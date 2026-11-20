@@ -38,7 +38,7 @@ export function clampInlineHeight(height) {
 export function buildInlineHostHtml({
   entryUrl,
   artifactOrigin,
-  width = 672,
+  width = 896,
   maxHeight = INLINE_MAX_HEIGHT_PX,
 }) {
   const targetOrigin = artifactOrigin || new URL(entryUrl).origin;

@@ -72,5 +72,8 @@ CoForge sets `data-theme="light"` or `"dark"` and `data-display-mode="panel"` or
 `--coforge-border`, `--coforge-border-subtle`, `--coforge-brand`, `--coforge-brand-fg`,
 `--coforge-success`, `--coforge-warning`, `--coforge-error`, and `--coforge-chart-1` through
 `--coforge-chart-6`), and fires a `coforge:theme` event on `window` (`detail: { theme, displayMode }`)
-when the theme changes. In `inline` mode, the frame blends transparently into the message stream,
-sizes itself automatically to document content (clamped to 96px–800px), and omits `comments.open`.
+when the theme changes. In `inline` mode, the frame blends transparently into the message stream
+up to 896px wide, sizes itself automatically to document content (clamped to 96px–800px, holding
+its high-water height at fixed width so tab switches do not jolt the chat stream), and omits
+`comments.open`. For multi-tab inline pages, give tab panels a consistent `min-height` so switching
+tabs stays visually balanced.

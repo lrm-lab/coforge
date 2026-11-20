@@ -40,7 +40,36 @@ export function readHostThemeTokens(root?: Element): PageThemeTokens {
   return tokens;
 }
 
+export type InlineHeightState = {
+  height: number;
+  settled: boolean;
+  hostWidth: number | null;
+};
+
 export function clampInlineFrameHeight(height: number): number {
   if (!Number.isFinite(height) || height <= 0) return INLINE_DEFAULT_HEIGHT_PX;
   return Math.min(INLINE_MAX_HEIGHT_PX, Math.max(INLINE_MIN_HEIGHT_PX, Math.ceil(height)));
+}
+
+export function nextInlineFrameHeight(
+  state: InlineHeightState,
+  reportedHeight: number,
+  hostWidth: number | null,
+): InlineHeightState {
+  if (!Number.isFinite(reportedHeight) || reportedHeight <= 0) return state;
+  const clamped = clampInlineFrameHeight(reportedHeight);
+  const validWidth =
+    hostWidth !== null && Number.isFinite(hostWidth) && hostWidth > 0
+      ? Math.round(hostWidth)
+      : null;
+  const widthChanged =
+    state.hostWidth !== null && validWidth !== null && Math.abs(validWidth - state.hostWidth) > 2;
+  if (!state.settled || widthChanged) {
+    return { height: clamped, settled: true, hostWidth: validWidth };
+  }
+  return {
+    height: Math.max(state.height, clamped),
+    settled: true,
+    hostWidth: state.hostWidth ?? validWidth,
+  };
 }

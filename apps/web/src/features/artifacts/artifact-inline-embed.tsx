@@ -23,7 +23,11 @@ import { useArtifactLink } from "./artifact-beside-chat";
 import { ArtifactPreviewFrame } from "./artifact-preview-frame";
 import { PageConfirmDialog } from "./artifact-page-confirm";
 import type { PageFrameSize, PageSuggestHandler } from "./artifact-page-bridge";
-import { INLINE_DEFAULT_HEIGHT_PX, clampInlineFrameHeight } from "./artifact-page-theme";
+import {
+  INLINE_DEFAULT_HEIGHT_PX,
+  nextInlineFrameHeight,
+  type InlineHeightState,
+} from "./artifact-page-theme";
 import { ARTIFACTS_KEY, type ArtifactCard } from "./artifact-queries";
 import { loadArtifactSandboxLink } from "./artifact-sandbox.functions";
 import { useInlineEmbedPool } from "./inline-embed-pool-context";
@@ -67,13 +71,27 @@ export function ArtifactInlineEmbed({
   const heightKey = `${card.id}:${resolvedVersion}`;
   const title = card.title || m.doc_untitled();
 
-  const [height, setHeight] = useState(
-    () => pool.cachedHeight(heightKey) ?? INLINE_DEFAULT_HEIGHT_PX,
-  );
+  const initialHeightState = (): InlineHeightState => {
+    const cached = pool.cachedHeight(heightKey);
+    return {
+      height: cached ?? INLINE_DEFAULT_HEIGHT_PX,
+      settled: cached !== undefined,
+      hostWidth: null,
+    };
+  };
+  const heightStateRef = useRef<InlineHeightState>(initialHeightState());
+  const [height, setHeight] = useState(() => heightStateRef.current.height);
 
   useEffect(() => {
     const cached = pool.cachedHeight(heightKey);
-    if (cached !== undefined) setHeight(cached);
+    const width = hostRef.current?.clientWidth || null;
+    const next: InlineHeightState = {
+      height: cached ?? INLINE_DEFAULT_HEIGHT_PX,
+      settled: cached !== undefined,
+      hostWidth: width,
+    };
+    heightStateRef.current = next;
+    setHeight(next.height);
   }, [pool, heightKey]);
 
   const expandedRef = useRef(false);
@@ -121,10 +139,12 @@ export function ArtifactInlineEmbed({
 
   const handleSize = useCallback(
     (size: PageFrameSize) => {
-      if (size.height <= 0) return;
-      const clamped = clampInlineFrameHeight(size.height);
-      pool.rememberHeight(heightKey, clamped);
-      setHeight(clamped);
+      const hostWidth = hostRef.current?.clientWidth || null;
+      const next = nextInlineFrameHeight(heightStateRef.current, size.height, hostWidth);
+      heightStateRef.current = next;
+      if (!next.settled) return;
+      pool.rememberHeight(heightKey, next.height);
+      setHeight(next.height);
     },
     [pool, heightKey],
   );
@@ -136,7 +156,7 @@ export function ArtifactInlineEmbed({
       onClick={(event) => {
         if (!selectionActive) event.stopPropagation();
       }}
-      className="group/embed relative w-full max-w-[42rem] rounded-lg"
+      className="group/embed relative w-full max-w-[56rem] rounded-lg"
     >
       {!active ? (
         <div
@@ -263,14 +283,15 @@ function InlineEmbedFrame({
   const [phase, setPhase] = useState<"loading" | "ready" | "timeout">("loading");
   const [showSkeleton, setShowSkeleton] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const expandedRef = useRef(false);
-  expandedRef.current = expanded;
+  const acceptInlineSizeRef = useRef(true);
+  if (expanded) acceptInlineSizeRef.current = false;
   const wasExpandedRef = useRef(false);
   const initializedRef = useRef(false);
   const sizedRef = useRef(false);
   const loadedRef = useRef(false);
   const revealedRef = useRef(false);
   const revealRaf = useRef<number | null>(null);
+  const collapseRaf = useRef<number | null>(null);
 
   const reveal = useCallback(() => {
     if (revealedRef.current) return;
@@ -292,7 +313,7 @@ function InlineEmbedFrame({
 
   const handleSizeChanged = useCallback(
     (size: PageFrameSize) => {
-      if (!expandedRef.current) onSizeChanged(size);
+      if (acceptInlineSizeRef.current) onSizeChanged(size);
       if (size.height > 0) {
         sizedRef.current = true;
         maybeReveal();
@@ -332,7 +353,19 @@ function InlineEmbedFrame({
 
   useEffect(() => {
     onExpandedChange(expanded);
-    if (wasExpandedRef.current && !expanded) bridge.notifyTheme();
+    if (expanded) {
+      acceptInlineSizeRef.current = false;
+      if (collapseRaf.current !== null) {
+        cancelAnimationFrame(collapseRaf.current);
+        collapseRaf.current = null;
+      }
+    } else if (wasExpandedRef.current) {
+      collapseRaf.current = requestAnimationFrame(() => {
+        collapseRaf.current = null;
+        acceptInlineSizeRef.current = true;
+        bridge.notifyTheme();
+      });
+    }
     wasExpandedRef.current = expanded;
   }, [expanded, onExpandedChange, bridge]);
 
@@ -343,6 +376,7 @@ function InlineEmbedFrame({
     () => () => {
       if (postLoadTimer.current !== null) window.clearTimeout(postLoadTimer.current);
       if (revealRaf.current !== null) cancelAnimationFrame(revealRaf.current);
+      if (collapseRaf.current !== null) cancelAnimationFrame(collapseRaf.current);
     },
     [],
   );

@@ -14,7 +14,7 @@ describe("artifact-checks SDK contract", () => {
     expect(ARTIFACT_CHECK_VIEWPORTS.map((v) => [v.shot, v.width, v.height])).toEqual([
       ["desktop", 1280, 800],
       ["phone", 390, 844],
-      ["inline", 672, 800],
+      ["inline", 896, 800],
     ]);
     expect(isArtifactCheckShot("desktop")).toBe(true);
     expect(isArtifactCheckShot("inline")).toBe(true);

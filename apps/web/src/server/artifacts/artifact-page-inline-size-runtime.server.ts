@@ -122,7 +122,7 @@ var measureSize = function () {
   var body = document.body;
   if (displayMode === "inline" && body) {
     var rect = body.getBoundingClientRect();
-    var vw = window.innerWidth || root.clientWidth || 672;
+    var vw = window.innerWidth || root.clientWidth || 896;
     var vh = window.innerHeight || 0;
     var naturalH = Math.ceil(Math.max(body.scrollHeight, body.offsetHeight, rect ? rect.height : 0));
     var width = Math.ceil(Math.max(root.scrollWidth, body.scrollWidth));

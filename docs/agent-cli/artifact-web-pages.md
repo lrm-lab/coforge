@@ -31,15 +31,16 @@ token's path (`/_f/<token>/<path>`), so relative references (`css/site.css`, `im
   it flush inline inside the message stream on the same isolated `a-<uuid>.<sandbox host>` origin.
   The runtime sets `data-display-mode="inline"`, applies host `--coforge-*` theme variables and
   transparent defaults, and reports content height (`ui/notifications/size-changed`, clamped to
-  96px–800px). Active inline frames are lazily activated in the viewport and bounded per
-  conversation by an LRU pool.
+  96px–800px, up to 896px wide; once settled at a given width the frame holds its high-water height
+  to avoid tab-switch layout jumps until the container width changes). Active inline frames are
+  lazily activated in the viewport and bounded per conversation by an LRU pool.
 
 ## Publish check
 
 Enabled by default across local Compose, staging, and production via the isolated Playwright
 sidecar (`services/artifact-checker/`). Pushing an `.html` artifact schedules an asynchronous
 `pg-boss` job that renders the version across three viewports (`desktop` 1280×800, `phone`
-390×844 @2x, and `inline` 672×800 with light `--coforge-*` tokens) under the same CSP and CDN
+390×844 @2x, and `inline` 896×800 with light `--coforge-*` tokens) under the same CSP and CDN
 allowlist, and `coforge artifact push` prints the next `coforge artifact check` command right
 after `Open:`:
 

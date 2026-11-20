@@ -129,6 +129,7 @@ describe("artifact-checker inline host and helpers", () => {
       artifactOrigin: "https://a-1.coforge.check",
     });
     expect(html).toContain('sandbox="allow-scripts allow-same-origin"');
+    expect(html).toContain("width: 896px");
     expect(html).toContain("height: 200px");
     expect(html).toContain("frame.style.height =");
     expect(html).toContain("ui/initialize");

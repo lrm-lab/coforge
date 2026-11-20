@@ -227,7 +227,7 @@ export function createPlaywrightDriver(options = {}) {
                 mobile: true,
                 mode: "panel",
               },
-              { shot: "inline", width: 672, height: 800, deviceScaleFactor: 1, mode: "inline" },
+              { shot: "inline", width: 896, height: 800, deviceScaleFactor: 1, mode: "inline" },
             ];
       const hasDesktopViewport = viewports.some((vp) => vp.shot === "desktop");
       const cdnCache = new Map();

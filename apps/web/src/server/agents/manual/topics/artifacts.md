@@ -47,7 +47,9 @@ change one they ask an Agent. When in doubt, make a document: anything that is m
   leave the background transparent so it blends into light and dark themes using the host
   `--coforge-*` CSS variables, and never size top-level containers with `100vh` or `height: 100%`
   (frame height is derived from content). Use a plain link without `?embed=1` for full-page
-  dashboards, wide tables, or multi-tab views.
+  dashboards, wide tables, or multi-tab views. When an inline embed has tabs or mode switches, give
+  each tab panel a consistent `min-height` so switching views feels steady (the inline frame grows
+  to fit taller content up to 800px and holds its high-water height while its width stays unchanged).
 
 ```sh
 mkdir funnel && cp index.html funnel/
@@ -67,7 +69,7 @@ comment suggestions) is in `coforge manual get artifact-pages`.
 ## Checking a web page
 
 After pushing an `.html` artifact, the server automatically runs a headless Chromium publish check
-across three viewports (`desktop` 1280×800, `phone` 390×844, and `inline` 672×800 with host
+across three viewports (`desktop` 1280×800, `phone` 390×844, and `inline` 896×800 with host
 `--coforge-*` tokens) when the publish-check worker is enabled. Before sharing the link in a
 conversation, wait for the result and inspect the screenshots:
 

@@ -15,7 +15,7 @@ export type ArtifactCheckViewport = {
 export const ARTIFACT_CHECK_VIEWPORTS: readonly ArtifactCheckViewport[] = [
   { shot: "desktop", width: 1280, height: 800, deviceScaleFactor: 1, mobile: false },
   { shot: "phone", width: 390, height: 844, deviceScaleFactor: 2, mobile: true },
-  { shot: "inline", width: 672, height: 800, deviceScaleFactor: 1, mobile: false },
+  { shot: "inline", width: 896, height: 800, deviceScaleFactor: 1, mobile: false },
 ];
 
 export const ARTIFACT_CHECK_MAX_CONSOLE_ERRORS = 10;

@@ -4,6 +4,7 @@ import {
   INLINE_MAX_HEIGHT_PX,
   INLINE_MIN_HEIGHT_PX,
   clampInlineFrameHeight,
+  nextInlineFrameHeight,
 } from "#src/features/artifacts/artifact-page-theme";
 import {
   INLINE_EMBED_MAX_ACTIVE,
@@ -87,5 +88,36 @@ describe("inline embed LRU pool", () => {
     expect(pool.isActive("m1")).toBe(false);
     expect(pool.isActive("m17")).toBe(true);
     for (let i = 2; i <= 16; i++) expect(pool.isActive(`m${i}`)).toBe(true);
+  });
+
+  test("monotonic inline height fits initial compact cards, prevents tab-switch shrink jitter, and resets when host width changes", () => {
+    let state = {
+      height: INLINE_DEFAULT_HEIGHT_PX,
+      settled: false,
+      hostWidth: null as number | null,
+    };
+    state = nextInlineFrameHeight(state, 140, 896);
+    expect(state).toEqual({ height: 140, settled: true, hostWidth: 896 });
+
+    state = nextInlineFrameHeight(state, 510, 896);
+    expect(state).toEqual({ height: 510, settled: true, hostWidth: 896 });
+
+    state = nextInlineFrameHeight(state, 390, 896);
+    expect(state).toEqual({ height: 510, settled: true, hostWidth: 896 });
+
+    state = nextInlineFrameHeight(state, 390, 895);
+    expect(state).toEqual({ height: 510, settled: true, hostWidth: 896 });
+
+    state = nextInlineFrameHeight(state, 390, 893);
+    expect(state).toEqual({ height: 390, settled: true, hostWidth: 893 });
+
+    state = nextInlineFrameHeight(state, 620, 420);
+    expect(state).toEqual({ height: 620, settled: true, hostWidth: 420 });
+
+    state = nextInlineFrameHeight(state, 390, 896);
+    expect(state).toEqual({ height: 390, settled: true, hostWidth: 896 });
+
+    expect(nextInlineFrameHeight(state, 0, 896)).toEqual(state);
+    expect(nextInlineFrameHeight(state, Number.NaN, 896)).toEqual(state);
   });
 });
