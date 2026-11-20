@@ -34,6 +34,7 @@ import {
 } from "#src/features/agents/agents.functions";
 import { AgentArchiveSection } from "./agent-archive-section";
 import { AgentMigrationSection } from "./agent-migration-section";
+import { useAgentMigrationStatus } from "./agent-migration-status";
 import { AgentRuntimeCredentialSection } from "./agent-runtime-credential-section";
 import {
   combineRuntimeSaveOutcomes,
@@ -113,6 +114,20 @@ export function AgentProfilePanel({
   const deleted = Boolean(profile?.deletedAt);
   const canManage = profile && !deleted ? canManageAgent(profile) : false;
   usePrefetchAgentActivityFeed(agentId, canManage);
+  // An Agent that manages Computers itself (assistants, app bots, external runtimes) is never
+  // offered a move; every other managed Agent can be placed directly when it has no reachable
+  // source (#coforge:#732).
+  const placeable = Boolean(
+    profile &&
+    canManage &&
+    !deleted &&
+    profile.systemKind == null &&
+    profile.hosting !== "external" &&
+    !profile.isWeeklyReportAssistant,
+  );
+  const migrationStatus = useAgentMigrationStatus(agentId, placeable).data;
+  // A revoked or missing Computer leaves the Agent unable to work: the move leads the Profile then.
+  const migrationLeads = migrationStatus?.directPlacement === true;
   const owned = Boolean(profile?.ownedByCurrentUser) && !deleted;
   const migrationRuntime = agentMigrationRuntime(profile?.runtimeConfig);
   const loadComputers = useServerFn(listComputers);
@@ -361,12 +376,14 @@ export function AgentProfilePanel({
                 />
               ) : undefined
             }
+            migrationLeads={migrationLeads}
+            computerAccessRevoked={migrationStatus?.computerAccessRevoked === true}
             migration={
-              profile.computer && !deleted && migrationRuntime ? (
+              (profile.computer || placeable) && !deleted && migrationRuntime ? (
                 <AgentMigrationSection
                   agentId={profile.id}
                   agentName={profile.displayName || profile.name}
-                  currentComputerId={profile.computer.id}
+                  currentComputerId={profile.computer?.id ?? null}
                   canMove={canManage}
                   runtime={migrationRuntime.runtime}
                   model={migrationRuntime.model}

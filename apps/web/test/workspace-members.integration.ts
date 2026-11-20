@@ -158,6 +158,7 @@ test("lists only the requested Workspace directory and denies outsiders", async 
           avatarUrl: agentAvatarUrl(assignedAgent.id),
           computerId: computer.id,
           computerName: "Owner workstation",
+          computerRevoked: false,
           createdAt: assignedAgent.createdAt,
           owner: {
             id: otherOwner.id,
@@ -175,6 +176,7 @@ test("lists only the requested Workspace directory and denies outsiders", async 
           avatarUrl: agentAvatarUrl(unassignedAgent.id),
           computerId: null,
           computerName: null,
+          computerRevoked: false,
           createdAt: unassignedAgent.createdAt,
           owner: {
             id: otherOwner.id,

@@ -6,6 +6,7 @@ export type StatusTone =
   | "online"
   | "working"
   | "thinking"
+  | "warning"
   | "idle"
   | "offline"
   | "error"
@@ -22,6 +23,7 @@ export function statusToneClass(tone: StatusTone) {
       return "bg-online";
     case "working":
     case "thinking":
+    case "warning":
       return "bg-utility-amber-500";
     case "error":
       return "bg-error-solid";

@@ -96,7 +96,12 @@ describe("WorkspaceMembers", () => {
                 avatarObjectKey: null,
               },
               weeklyReportAssistant: { id: "assistant-1" },
-              computer: { id: "other-machine-id", name: "other-workspace-machine", workspaces: [] },
+              computer: {
+                id: "other-machine-id",
+                name: "other-workspace-machine",
+                displayName: "",
+                workspaces: [],
+              },
             },
           ];
         },
@@ -180,6 +185,7 @@ describe("WorkspaceMembers", () => {
           avatarUrl: agentAvatarUrl("other-agent", "pink"),
           computerId: "office-mac-id",
           computerName: "Team workstation",
+          computerRevoked: false,
           createdAt: new Date("2026-07-23T08:00:00.000Z"),
           owner: {
             id: "another-user",
@@ -197,7 +203,8 @@ describe("WorkspaceMembers", () => {
           description: "Reviews changes",
           avatarUrl: agentAvatarUrl("detached-agent"),
           computerId: null,
-          computerName: null,
+          computerName: "other-workspace-machine",
+          computerRevoked: true,
           createdAt: new Date("2026-08-01T00:00:00.000Z"),
           owner: {
             id: "another-user",

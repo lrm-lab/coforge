@@ -224,9 +224,11 @@ export function AgentCard({
         <span className="flex max-w-full min-w-0 items-center gap-1.5 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-tertiary ring-1 ring-secondary ring-inset">
           <Monitor aria-hidden="true" className="size-3.5 shrink-0" />
           <span className="truncate">
-            {member.computerId === null
-              ? m.member_no_computer()
-              : member.computerName || m.agent_computer_unnamed()}
+            {member.computerRevoked
+              ? `${member.computerName || m.agent_computer_unnamed()} · ${m.member_computer_access_revoked()}`
+              : member.computerId === null
+                ? m.member_no_computer()
+                : member.computerName || m.agent_computer_unnamed()}
           </span>
         </span>
         <Tooltip title={m.member_created_by()} arrow>
