@@ -15,7 +15,6 @@ import {
   launchEventObserver,
   handleAgentStart,
   handleAgentStop,
-  controlPublications,
   controlIntentPorts,
   handleAgentTurnInterrupt,
   handleAgentWorkspaceReset,
@@ -154,11 +153,8 @@ import { RuntimeStartup } from "./runtime-startup";
 import { RuntimeStop } from "./runtime-stop";
 import { composeMessages } from "./message-composition";
 import { assembleExitedDelivery } from "./assemble-exited-delivery";
-import {
-  composeRuntimeServices,
-  migrationRoute,
-  type RuntimeServices,
-} from "./runtime-services-composition";
+import { composeRuntimeServices, type RuntimeServices } from "./runtime-services-composition";
+import { startupPublications } from "./runtime-startup-publications";
 import { AgentOperations } from "./agent-operations";
 import { composeAgentControl } from "./agent-control-composition";
 import {
@@ -169,7 +165,6 @@ import {
 } from "./runtime-accessors";
 import type { DaemonRuntimeLifecycle } from "./runtime-lifecycle";
 import { logComputerUpdateNoticeFailure } from "./agent-failure-logs";
-import { acceptAppRegistrationNotice } from "#src/agent-app-inbox/app-registration-notice";
 
 export { USAGE_SCAN_READ_TIMEOUT_MS } from "./runtime-agent-flows";
 
@@ -724,28 +719,14 @@ export class DaemonRuntime {
       computerVersion: this.computerVersion,
       releaseChannel: this.releaseChannel,
       isStopping: () => this.#stopping,
-      publications: {
-        startAgent: (intent) => this.handleAgentStart(intent),
-        stopAgent: (intent) => this.handleAgentStop(intent),
-        ...controlPublications(() => this.#controlIntentPorts()),
-        applyAgentConfigSync: (sync) => this.handleAgentConfig(sync),
-        interruptAgent: (intent) => this.handleAgentTurnInterrupt(intent),
-        probeAgent: (probe) => this.handleAgentActivityProbe(probe),
-        purgeAgentInbox: (purge) => this.handleAgentInboxPurge(purge),
-        resetWorkspace: (request) => this.handleAgentWorkspaceReset(request),
-        deliverMessage: (message) => this.handleAgentMessage(message),
-        stopRuntime: () => this.stop(),
-        connectionRefused: (reason) => this.lifecycle.connectionRefused?.(reason),
-        receiveReminderDue: (due) => this.#services.reminders.receive(due),
-        applyAppConfigSync: (sync) => this.#services.appConfigs.apply(sync),
-        applyAgentServerFeatures: (sync) => this.#sync.applyServerFeatures(sync),
-        acceptAppRegistrationNotice: (notice) =>
-          acceptAppRegistrationNotice(notice, {
-            isRunning: (agentId) => this.#readyRunningAgentIds().includes(agentId),
-            mint: (agentId, item) => this.mintAppItem(agentId, item),
-          }).then(() => {}),
-        migration: migrationRoute(this.#services.migrations),
-      },
+      publications: startupPublications({
+        handlers: this,
+        controlIntentPorts: () => this.#controlIntentPorts(),
+        lifecycle: this.lifecycle,
+        services: this.#services,
+        sync: this.#sync,
+        readyRunningAgentIds: () => this.#readyRunningAgentIds(),
+      }),
       agentControl: this.#agentControl,
       agentSessions: this.#agentSessions,
       configApply: this.#configApply,
