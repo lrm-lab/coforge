@@ -1,14 +1,19 @@
 /** Injected noVNC clipboard helpers for desktop proxy adaptation. */
 
 export const DESKTOP_PAGE_CLIPBOARD_SCRIPT = `
-    function coforgeDesktopPaste(text) {
-      const push = fetch(\`\${base}/clipboard\${query}\`, {
+    function coforgePushRemoteClipboard(text) {
+      if (!text) return Promise.resolve(false);
+      return fetch(\`\${base}/clipboard\${query}\`, {
         method: "POST",
         body: text,
         headers: { "Content-Type": "text/plain;charset=utf-8" },
-      });
-      return push.then((res) => {
-        if (!res.ok) return;
+      })
+        .then((res) => res.ok)
+        .catch(() => false);
+    }
+    function coforgeDesktopPaste(text) {
+      return coforgePushRemoteClipboard(text).then((ok) => {
+        if (!ok) return;
         try {
           rfb.sendKey(0xffe3, "ControlLeft", true);
           rfb.sendKey(0x0076, "KeyV", true);
@@ -16,7 +21,7 @@ export const DESKTOP_PAGE_CLIPBOARD_SCRIPT = `
           rfb.sendKey(0xffe3, "ControlLeft", false);
         } catch {
         }
-      }).catch(() => {});
+      });
     }
     function coforgeWriteLocalClipboard(text) {
       if (!text) return Promise.resolve(false);
