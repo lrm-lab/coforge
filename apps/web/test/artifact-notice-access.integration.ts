@@ -254,3 +254,38 @@ test("an author still reads its own notice after the home conversation is gone",
     .then((rows) => rows.map((delivery) => delivery.messageId));
   expect(pendingIds).toContain(written.messageId);
 });
+
+test("a home key without the conversation prefix blocks a non-author", async () => {
+  const { agentsReadingArtifact } = await import("#src/server/artifacts/artifact-access.server");
+  const artifact = await h.f.make("Prefix gate");
+  const reader = await h.nameOf(h.f.agents.reader);
+  await h.create(artifact, `Prefix gate, see @${reader}.`);
+  const sent = await h.submit(artifact);
+  if (sent.status !== "sent") throw new Error("not sent");
+  const event = await h.f.db.systemAgentEvent.findUniqueOrThrow({
+    where: {
+      source_agentId_externalEventId: {
+        source: "system.artifacts",
+        agentId: h.f.agents.reader,
+        externalEventId: `${artifact}:web-draft-review:${sent.reviewId}`,
+      },
+    },
+    select: { messageId: true },
+  });
+  await h.f.db.artifact.update({
+    where: { id: artifact },
+    data: { access: "conversation", homeKey: "conversation-gone" },
+  });
+  const row = await h.f.db.artifact.findUniqueOrThrow({
+    where: { id: artifact },
+    select: { id: true, homeKey: true, access: true, authorAgentId: true, deletedAt: true },
+  });
+  expect(row.authorAgentId).not.toBe(h.f.agents.reader);
+  const byRule = await agentsReadingArtifact(h.f.db, h.f.workspaceId, row, [h.f.agents.reader]);
+  expect(byRule.has(h.f.agents.reader)).toBe(false);
+  const conversations = new PrismaDirectConversationRepository(h.f.db);
+  const pendingIds = await conversations
+    .readPendingAgentDeliveries(h.f.workspaceId, h.f.agents.reader)
+    .then((rows) => rows.map((delivery) => delivery.messageId));
+  expect(pendingIds).not.toContain(event.messageId);
+});
