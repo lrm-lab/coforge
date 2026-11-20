@@ -50,7 +50,8 @@ describe("PrismaDirectConversationRepository pending deliveries", () => {
       "agent-1",
     );
 
-    expect(rawQueries).toHaveLength(1);
+    expect(rawQueries).toHaveLength(2);
+    expect((rawQueries[1] as { values?: unknown[] }).values).toContain("delivery-1");
     expect(queries[0]).toMatchObject({ where: { deliveryId: { in: ["delivery-1"] } } });
     expect(result).toEqual<PendingAgentDelivery[]>([
       {

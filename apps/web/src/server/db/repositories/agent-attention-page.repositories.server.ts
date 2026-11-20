@@ -2,6 +2,7 @@ import { Prisma } from "#src/generated/prisma/client";
 import { readableArtifactNoticeSql } from "#src/server/artifacts/artifact-notice-visibility.server";
 import { readableChannelSql } from "#src/server/conversations/channel-read-access.server";
 import { directConversationSql } from "#src/server/conversations/active-member.server";
+import { liveDeliverySql } from "#src/server/db/repositories/agent-attention-deliveries.repositories.server";
 
 export function pendingDeliveryPageSql(
   workspaceId: string,
@@ -24,8 +25,7 @@ export function pendingDeliveryPageSql(
     WHERE d."workspaceId" = ${workspaceId}::uuid
       AND d."agentId" = ${agentId}::uuid
       AND ${selected}
-      AND (d."receivedAt" IS NOT NULL OR d."expiresAt" IS NULL
-        OR d."expiresAt" > (now() AT TIME ZONE 'UTC'))
+      AND (d."receivedAt" IS NOT NULL OR ${liveDeliverySql("d")})
       AND c."hiddenFromWorkspaceAt" IS NULL
       AND (
         c."channelName" IS NOT NULL
