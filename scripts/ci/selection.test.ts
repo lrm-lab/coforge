@@ -369,3 +369,11 @@ test("Anvil library changes run its dependency-direction guard", () => {
     selectChecks(["packages/anvil/test/jsonl-process-cleanup.test.ts"], "changes"),
   ).not.toContain("ci");
 });
+
+test("artifact-checker sidecar changes run deploy and web checks", () => {
+  expect(selectChecks(["services/artifact-checker/browser.mjs"], "changes")).toEqual([
+    "deploy",
+    "web",
+  ]);
+  expect(selectChecks(["services/artifact-checker/browser.mjs"], "local")).toEqual(["deploy"]);
+});
