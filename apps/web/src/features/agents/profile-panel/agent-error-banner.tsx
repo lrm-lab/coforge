@@ -41,6 +41,7 @@ export function AgentErrorBanner({
   // (task #90). Retry is the same Start either way: on a live Agent it hands the Daemon what the
   // hold kept, and a Stop first would drop it.
   const recovery = retry && (!status.isOnline || status.alert) ? status.recovery : undefined;
+  const showRecovery = recovery && !(recovery === "retry" && retry?.computerOffline);
   const resetBlocked = recovery === "reset_session" && retry?.computerOffline === true;
   const retryNote = resetBlocked ? m.agent_error_banner_computer_offline() : retry?.note;
   const showLinks = !onActivityTab && onViewLogs;
@@ -66,13 +67,10 @@ export function AgentErrorBanner({
         )}
       >
         <span className="min-w-0 flex-1 text-sm break-words text-primary">{label}</span>
-        {(recovery || showLinks) && (
+        {(showRecovery || showLinks) && (
           <div className="-my-1 flex shrink-0 items-center gap-1">
-            {recovery && retry && (
+            {showRecovery && retry && (
               <>
-                {/* Retry is the panel's Start, under its one rule (task #731): on an offline
-                    Computer it still goes through and waits for the Computer, and the note
-                    beside it says so; Reset session needs the Computer there. */}
                 <Button
                   color="secondary"
                   size="sm"

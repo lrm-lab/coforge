@@ -87,22 +87,25 @@ test("a signed-out runtime's Agent says so, and what to do", async () => {
   const words: Record<string, string> = { en: logged, "zh-CN": logged };
   const said = words.en!;
   await display.observeStatus({ ...frame(1), status: "active" } as never);
-  await display.observeActivity(
-    {
-      ...frame(2),
-      detailKind: "runtime_error",
-      level: "error",
-      detail: logged,
-      launchId,
-      runtimeError: {
-        errorClass: "AuthError",
-        errorReason: "auth_failed",
-        fingerprint: `fp-${suffix}`,
-        providerMessage: '401 "invalid api key"',
-      },
-    } as never,
-    { daemonInstanceId: `e2e-${suffix}`, launchId },
-  );
+  const reportLoginError = (seq: number) =>
+    display.observeActivity(
+      {
+        ...frame(seq),
+        detailKind: "runtime_error",
+        level: "error",
+        detail: logged,
+        launchId,
+        runtimeError: {
+          errorClass: "AuthError",
+          errorReason: "auth_failed",
+          fingerprint: `fp-${suffix}`,
+          requiredAction: "user_reauth",
+          providerMessage: '401 "invalid api key"',
+        },
+      } as never,
+      { daemonInstanceId: `e2e-${suffix}`, launchId },
+    );
+  await reportLoginError(2);
   await display.observeStatus({ ...frame(3), status: "inactive" } as never);
 
   const until = async (expression: string) => {
@@ -198,37 +201,39 @@ test("a signed-out runtime's Agent says so, and what to do", async () => {
     await until(warning(said));
     await shots("hover-en-desktop");
 
-    await browser("open", page("en", `/dm/${direct.id}`));
-    const profile = `[...document.querySelectorAll("button")].find((b) => b.querySelector("h1"))`;
-    await until(`${pageHydrated} && ${profile} != null`);
-    await press(profile);
-    const banner = `document.querySelector(".bg-error-primary")?.textContent ?? ""`;
+    await display.observeStatus({ ...frame(4), status: "active" } as never);
+    await reportLoginError(5);
+    const openProfile = (locale: string) =>
+      browser("open", page(locale, `/members?profile=agent:${agent.id}&agentTab=profile`));
+    await openProfile("en");
+    const banner = `(document.querySelector('[role="status"].bg-error-primary')?.textContent ?? "")`;
     await until(`${banner}.includes(${JSON.stringify(logged)})`);
     await shots("profile-en-desktop");
     expect(await evaluate<string>(banner)).not.toContain("invalid api key");
-    // Stopped until a person acts, so the banner offers to start it again (task #731); its
-    // Computer is offline here, so the banner says so: a press still goes through and the Agent
-    // starts when the Computer reconnects (e2e-agent-start-offline-computer).
-    const retry = `[...document.querySelectorAll(".bg-error-primary button")].find((b) => b.textContent.trim() === "Retry")`;
-    expect(await evaluate<boolean>(`${retry} != null && !${retry}.disabled`)).toBe(true);
-    expect(await evaluate<string>(banner)).toContain("Computer offline");
+    const bannerButtons = `[...document.querySelectorAll('[role="status"].bg-error-primary button')].map((b) => b.getAttribute("aria-label") || b.textContent.trim())`;
+    const expectOfflineActions = async () => {
+      expect(await evaluate<string>(banner)).toContain(logged);
+      expect(await evaluate<string[]>(bannerButtons)).toEqual([
+        "Copy diagnostic info",
+        "View logs",
+      ]);
+      expect(await evaluate<string>(banner)).not.toContain("Computer offline");
+    };
+    await expectOfflineActions();
     await browser("set", "viewport", "390", "844");
-    await browser("open", page("en", `/dm/${direct.id}`));
-    await until(`${pageHydrated} && ${profile} != null`);
-    await press(profile);
+    await openProfile("en");
     await until(`${banner}.includes(${JSON.stringify(logged)})`);
     await shots("profile-en-phone");
+    await expectOfflineActions();
     await browser("set", "viewport", "1280", "860");
-    await browser("open", page("zh-CN", `/dm/${direct.id}`));
-    await until(`${pageHydrated} && ${profile} != null`);
-    await press(profile);
+    await openProfile("zh-CN");
     await until(`${banner}.includes(${JSON.stringify(logged)})`);
     await shots("profile-zh-CN-desktop");
     expect(
       await evaluate<boolean>(
-        `[...document.querySelectorAll(".bg-error-primary button")].some((b) => b.textContent.trim() === "重试") && document.querySelector(".bg-error-primary").textContent.includes("电脑离线")`,
+        `[...document.querySelectorAll(".bg-error-primary button")].some((b) => b.textContent.trim() === "重试") || document.querySelector(".bg-error-primary").textContent.includes("电脑离线")`,
       ),
-    ).toBe(true);
+    ).toBe(false);
     await browser("open", page("en", `/computer/${computer.id}`));
     await until(`${pageHydrated} && ${warning(said)}`);
     await shots("computer-en-desktop");
