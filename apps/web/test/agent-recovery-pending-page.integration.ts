@@ -1,45 +1,12 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import {
-  WEB_DRAFT_REVIEW_MARKER,
-  artifactNoticeBlockedMessages,
-} from "#src/server/artifacts/artifact-notice-visibility.server";
-import { pendingDeliveryWhere } from "#src/server/db/repositories/agent-attention.repositories.server";
+import { WEB_DRAFT_REVIEW_MARKER } from "#src/server/artifacts/artifact-notice-visibility.server";
 import { AGENT_RECOVERY_MESSAGE_LIMIT } from "#src/server/db/repositories/agent-recovery-row.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 
 const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
 if (!connectionString) throw new Error("CHANNEL_TEST_DATABASE_URL is required");
-
-async function previousPendingDeliveryIds(
-  db: PrismaClient,
-  workspaceId: string,
-  agentId: string,
-  select?: { deliveryIds: readonly string[]; orUnreceived?: boolean },
-): Promise<string[]> {
-  const unreceived = { receivedAt: null };
-  const chosen = { deliveryId: { in: [...(select?.deliveryIds ?? [])] } };
-  const selected = !select
-    ? unreceived
-    : { AND: [select.orUnreceived ? { OR: [unreceived, chosen] } : chosen] };
-  const pendingWhere = await pendingDeliveryWhere(db, { workspaceId, agentId }, selected);
-  const fetched = await db.agentMessageDelivery.findMany({
-    where: pendingWhere,
-    orderBy: [{ createdAt: "asc" }, { deliveryId: "asc" }],
-    take: AGENT_RECOVERY_MESSAGE_LIMIT,
-    select: { deliveryId: true, messageId: true },
-  });
-  const blocked = await artifactNoticeBlockedMessages(
-    db,
-    workspaceId,
-    agentId,
-    fetched.map((delivery) => delivery.messageId),
-  );
-  return fetched
-    .filter((delivery) => !blocked.has(delivery.messageId))
-    .map((delivery) => delivery.deliveryId);
-}
 
 test("the pending page keeps the attention rule and the notice permission, in order", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
@@ -331,7 +298,6 @@ test("the pending page keeps the attention rule and the notice permission, in or
       unseatedDm.deliveryId,
       notifiedMention.deliveryId,
     ]);
-    expect(await previousPendingDeliveryIds(db, workspace.id, reader.id)).toEqual(actual);
 
     const chosen = {
       deliveryIds: [
@@ -345,18 +311,12 @@ test("the pending page keeps the attention rule and the notice permission, in or
       await repository.readPendingAgentDeliveries(workspace.id, reader.id, chosen)
     ).map((delivery) => delivery.deliveryId);
     expect(chosenIds).toEqual([received.deliveryId, readableNotice.deliveryId]);
-    expect(await previousPendingDeliveryIds(db, workspace.id, reader.id, chosen)).toEqual(
-      chosenIds,
-    );
 
     const withUnreceived = { ...chosen, orUnreceived: true };
     const unionIds = (
       await repository.readPendingAgentDeliveries(workspace.id, reader.id, withUnreceived)
     ).map((delivery) => delivery.deliveryId);
     expect(unionIds).toEqual([received.deliveryId, ...actual]);
-    expect(await previousPendingDeliveryIds(db, workspace.id, reader.id, withUnreceived)).toEqual(
-      unionIds,
-    );
 
     expect(
       await repository.readPendingAgentDeliveries(workspace.id, reader.id, { deliveryIds: [] }),
@@ -458,16 +418,15 @@ test("a blocked notice no longer costs the page a row", async () => {
       })),
       select: { id: true, sequence: true },
     });
-    const allowedDeliveries = await db.agentMessageDelivery.createManyAndReturn({
-      data: allowedMessages.map((message, index) => ({
-        messageId: message.id,
+
+    await db.agentMessageDelivery.createMany({
+      data: allowedMessages.map((message) => ({
         workspaceId: workspace.id,
         conversationId: channel.id,
+        messageId: message.id,
         agentId: reader.id,
         sequence: message.sequence,
-        createdAt: allowedRows[index]!.createdAt,
       })),
-      select: { deliveryId: true, messageId: true },
     });
 
     const repository = new PrismaDirectConversationRepository(db);
@@ -475,14 +434,6 @@ test("a blocked notice no longer costs the page a row", async () => {
       (delivery) => delivery.messageId,
     );
     expect(actual).toEqual(allowedMessages.map((message) => message.id));
-
-    const previous = await previousPendingDeliveryIds(db, workspace.id, reader.id);
-    expect(previous).toHaveLength(AGENT_RECOVERY_MESSAGE_LIMIT - blockedCount);
-    expect(previous).toEqual(
-      allowedDeliveries
-        .slice(0, AGENT_RECOVERY_MESSAGE_LIMIT - blockedCount)
-        .map((delivery) => delivery.deliveryId),
-    );
   } finally {
     await db.workspace.deleteMany({ where: { id: workspace.id } });
     await db.user.deleteMany({ where: { id: user.id } });

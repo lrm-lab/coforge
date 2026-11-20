@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
+import { Prisma } from "#src/generated/prisma/client";
 import { agentReadableArtifactSql } from "./artifact-visible.server";
 
 export const WEB_DRAFT_REVIEW_MARKER = "web-draft-review";
@@ -25,18 +25,4 @@ export function readableArtifactNoticeSql(
             AND ${readable})
     )
   )`;
-}
-
-export async function artifactNoticeBlockedMessages(
-  db: PrismaClient,
-  workspaceId: string,
-  agentId: string,
-  messageIds: readonly string[],
-): Promise<Set<string>> {
-  if (messageIds.length === 0) return new Set();
-  const rows = await db.$queryRaw<{ id: string }[]>(Prisma.sql`
-    SELECT m."id" FROM "messages" m
-    WHERE m."id" IN (${Prisma.join(messageIds)})
-      AND NOT ${readableArtifactNoticeSql(workspaceId, agentId, Prisma.sql`m."id"`)}`);
-  return new Set(rows.map((row) => row.id));
 }

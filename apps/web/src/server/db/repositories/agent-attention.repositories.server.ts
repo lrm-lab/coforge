@@ -4,7 +4,6 @@ import { liveDeliverySql } from "./agent-attention-deliveries.repositories.serve
 export {
   liveDeliverySql,
   NOTIFIED_AGENT_WHERE,
-  pendingDeliveryWhere,
   unreadAgentMessagesFragment,
 } from "./agent-attention-deliveries.repositories.server";
 

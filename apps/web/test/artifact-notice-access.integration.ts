@@ -158,8 +158,6 @@ test("a notice whose artifact row is gone is not handed back", async () => {
 
 test("the JavaScript rule and the SQL predicate agree on an artifact whose home is gone", async () => {
   const { agentsReadingArtifact } = await import("#src/server/artifacts/artifact-access.server");
-  const { artifactNoticeBlockedMessages } =
-    await import("#src/server/artifacts/artifact-notice-visibility.server");
   const artifact = await h.f.make("Divergence gate");
   const reader = await h.nameOf(h.f.agents.reader);
   await h.create(artifact, `Divergence gate, see @${reader}.`);
@@ -187,13 +185,16 @@ test("the JavaScript rule and the SQL predicate agree on an artifact whose home 
   expect(row.authorAgentId).not.toBe(h.f.agents.reader);
 
   const byRule = await agentsReadingArtifact(h.f.db, h.f.workspaceId, row, [h.f.agents.reader]);
-  const blocked = await artifactNoticeBlockedMessages(h.f.db, h.f.workspaceId, h.f.agents.reader, [
-    event.messageId,
-  ]);
-  expect({ rule: byRule.has(h.f.agents.reader), blocked: blocked.has(event.messageId) }).toEqual({
-    rule: false,
-    blocked: true,
-  });
+  const returned = (
+    await new PrismaDirectConversationRepository(h.f.db).readPendingAgentDeliveries(
+      h.f.workspaceId,
+      h.f.agents.reader,
+    )
+  ).map((delivery) => delivery.messageId);
+  expect({
+    rule: byRule.has(h.f.agents.reader),
+    returned: returned.includes(event.messageId),
+  }).toEqual({ rule: false, returned: false });
 });
 
 test("an event without the web marker keeps its old behaviour", async () => {

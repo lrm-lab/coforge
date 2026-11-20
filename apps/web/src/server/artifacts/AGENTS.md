@@ -36,8 +36,7 @@ out" a move, not a split:
 - `artifact-notice-visibility.server.ts` — `readableArtifactNoticeSql`, the rule as SQL: which of
   an Agent's notices name an artifact it can no longer read. The reads that hand a notice's body
   back to it apply that fragment inside their own statement, so a blocked row never takes a page
-  slot; `artifactNoticeBlockedMessages` answers the same question for a list of ids and is now
-  used only by tests.
+  slot; Every read of a notice's body asks it.
 
 Everything else is internal: `artifacts.server.ts` (the `Artifacts` use
 cases), the merge/read/write/signals/documents/public-links/blobs

@@ -1,14 +1,7 @@
-import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
+import { Prisma } from "#src/generated/prisma/client";
 import { readableArtifactNoticeSql } from "#src/server/artifacts/artifact-notice-visibility.server";
-import { visibleChannelWhere } from "#src/server/conversations/channel-read-access.server";
 import { CHANNEL_VISIBILITY } from "#src/features/conversations/channel-visibility";
-import {
-  ACTIVE_MEMBER_WHERE,
-  DIRECT_CONVERSATION_WHERE,
-  TARGETABLE_CONVERSATION_WHERE,
-  directConversationSql,
-  VISIBLE_CONVERSATION_WHERE,
-} from "#src/server/conversations/active-member.server";
+import { directConversationSql } from "#src/server/conversations/active-member.server";
 
 /**
  * The Agent-side half of the attention rule: which delivery rows still owe the Agent attention.
@@ -47,103 +40,6 @@ export const liveDeliverySql = (alias: string) =>
  * The `where` of the Agent's unreplayed deliveries, from `selected` (which deliveries), less the
  * stale ones (`liveDeliverySql`'s counterpart: Prisma cannot compare to the database clock).
  */
-export async function pendingDeliveryWhere(
-  db: Pick<PrismaClient, "$queryRaw">,
-  scope: { workspaceId: string; agentId: string },
-  selected: Prisma.AgentMessageDeliveryWhereInput,
-): Promise<Prisma.AgentMessageDeliveryWhereInput> {
-  const { workspaceId, agentId } = scope;
-  const stale = await db.$queryRaw<{ deliveryId: string }[]>`
-    SELECT "deliveryId" FROM "agent_message_deliveries"
-    WHERE "agentId" = ${agentId}::uuid AND "receivedAt" IS NULL
-      AND "expiresAt" <= (now() AT TIME ZONE 'UTC')`;
-  return {
-    workspaceId,
-    agentId,
-    ...selected,
-    deliveryId: { notIn: stale.map((row) => row.deliveryId) },
-    conversation: {
-      ...VISIBLE_CONVERSATION_WHERE,
-      OR: [
-        TARGETABLE_CONVERSATION_WHERE,
-        { kind: "attachment_comments" },
-        // A task's conversation has no channel of its own: it replays only while its board is
-        // still one the Agent may read.
-        {
-          kind: "task_thread",
-          taskDiscussionOf: {
-            conversation: {
-              OR: [
-                visibleChannelWhere(workspaceId, { agentId }),
-                { ...VISIBLE_CONVERSATION_WHERE, ...DIRECT_CONVERSATION_WHERE },
-              ],
-            },
-          },
-        },
-      ],
-    },
-    OR: [
-      { conversation: DIRECT_CONVERSATION_WHERE },
-      {
-        conversation: {
-          // `kind` is null for a channel or a DM, which `not` would leave out. A comment
-          // conversation's seat is only bookkeeping — a stale one must not replay a delivery
-          // after the Agent lost the attachment's source conversation; the comment branch below
-          // rechecks that membership itself.
-          OR: [{ kind: null }, { kind: { notIn: ["task_thread", "attachment_comments"] } }],
-          members: { some: { agentId, ...ACTIVE_MEMBER_WHERE } },
-        },
-      },
-      // A task's conversation is the Agent's while it follows the task; its seat there only
-      // keeps a read position.
-      {
-        conversation: {
-          taskDiscussionOf: {
-            follows: { some: { member: { agentId, ...ACTIVE_MEMBER_WHERE } } },
-          },
-        },
-      },
-      // A comment notification: the delivery counts while the Agent is still an active member of
-      // the attachment's source conversation, the rule comment reads recheck on every access.
-      // Detection goes through the comment's `attachment_comments` row, the only identity that
-      // survives comment migration; the source membership itself differs per shape — after
-      // migration the comment's own conversation IS the source.
-      {
-        message: { attachmentComment: { isNot: null } },
-        OR: [
-          // Post-migration shape: the comment lives in the source conversation — a seat there
-          // is the membership recheck, never a bookkeeping conversation's seat.
-          {
-            conversation: {
-              ...VISIBLE_CONVERSATION_WHERE,
-              OR: [{ kind: null }, { kind: { notIn: ["task_thread", "attachment_comments"] } }],
-              members: { some: { agentId, ...ACTIVE_MEMBER_WHERE } },
-            },
-          },
-          {
-            conversation: {
-              kind: "attachment_comments",
-              attachmentCommentThread: {
-                attachment: {
-                  conversation: {
-                    ...VISIBLE_CONVERSATION_WHERE,
-                    members: { some: { agentId, ...ACTIVE_MEMBER_WHERE } },
-                  },
-                },
-              },
-            },
-          },
-        ],
-      },
-      // A message it was notified of from outside the channel, while the channel stays one it may
-      // read: never a private one it is not in.
-      {
-        conversation: visibleChannelWhere(workspaceId, { agentId }),
-        message: { pendingMentionActions: { some: NOTIFIED_AGENT_WHERE(agentId) } },
-      },
-    ],
-  };
-}
 
 /**
  * Messages the Agent owes attention to: above its per-target read boundary, from a user, or
