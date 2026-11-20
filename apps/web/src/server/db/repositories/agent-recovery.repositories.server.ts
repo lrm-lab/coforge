@@ -150,24 +150,10 @@ export async function readPendingAgentDeliveries(
             },
           },
         });
-  const still = new Set(
-    candidates.length === 0
-      ? []
-      : (
-          await ports.db.$queryRaw<{ deliveryId: string }[]>(
-            pendingDeliveryPageSql(
-              workspaceId,
-              agentId,
-              Prisma.sql`(${selected}) AND d."deliveryId" IN (${Prisma.join(candidates)})`,
-              AGENT_RECOVERY_MESSAGE_LIMIT,
-            ),
-          )
-        ).map((row) => row.deliveryId),
-  );
   const deliveryById = new Map(fetched.map((delivery) => [delivery.deliveryId, delivery] as const));
   const deliveries = candidates.flatMap((deliveryId) => {
     const delivery = deliveryById.get(deliveryId);
-    return delivery && still.has(deliveryId) ? [delivery] : [];
+    return delivery ? [delivery] : [];
   });
   const chooserIds = [
     ...new Set(
@@ -224,32 +210,48 @@ export async function readPendingAgentDeliveries(
       ),
     ),
   );
-  return deliveries.map((delivery) => {
-    const { actionCard, ...message } = delivery.message;
-    const sender = agentMessageSender(delivery.message.sender);
-    const target = deliveryTarget(
-      conversationTarget(delivery.conversation, targetOf),
-      delivery.message.threadRootId,
-    );
-    return {
-      messageId: delivery.messageId,
-      deliveryId: delivery.deliveryId,
-      conversationId: delivery.conversationId,
-      sequence: delivery.sequence,
-      createdAtMs: delivery.message.createdAt.getTime(),
-      target,
-      latestSenderKind: sender.kind,
-      latestSenderHandle: sender.handle,
-      latestSenderDescription: sender.description,
-      ...agentDeliveryView(message, agentId, taskViews.get(delivery.deliveryId)),
-      ...(delivery.reason === "choice" ? { body: answerBody(actionCard, target, choosers) } : {}),
-      ...(delivery.reason ? { reason: delivery.reason } : {}),
-      ...(delivery.conversation.kind === APP_EVENTS_KIND ? { source: "app" as const } : {}),
-      ...(delivery.message.pendingMentionActions.length && !memberOf.has(delivery.conversationId)
-        ? { nonMemberMention: true }
-        : {}),
-    };
-  });
+  const still = new Set(
+    candidates.length === 0
+      ? []
+      : (
+          await ports.db.$queryRaw<{ deliveryId: string }[]>(
+            pendingDeliveryPageSql(
+              workspaceId,
+              agentId,
+              Prisma.sql`(${selected}) AND d."deliveryId" IN (${Prisma.join(candidates)})`,
+              AGENT_RECOVERY_MESSAGE_LIMIT,
+            ),
+          )
+        ).map((row) => row.deliveryId),
+  );
+  return deliveries
+    .filter((delivery) => still.has(delivery.deliveryId))
+    .map((delivery) => {
+      const { actionCard, ...message } = delivery.message;
+      const sender = agentMessageSender(delivery.message.sender);
+      const target = deliveryTarget(
+        conversationTarget(delivery.conversation, targetOf),
+        delivery.message.threadRootId,
+      );
+      return {
+        messageId: delivery.messageId,
+        deliveryId: delivery.deliveryId,
+        conversationId: delivery.conversationId,
+        sequence: delivery.sequence,
+        createdAtMs: delivery.message.createdAt.getTime(),
+        target,
+        latestSenderKind: sender.kind,
+        latestSenderHandle: sender.handle,
+        latestSenderDescription: sender.description,
+        ...agentDeliveryView(message, agentId, taskViews.get(delivery.deliveryId)),
+        ...(delivery.reason === "choice" ? { body: answerBody(actionCard, target, choosers) } : {}),
+        ...(delivery.reason ? { reason: delivery.reason } : {}),
+        ...(delivery.conversation.kind === APP_EVENTS_KIND ? { source: "app" as const } : {}),
+        ...(delivery.message.pendingMentionActions.length && !memberOf.has(delivery.conversationId)
+          ? { nonMemberMention: true }
+          : {}),
+      };
+    });
 }
 function appEventRowTarget(
   row: Pick<AgentRecoveryRow, "conversationKind" | "directKey" | "appKey">,

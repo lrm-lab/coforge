@@ -394,9 +394,25 @@ test("a revocation while the bodies load keeps the readable rows", async () => {
   const doomedEvent = await eventOf(doomed, first.reviewId);
   const keptEvent = await eventOf(kept, second.reviewId);
 
+  const assembled: string[][] = [];
   const racing = new Proxy(h.f.db, {
     get(target, property, receiver) {
-      if (property !== "agentMessageDelivery") return Reflect.get(target, property, receiver);
+      if (property === "agentMessageDelivery") {
+        const model = Reflect.get(target, property, receiver) as object;
+        return new Proxy(model, {
+          get(inner, method, innerReceiver) {
+            if (method !== "findMany") return Reflect.get(inner, method, innerReceiver);
+            const read = Reflect.get(inner, method, innerReceiver) as (
+              ...args: { where: { deliveryId: { in: string[] } } }[]
+            ) => Promise<unknown>;
+            return async (...args: { where: { deliveryId: { in: string[] } } }[]) => {
+              assembled.push(args[0].where.deliveryId.in);
+              return read.apply(inner, args);
+            };
+          },
+        });
+      }
+      if (property !== "conversationMember") return Reflect.get(target, property, receiver);
       const model = Reflect.get(target, property, receiver) as object;
       return new Proxy(model, {
         get(inner, method, innerReceiver) {
@@ -422,6 +438,12 @@ test("a revocation while the bodies load keeps the readable rows", async () => {
   );
   const returned = pending.map((delivery) => delivery.messageId);
 
+  const pageDeliveries = assembled.flat();
+  const doomedDelivery = await h.f.db.agentMessageDelivery.findFirstOrThrow({
+    where: { messageId: doomedEvent.messageId },
+    select: { deliveryId: true },
+  });
+  expect(pageDeliveries).toContain(doomedDelivery.deliveryId);
   expect(returned).toContain(keptEvent.messageId);
   expect(returned).not.toContain(doomedEvent.messageId);
 });
