@@ -1,5 +1,7 @@
 import type { DirectConversationPorts } from "./agent-targets.repositories.server";
 import { readableArtifactNoticeSql } from "#src/server/artifacts/artifact-notice-visibility.server";
+import { readableChannelSql } from "#src/server/conversations/channel-read-access.server";
+import { directConversationSql } from "#src/server/conversations/active-member.server";
 import { isRecoverableAgentTarget } from "@lrm/coforge-sdk/internal";
 import type { QuestionsAnswer } from "#src/server/conversations/action-card-questions.server";
 import {
@@ -95,16 +97,6 @@ function pendingDeliveryPageSql(
     SELECT 1 FROM "conversation_members" seat
     WHERE seat."conversationId" = ${Prisma.raw(alias)}."id"
       AND seat."agentId" = ${agentId}::uuid AND seat."leftAt" IS NULL)`;
-  const readableChannel = (alias: string) => Prisma.sql`(
-    ${Prisma.raw(alias)}."workspaceId" = ${workspaceId}::uuid
-    AND ${Prisma.raw(alias)}."channelName" IS NOT NULL
-    AND ${Prisma.raw(alias)}."hiddenFromWorkspaceAt" IS NULL
-    AND (${Prisma.raw(alias)}."visibility" = 'public' OR EXISTS (
-      SELECT 1 FROM "conversation_members" channel_seat
-      WHERE channel_seat."conversationId" = ${Prisma.raw(alias)}."id"
-        AND channel_seat."workspaceId" = ${workspaceId}::uuid
-        AND channel_seat."agentId" = ${agentId}::uuid
-        AND channel_seat."leftAt" IS NULL)))`;
   const ordinaryTarget = (alias: string) => Prisma.sql`(
     ${Prisma.raw(alias)}."kind" IS NULL
     OR ${Prisma.raw(alias)}."kind" NOT IN ('task_thread', 'attachment_comments'))`;
@@ -121,17 +113,17 @@ function pendingDeliveryPageSql(
       AND c."hiddenFromWorkspaceAt" IS NULL
       AND (
         c."channelName" IS NOT NULL
-        OR c."directKey" IS NOT NULL
+        OR ${directConversationSql("c")}
         OR c."kind" = 'attachment_comments'
         OR (c."kind" = 'task_thread' AND EXISTS (
           SELECT 1 FROM "tasks" task
           JOIN "conversations" board ON board."id" = task."conversationId"
           WHERE task."discussionConversationId" = c."id"
-            AND (${readableChannel("board")}
-              OR (board."hiddenFromWorkspaceAt" IS NULL AND board."directKey" IS NOT NULL))))
+            AND (${readableChannelSql("board", workspaceId, { agentId })}
+              OR (board."hiddenFromWorkspaceAt" IS NULL AND ${directConversationSql("board")}))))
       )
       AND (
-        c."directKey" IS NOT NULL
+        ${directConversationSql("c")}
         OR (${ordinaryTarget("c")} AND ${seat("c")})
         OR EXISTS (
           SELECT 1 FROM "tasks" followed
@@ -162,7 +154,7 @@ function pendingDeliveryPageSql(
                 AND thread."workspaceId" = c."workspaceId"
                 AND source."hiddenFromWorkspaceAt" IS NULL
                 AND ${seat("source")}))))
-        OR (${readableChannel("c")} AND EXISTS (
+        OR (${readableChannelSql("c", workspaceId, { agentId })} AND EXISTS (
           SELECT 1 FROM "pending_mention_actions" mention
           WHERE mention."messageId" = msg."id"
             AND mention."conversationId" = msg."conversationId"
