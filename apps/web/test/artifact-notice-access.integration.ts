@@ -194,3 +194,32 @@ test("the JavaScript rule and the SQL predicate agree on an artifact whose home 
     blocked: true,
   });
 });
+
+test("an event without the web marker keeps its old behaviour", async () => {
+  const artifact = await h.f.make("Old key gate");
+  const reader = await h.nameOf(h.f.agents.reader);
+  await h.create(artifact, `Old key gate, see @${reader}.`);
+  const sent = await h.submit(artifact);
+  if (sent.status !== "sent") throw new Error("not sent");
+  const event = await h.f.db.systemAgentEvent.findUniqueOrThrow({
+    where: {
+      source_agentId_externalEventId: {
+        source: "system.artifacts",
+        agentId: h.f.agents.reader,
+        externalEventId: `${artifact}:web-draft-review:${sent.reviewId}`,
+      },
+    },
+    select: { id: true, messageId: true },
+  });
+  await h.f.db.systemAgentEvent.update({
+    where: { id: event.id },
+    data: { externalEventId: `${artifact}:${sent.reviewId}` },
+  });
+  await h.f.db.artifact.update({ where: { id: artifact }, data: { deletedAt: new Date() } });
+
+  const conversations = new PrismaDirectConversationRepository(h.f.db);
+  const pendingIds = await conversations
+    .readPendingAgentDeliveries(h.f.workspaceId, h.f.agents.reader)
+    .then((rows) => rows.map((row) => row.messageId));
+  expect(pendingIds).toContain(event.messageId);
+});
