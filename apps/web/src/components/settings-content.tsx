@@ -80,7 +80,7 @@ export interface SettingsContentProps {
   onProfileSave: (profile: { displayName: string; description: string }) => Promise<void>;
   onAvatarUpload: (file: File) => Promise<void>;
   onAvatarPresetChoose: (presetId: string) => Promise<void>;
-  onLocaleChange: (locale: Locale) => void;
+  onLocaleChange: (locale: Locale) => Promise<void>;
   onThemeChange: (theme: Theme) => void;
   onMessageFullWidthChange: (full: boolean) => void;
   onHideEmptySidebarSectionsChange: (hide: boolean) => void;

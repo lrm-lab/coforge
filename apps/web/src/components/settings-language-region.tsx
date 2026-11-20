@@ -1,4 +1,4 @@
-import { useSubmitGuard } from "#src/hooks/use-submit-guard";
+import { STAY_PENDING, useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { useEffect, useState } from "react";
 import { Clock as Clock3, Translate01 as Languages } from "@untitledui/icons";
 import {} from "#src/components/layout/page-header";
@@ -24,7 +24,7 @@ import {
   SettingsGroup,
   SettingsPage,
 } from "#src/components/settings-layout";
-import { saveErrorFrom, type SaveError } from "#src/components/save-error";
+import { saveErrorFrom, SaveErrorMessage, type SaveError } from "#src/components/save-error";
 import { m } from "#src/paraglide/messages";
 import {} from "./settings-preferences";
 import {} from "./settings-workspace-profile";
@@ -41,13 +41,14 @@ export function LanguageRegionSettings({
   "locale" | "timeZone" | "timeFormat" | "onLocaleChange" | "onDateTimeSave"
 >) {
   const timeZoneOptions = getTimeZoneOptions(m.preferences_system());
-  const [draftLocale, setDraftLocale] = useState<Locale>(locale);
   // Until the viewer saves a choice, the page shows the cycle their language already uses.
   const effectiveTimeFormat = timeFormat ?? localeTimeFormat(locale);
   const [draftTimeZone, setDraftTimeZone] = useState(timeZone ?? "");
   const [draftTimeFormat, setDraftTimeFormat] = useState<TimeFormat>(effectiveTimeFormat);
   const [saving, guard] = useSubmitGuard();
   const [saveError, setSaveError] = useState<SaveError | null>(null);
+  const [savingLocale, guardLocale] = useSubmitGuard();
+  const [localeError, setLocaleError] = useState<SaveError | null>(null);
 
   useEffect(() => {
     setDraftTimeZone(timeZone ?? "");
@@ -56,6 +57,19 @@ export function LanguageRegionSettings({
 
   const dateTimeChanged =
     draftTimeZone !== (timeZone ?? "") || draftTimeFormat !== effectiveTimeFormat;
+
+  function chooseLocale(next: Locale) {
+    if (next === locale) return;
+    setLocaleError(null);
+    void guardLocale(async () => {
+      try {
+        await onLocaleChange(next);
+        return STAY_PENDING;
+      } catch (cause) {
+        setLocaleError(saveErrorFrom(m.settings_save_error(), cause));
+      }
+    });
+  }
 
   function saveDateTime() {
     void guard(async () => {
@@ -84,25 +98,17 @@ export function LanguageRegionSettings({
             <Select
               aria-label={m.language_region_display_language()}
               className="max-w-sm"
-              value={draftLocale}
+              value={locale}
+              isDisabled={savingLocale}
               onChange={(key) => {
-                if (key === "en" || key === "zh-CN") setDraftLocale(key);
+                if (key === "en" || key === "zh-CN") chooseLocale(key);
               }}
             >
               <SelectItem id="en" label={m.preferences_english()} />
               <SelectItem id="zh-CN" label={m.preferences_chinese()} />
             </Select>
           </SettingsField>
-          <SettingsCardFooter>
-            <Button
-              type="button"
-              size="sm"
-              isDisabled={draftLocale === locale}
-              onPress={() => onLocaleChange(draftLocale)}
-            >
-              {m.settings_group_save()}
-            </Button>
-          </SettingsCardFooter>
+          {localeError && <SaveErrorMessage error={localeError} />}
         </SettingsCard>
       </SettingsGroup>
 

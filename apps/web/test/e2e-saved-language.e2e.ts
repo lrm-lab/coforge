@@ -2,12 +2,6 @@ import { afterAll, expect, test } from "bun:test";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { setupAgentReplying } from "./helpers/agent-replying-fixture";
 
-/**
- * Browser E2E (task #4): the language saved in Settings is the person's on every page of the
- * Workspace. An address in the other language (a link someone shared) switches to the saved one on
- * Members as it does on Settings, rather than Settings alone. Screenshots are written under
- * `.artifacts/e2e/saved-language/`.
- */
 const fx = setupAgentReplying({ artifactsName: "saved-language" });
 
 let before: { language: string | null } | null = null;
@@ -19,13 +13,55 @@ afterAll(async () => {
   });
 });
 
-test("an English address opens in the saved Chinese on Members and on Settings", async () => {
-  before = await fx.db.userPreference.findUnique({ where: { userId: DEV_BROWSER_USER.id } });
+async function seedLanguage(language: string) {
   await fx.db.userPreference.upsert({
     where: { userId: DEV_BROWSER_USER.id },
-    create: { userId: DEV_BROWSER_USER.id, language: "zh-CN" },
-    update: { language: "zh-CN" },
+    create: { userId: DEV_BROWSER_USER.id, language },
+    update: { language },
   });
+}
+
+async function savedLanguage() {
+  return (await fx.db.userPreference.findUniqueOrThrow({ where: { userId: DEV_BROWSER_USER.id } }))
+    .language;
+}
+
+const languageCard = (label: string) =>
+  `(document.querySelector('button[aria-label=${JSON.stringify(label)}]')?.closest("div.rounded-xl") ?? null)`;
+const saveButtons = (card: string) =>
+  `[...((${card})?.querySelectorAll("button") ?? [])].filter((el) => ["保存", "Save"].includes(el.textContent.trim())).length`;
+const saved = `Number(sessionStorage.getItem("__languageSaves") ?? 0)`;
+const watchSaves = `(() => {
+  sessionStorage.setItem("__languageSaves", "0");
+  const send = window.fetch;
+  window.fetch = function (input, init) {
+    const url = String(typeof input === "string" ? input : input?.url);
+    const body = typeof init?.body === "string" ? init.body : "";
+    const method = String(init?.method ?? "GET").toUpperCase();
+    if (method === "POST" && url.includes("/_serverFn/") && body.includes('"language"')) {
+      sessionStorage.setItem("__languageSaves", String(Number(sessionStorage.getItem("__languageSaves")) + 1));
+    }
+    return send.apply(this, arguments);
+  };
+  return true;
+})()`;
+
+async function pickLanguage(label: string, option: string) {
+  await fx.browser("click", `button[aria-label=${JSON.stringify(label)}]`);
+  const text = JSON.stringify(option);
+  await fx.until(
+    `[...document.querySelectorAll('[role="option"]')].some((el) => el.textContent.includes(${text}))`,
+    10_000,
+  );
+  await fx.evaluate(
+    `[...document.querySelectorAll('[role="option"]')].find((el) => el.textContent.includes(${text})).click()`,
+  );
+  await fx.until(`document.querySelector('[role="listbox"]') === null`, 10_000);
+}
+
+test("choosing a language saves it at once and keeps it on every page", async () => {
+  before = await fx.db.userPreference.findUnique({ where: { userId: DEV_BROWSER_USER.id } });
+  await seedLanguage("zh-CN");
   for (const page of ["members", "settings"]) {
     await fx.browser("open", `${fx.proxy.origin}${fx.workspacePath}/${page}`);
     await fx.until(
@@ -35,34 +71,62 @@ test("an English address opens in the saved Chinese on Members and on Settings",
     await fx.screenshot(`${page}-zh.png`);
   }
   expect(await fx.evaluate<string>("location.pathname")).toEndWith("/settings");
-}, 120_000);
 
-test("switching to English in Settings turns the page English at once, and it stays after a reload", async () => {
-  await fx.db.userPreference.upsert({
-    where: { userId: DEV_BROWSER_USER.id },
-    create: { userId: DEV_BROWSER_USER.id, language: "zh-CN" },
-    update: { language: "zh-CN" },
-  });
-  const zh = fx.workspacePath.replace(/^\/en\//, "/zh-CN/");
-  await fx.browser("open", `${fx.proxy.origin}${zh}/settings?section=language-region`);
-  const select = `document.querySelector('button[aria-label="界面语言"]')`;
-  await fx.until(`${select} !== null`, 30_000);
-  await fx.evaluate(`${select}.click()`);
-  const english = `[...document.querySelectorAll('[role="option"]')].find((el) => el.textContent.includes("English"))`;
-  await fx.until(`${english} !== undefined`, 10_000);
-  await fx.evaluate(`${english}.click()`);
-  const save = `[...document.querySelectorAll("button")].find((el) => el.textContent.trim() === "保存" && !el.disabled)`;
-  await fx.until(`${save} !== undefined`, 10_000);
-  await fx.evaluate(`${save}.click()`);
-  const englishPage = `location.pathname.startsWith("/en/") && document.documentElement?.lang === "en"`;
-  await fx.until(englishPage, 30_000);
+  await fx.browser(
+    "open",
+    `${fx.proxy.origin}${fx.workspacePath}/settings?section=language-region`,
+  );
+  const chineseCard = languageCard("界面语言");
+  await fx.until(`${chineseCard} !== null`, 30_000);
+  expect(await fx.evaluate<number>(saveButtons(chineseCard))).toBe(0);
+  await fx.screenshot("language-card-zh.png");
+
+  await fx.evaluate(watchSaves);
+  await pickLanguage("界面语言", "English");
+  await fx.until(
+    `location.pathname.startsWith("/en/") && document.documentElement?.lang === "en"`,
+    30_000,
+  );
+  expect(await savedLanguage()).toBe("en");
+  expect(await fx.evaluate<number>(saved)).toBeGreaterThan(0);
   await fx.screenshot("settings-switched-en.png");
-  expect(
-    (await fx.db.userPreference.findUniqueOrThrow({ where: { userId: DEV_BROWSER_USER.id } }))
-      .language,
-  ).toBe("en");
-  await fx.browser("open", `${fx.proxy.origin}${fx.workspacePath}/members`);
-  await fx.until(`document.readyState === "complete"`, 30_000);
-  await Bun.sleep(2_000);
-  expect(await fx.evaluate<boolean>(englishPage)).toBe(true);
-}, 120_000);
+
+  await fx.browser("reload");
+  await fx.until(
+    `location.pathname.startsWith("/en/") && document.documentElement?.lang === "en"`,
+    30_000,
+  );
+  const englishCard = languageCard("Display language");
+  await fx.until(`${englishCard} !== null`, 30_000);
+  expect(await fx.evaluate<number>(saveButtons(englishCard))).toBe(0);
+  expect(await savedLanguage()).toBe("en");
+
+  await fx.evaluate(watchSaves);
+  await fx.evaluate(
+    `(() => { window.__stayed = false; setTimeout(() => { window.__stayed = true; }, 50); return true; })()`,
+  );
+  await pickLanguage("Display language", "English");
+  await fx.browser("click", `button[aria-label="Display language"]`);
+  await fx.until(`document.querySelector('[role="listbox"]') !== null`, 10_000);
+  await fx.browser("press", "Escape");
+  await fx.until(`document.querySelector('[role="listbox"]') === null`, 10_000);
+  await Bun.sleep(1_500);
+  expect(await fx.evaluate<number>(saved)).toBe(0);
+  expect(await fx.evaluate<boolean>("window.__stayed === true")).toBe(true);
+  expect(await savedLanguage()).toBe("en");
+
+  await pickLanguage("Display language", "Simplified Chinese");
+  await fx.until(
+    `location.pathname.startsWith("/zh-CN/") && document.documentElement?.lang === "zh-CN"`,
+    30_000,
+  );
+  expect(await savedLanguage()).toBe("zh-CN");
+  await fx.screenshot("settings-switched-zh.png");
+
+  await fx.browser("reload");
+  await fx.until(
+    `location.pathname.startsWith("/zh-CN/") && document.documentElement?.lang === "zh-CN"`,
+    30_000,
+  );
+  expect(await savedLanguage()).toBe("zh-CN");
+}, 180_000);
