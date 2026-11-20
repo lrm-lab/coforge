@@ -222,11 +222,15 @@ export class ArtifactNotices {
     });
   }
 
-  private async audience(input: Reach, plan: AudiencePlan): Promise<Audience> {
+  private async audience(
+    input: Reach,
+    plan: AudiencePlan,
+    scope: DatabaseScope = this.db,
+  ): Promise<Audience> {
     const { artifact } = input;
     const [mentions, followers] = await Promise.all([
-      mentionedIn(this.db, input.workspaceId, plan.texts, plan.handlesPerText),
-      plan.followers === undefined ? [] : followerIds(this.db, artifact.id),
+      mentionedIn(scope, input.workspaceId, plan.texts, plan.handlesPerText),
+      plan.followers === undefined ? [] : followerIds(scope, artifact.id),
     ]);
     const agents = new Map<string, NoticeReason>();
     if (plan.followers) for (const agentId of followers) agents.set(agentId, plan.followers);
@@ -242,7 +246,7 @@ export class ArtifactNotices {
 
   async recipients(input: Reach, plan: AudiencePlan, scope: DatabaseScope = this.db) {
     const { artifact, workspaceId } = input;
-    const { agents, people, mentioned } = await this.audience(input, plan);
+    const { agents, people, mentioned } = await this.audience(input, plan, scope);
     const named = await scope.agent.findMany({
       where: { id: { in: [...agents.keys()] }, workspaceId, ...ACTIVE_AGENT_WHERE },
       select: { id: true, name: true, displayName: true },

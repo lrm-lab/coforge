@@ -15,7 +15,7 @@ export type SystemAgentEventWrite = {
 };
 
 export interface SystemAgentEventStore {
-  expiryAfter(ttlSeconds: number): Promise<Date>;
+  expiryAfter(ttlSeconds: number, scope?: DatabaseScope): Promise<Date>;
   exists(
     source: SystemEventSource,
     agentId: string,
@@ -60,7 +60,7 @@ export class SystemAgentEvents {
         workspaceId: notice.workspaceId,
         agentId: notice.agentId,
         externalEventId: notice.key,
-        expiresAt: await this.store.expiryAfter(NOTICE_TTL_SECONDS),
+        expiresAt: await this.store.expiryAfter(NOTICE_TTL_SECONDS, scope),
         body,
       },
       scope,

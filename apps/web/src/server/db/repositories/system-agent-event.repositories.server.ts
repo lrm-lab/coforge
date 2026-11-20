@@ -6,7 +6,11 @@ import {
 import type { StoredAgentEvent } from "#src/server/app-agent-events/agent-events.server";
 import type { SystemAgentEventStore } from "#src/server/app-agent-events/system-agent-events.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
-import { inTransaction, type DatabaseScope } from "#src/server/db/transaction.server";
+import {
+  inTransaction,
+  isDatabaseClient,
+  type DatabaseScope,
+} from "#src/server/db/transaction.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import {
   eventConversation,
@@ -16,8 +20,8 @@ import {
 export class PrismaSystemAgentEventStore implements SystemAgentEventStore {
   constructor(private readonly db: PrismaClient) {}
 
-  async expiryAfter(ttlSeconds: number) {
-    const [row] = await this.db.$queryRaw<{ expiresAt: Date }[]>`
+  async expiryAfter(ttlSeconds: number, scope: DatabaseScope = this.db) {
+    const [row] = await scope.$queryRaw<{ expiresAt: Date }[]>`
       SELECT ((now() AT TIME ZONE 'UTC') + make_interval(secs => ${ttlSeconds}::double precision))::timestamp(3)
         AS "expiresAt"`;
     return row!.expiresAt;
@@ -97,7 +101,7 @@ export class PrismaSystemAgentEventStore implements SystemAgentEventStore {
         };
       });
     } catch (error) {
-      if (scope === this.db && isUniqueViolation(error)) return undefined;
+      if (isDatabaseClient(scope) && isUniqueViolation(error)) return undefined;
       throw error;
     }
   }

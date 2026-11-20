@@ -57,6 +57,11 @@ test("a notice stops being readable once the Agent loses the artifact", async ()
 
   expect(await pendingIds()).not.toContain(event.messageId);
   expect(await recoveryIds()).not.toContain(event.messageId);
+  await h.f.db.conversation.update({ where: { id: homeId }, data: { visibility: "public" } });
+  await h.f.db.conversationMember.updateMany({
+    where: { conversationId: homeId, agentId: h.f.agents.reader, leftAt: { not: null } },
+    data: { leftAt: null },
+  });
   const systemMembership = await h.f.db.conversationMember.findFirst({
     where: { conversationId: event.conversationId, agentId: h.f.agents.reader, leftAt: null },
     select: { id: true },
@@ -65,11 +70,6 @@ test("a notice stops being readable once the Agent loses the artifact", async ()
 });
 
 test("a blocked notice does not starve a later readable one in the same conversation", async () => {
-  await h.f.db.conversation.updateMany({ data: { visibility: "public" } });
-  await h.f.db.conversationMember.updateMany({
-    where: { agentId: h.f.agents.reader },
-    data: { leftAt: null },
-  });
   const blockedArtifact = await h.f.make("Blocked gate");
   const visibleArtifact = await h.f.make("Later gate");
   const reader = await h.nameOf(h.f.agents.reader);
