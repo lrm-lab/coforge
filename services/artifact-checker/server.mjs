@@ -1,4 +1,5 @@
 import { chmodSync } from "node:fs";
+import { lstat, unlink } from "node:fs/promises";
 import { timingSafeEqual } from "node:crypto";
 import { createPlaywrightDriver } from "./browser.mjs";
 import { isValidArtifactOrigin } from "./ssrf.mjs";
@@ -7,6 +8,28 @@ const DEFAULT_PORT = 3100;
 const DEFAULT_MAX_CONCURRENCY = 1;
 const DEFAULT_MAX_BODY_BYTES = 24 * 1024 * 1024;
 const MAX_QUEUED_REQUESTS = 8;
+
+export async function removeStaleSocket(path) {
+  const original = await lstat(path).catch((error) => {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  });
+  if (!original) return;
+  if (!original.isSocket()) throw new Error("The checker socket path is occupied by a different file type");
+  const connection = await Bun.connect({ unix: path, socket: { data() {} } }).catch((error) => {
+    if (error.code === "ECONNREFUSED") return null;
+    throw error;
+  });
+  if (connection) {
+    connection.end();
+    throw new Error("The checker socket already has a listener");
+  }
+  const current = await lstat(path);
+  if (current.dev !== original.dev || current.ino !== original.ino) {
+    throw new Error("The checker socket changed during startup");
+  }
+  await unlink(path);
+}
 
 function rssMb() {
   return Math.round((process.memoryUsage().rss / (1024 * 1024)) * 10) / 10;
@@ -306,6 +329,7 @@ if (import.meta.main) {
     throw new Error("The checker requires a private socket and an HTTP egress proxy");
   }
   const checker = createCheckerServer({ logger, secret, allowUnauthenticated, proxy });
+  if (socket) await removeStaleSocket(socket);
   const server = checker.start({ hostname, port, socket });
   logger.info({
     event: "artifact_checker.started",

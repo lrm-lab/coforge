@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { lstat, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
@@ -8,7 +8,7 @@ import {
   INLINE_HOST_ORIGIN,
   INLINE_LIGHT_TOKENS,
 } from "../evaluate.mjs";
-import { createCheckerServer, isAuthorizedBearer } from "../server.mjs";
+import { createCheckerServer, isAuthorizedBearer, removeStaleSocket } from "../server.mjs";
 import {
   fetchCdnSafely,
   isAllowedRequestUrl,
@@ -255,11 +255,44 @@ test("the checker accepts authorized requests through its private Unix socket", 
   try {
     const response = await fetch("http://artifact-checker/health", { unix: socket });
     expect(response.status).toBe(200);
-    const denied = await fetch("http://artifact-checker/check", { unix: socket, method: "POST", body: "{}" });
+    const denied = await fetch("http://artifact-checker/check", {
+      unix: socket,
+      method: "POST",
+      body: "{}",
+    });
     expect(denied.status).toBe(401);
   } finally {
     server.stop(true);
     await checker.driver.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("the checker replaces a socket left by a terminated worker and preserves an active listener", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "checker-restart-"));
+  const socket = join(directory, "checker.sock");
+  const previous = Bun.spawn(
+    [
+      process.execPath,
+      "-e",
+      "Bun.serve({ unix: process.argv[1], fetch: () => new Response() }); console.log('listening');",
+      socket,
+    ],
+    { stdout: "pipe", stderr: "inherit" },
+  );
+  try {
+    const reader = previous.stdout.getReader();
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe("listening\n");
+    reader.releaseLock();
+    await expect(removeStaleSocket(socket)).rejects.toThrow("already has a listener");
+    previous.kill("SIGKILL");
+    await previous.exited;
+    expect((await lstat(socket)).isSocket()).toBe(true);
+    await removeStaleSocket(socket);
+    await expect(lstat(socket)).rejects.toHaveProperty("code", "ENOENT");
+  } finally {
+    previous.kill();
+    await previous.exited;
     await rm(directory, { recursive: true, force: true });
   }
 });
