@@ -111,27 +111,10 @@ RUN chmod 755 /usr/local/bin/coforge-computer \
   /usr/local/share/coforge/pi-braimaster-provider.json \
   && find /usr/local/share/coforge/pi-skills -type f -name 'SKILL.md' -exec chmod 644 {} +
 
-RUN npm config set prefix /root/.npm-global \
-  && npm config set fetch-retries 5 \
-  && npm config set fetch-retry-mintimeout 20000 \
-  && npm config set fetch-retry-maxtimeout 120000 \
-  && npm config set fetch-timeout 300000
-
-RUN if [ "${INSTALL_PI}" != "1" ]; then \
-      echo "Skipping Pi install (INSTALL_PI=${INSTALL_PI})"; \
-    else \
-      if [ -n "${NPM_REGISTRY}" ]; then \
-        npm config set registry "${NPM_REGISTRY}"; \
-        echo "Using npm registry: ${NPM_REGISTRY}"; \
-      fi; \
-      npm install -g --ignore-scripts @earendil-works/pi-coding-agent; \
-      mkdir -p /root/.pi/agent; \
-      PI_SUITE_SOURCE="${PI_SUITE}"; \
-      if [ "${PI_SUITE}" = "npm:@lebronj/pi-suite" ] && [ -n "${PI_SUITE_VERSION}" ]; then \
-        PI_SUITE_SOURCE="npm:@lebronj/pi-suite@${PI_SUITE_VERSION}"; \
-      fi; \
-      pi install "${PI_SUITE_SOURCE}"; \
-    fi
+COPY scripts/install-pi.sh /tmp/install-pi.sh
+RUN chmod +x /tmp/install-pi.sh \
+  && /tmp/install-pi.sh \
+  && rm -f /tmp/install-pi.sh
 
 RUN ln -sf /root/.npm-global/bin/pi /usr/local/bin/pi.real \
   && printf '%s\n' \
