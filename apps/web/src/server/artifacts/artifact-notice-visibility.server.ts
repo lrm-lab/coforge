@@ -11,9 +11,13 @@ export function readableArtifactNoticeSql(
   const readable = agentReadableArtifactSql(workspaceId, agentId);
   return Prisma.sql`NOT (
     EXISTS (
-      SELECT 1 FROM "system_agent_events" e
-      WHERE e."messageId" = ${messageId}
-        AND e."source" = 'system.artifacts'
+      SELECT 1 FROM (
+        SELECT e."workspaceId", e."agentId", e."source", e."externalEventId"
+        FROM "system_agent_events" e
+        WHERE e."messageId" = ${messageId}
+        OFFSET 0
+      ) e
+      WHERE e."source" = 'system.artifacts'
         AND split_part(e."externalEventId", ':', 2) = ${WEB_DRAFT_REVIEW_MARKER}
         AND e."workspaceId" = ${workspaceId}::uuid
         AND e."agentId" = ${agentId}::uuid
@@ -23,7 +27,6 @@ export function readableArtifactNoticeSql(
             AND a."workspaceId" = ${workspaceId}::uuid
             AND a."deletedAt" IS NULL
             AND ${readable})
-      OFFSET 0
     )
   )`;
 }
