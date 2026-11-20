@@ -40,7 +40,11 @@ export function artifactChrome({ browser, evaluate }: Session) {
   const openMore = async () => {
     await until(`${more} != null`);
     await press(more);
-    await until(`document.querySelector('[role="menu"]') != null`);
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('[data-cascade-level="root"]')?.getAnimations().every((animation) => animation.playState !== "running") === true`,
+    );
   };
   const closeMenus = async () => {
     await browser("press", "Escape");

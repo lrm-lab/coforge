@@ -29,6 +29,7 @@ import {
   Button as AriaButton,
   Header as AriaHeader,
   Menu as AriaMenu,
+  MenuContext,
   MenuItem as AriaMenuItem,
   MenuSection as AriaMenuSection,
   MenuTrigger as AriaMenuTrigger,
@@ -153,16 +154,6 @@ const DropdownSubmenuTrigger = ({ children }: DropdownSubmenuTriggerProps) => {
   const triggerProps = triggerElement.props as { label?: string; textValue?: string };
   const defaultTitle = triggerProps.label ?? triggerProps.textValue;
 
-  const itemContextValue = useMemo(
-    () => ({
-      submenuId,
-      isSubmenuOpen,
-      triggerRef,
-      openSubmenuNow,
-    }),
-    [isSubmenuOpen, openSubmenuNow, submenuId],
-  );
-
   const popoverContextValue = useMemo(
     () => ({
       triggerRef,
@@ -173,16 +164,30 @@ const DropdownSubmenuTrigger = ({ children }: DropdownSubmenuTriggerProps) => {
     [defaultTitle, onCloseSubmenu],
   );
 
+  const itemContextValue = useMemo(
+    () => ({
+      submenuId,
+      isSubmenuOpen,
+      triggerRef,
+      openSubmenuNow,
+      popover: isSubmenuOpen && (
+        <CascadeDepthProvider depth={depth + 1}>
+          <CascadeSubmenuPopoverProvider value={popoverContextValue}>
+            <MenuContext.Provider value={null}>
+              <PopoverContext.Provider value={{ trigger: "SubmenuTrigger", triggerRef }}>
+                {popoverElement}
+              </PopoverContext.Provider>
+            </MenuContext.Provider>
+          </CascadeSubmenuPopoverProvider>
+        </CascadeDepthProvider>
+      ),
+    }),
+    [depth, isSubmenuOpen, openSubmenuNow, popoverContextValue, popoverElement, submenuId],
+  );
+
   return (
     <CascadeSubmenuItemProvider value={itemContextValue}>
       {triggerElement}
-      {isSubmenuOpen && (
-        <CascadeDepthProvider depth={depth + 1}>
-          <CascadeSubmenuPopoverProvider value={popoverContextValue}>
-            {popoverElement}
-          </CascadeSubmenuPopoverProvider>
-        </CascadeDepthProvider>
-      )}
     </CascadeSubmenuItemProvider>
   );
 };
@@ -226,18 +231,38 @@ const DropdownItem = ({
   const submenuId = submenuItem?.submenuId ?? null;
   const rowState = cascade ? cascade.getRowState(depth, rowId, submenuId) : "idle";
 
+  const handleSubmenuKeyDown = useCallback(
+    (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "ArrowRight" && event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      event.stopPropagation();
+      cascade?.markSuppressRootClose();
+      submenuItem?.openSubmenuNow(true);
+    },
+    [cascade, submenuItem],
+  );
+
   const setItemRef = useCallback(
     (node: HTMLDivElement | null) => {
       if (submenuItem) {
         submenuItem.triggerRef.current = node;
       }
+      const listenForSubmenuKeys = node && submenuItem && !props.isDisabled;
+      if (listenForSubmenuKeys) node.addEventListener("keydown", handleSubmenuKeyDown, true);
       if (typeof ref === "function") {
         ref(node);
       } else if (ref && "current" in ref) {
         ref.current = node;
       }
+      if (!node) return;
+      return () => {
+        if (listenForSubmenuKeys) node.removeEventListener("keydown", handleSubmenuKeyDown, true);
+        if (submenuItem) submenuItem.triggerRef.current = null;
+        if (typeof ref === "function") ref(null);
+        else if (ref && "current" in ref) ref.current = null;
+      };
     },
-    [ref, submenuItem],
+    [handleSubmenuKeyDown, props.isDisabled, ref, submenuItem],
   );
 
   const handlePointerEnter = useCallback(
@@ -274,22 +299,6 @@ const DropdownItem = ({
     if (!submenuId) return;
     cascade?.onFolderDragLeave(depth, rowId);
   }, [cascade, depth, rowId, submenuId]);
-
-  useEffect(() => {
-    if (props.isDisabled || !submenuItem) return;
-    const el = submenuItem.triggerRef.current;
-    if (!el) return;
-    const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "ArrowRight" || event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        event.stopPropagation();
-        cascade?.markSuppressRootClose();
-        submenuItem.openSubmenuNow(true);
-      }
-    };
-    el.addEventListener("keydown", onKeyDown, true);
-    return () => el.removeEventListener("keydown", onKeyDown, true);
-  }, [cascade, props.isDisabled, submenuItem]);
 
   const handleAction = useCallback(() => {
     if (submenuItem) {
@@ -336,7 +345,16 @@ const DropdownItem = ({
   );
 
   if (unstyled) {
-    return <AriaMenuItem ref={setItemRef} id={label} textValue={label} onAction={handleAction} {...props} />;
+    return (
+      <AriaMenuItem ref={setItemRef} id={label} textValue={label} onAction={handleAction} {...props}>
+        {(state) => (
+          <>
+            {typeof children === "function" ? children(state) : children}
+            {submenuItem?.popover}
+          </>
+        )}
+      </AriaMenuItem>
+    );
   }
 
   const showMorphFolder = hasSubmenu && (folderIcon || Icon === Folder);
@@ -370,69 +388,72 @@ const DropdownItem = ({
                   : "idle";
 
         return (
-          <div
-            data-cascade-state={effectiveState}
-            onPointerEnter={handlePointerEnter}
-            onPointerLeave={handlePointerLeave}
-            onDragEnter={handleDragEnter}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            className={cx(
-              "cascade-menu-row outline-focus-ring",
-              state.isFocusVisible && "outline-2 -outline-offset-2",
-            )}
-          >
-            {state.selectionMode !== "none" && !avatarUrl && !Icon && !leading && !showMorphFolder && (
-              <SelectionIndicator {...state} />
-            )}
+          <>
+            <div
+              data-cascade-state={effectiveState}
+              onPointerEnter={handlePointerEnter}
+              onPointerLeave={handlePointerLeave}
+              onDragEnter={handleDragEnter}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={cx(
+                "cascade-menu-row outline-focus-ring",
+                state.isFocusVisible && "outline-2 -outline-offset-2",
+              )}
+            >
+              {state.selectionMode !== "none" && !avatarUrl && !Icon && !leading && !showMorphFolder && (
+                <SelectionIndicator {...state} />
+              )}
 
-            {avatarUrl && (
-              <div className="flex size-[18px] shrink-0 items-center justify-center">
-                <Avatar aria-hidden="true" size="xs" src={avatarUrl} alt={label} className="size-[18px]" />
-              </div>
-            )}
+              {avatarUrl && (
+                <div className="flex size-[18px] shrink-0 items-center justify-center">
+                  <Avatar aria-hidden="true" size="xs" src={avatarUrl} alt={label} className="size-[18px]" />
+                </div>
+              )}
 
-            {showMorphFolder ? (
-              <CascadeFolderIcon open={Boolean(submenuItem?.isSubmenuOpen)} className="cascade-menu-icon" />
-            ) : Icon ? (
-              <span className="cascade-menu-icon" data-monochrome-icon={monochromeIcon ? "true" : undefined}>
-                <Icon aria-hidden="true" className="size-[18px] shrink-0 stroke-[1.9px]" />
+              {showMorphFolder ? (
+                <CascadeFolderIcon open={Boolean(submenuItem?.isSubmenuOpen)} className="cascade-menu-icon" />
+              ) : Icon ? (
+                <span className="cascade-menu-icon" data-monochrome-icon={monochromeIcon ? "true" : undefined}>
+                  <Icon aria-hidden="true" className="size-[18px] shrink-0 stroke-[1.9px]" />
+                </span>
+              ) : null}
+
+              {leading && (
+                <span
+                  className="cascade-menu-icon"
+                  data-monochrome-icon={monochromeIcon ? "true" : undefined}
+                >
+                  {leading}
+                </span>
+              )}
+
+              <span className="grow truncate">
+                {label || (typeof children === "function" ? children(state) : children)}
               </span>
-            ) : null}
 
-            {leading && (
-              <span
-                className="cascade-menu-icon"
-                data-monochrome-icon={monochromeIcon ? "true" : undefined}
-              >
-                {leading}
-              </span>
-            )}
+              {addon && (
+                <span className="max-w-1/2 shrink-0 truncate text-xs font-medium text-[var(--cascade-menu-quiet)]">
+                  {addon}
+                </span>
+              )}
 
-            <span className="grow truncate">
-              {label || (typeof children === "function" ? children(state) : children)}
-            </span>
+              {count !== undefined && (
+                <span className="shrink-0 text-xs font-medium text-[var(--cascade-menu-quiet)] tabular-nums">
+                  {count}
+                </span>
+              )}
 
-            {addon && (
-              <span className="max-w-1/2 shrink-0 truncate text-xs font-medium text-[var(--cascade-menu-quiet)]">
-                {addon}
-              </span>
-            )}
+              {state.selectionMode !== "none" && (avatarUrl || Icon || leading || showMorphFolder) && (
+                <SelectionIndicator {...state} />
+              )}
 
-            {count !== undefined && (
-              <span className="shrink-0 text-xs font-medium text-[var(--cascade-menu-quiet)] tabular-nums">
-                {count}
-              </span>
-            )}
-
-            {state.selectionMode !== "none" && (avatarUrl || Icon || leading || showMorphFolder) && (
-              <SelectionIndicator {...state} />
-            )}
-
-            {(hasSubmenu || state.hasSubmenu) && (
-              <ChevronRight aria-hidden="true" className="cascade-menu-chevron stroke-[2.25px]" />
-            )}
-          </div>
+              {(hasSubmenu || state.hasSubmenu) && (
+                <ChevronRight aria-hidden="true" className="cascade-menu-chevron stroke-[2.25px]" />
+              )}
+            </div>
+            {submenuItem?.popover}
+          </>
         );
       }}
     </AriaMenuItem>
@@ -536,7 +557,9 @@ const DropdownSubmenuPopover = ({ className, title, children, ...props }: Dropdo
       if (el && submenuPopover?.focusFirstOnOpenRef.current) {
         submenuPopover.focusFirstOnOpenRef.current = false;
         requestAnimationFrame(() => {
-          const firstItem = el.querySelector<HTMLElement>('[role="menuitem"]');
+          const firstItem = el.querySelector<HTMLElement>(
+            '[role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]',
+          );
           firstItem?.focus();
         });
       }

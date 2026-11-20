@@ -32,6 +32,7 @@ export interface CascadeSubmenuItemContextValue {
   readonly isSubmenuOpen: boolean;
   readonly triggerRef: RefObject<HTMLDivElement | null>;
   readonly openSubmenuNow: (focusFirstItem: boolean) => void;
+  readonly popover: ReactNode;
 }
 
 export interface CascadeSubmenuPopoverContextValue {
