@@ -223,3 +223,34 @@ test("an event without the web marker keeps its old behaviour", async () => {
     .then((rows) => rows.map((row) => row.messageId));
   expect(pendingIds).toContain(event.messageId);
 });
+
+test("an author still reads its own notice after the home conversation is gone", async () => {
+  const { PrismaSystemAgentEventStore } =
+    await import("#src/server/db/repositories/system-agent-event.repositories.server");
+  const artifact = await h.f.make("Author fallback");
+  const row = await h.f.db.artifact.findUniqueOrThrow({
+    where: { id: artifact },
+    select: { authorAgentId: true },
+  });
+  await h.f.db.artifact.update({
+    where: { id: artifact },
+    data: { access: "conversation", homeKey: `conversation:${crypto.randomUUID()}` },
+  });
+  if (!row.authorAgentId) throw new Error("the fixture artifact has no author");
+  const store = new PrismaSystemAgentEventStore(h.f.db);
+  const written = await store.write({
+    source: "system.artifacts",
+    workspaceId: h.f.workspaceId,
+    agentId: row.authorAgentId,
+    externalEventId: `${artifact}:web-draft-review:${crypto.randomUUID()}`,
+    expiresAt: await store.expiryAfter(600),
+    body: "Author fallback notice.",
+  });
+  if (!written) throw new Error("not written");
+
+  const conversations = new PrismaDirectConversationRepository(h.f.db);
+  const pendingIds = await conversations
+    .readPendingAgentDeliveries(h.f.workspaceId, row.authorAgentId)
+    .then((rows) => rows.map((delivery) => delivery.messageId));
+  expect(pendingIds).toContain(written.messageId);
+});
