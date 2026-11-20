@@ -31,15 +31,14 @@ test("Cmd/Ctrl+B toggles the sidebar, except in a rich-text editor", async () =>
   const apple = () => evaluate<boolean>(`/Mac|iPhone|iPad|iPod/i.test(navigator.platform)`);
   const COLLAPSE = 'button[aria-label="Collapse sidebar"]';
   const EXPAND = 'button[aria-label="Expand sidebar"]';
-  /** Moves a real pointer onto a button, from off it, so its tooltip opens. The button can still
-   * be moving (the rail's width transition, a late list row) between measuring and the move, so
-   * each attempt confirms the point lands on the button before the tooltip wait relies on it. */
+  /** Moves a real pointer onto a button so its tooltip opens. The button can still be moving (the
+   * rail's width transition, a late list row) between measuring and the move, so each attempt
+   * confirms the point lands on the button before the tooltip wait relies on it. */
   async function hover(selector: string) {
     for (let attempt = 0; attempt < 10; attempt++) {
       const [x, y] = await evaluate<[number, number]>(
         `(() => { const box = document.querySelector('${selector}').getBoundingClientRect(); return [Math.round(box.x + box.width / 2), Math.round(box.y + box.height / 2)]; })()`,
       );
-      await browser("mouse", "move", "700", "450");
       await browser("mouse", "move", String(x), String(y));
       const landed = await evaluate<boolean>(
         `(() => { const el = document.querySelector('${selector}'); const hit = document.elementFromPoint(${x}, ${y}); return Boolean(el && hit && (hit === el || el.contains(hit))); })()`,
@@ -48,13 +47,27 @@ test("Cmd/Ctrl+B toggles the sidebar, except in a rich-text editor", async () =>
       await browser("wait", "100");
     }
   }
+
+  async function parkUntilNoTooltipShowing() {
+    await browser("mouse", "move", "700", "450");
+    for (let attempt = 0; attempt < 20; attempt++) {
+      if ((await evaluate<number>(`document.querySelectorAll('[role="tooltip"]').length`)) === 0)
+        return true;
+      await browser("wait", "100");
+    }
+    return false;
+  }
+
   /** Hovers until the button's tooltip opens and returns its text, read in the same page
    * evaluation that first sees it: a tooltip can close again before a second DOM read (a hover
    * end, another trigger's warmup, an unmount), so seeing it and reading it must be one
    * observation. `title` names the tooltip wanted, so a previous button's still-closing tooltip
    * does not count. */
   async function tooltipAfterHover(selector: string, title: string) {
+    let reachedHover = false;
     for (let attempt = 0; attempt < 4; attempt++) {
+      if (!(await parkUntilNoTooltipShowing())) continue;
+      reachedHover = true;
       await hover(selector);
       const shown = JSON.parse(
         await browser(
@@ -73,7 +86,11 @@ test("Cmd/Ctrl+B toggles the sidebar, except in a rich-text editor", async () =>
       ) as string | null;
       if (shown !== null) return shown;
     }
-    throw new Error(`the ${selector} tooltip never opened`);
+    throw new Error(
+      reachedHover
+        ? `the ${selector} tooltip never opened`
+        : `a tooltip stayed open over ${selector}, so the pointer never reached it`,
+    );
   }
 
   try {
