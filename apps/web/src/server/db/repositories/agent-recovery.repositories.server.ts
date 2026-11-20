@@ -1,5 +1,5 @@
 import type { DirectConversationPorts } from "./agent-targets.repositories.server";
-import { pendingDeliveryPageSql } from "./agent-attention-deliveries.repositories.server";
+import { pendingDeliveryPageSql } from "./agent-attention-page.repositories.server";
 import { isRecoverableAgentTarget } from "@lrm/coforge-sdk/internal";
 import type { QuestionsAnswer } from "#src/server/conversations/action-card-questions.server";
 import {
