@@ -180,16 +180,20 @@ export async function readNoticePage(
     anchor === null
       ? Prisma.sql`FALSE`
       : Prisma.sql`r."sequence" ${Prisma.raw(comparison === "atOrBelow" ? "<=" : ">=")} ${anchor}::int`;
+  const sameSide = (comparison: "<" | ">") =>
+    anchor === null
+      ? Prisma.empty
+      : Prisma.sql`WHERE edge."sequence" ${Prisma.raw(comparison)} ${anchor}::int`;
   const parts = await confirmPageAndProbeEdges(
     db,
     scope,
     pageIds,
     input.after
       ? anchorAt("atOrBelow")
-      : Prisma.sql`r."sequence" < COALESCE((SELECT min(edge."sequence") FROM "page" edge), ${anchor}::int)`,
+      : Prisma.sql`r."sequence" < COALESCE((SELECT min(edge."sequence") FROM "page" edge ${sameSide("<")}), ${anchor}::int)`,
     input.before
       ? anchorAt("atOrAbove")
-      : Prisma.sql`r."sequence" > COALESCE((SELECT max(edge."sequence") FROM "page" edge), ${anchor}::int)`,
+      : Prisma.sql`r."sequence" > COALESCE((SELECT max(edge."sequence") FROM "page" edge ${sameSide(">")}), ${anchor}::int)`,
   );
   const confirmed = new Set(parts.filter((row) => row.part === "page").map((row) => row.id));
   const readable = rows.filter((row) => confirmed.has(row.id));
