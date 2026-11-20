@@ -39,6 +39,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
   dbus-x11 \
   fonts-dejavu-core \
   fonts-noto-cjk \
+  fonts-noto-color-emoji \
   tigervnc-standalone-server \
   novnc \
   librsvg2-bin \
