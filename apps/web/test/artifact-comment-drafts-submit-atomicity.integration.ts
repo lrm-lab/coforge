@@ -19,7 +19,6 @@ test("a notice that cannot be stored rolls the review back and keeps the drafts"
   const failing = new ArtifactCommentDrafts(
     h.f.db,
     h.f.blobs,
-    async () => true,
     {
       deliver: async () => {},
       stage: async () => {
@@ -30,7 +29,7 @@ test("a notice that cannot be stored rolls the review back and keeps the drafts"
   );
 
   const attempt = failing.submit({ ...h.place(artifact), draftIds: ids, clientKey: h.f.key() });
-  await expect(attempt).rejects.toThrow();
+  await expect(attempt).rejects.toThrow("notice store down");
 
   expect(await h.f.db.artifactCommentReview.count({ where: { artifactId: artifact } })).toBe(0);
   expect(await h.f.db.artifactComment.count({ where: { artifactId: artifact } })).toBe(0);
@@ -96,7 +95,7 @@ test("a first push that fails leaves the delivery stored for recovery under the 
   };
   const drafts = new (
     await import("#src/server/artifacts/artifact-comment-drafts.server")
-  ).ArtifactCommentDrafts(h.f.db, h.f.blobs, async () => true, port, quietSignals);
+  ).ArtifactCommentDrafts(h.f.db, h.f.blobs, port, quietSignals);
   const sent = await drafts.submit({ ...h.place(artifact), draftIds: ids, clientKey: h.f.key() });
   if (sent.status !== "sent") throw new Error("not sent");
   const stored = await h.f.db.systemAgentEvent.findUniqueOrThrow({
