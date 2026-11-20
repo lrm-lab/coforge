@@ -1,8 +1,5 @@
 import type { DirectConversationPorts } from "./agent-targets.repositories.server";
-import {
-  artifactNoticeBlockedMessages,
-  readableArtifactNoticeSql,
-} from "#src/server/artifacts/artifact-notice-visibility.server";
+import { artifactNoticeBlockedMessages } from "#src/server/artifacts/artifact-notice-visibility.server";
 import { isRecoverableAgentTarget } from "@lrm/coforge-sdk/internal";
 import type { QuestionsAnswer } from "#src/server/conversations/action-card-questions.server";
 import {
@@ -249,15 +246,10 @@ export async function readAgentRecoveryContext(
     resumeMessages: AgentFacing<AgentRecoveryContext["resumeMessages"][number]>[];
   }
 > {
-  const hideBlocked = Prisma.sql`WHERE ${readableArtifactNoticeSql(
-    workspaceId,
-    agentId,
-    Prisma.sql`u."id"`,
-  )}`;
   const [ranked, openTasks] = await Promise.all([
     ports.db.$queryRaw<AgentRecoveryRow[]>`
     WITH unread AS (
-      SELECT u.* FROM (${unreadAgentMessagesFragment(workspaceId, agentId)}) u ${hideBlocked}
+      ${unreadAgentMessagesFragment(workspaceId, agentId)}
     ), ranked AS (
       SELECT u.*,
         (COUNT(*) OVER (PARTITION BY "conversationId", "threadRootId"))::int AS "unreadCount",

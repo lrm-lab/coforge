@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
+import { readableArtifactNoticeSql } from "#src/server/artifacts/artifact-notice-visibility.server";
 import { visibleChannelWhere } from "#src/server/conversations/channel-read-access.server";
 import { CHANNEL_VISIBILITY } from "#src/features/conversations/channel-visibility";
 import {
@@ -327,5 +328,6 @@ export function unreadAgentMessagesFragment(
         THEN am."agentReadThroughSequence" ELSE COALESCE(tr."readThroughSequence", 0) END)
       AND (sm."userId" IS NOT NULL OR d."deliveryId" IS NOT NULL)
       AND (${directConversationSql("c")} OR d."deliveryId" IS NOT NULL)
+      AND ${readableArtifactNoticeSql(workspaceId, agentId, Prisma.sql`m."id"`)}
       ${targetFilter}`;
 }
