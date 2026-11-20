@@ -362,3 +362,30 @@ test("the bot inbox stops handing back a notice once the artifact is gone", asyn
   expect(await hinted()).not.toContain(event.messageId);
   expect(JSON.stringify(await inbox.check(principal))).not.toContain(event.messageId);
 });
+
+test("the wake hint drops the notice in the same step its artifact goes", async () => {
+  const { listWakeHints } = await import("#src/server/agents/external-wake-hints.server");
+  const artifact = await h.f.make("Hint gate");
+  const other = await h.nameOf(h.f.agents.other);
+  await h.create(artifact, `Hint gate, see @${other}.`);
+  const sent = await h.submit(artifact);
+  if (sent.status !== "sent") throw new Error("not sent");
+  const event = await h.f.db.systemAgentEvent.findUniqueOrThrow({
+    where: {
+      source_agentId_externalEventId: {
+        source: "system.artifacts",
+        agentId: h.f.agents.other,
+        externalEventId: `${artifact}:${WEB_DRAFT_REVIEW_MARKER}:${sent.reviewId}`,
+      },
+    },
+    select: { messageId: true },
+  });
+  const scope = { workspaceId: h.f.workspaceId, agentId: h.f.agents.other };
+  const hinted = async () =>
+    (await listWakeHints(h.f.db, scope)).map((hint) => hint.firstPendingMsgId);
+  expect(await hinted()).toContain(event.messageId);
+
+  await h.f.db.artifact.update({ where: { id: artifact }, data: { deletedAt: new Date() } });
+
+  expect(await hinted()).not.toContain(event.messageId);
+});
