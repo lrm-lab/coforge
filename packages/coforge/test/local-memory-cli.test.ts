@@ -96,3 +96,14 @@ test("personal memory search can explicitly include archives and keeps that filt
   });
   expect(output).toContain("--archived --offset 128");
 });
+
+test.each([
+  ["--body", "Use --content"],
+  ["--summary", "Use --title and --content"],
+  ["--file", "Pass the text with --content"],
+])("memory save explains unsupported %s without accepting it", (flag, hint) => {
+  expect(() => parseMemoryArgs(["save", "--key", "lesson", flag, "private-value"])).toThrow(hint);
+  expect(() => parseMemoryArgs(["save", "--key", "lesson", flag, "private-value"])).not.toThrow(
+    "private-value",
+  );
+});

@@ -1,3 +1,4 @@
+import { invalidArg } from "./cli-error";
 import {
   parseTeamMemoryArgs,
   runTeamMemoryCommand,
@@ -29,6 +30,21 @@ export function parseMemoryArgs(args: readonly string[]): MemoryInvocation {
   let json = false;
   for (let index = 1; index < args.length; index++) {
     const flag = args[index]!;
+    if (operation === "save") {
+      const hint =
+        flag === "--body"
+          ? "Use --content for the memory text."
+          : flag === "--summary"
+            ? "Use --title and --content for the memory title and text."
+            : flag === "--file"
+              ? "Pass the text with --content; save does not read a file."
+              : undefined;
+      if (hint)
+        throw invalidArg(
+          `Unsupported memory save flag: ${flag}. ${hint}`,
+          "Run coforge memory save --help for the required fields.",
+        );
+    }
     if (flag === "--json") {
       json = true;
       continue;
