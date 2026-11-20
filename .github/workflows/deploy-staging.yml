@@ -94,9 +94,7 @@ jobs:
           build-args: |
             COFORGE_BUILD_ID=${{ github.sha }}
           outputs: type=image,name=ghcr.io/${{ env.IMAGE_REPOSITORY }},push-by-digest=true,name-canonical=true,rewrite-timestamp=true
-        # A constant timestamp for the files the build writes: a layer rebuilt from unchanged
-        # inputs, such as the migration toolchain, keeps its digest without a build cache, which
-        # other jobs on main could write.
+        # Constant mtime preserves unchanged layer digests without a build cache.
         env:
           SOURCE_DATE_EPOCH: 0
 
@@ -117,14 +115,21 @@ jobs:
           id="$(bun scripts/deploy/deployment.ts validate --image "${{ steps.identity.outputs.image }}")"
           echo "deployment_id=${id#deployment_id=}" >> "$GITHUB_OUTPUT"
 
+  checker-image:
+    name: Build and push Artifact Checker image
+    needs: [ci-status, gates]
+    if: always() && github.ref == 'refs/heads/main' && !cancelled() && (needs.ci-status.outputs.passed == 'true' || (needs.gates.result == 'success' && needs.gates.outputs.deploy == 'true'))
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/artifact-checker-image.yml
+
   deploy:
     name: Deploy and verify Web
-    needs: image
-    if: always() && !cancelled() && needs.image.result == 'success'
+    needs: [image, checker-image]
+    if: always() && !cancelled() && needs.image.result == 'success' && needs.checker-image.result == 'success'
     runs-on: ubuntu-latest
     environment: staging
-    # Covers remote-deploy.sh's bounded waits at their worst (about 22 minutes on the host):
-    # three bounded Web image pull attempts, Compose health, public readiness, and a rollback.
     timeout-minutes: 30
     permissions:
       contents: read
@@ -229,6 +234,7 @@ jobs:
       - name: Copy deployment assets
         run: |
           tar -czf "$REMOTE_ASSETS" \
+            infra/artifact-checker.compose.yml \
             infra/staging/docker-compose.yml \
             infra/staging/caddy/Caddyfile \
             infra/staging/centrifugo/config.yaml \
@@ -279,6 +285,7 @@ jobs:
       - name: Deploy image and check health
         env:
           IMAGE: ${{ needs.image.outputs.image }}
+          CHECKER_IMAGE: ${{ needs.checker-image.outputs.image }}
         run: |
           {
             ssh -i "$SSH_DIR/key" \
@@ -289,6 +296,7 @@ jobs:
               "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
               "mkdir -p \$(dirname '$REMOTE_ROOT/state.env') && bash '$REMOTE_ROOT/scripts/deploy/remote-deploy.sh' \
                 --image '$IMAGE' \
+                --checker-image '$CHECKER_IMAGE' \
                 --compose-file '$REMOTE_ROOT/infra/staging/docker-compose.yml' \
                 --secrets-dir '$REMOTE_ROOT/infra/staging/secrets' \
                 --state-file '$REMOTE_ROOT/state.env' \

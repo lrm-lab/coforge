@@ -64,6 +64,7 @@ wildcard_probe_host=
 web_pull_attempts=3
 web_pull_deadline=210
 image=
+checker_image=
 compose_file=
 secrets_dir=
 state_file=
@@ -94,6 +95,10 @@ while [ "$#" -gt 0 ]; do
 		;;
 	--image)
 		image="${2:?}"
+		shift 2
+		;;
+	--checker-image)
+		checker_image="${2-}"
 		shift 2
 		;;
 	--compose-file)
@@ -130,7 +135,12 @@ done
 [ -n "$web_health_url" ] || usage
 [ -n "$public_health_url" ] || usage
 
-readonly COMPOSE_ARGS=(-p "$project" -f "$compose_file")
+checker_compose_file="$(dirname "$compose_file")/../artifact-checker.compose.yml"
+if [ -n "$checker_image" ] && [ -f "$checker_compose_file" ]; then
+	readonly COMPOSE_ARGS=(-p "$project" -f "$compose_file" -f "$checker_compose_file")
+else
+	readonly COMPOSE_ARGS=(-p "$project" -f "$compose_file")
+fi
 
 # The last healthy release: the shipped Compose file, Caddyfile, and Centrifugo
 # configuration that were live the last time this script recorded a healthy
@@ -144,6 +154,10 @@ release_snapshot_files=(docker-compose.yml caddy/Caddyfile centrifugo/config.yam
 # Fail closed on a mutable reference instead of guessing the intended digest.
 if ! printf '%s' "$image" | grep -Eq '@sha256:[0-9a-f]{64}$'; then
 	printf 'outcome=failed\nhealth_result=mutable image reference rejected\nrollback_target=\nprevious_web_image=\n'
+	exit 0
+fi
+if [ -n "$checker_image" ] && ! printf '%s' "$checker_image" | grep -Eq '@sha256:[0-9a-f]{64}$'; then
+	printf 'outcome=failed\nhealth_result=mutable checker image reference rejected\nrollback_target=\nprevious_web_image=\n'
 	exit 0
 fi
 
@@ -196,7 +210,7 @@ fi
 compose_all_healthy() {
 	local service container services
 	services="$(compose config --services)" || return 1
-	for service in web centrifugo redis postgres; do
+	for service in web centrifugo redis postgres artifact-checker; do
 		# Managed datastores (production) have no Compose service to check.
 		grep -qx "$service" <<<"$services" || continue
 		container="$(compose ps -q "$service")"
@@ -259,11 +273,11 @@ rollback() {
 		if [ -d "$release_snapshot_dir" ]; then
 			restore_release_snapshot
 			printf 'restored the last healthy release configuration\n' >&2
-			write_deploy_env "$target"
+			write_deploy_env "$target" "$checker_image"
 			compose up -d --remove-orphans --wait --wait-timeout "$timeout" >/dev/null
 		else
 			printf 'no last healthy release snapshot; rolling back the image only\n' >&2
-			write_deploy_env "$target"
+			write_deploy_env "$target" "$checker_image"
 			compose up -d --wait --wait-timeout "$timeout" web >/dev/null
 		fi
 		if wait_for_health; then
@@ -301,7 +315,7 @@ report() {
 	[ -z "$deploy_warning" ] || printf 'warning=%s\n' "$deploy_warning"
 }
 
-write_deploy_env "$image"
+write_deploy_env "$image" "$checker_image"
 
 # A candidate stopped before anything was recreated leaves its shipped files on
 # the live paths (the workflow copied them before this script ran). Running
@@ -312,7 +326,7 @@ discard_candidate_configuration() {
 	[ -d "$release_snapshot_dir" ] || return 0
 	restore_release_snapshot
 	if [ -n "$current_image" ]; then
-		write_deploy_env "$current_image"
+		write_deploy_env "$current_image" "$checker_image"
 	fi
 }
 

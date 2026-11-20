@@ -79,7 +79,7 @@ compose() {
 
 write_deploy_env() {
 	# Writes .env next to the compose file with chmod 600; never printed.
-	local web_image="$1" env_file env_file_tmp centrifugo_config_sha256 caddyfile_sha256 desktop_host_gateway
+	local web_image="$1" checker_image="${2:-}" env_file env_file_tmp centrifugo_config_sha256 caddyfile_sha256 desktop_host_gateway check_secret
 	env_file="$(cd "$(dirname "$compose_file")" && pwd)/.env"
 	centrifugo_config_sha256="$(sha256sum "$(dirname "$compose_file")/centrifugo/config.yaml" | awk '{print $1}')"
 	caddyfile_sha256="$(sha256sum "$(dirname "$compose_file")/caddy/Caddyfile" | awk '{print $1}')"
@@ -98,7 +98,7 @@ write_deploy_env() {
 	umask 077
 	env_file_tmp="$(mktemp "${env_file}.XXXXXX")"
 	{
-			printf 'COFORGE_WEB_IMAGE=%s\n' "$web_image"
+		printf 'COFORGE_WEB_IMAGE=%s\n' "$web_image"
 		# A managed datastore supplies its whole URL as a secret file; the bundled
 		# postgres and redis services build it from their password files.
 		if [ -f "$secrets_dir/database_url" ]; then
@@ -119,6 +119,17 @@ write_deploy_env() {
 		printf 'COFORGE_DESKTOP_HOST_GATEWAY=%s\n' "$desktop_host_gateway"
 		printf 'COFORGE_WORKER_JWT_KEY_ID=%s\n' "$(cat "$secrets_dir/worker_jwt_key_id")"
 		printf 'COFORGE_WORKER_JWT_PRIVATE_JWK=%s\n' "$(cat "$secrets_dir/worker_jwt_private_jwk")"
+		if [ -n "$checker_image" ]; then
+			if [ -f "$secrets_dir/coforge_artifact_check_secret" ]; then
+				check_secret="$(cat "$secrets_dir/coforge_artifact_check_secret")"
+			else
+				check_secret="$(printf 'artifact-check:%s' "$COFORGE_SESSION_SECRET" | sha256sum | awk '{print $1}')"
+			fi
+			printf 'COFORGE_ARTIFACT_CHECKER_IMAGE=%s\n' "$checker_image"
+			printf 'COFORGE_ARTIFACT_CHECK_WORKER_URL=http://artifact-checker:3100\n'
+			printf 'COFORGE_ARTIFACT_CHECK_SECRET=%s\n' "$check_secret"
+			printf 'COFORGE_ARTIFACT_CHECK_CONCURRENCY=%s\n' "${COFORGE_ARTIFACT_CHECK_CONCURRENCY:-1}"
+		fi
 	} >"$env_file_tmp"
 	chmod 600 "$env_file_tmp"
 	mv "$env_file_tmp" "$env_file"

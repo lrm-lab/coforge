@@ -41,16 +41,19 @@ Emits one-line JSON events to stdout/stderr:
 
 ## Local build and deployment
 
+Enabled by default in local Compose ([`infra/docker-compose.yml`](../../infra/docker-compose.yml)),
+staging (`.github/workflows/deploy-staging.yml`), and production
+(`.github/workflows/deploy-production.yml`). Staging builds the sidecar via
+`.github/workflows/artifact-checker-image.yml`, passes its immutable digest to
+`scripts/deploy/remote-deploy.sh --checker-image`, attaches `infra/artifact-checker.compose.yml`,
+and derives `COFORGE_ARTIFACT_CHECK_SECRET` automatically when no explicit host secret file exists.
+
+Standalone smoke test:
+
 ```bash
 docker build -t coforge-artifact-checker services/artifact-checker
 docker run --rm -p 3100:3100 --shm-size=256m --memory=1g \
   -e COFORGE_ARTIFACT_CHECK_SECRET=dev-secret \
   coforge-artifact-checker
 curl -s http://127.0.0.1:3100/health
-```
-
-Enable alongside staging or production with the Compose overlay:
-
-```bash
-docker compose -f infra/staging/docker-compose.yml -f infra/artifact-checker.compose.yml up -d
 ```

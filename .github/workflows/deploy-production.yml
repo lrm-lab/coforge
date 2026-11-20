@@ -39,9 +39,11 @@ jobs:
     timeout-minutes: 10
     outputs:
       staging_sha: ${{ steps.find_staging.outputs.staging_sha }}
+      checker_image: ${{ steps.find_checker.outputs.image }}
     permissions:
       contents: read
       actions: read
+      packages: read
     steps:
       - name: Require an immutable digest of the Web image
         run: |
@@ -71,6 +73,26 @@ jobs:
           done
           echo "no healthy staging deployment of $IMAGE among the last 50 successful staging runs" >&2
           exit 1
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve matching Artifact Checker image digest
+        id: find_checker
+        env:
+          STAGING_SHA: ${{ steps.find_staging.outputs.staging_sha }}
+        run: |
+          repo="ghcr.io/lrm-lab/coforge/coforge-artifact-checker"
+          digest="$(docker buildx imagetools inspect "${repo}:sha-${STAGING_SHA}" --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"' || true)"
+          if printf '%s' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+            echo "image=${repo}@${digest}" >> "$GITHUB_OUTPUT"
+          else
+            echo "image=" >> "$GITHUB_OUTPUT"
+          fi
 
       # web-e2e and web-integration never block a deploy; their latest main
       # conclusions are context for the operator (docs/release/github-actions.md).
@@ -189,6 +211,7 @@ jobs:
       - name: Copy deployment assets
         run: |
           tar -czf "$REMOTE_ASSETS" \
+            infra/artifact-checker.compose.yml \
             infra/production/docker-compose.yml \
             infra/production/caddy/Caddyfile \
             infra/production/centrifugo/config.yaml \
@@ -249,6 +272,8 @@ jobs:
             --optional "COFORGE_CLOUD_CLUSTER_TOKEN COFORGE_CLOUD_SERVICE_PASSWORD"
 
       - name: Deploy image and check health
+        env:
+          CHECKER_IMAGE: ${{ needs.candidate.outputs.checker_image }}
         run: |
           ssh -i "$SSH_DIR/key" \
             -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
@@ -258,6 +283,7 @@ jobs:
             "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
             "bash '$REMOTE_ROOT/scripts/deploy/remote-deploy.sh' \
               --project coforge-production \
+              --checker-image '$CHECKER_IMAGE' \
               --image '$IMAGE' \
               --compose-file '$REMOTE_ROOT/infra/production/docker-compose.yml' \
               --secrets-dir '$REMOTE_ROOT/infra/production/secrets' \
