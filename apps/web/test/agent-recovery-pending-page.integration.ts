@@ -215,6 +215,36 @@ test("the pending page keeps the attention rule and the notice permission, in or
       },
     });
 
+    const handoff = await db.conversation.create({
+      data: { workspaceId: workspace.id, channelName: `handoff-${suffix}` },
+    });
+    await db.conversationMember.create({
+      data: { workspaceId: workspace.id, conversationId: handoff.id, userId: user.id },
+    });
+    const handoffAttachment = await db.attachment.create({
+      data: {
+        workspaceId: workspace.id,
+        conversationId: handoff.id,
+        objectKey: `pending/${suffix}/handoff.pdf`,
+        fileName: "handoff.pdf",
+        contentType: "application/pdf",
+        sizeBytes: 12,
+      },
+    });
+    const handoffComments = await db.conversation.create({
+      data: { workspaceId: workspace.id, kind: "attachment_comments" },
+    });
+    await db.conversationMember.create({
+      data: { workspaceId: workspace.id, conversationId: handoffComments.id, agentId: reader.id },
+    });
+    await db.attachmentCommentThread.create({
+      data: {
+        attachmentId: handoffAttachment.id,
+        workspaceId: workspace.id,
+        conversationId: handoffComments.id,
+      },
+    });
+
     const received = await seed({
       conversationId: plans.id,
       senderMemberId: planner.id,
@@ -245,6 +275,15 @@ test("the pending page keeps the attention rule and the notice permission, in or
         attachmentId: attachments.id,
         workspaceId: workspace.id,
         conversationId: comments.id,
+      },
+    });
+    const sourcedComment = await seed({ conversationId: handoffComments.id, senderMemberId: null });
+    await db.attachmentComment.create({
+      data: {
+        messageId: sourcedComment.messageId,
+        attachmentId: handoffAttachment.id,
+        workspaceId: workspace.id,
+        conversationId: handoffComments.id,
       },
     });
     const blockedNotice = await seed({ conversationId: plans.id, senderMemberId: null });
@@ -337,6 +376,7 @@ test("the pending page keeps the attention rule and the notice permission, in or
       notifiedMention.deliveryId,
     ]);
     expect(actual).not.toContain(privateMention.deliveryId);
+    expect(actual).not.toContain(sourcedComment.deliveryId);
 
     const chosen = {
       deliveryIds: [
@@ -356,6 +396,15 @@ test("the pending page keeps the attention rule and the notice permission, in or
       await repository.readPendingAgentDeliveries(workspace.id, reader.id, withUnreceived)
     ).map((delivery) => delivery.deliveryId);
     expect(unionIds).toEqual([received.deliveryId, ...actual]);
+
+    await db.conversationMember.create({
+      data: { workspaceId: workspace.id, conversationId: handoff.id, agentId: reader.id },
+    });
+    const afterSeat = (await repository.readPendingAgentDeliveries(workspace.id, reader.id)).map(
+      (delivery) => delivery.deliveryId,
+    );
+    expect(afterSeat).toContain(sourcedComment.deliveryId);
+    expect(afterSeat).not.toContain(unseatedComment.deliveryId);
 
     expect(
       await repository.readPendingAgentDeliveries(workspace.id, reader.id, { deliveryIds: [] }),
