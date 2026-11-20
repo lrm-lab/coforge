@@ -308,7 +308,7 @@ export function AgentRuntimeConfigDialog({
           if (!next) guard.requestClose();
         }}
       >
-        <Modal className="w-[calc(100vw-2rem)] max-w-lg">
+        <Modal className="w-[calc(100vw-2rem)] max-w-md">
           <Dialog>
             {({ close }) => (
               <AgentRuntimeConfigForm

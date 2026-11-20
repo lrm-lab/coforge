@@ -5,11 +5,14 @@ import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { runtimeUnavailableReason } from "#src/features/computers/runtime-unavailable-reason";
 import { m } from "#src/paraglide/messages";
 import type { RuntimeOptions } from "./agent-runtime-fields-state";
-import { RUNTIME_PROVIDER_DISPLAY_ORDER, runtimeProviderLabel } from "./runtime-provider-display";
+import {
+  compareRuntimeProvidersByLabel,
+  RUNTIME_PROVIDER_DISPLAY_ORDER,
+  runtimeProviderLabel,
+  sortedRuntimeProviders,
+} from "./runtime-provider-display";
 import { RuntimeProviderMark } from "./runtime-provider-mark";
 
-/** The runtime picker of the Agent forms: CoForge, then the runtimes the Computer can run, then
- * the ones it has but cannot use, each with why. */
 export function AgentRuntimeProviderSelect({
   provider,
   providers,
@@ -24,6 +27,15 @@ export function AgentRuntimeProviderSelect({
   onChange: (key: string | number) => void;
 }) {
   const controlSize = useDialogControlSize();
+  const selectableProviders = sortedRuntimeProviders([
+    RUNTIME_PROVIDER.COFORGE,
+    ...RUNTIME_PROVIDER_DISPLAY_ORDER.filter((candidate) => providers.has(candidate)),
+  ]);
+  const selectableProviderSet = new Set(selectableProviders);
+  const unavailableEntries = unusable
+    .filter((entry) => !selectableProviderSet.has(entry.provider))
+    .sort((a, b) => compareRuntimeProvidersByLabel(a.provider, b.provider));
+
   return (
     <Select
       label={m.agent_form_provider()}
@@ -34,35 +46,24 @@ export function AgentRuntimeProviderSelect({
         if (key !== null) onChange(key);
       }}
     >
-      <Select.Item
-        id={RUNTIME_PROVIDER.COFORGE}
-        label={runtimeProviderLabel(RUNTIME_PROVIDER.COFORGE)}
-        icon={<RuntimeProviderMark provider={RUNTIME_PROVIDER.COFORGE} />}
-      />
-      {RUNTIME_PROVIDER_DISPLAY_ORDER.filter((candidate) => providers.has(candidate)).map(
-        (candidate) => (
-          <Select.Item
-            key={candidate}
-            id={candidate}
-            label={runtimeProviderLabel(candidate)}
-            icon={<RuntimeProviderMark provider={candidate} />}
-          />
-        ),
-      )}
-      {unusable
-        .filter((entry) => !providers.has(entry.provider))
-        .map((entry) => (
-          // Shown, never selectable: the person learns why the runtime they know about is
-          // missing from the list instead of finding it gone.
-          <Select.Item
-            key={entry.provider}
-            id={entry.provider}
-            label={runtimeProviderLabel(entry.provider)}
-            supportingText={runtimeUnavailableReason(entry.unavailableCode, entry.diagnostic)}
-            icon={<RuntimeProviderMark provider={entry.provider} />}
-            isDisabled
-          />
-        ))}
+      {selectableProviders.map((candidate) => (
+        <Select.Item
+          key={candidate}
+          id={candidate}
+          label={runtimeProviderLabel(candidate)}
+          icon={<RuntimeProviderMark provider={candidate} />}
+        />
+      ))}
+      {unavailableEntries.map((entry) => (
+        <Select.Item
+          key={entry.provider}
+          id={entry.provider}
+          label={runtimeProviderLabel(entry.provider)}
+          supportingText={runtimeUnavailableReason(entry.unavailableCode, entry.diagnostic)}
+          icon={<RuntimeProviderMark provider={entry.provider} />}
+          isDisabled
+        />
+      ))}
     </Select>
   );
 }

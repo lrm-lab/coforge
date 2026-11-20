@@ -15,51 +15,54 @@ import commandCodeMark from "./marks/command-code.svg";
 // Not in @lobehub/icons: Factory's rotor mark, from factory.ai/favicon.svg (see the file header).
 import droidMark from "./marks/droid.svg";
 
-/**
- * The one display table for a RuntimeProvider: shared by the Agent runtime picker, the Agent
- * detail page, and the Computer runtime usage panel. Adding a RuntimeProvider value without
- * adding an entry here fails to compile.
- */
-
-/** The order the runtime picker has always listed providers in; CoForge is offered separately
- * since it is always shown regardless of the Computer's reported provider set. */
 export const RUNTIME_PROVIDER_DISPLAY_ORDER: readonly RuntimeProvider[] = [
-  RUNTIME_PROVIDER.PI,
-  RUNTIME_PROVIDER.CODEX,
-  RUNTIME_PROVIDER.CLAUDE_CODE,
-  RUNTIME_PROVIDER.KIRO,
-  RUNTIME_PROVIDER.CURSOR,
-  RUNTIME_PROVIDER.OPENCODE,
-  RUNTIME_PROVIDER.GROK,
   RUNTIME_PROVIDER.ANTIGRAVITY,
+  RUNTIME_PROVIDER.CLAUDE_CODE,
+  RUNTIME_PROVIDER.CODEX,
   RUNTIME_PROVIDER.COMMAND_CODE,
+  RUNTIME_PROVIDER.CURSOR,
+  RUNTIME_PROVIDER.DSH,
   RUNTIME_PROVIDER.DEVIN,
   RUNTIME_PROVIDER.DROID,
-  RUNTIME_PROVIDER.DSH,
+  RUNTIME_PROVIDER.GROK,
+  RUNTIME_PROVIDER.KIRO,
+  RUNTIME_PROVIDER.OPENCODE,
+  RUNTIME_PROVIDER.PI,
 ];
 
-/** The label shown in the runtime picker and the Agent detail page. CoForge's own built-in
- * runtime is localized; the others show the provider's own name verbatim. */
+const EXTERNAL_RUNTIME_PROVIDER_LABELS: Record<
+  Exclude<RuntimeProvider, typeof RUNTIME_PROVIDER.COFORGE>,
+  string
+> = {
+  [RUNTIME_PROVIDER.PI]: "Pi",
+  [RUNTIME_PROVIDER.CODEX]: "Codex",
+  [RUNTIME_PROVIDER.CLAUDE_CODE]: "Claude Code",
+  [RUNTIME_PROVIDER.KIRO]: "Kiro",
+  [RUNTIME_PROVIDER.CURSOR]: "Cursor CLI",
+  [RUNTIME_PROVIDER.OPENCODE]: "OpenCode",
+  [RUNTIME_PROVIDER.GROK]: "Grok Build",
+  [RUNTIME_PROVIDER.ANTIGRAVITY]: "Antigravity CLI",
+  [RUNTIME_PROVIDER.DSH]: "DeepSeek Harness",
+  [RUNTIME_PROVIDER.COMMAND_CODE]: "Command Code",
+  [RUNTIME_PROVIDER.DEVIN]: "Devin",
+  [RUNTIME_PROVIDER.DROID]: "Droid",
+};
+
 export function runtimeProviderLabel(provider: RuntimeProvider): string {
-  const labels: Record<RuntimeProvider, string> = {
-    [RUNTIME_PROVIDER.COFORGE]: m.agent_provider_pi_builtin(),
-    [RUNTIME_PROVIDER.PI]: "Pi",
-    [RUNTIME_PROVIDER.CODEX]: "Codex",
-    [RUNTIME_PROVIDER.CLAUDE_CODE]: "Claude Code",
-    [RUNTIME_PROVIDER.KIRO]: "Kiro",
-    [RUNTIME_PROVIDER.CURSOR]: "Cursor CLI",
-    [RUNTIME_PROVIDER.OPENCODE]: "OpenCode",
-    [RUNTIME_PROVIDER.GROK]: "Grok Build",
-    [RUNTIME_PROVIDER.ANTIGRAVITY]: "Antigravity CLI",
-    [RUNTIME_PROVIDER.DSH]: "DeepSeek Harness",
-    [RUNTIME_PROVIDER.COMMAND_CODE]: "Command Code",
-    [RUNTIME_PROVIDER.DEVIN]: "Devin",
-    [RUNTIME_PROVIDER.DROID]: "Droid",
-  };
-  return labels[provider];
+  if (provider === RUNTIME_PROVIDER.COFORGE) return m.agent_provider_pi_builtin();
+  return EXTERNAL_RUNTIME_PROVIDER_LABELS[provider];
 }
 
-/** Every provider's mark (icon) except CoForge's own, which renders as the inline `CoForgeMark` SVG. */
+const RUNTIME_LABEL_COLLATOR = new Intl.Collator("en", { sensitivity: "base" });
+
+export function compareRuntimeProvidersByLabel(a: RuntimeProvider, b: RuntimeProvider): number {
+  return RUNTIME_LABEL_COLLATOR.compare(runtimeProviderLabel(a), runtimeProviderLabel(b));
+}
+
+export function sortedRuntimeProviders(providers: Iterable<RuntimeProvider>): RuntimeProvider[] {
+  return [...new Set(providers)].sort(compareRuntimeProvidersByLabel);
+}
+
 export const RUNTIME_PROVIDER_MARK: Record<
   Exclude<RuntimeProvider, typeof RUNTIME_PROVIDER.COFORGE>,
   string
@@ -78,8 +81,6 @@ export const RUNTIME_PROVIDER_MARK: Record<
   [RUNTIME_PROVIDER.DROID]: droidMark,
 };
 
-/** Whether that mark is a full-color icon rendered as an `<img>`, as opposed to a monochrome
- * glyph that must be recolored with a CSS mask to match the current theme. */
 export const RUNTIME_PROVIDER_MARK_IS_COLOR_ICON: Record<
   Exclude<RuntimeProvider, typeof RUNTIME_PROVIDER.COFORGE>,
   boolean
@@ -95,6 +96,5 @@ export const RUNTIME_PROVIDER_MARK_IS_COLOR_ICON: Record<
   [RUNTIME_PROVIDER.DSH]: true,
   [RUNTIME_PROVIDER.COMMAND_CODE]: false,
   [RUNTIME_PROVIDER.DEVIN]: true,
-  // Monochrome: Factory's guidelines want it white on dark and black on light.
   [RUNTIME_PROVIDER.DROID]: false,
 };
