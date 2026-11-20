@@ -11,6 +11,7 @@ export * from "./user-info";
 export * from "./profile";
 export * from "./app-config";
 export * from "./apps";
+export * from "./artifact-checks";
 export * from "./artifact-comments";
 export * from "./artifacts";
 export * from "./app-marketplace";

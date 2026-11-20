@@ -1,4 +1,5 @@
 import { isRecord } from "#src/internal/json-record";
+import { isArtifactCheckShot, type ArtifactCheckShot } from "./artifact-checks";
 import {
   ARTIFACT_COMMENT_IMAGES_MAX,
   isAnchorShape,
@@ -16,6 +17,8 @@ export type AgentArtifactFile = { path: string; sha256: string };
 export type AgentArtifactRequest =
   | { operation: "list"; target?: string; query?: string; after?: string; limit?: number }
   | { operation: "read"; artifact: string; version?: number }
+  | { operation: "check"; artifact: string; version?: number }
+  | { operation: "check-shot"; artifact: string; version?: number; shot: ArtifactCheckShot }
   | {
       operation: "push";
       artifact: string;
@@ -87,7 +90,8 @@ type FieldKind =
   | "strings"
   | "files"
   | "anchor"
-  | "reviewComments";
+  | "reviewComments"
+  | "checkShot";
 
 const FIELD_CHECKS: Record<FieldKind, (value: unknown) => boolean> = {
   string: (value) => typeof value === "string",
@@ -101,6 +105,7 @@ const FIELD_CHECKS: Record<FieldKind, (value: unknown) => boolean> = {
   files: (value) => Array.isArray(value) && value.every(isManifestFile),
   anchor: isAnchorShape,
   reviewComments: (value) => Array.isArray(value) && value.every(isReviewCommentShape),
+  checkShot: isArtifactCheckShot,
 };
 
 type OperationShape = {
@@ -120,6 +125,16 @@ const OPERATIONS = {
   read: {
     fields: { artifact: "string", version: "number" },
     required: ["artifact"],
+    repeatable: true,
+  },
+  check: {
+    fields: { artifact: "string", version: "number" },
+    required: ["artifact"],
+    repeatable: true,
+  },
+  "check-shot": {
+    fields: { artifact: "string", version: "number", shot: "checkShot" },
+    required: ["artifact", "shot"],
     repeatable: true,
   },
   push: {

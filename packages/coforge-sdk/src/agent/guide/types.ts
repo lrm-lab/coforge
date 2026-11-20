@@ -3,6 +3,7 @@ export type GuideAudience = "managed" | "external";
 export type GuideFeatures = {
   taskConversations?: boolean;
   artifacts?: boolean;
+  artifactChecks?: boolean;
 };
 
 export type GuideCapabilities = {

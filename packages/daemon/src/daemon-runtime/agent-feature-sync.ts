@@ -5,10 +5,20 @@ import type { AgentServerFeatures } from "@lrm/coforge-sdk/internal";
  * states every switch it knows; a delivery may name only some — a switch it does not name is
  * unknown, never off, and never a reason to restart. */
 type WireFeatures = {
-  features?: { taskConversations?: boolean; artifacts?: boolean; agentContextView?: boolean };
+  features?: {
+    taskConversations?: boolean;
+    artifacts?: boolean;
+    artifactChecks?: boolean;
+    agentContextView?: boolean;
+  };
 };
-type FeatureKey = "taskConversations" | "artifacts" | "agentContextView";
-const FEATURE_KEYS: readonly FeatureKey[] = ["taskConversations", "artifacts", "agentContextView"];
+type FeatureKey = "taskConversations" | "artifacts" | "artifactChecks" | "agentContextView";
+const FEATURE_KEYS: readonly FeatureKey[] = [
+  "taskConversations",
+  "artifacts",
+  "artifactChecks",
+  "agentContextView",
+];
 
 const NOTICE_HEAD = "CoForge notice: this workspace's features changed:";
 const NOTICE_TAIL =
@@ -22,6 +32,10 @@ const FEATURE_NOTICES: Record<FeatureKey, { on: string; off: string }> = {
   artifacts: {
     on: "Artifacts turned on (`coforge artifact` creates and edits them)",
     off: "Artifacts turned off (`coforge artifact` refuses; send files as attachments)",
+  },
+  artifactChecks: {
+    on: "Artifact publish checks turned on (`coforge artifact check <id> --wait` verifies rendered HTML pages)",
+    off: "Artifact publish checks turned off",
   },
   agentContextView: {
     on: "Agent context view turned on",

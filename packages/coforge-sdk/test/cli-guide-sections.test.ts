@@ -74,6 +74,16 @@ describe("cli-guide-sections", () => {
     });
     expect(sections.artifacts).toBeUndefined();
     expect(sections.tasks).toContain("## Tasks\n");
+
+    const checksOff = buildCoforgeCliGuideSections({
+      audience: "managed",
+      features: { artifacts: true, artifactChecks: false },
+    });
+    expect(checksOff.artifacts).toContain("## Artifacts\n");
+    expect(checksOff.artifacts).not.toContain("coforge artifact check");
+    expect(buildCoforgeCliGuideSections({ audience: "managed" }).artifacts).toContain(
+      "coforge artifact check <id> --wait",
+    );
   });
 
   test("buildExternalAgentGuide renders identity, context, CLI setup and shared sections", () => {
