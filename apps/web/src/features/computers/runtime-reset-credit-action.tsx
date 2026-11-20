@@ -1,43 +1,62 @@
-import { useState } from "react";
-import { ClockRewind } from "@untitledui/icons";
+import { useContext, useState } from "react";
+import { AlertCircle, ClockRewind } from "@untitledui/icons";
+import { OverlayTriggerStateContext } from "react-aria-components";
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 
 import { Button } from "#src/components/base/buttons/button";
-import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { useAppToast } from "#src/components/ui/toast";
 import { m } from "#src/paraglide/messages";
 import { clearResetCreditAttempt, resetCreditAttemptKey } from "./reset-credit-attempt";
+import type { ResetCreditPrompt } from "./runtime-reset-credit-state";
 import type { ResetCreditConsumeResult } from "./use-reset-credit-consume";
 
-/** The popover's button, an icon and the credits left, beside the sign-out icon; its name is the
- * tooltip and the accessible label. The caller shows it only for a viewer who may manage the
- * runtime, signed in, with a credit; the Computer being offline disables it. */
-export function RuntimeResetCreditButton({
-  available,
+export function RuntimeResetCreditAction({
+  prompt,
+  runtimeName,
   computerOnline,
   onPress,
 }: {
-  available: number;
+  prompt: ResetCreditPrompt;
+  runtimeName: string;
   computerOnline?: boolean;
   onPress: () => void;
 }) {
-  const label = m.runtime_reset_credit_use({ count: available });
-  return (
-    <Tooltip title={label}>
-      <Button
-        size="xs"
-        color="secondary"
-        iconLeading={ClockRewind}
-        aria-label={label}
-        isDisabled={computerOnline === false}
-        className="shrink-0 tabular-nums"
-        onPress={onPress}
-      >
-        {available}
-      </Button>
-    </Tooltip>
+  const popover = useContext(OverlayTriggerStateContext);
+  const handlePress = () => {
+    popover?.close();
+    onPress();
+  };
+  const button = (
+    <Button
+      size="sm"
+      color={prompt.variant === "primary" ? "primary" : "secondary"}
+      iconLeading={ClockRewind}
+      aria-label={m.runtime_reset_credit_use({ count: prompt.available })}
+      isDisabled={computerOnline === false}
+      className="shrink-0 tabular-nums"
+      onPress={handlePress}
+    >
+      {m.runtime_reset_credit_action({ count: prompt.available })}
+    </Button>
   );
+
+  if (prompt.variant === "primary") {
+    return (
+      <div
+        role="alert"
+        className="mt-3 space-y-2.5 rounded-xl border border-secondary bg-warning-primary p-3"
+      >
+        <div className="flex items-start gap-2 text-xs text-warning-primary">
+          <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+          <p>{m.runtime_reset_credit_callout({ runtime: runtimeName })}</p>
+        </div>
+        {button}
+      </div>
+    );
+  }
+
+  return <div className="mt-3">{button}</div>;
 }
 
 class ResetCreditNotice extends Error {

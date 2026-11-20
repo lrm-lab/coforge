@@ -16,6 +16,7 @@ import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-disp
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
 import { AgentDesktopThumbnail } from "#src/features/computers/agent-desktop-thumbnail";
 import { computerIcon } from "#src/features/computers/computer-identity";
+import { canOfferAgentResetCredit } from "#src/features/computers/runtime-reset-credit-state";
 import { RuntimeUsage, UsageHealthDot } from "#src/features/computers/runtime-usage";
 import { type AgentRuntimeControls } from "#src/features/agents/agent-runtime-controls";
 import type { getAgentProfile } from "#src/features/agents/agents.functions";
@@ -366,6 +367,7 @@ function AgentProfileTabBody({
                         computerOnline={usageComputer.online}
                         timeZone={timeZone}
                         showUsage={profile.runtimeUsageVisible}
+                        canResetCredit={canOfferAgentResetCredit(profile)}
                         agentUsage={
                           runtimeConfig.runtime === RUNTIME_PROVIDER.CODEX
                             ? {

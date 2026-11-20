@@ -5,11 +5,11 @@ These rules apply to `src/features/computers/`.
 ## Module map
 
 - One Computer's detail panel is `computer-detail*.tsx` with `use-computer-detail-lifecycle.ts` (upgrade slots, restart polling); `computer-layout.tsx` holds list/detail selection.
-- `runtime-reset-credit-action.tsx` — the runtime popover's "Use reset · N" button and its confirm dialog (outside the popover, like the sign-out dialog); takes the count and an `onConsume(idempotencyKey)` as props
+- `runtime-reset-credit-action.tsx` and `runtime-reset-credit-state.ts` — the runtime popover's Raft-aligned reset credit prompt (`resetCreditPrompt`, `canOfferAgentResetCredit`), action/callout (`RuntimeResetCreditAction`), and confirm dialog (`RuntimeResetCreditDialog`, mounted outside the popover by `RuntimeUsage`)
 - `reset-credit-attempt.ts` — the reset attempt's idempotency key per Computer + provider + account label (`sessionStorage`, memory fallback); expires 10 minutes after it was made, cleared only on a settled outcome, kept after `unknown`, a refusal or a thrown failure. The dialog treats `already_redeemed` like `reset` (toast, close); any other settled answer shows its message and turns Confirm off (`ConfirmDialog`'s `confirmDisabled`)
 - `poll-for-answer.ts` — the shared wait for a started request: asks until the answer is not pending, asks again after a read that failed, and ends as the caller's give-up value at the deadline or when the caller's signal aborts (unmount). The reset credit (`reset-credit-poll.ts`), the Agent form's Command Code efforts (`features/agents/use-command-code-efforts.ts`, with `command-code-effort.functions.ts`: from 250 ms, doubling to 1.5 s, 45 s deadline, ends with no efforts), the Agent panel's Stop current turn (`features/agents/agent-turn-interrupt-poll.ts`), the runtime catalog refresh (below), the Agent context view (`features/agents/agent-context-view-poll.ts`, with `agent-context-view.functions.ts`: from 250 ms, doubling to 1 s, 30 s deadline, ends as `timeout`; no UI calls it yet) and every Pi chat command (`features/pi-chat/pi-chat-poll.ts`, run by `use-execute-pi-chat.ts`: from 50 ms, doubling to 500 ms, 25 s deadline inside the reply's 30 s lifetime, ends as the unavailable error) all poll through it; a Server Function that waits on a Computer longer than about eight seconds must be split into start and read the same way
 - `runtime-catalog-refresh.functions.ts`, `runtime-catalog-refresh-poll.ts` and `use-runtime-catalog-refresh-request.ts` — the Agent form's refresh and the Computer page's Rescan runtimes: `startRuntimeCatalogRefresh` returns at once, `readRuntimeCatalogRefresh` returns pending or the outcome, and `awaitRuntimeCatalogRefresh` polls (from 500 ms, doubling to 1.5 s, 50 s deadline: longer than the Daemon's 45 s probe budget, inside the 60 s pending request) and resolves to refreshed, error with the runtime's reason, or timeout; the hook ends the wait only when the asking component unmounts
-- `use-reset-credit-consume.ts` — the dialog's `onConsume`: starts with `consumeResetCredit`, then polls `readResetCredit` (`reset-credit-poll.ts`: every 1.5 s, read failures asked again, 100 s deadline or unmount ends as `unknown` so the key is kept); resolves to the refusal (`forbidden`, `offline`, `needs_upgrade`) as a value, which the dialog shows without touching the attempt's key (a thrown failure keeps it too), and re-reads the popover's usage after a settled answer, scanning it as Refresh does when the cache holds no reading from that attempt (`usageCarriesAttempt`); Refresh joins a scan already running, and the server ends any scan that began before the spend, so this scan is always a later one
+- `use-reset-credit-consume.ts` — the dialog's `onConsume`: starts with `consumeResetCredit`, then polls `readResetCredit` (`reset-credit-poll.ts`: every 1.5 s, read failures asked again, 100 s deadline or unmount ends as `unknown` so the key is kept); resolves to the refusal (`forbidden`, `offline`, `needs_upgrade`) as a value, which the dialog shows without touching the attempt's key (a thrown failure keeps it too), and re-reads the popover's usage after a settled answer, scanning it as Refresh does when the cache holds no reading from that attempt (`usageCarriesAttempt`); when triggered with an `agentUsage` scope, also refreshes the Agent's usage cache and invalidates `agent-runtime-usage` for the Computer
 
 - `computer-layout.tsx` owns Computer list/detail selection, the return
   control, list scroll retention, and the empty state, following the same
@@ -28,18 +28,19 @@ These rules apply to `src/features/computers/`.
   scans its usage once. The dialogs do not invalidate: their result arrives before that report.
 - A runtime's popover opens on a press, with a close button and Escape, on the Computer page and the Agent profile alike (`runtime-usage.tsx`).
   A quota reads as the share left.
-- The reset credit button (Codex only) sits immediately left of Sign Out in the `accountAction`
-  cluster of `computer-runtimes.tsx`. `RuntimeUsage` hands `accountAction` the usage snapshot it
-  read, so the count (`resetCreditsAvailable`) and the account label come from the popover's own
-  reading. That reading, the usage popover (`showUsage` is `canSignIn`; on the Agent profile
-  `runtimeUsageVisible`, which the server decides through `RuntimeUsageAccess`) and the button all
-  follow the server's `canManage`: the Computer's owner and Workspace owners and admins
-  (`server/computers/AGENTS.md`) over a runtime they see on the page (another member's only once
-  public); a plain member sees none of them. Neither the page nor the profile offers usage for a
-  runtime that cannot start (`unavailableCode`). Anyone but the Computer's
-  owner reads only the fields the popover draws, never the credit balance. The dialog is a third
-  `AuthDialog` kind, rendered outside the popover with parent-held state; the count and label it
-  names are fixed when it opens.
+- Reset credits (Codex only) live inside the shared `RuntimeUsage` component so the Computer page
+  and the Agent profile behave identically, following Raft: when `resetCreditsAvailable` is
+  reported and the reset button is not shown, a facts line below the usage meters names the
+  remaining resets (joined with credits balance when present; when the button is shown, the count
+  appears only on the button). The reset button appears only when `canResetCredit` is true, signed
+  in, and a credit is available — hidden below 80% usage, secondary at ≥80% used, and a warning
+  callout with a primary button when rate-limited or at `limit_reached` (`resetCreditPrompt`). On
+  the Agent profile, `canResetCredit` is enabled only when the Agent has no per-Agent credential
+  override (`canOfferAgentResetCredit`), matching the Computer-scoped reset endpoint. Neither the
+  page nor the profile offers usage for a runtime that cannot start (`unavailableCode`). Anyone
+  but the Computer's owner reads only the fields the popover draws, never the credit balance. The
+  confirm dialog renders outside `<Popover>` inside `RuntimeUsage`, keyed by `(computerId,
+provider)`, with its count and account label fixed when it opens.
 - A cloud Computer belongs to the account: one default, started when first
   sign-in creates the personal Workspace and again when another Workspace is
   created, and ensured once more when the Computers page opens. That start also

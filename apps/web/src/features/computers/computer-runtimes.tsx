@@ -13,33 +13,24 @@ import { computerLabel } from "./computer-identity";
 import { RuntimeChip } from "./runtime-chip";
 import { RuntimeSignInDialog, unsupportedText } from "./runtime-sign-in-dialog";
 import { RuntimeSignOutDialog } from "./runtime-sign-out-dialog";
-import { RuntimeResetCreditButton, RuntimeResetCreditDialog } from "./runtime-reset-credit-action";
 import { RuntimeUsage } from "./runtime-usage";
 import { runtimeUnavailableReason } from "./runtime-unavailable-reason";
 import type { AccountState } from "./runtime-usage-status";
-import type { UsageSnapshot } from "#src/server/centrifugo/usage-cache.server";
 import {
   isRuntimeLoginStateProvider,
   isSignableRuntimeProvider,
   runtimeLoginChip,
 } from "./runtime-login-chip";
-import { useConsumeResetCredit } from "./use-reset-credit-consume";
 import { useRuntimeAuthStatusRefresh } from "./use-runtime-auth-signals";
 
 const RUNTIME_CHIP_TRIGGER_CLASS_NAME =
   "rounded-md outline-none data-focus-visible:ring-2 data-focus-visible:ring-brand";
 
-type AuthDialog =
-  | { kind: "sign_in" | "sign_out"; provider: RuntimeAuthProvider; name: string }
-  | {
-      kind: "reset_credit";
-      provider: RuntimeAuthProvider;
-      name: string;
-      /** What the popover showed when it was pressed: the dialog names these, and they do not
-       * change under it while the usage refreshes. */
-      available: number;
-      accountLabel?: string;
-    };
+type AuthDialog = {
+  kind: "sign_in" | "sign_out";
+  provider: RuntimeAuthProvider;
+  name: string;
+};
 
 /**
  * A Computer's runtimes as Raft lays them out: one chip each, opening that runtime's popover on a
@@ -76,7 +67,6 @@ export function ComputerRuntimeList({
   );
   const [authDialog, setAuthDialog] = useState<AuthDialog | undefined>(undefined);
   useRuntimeAuthStatusRefresh(computer.id);
-  const consumeResetCredit = useConsumeResetCredit();
   const canSignIn = computer.ownedByCurrentUser || computer.canManageAgents;
   const computerName = computerLabel(computer);
   const setRuntimePublic = async (runtimeId: string, isPublic: boolean) => {
@@ -110,44 +100,12 @@ export function ComputerRuntimeList({
             isSignableRuntimeProvider(provider) &&
             setAuthDialog({ kind, provider, name: runtime.displayName });
           const kiroOnWindows = provider === RUNTIME_PROVIDER.KIRO && computer.platform === "win32";
-          // One button in one place, for the state the popover shows (`shownAccount`): Sign In when
-          // signed out, Sign Out when signed in. An icon the size of the popover's Refresh, named
-          // by its tooltip and its label (Frank, task #209); signed out, the band says why. Signed
-          // in, the reset credit button sits immediately left of Sign Out.
-          const accountAction = (
-            shown: AccountState | undefined,
-            snapshot: UsageSnapshot | undefined,
-          ) => {
+          const accountAction = (shown: AccountState | undefined) => {
             const signIn = signable && shown === "logged_out" && !kiroOnWindows;
             if (!signIn && !(signable && shown === "logged_in")) return undefined;
             const label = signIn ? m.runtime_auth_sign_in() : m.runtime_auth_sign_out();
-            // Only signed in, as who may sign out, and with a credit left to spend.
-            const resetCredits = signIn ? 0 : (snapshot?.resetCreditsAvailable ?? 0);
             return (
               <div className="ml-auto flex shrink-0 items-center gap-1.5">
-                {resetCredits > 0 && (
-                  <PopoverAction
-                    onPress={() => {
-                      const accountLabel = snapshot?.accountLabel ?? auth?.account?.maskedLabel;
-                      if (isSignableRuntimeProvider(provider))
-                        setAuthDialog({
-                          kind: "reset_credit",
-                          provider,
-                          name: runtime.displayName,
-                          available: resetCredits,
-                          ...(accountLabel ? { accountLabel } : {}),
-                        });
-                    }}
-                  >
-                    {(press) => (
-                      <RuntimeResetCreditButton
-                        available={resetCredits}
-                        computerOnline={computer.online}
-                        onPress={press}
-                      />
-                    )}
-                  </PopoverAction>
-                )}
                 <PopoverAction onPress={() => open(signIn ? "sign_in" : "sign_out")}>
                   {(press) => (
                     <Tooltip title={label}>
@@ -211,6 +169,7 @@ export function ComputerRuntimeList({
                 computerOnline={computer.online}
                 timeZone={timeZone}
                 showUsage={canSignIn && !unusableReason}
+                canResetCredit={canSignIn && !unusableReason}
                 auth={unusableReason ? undefined : auth}
                 account={unusableReason ? undefined : account}
                 notice={unusableReason}
@@ -238,19 +197,6 @@ export function ComputerRuntimeList({
           computerName={computerName}
           provider={authDialog.provider}
           runtimeName={authDialog.name}
-          onClose={() => setAuthDialog(undefined)}
-        />
-      )}
-      {authDialog?.kind === "reset_credit" && (
-        <RuntimeResetCreditDialog
-          computerId={computer.id}
-          provider={authDialog.provider}
-          runtimeName={authDialog.name}
-          accountLabel={authDialog.accountLabel}
-          available={authDialog.available}
-          onConsume={(idempotencyKey) =>
-            consumeResetCredit(computer.id, authDialog.provider, idempotencyKey)
-          }
           onClose={() => setAuthDialog(undefined)}
         />
       )}

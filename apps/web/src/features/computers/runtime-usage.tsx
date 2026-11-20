@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Button as AriaButton, Dialog, DialogTrigger, Popover } from "react-aria-components";
 import type { RuntimeAuthStatus } from "@lrm/coforge-anvil";
@@ -12,7 +12,10 @@ import { m } from "#src/paraglide/messages";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
 import { isSignableRuntimeProvider } from "./runtime-login-chip";
 import { requestRuntimeAuthStatus } from "./runtime-auth.functions";
+import { RuntimeResetCreditDialog } from "./runtime-reset-credit-action";
+import { resetCreditPrompt } from "./runtime-reset-credit-state";
 import { RuntimeUsagePopoverContent } from "./runtime-usage-popover-content";
+import { useConsumeResetCredit } from "./use-reset-credit-consume";
 import { useRuntimeUsage, type AgentUsageQueryScope } from "./use-runtime-usage";
 import {
   chipStatus,
@@ -22,7 +25,6 @@ import {
   type AccountState,
   type RuntimeStatus,
 } from "./runtime-usage-status";
-import type { UsageSnapshot } from "#src/server/centrifugo/usage-cache.server";
 
 export { RuntimeUsagePopoverContent };
 
@@ -98,6 +100,7 @@ export function RuntimeUsage({
   footerLabel,
   actions,
   showUsage = true,
+  canResetCredit = false,
   auth,
   account,
   accountAction,
@@ -123,20 +126,27 @@ export function RuntimeUsage({
   /** False when the viewer may not see this runtime's account usage: the usage is neither read nor
    * drawn, and only the runtime band, the footer and the actions remain. */
   showUsage?: boolean;
+  canResetCredit?: boolean;
   /** The runtime's login state on the Computer page, account fields only for those allowed them
    * (`runtimeAuthView`). With it, the popover opens even without usage, to show that account. */
   auth?: RuntimeAuthStatus;
   /** The login state to name: `auth`'s, or `unreported` when the Computer is too old to send one. */
   account?: AccountState;
-  /** Signs the runtime in or out for the login state the popover shows, if the viewer may, and
-   * offers what its usage reading allows beside it (a reset credit). */
-  accountAction?: (
-    shown: AccountState | undefined,
-    snapshot: UsageSnapshot | undefined,
-  ) => ReactNode;
+  /** Signs the runtime in or out for the login state the popover shows, if the viewer may. */
+  accountAction?: (shown: AccountState | undefined) => ReactNode;
   /** A line under the version: why this runtime cannot be used, when it cannot. */
   notice?: ReactNode;
 }) {
+  const [resetCreditDialog, setResetCreditDialog] = useState<
+    | {
+        computerId: string;
+        provider: RuntimeProvider;
+        available: number;
+        accountLabel?: string;
+      }
+    | undefined
+  >(undefined);
+  const consumeResetCredit = useConsumeResetCredit();
   const supportsUsage = showUsage && RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN[runtime.provider];
   const usage = useRuntimeUsage(computerId, runtime.provider, {
     enabled: supportsUsage,
@@ -167,6 +177,29 @@ export function RuntimeUsage({
   // reason it cannot be used at all.
   if (!supportsUsage && !footer && !actions && !account && !notice) return resolvedTrigger;
 
+  const snapshot = usageRead?.result?.snapshot;
+  const resetPrompt =
+    supportsUsage && canResetCredit && shown !== "logged_out"
+      ? resetCreditPrompt(snapshot)
+      : undefined;
+  const openResetCredit = resetPrompt
+    ? () => {
+        const accountLabel = snapshot?.accountLabel ?? auth?.account?.maskedLabel;
+        setResetCreditDialog({
+          computerId,
+          provider: runtime.provider,
+          available: resetPrompt.available,
+          ...(accountLabel ? { accountLabel } : {}),
+        });
+      }
+    : undefined;
+  const activeResetDialog =
+    resetCreditDialog &&
+    resetCreditDialog.computerId === computerId &&
+    resetCreditDialog.provider === runtime.provider
+      ? resetCreditDialog
+      : undefined;
+
   // The dot is named here too: the trigger's aria-label replaces the dot's own name, a login
   // state first, as the chip draws it.
   const label = [
@@ -179,39 +212,56 @@ export function RuntimeUsage({
     .join(" · ");
 
   return (
-    <DialogTrigger onOpenChange={(open) => open && rereadLogin()}>
-      <AriaButton aria-label={label} className={triggerClassName ?? DEFAULT_TRIGGER_CLASS_NAME}>
-        {resolvedTrigger}
-      </AriaButton>
-      <Popover
-        placement="bottom start"
-        offset={8}
-        containerPadding={12}
-        className="z-50 flex max-h-[calc(100dvh-4rem)] w-80 max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-xl border border-secondary bg-primary text-sm text-primary shadow-lg outline-none"
-      >
-        <Dialog aria-label={label} className="flex min-h-0 flex-col outline-none">
-          {({ close }) => (
-            <RuntimeUsagePopoverContent
-              runtime={runtime}
-              agentUsageUnavailable={usage.data?.unavailable}
-              showUsage={supportsUsage}
-              data={usageRead}
-              scanning={usage.scanning}
-              scanFailed={usage.scanFailed}
-              computerOnline={computerOnline}
-              timeZone={timeZone}
-              onRefresh={usage.refresh}
-              onClose={close}
-              auth={auth}
-              account={shown}
-              footer={footer}
-              actions={actions}
-              accountAction={accountAction?.(shown, usageRead?.result?.snapshot)}
-              notice={notice}
-            />
-          )}
-        </Dialog>
-      </Popover>
-    </DialogTrigger>
+    <>
+      <DialogTrigger onOpenChange={(open) => open && rereadLogin()}>
+        <AriaButton aria-label={label} className={triggerClassName ?? DEFAULT_TRIGGER_CLASS_NAME}>
+          {resolvedTrigger}
+        </AriaButton>
+        <Popover
+          placement="bottom start"
+          offset={8}
+          containerPadding={12}
+          className="z-50 flex max-h-[calc(100dvh-4rem)] w-80 max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-xl border border-secondary bg-primary text-sm text-primary shadow-lg outline-none"
+        >
+          <Dialog aria-label={label} className="flex min-h-0 flex-col outline-none">
+            {({ close }) => (
+              <RuntimeUsagePopoverContent
+                runtime={runtime}
+                agentUsageUnavailable={usage.data?.unavailable}
+                showUsage={supportsUsage}
+                data={usageRead}
+                scanning={usage.scanning}
+                scanFailed={usage.scanFailed}
+                computerOnline={computerOnline}
+                timeZone={timeZone}
+                onRefresh={usage.refresh}
+                onClose={close}
+                auth={auth}
+                account={shown}
+                footer={footer}
+                actions={actions}
+                accountAction={accountAction?.(shown)}
+                resetPrompt={resetPrompt}
+                onResetCredit={openResetCredit}
+                notice={notice}
+              />
+            )}
+          </Dialog>
+        </Popover>
+      </DialogTrigger>
+      {activeResetDialog && (
+        <RuntimeResetCreditDialog
+          computerId={computerId}
+          provider={runtime.provider}
+          runtimeName={runtime.displayName}
+          accountLabel={activeResetDialog.accountLabel}
+          available={activeResetDialog.available}
+          onConsume={(idempotencyKey) =>
+            consumeResetCredit(computerId, runtime.provider, idempotencyKey, agentUsage)
+          }
+          onClose={() => setResetCreditDialog(undefined)}
+        />
+      )}
+    </>
   );
 }

@@ -12,17 +12,21 @@ export function runtimeUsageQueryKey(computerId: string, provider: RuntimeProvid
   return ["runtime-usage", computerId, provider] as const;
 }
 
+export function agentRuntimeUsageQueryKey(computerId: string, agent: AgentUsageQueryScope) {
+  return ["agent-runtime-usage", computerId, agent.agentId, agent.runtimeConfigRevision] as const;
+}
+
 export type AgentUsageQueryScope = { agentId: string; runtimeConfigRevision: number };
 type UsageTarget = { computerId: string; provider: RuntimeProvider; agent?: AgentUsageQueryScope };
 type UsageRead = Awaited<ReturnType<typeof readUsage>>;
 
 function usageQueryKey({ agent, computerId, provider }: UsageTarget) {
   return agent
-    ? (["agent-runtime-usage", computerId, agent.agentId, agent.runtimeConfigRevision] as const)
+    ? agentRuntimeUsageQueryKey(computerId, agent)
     : runtimeUsageQueryKey(computerId, provider);
 }
 
-function usageForTarget(reading: AgentUsageReadResult, { agent, computerId }: UsageTarget) {
+export function usageForTarget(reading: AgentUsageReadResult, { agent, computerId }: UsageTarget) {
   if (!agent || reading.unavailable) return reading;
   return reading.target?.runtimeConfigRevision === agent.runtimeConfigRevision &&
     reading.target.computerId === computerId

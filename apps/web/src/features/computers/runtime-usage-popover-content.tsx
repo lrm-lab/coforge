@@ -13,6 +13,8 @@ import { Skeleton } from "#src/components/ui/skeleton";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { Runtime } from "./runtime-usage";
+import { RuntimeResetCreditAction } from "./runtime-reset-credit-action";
+import type { ResetCreditPrompt } from "./runtime-reset-credit-state";
 import { RuntimeUsageWindows } from "./runtime-usage-windows-list";
 import {
   accountBand,
@@ -45,6 +47,8 @@ export function RuntimeUsagePopoverContent({
   footer,
   actions,
   accountAction,
+  resetPrompt,
+  onResetCredit,
   notice,
 }: {
   runtime: Pick<Runtime, "provider" | "displayName" | "version">;
@@ -64,6 +68,8 @@ export function RuntimeUsagePopoverContent({
   footer?: ReactNode;
   actions?: ReactNode;
   accountAction?: ReactNode;
+  resetPrompt?: ResetCreditPrompt;
+  onResetCredit?: () => void;
   /** A line under the version: why this runtime cannot be used, when it cannot. */
   notice?: ReactNode;
 }) {
@@ -97,7 +103,16 @@ export function RuntimeUsagePopoverContent({
       : usageCredits?.hasCredits
         ? m.computer_usage_credits_available()
         : undefined;
-  const accountNote = [plan && accountLabel, credits].filter(Boolean).join(" · ");
+  const resetCredits =
+    runtime.provider === RUNTIME_PROVIDER.CODEX ? snapshot?.resetCreditsAvailable : undefined;
+  const resetsFact =
+    resetCredits !== undefined && !resetPrompt
+      ? resetCredits > 0
+        ? m.runtime_reset_credit_left({ count: resetCredits })
+        : m.runtime_reset_credit_none()
+      : undefined;
+  const factsLine = [resetsFact, credits].filter(Boolean).join(" · ");
+  const accountNote = plan && accountLabel ? accountLabel : undefined;
   const title = plan || accountLabel;
   const refreshLabel = scanning ? m.computer_usage_refreshing() : m.computer_usage_refresh();
 
@@ -176,10 +191,6 @@ export function RuntimeUsagePopoverContent({
 
         {!signedOut && (showUsage || plan || accountLabel || sectionAction) && (
           <section className="px-4 py-3">
-            {/* The account band leads with the plan, then the signed-in account. A credits note
-              counts too: Codex can report credits with no plan and no email, and that note used
-              to show under a placeholder heading. With no plan and no account there is no heading
-              at all (E′): the row holds only the badge or the button. */}
             {(title || accountNote || badge || sectionAction) && (
               <div className="flex items-center justify-between gap-3">
                 {(title || accountNote) && (
@@ -187,16 +198,7 @@ export function RuntimeUsagePopoverContent({
                     {title && (
                       <h3 className="truncate text-sm font-medium text-primary">{title}</h3>
                     )}
-                    {accountNote && (
-                      <p
-                        className={cn(
-                          "text-xs text-tertiary",
-                          balance ? "wrap-anywhere" : "truncate",
-                        )}
-                      >
-                        {accountNote}
-                      </p>
-                    )}
+                    {accountNote && <p className="truncate text-xs text-tertiary">{accountNote}</p>}
                   </div>
                 )}
                 {/* The sign-out button takes the badge's place: the usage below already shows a
@@ -226,6 +228,24 @@ export function RuntimeUsagePopoverContent({
                   snapshot={snapshot}
                   timeZone={timeZone}
                 />
+                {factsLine && (
+                  <p
+                    className={cn(
+                      "mt-3 text-xs tabular-nums text-tertiary",
+                      balance ? "wrap-anywhere" : "truncate",
+                    )}
+                  >
+                    {factsLine}
+                  </p>
+                )}
+                {resetPrompt && onResetCredit && (
+                  <RuntimeResetCreditAction
+                    prompt={resetPrompt}
+                    runtimeName={runtime.displayName}
+                    computerOnline={computerOnline}
+                    onPress={onResetCredit}
+                  />
+                )}
               </>
             )}
           </section>

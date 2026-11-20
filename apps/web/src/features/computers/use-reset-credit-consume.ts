@@ -6,8 +6,13 @@ import type { ResetCreditOutcome, RuntimeProvider } from "@lrm/coforge-sdk/inter
 import { consumeResetCredit, readResetCredit, readUsage } from "./computer-usage.functions";
 import { awaitResetCredit, usageCarriesAttempt } from "./reset-credit-poll";
 import type { ResetCreditStart } from "#src/server/computers/runtime-reset-credit.server";
-import { scanRuntimeUsage } from "./usage-scan";
-import { runtimeUsageQueryKey } from "./use-runtime-usage";
+import { scanAgentRuntimeUsage, scanRuntimeUsage } from "./usage-scan";
+import {
+  agentRuntimeUsageQueryKey,
+  runtimeUsageQueryKey,
+  usageForTarget,
+  type AgentUsageQueryScope,
+} from "./use-runtime-usage";
 
 /** What an attempt came to: what the account settled, or why the Computer was not asked. A
  * refusal leaves the attempt open, as a failed call does; the dialog tells the two apart. */
@@ -40,6 +45,7 @@ export function useConsumeResetCredit() {
     computerId: string,
     provider: RuntimeProvider,
     idempotencyKey: string,
+    agentUsage?: AgentUsageQueryScope,
   ): Promise<ResetCreditConsumeResult> => {
     const started = await start({ data: { computerId, provider, idempotencyKey } });
     if (started.status === "refused") return started.reason;
@@ -49,16 +55,35 @@ export function useConsumeResetCredit() {
     });
     if (settled.status === "refused") return settled.reason;
     const queryKey = runtimeUsageQueryKey(computerId, provider);
-    const usage = await queryClient.fetchQuery({
-      queryKey,
-      queryFn: () => readUsage({ data: { computerId, provider } }),
-      staleTime: 0,
+    const agentKey = agentUsage ? agentRuntimeUsageQueryKey(computerId, agentUsage) : undefined;
+    await Promise.all([
+      (async () => {
+        const usage = await queryClient.fetchQuery({
+          queryKey,
+          queryFn: () => readUsage({ data: { computerId, provider } }),
+          staleTime: 0,
+        });
+        if (!usageCarriesAttempt(usage, started.requestId))
+          await scanRuntimeUsage(computerId, provider)
+            .then((scanned) => queryClient.setQueryData(queryKey, scanned))
+            .catch(() => undefined);
+      })(),
+      agentUsage && agentKey
+        ? scanAgentRuntimeUsage(agentUsage.agentId)
+            .then((scanned) =>
+              queryClient.setQueryData(
+                agentKey,
+                usageForTarget(scanned, { computerId, provider, agent: agentUsage }),
+              ),
+            )
+            .catch(() => undefined)
+        : Promise.resolve(),
+    ]);
+    const refreshedAgentKey = agentKey ? JSON.stringify(agentKey) : undefined;
+    await queryClient.invalidateQueries({
+      queryKey: ["agent-runtime-usage", computerId],
+      predicate: (query) => JSON.stringify(query.queryKey) !== refreshedAgentKey,
     });
-    if (!usageCarriesAttempt(usage, started.requestId))
-      // The outcome is settled whether or not this scan answers: a failed one leaves the cache.
-      await scanRuntimeUsage(computerId, provider)
-        .then((scanned) => queryClient.setQueryData(queryKey, scanned))
-        .catch(() => undefined);
     return settled.outcome;
   };
 }
