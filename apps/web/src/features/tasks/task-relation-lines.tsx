@@ -8,7 +8,6 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { m } from "#src/paraglide/messages";
 
-import { TaskLocator } from "./task-chip";
 import { TaskLinkRow } from "./task-relations";
 import { TaskStatusIcon } from "./task-status-icon";
 import {
@@ -20,34 +19,22 @@ import {
 } from "./task-relation-edits";
 import { TaskPickerButton } from "./task-picker";
 
-/**
- * Task dependencies in the Task popup (#task-deps task #2), as values of its property grid beside
- * Status and Owner: Parent, Blocked by and Blocking, each shown only when the Task has one (its
- * sub-tasks have a tab of their own). A value names the first related Task on one line and opens
- * the full list in a popover, as Linear lists Blocked by and Blocks as issue properties
- * (linear.app/docs/issue-property#issue-relations).
- */
-
-/** A Task named inline: its name, then its title, cut to fit. */
 function InlineTask({ task }: { task: TaskLink }) {
   if (task.hidden) return <span className="min-w-0 truncate">{m.tasks_ref_hidden()}</span>;
   return (
     <>
       <TaskStatusIcon status={task.status} className="size-3.5" />
       <span className="min-w-0 truncate text-primary">{task.title}</span>
-      <TaskLocator task={task} />
     </>
   );
 }
 
 const VALUE_BUTTON =
-  "-mx-1.5 inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 text-sm text-secondary outline-none hover:bg-primary_hover focus-visible:ring-2 focus-visible:ring-focus-ring pressed:bg-primary_hover";
+  "-mx-1.5 inline-flex h-7 max-w-[calc(100%+0.75rem)] min-w-0 items-center gap-1.5 overflow-hidden rounded-md px-1.5 text-sm text-secondary outline-none hover:bg-primary_hover focus-visible:ring-2 focus-visible:ring-focus-ring pressed:bg-primary_hover";
 
-/** Shown on a row's hover, and always where there is no hover to show it. */
 const REVEAL_ON_ROW_HOVER =
-  "opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 any-pointer-coarse:opacity-100";
+  "shrink-0 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 any-pointer-coarse:opacity-100";
 
-/** The first of several Tasks, then how many more. */
 function FirstAndMore({ tasks }: { tasks: readonly TaskLink[] }) {
   const first = tasks.find((link) => !link.hidden) ?? tasks[0];
   if (!first) return null;
@@ -61,7 +48,6 @@ function FirstAndMore({ tasks }: { tasks: readonly TaskLink[] }) {
   );
 }
 
-/** A value that opens its full list in a popover headed by the property's name. */
 function ValuePopover({
   label,
   value,
@@ -84,8 +70,6 @@ function ValuePopover({
   );
 }
 
-/** The Task this one is a step of, opened on press, and released from it by the "x" beside it
- * (where the viewer may change it). */
 export function TaskParentValue({
   parent,
   disabled,
@@ -98,9 +82,9 @@ export function TaskParentValue({
   onClear?: () => void;
 }) {
   return (
-    <div className="group/row flex min-w-0 items-center gap-1">
+    <div className="group/row flex max-w-full min-w-0 items-center gap-2">
       {parent.hidden || !onOpen ? (
-        <span className="flex h-7 min-w-0 items-center gap-1.5 text-sm text-secondary">
+        <span className="flex h-7 min-w-0 items-center gap-1.5 overflow-hidden text-sm text-secondary">
           <InlineTask task={parent} />
         </span>
       ) : (
@@ -123,8 +107,6 @@ export function TaskParentValue({
   );
 }
 
-/** The unfinished Tasks this one waits on; the list also holds the finished ones, removable, and
- * adds another. */
 export function TaskBlockedByValue({
   task,
   blockedBy,
@@ -142,17 +124,11 @@ export function TaskBlockedByValue({
   onAdd: (task: VisibleTaskName) => void;
   onRemove: (task: VisibleTaskName) => void;
 }) {
-  // A blocker the reader cannot name cannot be kept by an amendment, which replaces the whole set:
-  // with one among them, the list can be read but not edited.
   const removable = canRemoveBlockers(blockedBy);
   return (
     <ValuePopover
       label={m.tasks_blocked_by()}
-      value={
-        <>
-          <FirstAndMore tasks={openBlockers(blockedBy)} />
-        </>
-      }
+      value={<FirstAndMore tasks={openBlockers(blockedBy)} />}
     >
       <ul className="max-h-72 overflow-y-auto">
         {blockedBy.map((link, index) => (
@@ -194,7 +170,6 @@ export function TaskBlockedByValue({
   );
 }
 
-/** The Tasks waiting on this one. */
 export function TaskBlockingValue({
   blocking,
   onOpen,
@@ -217,9 +192,6 @@ export function TaskBlockingValue({
   );
 }
 
-/** The ⋯ menu's relation items, each saying what it adds (as Linear adds a relation from the
- * issue's overflow menu, then asks for the issue). They stay, greyed, where the viewer may not
- * change the Task's relations, or the Task has no room (or no editable set) for another blocker. */
 export function taskRelationMenuItems({
   canEdit,
   canAddBlocker: roomForBlocker,

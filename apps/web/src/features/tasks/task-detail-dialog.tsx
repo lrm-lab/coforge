@@ -384,7 +384,7 @@ export function TaskDetailDialog({
                   )}
                 </div>
                 {sidebar && (
-                  <aside className="w-72 shrink-0 overflow-y-auto border-l border-secondary bg-secondary_alt px-5 py-5">
+                  <aside className="w-72 shrink-0 overflow-x-hidden overflow-y-auto border-l border-secondary bg-secondary_alt px-5 py-5">
                     {section}
                   </aside>
                 )}
