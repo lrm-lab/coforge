@@ -152,3 +152,34 @@ test("a conversation whose only unread notice is blocked yields no cursor group"
   await inbox.check(principal, { since: followed.cursor });
   expect(await readThrough()).toBe(nextEvent.message.sequence);
 });
+
+test("an artifact in another workspace leaves its notice unreadable", async () => {
+  const artifact = await h.f.make("Foreign gate");
+  const reader = await h.nameOf(h.f.agents.reader);
+  await h.create(artifact, `Foreign gate, see @${reader}.`);
+  const sent = await h.submit(artifact);
+  if (sent.status !== "sent") throw new Error("not sent");
+  const event = await h.f.db.systemAgentEvent.findUniqueOrThrow({
+    where: {
+      source_agentId_externalEventId: {
+        source: "system.artifacts",
+        agentId: h.f.agents.reader,
+        externalEventId: `${artifact}:${WEB_DRAFT_REVIEW_MARKER}:${sent.reviewId}`,
+      },
+    },
+    select: { messageId: true },
+  });
+  const conversations = new PrismaDirectConversationRepository(h.f.db);
+  const pending = async () =>
+    (await conversations.readPendingAgentDeliveries(h.f.workspaceId, h.f.agents.reader)).map(
+      (delivery) => delivery.messageId,
+    );
+  expect(await pending()).toContain(event.messageId);
+
+  const foreign = await h.f.db.workspace.create({
+    data: { slug: `foreign-${Date.now()}`, name: "Foreign" },
+  });
+  await h.f.db.artifact.update({ where: { id: artifact }, data: { workspaceId: foreign.id } });
+
+  expect(await pending()).not.toContain(event.messageId);
+});
