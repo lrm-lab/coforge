@@ -1,5 +1,5 @@
 import type { DirectConversationPorts } from "./agent-targets.repositories.server";
-import { artifactNoticeBlockedMessages } from "#src/server/artifacts/artifact-notice-visibility.server";
+import { readableArtifactNoticeSql } from "#src/server/artifacts/artifact-notice-visibility.server";
 import { isRecoverableAgentTarget } from "@lrm/coforge-sdk/internal";
 import type { QuestionsAnswer } from "#src/server/conversations/action-card-questions.server";
 import {
@@ -35,7 +35,6 @@ import {
 } from "#src/server/conversations/sender-display.server";
 import {
   NOTIFIED_AGENT_WHERE,
-  pendingDeliveryWhere,
   unreadAgentMessagesFragment,
 } from "#src/server/db/repositories/agent-attention.repositories.server";
 import {
@@ -87,6 +86,93 @@ function answerBody(
   )?.prompt;
   return questionsResultBody(answers, cardPerson(chooser?.handle), target, prompt);
 }
+function pendingDeliveryPageSql(
+  workspaceId: string,
+  agentId: string,
+  selected: Prisma.Sql,
+): Prisma.Sql {
+  const seat = (alias: string) => Prisma.sql`EXISTS (
+    SELECT 1 FROM "conversation_members" seat
+    WHERE seat."conversationId" = ${Prisma.raw(alias)}."id"
+      AND seat."agentId" = ${agentId}::uuid AND seat."leftAt" IS NULL)`;
+  const readableChannel = (alias: string) => Prisma.sql`(
+    ${Prisma.raw(alias)}."workspaceId" = ${workspaceId}::uuid
+    AND ${Prisma.raw(alias)}."channelName" IS NOT NULL
+    AND ${Prisma.raw(alias)}."hiddenFromWorkspaceAt" IS NULL
+    AND (${Prisma.raw(alias)}."visibility" = 'public' OR EXISTS (
+      SELECT 1 FROM "conversation_members" channel_seat
+      WHERE channel_seat."conversationId" = ${Prisma.raw(alias)}."id"
+        AND channel_seat."workspaceId" = ${workspaceId}::uuid
+        AND channel_seat."agentId" = ${agentId}::uuid
+        AND channel_seat."leftAt" IS NULL)))`;
+  const ordinaryTarget = (alias: string) => Prisma.sql`(
+    ${Prisma.raw(alias)}."kind" IS NULL
+    OR ${Prisma.raw(alias)}."kind" NOT IN ('task_thread', 'attachment_comments'))`;
+  return Prisma.sql`
+    SELECT d."deliveryId"
+    FROM "agent_message_deliveries" d
+    JOIN "messages" msg ON msg."id" = d."messageId"
+    JOIN "conversations" c ON c."id" = d."conversationId" AND c."workspaceId" = d."workspaceId"
+    WHERE d."workspaceId" = ${workspaceId}::uuid
+      AND d."agentId" = ${agentId}::uuid
+      AND ${selected}
+      AND (d."receivedAt" IS NOT NULL OR d."expiresAt" IS NULL
+        OR d."expiresAt" > (now() AT TIME ZONE 'UTC'))
+      AND c."hiddenFromWorkspaceAt" IS NULL
+      AND (
+        c."channelName" IS NOT NULL
+        OR c."directKey" IS NOT NULL
+        OR c."kind" = 'attachment_comments'
+        OR (c."kind" = 'task_thread' AND EXISTS (
+          SELECT 1 FROM "tasks" task
+          JOIN "conversations" board ON board."id" = task."conversationId"
+          WHERE task."discussionConversationId" = c."id"
+            AND (${readableChannel("board")}
+              OR (board."hiddenFromWorkspaceAt" IS NULL AND board."directKey" IS NOT NULL))))
+      )
+      AND (
+        c."directKey" IS NOT NULL
+        OR (${ordinaryTarget("c")} AND ${seat("c")})
+        OR EXISTS (
+          SELECT 1 FROM "tasks" followed
+          WHERE followed."discussionConversationId" = c."id"
+            AND EXISTS (
+              SELECT 1 FROM "task_follows" follow
+              JOIN "conversation_members" follower ON follower."id" = follow."memberId"
+                AND follower."conversationId" = follow."conversationId"
+                AND follower."workspaceId" = follow."workspaceId"
+              WHERE follow."taskId" = followed."id"
+                AND follow."conversationId" = followed."conversationId"
+                AND follower."agentId" = ${agentId}::uuid
+                AND follower."leftAt" IS NULL))
+        OR (
+          EXISTS (
+            SELECT 1 FROM "attachment_comments" comment_row
+            WHERE comment_row."messageId" = msg."id"
+              AND comment_row."conversationId" = msg."conversationId")
+          AND (
+            (${ordinaryTarget("c")} AND ${seat("c")})
+            OR (c."kind" = 'attachment_comments' AND EXISTS (
+              SELECT 1 FROM "attachment_comment_threads" thread
+              JOIN "attachments" attachment ON attachment."id" = thread."attachmentId"
+                AND attachment."workspaceId" = thread."workspaceId"
+              JOIN "conversations" source ON source."id" = attachment."conversationId"
+                AND source."workspaceId" = attachment."workspaceId"
+              WHERE thread."conversationId" = c."id"
+                AND thread."workspaceId" = c."workspaceId"
+                AND source."hiddenFromWorkspaceAt" IS NULL
+                AND ${seat("source")}))))
+        OR (${readableChannel("c")} AND EXISTS (
+          SELECT 1 FROM "pending_mention_actions" mention
+          WHERE mention."messageId" = msg."id"
+            AND mention."conversationId" = msg."conversationId"
+            AND mention."targetAgentId" = ${agentId}::uuid
+            AND mention."notifiedAt" IS NOT NULL))
+      )
+      AND ${readableArtifactNoticeSql(workspaceId, agentId, Prisma.sql`msg."id"`)}
+    ORDER BY d."createdAt" ASC, d."deliveryId" ASC
+    LIMIT ${AGENT_RECOVERY_MESSAGE_LIMIT}`;
+}
 export async function readPendingAgentDeliveries(
   ports: DirectConversationPorts,
   workspaceId: string,
@@ -96,58 +182,65 @@ export async function readPendingAgentDeliveries(
     orUnreceived?: boolean;
   },
 ): Promise<AgentFacing<PendingAgentDelivery>[]> {
-  const unreceived = { receivedAt: null } satisfies Prisma.AgentMessageDeliveryWhereInput;
-  const chosen = { deliveryId: { in: [...(select?.deliveryIds ?? [])] } };
+  const chosenDeliveryIds = select ? [...select.deliveryIds] : [];
+  if (select && !select.orUnreceived && chosenDeliveryIds.length === 0) return [];
   const selected = !select
-    ? unreceived
-    : { AND: [select.orUnreceived ? { OR: [unreceived, chosen] } : chosen] };
-  const pendingWhere = await pendingDeliveryWhere(ports.db, { workspaceId, agentId }, selected);
-  const fetched = await ports.db.agentMessageDelivery.findMany({
-    where: pendingWhere,
-    orderBy: [{ createdAt: "asc" }, { deliveryId: "asc" }],
-    take: AGENT_RECOVERY_MESSAGE_LIMIT,
-    select: {
-      deliveryId: true,
-      messageId: true,
-      conversationId: true,
-      conversation: { select: TARGET_CONVERSATION_SELECT },
-      sequence: true,
-      reason: true,
-      message: {
-        select: {
-          body: true,
-          createdAt: true,
-          threadRootId: true,
-          sender: MESSAGE_SENDER_SELECT,
-          mentions: MESSAGE_MENTIONS_SELECT,
-          forwards: AGENT_FORWARD_SELECT,
-          attachments: {
-            select: { id: true, forwardPosition: true },
-            orderBy: { position: "asc" },
-          },
-          pendingMentionActions: { where: NOTIFIED_AGENT_WHERE(agentId), select: { id: true } },
-          actionCard: {
-            select: {
-              kind: true,
-              state: true,
-              payload: true,
-              result: true,
-              committedByUserId: true,
+    ? Prisma.sql`d."receivedAt" IS NULL`
+    : !select.orUnreceived
+      ? Prisma.sql`d."deliveryId" IN (${Prisma.join(chosenDeliveryIds)})`
+      : chosenDeliveryIds.length === 0
+        ? Prisma.sql`d."receivedAt" IS NULL`
+        : Prisma.sql`(d."receivedAt" IS NULL OR d."deliveryId" IN (${Prisma.join(chosenDeliveryIds)}))`;
+  const page = await ports.db.$queryRaw<{ deliveryId: string }[]>(
+    pendingDeliveryPageSql(workspaceId, agentId, selected),
+  );
+  const pageIds = page.map((row) => row.deliveryId);
+  const fetched =
+    pageIds.length === 0
+      ? []
+      : await ports.db.agentMessageDelivery.findMany({
+          where: { deliveryId: { in: pageIds } },
+          select: {
+            deliveryId: true,
+            messageId: true,
+            conversationId: true,
+            conversation: { select: TARGET_CONVERSATION_SELECT },
+            sequence: true,
+            reason: true,
+            message: {
+              select: {
+                body: true,
+                createdAt: true,
+                threadRootId: true,
+                sender: MESSAGE_SENDER_SELECT,
+                mentions: MESSAGE_MENTIONS_SELECT,
+                forwards: AGENT_FORWARD_SELECT,
+                attachments: {
+                  select: { id: true, forwardPosition: true },
+                  orderBy: { position: "asc" },
+                },
+                pendingMentionActions: {
+                  where: NOTIFIED_AGENT_WHERE(agentId),
+                  select: { id: true },
+                },
+                actionCard: {
+                  select: {
+                    kind: true,
+                    state: true,
+                    payload: true,
+                    result: true,
+                    committedByUserId: true,
+                  },
+                },
+              },
             },
           },
-        },
-      },
-    },
+        });
+  const deliveryById = new Map(fetched.map((delivery) => [delivery.deliveryId, delivery] as const));
+  const deliveries = page.flatMap((row) => {
+    const delivery = deliveryById.get(row.deliveryId);
+    return delivery ? [delivery] : [];
   });
-  const blocked = await artifactNoticeBlockedMessages(
-    ports.db,
-    workspaceId,
-    agentId,
-    fetched.map((delivery) => delivery.messageId),
-  );
-  const deliveries = blocked.size
-    ? fetched.filter((delivery) => !blocked.has(delivery.messageId))
-    : fetched;
   const chooserIds = [
     ...new Set(
       deliveries.flatMap((delivery) =>

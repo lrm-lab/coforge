@@ -117,7 +117,7 @@ describe("app_events target resolution, recovery, wake hints, and inbox list", (
 
   test("readPendingAgentDeliveries names app_events targets and marks source as app", async () => {
     const db = {
-      $queryRaw: async () => [],
+      $queryRaw: async () => [{ deliveryId: "del-sys-1" }],
       agentMessageDelivery: {
         findMany: async () => [
           {

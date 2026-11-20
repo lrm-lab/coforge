@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { AGENT_RECOVERY_MESSAGE_LIMIT } from "#src/server/db/repositories/agent-recovery-row.server";
 import {
   PrismaDirectConversationRepository,
   type PendingAgentDelivery,
@@ -11,10 +10,14 @@ import {
 describe("PrismaDirectConversationRepository pending deliveries", () => {
   test("reads all scoped unacknowledged deliveries oldest-first", async () => {
     const queries: object[] = [];
+    const rawQueries: unknown[] = [];
     const db = {
       agent: { findMany: async () => [] },
       conversationMember: { findMany: async () => [] },
-      $queryRaw: async () => [],
+      $queryRaw: async (input: unknown) => {
+        rawQueries.push(input);
+        return [{ deliveryId: "delivery-1" }];
+      },
       agentMessageDelivery: {
         findMany: async (input: object) => {
           queries.push(input);
@@ -47,16 +50,8 @@ describe("PrismaDirectConversationRepository pending deliveries", () => {
       "agent-1",
     );
 
-    expect(queries[0]).toMatchObject({
-      where: {
-        workspaceId: "workspace-1",
-        agentId: "agent-1",
-        receivedAt: null,
-      },
-      orderBy: [{ createdAt: "asc" }, { deliveryId: "asc" }],
-      // The replay is bounded: oldest-first means the newest backlog waits for the next trigger.
-      take: AGENT_RECOVERY_MESSAGE_LIMIT,
-    });
+    expect(rawQueries).toHaveLength(1);
+    expect(queries[0]).toMatchObject({ where: { deliveryId: { in: ["delivery-1"] } } });
     expect(result).toEqual<PendingAgentDelivery[]>([
       {
         messageId: "message-1",
@@ -77,7 +72,7 @@ describe("PrismaDirectConversationRepository pending deliveries", () => {
     const db = {
       conversation: { findMany: async () => [] },
       conversationMember: { findMany: async () => [] },
-      $queryRaw: async () => [],
+      $queryRaw: async () => [{ deliveryId: "delivery-agent" }],
       agentMessageDelivery: {
         findMany: async () => [
           {
@@ -127,7 +122,7 @@ describe("PrismaDirectConversationRepository pending deliveries", () => {
     const db = {
       agent: { findMany: async () => [] },
       conversationMember: { findMany: async () => [] },
-      $queryRaw: async () => [],
+      $queryRaw: async () => [{ deliveryId: "delivery-1" }],
       agentMessageDelivery: {
         findMany: async () => [
           {
