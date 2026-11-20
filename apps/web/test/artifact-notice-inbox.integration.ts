@@ -174,6 +174,7 @@ test("an artifact in another workspace leaves its notice unreadable", async () =
     (await conversations.readPendingAgentDeliveries(h.f.workspaceId, h.f.agents.reader)).map(
       (delivery) => delivery.messageId,
     );
+  await h.f.db.artifact.update({ where: { id: artifact }, data: { access: "workspace" } });
   expect(await pending()).toContain(event.messageId);
 
   const foreign = await h.f.db.workspace.create({
