@@ -80,46 +80,36 @@ export function ConversationFilter({
     { id: "link", label: labels.link, face: { kind: "icon", icon: <Globe02 /> } },
     { id: "workspace", label: labels.workspace, face: { kind: "icon", icon: <Users01 /> } },
   ];
-  const rooms: PickerOption[] = [
-    ...channels.map((channel) => ({
+  const roomOptions = new Map<string, PickerOption>();
+  for (const channel of channels)
+    roomOptions.set(channel.id, {
       id: roomKey(channel.id),
       label: channel.name,
       ariaLabel: `#${channel.name}`,
       keywords: `#${channel.name}`,
-      face: {
-        kind: "channel" as const,
-        visibility: channel.visibility,
-        members: channel.members,
-      },
-    })),
-    ...(directory?.people ?? []).flatMap((person) =>
-      person.dmId
-        ? [
-            {
-              id: roomKey(person.dmId),
-              label: person.name,
-              face: {
-                kind: "identity" as const,
-                name: person.name,
-                src: person.avatarUrl,
-                userId: person.id,
-              },
-            },
-          ]
-        : [],
-    ),
-    ...(directory?.agents ?? []).flatMap((agent) =>
-      agent.dmId
-        ? [
-            {
-              id: roomKey(agent.dmId),
-              label: agent.name,
-              face: { kind: "identity" as const, name: agent.name, agentId: agent.id },
-            },
-          ]
-        : [],
-    ),
-  ];
+      face: { kind: "channel", visibility: channel.visibility, members: channel.members },
+    });
+  for (const person of directory?.people ?? []) {
+    const conversationId = person.dmId;
+    if (!conversationId || roomOptions.has(conversationId)) continue;
+    roomOptions.set(conversationId, {
+      id: roomKey(conversationId),
+      label: person.name,
+      keywords: `@${person.name}`,
+      face: { kind: "identity", name: person.name, src: person.avatarUrl, userId: person.id },
+    });
+  }
+  for (const agent of directory?.agents ?? []) {
+    const conversationId = agent.dmId;
+    if (!conversationId || roomOptions.has(conversationId)) continue;
+    roomOptions.set(conversationId, {
+      id: roomKey(conversationId),
+      label: agent.name,
+      keywords: `@${agent.name}`,
+      face: { kind: "identity", name: agent.name, agentId: agent.id },
+    });
+  }
+  const rooms = [...roomOptions.values()];
   return (
     <div className="flex shrink-0 items-center">
       <EntityPicker
