@@ -25,8 +25,10 @@ the code:
 - Half-given answers are drafts on this device only (`question-drafts.ts`, localStorage key
   `coforge.question-draft:<messageId>`), dropped once the card stops waiting and pruned past the
   longest a card can wait. Syncing them across devices is a later change.
-- "Don't answer" always asks first (`Popconfirm`, tone `final`: not red, since nothing is lost): a
-  decline is final and wakes the Agent that asked. There is no undo window. The Activity inbox's
-  waiting row declines with the same words.
+- "Don't answer" sits in the card's top-right corner as a card-level exit so the footer stays
+  dedicated to the answering flow (pager plus Skip, Next or Send); it always asks first
+  (`Popconfirm`, tone `final`: not red, since nothing is lost): a decline is final and wakes the
+  Agent that asked. There is no undo window. The Activity inbox's waiting row declines with the
+  same words.
 - The card shows the Agent's own deadline (`view.deadline`) only while it waits; the 30-day default
   shows no time.

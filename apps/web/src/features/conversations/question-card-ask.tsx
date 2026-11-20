@@ -28,6 +28,7 @@ const TURN_AFTER_PICK_MS = 260;
 
 export function QuestionAsk({
   view,
+  title,
   asker,
   status,
   due,
@@ -39,6 +40,7 @@ export function QuestionAsk({
   focusAfter,
 }: {
   view: AskingView;
+  title?: string;
   tab: number;
   setTab: (tab: number) => void;
   kbd: boolean;
@@ -46,7 +48,7 @@ export function QuestionAsk({
   asker: string;
   status: ReactNode;
   due?: string;
-  onHandled: () => void;
+  onHandled: (withFooter: boolean) => void;
   focusAfter: () => HTMLElement | null | undefined;
 }) {
   const cards = useQuestionCards();
@@ -74,6 +76,8 @@ export function QuestionAsk({
   const keyState = { questions, drafts, tab, hi, kbd, readOnly };
   const otherRow = question.other ? question.options.length : -1;
   const listId = `${useId()}-q${tab}`;
+  const showSend = several ? last : question.select === "many" || Boolean(draft?.text.trim());
+  const showFooter = several || showSend || Boolean(due) || Boolean(error) || readOnly;
 
   useLayoutEffect(() => {
     if (!kbd) return;
@@ -114,7 +118,7 @@ export function QuestionAsk({
     setSending(true);
     setError("");
     const keys = rootRef.current?.contains(document.activeElement);
-    onHandled();
+    onHandled(showFooter);
     try {
       await cards!.submit(view, { ...drafts, ...patch });
       if (keys) requestAnimationFrame(() => focusAfter()?.focus({ preventScroll: true }));
@@ -207,12 +211,37 @@ export function QuestionAsk({
     act(action);
   }
 
-  const showSend = several ? last : question.select === "many" || Boolean(draft?.text.trim());
-  const promptClass = cn(
-    "px-3 pt-2 pb-1.5 text-sm wrap-anywhere text-primary",
+  const promptInlineClass = cn(
+    "min-w-0 flex-1 text-sm wrap-anywhere text-primary",
     several ? "font-medium" : "font-semibold",
   );
+  const promptClass = cn("px-3 pt-2 pb-1.5", promptInlineClass);
   const mode = readOnly ? "view" : "live";
+  const declineClass =
+    "-mt-0.5 shrink-0 px-2 py-1 text-xs/4 font-medium text-quaternary hover:text-secondary max-sm:-mt-1.5 max-sm:min-h-10 max-sm:px-2.5 max-sm:text-sm";
+  const declineControl = !readOnly ? (
+    <DeclineQuestion
+      asker={asker}
+      questions={questions.length}
+      placement="bottom end"
+      fallbackFocus={() => cardRef.current}
+      onDecline={async () => {
+        onHandled(showFooter);
+        await cards!.decline(view);
+      }}
+    >
+      <Button
+        data-question-decline=""
+        size="xs"
+        color="tertiary"
+        noTextPadding
+        className={declineClass}
+      >
+        {m.question_card_decline()}
+      </Button>
+    </DeclineQuestion>
+  ) : null;
+  const declineInPrompt = !title && Boolean(declineControl);
   return (
     <div
       ref={rootRef}
@@ -223,21 +252,53 @@ export function QuestionAsk({
       onPointerMove={(event) => {
         if (kbd && event.pointerType === "mouse") setKbd(false);
       }}
-      className="flex flex-1 flex-col"
+      className={cn("flex flex-1 flex-col", !showFooter && "pb-1")}
     >
+      {title && (
+        <div
+          className={cn(
+            "pt-2 pl-3",
+            declineControl ? "flex items-start justify-between gap-2 pr-1" : "pr-3",
+          )}
+        >
+          <p
+            data-question-title=""
+            className="min-w-0 flex-1 text-sm font-semibold wrap-anywhere text-primary"
+          >
+            {title}
+          </p>
+          {declineControl}
+        </div>
+      )}
       <QuestionPageStack
         items={questions}
         activeIndex={tab}
         renderSizer={(each) => (
           <>
-            <p className={promptClass}>{each.prompt}</p>
+            {declineInPrompt ? (
+              <div className="flex items-start justify-between gap-2 pt-2 pr-1 pb-1.5 pl-3">
+                <p className={promptInlineClass}>{each.prompt}</p>
+                <span className={declineClass}>{m.question_card_decline()}</span>
+              </div>
+            ) : (
+              <p className={promptClass}>{each.prompt}</p>
+            )}
             <QuestionOptions id="" question={each} draft={undefined} mode={mode} sizer />
           </>
         )}
       >
-        <p data-question-prompt="" className={promptClass}>
-          {question.prompt}
-        </p>
+        {declineInPrompt ? (
+          <div className="flex items-start justify-between gap-2 pt-2 pr-1 pb-1.5 pl-3">
+            <p data-question-prompt="" className={promptInlineClass}>
+              {question.prompt}
+            </p>
+            {declineControl}
+          </div>
+        ) : (
+          <p data-question-prompt="" className={promptClass}>
+            {question.prompt}
+          </p>
+        )}
         <QuestionOptions
           key={question.id}
           id={listId}
@@ -252,53 +313,39 @@ export function QuestionAsk({
           onDraft={(next) => setDraft(question.id, next)}
         />
       </QuestionPageStack>
-      <div className="mt-auto flex flex-wrap items-center gap-x-3 pt-1 pl-3 text-xs text-quaternary">
-        {due && (
-          <span data-question-due="" className="whitespace-nowrap max-sm:basis-full max-sm:pt-1">
-            {due}
-          </span>
-        )}
-        {several && <QuestionPager tab={tab} total={questions.length} onTurn={turn} />}
-        {readOnly && (
-          <span data-question-status="" className="flex min-w-0 max-w-full items-center">
-            {status}
-          </span>
-        )}
-        {error && (
-          <p role="alert" className="min-w-0 text-error-primary">
-            {error}
-          </p>
-        )}
-        {!readOnly && (
-          <span className="ml-auto flex min-h-10 items-center gap-1 py-1 pr-1 max-sm:min-h-13">
-            <DeclineQuestion
-              asker={asker}
-              questions={questions.length}
-              placement="top end"
-              fallbackFocus={() => cardRef.current}
-              onDecline={async () => {
-                onHandled();
-                await cards!.decline(view);
-              }}
-            >
-              <Button data-question-decline="" size={size} color="link-gray" className="px-2">
-                {m.question_card_decline()}
-              </Button>
-            </DeclineQuestion>
-            {showSend ? (
-              <Button
-                data-question-send=""
-                size={size}
-                color="primary"
-                isDisabled={!anyAnswered}
-                isLoading={sending}
-                showTextWhileLoading
-                onPress={() => void submit()}
-              >
-                {sending ? m.question_card_sending() : m.question_card_send()}
-              </Button>
-            ) : (
-              several && (
+      {showFooter && (
+        <div className="mt-auto flex flex-wrap items-center gap-x-3 pt-1 pl-3 text-xs text-quaternary">
+          {due && (
+            <span data-question-due="" className="whitespace-nowrap max-sm:basis-full max-sm:pt-1">
+              {due}
+            </span>
+          )}
+          {several && <QuestionPager tab={tab} total={questions.length} onTurn={turn} />}
+          {readOnly && (
+            <span data-question-status="" className="flex min-w-0 max-w-full items-center">
+              {status}
+            </span>
+          )}
+          {error && (
+            <p role="alert" className="min-w-0 text-error-primary">
+              {error}
+            </p>
+          )}
+          {!readOnly && (showSend || several) ? (
+            <span className="ml-auto flex min-h-10 items-center py-1 pr-1 max-sm:min-h-13">
+              {showSend ? (
+                <Button
+                  data-question-send=""
+                  size={size}
+                  color="primary"
+                  isDisabled={!anyAnswered}
+                  isLoading={sending}
+                  showTextWhileLoading
+                  onPress={() => void submit()}
+                >
+                  {sending ? m.question_card_sending() : m.question_card_send()}
+                </Button>
+              ) : (
                 <Button
                   data-question-next=""
                   size={size}
@@ -307,12 +354,13 @@ export function QuestionAsk({
                 >
                   {answered(draft) ? m.question_card_next() : m.question_card_skip()}
                 </Button>
-              )
-            )}
-          </span>
-        )}
-        {readOnly && <span className="min-h-10 max-sm:min-h-13" />}
-      </div>
+              )}
+            </span>
+          ) : (
+            <span className="min-h-10 max-sm:min-h-13" />
+          )}
+        </div>
+      )}
     </div>
   );
 }

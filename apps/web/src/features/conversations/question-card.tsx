@@ -21,6 +21,7 @@ export function QuestionCard({ card, asker }: { card: AskingView; asker: string 
   const cards = useQuestionCards();
   const view = cards?.viewOf(card) ?? card;
   const [handledHere, setHandledHere] = useState(false);
+  const [settledWithFooter, setSettledWithFooter] = useState(true);
   const [tab, setTab] = useState(0);
   const [kbd, setKbd] = useState(false);
   const { box, settles, heldHeight } = useSettleInPlace(view, handledHere);
@@ -33,6 +34,7 @@ export function QuestionCard({ card, asker }: { card: AskingView; asker: string 
   }, [pending, view.messageId]);
   const questions = cardQuestions(view);
   const several = questions.length > 1;
+  const cardTitle = several && view.kind === "questions" && view.prompt ? view.prompt : "";
   const time = (iso: string) => formatMonthDayTime(iso, timeZone, getLocale(), timeFormat);
   const status = cardStatus(view, { mine: isMine(view), time });
 
@@ -41,6 +43,7 @@ export function QuestionCard({ card, asker }: { card: AskingView; asker: string 
     body = (
       <QuestionAsk
         view={view}
+        title={cardTitle || undefined}
         asker={asker}
         status={status}
         due={view.deadline ? m.question_card_due({ time: time(view.deadline) }) : undefined}
@@ -48,7 +51,10 @@ export function QuestionCard({ card, asker }: { card: AskingView; asker: string 
         setTab={setTab}
         kbd={kbd}
         setKbd={setKbd}
-        onHandled={() => setHandledHere(true)}
+        onHandled={(withFooter) => {
+          setHandledHere(true);
+          setSettledWithFooter(withFooter);
+        }}
         focusAfter={() => cards?.waitingKeysTarget(view.messageId) ?? box.current}
       />
     );
@@ -63,12 +69,37 @@ export function QuestionCard({ card, asker }: { card: AskingView; asker: string 
       const activeTab = Math.min(tab, questions.length - 1);
       const question = questions[activeTab]!;
       const mode = answered ? "answered" : "off";
-      const promptClass = cn(
-        "px-3 pt-2 pb-1.5 text-sm wrap-anywhere",
+      const promptInlineClass = cn(
+        "min-w-0 flex-1 text-sm wrap-anywhere",
         several ? "font-medium" : "font-semibold",
         answered ? "text-primary" : "text-tertiary",
       );
-      body = (
+      const promptClass = cn("px-3 pt-2 pb-1.5", promptInlineClass);
+      const headerStatus = !several && !settledWithFooter;
+      body = headerStatus ? (
+        <div className="flex flex-1 flex-col pb-1">
+          <div className="flex items-start justify-between gap-2 pt-2 pr-2 pb-1.5 pl-3">
+            <p data-question-prompt="" className={promptInlineClass}>
+              {question.prompt}
+            </p>
+            {status && (
+              <span
+                data-question-status=""
+                className="shrink-0 pt-0.5 text-right text-xs text-quaternary"
+              >
+                {status}
+              </span>
+            )}
+          </div>
+          <QuestionOptions
+            key={question.id}
+            id={`${view.messageId}-q${activeTab}`}
+            question={question}
+            draft={answers[question.id]}
+            mode={mode}
+          />
+        </div>
+      ) : (
         <>
           <QuestionPageStack
             items={questions}
@@ -130,12 +161,12 @@ export function QuestionCard({ card, asker }: { card: AskingView; asker: string 
         pending && "focus-within:border-primary",
       )}
     >
-      {several && view.kind === "questions" && view.prompt && (
+      {!pending && cardTitle && (
         <p
           data-question-title=""
           className="px-3 pt-2 text-sm font-semibold wrap-anywhere text-primary"
         >
-          {view.prompt}
+          {cardTitle}
         </p>
       )}
       {body}
