@@ -193,7 +193,9 @@ export async function readNoticePage(
           ? (await ids(db, scope, { above: anchorSequence }, "asc", limit + 1)).slice(0, limit)
           : await ids(db, scope, {}, "desc", limit);
   const rows = (await hydrate(db, pageIds)).sort((a, b) => a.sequence - b.sequence);
-  const anchor = anchorSequence ?? null;
+  const anchor =
+    anchorSequence ??
+    (unreadFromStart && scope.fromSequence !== undefined ? scope.fromSequence - 1 : null);
   const anchorAt = (comparison: "atOrBelow" | "atOrAbove") =>
     anchor === null
       ? Prisma.sql`FALSE`
