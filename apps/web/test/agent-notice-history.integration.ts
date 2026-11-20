@@ -160,6 +160,43 @@ test("the notice conversation reads only the notices the Agent can still read", 
 
     const emptyPosition = await read({ before: "99", limit: 2 });
     expect(emptyPosition.messages.map((message) => message.sequence)).toEqual([8, 9]);
+
+    const fromZero = await read({ after: "0", limit: 2 });
+    expect(fromZero.messages.map((message) => message.sequence)).toEqual([1, 2]);
+    expect(fromZero.hasOlder).toBe(false);
+    expect(fromZero.hasNewer).toBe(true);
+
+    let statements = 0;
+    const revoking = new Proxy(db, {
+      get(target, property, receiver) {
+        if (property !== "$queryRaw") return Reflect.get(target, property, receiver);
+        return async (...args: unknown[]) => {
+          statements += 1;
+          if (statements === 2)
+            await db.artifact.update({
+              where: { id: artifact.id },
+              data: { access: "conversation", homeKey: `conversation:${crypto.randomUUID()}` },
+            });
+          return (target.$queryRaw as (...input: unknown[]) => Promise<unknown>)(...args);
+        };
+      },
+    });
+    const revoked = await readAgentMessagePage(revoking, {
+      workspaceId: workspace.id,
+      agentId: agent.id,
+      conversationId: conversation.id,
+      threadRootId: null,
+      canonicalTarget: "@app.system.artifacts",
+      isChannel: false,
+      isUserAgentDirectConversation: false,
+      page: { before: "4", limit: 2 } as never,
+      resolveAnchor: async () => {
+        throw new Error("unused");
+      },
+    });
+    expect(revoked.messages.map((message) => message.sequence)).toEqual([1]);
+    expect(revoked.hasOlder).toBe(false);
+    expect(revoked.hasNewer).toBe(true);
     expect(fourth!.id).toContain("-");
   } finally {
     await db.workspace.deleteMany({ where: { id: workspace.id } });
