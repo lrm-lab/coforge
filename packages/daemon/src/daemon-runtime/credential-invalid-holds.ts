@@ -280,7 +280,7 @@ export class CredentialInvalidHolds {
   #holdSiblings(change: Extract<LedgerChange, { kind: "recorded" }>): void {
     if (!isSharedKey(change.key)) return;
     const { key, record } = change;
-    for (const agentId of [...this.ports.runningAgentIds()]) {
+    for (const agentId of Array.from(this.ports.runningAgentIds())) {
       const config = this.ports.configOf(agentId);
       if (agentId === change.agentId || !config || credentialKeyOf(agentId, config) !== key)
         continue;

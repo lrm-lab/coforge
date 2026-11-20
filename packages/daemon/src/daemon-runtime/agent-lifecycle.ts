@@ -35,7 +35,7 @@ export class AgentLifecycle {
   }
 
   #notify(event: string, tell: (listener: AgentLifecycleListener) => void): void {
-    for (const listener of [...this.#listeners]) {
+    for (const listener of Array.from(this.#listeners)) {
       try {
         tell(listener);
       } catch (error) {
