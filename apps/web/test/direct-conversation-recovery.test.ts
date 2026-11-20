@@ -85,14 +85,38 @@ describe("PrismaDirectConversationRepository recovery", () => {
     // read as a non-member), the two direct-message branches, the notified-non-member branch (and
     // its not-a-member check), the membership join, the delivery join, the comment-delivery
     // branch, the budget.
-    const bound = queries[0];
-    expect(bound.at(-1)).toBe(100);
-    expect(
-      bound.filter(
-        (value) =>
-          !["workspace-1", "agent-1", "web-draft-review", "public", 100].includes(value as never),
-      ),
-    ).toEqual([]);
+    expect(queries[0]).toEqual([
+      "workspace-1",
+      "agent-1",
+      "agent-1",
+      "workspace-1",
+      "agent-1",
+      "agent-1",
+      "workspace-1",
+      "agent-1",
+      "workspace-1",
+      "agent-1",
+      "public",
+      "workspace-1",
+      "agent-1",
+      "agent-1",
+      "workspace-1",
+      "agent-1",
+      "workspace-1",
+      "agent-1",
+      "agent-1",
+      "web-draft-review",
+      "workspace-1",
+      "agent-1",
+      "workspace-1",
+      "workspace-1",
+      "agent-1",
+      "public",
+      "agent-1",
+      "agent-1",
+      "workspace-1",
+      100,
+    ]);
     expect(result.resumeMessages).toHaveLength(100);
     expect(result.resumeMessages.slice(0, 2)).toEqual<AgentRecoveryContext["resumeMessages"]>([
       {
