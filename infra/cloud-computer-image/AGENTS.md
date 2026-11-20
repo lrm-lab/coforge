@@ -9,7 +9,10 @@ image. Complements [container host](../../docs/computer/container-host.md) and
   local/fixture image only; do not point `COFORGE_COMPUTER_IMAGE` at it.
 - Build with `./scripts/build-swarm.sh` from this directory. The script downloads
   `coforge-computer` from the environment's release feed; it does not compile
-  from the monorepo workspace.
+  from the monorepo workspace. If Pi `npm install` hits `ETIMEDOUT` despite
+  `NPM_REGISTRY`, rebuild with `DOCKER_BUILD_NETWORK=host` so a host-local
+  proxy at `127.0.0.1` is reachable; the release-feed download always bypasses
+  that proxy.
 - Never commit `config/pi.env`, `config/coforge.env`, or
   `config/pi-agent/models.json`. Do not push the built image to a public
   registry while it carries baked provider keys.

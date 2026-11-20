@@ -19,11 +19,18 @@ EXTRA=(
   --build-arg "PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST:-mirrors.aliyun.com}"
 )
 mkdir -p coforge
+# Release feed is on coforge.cn; a local clash/v2ray proxy often resets that TLS
+# session. Always fetch the feed direct (mirrors still use DOCKER_BUILD_NETWORK).
+curl_feed() {
+  env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u NO_PROXY \
+      -u http_proxy -u https_proxy -u all_proxy -u no_proxy \
+      curl "$@"
+}
 if [[ -n "${COFORGE_RELEASE_FEED_URL:-}" ]]; then
   feed="${COFORGE_RELEASE_FEED_URL%/}"
   cloud_host="${COFORGE_CLOUD_HOST:-}"
   staged_bin="coforge/coforge-computer"
-  version="$(curl -fsSL "${feed}/latest" | tr -d '[:space:]')"
+  version="$(curl_feed -fsSL --retry 3 --retry-all-errors "${feed}/latest" | tr -d '[:space:]')"
   case "${version}" in
     ""|latest|.|*..*|-*)
       echo "[build.sh] ERROR: feed latest is not a version: ${version}" >&2
@@ -34,7 +41,7 @@ if [[ -n "${COFORGE_RELEASE_FEED_URL:-}" ]]; then
     echo "[build.sh] ERROR: feed latest is not a version: ${version}" >&2
     exit 1
   fi
-  expected="$(curl -fsSL "${feed}/${version}/linux-x64/coforge-computer.sha256" | tr -d '[:space:]')"
+  expected="$(curl_feed -fsSL --retry 3 --retry-all-errors "${feed}/${version}/linux-x64/coforge-computer.sha256" | tr -d '[:space:]')"
   if [[ ! "${expected}" =~ ^[0-9a-fA-F]{64}$ ]]; then
     echo "[build.sh] ERROR: feed sha256 for ${version} is not a checksum" >&2
     exit 1
@@ -57,7 +64,7 @@ if [[ -n "${COFORGE_RELEASE_FEED_URL:-}" ]]; then
     trap "rm -rf '${tmp}'" EXIT
     echo "[build.sh] downloading ${feed}/${version}/linux-x64/coforge-computer.gz"
     # -s hides the meter; keep -fL and show a progress bar for the large binary.
-    curl -fL --progress-bar "${feed}/${version}/linux-x64/coforge-computer.gz" -o "${tmp}/coforge-computer.gz"
+    curl_feed -fL --retry 3 --retry-all-errors --progress-bar "${feed}/${version}/linux-x64/coforge-computer.gz" -o "${tmp}/coforge-computer.gz"
     gzip -dc "${tmp}/coforge-computer.gz" > "${staged_bin}"
     actual="$(sha256sum "${staged_bin}" | awk '{print $1}')"
     if [[ "${actual}" != "${expected}" ]]; then
@@ -141,8 +148,16 @@ echo "[build.sh] SANDBOX_IMAGE=${SANDBOX_IMAGE}"
 echo "[build.sh] APT_MIRROR=${APT_MIRROR:-https://mirrors.cloud.tencent.com/debian}"
 echo "[build.sh] PIP_INDEX_URL=${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}"
 echo "[build.sh] tag=${TAG}"
-# The host proxy listens on 127.0.0.1, which is the build container itself.
-# Keep it for the release download above, and let apt use the mirror directly.
-env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u NO_PROXY \
-    -u http_proxy -u https_proxy -u all_proxy -u no_proxy \
-    "${DOCKER_BIN}" build "${EXTRA[@]}" -t "${TAG}" .
+# Default: strip host proxy (127.0.0.1 is the build container, not the host) and
+# let apt/pip/npm hit the China mirrors directly. Set DOCKER_BUILD_NETWORK=host
+# when those mirrors time out and the host proxy must be reachable as 127.0.0.1.
+DOCKER_BUILD_NETWORK="${DOCKER_BUILD_NETWORK:-}"
+if [[ -n "${DOCKER_BUILD_NETWORK}" ]]; then
+  EXTRA+=(--network "${DOCKER_BUILD_NETWORK}")
+  echo "[build.sh] docker network=${DOCKER_BUILD_NETWORK} (proxy env kept)"
+  "${DOCKER_BIN}" build "${EXTRA[@]}" -t "${TAG}" .
+else
+  env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u NO_PROXY \
+      -u http_proxy -u https_proxy -u all_proxy -u no_proxy \
+      "${DOCKER_BIN}" build "${EXTRA[@]}" -t "${TAG}" .
+fi
