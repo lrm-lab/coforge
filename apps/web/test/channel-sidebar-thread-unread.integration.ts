@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { PgBoss } from "pg-boss";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { RedisClient } from "bun";
 import { Prisma, PrismaClient } from "#src/generated/prisma/client";
@@ -18,10 +17,15 @@ import {
   CHANNEL_THREAD_UNREAD_QUEUE,
   publishChannelThreadUnread,
   recordChannelThreadUnread,
-  registerChannelThreadUnreadQueue,
   type ChannelThreadUnreadJob,
 } from "#src/server/conversations/channel-thread-unread-events.server";
-import { startedAppNotificationQueue } from "#src/server/app-notifications/app-notification-queue.server";
+import {
+  channelThreadUnreadQueueReady,
+  isAppNotificationQueueStarted,
+  prepareAppNotificationQueues,
+  stopAppNotificationQueue,
+} from "#src/server/app-notifications/app-notification-queue.server";
+import { markActivityAllRead } from "#src/server/inbox/activity-inbox-writes.server";
 import { enrollGeneral } from "./helpers/general-channel-fixture";
 import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
@@ -352,15 +356,20 @@ test("channel sidebar thread unreads: counts distinct followed non-task threads,
       threadMentioned: false,
     });
 
-    const boss = new PgBoss({ connectionString });
     const previousUrl = Bun.env.COFORGE_CENTRIFUGO_API_URL;
     const previousKey = Bun.env.COFORGE_CENTRIFUGO_API_KEY;
     try {
-      await boss.start();
-      await boss.createQueue(CHANNEL_THREAD_UNREAD_QUEUE, { retryLimit: 1, retryDelay: 0 });
-      registerChannelThreadUnreadQueue(() => boss);
       Bun.env.COFORGE_CENTRIFUGO_API_URL = "http://127.0.0.1:1";
       Bun.env.COFORGE_CENTRIFUGO_API_KEY = "synthetic-channel-unread-test";
+      expect(channelThreadUnreadQueueReady()).toBe(false);
+      const boss = await prepareAppNotificationQueues(connectionString);
+      expect(channelThreadUnreadQueueReady()).toBe(true);
+      expect(isAppNotificationQueueStarted()).toBe(false);
+      await boss.updateQueue(CHANNEL_THREAD_UNREAD_QUEUE, {
+        retryLimit: 1,
+        retryDelay: 0,
+        retryBackoff: false,
+      });
       const data = { workspaceId: workspace.id, conversationId: empty.id, userId: bob.id };
       await expect(
         db.$transaction(async (tx) => {
@@ -415,13 +424,45 @@ test("channel sidebar thread unreads: counts distinct followed non-task threads,
       await publishChannelThreadUnread(db, publisher, retry!.data, retry!.id);
       expect(deliveries).toHaveLength(2);
       await boss.complete(CHANNEL_THREAD_UNREAD_QUEUE, job!.id);
+
+      const extraRootA = await send(bob.id, "first root for activity mark-all");
+      const extraRootB = await send(bob.id, "second root for activity mark-all");
+      await send(ada.id, "first queued reply", { threadRootId: extraRootA.id });
+      await send(ada.id, "second queued reply", { threadRootId: extraRootB.id });
+      const replies = await boss.fetch<ChannelThreadUnreadJob>(CHANNEL_THREAD_UNREAD_QUEUE, {
+        batchSize: 10,
+      });
+      expect(replies).toHaveLength(2);
+      for (const rootMessageId of [extraRootA.id, extraRootB.id])
+        expect(replies.map(({ data }) => data)).toContainEqual({
+          workspaceId: workspace.id,
+          conversationId: team.id,
+          rootMessageId,
+        });
+      await boss.complete(
+        CHANNEL_THREAD_UNREAD_QUEUE,
+        replies.map(({ id }) => id),
+      );
+      await markActivityAllRead(db, realtime, workspace.id, bob.id, { before: new Date() });
+      const bulk = await boss.fetch<ChannelThreadUnreadJob>(CHANNEL_THREAD_UNREAD_QUEUE, {
+        batchSize: 10,
+      });
+      expect(bulk.map(({ data }) => data)).toEqual([
+        { workspaceId: workspace.id, conversationId: team.id, userId: bob.id },
+      ]);
+      expect((await list([team.id])).channels).toEqual([
+        { conversationId: team.id, unreadThreadCount: 0, threadMentioned: false },
+      ]);
+      await boss.complete(
+        CHANNEL_THREAD_UNREAD_QUEUE,
+        bulk.map(({ id }) => id),
+      );
     } finally {
       if (previousUrl === undefined) delete Bun.env.COFORGE_CENTRIFUGO_API_URL;
       else Bun.env.COFORGE_CENTRIFUGO_API_URL = previousUrl;
       if (previousKey === undefined) delete Bun.env.COFORGE_CENTRIFUGO_API_KEY;
       else Bun.env.COFORGE_CENTRIFUGO_API_KEY = previousKey;
-      registerChannelThreadUnreadQueue(startedAppNotificationQueue);
-      await boss.stop();
+      await stopAppNotificationQueue();
     }
   } finally {
     await db.workspace.deleteMany({ where: { id: workspace.id } });

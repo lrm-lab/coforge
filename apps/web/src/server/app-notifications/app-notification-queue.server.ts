@@ -71,9 +71,8 @@ const EVENT_QUEUE_OPTIONS = {
  * this many retries (about ten minutes in all); then only a flag file reload or a restart tries. */
 export const QUEUE_START_RETRY = { initialDelayMs: 1_000, maxDelayMs: 30_000, maxRetries: 24 };
 
-/** The start in flight or finished, and the queue itself once that start has settled
- * successfully. `running` is what `record` may use: it is never set while pg-boss is still
- * starting, so no domain transaction can wait on (or race) pg-boss's schema DDL. */
+let preparing: Promise<PgBoss> | undefined;
+let prepared: PgBoss | undefined;
 let starting: Promise<PgBoss> | undefined;
 let running: PgBoss | undefined;
 /** Set when the server is told to stop; after that nothing starts the queue. */
@@ -81,20 +80,13 @@ let stopping = false;
 let shutdownRegistered = false;
 const stopListeningForStarts = new Set<() => void>();
 
-/**
- * Starts pg-boss once per process, with the two workers, on `connectionString` (the server's
- * `DATABASE_URL` by default). pg-boss installs and migrates its own `pgboss` schema when it starts,
- * so the database user needs `CREATE` on the database for the first start, and it must never run
- * inside a domain transaction: only server start and a flag file reload start it. A failed start is
- * not remembered; the next call tries again.
- */
-export function startAppNotificationQueue(
+export function prepareAppNotificationQueues(
   connectionString: string | undefined = configuredDatabaseUrl(),
 ): Promise<PgBoss> {
   if (!connectionString || stopping) return Promise.reject(new AppError("TEMPORARILY_UNAVAILABLE"));
   const url = connectionString;
   registerShutdown();
-  starting ??= (async () => {
+  preparing ??= (async () => {
     const boss = new PgBoss({
       ...databasePoolConfig(url),
       max: QUEUE_POOL_SIZE,
@@ -105,11 +97,35 @@ export function startAppNotificationQueue(
     );
     try {
       await boss.start();
+      await boss.createQueue(CHANNEL_THREAD_UNREAD_QUEUE, EVENT_QUEUE_OPTIONS);
+    } catch (error) {
+      await boss.stop({ graceful: false }).catch(() => {});
+      throw error;
+    }
+    prepared = boss;
+    return boss;
+  })().catch((error: unknown) => {
+    preparing = undefined;
+    throw error;
+  });
+  return preparing;
+}
+
+export function channelThreadUnreadQueueReady(): boolean {
+  return !centrifugoServerApiConfigured() || prepared !== undefined;
+}
+
+export function startAppNotificationQueue(
+  connectionString: string | undefined = configuredDatabaseUrl(),
+): Promise<PgBoss> {
+  if (!connectionString || stopping) return Promise.reject(new AppError("TEMPORARILY_UNAVAILABLE"));
+  starting ??= (async () => {
+    const boss = await prepareAppNotificationQueues(connectionString);
+    try {
       await boss.createQueue(APP_NOTIFICATION_EVENT_QUEUE, EVENT_QUEUE_OPTIONS);
       await boss.createQueue(APP_NOTIFICATION_DELIVERY_QUEUE, DELIVERY_QUEUE_OPTIONS);
       await boss.createQueue(EXTERNAL_INBOX_NOTICE_QUEUE, EXTERNAL_INBOX_NOTICE_QUEUE_OPTIONS);
       await boss.createQueue(ARTIFACT_VERSION_CHECK_QUEUE, ARTIFACT_VERSION_CHECK_QUEUE_OPTIONS);
-      await boss.createQueue(CHANNEL_THREAD_UNREAD_QUEUE, EVENT_QUEUE_OPTIONS);
       const polling = { pollingIntervalSeconds: APP_NOTIFICATION_POLLING_INTERVAL_SECONDS };
       await boss.work<AppNotificationEvent>(APP_NOTIFICATION_EVENT_QUEUE, polling, (jobs) =>
         fanOutAppNotificationEvents(boss, jobs),
@@ -158,7 +174,13 @@ export function startAppNotificationQueue(
         console.error(JSON.stringify({ event: "app_notifications:probe_resume_failed" })),
       );
     } catch (error) {
-      await boss.stop({ graceful: false }).catch(() => {});
+      await Promise.allSettled([
+        boss.offWork(APP_NOTIFICATION_EVENT_QUEUE),
+        boss.offWork(APP_NOTIFICATION_DELIVERY_QUEUE),
+        boss.offWork(EXTERNAL_INBOX_NOTICE_QUEUE),
+        boss.offWork(ARTIFACT_VERSION_CHECK_QUEUE),
+        boss.offWork(CHANNEL_THREAD_UNREAD_QUEUE),
+      ]);
       throw error;
     }
     running = boss;
@@ -173,10 +195,13 @@ export function startAppNotificationQueue(
 
 /** Waits for the running handlers to finish, then closes pg-boss's pool. */
 export async function stopAppNotificationQueue(): Promise<void> {
-  const pending = starting;
+  await starting?.catch(() => undefined);
+  const boss = await preparing?.catch(() => undefined);
   starting = undefined;
+  preparing = undefined;
+  prepared = undefined;
   running = undefined;
-  if (pending) await (await pending.catch(() => undefined))?.stop({ graceful: true });
+  await boss?.stop({ graceful: true });
 }
 
 /**
@@ -188,7 +213,7 @@ export function startedAppNotificationQueue(): PgBoss | undefined {
 }
 
 registerArtifactCheckQueueAccessor(startedAppNotificationQueue);
-registerChannelThreadUnreadQueue(startedAppNotificationQueue);
+registerChannelThreadUnreadQueue(() => prepared);
 
 /** Whether the queue is running in this process. */
 export function isAppNotificationQueueStarted(): boolean {

@@ -150,7 +150,9 @@ export async function markActivityAllRead(
       data: { targetReadAt: new Date() },
     });
     const threads = await tx.$queryRaw<{ conversationId: string }[]>(
-      markThreadsReadSql(workspaceId, followedChannelThreadsSql(workspaceId, userId), before),
+      markThreadsReadSql(workspaceId, followedChannelThreadsSql(workspaceId, userId), before, {
+        returnChannels: true,
+      }),
     );
     await tx.$executeRaw(
       markThreadsReadSql(workspaceId, directThreadsSql(workspaceId, userId), before),
@@ -158,11 +160,7 @@ export async function markActivityAllRead(
     await tx.$queryRaw(readArtifactsSql(workspaceId, userId, { through: before }));
     await recordChannelThreadUnread(
       tx,
-      ...[...new Set(threads.map((row) => row.conversationId))].map((conversationId) => ({
-        workspaceId,
-        conversationId,
-        userId,
-      })),
+      ...threads.map(({ conversationId }) => ({ workspaceId, conversationId, userId })),
     );
     return conversations;
   });

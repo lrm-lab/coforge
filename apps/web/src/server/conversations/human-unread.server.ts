@@ -304,8 +304,13 @@ export function markConversationsReadSql(workspaceId: string, userId: string, be
  * Reads threads through their newest reply posted at or before `before`. `threads` selects
  * `"memberId"`, `"conversationId"` and `"rootMessageId"` rows for the person's own member rows.
  */
-export function markThreadsReadSql(workspaceId: string, threads: Prisma.Sql, before: Date) {
-  return Prisma.sql`
+export function markThreadsReadSql(
+  workspaceId: string,
+  threads: Prisma.Sql,
+  before: Date,
+  { returnChannels = false }: { returnChannels?: boolean } = {},
+) {
+  const update = Prisma.sql`
     INSERT INTO "thread_reads"
       ("memberId", "conversationId", "workspaceId", "rootMessageId", "readThroughSequence")
     SELECT threads."memberId", threads."conversationId", ${workspaceId}::uuid,
@@ -320,8 +325,10 @@ export function markThreadsReadSql(workspaceId: string, threads: Prisma.Sql, bef
     ) latest
     ON CONFLICT ("memberId", "rootMessageId") DO UPDATE SET "readThroughSequence" =
       EXCLUDED."readThroughSequence"
-    WHERE EXCLUDED."readThroughSequence" > "thread_reads"."readThroughSequence"
-    RETURNING "conversationId"`;
+    WHERE EXCLUDED."readThroughSequence" > "thread_reads"."readThroughSequence"`;
+  if (!returnChannels) return update;
+  return Prisma.sql`WITH moved AS (${update} RETURNING "conversationId")
+    SELECT DISTINCT "conversationId" FROM moved`;
 }
 
 /** The channel threads one person follows, as `markThreadsReadSql` rows. */

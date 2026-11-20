@@ -2,7 +2,10 @@ import handler from "@tanstack/react-start/server-entry";
 
 import { isRawHttpPath } from "#src/lib/non-localized-path";
 import { paraglideMiddleware } from "#src/paraglide/server";
-import { startAppNotificationQueueAtServerStartFromEnv } from "#src/server/app-notifications/app-notification-queue.server";
+import {
+  channelThreadUnreadQueueReady,
+  startAppNotificationQueueAtServerStartFromEnv,
+} from "#src/server/app-notifications/app-notification-queue.server";
 import { registerArtifactCheckJobRunner } from "#src/server/artifacts/artifact-check-queue.server";
 import { productionArtifactChecks } from "#src/server/artifacts/artifact-composition.server";
 import { requireDatabaseClient } from "#src/server/db/client.server";
@@ -78,6 +81,8 @@ function addressedUrl(request: Request): URL {
 
 export default {
   async fetch(request: Request): Promise<Response> {
+    if (!channelThreadUnreadQueueReady())
+      return new Response("Service unavailable", { status: 503 });
     // The web-page sandbox origin (task #490) serves its signed pages and nothing else: none of
     // the application's pages or APIs ever answer on it.
     if (isSandboxRequest(request, artifactSandboxOrigin())) return serveArtifactSandbox(request);
