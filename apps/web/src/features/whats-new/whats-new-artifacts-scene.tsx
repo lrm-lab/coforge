@@ -156,7 +156,7 @@ export function ArtifactsScene() {
                       <span className="wna-chart-dot" />
                       <span>{m.whats_new_artifacts_demo_growth()}</span>
                     </div>
-                    <span className="wna-delta">+24%</span>
+                    <span className="wna-delta">+14.2%</span>
                   </div>
                   <svg viewBox="0 0 160 54" className="h-[3.25rem] w-full overflow-visible">
                     <defs>
@@ -203,14 +203,14 @@ export function ArtifactsScene() {
 
                 <div className="wna-kpi-grid">
                   <div className="wna-kpi-card">
-                    <span className="wna-kpi-num">316</span>
+                    <span className="wna-kpi-num">87.4</span>
                     <div className="flex flex-col gap-[0.15625rem]">
                       <span className="h-[0.1875rem] w-[85%] rounded-full bg-[#8f6ff2]" />
                       <span className="h-[0.1875rem] w-[55%] rounded-full bg-[#f472b6]" />
                     </div>
                   </div>
                   <div className="wna-kpi-card">
-                    <span className="wna-kpi-num">98%</span>
+                    <span className="wna-kpi-num">128k</span>
                     <div className="flex flex-col gap-[0.15625rem]">
                       <span className="h-[0.1875rem] w-[92%] rounded-full bg-[#10b981]" />
                       <span className="h-[0.1875rem] w-[64%] rounded-full bg-[#38bdf8]" />
@@ -233,22 +233,22 @@ export function ArtifactsScene() {
                       <span
                         ref={bind("bar1")}
                         className="wna-bar"
-                        style={{ height: "55%", background: "#fb923c" }}
+                        style={{ height: "52%", background: "#d0d5dd" }}
                       />
                       <span
                         ref={bind("bar2")}
                         className="wna-bar"
-                        style={{ height: "78%", background: "#f97316" }}
+                        style={{ height: "68%", background: "#cbd5e1" }}
                       />
                       <span
                         ref={bind("bar3")}
                         className="wna-bar"
-                        style={{ height: "48%", background: "#fdba74" }}
+                        style={{ height: "58%", background: "#cbd5e1" }}
                       />
                       <span
                         ref={bind("bar4")}
                         className="wna-bar"
-                        style={{ height: "90%", background: "#ea580c" }}
+                        style={{ height: "94%", background: "#98a2b3" }}
                       />
                     </div>
                     <div ref={bind("orangeBox")} className="wna-orange-box">
@@ -295,7 +295,7 @@ export function ArtifactsScene() {
               className="wna-review-avatar"
             />
             <div className="min-w-0 flex-1">
-              <div className="wna-review-chip">&lt;funnel&gt;</div>
+              <div className="wna-review-chip">&lt;ablation&gt;</div>
               <div ref={bind("reviewText")} className="wna-review-text" />
             </div>
             <div ref={bind("sendPill")} className="wna-send-pill">

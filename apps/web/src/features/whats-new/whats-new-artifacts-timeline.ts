@@ -222,30 +222,34 @@ export function applySceneFrame(refs: SceneRefs, t: number, comment: string, amb
   const b1 = t >= 7150;
   const b2 = t >= 7900;
   const b3 = t >= 8650;
-  const b4 = t >= 9350;
+  const b4 = t >= 9250;
   if (refs.bar1) {
-    refs.bar1.style.background = b1 ? "#a78bfa" : "#fb923c";
-    refs.bar1.style.height = b1 ? "62%" : "55%";
+    refs.bar1.style.background = b1 ? "#e0d7fe" : "#d0d5dd";
+    refs.bar1.style.height = "52%";
   }
   if (refs.bar2) {
-    refs.bar2.style.background = b2 ? "#8b5cf6" : "#f97316";
-    refs.bar2.style.height = b2 ? "84%" : "78%";
+    refs.bar2.style.background = b2 ? "#e0d7fe" : "#cbd5e1";
+    refs.bar2.style.height = "68%";
   }
   if (refs.bar3) {
-    refs.bar3.style.background = b3 ? "#7c3aed" : "#fdba74";
-    refs.bar3.style.height = b3 ? "74%" : "48%";
+    refs.bar3.style.background = b3 ? "#e0d7fe" : "#cbd5e1";
+    refs.bar3.style.height = "58%";
   }
   if (refs.bar4) {
-    refs.bar4.style.background = b4 ? "#5d36dc" : "#ea580c";
-    refs.bar4.style.height = b4 ? "100%" : "90%";
+    refs.bar4.style.background = b4 ? "#5d36dc" : "#98a2b3";
+    refs.bar4.style.height = b4 ? "100%" : "94%";
+    refs.bar4.style.boxShadow = b4 ? "0 0 8px rgba(93, 54, 220, 0.55)" : "none";
   }
 
   if (refs.funnel) {
-    refs.funnel.style.background = b4 ? "#f5f3ff" : "#fff7f2";
-    refs.funnel.style.borderColor = b4 ? "#8b5cf6" : "#fed7aa";
-    refs.funnel.style.boxShadow = isV3 ? "0 0 0 2px rgba(124, 92, 250, 0.16)" : "none";
+    refs.funnel.style.background = b4 ? "#f4f0ff" : "#ffffff";
+    refs.funnel.style.borderColor = b4 ? "#7c5cfa" : "#e6eaf2";
+    refs.funnel.style.boxShadow = isV3
+      ? "0 4px 14px -2px rgba(93, 54, 220, 0.28), 0 0 0 1.5px rgba(124, 92, 250, 0.32)"
+      : "none";
+    refs.funnel.style.transform = isV3 ? "translateY(-1px)" : "translateY(0px)";
   }
-  if (refs.funnelLabel) refs.funnelLabel.style.color = b4 ? "#5d36dc" : "#c2410c";
+  if (refs.funnelLabel) refs.funnelLabel.style.color = b4 ? "#5d36dc" : "#667085";
   if (refs.funnelCheck) {
     refs.funnelCheck.style.opacity = isV3 ? "1" : "0";
     refs.funnelCheck.style.transform = isV3 ? "scale(1)" : "scale(0.4)";

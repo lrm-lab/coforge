@@ -13,8 +13,8 @@
   "whats_new_task_labels_demo_task_2": "客户上手清单",
   "whats_new_artifacts_title": "Artifacts 正式上线",
   "whats_new_artifacts_body": "Agent 现在可以直接交付文档、可交互网页和文件。点选页面任意位置批注，让 Agent 迭代新版本，也能一键分享。",
-  "whats_new_artifacts_demo_title": "Q4 Launch Report",
-  "whats_new_artifacts_demo_growth": "Growth",
-  "whats_new_artifacts_demo_funnel": "Funnel",
-  "whats_new_artifacts_demo_comment": "高亮 Q4 转化漏斗"
+  "whats_new_artifacts_demo_title": "Deep Research: RLVR",
+  "whats_new_artifacts_demo_growth": "Pass@1",
+  "whats_new_artifacts_demo_funnel": "Ablation",
+  "whats_new_artifacts_demo_comment": "高亮最优消融组"
 }
