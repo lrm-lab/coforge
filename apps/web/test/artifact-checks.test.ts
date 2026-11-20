@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   ARTIFACT_CHECK_MAX_BLOCKED_RESOURCES,
+  ARTIFACT_CHECK_MAX_BROKEN_IMAGES,
   ARTIFACT_CHECK_MAX_CONSOLE_ERRORS,
+  ARTIFACT_CHECK_MAX_FAILED_ASSETS,
 } from "@lrm/coforge-sdk/agent";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { isAppError } from "#src/lib/app-error";
@@ -50,6 +52,7 @@ type VersionFixture = {
 
 function makeHarness(options?: {
   enabled?: boolean;
+  dailyCap?: number;
   versions?: VersionFixture[];
   blobs?: Record<string, Uint8Array>;
   enqueue?: (job: unknown) => Promise<string | null>;
@@ -67,6 +70,30 @@ function makeHarness(options?: {
 
   const dbOps = {
     artifactVersionCheck: {
+      count: async ({
+        where,
+      }: {
+        where: {
+          status?: { in: string[] };
+          createdAt?: { gte: Date };
+          NOT?: { artifactId?: string; version?: { lt: number }; status?: string };
+        };
+      }) => {
+        let total = 0;
+        for (const row of checks.values()) {
+          if (where.status && !where.status.in.includes(row.status)) continue;
+          if (where.createdAt && row.createdAt < where.createdAt.gte) continue;
+          if (
+            where.NOT &&
+            (where.NOT.artifactId === undefined || row.artifactId === where.NOT.artifactId) &&
+            (where.NOT.version === undefined || row.version < where.NOT.version.lt) &&
+            (where.NOT.status === undefined || row.status === where.NOT.status)
+          )
+            continue;
+          total += 1;
+        }
+        return total;
+      },
       findUnique: async ({
         where,
       }: {
@@ -201,6 +228,7 @@ function makeHarness(options?: {
       },
     },
     enabled: () => options?.enabled ?? true,
+    dailyCap: () => options?.dailyCap ?? 200,
     runner: () => (options && "runner" in options ? (options.runner ?? null) : null),
     enqueue: options?.enqueue ?? (async () => `job-${seq}`),
     logger,
@@ -310,6 +338,34 @@ describe("ArtifactChecks.scheduleAfterPush", () => {
     expect(res.status).toBe("skipped");
     expect(res.skipReason).toBe("queue_unavailable");
   });
+
+  test("marks skipped(workspace_daily_cap) once 24-hour workspace limit is reached", async () => {
+    const h = makeHarness({ dailyCap: 1 });
+    const first = await h.service.scheduleAfterPush({
+      workspaceId: "ws-1",
+      artifactId: "art-1",
+      version: 1,
+      entryPath: "index.html",
+      filesChanged: true,
+    });
+    const second = await h.service.scheduleAfterPush({
+      workspaceId: "ws-1",
+      artifactId: "art-2",
+      version: 1,
+      entryPath: "index.html",
+      filesChanged: true,
+    });
+    expect(first.scheduled).toBe(true);
+    expect(second.scheduled).toBe(false);
+    expect(second.status).toBe("skipped");
+    expect(second.skipReason).toBe("workspace_daily_cap");
+    const capEvent = h.events.find(
+      (e) =>
+        e.payload.event === "artifact_check.skipped" && e.payload.reason === "workspace_daily_cap",
+    );
+    expect(capEvent?.level).toBe("warn");
+    expect(capEvent?.payload.dailyCap).toBe(1);
+  });
 });
 
 describe("ArtifactChecks.runJob, retention, and reads", () => {
@@ -352,6 +408,11 @@ describe("ArtifactChecks.runJob, retention, and reads", () => {
               { length: 25 },
               (_, i) => `https://evil-${i}.example/x.js`,
             ),
+            brokenImages: Array.from(
+              { length: 15 },
+              (_, i) => `https://a-1.coforge.check/i-${i}.png`,
+            ),
+            failedAssets: Array.from({ length: 15 }, (_, i) => `/missing-${i}.js`),
             blank: false,
             phoneOverflow: { contentWidth: 480.4, viewportWidth: 390 },
             inlineOverflow: { contentHeight: 920.2, maxHeight: 800, clipped: true },
@@ -402,6 +463,8 @@ describe("ArtifactChecks.runJob, retention, and reads", () => {
     expect(latest.check?.findings?.blockedResources).toHaveLength(
       ARTIFACT_CHECK_MAX_BLOCKED_RESOURCES,
     );
+    expect(latest.check?.findings?.brokenImages).toHaveLength(ARTIFACT_CHECK_MAX_BROKEN_IMAGES);
+    expect(latest.check?.findings?.failedAssets).toHaveLength(ARTIFACT_CHECK_MAX_FAILED_ASSETS);
     expect(latest.check?.findings?.phoneOverflow).toEqual({
       contentWidth: 480,
       viewportWidth: 390,

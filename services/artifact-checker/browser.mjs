@@ -222,6 +222,10 @@ export function createPlaywrightDriver(options = {}) {
       const seenErrors = new Set();
       const blockedResources = [];
       const seenBlocked = new Set();
+      const failedAssets = [];
+      const seenFailedAssets = new Set();
+      const brokenImages = [];
+      const seenBrokenImages = new Set();
       const pageCantScroll = [];
       const screenshots = [];
       const shotDurationsMs = {};
@@ -250,6 +254,22 @@ export function createPlaywrightDriver(options = {}) {
         if (!clean || seenBlocked.has(clean)) return;
         seenBlocked.add(clean);
         blockedResources.push(clean);
+      };
+
+      const addFailedAsset = (assetPath) => {
+        if (failedAssets.length >= 10) return;
+        const clean = String(assetPath ?? "").slice(0, 300);
+        if (!clean || seenFailedAssets.has(clean)) return;
+        seenFailedAssets.add(clean);
+        failedAssets.push(clean);
+      };
+
+      const addBrokenImage = (src) => {
+        if (brokenImages.length >= 10) return;
+        const clean = String(src ?? "").slice(0, 300);
+        if (!clean || seenBrokenImages.has(clean)) return;
+        seenBrokenImages.add(clean);
+        brokenImages.push(clean);
       };
 
       const viewports =
@@ -374,12 +394,14 @@ export function createPlaywrightDriver(options = {}) {
             }
             const normalized = normalizeBundlePath(pathname);
             if (normalized === null) {
+              addFailedAsset(pathname);
               await route.fulfill({ status: 404, contentType: "text/plain", body: "Not found" });
               return;
             }
             const rel = normalized === "" ? entryPath : normalized;
             const entry = fileMap.get(rel);
             if (!entry) {
+              if (rel !== "favicon.ico") addFailedAsset(rel);
               await route.fulfill({ status: 404, contentType: "text/plain", body: "Not found" });
               return;
             }
@@ -476,6 +498,9 @@ export function createPlaywrightDriver(options = {}) {
               `${vp.shot} evaluate`,
             );
             if (vp.shot === "desktop" && diag.blank) blank = true;
+            if (vp.shot === "desktop") {
+              for (const src of diag.brokenImages ?? []) addBrokenImage(src);
+            }
             if (vp.shot === "phone" && diag.phoneOverflow) phoneOverflow = diag.phoneOverflow;
             if (diag.scrollLock) pageCantScroll.push(diag.scrollLock);
             const png = await page.screenshot({
@@ -504,6 +529,8 @@ export function createPlaywrightDriver(options = {}) {
           phoneOverflow,
           inlineOverflow,
           ...(pageCantScroll.length > 0 ? { pageCantScroll } : {}),
+          ...(brokenImages.length > 0 ? { brokenImages } : {}),
+          ...(failedAssets.length > 0 ? { failedAssets } : {}),
         },
         screenshots,
         metrics: {

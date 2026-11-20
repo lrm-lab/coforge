@@ -1,13 +1,18 @@
 import {
   ARTIFACT_CHECK_MAX_BLOCKED_RESOURCES,
+  ARTIFACT_CHECK_MAX_BROKEN_IMAGES,
   ARTIFACT_CHECK_MAX_CONSOLE_ERRORS,
+  ARTIFACT_CHECK_MAX_FAILED_ASSETS,
+  ARTIFACT_CHECK_RETENTION_VERSIONS,
   isArtifactCheckShot,
   isArtifactCheckStatus,
   type ArtifactCheckFindings,
   type ArtifactCheckRecord,
   type ArtifactCheckShot,
 } from "@lrm/coforge-sdk/agent";
+import type { Prisma } from "#src/generated/prisma/client";
 import type { StoredArtifactBlobs } from "./artifact-blobs.server";
+import type { ArtifactCheckLogger } from "./artifact-check-log.server";
 import { artifactContentType } from "./artifact-content-types.server";
 import {
   ArtifactCheckRunnerError,
@@ -77,6 +82,20 @@ export function sanitizeFindings(raw: ArtifactCheckFindings): ArtifactCheckFindi
               style: String(item.style ?? "").slice(0, 200),
             })),
           })),
+        }
+      : {}),
+    ...(raw.brokenImages && raw.brokenImages.length > 0
+      ? {
+          brokenImages: raw.brokenImages
+            .slice(0, ARTIFACT_CHECK_MAX_BROKEN_IMAGES)
+            .map((item) => String(item).slice(0, 300)),
+        }
+      : {}),
+    ...(raw.failedAssets && raw.failedAssets.length > 0
+      ? {
+          failedAssets: raw.failedAssets
+            .slice(0, ARTIFACT_CHECK_MAX_FAILED_ASSETS)
+            .map((item) => String(item).slice(0, 300)),
         }
       : {}),
   };
@@ -189,4 +208,43 @@ export async function buildCheckBundle(input: {
   }
 
   return { origin, csp, files, totalBytes };
+}
+
+export async function pruneOlderCheckScreenshots(input: {
+  tx: Prisma.TransactionClient;
+  blobs: Pick<StoredArtifactBlobs, "release">;
+  logger: ArtifactCheckLogger;
+  workspaceId: string;
+  artifactId: string;
+}): Promise<number[]> {
+  const done = await input.tx.artifactVersionCheck.findMany({
+    where: { artifactId: input.artifactId, status: "done" },
+    orderBy: { version: "desc" },
+    take: ARTIFACT_CHECK_RETENTION_VERSIONS + 25,
+    select: { id: true, version: true, screenshots: true },
+  });
+  const toPrune = done.slice(ARTIFACT_CHECK_RETENTION_VERSIONS);
+  const prunedVersions: number[] = [];
+  const releasedSha256s: string[] = [];
+  for (const row of toPrune) {
+    const shots = parseStoredScreenshots(row.screenshots);
+    if (shots.length === 0) continue;
+    for (const shot of shots) releasedSha256s.push(shot.sha256);
+    await input.tx.artifactVersionCheck.update({
+      where: { id: row.id },
+      data: { screenshots: [] },
+    });
+    prunedVersions.push(row.version);
+  }
+  if (releasedSha256s.length > 0) {
+    await input.blobs.release(input.tx, input.workspaceId, releasedSha256s);
+    input.logger.info({
+      event: "artifact_check.retention_pruned",
+      workspaceId: input.workspaceId,
+      artifactId: input.artifactId,
+      prunedVersions,
+      releasedBlobCount: releasedSha256s.length,
+    });
+  }
+  return prunedVersions;
 }

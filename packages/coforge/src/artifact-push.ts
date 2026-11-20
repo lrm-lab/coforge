@@ -58,6 +58,9 @@ function formatPushCheckHint(
       `Publish check: skipped (files unchanged from v${version - 1}). Read previous check: coforge artifact check ${artifactId} --rev ${version - 1}`,
     ];
   }
+  if (check.status === "skipped" && check.skipReason === "workspace_daily_cap") {
+    return ["Publish check: skipped (workspace reached its 24-hour publish check limit)."];
+  }
   if (check.status === "skipped") {
     return [`Publish check: skipped (${check.skipReason ?? "unknown"}).`];
   }
