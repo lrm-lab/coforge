@@ -410,7 +410,12 @@ export class AgentMessageAttentionIndex {
     this.#generations.get(agentId)?.seenMessageIds.clear();
   }
   captureNoticeAcceptance(agentId: string) {
-    return this.#acceptedNotices.acceptance(agentId);
+    const accept = this.#acceptedNotices.acceptance(agentId);
+    return (messages: Parameters<typeof accept>[0]) => {
+      if (!accept(messages)) return false;
+      this.hold.noticeAccepted?.(agentId, messages);
+      return true;
+    };
   }
   #consumed(
     message: AgentMessageDelivery & {

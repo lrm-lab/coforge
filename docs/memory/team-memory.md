@@ -10,8 +10,32 @@ Local files remain authoritative and portable with the Agent workspace. `MEMORY.
 core index; `notes/active-context.md` holds current work; `notes/knowledge/` stores sourced facts,
 decisions, preferences and reusable experiences with revision history. Keyword search handles
 English terms and Chinese character pairs. A bounded summary accompanies fresh sessions; providers
-that report compaction receive a smaller recovery block with the next real input. No extra model
-turn starts solely to maintain memory.
+that report compaction receive a smaller recovery block with the next real input.
+
+The original Agent can review changed, API-saved personal entries while its existing session is
+idle. A human DM, direct mention or Task discussion since the previous review is required, along
+with a successful local save/archive. System notices, other Agents and ordinary channel traffic
+do not qualify. The daemon checks once per minute without model calls and starts at most one
+batch per 24 hours; busy, stopped, migrating or held Agents wait. It never launches an offline
+Agent solely for a review or catches up missed daily runs.
+
+Each batch contains at most five keys and asks the Agent to finish within two minutes, yielding
+to human work. The time budget and semantic review are instructions, not a provider execution
+kill timer. Reads and direct filesystem edits do not enqueue entries. Only writes after this
+feature is installed are tracked; there is no initial full-history scan.
+
+The daemon stores the human watermark, cooldown, pending key/revision pairs and active batch in
+the existing local Agent state ledger. The Agent acknowledges only reviewed keys in
+`notes/.memory-review-receipt.json`; interrupted or unacknowledged entries remain pending, and
+later human edits cannot be cleared by an older batch. A failed/unknown delivery does not cause
+repeated model calls. Review-produced writes do not re-enqueue themselves. Another batch still
+requires new human activity, even if work remains. Agent deletion or migration clears the local
+ledger along with its other runtime state.
+
+Reviews use the existing revision-checked save/archive commands to retain history. Potential
+team knowledge stays in `notes/team-memory-candidates.md` on the same computer, with a short
+conclusion and accessible public evidence. This feature submits nothing to team memory and reads
+no chat backlog.
 
 When the existing System Cleaner is configured and enabled, successful local writes request a
 size check at the next idle boundary. Large active knowledge collections receive a bounded-review
