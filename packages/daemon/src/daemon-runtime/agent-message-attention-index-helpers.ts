@@ -1,4 +1,5 @@
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
+import type { NoticeGeneration } from "./agent-wakeup-unavailable-error";
 import { HELD_CONTEXT_LIMIT } from "@lrm/coforge-sdk/internal";
 import type {
   AgentConsumedSeqEntry,
@@ -87,19 +88,19 @@ export function attentionRecorded(
 }
 
 /**
- * Settles deliveries a notice of which was accepted. They stop being held only now: a Memory batch
- * whose notice failed is flushed again, and must still be known as recorded.
+ * Releases the batch after flush. Settlements include deliveries already consumed or announced,
+ * so acceptance evidence comes only from the deliveries this flush handed to the runtime.
  */
 export function markFlushed(
-  generation: {
-    seenDeliveryIds: ReadonlySet<string>;
-    notified: Set<string>;
-    recordedHeld: Set<string>;
-  },
-  flushed: readonly AgentMessageDelivery[],
+  generation: NoticeGeneration,
+  settled: readonly AgentMessageDelivery[],
+  announced: readonly AgentMessageDelivery[],
 ): void {
-  markNotified(generation, flushed);
-  for (const message of flushed) generation.recordedHeld.delete(message.deliveryId);
+  markNoticeAccepted(generation, announced);
+  for (const { deliveryId } of settled) {
+    if (generation.seenDeliveryIds.has(deliveryId)) generation.notified.add(deliveryId);
+    generation.recordedHeld.delete(deliveryId);
+  }
 }
 
 /**
@@ -108,13 +109,15 @@ export function markFlushed(
  * moved past its delivery, or a backlog flushed past the window, leaves no id behind that nothing
  * would ever forget.
  */
-export function markNotified(
-  generation: { seenDeliveryIds: ReadonlySet<string>; notified: Set<string> },
-  accepted: readonly AgentMessageDelivery[],
+export function markNoticeAccepted(
+  generation: NoticeGeneration,
+  accepted: readonly { deliveryId: string }[],
 ): void {
-  for (const message of accepted)
-    if (generation.seenDeliveryIds.has(message.deliveryId))
-      generation.notified.add(message.deliveryId);
+  for (const { deliveryId } of accepted) {
+    if (!generation.seenDeliveryIds.has(deliveryId)) continue;
+    generation.notified.add(deliveryId);
+    generation.acceptedDeliveryIds.add(deliveryId);
+  }
 }
 
 export type ConsumedAgent = {

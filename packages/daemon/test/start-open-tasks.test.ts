@@ -9,6 +9,7 @@ import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path
 import { prependSessionMemory } from "#src/agent-runtime/session-memory-briefing";
 import { formatStartOpenTaskLines } from "#src/agent-runtime/start-open-tasks";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
+import { noticeGeneration } from "#src/daemon-runtime/agent-wakeup-unavailable-error";
 import { planRecovery } from "#src/daemon-runtime/agent-message-attention-recovery";
 import { mergeCarried } from "#src/daemon-runtime/provider-replay-recovery";
 import { DaemonRuntime, type DaemonConfig } from "#src/daemon-runtime/runtime";
@@ -235,10 +236,8 @@ describe("start open tasks propagation", () => {
       snapshotMessages: [],
       openTasks: sampleOpenTasks,
       currentAttention: new Map(),
-      seenDeliveryIds: new Set(),
-      seenMessageIds: new Set(),
+      generation: noticeGeneration(),
       readBasis: () => undefined,
-      notificationInFlight: () => false,
       alreadyNotified: () => false,
       decide: () => {},
     });
@@ -265,10 +264,8 @@ describe("start open tasks propagation", () => {
       snapshotMessages: [],
       openTasks: sampleOpenTasks,
       currentAttention: new Map(),
-      seenDeliveryIds: new Set(),
-      seenMessageIds: new Set(),
+      generation: noticeGeneration(),
       readBasis: () => undefined,
-      notificationInFlight: () => false,
       alreadyNotified: () => false,
       decide: () => {},
     });

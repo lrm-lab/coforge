@@ -5,6 +5,7 @@ export type GenerationMemory = {
   seenDeliveryIds: Set<string>;
   seenMessageIds: Set<string>;
   notified: Set<string>;
+  acceptedDeliveryIds: Set<string>;
   notificationAttempts: Map<string, Promise<void>>;
 };
 
@@ -21,6 +22,7 @@ export function rememberDelivery(
     const oldest = generation.seenDeliveryIds.values().next().value!;
     generation.seenDeliveryIds.delete(oldest);
     generation.notified.delete(oldest);
+    generation.acceptedDeliveryIds.delete(oldest);
     generation.notificationAttempts.delete(oldest);
   }
   generation.seenDeliveryIds.add(deliveryId);

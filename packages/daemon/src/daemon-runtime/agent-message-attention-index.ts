@@ -24,6 +24,7 @@ import { PreviewSeen } from "./inbox-preview-rows";
 import {
   logAttentionDecision,
   logRecoveryNoticeAccepted,
+  recordedDeliveryOutcome,
   type AttentionDecisionMessage,
   type AttentionDecisionOutcome,
   type AttentionDecisionBasis,
@@ -37,6 +38,7 @@ import {
   attentionRecorded,
   isCardEvent,
   markFlushed,
+  markNoticeAccepted,
   type PendingWindowEntry,
 } from "./agent-message-attention-index-helpers";
 const logger = getLogger(["coforge", "daemon", "message-attention"]);
@@ -114,7 +116,7 @@ export class AgentMessageAttentionIndex {
         this.logDecision(message, attempt ? "notification_in_flight" : "notified");
         await (attempt ?? this.#notify(message));
         if (this.#generations.get(message.agentId) !== generation) return;
-      } else this.logDecision(message, "already_notified");
+      } else this.logDecision(message, recordedDeliveryOutcome(generation, message.deliveryId));
       await this.acknowledge(message);
       return;
     }
@@ -226,7 +228,7 @@ export class AgentMessageAttentionIndex {
       await this.#notify(announced[announced.length - 1]!, undefined, announced);
       if (this.#generations.get(agentId) !== generation) return;
     }
-    markFlushed(generation, settled);
+    markFlushed(generation, settled, announced);
   }
   async recover(
     agentId: string,
@@ -249,10 +251,8 @@ export class AgentMessageAttentionIndex {
       countedDeliveries: options?.countedDeliveries,
       openTasks,
       currentAttention: this.#attention.get(agentId) ?? new Map<string, MessageAttention>(),
-      seenDeliveryIds: generation.seenDeliveryIds,
-      seenMessageIds: generation.seenMessageIds,
+      generation,
       readBasis: (id, message) => this.#readBasis(id, message),
-      notificationInFlight: (message) => generation.notificationAttempts.has(message.deliveryId),
       alreadyNotified: (message) => this.#acceptedNotices.has(agentId, message),
       decide: (message, outcome, basis) =>
         this.logDecision({ ...message, workspaceId: this.#workspaceId, agentId }, outcome, basis),
@@ -276,13 +276,13 @@ export class AgentMessageAttentionIndex {
     for (const message of recoveredMessages) {
       this.#consumption.recordConversation(agentId, message.target, message.conversationId);
       rememberDelivery(generation, message.deliveryId, message.messageId);
-      generation.notified.add(message.deliveryId);
       const pendingByTarget = this.#pendingSequences.get(agentId) ?? new Map<string, Set<number>>();
       const pending = pendingByTarget.get(message.target) ?? new Set<number>();
       pending.add(message.sequence);
       pendingByTarget.set(message.target, pending);
       this.#pendingSequences.set(agentId, pendingByTarget);
     }
+    markNoticeAccepted(generation, recoveredMessages);
     if (recoveredMessages.length) this.messageReceived(agentId, conversation);
     return announced;
   }

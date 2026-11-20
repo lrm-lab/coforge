@@ -13,7 +13,7 @@ import { composeDeliveryNotice } from "./delivery-notice";
 import { DELIVERY_IMPORTANCE, deliveryImportance } from "./delivery-importance";
 import type { AgentConsumedSeqPort } from "#src/persistence/agent-consumed-seq-store";
 import { diagnosticErrorName, type AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
-import { markNotified } from "./agent-message-attention-index-helpers";
+import { markNoticeAccepted } from "./agent-message-attention-index-helpers";
 import { isTrackedMention } from "./mention-delivery-tracker";
 import { AgentWakeupUnavailableError, noticeGeneration } from "./agent-wakeup-unavailable-error";
 import type { AgentMessageAttentionIndex, MessageAttention } from "./agent-message-attention-index";
@@ -116,7 +116,7 @@ export function writeDeliveryNotice(
     })
       .then(() => {
         if (this.isCurrentGeneration(message.agentId, generation)) {
-          markNotified(generation, announced);
+          markNoticeAccepted(generation, announced);
           this.noticeActionClocks.noteNoticeAccepted(message.agentId);
           this.messageReceived(message.agentId);
         }
@@ -177,7 +177,7 @@ export function writeDeliveryNotice(
     })
     .then(() => {
       if (this.isCurrentGeneration(message.agentId, generation)) {
-        markNotified(generation, [message]);
+        markNoticeAccepted(generation, [message]);
         const included = new Set(view.rows.flatMap((row) => [...row.newIds]));
         if (this.recordAccepted(announced.filter((item) => included.has(item.messageId))))
           this.previewSeen.record(message.agentId, view.whole);

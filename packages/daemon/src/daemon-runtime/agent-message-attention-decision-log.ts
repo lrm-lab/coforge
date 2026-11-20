@@ -5,6 +5,7 @@ import {
   containsSorted,
   type ConsumedReadBasis,
 } from "./agent-message-attention-index-helpers";
+import type { NoticeGeneration } from "./agent-wakeup-unavailable-error";
 import { frontierSourceOf } from "./agent-message-attention-frontier-source";
 
 const logger = getLogger(["coforge", "daemon", "message-attention"]);
@@ -14,7 +15,21 @@ export type AttentionDecisionOutcome =
   | "held"
   | "consumed"
   | "already_notified"
+  | "already_recorded"
   | "notification_in_flight";
+
+export function recordedDeliveryOutcome(
+  generation: Pick<
+    NoticeGeneration,
+    "acceptedDeliveryIds" | "recordedHeld" | "notificationAttempts"
+  >,
+  deliveryId: string,
+): AttentionDecisionOutcome {
+  if (generation.acceptedDeliveryIds.has(deliveryId)) return "already_notified";
+  if (generation.notificationAttempts.has(deliveryId)) return "notification_in_flight";
+  if (generation.recordedHeld.has(deliveryId)) return "held";
+  return "already_recorded";
+}
 
 export type AttentionReadBasis = ConsumedReadBasis | "full_preview";
 export type AttentionDecisionBasis =

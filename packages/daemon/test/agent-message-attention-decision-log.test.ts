@@ -191,3 +191,83 @@ test("a duplicate waits for the pending notice before it can be logged as alread
   expect(calls).toBe(1);
   expect(acks).toHaveLength(3);
 });
+
+test("recovery distinguishes a held delivery from acceptance after flush", async () => {
+  const notices: string[] = [];
+  const queued: ReturnType<typeof delivery>[] = [];
+  const acknowledgements: string[] = [];
+  const index = new AgentMessageAttentionIndex(
+    "workspace-1",
+    { session: () => session((notice) => notices.push(notice)) },
+    async (ack) => {
+      acknowledgements.push(ack.deliveryId);
+    },
+    undefined,
+    {
+      shouldHold: () => true,
+      enqueue: (_, message) => queued.push(message),
+      busy: () => {},
+    },
+  );
+  const message = {
+    ...delivery("held"),
+    target: "#team",
+    latestSenderKind: "human" as const,
+    latestSenderHandle: "ada",
+    latestSenderDescription: "",
+  };
+  await index.receive(message);
+  const recover = async () => {
+    expect(await index.recover(message.agentId, [message], {})).toEqual(new Set());
+  };
+  expect(await decisions(recover)).toEqual([
+    expect.objectContaining({ delivery_id: message.deliveryId, outcome: "held" }),
+  ]);
+  expect(notices).toHaveLength(0);
+  expect(acknowledgements).toEqual([message.deliveryId]);
+
+  await index.flush(message.agentId, queued);
+  expect(await decisions(recover)).toEqual([
+    expect.objectContaining({ delivery_id: message.deliveryId, outcome: "already_notified" }),
+  ]);
+  expect(notices).toHaveLength(1);
+  expect(acknowledgements).toEqual([message.deliveryId]);
+});
+
+test("recovery reports a refused first notice as registered without acceptance", async () => {
+  const notify = async () => {
+    throw new Error("runtime refused");
+  };
+  const acknowledgements: string[] = [];
+  const index = new AgentMessageAttentionIndex(
+    "workspace-1",
+    { session: () => ({ ...session(), notify }) },
+    async (ack) => {
+      acknowledgements.push(ack.deliveryId);
+    },
+  );
+  const message = {
+    ...delivery("refused"),
+    target: "#team",
+    latestSenderKind: "human" as const,
+    latestSenderHandle: "ada",
+    latestSenderDescription: "",
+  };
+  await expect(index.receive(message)).rejects.toThrow("runtime refused");
+  const recover = async () => {
+    expect(await index.recover(message.agentId, [message], {})).toEqual(new Set());
+  };
+  const recordedOnly = [
+    expect.objectContaining({ delivery_id: message.deliveryId, outcome: "already_recorded" }),
+  ];
+  expect(await decisions(recover)).toEqual(recordedOnly);
+
+  index.previewSeen.record(message.agentId, [
+    { target: message.target, sequence: message.sequence },
+  ]);
+  await index.flush(message.agentId, [message]);
+  expect(index.wasNotified(message)).toBe(true);
+  index.clearPreviewSeen(message.agentId);
+  expect(await decisions(recover)).toEqual(recordedOnly);
+  expect(acknowledgements).toEqual([]);
+});

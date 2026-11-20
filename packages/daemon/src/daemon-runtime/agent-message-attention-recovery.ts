@@ -4,11 +4,13 @@ import {
   type AgentStartOpenTasks,
 } from "@lrm/coforge-sdk/internal";
 import { composeRecoveryNotice } from "./agent-recovery-notice";
-import type {
-  AttentionDecisionOutcome,
-  AttentionDecisionBasis,
-  AttentionReadBasis,
+import {
+  recordedDeliveryOutcome,
+  type AttentionDecisionOutcome,
+  type AttentionDecisionBasis,
+  type AttentionReadBasis,
 } from "./agent-message-attention-decision-log";
+import type { NoticeGeneration } from "./agent-wakeup-unavailable-error";
 import type { MessageAttention } from "./agent-message-attention-index";
 import { foldMessageAttention, isDeliveryTarget } from "./message-attention-fields";
 import { isOrdinaryNotice, noticeMessageKey, type NoticeMessage } from "./accepted-message-notices";
@@ -38,10 +40,8 @@ export function planRecovery(input: {
   countedDeliveries?: readonly NoticeMessage[];
   openTasks?: AgentStartOpenTasks;
   currentAttention: ReadonlyMap<string, MessageAttention>;
-  seenDeliveryIds: ReadonlySet<string>;
-  seenMessageIds: ReadonlySet<string>;
+  generation: NoticeGeneration;
   readBasis(agentId: string, message: AgentRecoveryMessage): AttentionReadBasis | undefined;
-  notificationInFlight(message: AgentRecoveryMessage): boolean;
   alreadyNotified(message: AgentRecoveryMessage): boolean;
   decide(
     message: AgentRecoveryMessage,
@@ -49,7 +49,7 @@ export function planRecovery(input: {
     basis?: AttentionDecisionBasis,
   ): void;
 }): RecoveryPlan | undefined {
-  const { agentId, messages, unreadSummary, decide } = input;
+  const { agentId, messages, unreadSummary, decide, generation } = input;
   const byTarget = new Map(input.currentAttention);
   const recoveredTargets = new Set<string>();
   const recoveredMessages: AgentRecoveryMessage[] = [];
@@ -72,18 +72,16 @@ export function planRecovery(input: {
       decide(message, "consumed", readBasis);
       continue;
     }
-    if (
-      input.seenDeliveryIds.has(message.deliveryId) ||
-      input.seenMessageIds.has(message.messageId)
-    ) {
-      decide(
-        message,
-        input.notificationInFlight(message) ? "notification_in_flight" : "already_notified",
-      );
-      continue;
-    }
     if (input.alreadyNotified(message)) {
       decide(message, "already_notified", "accepted_message");
+      continue;
+    }
+    if (generation.seenMessageIds.has(message.messageId)) {
+      decide(message, "already_notified");
+      continue;
+    }
+    if (generation.seenDeliveryIds.has(message.deliveryId)) {
+      decide(message, recordedDeliveryOutcome(generation, message.deliveryId));
       continue;
     }
     recoveredMessages.push(message);
