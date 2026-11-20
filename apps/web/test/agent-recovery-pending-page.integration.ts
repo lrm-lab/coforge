@@ -202,6 +202,7 @@ test("the pending page keeps the attention rule and the notice permission, in or
       conversationId: plans.id,
       senderMemberId: planner.id,
       receivedAt: new Date(),
+      expiresAt: new Date(Date.now() - 60_000),
     });
     const stale = await seed({
       conversationId: plans.id,
