@@ -27,6 +27,21 @@ export function readableArtifactNoticeSql(
   )`;
 }
 
+export async function firstBlockedArtifactNoticeSequence(
+  db: PrismaClient,
+  workspaceId: string,
+  agentId: string,
+  conversationId: string,
+  upTo: number,
+): Promise<number | null> {
+  const [row] = await db.$queryRaw<{ sequence: number | null }[]>(Prisma.sql`
+    SELECT MIN(m."sequence") AS "sequence" FROM "messages" m
+    WHERE m."conversationId" = ${conversationId}::uuid
+      AND m."sequence" <= ${upTo}
+      AND NOT ${readableArtifactNoticeSql(workspaceId, agentId, Prisma.sql`m."id"`)}`);
+  return row?.sequence ?? null;
+}
+
 export async function artifactNoticeBlockedMessages(
   db: PrismaClient,
   workspaceId: string,

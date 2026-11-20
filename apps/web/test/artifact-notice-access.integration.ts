@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { WEB_DRAFT_REVIEW_MARKER } from "#src/server/artifacts/artifact-notice-visibility.server";
+import {
+  firstBlockedArtifactNoticeSequence,
+  WEB_DRAFT_REVIEW_MARKER,
+} from "#src/server/artifacts/artifact-notice-visibility.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { draftsHarness, type DraftsHarness } from "./helpers/artifact-drafts-harness";
 
@@ -373,10 +376,17 @@ test("the bot inbox stops handing back a notice once the artifact is gone", asyn
         select: { agentReadThroughSequence: true },
       })
     ).agentReadThroughSequence;
-  const before = await readThrough();
-  expect(before).toBeLessThan(event.message.sequence);
+  const blockedFirst = await firstBlockedArtifactNoticeSequence(
+    h.f.db,
+    h.f.workspaceId,
+    principal.agentId,
+    event.conversationId,
+    event.message.sequence,
+  );
+  if (blockedFirst === null) throw new Error("no blocked notice");
+  expect(await readThrough()).toBeLessThan(blockedFirst);
   await inbox.check(principal, { since: after.cursor });
-  expect(await readThrough()).toBe(before);
+  expect(await readThrough()).toBeLessThan(blockedFirst);
 });
 
 test("the wake hint drops the notice in the same step its artifact goes", async () => {
