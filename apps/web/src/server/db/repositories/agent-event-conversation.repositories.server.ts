@@ -1,7 +1,7 @@
 import type { Prisma } from "#src/generated/prisma/client";
 import { APP_EVENTS_KIND } from "#src/server/app-agent-events/app-event-target.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
-import { isDatabaseClient, type DatabaseScope } from "#src/server/db/transaction.server";
+import type { DatabaseScope } from "#src/server/db/transaction.server";
 
 const createEventConversation = (scope: DatabaseScope, workspaceId: string, directKey: string) =>
   scope.conversation.create({
@@ -13,15 +13,15 @@ export async function eventConversation(
   scope: DatabaseScope,
   workspaceId: string,
   directKey: string,
+  inTransaction = false,
 ) {
   const where = { workspaceId_directKey: { workspaceId, directKey } };
-  const root = isDatabaseClient(scope) ? scope : undefined;
-  if (!root)
+  if (inTransaction)
     await (scope as Prisma.TransactionClient).$executeRaw`
       SELECT pg_advisory_xact_lock(hashtextextended(${`event-conversation:${workspaceId}:${directKey}`}, 0))`;
   const found = await scope.conversation.findUnique({ where, select: { id: true } });
   if (found) return found.id;
-  if (!root) return (await createEventConversation(scope, workspaceId, directKey)).id;
+  if (inTransaction) return (await createEventConversation(scope, workspaceId, directKey)).id;
   try {
     return (await createEventConversation(scope, workspaceId, directKey)).id;
   } catch (error) {

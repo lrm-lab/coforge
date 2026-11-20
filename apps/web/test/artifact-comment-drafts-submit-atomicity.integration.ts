@@ -132,13 +132,27 @@ test("a duplicate event inside a transaction fails the whole transaction", async
   expect(await store.write(base)).toBeUndefined();
 
   const rolledBackEventId = `dup-guard:${h.f.key()}`;
-  await expect(
-    inTransaction(h.f.db, async (tx) => {
-      const first = await store.write({ ...base, externalEventId: rolledBackEventId }, tx);
-      if (!first) throw new Error("the first staged write found an existing event");
-      await store.write(base, tx);
-    }),
-  ).rejects.toThrow();
+  const advisoryLocks = async (scope: { $queryRaw: typeof h.f.db.$queryRaw }) =>
+    (
+      await scope.$queryRaw<{ locks: number }[]>`
+      SELECT count(*)::int AS locks FROM pg_locks
+      WHERE locktype = 'advisory' AND pid = pg_backend_pid()`
+    )[0]!.locks;
+  const failure = await inTransaction(h.f.db, async (tx) => {
+    const before = await advisoryLocks(tx);
+    const first = await store.write({ ...base, externalEventId: rolledBackEventId }, tx);
+    if (!first) throw new Error("the first staged write found an existing event");
+    expect(await advisoryLocks(tx)).toBeGreaterThan(before);
+    await store.write(base, tx);
+  }).catch((error: unknown) => error);
+  const rejection = failure as {
+    code?: string;
+    meta?: { driverAdapterError?: { cause?: { constraint?: { index?: string } } } };
+  };
+  expect(rejection.code).toBe("P2002");
+  expect(rejection.meta?.driverAdapterError?.cause?.constraint?.index).toBe(
+    "system_agent_events_source_agentId_externalEventId_key",
+  );
 
   expect(
     await h.f.db.systemAgentEvent.count({ where: { externalEventId: rolledBackEventId } }),
