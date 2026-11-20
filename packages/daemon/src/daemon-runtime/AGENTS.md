@@ -82,6 +82,8 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 - Context-usage change detection lives here: skip an unchanged reading and
   forget the last reading on launch end or dispose. `connection/` only sends.
 
+- `runtime-publication-handlers.ts` binds cloud publications to the runtime and its background services.
+
 ## Message attention and delivery
 
 Read the [message attention and delivery rules](../../../../docs/agents/daemon-message-attention.md) when changing that behavior.
