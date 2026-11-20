@@ -262,10 +262,13 @@ test("the notice conversation reads only the notices the Agent can still read", 
     const firstUnread = await read({ unread: true, limit: 1 } as never);
     expect(firstUnread.messages.map((message) => message.sequence)).toEqual([20]);
     expect(firstUnread.moreUnread).toBe(true);
-    const secondUnread = await read({ unread: true, fromSequence: 21, limit: 1 } as never);
+    const secondUnread = await read({ unread: true, limit: 1 } as never);
     expect(secondUnread.messages.map((message) => message.sequence)).toEqual([22]);
     expect(secondUnread.moreUnread).toBe(true);
-    const pastUnread = await read({ unread: true, fromSequence: 24, limit: 5 } as never);
+    const lastUnread = await read({ unread: true, limit: 1 } as never);
+    expect(lastUnread.messages.map((message) => message.sequence)).toEqual([23]);
+    expect(lastUnread.moreUnread).toBe(false);
+    const pastUnread = await read({ unread: true, limit: 5 } as never);
     expect(pastUnread.messages).toEqual([]);
     expect(pastUnread.moreUnread).toBe(false);
   } finally {
