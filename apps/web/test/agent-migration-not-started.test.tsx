@@ -56,7 +56,7 @@ test("the not-started notice is a warning that says to start it, not a success",
     <AgentMigrationNotStarted computerName="Studio Mac" assigned />,
   );
   expect(assigned).toContain("Assigned to Studio Mac");
-  expect(assigned).toContain("Start the Agent manually");
+  expect(assigned).toContain("Start manually");
   const moved = renderToStaticMarkup(
     <AgentMigrationNotStarted computerName="Studio Mac" assigned={false} />,
   );
@@ -127,7 +127,7 @@ const NOT_STARTED = { computerName: "Studio Mac", assigned: true };
 test("the section keeps the not-started notice when the status read reports moving unavailable", () => {
   const html = renderSection({ status: UNAVAILABLE, notStarted: NOT_STARTED });
   expect(html).toContain("Assigned to Studio Mac");
-  expect(html).toContain("Start the Agent manually");
+  expect(html).toContain("Start manually");
 });
 
 test("the not-started notice is gone once the Agent is online", () => {
@@ -136,7 +136,7 @@ test("the not-started notice is gone once the Agent is online", () => {
     notStarted: NOT_STARTED,
     agentOnline: true,
   });
-  expect(html).not.toContain("Start the Agent manually");
+  expect(html).not.toContain("Start manually");
 });
 
 test("a revoked placement reads as one status line and one action for its manager", () => {
@@ -150,7 +150,7 @@ test("a revoked placement reads as one status line and one action for its manage
     },
     notStarted: null,
   });
-  expect(html).toContain("Workspace disconnected from Old Studio");
+  expect(html).toContain("Disconnected from Old Studio");
   expect(html).toContain("Change Computer");
   expect(html).not.toContain("doesn&#x27;t have a Computer");
 });
@@ -167,9 +167,9 @@ test("a viewer who cannot move reads the revoked line but gets no action", () =>
     notStarted: null,
     canMove: false,
   });
-  expect(html).toContain("Workspace disconnected from Old Studio");
+  expect(html).toContain("Disconnected from Old Studio");
   expect(html).not.toContain("Change Computer");
-  expect(html).not.toContain("Choose a Computer");
+  expect(html).not.toContain("Choose Computer");
 });
 
 test("an unassigned Agent offers Choose a Computer, not a move", () => {
@@ -183,7 +183,7 @@ test("an unassigned Agent offers Choose a Computer, not a move", () => {
     },
     notStarted: null,
   });
-  expect(html).toContain("No Computer assigned");
-  expect(html).toContain("Choose a Computer");
+  expect(html).toContain("No Computer");
+  expect(html).toContain("Choose Computer");
   expect(html).not.toContain("Move to another Computer");
 });

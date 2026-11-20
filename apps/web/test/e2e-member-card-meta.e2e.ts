@@ -7,7 +7,7 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
 /**
- * A member card shows its Agent's name and "No computer assigned" in full at the widths people use. Seeds an
+ * A member card shows its Agent's name and "Unassigned" in full at the widths people use. Seeds an
  * Agent with no Computer and removes it after the run. Screenshots, light, dark and phone, are
  * written under `.artifacts/e2e/member-card-meta/`.
  */
@@ -40,7 +40,7 @@ test("a member card never cuts its name or Computer line", async () => {
     },
   });
   const page = `${origin}/en/w/${workspace.slug}/members`;
-  const label = `[...document.querySelectorAll("span")].find((el) => el.textContent === "No computer assigned" && el.closest('[role="row"]')?.textContent.includes(${JSON.stringify(agent.displayName)}))`;
+  const label = `[...document.querySelectorAll("span")].find((el) => el.textContent === "Unassigned" && el.closest('[role="row"]')?.textContent.includes(${JSON.stringify(agent.displayName)}))`;
   const cut = `(() => { const el = ${label}; return el.scrollWidth > el.clientWidth; })()`;
   const heading = `[...document.querySelectorAll("h2")].find((el) => el.textContent === ${JSON.stringify(agent.displayName)})`;
   const nameCut = `(() => { const el = ${heading}; return el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth; })()`;

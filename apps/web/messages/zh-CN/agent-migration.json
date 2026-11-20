@@ -4,7 +4,8 @@
   "agent_migration_action_fresh": "选择电脑",
   "agent_migration_action_change": "更换电脑",
   "agent_migration_dialog_title": "将 {name} 迁移到其他电脑",
-  "agent_migration_dialog_title_fresh": "为 {name} 选择电脑",
+  "agent_migration_dialog_title_change": "更换电脑",
+  "agent_migration_dialog_title_fresh": "选择电脑",
   "agent_migration_dialog_target_placeholder": "选择电脑",
   "agent_migration_dialog_target": "目标电脑",
   "agent_migration_dialog_no_targets": "这个工作区没有其他电脑，请先连接一台。",
@@ -12,6 +13,7 @@
   "agent_migration_dialog_left_behind": "密钥类文件（.env、密钥、token、凭据）不会迁移，需要在新电脑上重新复制。可在工作区的 .coforgemigrateignore 中设置还有哪些内容不迁移。",
   "agent_migration_dialog_stops": "迁移期间 Agent 会在当前电脑上停止，消息会等到它在新电脑上启动后再处理。",
   "agent_migration_submit": "开始迁移",
+  "agent_migration_submit_change": "更换",
   "agent_migration_submit_fresh": "分配",
   "agent_migration_submit_pending": "正在发起迁移…",
   "agent_migration_cancel": "取消迁移",
@@ -61,9 +63,9 @@
   "agent_migration_open_computer": "打开电脑设置",
   "agent_migration_open_computers": "打开电脑列表",
   "agent_migration_try_again": "重试",
-  "agent_migration_revoked_title": "工作区已断开与 {computer} 的连接",
-  "agent_migration_no_computer_title": "尚未分配电脑",
-  "agent_migration_direct_left_behind": "{computer} 上的文件和本地记忆不会带过来。",
-  "agent_migration_direct_not_started_moved": "已迁移到 {computer}，请手动启动 Agent。",
-  "agent_migration_direct_not_started_assigned": "已分配到 {computer}，请手动启动 Agent。"
+  "agent_migration_revoked_title": "已断开 {computer}",
+  "agent_migration_no_computer_title": "未分配电脑",
+  "agent_migration_direct_left_behind": "不会迁移 {computer} 上的文件和本地记忆。",
+  "agent_migration_direct_not_started_moved": "已更换到 {computer}，请手动启动。",
+  "agent_migration_direct_not_started_assigned": "已分配到 {computer}，请手动启动。"
 }

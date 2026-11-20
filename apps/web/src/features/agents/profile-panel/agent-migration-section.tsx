@@ -189,6 +189,7 @@ export function AgentMigrationSection({
   const direct = status.data.directPlacement === true;
   const revoked = status.data.computerAccessRevoked === true;
   const sourceName = status.data.sourceComputerName || null;
+  const freshDirect = direct && !revoked;
 
   const refresh = () =>
     Promise.all([queryClient.invalidateQueries({ queryKey: statusKey }), invalidateProfile()]);
@@ -382,9 +383,11 @@ export function AgentMigrationSection({
               <>
                 <DialogHeader
                   title={
-                    direct && !sourceName
-                      ? m.agent_migration_dialog_title_fresh({ name: agentName })
-                      : m.agent_migration_dialog_title({ name: agentName })
+                    freshDirect
+                      ? m.agent_migration_dialog_title_fresh()
+                      : direct && revoked
+                        ? m.agent_migration_dialog_title_change()
+                        : m.agent_migration_dialog_title({ name: agentName })
                   }
                   onClose={submitting ? undefined : close}
                 />
@@ -393,7 +396,13 @@ export function AgentMigrationSection({
                   selected={selected}
                   onSelect={setSelected}
                   disabled={submitting}
-                  direct={direct ? { sourceName } : undefined}
+                  direct={
+                    direct
+                      ? {
+                          sourceName: revoked ? (sourceName ?? m.agent_computer_unnamed()) : null,
+                        }
+                      : undefined
+                  }
                 />
                 {refusal && (
                   <AgentMigrationRefusalNotice
@@ -415,9 +424,11 @@ export function AgentMigrationSection({
                       ? m.agent_migration_submit_pending()
                       : refusal
                         ? m.agent_migration_try_again()
-                        : direct && !sourceName
+                        : freshDirect
                           ? m.agent_migration_submit_fresh()
-                          : m.agent_migration_submit()}
+                          : direct && revoked
+                            ? m.agent_migration_submit_change()
+                            : m.agent_migration_submit()}
                   </DialogAction>
                 </DialogActions>
               </>

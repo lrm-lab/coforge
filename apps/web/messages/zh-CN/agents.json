@@ -46,7 +46,7 @@
   "member_directory_load_error": "成员加载失败。",
   "member_loading_more": "正在加载更多成员…",
   "member_no_humans": "暂无人员",
-  "member_no_computer": "未分配电脑",
+  "member_no_computer": "未分配",
   "member_computer_access_revoked": "访问已撤销",
   "member_person_open_profile": "打开 {name} 的资料",
   "member_person_view_profile": "查看资料",
