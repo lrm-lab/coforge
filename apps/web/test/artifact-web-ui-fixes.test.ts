@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { computeMarkerLeft } from "#src/features/artifacts/artifact-anchor-places";
 import type { ArtifactCommentView } from "#src/features/artifacts/artifact-comment-queries";
 import {
   canSaveCommentEdit,
@@ -37,15 +36,9 @@ const makeComment = (id: string, extra: Partial<ArtifactCommentView> = {}): Arti
 
 test("B1: toggling the header comments button opens or closes only the comments panel independently of annotate mode", () => {
   expect(nextPanelAfterCommentsToggle(null)).toBe("comments");
+  expect(nextPanelAfterCommentsToggle("pending")).toBe("comments");
   expect(nextPanelAfterCommentsToggle("files")).toBe("comments");
   expect(nextPanelAfterCommentsToggle("comments")).toBeNull();
-});
-
-test("B2: margin marker left position appears once the right gutter is at least 44px", () => {
-  expect(computeMarkerLeft({ left: 0, right: 940 }, { right: 854 })).toBe(858);
-  expect(computeMarkerLeft({ left: 100, right: 1040 }, { right: 996 })).toBe(900);
-  expect(computeMarkerLeft({ left: 0, right: 940 }, { right: 897 })).toBeNull();
-  expect(computeMarkerLeft({ left: 0, right: 940 }, { right: 940 })).toBeNull();
 });
 
 test("B3: embed code action is available only when the viewer can enable link sharing or a public link is already on", () => {

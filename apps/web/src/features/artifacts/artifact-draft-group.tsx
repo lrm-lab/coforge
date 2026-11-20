@@ -1,15 +1,11 @@
 import { useMemo } from "react";
 
 import type { ChipMention } from "#src/features/conversations/message-reference-chips";
-import { SECTION_LABEL_CLASS } from "#src/features/conversations/review-chrome";
-import { cn } from "#src/lib/utils";
-import { m } from "#src/paraglide/messages";
 import { clip } from "./artifact-text-anchor";
 import { useCommentDrafts, type DraftRefusal } from "./artifact-comment-drafts-context";
 import type { CommentDraftView } from "./artifact-comment-drafts-queries";
 import type { ArtifactCommentView } from "./artifact-comment-queries";
 import { DraftCard, type DraftParent } from "./artifact-draft-card";
-import { DraftsLoadFailed } from "./artifact-drafts-load-failed";
 
 const EXCERPT_MAX = 160;
 
@@ -50,30 +46,5 @@ export function DraftList({
         />
       ))}
     </ul>
-  );
-}
-
-export function DraftGroup({
-  artifactId,
-  comments,
-  plainMentions,
-}: {
-  artifactId: string;
-  comments: readonly ArtifactCommentView[];
-  plainMentions: Map<string, ChipMention> | undefined;
-}) {
-  const { drafts, loadFailed } = useCommentDrafts();
-  if (loadFailed && drafts.length === 0) return <DraftsLoadFailed />;
-  if (drafts.length === 0) return null;
-  return (
-    <section data-draft-group="">
-      <h3 className={cn(SECTION_LABEL_CLASS, "mb-2 truncate")}>{m.av_dr_group()}</h3>
-      <DraftList
-        artifactId={artifactId}
-        comments={comments}
-        plainMentions={plainMentions}
-        refusal={null}
-      />
-    </section>
   );
 }

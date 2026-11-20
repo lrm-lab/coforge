@@ -44,9 +44,8 @@ These rules apply to `src/features/artifacts/`. They extend
   `entryFactsLine`; the line falls back to the size when the type's own fact is missing.
 - `ConversationShareDialog` arranges its target and composer panes through a `ShareLayout`; the
   artifact send dialog supplies the two-pane one.
-- The comments panel (`artifact-comment-panel.tsx`) and the files panel are one `panel` state and
-  share `ArtifactSidePanel`; a comment is written on the version being viewed and, with a file
-  open, on that file unless dismissed. On `artifact.comments.changed.v1` the cache fetches only the
+- The published comments, pending review and files panels share one `panel` state and
+  `ArtifactSidePanel`. The comment count opens published threads; selecting Reply opens its composer. On `artifact.comments.changed.v1` the cache fetches only the
   named comments (`syncCommentsChange`); the author's own mutation syncs itself and its event is
   skipped. The count comes from the document read. The composer reuses `ComposerField` with
   `mentionGroups="kind"` and the message composer's paste hook; its audience preview is keyed on the
@@ -57,7 +56,7 @@ These rules apply to `src/features/artifacts/`. They extend
   The kind picks an adapter (`textAdapter`, `linesAdapter`: `build`, `locate`, `fromSelection`) once.
   The surface keeps one cached index per content revision (`useSurfaceIndex`: the observer only marks
   it dirty and runs only while comment mode is on or the panel is open) and publishes one
-  `ThreadPlaces` map (comment id to found or neutral) through `publishPlaces`; marker tops, panel
+  `ThreadPlaces` map (comment id to found or neutral) through `publishPlaces`; panel
   order, the anchor line's status and reveal all read that map. Comments follow their version: the page
   hands surfaces only the shown version's threads (`useShownThreads`), a surface places only drafts
   written on that version, and nothing is re-anchored across versions; an anchor it cannot place reads neutral, and a thread on another version reads
@@ -78,11 +77,10 @@ These rules apply to `src/features/artifacts/`. They extend
   (`artifact-commenting.ts`). The composer's target is one union (`ComposerTarget`).
 - Comment mode (canvas picking) and the comments panel are independent states in `useCommentMode`:
   the header comment button and `⋯` toggle only the comments panel without hijacking canvas clicks,
-  while the bottom-right `ArtifactReviewPill` toggles canvas annotate mode (`C` / `Escape`)
+  while the bottom-right `ArtifactReviewPill` toggles canvas annotate mode (click to enter, `Escape` to exit)
   alongside draft undo/redo/discard/send. The panel docks beside the page, but while the artifact
   area is under 48rem (beside chat) it floats over the page's right side so the page keeps its width
-  (Frank's choice over the docked-only panel); on a phone it fills the screen. A marker or
-  thread link opens the panel alone; closing the panel keeps the mode. Everything
+  (Frank's choice over the docked-only panel); on a phone it fills the screen. A thread link opens the panel alone; closing the panel keeps the mode. Everything
   is drawn beside the content (the observed content node is never touched); highlights use the CSS
   Custom Highlight API (`lib/css-highlight.ts`). The text index skips `data-anchor-chrome` widgets
   (the code block's toolbar and previews), so a quote is what the reader sees; a quote shorter than
@@ -105,7 +103,7 @@ These rules apply to `src/features/artifacts/`. They extend
   the window in the capture phase instead of covering the page: a click (moved at most 4px, with no
   text selected) picks the element under it; the page's own handlers never see the pointer, mouse,
   touch, click or context-menu events (their defaults still run, so text selects and fields focus);
-  a drag selects text; a click on a mark goes to the mark. A nested frame, video or other element that swallows pointer events
+  a drag selects text; saved anchors are located without painting badges. A nested frame, video or other element that swallows pointer events
   cannot be picked into.
 - The boundary is the person, not the gate. The page controls its frame, so the host cannot tell the
   runtime's pick from one the page forges (the activation gate only filters: picking is on for all
@@ -122,7 +120,7 @@ These rules apply to `src/features/artifacts/`. They extend
   text selections and non-HTML offers still flow through `useAnchorDraft` and `DraftAffordance`; a
   pick the page cannot anchor shows a message),
   `use-frame-marks.ts` (marks, found keyed by the revision the bridge echoes, places through
-  `publishPlaces`, reveal; `activated` is ignored while a composer is open) and
+  `publishPlaces`, reveal without visible marks) and
   `artifact-frame-comment-layer.tsx`. Reports are provisional until the runtime reports after the
   page's load; marks past the 500 cap are never placed and read as neutral, and so does an element
   that is gone. `revealThread` for an `element` or `text` anchor on a framed entry focuses the mark
@@ -138,7 +136,6 @@ These rules apply to `src/features/artifacts/`. They extend
   drafts with images are not recorded; a step the server refuses for good is dropped with its toast,
   a transient failure keeps it; a restored draft keeps its creation time) run via Mod+Z, Shift+Mod+Z
   and Mod+Y outside text fields and modal dialogs, ignore handled events, and prevent the default
-  only when they act. Draft markers are dashed
-  and uncounted (`data-draft-marker`; the frame's marks carry `draft: true`); a click opens the draft.
+  only when they act. Hide the annotation button at the button itself. Restore it with Mod+period or three taps in its original spot.
   A refused send opens the pending panel with the failing draft outlined. `?review=<id>` filters the
   panel to one review through the existing review read.

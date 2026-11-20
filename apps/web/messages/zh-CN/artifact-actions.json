@@ -1,4 +1,7 @@
 {
+  "av_annotation_hidden": "批注按钮已隐藏。按 {shortcut} 或在原位置连点三下恢复。",
+  "av_hide_annotation_button": "隐藏批注按钮",
+  "av_show_annotation_button": "显示批注按钮",
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "av_menu_ai": "在 AI 中打开",
   "av_menu_copy_for_ai": "复制给 AI",

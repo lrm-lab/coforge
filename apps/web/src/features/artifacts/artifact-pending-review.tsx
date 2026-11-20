@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Button } from "#src/components/base/buttons/button";
 import type { ChipMention } from "#src/features/conversations/message-reference-chips";
 import { ReviewPanelHeader } from "#src/features/conversations/review-panel-header";
@@ -20,6 +21,7 @@ export function ArtifactPendingReview({
 }) {
   const drafts = useCommentDrafts();
   const { submit, closePending } = useCommentDraftActions();
+  useEffect(() => closePending, [closePending]);
   const { pending } = drafts;
   const count = drafts.drafts.length;
   return (
@@ -47,7 +49,7 @@ export function ArtifactPendingReview({
         />
       </div>
       <footer className="flex shrink-0 justify-end gap-2 border-t border-secondary p-3">
-        <Button size="xs" color="secondary" onPress={closePending}>
+        <Button size="xs" color="secondary" onPress={onClose}>
           {m.av_dr_back()}
         </Button>
         <Button

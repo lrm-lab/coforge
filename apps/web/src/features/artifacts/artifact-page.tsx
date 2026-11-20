@@ -8,7 +8,6 @@ import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-rea
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { copyText } from "#src/lib/clipboard";
-import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { deleteArtifact } from "./artifacts.functions";
 import { ArtifactDeleteConfirm } from "./artifact-delete-confirm";
@@ -186,7 +185,9 @@ function ArtifactPageFor({
     () => (current?.files ?? []).map((file) => file.path),
     [current?.files],
   );
-  const commentsOpen = commentMode.mode || panel === "comments";
+  const commentPanelOpen = panel === "comments" || panel === "pending";
+  const locating = panel === "locating";
+  const commentsOpen = commentMode.mode || commentPanelOpen || locating;
   const { openPath, source, framesPage, openFile, openThread } = useOpenFile(entryPath, webPage);
   const shownPath = openPath ?? entryPath;
   const [focus, postFocus, consumeFocus] = useCommentHandoff<string>(() => panel === "comments");
@@ -222,15 +223,18 @@ function ArtifactPageFor({
       entryPath: entryPath ?? "",
       filePaths,
       commenting: commentMode.mode,
-      panelOpen: panel === "comments",
+      panelOpen: commentPanelOpen || locating,
       pickedAnchor,
       setPickedAnchor,
-      revealThread,
+      revealThread: (target) => {
+        if (!docked) setPanel("locating");
+        revealThread(target);
+      },
       openThread: (commentId) => {
         setPanel("comments");
         postFocus(commentId);
       },
-      openPanel: () => setPanel("comments"),
+      openPanel: () => setPanel("pending"),
       publishPlaces,
       holds,
       pickBus,
@@ -241,7 +245,9 @@ function ArtifactPageFor({
       entryPath,
       filePaths,
       commentMode.mode,
-      panel,
+      commentPanelOpen,
+      locating,
+      docked,
       pickedAnchor,
       revealThread,
       postFocus,
@@ -250,9 +256,13 @@ function ArtifactPageFor({
       pickBus,
     ],
   );
+  const finishReveal = useCallback(() => {
+    consumeReveal();
+    setPanel((current) => (current === "locating" ? null : current));
+  }, [consumeReveal]);
   const requests = useMemo<CommentRequests>(
-    () => ({ reveal, consumeReveal, focus, consumeFocus }),
-    [reveal, consumeReveal, focus, consumeFocus],
+    () => ({ reveal, consumeReveal: finishReveal, focus, consumeFocus }),
+    [reveal, finishReveal, focus, consumeFocus],
   );
   const title = current?.artifact.title || m.doc_untitled();
   const copy = async (text: string, done: string) => {
@@ -383,10 +393,8 @@ function ArtifactPageFor({
               />
               <div className="@container/artifact relative flex min-h-0 flex-1">
                 <div
-                  className={cn(
-                    "relative flex min-w-0 flex-1 flex-col",
-                    (panel === "comments" || panel === "files") && "max-sm:hidden",
-                  )}
+                  inert={!docked && (commentPanelOpen || panel === "files")}
+                  className="relative flex min-w-0 flex-1 flex-col"
                 >
                   {incoming !== null && incoming > latest && (
                     <ArtifactUpdateBanner
@@ -446,11 +454,11 @@ function ArtifactPageFor({
                     />
                   )}
                 </div>
-                {panel === "comments" && current && (
+                {commentPanelOpen && current && (
                   <ArtifactCommentPanel
                     artifactId={artifactId}
                     shownVersion={shownVersion}
-                    openPath={openPath}
+                    pendingReview={panel === "pending"}
                     list={list}
                     groups={groups}
                     review={review}

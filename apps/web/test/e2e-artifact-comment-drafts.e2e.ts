@@ -90,19 +90,23 @@ test("a person saves drafts, undoes and redoes, sends them as one review, and a 
   const count = (selector: string) =>
     `document.querySelectorAll(${JSON.stringify(selector)}).length`;
   const sendLabelHasCount = (n: number) =>
-    `(document.querySelector("[data-draft-send]")?.textContent ?? "").includes("${n}")`;
+    `(document.querySelector(".artifact-review-fab-badge")?.textContent ?? "").includes("${n}")`;
   const draftBodies = () =>
     evaluate<string[]>(
-      `[...document.querySelectorAll("[data-draft-group] [data-draft-id]")].map((card) => card.textContent)`,
+      `[...document.querySelectorAll("[data-review-card] li")].map((card) => card.textContent)`,
     );
   const saveSelection = async (needle: string, text: string) => {
+    if (await evaluate<boolean>(`document.querySelector("[data-draft-send]") != null`))
+      await browser("press", "n");
+    else await click("[data-annotate-toggle]");
     await select(needle);
     await waitFor(`document.querySelector("[data-comment-selection]") != null`);
     await click("[data-comment-selection] button");
-    await waitFor(`document.querySelector("[data-comment-popover] textarea") != null`);
-    await browser("fill", "[data-comment-popover] textarea", text);
-    await click("[data-comment-popover] [data-save-draft]");
-    await waitFor(`document.querySelector("[data-comment-popover]") == null`);
+    await waitFor(`document.querySelector("[data-review-card] [role=textbox]") != null`);
+    await browser("click", "[data-review-editor]");
+    await browser("keyboard", "inserttext", text);
+    await click("[data-review-card] [data-save-draft]");
+    await waitFor(`document.querySelector("[data-draft-send]") != null`);
   };
   const first = `beta ${tail} on Friday`;
   const second = `Pricing is open for ${tail}`;
@@ -121,7 +125,8 @@ test("a person saves drafts, undoes and redoes, sends them as one review, and a 
     await browser("open", pageUrl);
     await waitFor(`${pageHydrated} && document.querySelector(".ProseMirror") != null`, 60_000);
 
-    await click("button[aria-pressed]");
+    if (!(await evaluate<boolean>(`document.querySelector("aside") != null`)))
+      await click("button[aria-pressed]");
     await waitFor(`document.querySelector("aside") != null`);
 
     const lead = await services.comments.post({
@@ -133,37 +138,32 @@ test("a person saves drafts, undoes and redoes, sends them as one review, and a 
     await waitFor(`document.querySelector('[data-comment-thread="${lead.id}"]') != null`);
 
     await saveSelection(first, `Friday is risky ${tail}`);
-    await waitFor(count("[data-draft-group] [data-draft-id]") + " === 1");
+    await waitFor(count("[data-review-card] li") + " === 1");
     await saveSelection(second, `Check the price ${tail}`);
-    await waitFor(count("[data-draft-group] [data-draft-id]") + " === 2");
+    await waitFor(count("[data-review-card] li") + " === 2");
     await click(`[data-comment-thread="${lead.id}"] article div.absolute button`);
     await waitFor(`document.querySelector("aside form textarea") != null`);
     await browser("fill", "aside form textarea", `Yes, it is firm ${tail}`);
     await click("aside form [data-save-draft]");
-    await waitFor(count("[data-draft-group] [data-draft-id]") + " === 3");
+    await waitFor(count("[data-review-card] li") + " === 3");
     await waitFor(sendLabelHasCount(3));
-    await waitFor(count("[data-draft-marker]") + " === 2");
+    await waitFor(count("[data-draft-marker]") + " === 0");
     const saved = await draftBodies();
     expect(saved[0]).toContain(`Friday is risky ${tail}`);
     expect(saved[1]).toContain(`Check the price ${tail}`);
     expect(saved[2]).toContain(`Yes, it is firm ${tail}`);
     await shoot("60-drafts-panel");
     await shoot("61-review-pill");
-    await shoot("62-draft-markers");
+    await shoot("62-clean-preview");
 
-    const middle = await evaluate<string>(
-      `document.querySelectorAll("[data-draft-group] [data-draft-id]")[1].dataset.draftId`,
-    );
-    await click(`[data-draft-id="${middle}"] [data-draft-delete]`);
-    await waitFor(count("[data-draft-group] [data-draft-id]") + " === 2");
+    await click('[data-review-card] li:nth-child(2) button[aria-label="Delete"]');
     await waitFor(sendLabelHasCount(2));
-    await click("[data-draft-undo]");
-    await waitFor(count("[data-draft-group] [data-draft-id]") + " === 3");
-    await click("[data-draft-redo]");
-    await waitFor(count("[data-draft-group] [data-draft-id]") + " === 2");
-    await click("[data-draft-undo]");
-    await waitFor(count("[data-draft-group] [data-draft-id]") + " === 3");
-    await waitFor(`document.querySelector("[data-draft-redo]").disabled === false`);
+    await browser("press", "Meta+z");
+    await waitFor(sendLabelHasCount(3));
+    await browser("press", "Meta+Shift+z");
+    await waitFor(sendLabelHasCount(2));
+    await browser("press", "Meta+z");
+    await waitFor(sendLabelHasCount(3));
     expect((await draftBodies())[1]).toContain(`Check the price ${tail}`);
 
     const sentBefore = await services.drafts.list({
@@ -242,7 +242,8 @@ test("a person saves drafts, undoes and redoes, sends them as one review, and a 
     await click("[data-review-chip] button");
     await waitFor(`document.querySelector("[data-review-chip]") == null`);
 
-    await click("button[aria-pressed]");
+    if (!(await evaluate<boolean>(`document.querySelector("aside") != null`)))
+      await click("button[aria-pressed]");
     await waitFor(`document.querySelector("aside") != null`);
     const linsLead = await services.comments.post({
       workspaceId,
@@ -256,6 +257,8 @@ test("a person saves drafts, undoes and redoes, sends them as one review, and a 
     await browser("fill", "aside form textarea", `Reply to a vanishing note ${tail}`);
     await click("aside form [data-save-draft]");
     await waitFor(sendLabelHasCount(1));
+    if (!(await evaluate<boolean>(`document.querySelector("[data-draft-send]") != null`)))
+      await click("[data-annotate-toggle]");
     await services.comments.remove({
       workspaceId,
       userId: lin.id,

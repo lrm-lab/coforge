@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type MouseEvent, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent, type RefObject } from "react";
 
 import type { AnchorDraft } from "./artifact-anchor-places";
 import { linesAdapter, type LineIndex } from "./artifact-line-ranges";
@@ -66,13 +66,14 @@ export function useTextOffer({ get, content, key, composing }: OfferInput<TextIn
     };
   }, [content, key, get, composing]);
 
+  const onDismiss = useCallback(() => {
+    setSelected(null);
+    window.getSelection()?.removeAllRanges();
+  }, []);
   return {
     offered: selected && selected.key === key ? selected.draft : null,
     paintOffer: false,
-    onDismiss: () => {
-      setSelected(null);
-      window.getSelection()?.removeAllRanges();
-    },
+    onDismiss,
   };
 }
 
@@ -89,10 +90,11 @@ export function useLinesOffer({ get, revision, key, composing }: OfferInput<Line
       : null;
   }, [current, get, revision]);
 
+  const onDismiss = useCallback(() => setSelection(null), []);
   return {
     offered,
     paintOffer: true,
-    onDismiss: () => setSelection(null),
+    onDismiss,
     onContentClick: (event) => {
       if (key === null || composing.current || !(event.target instanceof Element)) return;
       const line = Number(

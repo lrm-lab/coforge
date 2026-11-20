@@ -4,18 +4,6 @@ import type { CommentAnchor } from "./artifact-comment-inputs";
 export const COMMENT_FOCUS_HIGHLIGHT = "artifact-comment-focus";
 export const COMMENT_DRAFT_HIGHLIGHT = "artifact-comment-draft";
 
-export const MARGIN_MIN_PX = 44;
-export const MARGIN_OFFSET_PX = 4;
-
-export function computeMarkerLeft(
-  outer: { left: number; right: number },
-  inner: { right: number },
-): number | null {
-  return outer.right - inner.right >= MARGIN_MIN_PX
-    ? inner.right - outer.left + MARGIN_OFFSET_PX
-    : null;
-}
-
 export type AnchorLocation = { range: Range; element: Element; order: number };
 
 export type Place<Location extends { order: number }> =

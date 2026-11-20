@@ -13,7 +13,6 @@ import {
   ArtifactCommentComposer,
   useKnownMentionables,
   type CommentReplyTarget,
-  type ComposerTarget,
 } from "./artifact-comment-composer";
 import type { useArtifactComments } from "./artifact-comment-queries";
 import { ArtifactSidePanel } from "./artifact-side-panel";
@@ -28,7 +27,6 @@ import {
 } from "./artifact-comment-threads";
 import { useFlash } from "./use-flash";
 import { useCommentDrafts } from "./artifact-comment-drafts-context";
-import { DraftGroup } from "./artifact-draft-group";
 import { ArtifactPendingReview } from "./artifact-pending-review";
 import { ReviewChip, ReviewComments, ReviewFilterMenu } from "./artifact-review-view";
 import type { ReviewFilter } from "./use-review-filter";
@@ -36,7 +34,7 @@ import type { ReviewFilter } from "./use-review-filter";
 export function ArtifactCommentPanel({
   artifactId,
   shownVersion,
-  openPath,
+  pendingReview,
   list,
   groups,
   review,
@@ -44,7 +42,7 @@ export function ArtifactCommentPanel({
 }: {
   artifactId: string;
   shownVersion: number;
-  openPath: string | null;
+  pendingReview: boolean;
   list: ReturnType<typeof useArtifactComments>;
   groups: CommentGroups;
   review: ReviewFilter;
@@ -58,7 +56,6 @@ export function ArtifactCommentPanel({
   const known = useKnownMentionables(artifactId);
   const plainMentions = useMemo(() => plainMentionsByHandle(known), [known]);
   const [replyTo, setReplyTo] = useState<CommentReplyTarget | null>(null);
-  const [fileDismissed, setFileDismissed] = useState<string | null>(null);
   const [resolvedOpen, setResolvedOpen] = useState(false);
   const [flashId, flashThread] = useFlash<string>();
   const listElement = useRef<HTMLDivElement>(null);
@@ -76,7 +73,7 @@ export function ArtifactCommentPanel({
   );
   const titled = sections.some((section) => section.version !== shownVersion);
   const context: CommentContext = { artifactId, plainMentions, flashId, onReply: setReplyTo };
-  const empty = sections.length === 0 && groups.resolved.length === 0 && drafts.drafts.length === 0;
+  const empty = sections.length === 0 && groups.resolved.length === 0;
   useEffect(() => {
     if (focus === null) return;
     const match = findThreadForComment(groups, focus);
@@ -93,19 +90,7 @@ export function ArtifactCommentPanel({
     thread.scrollIntoView({ block: "nearest" });
     flashThread(targetId);
   }, [focus, groups, resolvedOpen, consumeFocus, flashThread]);
-  const filePath = openPath !== null && fileDismissed !== openPath ? openPath : null;
-  const composerTarget: ComposerTarget = replyTo
-    ? { kind: "reply", ...replyTo, onCancel: () => setReplyTo(null) }
-    : filePath !== null
-      ? {
-          kind: "file",
-          version: shownVersion,
-          path: filePath,
-          onClear: () => setFileDismissed(openPath),
-        }
-      : { kind: "panel", version: shownVersion };
-
-  if (drafts.pending.open)
+  if (pendingReview)
     return (
       <ArtifactSidePanel
         label={m.av_dr_pending_title({ count: drafts.drafts.length })}
@@ -173,7 +158,6 @@ export function ArtifactCommentPanel({
             {empty && !query.hasNextPage && (
               <p className="text-sm text-tertiary">{m.av_cm_empty()}</p>
             )}
-            <DraftGroup artifactId={artifactId} comments={comments} plainMentions={plainMentions} />
             {sections.map((section) => (
               <section
                 key={section.version}
@@ -233,11 +217,13 @@ export function ArtifactCommentPanel({
           </div>
         )}
       </div>
-      <ArtifactCommentComposer
-        artifactId={artifactId}
-        target={composerTarget}
-        onPosted={() => setReplyTo(null)}
-      />
+      {replyTo && (
+        <ArtifactCommentComposer
+          artifactId={artifactId}
+          target={{ kind: "reply", ...replyTo, onCancel: () => setReplyTo(null) }}
+          onPosted={() => setReplyTo(null)}
+        />
+      )}
     </ArtifactSidePanel>
   );
 }

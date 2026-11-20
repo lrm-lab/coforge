@@ -1,6 +1,6 @@
 import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
 
-export type ArtifactPanelName = "files" | "comments";
+export type ArtifactPanelName = "files" | "comments" | "pending" | "locating";
 
 export function nextPanelAfterCommentsToggle(
   panel: ArtifactPanelName | null,

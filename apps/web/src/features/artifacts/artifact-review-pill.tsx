@@ -4,8 +4,11 @@ import { Cursor02, Plus } from "@untitledui/icons";
 
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
-import { hotkeyKeycaps } from "#src/lib/hotkeys";
+import { useAppToast } from "#src/components/ui/toast";
+import { isRecordingShortcut } from "#src/features/shortcuts/shortcut-bindings";
+import { hotkeyKeycaps, hotkeyMatchesEvent } from "#src/lib/hotkeys";
 import { isApplePlatform } from "#src/lib/platform";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { useCommentDraftActions, useCommentDrafts } from "./artifact-comment-drafts-context";
 import type { CommentDraftView } from "./artifact-comment-drafts-queries";
@@ -68,13 +71,17 @@ export function ArtifactReviewPill({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [focusedIdx, setFocusedIdx] = useState(-1);
   const [apple, setApple] = useState(false);
+  const toast = useAppToast();
+  const [hidden, setHidden] = useState(false);
+  const restoreKey = useRef<string | null>(null);
+  const taps = useRef<number[]>([]);
   const editorRef = useRef<ArtifactInlineEditorHandle>(null);
   const pickedPathRef = useRef<string | undefined>(undefined);
-  const prevCount = useRef(drafts.drafts.length);
   const hydratedEditRef = useRef<string | null>(null);
 
   useEffect(() => {
     setApple(isApplePlatform());
+    setHidden(localStorage.getItem("artifact-annotation-hidden") === "true");
   }, []);
 
   const modEnter = hotkeyKeycaps("Mod+Enter", apple).join(apple ? " " : "+");
@@ -84,14 +91,9 @@ export function ArtifactReviewPill({
     ? (drafts.drafts.find((item) => item.id === editingId) ?? null)
     : null;
   const isCompose = editingDraft !== null || annotating || pickedAnchor !== null;
-  const showCard = cardOpen && (isCompose || count > 0);
+  const showCard = !hidden && cardOpen && (isCompose || count > 0);
   const nonElementPicked =
     pickedAnchor && pickedAnchor.anchor.type !== "element" ? pickedAnchor : null;
-
-  useEffect(() => {
-    if (count > prevCount.current) setCardOpen(true);
-    prevCount.current = count;
-  }, [count]);
 
   useEffect(() => {
     if (annotating || pickedAnchor) setCardOpen(true);
@@ -283,9 +285,58 @@ export function ArtifactReviewPill({
     ],
   );
 
+  const toggleVisibility = useCallback(() => {
+    const message = m.av_annotation_hidden({ shortcut: apple ? "⌘ + ." : "Ctrl + ." });
+    taps.current = [];
+    if (hidden) toast.dismissShown(message);
+    else {
+      onExitAnnotate();
+      setCardOpen(false);
+      toast.notice(message);
+    }
+    setHidden(!hidden);
+    localStorage.setItem("artifact-annotation-hidden", String(!hidden));
+  }, [apple, hidden, toast, onExitAnnotate]);
+
+  useEffect(() => {
+    const release = () => {
+      restoreKey.current = null;
+    };
+    const keyUp = (event: KeyboardEvent) => {
+      if ((event.code || event.key) === restoreKey.current) release();
+    };
+    const restore = (event: KeyboardEvent) => {
+      const key = event.code || event.key;
+      const repeatingRestore = event.repeat && restoreKey.current === key;
+      if (
+        !repeatingRestore &&
+        (!hidden ||
+          event.defaultPrevented ||
+          isRecordingShortcut() ||
+          isEditableTarget(event.target) ||
+          !hotkeyMatchesEvent("Mod+.", event, apple))
+      )
+        return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (!event.repeat) {
+        restoreKey.current = key;
+        toggleVisibility();
+      }
+    };
+    window.addEventListener("keydown", restore, true);
+    window.addEventListener("keyup", keyUp, true);
+    window.addEventListener("blur", release);
+    return () => {
+      window.removeEventListener("keydown", restore, true);
+      window.removeEventListener("keyup", keyUp, true);
+      window.removeEventListener("blur", release);
+    };
+  }, [hidden, apple, toggleVisibility]);
+
   const keyHandlerRef = useRef<(event: KeyboardEvent) => void>(() => {});
   keyHandlerRef.current = (event: KeyboardEvent) => {
-    if (event.defaultPrevented || isEditableTarget(event.target)) return;
+    if (event.defaultPrevented || isRecordingShortcut() || isEditableTarget(event.target)) return;
 
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       if (showCard && !isCompose && count > 0 && !locked) {
@@ -302,11 +353,7 @@ export function ArtifactReviewPill({
       return;
     }
 
-    if (
-      event.key === "c" ||
-      event.key === "C" ||
-      (showCard && !isCompose && (event.key === "n" || event.key === "N"))
-    ) {
+    if (showCard && !isCompose && (event.key === "n" || event.key === "N")) {
       event.preventDefault();
       enterCompose();
       return;
@@ -371,10 +418,28 @@ export function ArtifactReviewPill({
   };
 
   const editorHasContent = hasContent(segments);
+  const canHide = !editingDraft && !pickedAnchor && !editorHasContent && !saving;
   const canSave = editingDraft
     ? (editorHasContent || editingDraft.images.length > 0) && !saving && !locked
     : editorHasContent && !saving && !locked && !drafts.atLimit;
 
+  if (hidden)
+    return (
+      <AriaButton
+        aria-label={m.av_show_annotation_button()}
+        className="absolute right-4 bottom-4 z-20 size-10 touch-manipulation rounded-full bg-transparent outline-focus-ring focus-visible:outline-2"
+        onPress={(event) => {
+          const now = performance.now();
+          taps.current = [...taps.current.filter((time) => now - time < 850), now];
+          if (
+            event.pointerType === "keyboard" ||
+            event.pointerType === "virtual" ||
+            taps.current.length === 3
+          )
+            toggleVisibility();
+        }}
+      />
+    );
   return (
     <div
       data-artifact-review-pill=""
@@ -489,7 +554,20 @@ export function ArtifactReviewPill({
         </div>
       )}
 
-      <ArtifactReviewFab annotating={annotating} count={count} onPress={onOrbPress} />
+      <div className="group/fab pointer-events-auto relative flex items-center">
+        {canHide && (
+          <AriaButton
+            onPress={toggleVisibility}
+            className={cn(
+              showCard && "pointer-coarse:pointer-events-auto pointer-coarse:opacity-100",
+              "pointer-events-none absolute right-full whitespace-nowrap rounded-lg bg-primary px-2 py-1 text-xs text-secondary opacity-0 shadow-sm ring-1 ring-secondary transition-opacity group-hover/fab:pointer-events-auto group-hover/fab:opacity-100 group-focus-within/fab:pointer-events-auto group-focus-within/fab:opacity-100",
+            )}
+          >
+            {m.av_hide_annotation_button()}
+          </AriaButton>
+        )}
+        <ArtifactReviewFab annotating={annotating} count={count} onPress={onOrbPress} />
+      </div>
     </div>
   );
 }

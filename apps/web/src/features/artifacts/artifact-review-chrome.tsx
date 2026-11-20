@@ -234,10 +234,11 @@ export function ArtifactReviewFab({
     <Tooltip
       delay={220}
       title={
-        <TooltipWithKey
-          label={annotating ? m.av_cm_annotating() : m.av_cm_annotate()}
-          shortcut={annotating ? "Esc" : "C"}
-        />
+        annotating ? (
+          <TooltipWithKey label={m.av_cm_annotating()} shortcut="Esc" />
+        ) : (
+          m.av_cm_annotate()
+        )
       }
     >
       <AriaButton

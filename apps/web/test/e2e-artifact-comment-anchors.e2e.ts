@@ -27,7 +27,7 @@ const shots =
 const locale = Bun.env.COFORGE_E2E_LOCALE ?? "en";
 const [width, height] = (Bun.env.COFORGE_E2E_VIEWPORT ?? "1280x860").split("x");
 
-test("people comment on a selection and on lines; markers show beside the text on the version they were written on", async () => {
+test("people comment on a selection and on lines; the sidebar locates anchors without canvas badges", async () => {
   await installFeatureFlags(
     await readFeatureFlagsConfiguration({
       COFORGE_FEATURE_FLAGS_FILE: "/tmp/coforge-flags-docs.json",
@@ -77,6 +77,18 @@ test("people comment on a selection and on lines; markers show beside the text o
       "eval",
       `(() => { const target = document.querySelector(${JSON.stringify(selector)}); target?.click(); return Boolean(target); })()`,
     );
+  async function startPicking() {
+    if (
+      await evaluate<boolean>(
+        `document.querySelector('[data-annotate-toggle][aria-pressed="false"]') != null`,
+      )
+    ) {
+      await click("[data-annotate-toggle]");
+      await waitFor(
+        `document.querySelector('[data-annotate-toggle][aria-pressed="true"]') != null`,
+      );
+    }
+  }
   const select = (needle: string) =>
     browser(
       "eval",
@@ -125,24 +137,28 @@ test("people comment on a selection and on lines; markers show beside the text o
     await click("button[aria-pressed]");
     await waitFor(`document.querySelector("aside") != null`);
     await shoot("32-markdown-comment-mode");
+    await click("[data-annotate-toggle]");
     await select(quoted);
     await waitFor(`document.querySelector("[data-comment-selection]") != null`);
     await shoot("33-markdown-text-selected");
     await click("[data-comment-selection] button");
     await waitFor(
-      `document.querySelector("[data-comment-popover]")?.textContent.includes(${JSON.stringify(quoted)})`,
+      `document.querySelector("[data-review-card]")?.textContent.includes(${JSON.stringify(quoted)})`,
     );
-    await browser("fill", "[data-comment-popover] textarea", `Is Friday firm ${tail}?`);
+    await browser("click", "[data-review-editor]");
+    await browser("keyboard", "inserttext", `Is Friday firm ${tail}?`);
     await shoot("34-markdown-composer-with-anchor");
-    await click('[data-comment-popover] button[type="submit"]');
-    await waitFor(`document.querySelector("[data-comment-popover]") == null`);
+    await click("[data-review-card] [data-save-draft]");
+    await waitFor(`document.querySelector("[data-draft-send]") != null`);
+    await click("[data-draft-send]");
+    await waitFor(`document.querySelector("[data-review-card] [role=textbox]") == null`);
     await waitFor(
       `document.querySelector("[data-comment-thread]")?.textContent.includes(${JSON.stringify(quoted)})`,
     );
     const mine = await evaluate<string>(
       `document.querySelector("[data-comment-thread]").dataset.commentThread`,
     );
-    await waitFor(`document.querySelectorAll("[data-comment-marker]").length === 1`);
+    await waitFor(`document.querySelectorAll("[data-comment-marker]").length === 0`);
 
     const secondQuote = `Pricing is open for ${tail}`;
     const second = await services.comments.post({
@@ -156,17 +172,16 @@ test("people comment on a selection and on lines; markers show beside the text o
         idempotencyKey: `e2e-${tail}-second`,
       },
     });
-    await waitFor(`document.querySelectorAll("[data-comment-marker]").length === 2`);
-    await shoot("35-margin-markers");
+    await waitFor(`document.querySelectorAll("[data-comment-marker]").length === 0`);
+    await shoot("35-clean-margin");
     const showsChosen = (selector: string, userId: string) =>
       `document.querySelector(${JSON.stringify(`${selector} img[data-avatar-img]`)})?.getAttribute("src") === ${JSON.stringify(chosenFace(userId).url)}`;
     await waitFor(showsChosen(`[data-comment-thread="${second.id}"]`, lin.id));
-    await waitFor(showsChosen(`[data-comment-marker="${second.id}"]`, lin.id));
     await waitFor(showsChosen('button[aria-label="Who is viewing"]', DEV_BROWSER_USER.id));
     await waitFor(
       `[...document.querySelectorAll("[data-comment-thread]")].map((thread) => thread.dataset.commentThread).join() === ${JSON.stringify(`${mine},${second.id}`)}`,
     );
-    await click(`[data-comment-marker="${second.id}"]`);
+    await click(`[data-comment-thread="${second.id}"] [data-comment-anchor]`);
     await waitFor(
       `(${threadText(second.id)}).includes("Pricing needs a second look") && (${threadText(second.id)}).includes(${JSON.stringify(secondQuote)})`,
     );
@@ -189,7 +204,7 @@ test("people comment on a selection and on lines; markers show beside the text o
     await shoot("36-anchor-other-version");
     await click(`[data-comment-thread="${mine}"] [data-comment-anchor]`);
     await waitFor(
-      `document.querySelector('[data-comment-thread="${mine}"] [data-anchor-status="found"]') != null && document.querySelector('[data-comment-marker="${mine}"]') != null`,
+      `document.querySelector('[data-comment-thread="${mine}"] [data-anchor-status="found"]') != null && document.querySelector('[data-comment-marker="${mine}"]') == null`,
     );
     await waitFor(
       `document.querySelector('[data-comment-thread="${second.id}"] [data-anchor-status="found"]') != null`,
@@ -204,7 +219,7 @@ test("people comment on a selection and on lines; markers show beside the text o
       `document.querySelector('[data-comment-thread="${mine}"] [data-anchor-status="found"]') != null`,
     );
     await click('button[aria-pressed="false"]');
-    await waitFor(`document.querySelector('[data-comment-marker="${mine}"]') != null`);
+    await waitFor(`document.querySelector('[data-comment-marker="${mine}"]') == null`);
     await shoot("36-comment-link-on-its-version");
 
     const onLines = await services.comments.post({
@@ -221,6 +236,7 @@ test("people comment on a selection and on lines; markers show beside the text o
     await waitFor(`document.querySelector('[data-comment-thread="${onLines.id}"]') != null`);
     await click(`[data-comment-thread="${onLines.id}"] [data-comment-anchor]`);
     await waitFor(`document.querySelector('[data-anchor-line="3"]') != null`);
+    await startPicking();
     await click('[data-anchor-select="3"]');
     await browser(
       "eval",
@@ -228,23 +244,26 @@ test("people comment on a selection and on lines; markers show beside the text o
     );
     await waitFor(`document.querySelector("[data-comment-selection]") != null`);
     await click("[data-comment-selection] button");
-    await waitFor(`document.querySelector("[data-comment-popover]") != null`);
-    await browser("fill", "[data-comment-popover] textarea", `Drop these two ${tail}`);
+    await waitFor(`document.querySelector("[data-review-card] [role=textbox]") != null`);
+    await browser("click", "[data-review-editor]");
+    await browser("keyboard", "inserttext", `Drop these two ${tail}`);
     await shoot("37-code-lines");
-    await click('[data-comment-popover] button[type="submit"]');
-    await waitFor(`document.querySelector("[data-comment-popover]") == null`);
+    await click("[data-review-card] [data-save-draft]");
+    await waitFor(`document.querySelector("[data-draft-send]") != null`);
+    await click("[data-draft-send]");
+    await waitFor(`document.querySelector("[data-review-card] [role=textbox]") == null`);
     await waitFor(
       `[...document.querySelectorAll("[data-comment-thread]")].some((thread) => thread.textContent.includes("Drop these two ${tail}") && thread.textContent.includes("app.js"))`,
     );
+    await startPicking();
     await browser("eval", `document.querySelector('[data-anchor-select="1"]').focus()`);
     await browser("press", "Enter");
     await waitFor(`document.querySelector("[data-comment-selection]") != null`);
     await click("[data-comment-selection] button");
-    await waitFor(
-      `document.querySelector("[data-comment-popover]")?.textContent.includes("Line 1")`,
-    );
+    await waitFor(`document.querySelector("[data-review-card]")?.textContent.includes("L1")`);
+    await browser("click", "[data-review-editor]");
     await browser("press", "Escape");
-    await waitFor(`document.querySelector("[data-comment-popover]") == null`);
+    await waitFor(`document.querySelector("[data-review-card] [role=textbox]") == null`);
 
     const onTable = await services.comments.post({
       workspaceId,
@@ -260,6 +279,7 @@ test("people comment on a selection and on lines; markers show beside the text o
     const openTable = async () => {
       await waitFor(`document.querySelector('[data-comment-thread="${onTable.id}"]') != null`);
       await click(`[data-comment-thread="${onTable.id}"] [data-comment-anchor]`);
+      await startPicking();
       await waitFor(
         `[...document.querySelectorAll("[data-anchor-select]")].map((cell) => cell.textContent).join() === "1,2,4"`,
       );
@@ -268,26 +288,31 @@ test("people comment on a selection and on lines; markers show beside the text o
     await waitFor(
       `document.querySelector('[data-comment-thread="${onTable.id}"] [data-anchor-status="found"]') != null`,
     );
+    await startPicking();
     await click('[data-anchor-select="2"]');
     await waitFor(`document.querySelector("[data-comment-selection]") != null`);
     await click("[data-comment-selection] button");
-    await waitFor(`document.querySelector("[data-comment-popover]")?.textContent.includes("2–3")`);
+    await waitFor(`document.querySelector("[data-review-card]")?.textContent.includes("L2–3")`);
     await click(`[data-comment-thread="${onLines.id}"] [data-comment-anchor]`);
     await waitFor(
       `document.querySelector('[data-anchor-line="3"]') != null && document.querySelector("table") == null`,
     );
     await waitFor(
-      `document.querySelector("[data-comment-popover]") == null && document.querySelector("[data-comment-selection]") == null`,
+      `!document.querySelector("[data-review-card]")?.textContent.includes("L2–3") && document.querySelector("[data-comment-selection]") == null`,
     );
 
     await openTable();
+    await startPicking();
     await click('[data-anchor-select="2"]');
     await waitFor(`document.querySelector("[data-comment-selection]") != null`);
     await click("[data-comment-selection] button");
-    await waitFor(`document.querySelector("[data-comment-popover]") != null`);
-    await browser("fill", "[data-comment-popover] textarea", `Two lines in one row ${tail}`);
-    await click('[data-comment-popover] button[type="submit"]');
-    await waitFor(`document.querySelector("[data-comment-popover]") == null`);
+    await waitFor(`document.querySelector("[data-review-card] [role=textbox]") != null`);
+    await browser("click", "[data-review-editor]");
+    await browser("keyboard", "inserttext", `Two lines in one row ${tail}`);
+    await click("[data-review-card] [data-save-draft]");
+    await waitFor(`document.querySelector("[data-draft-send]") != null`);
+    await click("[data-draft-send]");
+    await waitFor(`document.querySelector("[data-review-card] [role=textbox]") == null`);
     await waitFor(
       `[...document.querySelectorAll("[data-comment-thread]")].some((thread) => thread.textContent.includes("Two lines in one row ${tail}") && thread.textContent.includes("2–3"))`,
     );

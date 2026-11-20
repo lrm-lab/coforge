@@ -1,4 +1,7 @@
 {
+  "av_annotation_hidden": "Annotation button hidden. Press {shortcut} or tap its original spot three times to restore it.",
+  "av_hide_annotation_button": "Hide annotation button",
+  "av_show_annotation_button": "Show annotation button",
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "av_menu_ai": "Ask AI",
   "av_menu_copy_for_ai": "Copy for AI",

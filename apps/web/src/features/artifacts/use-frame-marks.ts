@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { m } from "#src/paraglide/messages";
-import { useCommentDraftActions, useCommentDrafts } from "./artifact-comment-drafts-context";
+import { useCommentDrafts } from "./artifact-comment-drafts-context";
 import type { CommentAnchor } from "./artifact-comment-inputs";
 import { useArtifactCommenting, useCommentRequests, useShownThreads } from "./artifact-commenting";
 import { isFrameAnchor, markPlaces, sameAnchor, type PageMark } from "./artifact-page-annotations";
@@ -36,20 +36,9 @@ function sameMarks(left: readonly PageMark[], right: readonly PageMark[]): boole
   return true;
 }
 
-export function useFrameMarks({
-  bridge,
-  composing,
-  path,
-}: {
-  bridge: PageBridge;
-  composing: RefObject<boolean>;
-  path: string;
-}) {
-  const { version, commenting, panelOpen, publishPlaces, openThread } = useArtifactCommenting();
+export function useFrameMarks({ bridge, path }: { bridge: PageBridge; path: string }) {
+  const { version, commenting, panelOpen, publishPlaces } = useArtifactCommenting();
   const { drafts } = useCommentDrafts();
-  const { openDraft } = useCommentDraftActions();
-  const draftsRef = useRef(drafts);
-  draftsRef.current = drafts;
   const { reveal, consumeReveal } = useCommentRequests();
   const anchored = useShownThreads();
   const [sentRevision, setSentRevision] = useState(0);
@@ -90,13 +79,8 @@ export function useFrameMarks({
     () =>
       bridge.annotations.listen((event) => {
         if (event.kind === "found") setReport({ revision: event.revision, ids: event.ids });
-        else if (event.kind === "activated" && !composing.current) {
-          const draft = draftsRef.current.find(({ id }) => id === event.id);
-          if (draft) openDraft(draft);
-          else openThread(event.id);
-        }
       }),
-    [bridge, composing, openThread, openDraft],
+    [bridge],
   );
 
   const foundIds = report && report.revision === sentRevision ? report.ids : null;

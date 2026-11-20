@@ -34,7 +34,7 @@ export function useFrameOffer({
     bridge.annotations.configure({
       picking: commenting,
       selecting: commenting,
-      showMarks: commenting,
+      showMarks: false,
     });
   }, [bridge, commenting]);
 

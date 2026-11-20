@@ -31,7 +31,7 @@ export function ArtifactFrameCommentLayer({
     key,
     composing: composingRef,
   });
-  useFrameMarks({ bridge, composing: composingRef, path });
+  useFrameMarks({ bridge, path });
   const draft = useAnchorDraft({ key, frame: container, ...offers });
   composingRef.current = draft.composing !== null;
 
