@@ -63,8 +63,7 @@
   "agent_migration_open_computer": "Open Computer settings",
   "agent_migration_open_computers": "Open Computers",
   "agent_migration_try_again": "Try again",
-  "agent_migration_revoked_title": "Disconnected from {computer}",
-  "agent_migration_no_computer_title": "No Computer",
+  "agent_migration_revoked_title": "Access to {computer} has been revoked",
   "agent_migration_direct_not_started_moved": "Moved to {computer}. Start manually.",
   "agent_migration_direct_not_started_assigned": "Assigned to {computer}. Start manually."
 }

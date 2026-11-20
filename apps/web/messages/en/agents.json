@@ -181,7 +181,6 @@
   "agent_profile_creator": "Creator",
   "agent_profile_computer_connected": "Connected",
   "agent_profile_computer_offline": "Offline",
-  "agent_profile_computer_access_revoked": "Access revoked",
   "agent_profile_view_activity": "View activity",
   "agent_profile_edit_display_name": "Edit display name",
   "agent_profile_edit_description": "Edit description",

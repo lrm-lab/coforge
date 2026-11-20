@@ -104,11 +104,8 @@ function renderSection({
     <QueryClientProvider client={queryClient}>
       <AgentMigrationSection
         agentId="agent-1"
-        agentName="Field Notes"
-        currentComputerId={null}
+        onMove={() => {}}
         canMove={canMove}
-        runtime="pi"
-        model="pi-default"
         agentOnline={agentOnline}
       />
     </QueryClientProvider>,
@@ -139,7 +136,7 @@ test("the not-started notice is gone once the Agent is online", () => {
   expect(html).not.toContain("Start manually");
 });
 
-test("the actions section offers its manager one change action", () => {
+test("the profile actions section omits the header change action", () => {
   const html = renderSection({
     status: {
       available: true,
@@ -151,7 +148,7 @@ test("the actions section offers its manager one change action", () => {
     notStarted: null,
   });
   expect(html).not.toContain("Disconnected from Old Studio");
-  expect(html).toContain("Change Computer");
+  expect(html).not.toContain("Change Computer");
   expect(html).not.toContain("doesn&#x27;t have a Computer");
 });
 
@@ -172,7 +169,7 @@ test("a viewer who cannot move gets no action", () => {
   expect(html).not.toContain("Choose Computer");
 });
 
-test("an unassigned Agent offers Choose a Computer, not a move", () => {
+test("an unassigned Agent has no duplicate placement action in the profile body", () => {
   const html = renderSection({
     status: {
       available: true,
@@ -184,6 +181,6 @@ test("an unassigned Agent offers Choose a Computer, not a move", () => {
     notStarted: null,
   });
   expect(html).not.toContain("No Computer");
-  expect(html).toContain("Choose Computer");
+  expect(html).not.toContain("Choose Computer");
   expect(html).not.toContain("Move to another Computer");
 });

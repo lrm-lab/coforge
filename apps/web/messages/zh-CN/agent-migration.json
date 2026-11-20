@@ -63,8 +63,7 @@
   "agent_migration_open_computer": "打开电脑设置",
   "agent_migration_open_computers": "打开电脑列表",
   "agent_migration_try_again": "重试",
-  "agent_migration_revoked_title": "已断开 {computer}",
-  "agent_migration_no_computer_title": "未分配电脑",
+  "agent_migration_revoked_title": "对 {computer} 的访问权限已撤销",
   "agent_migration_direct_not_started_moved": "已更换到 {computer}，请手动启动。",
   "agent_migration_direct_not_started_assigned": "已分配到 {computer}，请手动启动。"
 }

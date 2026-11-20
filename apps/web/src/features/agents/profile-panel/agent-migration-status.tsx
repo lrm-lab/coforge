@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
@@ -147,6 +148,22 @@ export function useAgentMigrationNotStarted(agentId: string) {
     setNotStarted: (value: { computerName: string; assigned: boolean } | null) =>
       writeAgentMigrationNotStarted(queryClient, agentId, value),
   };
+}
+
+export function AgentPlacementResult({
+  agentId,
+  agentOnline,
+}: {
+  agentId: string;
+  agentOnline: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const { notStarted: notStartedOn } = useAgentMigrationNotStarted(agentId);
+  useEffect(() => {
+    if (agentOnline && notStartedOn) writeAgentMigrationNotStarted(queryClient, agentId, null);
+  }, [agentOnline, notStartedOn, queryClient, agentId]);
+
+  return notStartedOn && !agentOnline ? <AgentMigrationNotStarted {...notStartedOn} /> : null;
 }
 
 export function AgentMigrationNotStarted({

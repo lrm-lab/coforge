@@ -25,6 +25,7 @@ export function AgentProfileHeader({
   display,
   controls,
   canMessage,
+  computerAction,
   deleted = false,
   onClose,
   back,
@@ -41,6 +42,7 @@ export function AgentProfileHeader({
   display?: AgentDisplaySnapshot;
   controls: AgentRuntimeControls;
   canMessage: boolean;
+  computerAction?: { label: string; onPress: () => void };
   deleted?: boolean;
   onClose: () => void;
   back?: { label: string; onPress: () => void };
@@ -96,11 +98,15 @@ export function AgentProfileHeader({
         )}
         {!deleted && (
           <>
-            <AgentProfileActionsMenu className="flex @lg/agent-header:hidden" controls={controls} />
+            <AgentProfileActionsMenu
+              className={computerAction ? "flex" : "flex @lg/agent-header:hidden"}
+              controls={controls}
+              computerAction={computerAction}
+            />
             <ButtonUtility
               icon={controls.isOnline ? Stop : Play}
               size="sm"
-              className="hidden @lg/agent-header:inline-flex"
+              className={computerAction ? "hidden" : "hidden @lg/agent-header:inline-flex"}
               isDisabled={controls.startStopBusy}
               tooltip={
                 controls.isOnline
@@ -116,7 +122,7 @@ export function AgentProfileHeader({
             <ButtonUtility
               icon={RotateCcw}
               size="sm"
-              className="hidden @lg/agent-header:inline-flex"
+              className={computerAction ? "hidden" : "hidden @lg/agent-header:inline-flex"}
               isDisabled={controls.controlInFlight}
               tooltip={m.agent_control_restart_reset_tooltip()}
               onClick={() => controls.openRestart("restart")}

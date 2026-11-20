@@ -1,3 +1,5 @@
+import { AlertTriangle } from "@untitledui/icons";
+import { m } from "#src/paraglide/messages";
 import { useEffect, useRef, useState } from "react";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useServerFn } from "@tanstack/react-start";
@@ -33,9 +35,7 @@ import {
   saveAgentEnvironment,
 } from "#src/features/agents/agents.functions";
 import { AgentArchiveSection } from "./agent-archive-section";
-import { AgentMigrationSection } from "./agent-migration-section";
-import { AlertTriangle } from "@untitledui/icons";
-import { m } from "#src/paraglide/messages";
+import { useAgentProfileMigration } from "./use-agent-profile-migration";
 import { AgentRuntimeCredentialSection } from "./agent-runtime-credential-section";
 import {
   combineRuntimeSaveOutcomes,
@@ -53,7 +53,6 @@ import { AgentProfileTabs, useAgentProfileTabOrder } from "./agent-profile-tabs"
 import { setupComputerOptions } from "./setup-computers";
 import { AgentProfileTab } from "./agent-profile-tab";
 import {
-  agentMigrationRuntime,
   profileDiagnosticFacts,
   profileRuntimeSelection,
   profileUpdateInput,
@@ -119,16 +118,7 @@ export function AgentProfilePanel({
   const deleted = Boolean(profile?.deletedAt);
   const canManage = profile && !deleted ? canManageAgent(profile) : false;
   usePrefetchAgentActivityFeed(agentId, canManage);
-  const placeable = Boolean(
-    profile &&
-    canManage &&
-    !deleted &&
-    profile.systemKind == null &&
-    profile.hosting !== "external" &&
-    !profile.isWeeklyReportAssistant,
-  );
   const owned = Boolean(profile?.ownedByCurrentUser) && !deleted;
-  const migrationRuntime = agentMigrationRuntime(profile?.runtimeConfig);
   const loadComputers = useServerFn(listComputers);
   const offerComputerPicker = Boolean(profile && canManage && !profile.computer);
   const computersQuery = useQuery({
@@ -164,6 +154,7 @@ export function AgentProfilePanel({
 
   const executeControl = useServerFn(executeAgentControl);
   const agentIsOnline = agentDisplay(display, { stopped: profile?.stopped }).isOnline;
+  const migration = useAgentProfileMigration(agentId, profile, canManage, agentIsOnline === true);
   const controls = useAgentRuntimeControls({
     agentId,
     agentName: knownName || agentId,
@@ -271,6 +262,7 @@ export function AgentProfilePanel({
   return (
     <div ref={root} className="flex h-full min-h-0 min-w-0 flex-col">
       <AgentProfileHeader
+        computerAction={migration.directAction}
         pageHeading={pageHeading}
         canMessage={Boolean(profile?.canMessage)}
         deleted={deleted}
@@ -327,6 +319,7 @@ export function AgentProfilePanel({
           />
         )
       )}
+      {tab !== "profile" && migration.result}
       <AgentProfileTabs
         active={tab}
         tabs={tabOrder.tabs}
@@ -420,19 +413,7 @@ export function AgentProfilePanel({
               ) : undefined
             }
             computerAccessRevoked={profile.computerAccessRevoked === true}
-            migration={
-              (profile.computer || placeable) && !deleted && migrationRuntime ? (
-                <AgentMigrationSection
-                  agentId={profile.id}
-                  agentName={profile.displayName || profile.name}
-                  currentComputerId={profile.computer?.id ?? null}
-                  canMove={canManage}
-                  runtime={migrationRuntime.runtime}
-                  model={migrationRuntime.model}
-                  agentOnline={agentIsOnline === true}
-                />
-              ) : undefined
-            }
+            migration={migration.section}
             onRequestVisibilityChange={
               profile.canChangeVisibility ? (target) => setVisibilityTarget(target) : undefined
             }
@@ -464,6 +445,7 @@ export function AgentProfilePanel({
           onSave={onSaveRuntime}
         />
       )}
+      {migration.dialog}
       <AgentRestartDialog agentName={knownName} control={controls} />
       {profile && (
         <AgentProfileConfirmationDialogs
