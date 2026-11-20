@@ -3,7 +3,7 @@ import { artifactCommandsHidden } from "./workspace-features";
 /** The `coforge artifact` synopsis segment of `CLI_USAGE`; `cliUsage` drops it when the
  * launch's features switched artifacts off (task #711). */
 const ARTIFACT_USAGE =
-  "coforge artifact list|read|pull|push|download|move|delete|comments|comment|review|resolve|reopen|follow|unfollow ... | ";
+  "coforge artifact list|read|pull|push|download|check|move|delete|comments|comment|review|resolve|reopen|follow|unfollow ... | ";
 const CONTEXT_USAGE = "coforge context search|read --message-id <id> --session-id <id> ... | ";
 const PROC_USAGE = "coforge proc start|list|logs|stop ... | ";
 

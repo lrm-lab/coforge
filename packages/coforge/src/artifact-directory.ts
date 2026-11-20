@@ -6,7 +6,7 @@ import { inPool } from "#src/pool";
 
 export const STATE_FILE = ".coforge-artifact.json";
 
-const TOOL_NAMES = new Set([".git", ".DS_Store", "node_modules"]);
+const TOOL_NAMES = new Set([".git", ".DS_Store", "node_modules", ".coforge-check"]);
 
 export type ArtifactState = {
   artifact: string;

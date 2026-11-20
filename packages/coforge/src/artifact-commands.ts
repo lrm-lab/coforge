@@ -24,6 +24,11 @@ import {
 } from "#src/artifact-comment-args";
 import { runArtifactComment } from "#src/artifact-comment-commands";
 import {
+  parseCheckArgs,
+  runArtifactCheck,
+  type ArtifactCheckInvocation,
+} from "#src/artifact-check-commands";
+import {
   formatArtifactDeleted,
   formatArtifactList,
   formatArtifactMoved,
@@ -39,7 +44,8 @@ import { formatFollow, type FollowAnswer } from "#src/artifact-follow-format";
 export type ArtifactInvocation =
   | ArtifactRequestInvocation
   | ArtifactDirectoryInvocation
-  | ArtifactCommentInvocation;
+  | ArtifactCommentInvocation
+  | ArtifactCheckInvocation;
 
 export type ArtifactRequestInvocation = {
   command: "artifact";
@@ -62,6 +68,7 @@ const OPERATIONS = [
   "push",
   "pull",
   "download",
+  "check",
   "move",
   "delete",
   "save",
@@ -103,6 +110,7 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
     throw invalidArgument("artifact", `Unknown artifact command ${args[0] ?? "(none)"}`);
   if (operation === "pull" || operation === "push" || operation === "download")
     return parseDirectoryArgs(args);
+  if (operation === "check") return parseCheckArgs(args.slice(1));
   if (isCommentOperation(operation)) return parseCommentArgs(operation, args.slice(1));
   const command = `artifact ${operation}`;
   const flags = FLAGS[operation as RequestOperation];
@@ -188,6 +196,7 @@ export async function runArtifact(
 ): Promise<unknown> {
   if (!transport.artifact) throw new Error("Artifact transport is unavailable");
   if ("directory" in invocation) return runArtifactDirectory(invocation, transport);
+  if ("check" in invocation) return runArtifactCheck(invocation, transport);
   if ("comment" in invocation)
     return runArtifactComment(invocation, transport, readStdin ?? readStdinText, stdinIsTTY);
   const request = invocation.request;
