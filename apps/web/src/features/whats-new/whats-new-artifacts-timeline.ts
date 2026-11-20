@@ -83,16 +83,16 @@ export function applySceneFrame(refs: SceneRefs, t: number, comment: string, amb
   if (refs.pointer) {
     if (t < 1800) {
       refs.pointer.style.opacity = "0";
-      refs.pointer.style.transform = "translate(374px, 210px)";
+      refs.pointer.style.transform = "translate(370px, 214px)";
     } else if (t < 5200) {
       refs.pointer.style.opacity = "1";
-      refs.pointer.style.transform = "translate(278px, 198px)";
+      refs.pointer.style.transform = "translate(268px, 212px)";
     } else if (t < 6150) {
       refs.pointer.style.opacity = "1";
-      refs.pointer.style.transform = "translate(442px, 206px)";
+      refs.pointer.style.transform = "translate(426px, 192px)";
     } else {
       refs.pointer.style.opacity = "0";
-      refs.pointer.style.transform = "translate(454px, 218px)";
+      refs.pointer.style.transform = "translate(442px, 206px)";
     }
   }
 
@@ -123,8 +123,8 @@ export function applySceneFrame(refs: SceneRefs, t: number, comment: string, amb
     if (t >= 6100 && t < 6850) {
       const u = (t - 6100) / 750;
       const ease = 1 - (1 - u) ** 3;
-      const x = 440 + (62 - 440) * ease;
-      const y = 205 + (146 - 205) * ease - Math.sin(u * Math.PI) * 56;
+      const x = 426 + (40 - 426) * ease;
+      const y = 190 + (146 - 190) * ease - Math.sin(u * Math.PI) * 56;
       const scale = 1 - Math.abs(u - 0.5) * 0.45;
       refs.signalOrb.style.opacity = String(u < 0.85 ? 1 : (1 - u) / 0.15);
       refs.signalOrb.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) scale(${scale.toFixed(3)})`;
@@ -175,19 +175,19 @@ export function applySceneFrame(refs: SceneRefs, t: number, comment: string, amb
   if (refs.agentCursor) {
     if (!isWorking) {
       refs.agentCursor.style.opacity = "0";
-      refs.agentCursor.style.transform = "translate(114px, 168px)";
+      refs.agentCursor.style.transform = "translate(96px, 168px)";
     } else if (t < 7550) {
       refs.agentCursor.style.opacity = "1";
-      refs.agentCursor.style.transform = "translate(252px, 202px)";
+      refs.agentCursor.style.transform = "translate(232px, 218px)";
     } else if (t < 8350) {
       refs.agentCursor.style.opacity = "1";
-      refs.agentCursor.style.transform = "translate(268px, 198px)";
+      refs.agentCursor.style.transform = "translate(254px, 212px)";
     } else if (t < 9150) {
       refs.agentCursor.style.opacity = "1";
-      refs.agentCursor.style.transform = "translate(284px, 199px)";
+      refs.agentCursor.style.transform = "translate(276px, 214px)";
     } else {
       refs.agentCursor.style.opacity = "1";
-      refs.agentCursor.style.transform = "translate(298px, 194px)";
+      refs.agentCursor.style.transform = "translate(298px, 206px)";
     }
   }
 

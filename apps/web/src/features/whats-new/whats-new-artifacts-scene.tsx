@@ -1,15 +1,5 @@
 import { useEffect, useId, useRef } from "react";
-import {
-  Activity,
-  ArrowRight,
-  Check,
-  CodeBrowser,
-  Folder,
-  Globe01,
-  MessageChatSquare,
-  MessageSquare01,
-  Stars01,
-} from "@untitledui/icons";
+import { ArrowRight, Check, Globe01, MessageSquare01 } from "@untitledui/icons";
 import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { m } from "#src/paraglide/messages";
@@ -25,6 +15,50 @@ import {
   type SceneRefs,
 } from "./whats-new-artifacts-timeline";
 import "./whats-new-artifacts-scene.css";
+
+export function ArtifactsThumb() {
+  const uid = useId();
+  const gradId = `${uid}-thumb`;
+  return (
+    <div className="wna-thumb">
+      <div className="wna-thumb-card">
+        <div className="flex items-center gap-1">
+          <span className="size-1.5 rounded-full bg-[#5d36dc]" />
+          <span className="h-[0.1875rem] w-12 rounded-full bg-[#101319]/75" />
+          <span className="ml-auto rounded bg-[#5d36dc] px-1 py-[0.03125rem] text-[0.4375rem] leading-tight font-semibold text-white">
+            v3
+          </span>
+        </div>
+        <div className="grid flex-1 grid-cols-[1.35fr_1fr] gap-1.5">
+          <div className="flex flex-col justify-end rounded bg-[#f8f9fc] p-1">
+            <svg viewBox="0 0 80 26" className="h-6 w-full overflow-visible">
+              <defs>
+                <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#7c5cfa" stopOpacity="0.42" />
+                  <stop offset="100%" stopColor="#7c5cfa" stopOpacity="0.02" />
+                </linearGradient>
+              </defs>
+              <path d="M 0 22 Q 18 12 38 15 T 80 5 L 80 25 L 0 25 Z" fill={`url(#${gradId})`} />
+              <path
+                d="M 0 22 Q 18 12 38 15 T 80 5"
+                fill="none"
+                stroke="#5d36dc"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+            </svg>
+          </div>
+          <div className="flex items-end gap-[0.1875rem] rounded border border-[#7c5cfa]/40 bg-[#f4f0ff] p-1">
+            <span className="h-[46%] flex-1 rounded-[1.5px] bg-[#ddd6fe]" />
+            <span className="h-[64%] flex-1 rounded-[1.5px] bg-[#ddd6fe]" />
+            <span className="h-[54%] flex-1 rounded-[1.5px] bg-[#ddd6fe]" />
+            <span className="h-[96%] flex-1 rounded-[1.5px] bg-[#5d36dc] shadow-[0_0_6px_rgba(93,54,220,0.5)]" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function ArtifactsScene() {
   const reducedMotion = usePrefersReducedMotion();
@@ -119,35 +153,17 @@ export function ArtifactsScene() {
 
         <div className="wna-win">
           <div className="wna-header">
-            <CoForgeMark className="h-[0.8125rem] w-auto [&_circle]:stroke-[#101319]" />
+            <CoForgeMark className="h-[0.875rem] w-auto [&_circle]:stroke-[#101319]" />
             <div className="wna-title">{m.whats_new_artifacts_demo_title()}</div>
             <div ref={bind("verPill")} className="wna-ver-pill wna-smooth">
               v2
             </div>
             <div className="wna-globe">
-              <Globe01 className="size-[0.53125rem]" strokeWidth={2.2} />
+              <Globe01 className="size-[0.5625rem]" strokeWidth={2.2} />
             </div>
           </div>
 
           <div className="wna-body">
-            <div className="wna-sidebar">
-              <span className="wna-nav-icon">
-                <MessageChatSquare className="size-[0.6875rem]" strokeWidth={1.9} />
-              </span>
-              <span className="wna-nav-icon">
-                <Activity className="size-[0.6875rem]" strokeWidth={1.9} />
-              </span>
-              <span className="wna-nav-icon">
-                <Stars01 className="size-[0.6875rem]" strokeWidth={1.9} />
-              </span>
-              <span className="wna-nav-icon">
-                <Folder className="size-[0.6875rem]" strokeWidth={1.9} />
-              </span>
-              <span className="wna-nav-icon wna-nav-icon-active">
-                <CodeBrowser className="size-[0.71875rem]" strokeWidth={2} />
-              </span>
-            </div>
-
             <div className="wna-canvas">
               <div className="wna-left-col">
                 <div className="wna-chart-card">
@@ -158,7 +174,7 @@ export function ArtifactsScene() {
                     </div>
                     <span className="wna-delta">+14.2%</span>
                   </div>
-                  <svg viewBox="0 0 160 54" className="h-[3.25rem] w-full overflow-visible">
+                  <svg viewBox="0 0 160 54" className="h-[3.5rem] w-full overflow-visible">
                     <defs>
                       <linearGradient id={violetGradId} x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#7c5cfa" stopOpacity="0.45" />
@@ -204,16 +220,16 @@ export function ArtifactsScene() {
                 <div className="wna-kpi-grid">
                   <div className="wna-kpi-card">
                     <span className="wna-kpi-num">87.4</span>
-                    <div className="flex flex-col gap-[0.15625rem]">
-                      <span className="h-[0.1875rem] w-[85%] rounded-full bg-[#8f6ff2]" />
-                      <span className="h-[0.1875rem] w-[55%] rounded-full bg-[#f472b6]" />
+                    <div className="flex flex-col gap-[0.1875rem]">
+                      <span className="h-[0.21875rem] w-[85%] rounded-full bg-[#8f6ff2]" />
+                      <span className="h-[0.21875rem] w-[55%] rounded-full bg-[#f472b6]" />
                     </div>
                   </div>
                   <div className="wna-kpi-card">
                     <span className="wna-kpi-num">128k</span>
-                    <div className="flex flex-col gap-[0.15625rem]">
-                      <span className="h-[0.1875rem] w-[92%] rounded-full bg-[#10b981]" />
-                      <span className="h-[0.1875rem] w-[64%] rounded-full bg-[#38bdf8]" />
+                    <div className="flex flex-col gap-[0.1875rem]">
+                      <span className="h-[0.21875rem] w-[92%] rounded-full bg-[#10b981]" />
+                      <span className="h-[0.21875rem] w-[64%] rounded-full bg-[#38bdf8]" />
                     </div>
                   </div>
 
@@ -226,7 +242,7 @@ export function ArtifactsScene() {
                         {m.whats_new_artifacts_demo_funnel()}
                       </span>
                       <span ref={bind("funnelCheck")} className="wna-funnel-check">
-                        <Check className="size-[0.375rem]" strokeWidth={3.5} />
+                        <Check className="size-[0.40625rem]" strokeWidth={3.5} />
                       </span>
                     </div>
                     <div className="wna-bars">
@@ -265,56 +281,52 @@ export function ArtifactsScene() {
               <div className="wna-doc-col">
                 <div className="flex items-center gap-[0.25rem]">
                   <span className="size-[0.375rem] rounded-full bg-[#a993ff]" />
-                  <span className="h-[0.25rem] w-[2.625rem] rounded-full bg-[#cbd5e1]" />
+                  <span className="h-[0.25rem] w-[3rem] rounded-full bg-[#cbd5e1]" />
                 </div>
-                <div className="flex flex-col gap-[0.21875rem] rounded-[0.3125rem] bg-[#f5f3ff] p-[0.3125rem]">
+                <div className="flex flex-col gap-[0.25rem] rounded-[0.375rem] bg-[#f5f3ff] p-[0.375rem]">
                   <span className="h-[0.21875rem] w-[88%] rounded-full bg-[#c4b5fd]" />
                   <span className="h-[0.21875rem] w-[65%] rounded-full bg-[#ddd6fe]" />
                 </div>
-                <div className="mt-[0.125rem] flex flex-col gap-[0.25rem]">
+                <div className="mt-[0.125rem] flex flex-col gap-[0.28125rem]">
                   <span className="h-[0.21875rem] w-[92%] rounded-full bg-[#e2e8f0]" />
                   <span className="h-[0.21875rem] w-[78%] rounded-full bg-[#e2e8f0]" />
                   <span className="h-[0.21875rem] w-[84%] rounded-full bg-[#e2e8f0]" />
                   <span className="h-[0.21875rem] w-[58%] rounded-full bg-[#e2e8f0]" />
                 </div>
-                <div className="mt-auto flex gap-[0.1875rem]">
-                  <span className="h-[0.6875rem] flex-1 rounded-[0.25rem] bg-[#f1f5f9]" />
-                  <span className="h-[0.6875rem] w-[1.125rem] rounded-[0.25rem] bg-[#efe8ff]" />
+              </div>
+
+              <div ref={bind("reviewCard")} className="wna-review-card">
+                <div className="flex items-start gap-[0.4375rem]">
+                  <img
+                    src="/avatars/person-1-2.webp"
+                    alt=""
+                    decoding="async"
+                    className="wna-review-avatar"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="wna-review-chip">&lt;ablation&gt;</div>
+                    <div ref={bind("reviewText")} className="wna-review-text" />
+                  </div>
+                  <div ref={bind("sendPill")} className="wna-send-pill">
+                    <ArrowRight className="size-[0.625rem]" strokeWidth={2.4} />
+                  </div>
                 </div>
+              </div>
+
+              <div ref={bind("fab")} className="wna-fab">
+                <MessageSquare01 className="size-[0.6875rem]" strokeWidth={2} />
+                <span ref={bind("fabBadge")} className="wna-fab-badge">
+                  1
+                </span>
               </div>
             </div>
           </div>
         </div>
 
-        <div ref={bind("reviewCard")} className="wna-review-card">
-          <div className="flex items-start gap-[0.4375rem]">
-            <img
-              src="/avatars/person-1-2.webp"
-              alt=""
-              decoding="async"
-              className="wna-review-avatar"
-            />
-            <div className="min-w-0 flex-1">
-              <div className="wna-review-chip">&lt;ablation&gt;</div>
-              <div ref={bind("reviewText")} className="wna-review-text" />
-            </div>
-            <div ref={bind("sendPill")} className="wna-send-pill">
-              <ArrowRight className="size-[0.625rem]" strokeWidth={2.4} />
-            </div>
-          </div>
-        </div>
-
-        <div ref={bind("fab")} className="wna-fab">
-          <MessageSquare01 className="size-[0.6875rem]" strokeWidth={2} />
-          <span ref={bind("fabBadge")} className="wna-fab-badge">
-            1
-          </span>
-        </div>
-
         <div
           ref={bind("pointer")}
           className="wna-cursor"
-          style={{ transform: "translate(374px, 210px)", opacity: 0 }}
+          style={{ transform: "translate(370px, 214px)", opacity: 0 }}
         >
           <svg
             width="16"
@@ -336,7 +348,7 @@ export function ArtifactsScene() {
         <div
           ref={bind("agentCursor")}
           className="wna-agent-cursor"
-          style={{ transform: "translate(114px, 168px)", opacity: 0 }}
+          style={{ transform: "translate(96px, 168px)", opacity: 0 }}
         >
           <svg
             width="15"

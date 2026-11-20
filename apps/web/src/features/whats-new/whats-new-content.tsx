@@ -2,13 +2,17 @@ import type { ComponentType, ReactNode } from "react";
 import { LABEL_DOT, LABEL_PALETTE } from "#src/features/tasks/label-colors";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
-import { ArtifactsScene } from "./whats-new-artifacts-scene";
+import { ArtifactsScene, ArtifactsThumb } from "./whats-new-artifacts-scene";
 import type { WhatsNewId } from "./whats-new-entries";
 
 type WhatsNewContent = {
   title: () => string;
+  teaser: () => string;
   body: () => string;
   illustration: ComponentType;
+  thumbnail: ComponentType;
+  heroTone?: "dark";
+  action?: { label: () => string; path: string };
 };
 
 function Chip({ dot, label }: { dot: string; label: string }) {
@@ -51,15 +55,37 @@ function LabelsScene() {
   );
 }
 
+function LabelsThumb() {
+  return (
+    <div className="flex h-full flex-col justify-center gap-1.5 bg-secondary px-2.5 py-2">
+      <div className="flex items-center gap-1.5 rounded-md bg-primary px-2 py-1 ring-1 ring-secondary">
+        <span className={cx("size-1.5 rounded-full", LABEL_DOT.error)} />
+        <span className={cx("size-1.5 rounded-full", LABEL_DOT.pink)} />
+        <span className="h-1.5 flex-1 rounded-full bg-quaternary" />
+      </div>
+      <div className="flex items-center gap-1.5 rounded-md bg-primary px-2 py-1 ring-1 ring-secondary">
+        <span className={cx("size-1.5 rounded-full", LABEL_DOT.sky)} />
+        <span className="h-1.5 w-3/5 rounded-full bg-quaternary" />
+      </div>
+    </div>
+  );
+}
+
 export const WHATS_NEW_CONTENT: Record<WhatsNewId, WhatsNewContent> = {
   "task-labels": {
     title: m.whats_new_task_labels_title,
+    teaser: m.whats_new_task_labels_teaser,
     body: m.whats_new_task_labels_body,
     illustration: LabelsScene,
+    thumbnail: LabelsThumb,
   },
   artifacts: {
     title: m.whats_new_artifacts_title,
+    teaser: m.whats_new_artifacts_teaser,
     body: m.whats_new_artifacts_body,
     illustration: ArtifactsScene,
+    thumbnail: ArtifactsThumb,
+    heroTone: "dark",
+    action: { label: m.whats_new_artifacts_cta, path: "/artifacts" },
   },
 };

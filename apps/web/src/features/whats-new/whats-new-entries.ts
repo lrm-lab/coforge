@@ -1,25 +1,16 @@
 import type { ExperimentKey } from "#src/server/experiments/experiments.server";
 
-/**
- * The "What's new" entries (task #493), as data the server and the sidebar share. Each ships in the
- * code of the release that introduces its feature; `releasedAt` is that release's time, to the
- * minute and unique, so entries have one order. Each entry's words and picture live in
- * `whats-new-content.tsx` under the same id.
- */
 export type WhatsNewEntryData = {
   id: string;
-  /** ISO time of the web release that ships the feature. An entry shows only from then on. */
   releasedAt: string;
-  /** An experiment the feature needs: while it is off in the Workspace the entry is skipped, and
-   * not counted as seen. */
   experiment?: ExperimentKey;
-  /** An entry worth interrupting for: it opens by itself once, rather than waiting for the row. */
   announce?: true;
+  includeNewcomers?: true;
 };
 
 export const WHATS_NEW_ENTRIES = [
   { id: "task-labels", releasedAt: "2026-11-04T08:01:00Z" },
-  { id: "artifacts", releasedAt: "2026-11-20T07:00:00Z", announce: true },
+  { id: "artifacts", releasedAt: "2026-11-20T07:00:00Z", includeNewcomers: true },
 ] as const satisfies readonly WhatsNewEntryData[];
 
 export type WhatsNewId = (typeof WHATS_NEW_ENTRIES)[number]["id"];
@@ -28,10 +19,6 @@ export function isWhatsNewId(value: unknown): value is WhatsNewId {
   return WHATS_NEW_ENTRIES.some((entry) => entry.id === value);
 }
 
-/**
- * The entries a person has still to see, oldest first: released by now and after they joined,
- * not dismissed, and with any experiment they need on.
- */
 export function pendingWhatsNew(
   entries: readonly WhatsNewEntryData[],
   viewer: {
@@ -46,7 +33,7 @@ export function pendingWhatsNew(
       const released = Date.parse(entry.releasedAt);
       return (
         released <= viewer.now.getTime() &&
-        released > viewer.joinedAt.getTime() &&
+        (entry.includeNewcomers === true || released > viewer.joinedAt.getTime()) &&
         !viewer.dismissed.includes(entry.id) &&
         (entry.experiment === undefined || viewer.experimentOn(entry.experiment))
       );
@@ -55,10 +42,6 @@ export function pendingWhatsNew(
     .map((entry) => entry.id);
 }
 
-/**
- * The pending entries, in their order, that open by themselves now: those marked `announce` that
- * this browser has not yet opened unasked (`announced`).
- */
 export function announcedWhatsNew<Id extends string>(
   entries: readonly WhatsNewEntryData[],
   pending: readonly Id[],

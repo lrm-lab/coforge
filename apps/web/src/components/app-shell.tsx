@@ -325,7 +325,7 @@ function WorkspaceChrome({
                   search={<SearchField />}
                   footer={
                     <>
-                      <WhatsNewRow />
+                      <WhatsNewRow base={base} />
                       <UserRow
                         base={base}
                         user={user}
@@ -347,7 +347,7 @@ function WorkspaceChrome({
                   }
                   footer={
                     <>
-                      <WhatsNewRailButton />
+                      <WhatsNewRailButton base={base} />
                       <NotificationBell
                         workspaceSlug={currentWorkspace.slug}
                         badgeRing="ring-sidebar"

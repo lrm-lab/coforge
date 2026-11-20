@@ -5,24 +5,21 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { m } from "#src/paraglide/messages";
+import { localizeHref } from "#src/paraglide/runtime";
 import { cx } from "#src/utils/cx";
 import { WHATS_NEW_CONTENT } from "./whats-new-content";
 import type { WhatsNewId } from "./whats-new-entries";
 
-/**
- * The "What's new" dialog (task #516): one page per entry, a large picture, the title and a few
- * sentences, paged with Next and Back. Centred on a wide screen, at the bottom on a phone. When it
- * goes, by "Got it", the close button, Escape or a click outside, `onClose` gets the entries whose
- * page was reached. The caller keeps `ids` fixed while it is open.
- */
 export function WhatsNewDialog({
   ids,
   open,
   onClose,
+  base,
 }: {
   ids: readonly WhatsNewId[];
   open: boolean;
   onClose: (seen: readonly WhatsNewId[]) => void;
+  base?: string;
 }) {
   const reached = useRef(0);
   return (
@@ -35,11 +32,12 @@ export function WhatsNewDialog({
       }}
       isDismissable
     >
-      <Modal className="w-full max-w-[30rem]">
+      <Modal className="w-full max-w-[30rem] overflow-hidden">
         <Dialog aria-label={m.whats_new_entry()}>
           {({ close }) => (
             <WhatsNewPages
               pages={ids}
+              base={base}
               onReach={(at) => (reached.current = Math.max(reached.current, at))}
               onDone={close}
             />
@@ -52,10 +50,12 @@ export function WhatsNewDialog({
 
 function WhatsNewPages({
   pages,
+  base,
   onReach,
   onDone,
 }: {
   pages: readonly WhatsNewId[];
+  base?: string;
   onReach: (index: number) => void;
   onDone: () => void;
 }) {
@@ -65,59 +65,67 @@ function WhatsNewPages({
   const entry = WHATS_NEW_CONTENT[id];
   const Illustration = entry.illustration;
   const last = index >= pages.length - 1;
+  const actionHref =
+    last && base && entry.action ? localizeHref(`${base}${entry.action.path}`) : undefined;
   const go = (to: number) => {
     setIndex(to);
     onReach(to);
   };
   return (
-    <div className="p-4 sm:p-5">
+    <div className="relative flex flex-col">
       <ButtonUtility
         icon={XClose}
         size="xs"
         color="tertiary"
         aria-label={m.whats_new_close()}
         onClick={onDone}
-        className="absolute top-6 right-6 z-10 bg-primary/80 backdrop-blur-xs hover:bg-primary"
+        className={cx(
+          "absolute top-3.5 right-3.5 z-10 rounded-full",
+          entry.heroTone === "dark" &&
+            "bg-overlay/30 text-white/90 ring-1 ring-white/15 backdrop-blur-sm hover:bg-overlay/50 hover:text-white",
+        )}
       />
-      <div
-        aria-hidden="true"
-        className="h-52 overflow-hidden rounded-xl bg-secondary ring-1 ring-secondary ring-inset sm:h-60"
-      >
+      <div aria-hidden="true" className="relative h-56 overflow-hidden bg-secondary sm:h-64">
         <Illustration />
       </div>
-      <div className="mt-5 px-1">
+      <div className="px-5 pt-5 pb-5 sm:px-6 sm:pb-6">
         <Heading slot="title" className="text-lg font-semibold text-primary">
           {entry.title()}
         </Heading>
         <p className="mt-1.5 text-md text-tertiary">{entry.body()}</p>
-      </div>
-      <div className="mt-6 flex items-center gap-2 px-1">
-        {pages.length > 1 && (
-          <div className="flex items-center gap-1.5" aria-hidden="true">
-            {pages.map((each, at) => (
-              <span
-                key={each}
-                className={cx(
-                  "h-1.5 rounded-full transition-[width,background-color] duration-(--duration-sm) ease-in-out",
-                  at === index ? "w-3.5 bg-fg-secondary" : "w-1.5 bg-quaternary",
-                )}
-              />
-            ))}
-          </div>
-        )}
-        <div className="ml-auto flex items-center gap-2">
-          {index > 0 && (
-            <Button size="sm" color="tertiary" onClick={() => go(index - 1)}>
-              {m.whats_new_back()}
-            </Button>
+        <div className="mt-6 flex items-center gap-2">
+          {pages.length > 1 && (
+            <div className="flex items-center gap-1.5" aria-hidden="true">
+              {pages.map((each, at) => (
+                <span
+                  key={each}
+                  className={cx(
+                    "h-1.5 rounded-full transition-[width,background-color] duration-(--duration-sm) ease-in-out",
+                    at === index ? "w-3.5 bg-fg-secondary" : "w-1.5 bg-quaternary",
+                  )}
+                />
+              ))}
+            </div>
           )}
-          <Button
-            size="sm"
-            color={last ? "primary" : "secondary"}
-            onClick={() => (last ? onDone() : go(index + 1))}
-          >
-            {last ? m.whats_new_got_it() : m.whats_new_next()}
-          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            {index > 0 && (
+              <Button size="sm" color="tertiary" onClick={() => go(index - 1)}>
+                {m.whats_new_back()}
+              </Button>
+            )}
+            <Button
+              size="sm"
+              color={last && !actionHref ? "primary" : "secondary"}
+              onClick={() => (last ? onDone() : go(index + 1))}
+            >
+              {last ? m.whats_new_got_it() : m.whats_new_next()}
+            </Button>
+            {actionHref && entry.action && (
+              <Button size="sm" color="primary" href={actionHref} onPress={onDone}>
+                {entry.action.label()}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>

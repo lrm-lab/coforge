@@ -6,35 +6,35 @@
   user-select: none;
   background:
     radial-gradient(
-      circle at 86% 18%,
-      rgba(206, 190, 255, 0.92) 0%,
-      rgba(143, 111, 242, 0.55) 28%,
-      rgba(93, 54, 220, 0.25) 54%,
+      circle at 86% 16%,
+      rgba(206, 190, 255, 0.82) 0%,
+      rgba(143, 111, 242, 0.46) 30%,
+      rgba(93, 54, 220, 0.22) 56%,
       transparent 78%
     ),
-    radial-gradient(circle at 18% 85%, rgba(93, 54, 220, 0.55) 0%, transparent 55%),
-    linear-gradient(125deg, #0d0a1f 0%, #1c1348 38%, #4d2cc9 74%, #9579f6 100%);
+    radial-gradient(circle at 14% 86%, rgba(93, 54, 220, 0.52) 0%, transparent 56%),
+    linear-gradient(128deg, #0e0b22 0%, #1d144a 40%, #4c2bc8 78%, #8568f2 100%);
 }
 
 .dark-mode .wna-root {
   background:
     radial-gradient(
-      circle at 86% 18%,
-      rgba(176, 154, 252, 0.72) 0%,
-      rgba(124, 92, 250, 0.44) 30%,
-      rgba(74, 42, 186, 0.24) 56%,
+      circle at 86% 16%,
+      rgba(167, 146, 250, 0.62) 0%,
+      rgba(124, 92, 250, 0.36) 30%,
+      rgba(67, 36, 174, 0.22) 56%,
       transparent 78%
     ),
-    radial-gradient(circle at 18% 85%, rgba(93, 54, 220, 0.48) 0%, transparent 55%),
-    linear-gradient(125deg, #0a0818 0%, #17103b 42%, #3f23a8 78%, #775ae2 100%);
+    radial-gradient(circle at 14% 86%, rgba(93, 54, 220, 0.46) 0%, transparent 56%),
+    linear-gradient(128deg, #0b091a 0%, #161038 42%, #3a209e 80%, #6d50d9 100%);
 }
 
 .wna-aurora {
   position: absolute;
   inset: -25%;
   background:
-    radial-gradient(circle at 74% 30%, rgba(197, 186, 254, 0.34), transparent 44%),
-    radial-gradient(circle at 26% 72%, rgba(93, 54, 220, 0.34), transparent 50%);
+    radial-gradient(circle at 74% 28%, rgba(197, 186, 254, 0.32), transparent 44%),
+    radial-gradient(circle at 24% 74%, rgba(93, 54, 220, 0.32), transparent 50%);
   pointer-events: none;
   will-change: transform;
 }
@@ -46,7 +46,7 @@
   width: 30rem;
   height: 16.875rem;
   transform-origin: center center;
-  transform: translate(-50%, -50%) scale(var(--wna-scale, 0.88));
+  transform: translate(-50%, -50%) scale(var(--wna-scale, 0.94));
 }
 
 .wna-smooth {
@@ -54,57 +54,59 @@
     background-color 460ms cubic-bezier(0.22, 1, 0.36, 1),
     border-color 460ms cubic-bezier(0.22, 1, 0.36, 1),
     color 460ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 460ms cubic-bezier(0.22, 1, 0.36, 1),
     opacity 420ms cubic-bezier(0.22, 1, 0.36, 1),
     transform 460ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .wna-bar {
   flex: 1;
-  border-radius: 2px;
+  border-radius: 2.5px;
   transition:
     height 520ms cubic-bezier(0.22, 1, 0.36, 1),
-    background-color 460ms cubic-bezier(0.22, 1, 0.36, 1);
+    background-color 460ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 460ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .wna-version-tab {
   position: absolute;
   height: 1.5rem;
   border-radius: 0.625rem 0.625rem 0 0;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.28);
   backdrop-filter: blur(8px);
   display: flex;
   align-items: flex-start;
   padding: 0.125rem 0.6875rem 0;
-  font-size: 0.5rem;
+  font-size: 0.53125rem;
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: 0.01em;
 }
 
 .wna-tab-v1 {
-  top: 1.625rem;
-  left: 8.25rem;
-  width: 15.875rem;
-  background: rgba(203, 190, 255, 0.22);
+  top: 1.0625rem;
+  left: 6.25rem;
+  width: 20.25rem;
+  background: rgba(203, 190, 255, 0.2);
   color: rgba(255, 255, 255, 0.72);
   z-index: 2;
 }
 
 .wna-tab-v2 {
-  top: 2.3125rem;
-  left: 7.375rem;
-  width: 17.625rem;
-  background: rgba(230, 222, 255, 0.42);
+  top: 1.75rem;
+  left: 5.375rem;
+  width: 22rem;
+  background: rgba(230, 222, 255, 0.36);
   color: rgba(255, 255, 255, 0.92);
   z-index: 3;
 }
 
 .wna-mascot-wrap {
   position: absolute;
-  left: 1rem;
-  top: 7rem;
-  width: 4.5rem;
-  height: 4.5rem;
+  left: 0.75rem;
+  top: 7.5rem;
+  width: 3.375rem;
+  height: 3.375rem;
   z-index: 16;
 }
 
@@ -114,8 +116,8 @@
   border-radius: 9999px;
   background: radial-gradient(
     circle,
-    rgba(167, 139, 250, 0.52) 0%,
-    rgba(93, 54, 220, 0.16) 56%,
+    rgba(167, 139, 250, 0.56) 0%,
+    rgba(93, 54, 220, 0.18) 56%,
     transparent 76%
   );
   opacity: 0;
@@ -125,21 +127,18 @@
 
 .wna-mascot-img {
   position: relative;
-  width: 4.5rem;
-  height: 4.5rem;
+  width: 3.375rem;
+  height: 3.375rem;
   object-fit: contain;
   transform-origin: center bottom;
   will-change: transform;
-  filter: drop-shadow(1.5px 0 0 #ffffff) drop-shadow(-1.5px 0 0 #ffffff)
-    drop-shadow(0 1.5px 0 #ffffff) drop-shadow(0 -1.5px 0 #ffffff) drop-shadow(1px 1px 0 #ffffff)
-    drop-shadow(-1px -1px 0 #ffffff) drop-shadow(1px -1px 0 #ffffff) drop-shadow(-1px 1px 0 #ffffff)
-    drop-shadow(0 8px 16px rgba(12, 8, 36, 0.38));
+  filter: drop-shadow(0 10px 18px rgba(10, 6, 36, 0.52));
 }
 
 .wna-reply-bubble {
   position: absolute;
-  left: 3.25rem;
-  top: 5.375rem;
+  left: 1.375rem;
+  top: 5.75rem;
   z-index: 26;
   height: 1.3125rem;
   min-width: 2.125rem;
@@ -153,7 +152,7 @@
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transform-origin: bottom left;
+  transform-origin: bottom center;
   transform: translateY(0.375rem) scale(0.76);
   transition:
     opacity 300ms ease,
@@ -166,7 +165,7 @@
 .wna-reply-bubble::after {
   content: "";
   position: absolute;
-  left: 0.4375rem;
+  left: 0.75rem;
   bottom: -0.25rem;
   width: 0.4375rem;
   height: 0.4375rem;
@@ -234,15 +233,15 @@
 
 .wna-win {
   position: absolute;
-  left: 6.375rem;
-  top: 3.375rem;
-  width: 19.625rem;
-  height: 11.5rem;
-  border-radius: 0.6875rem;
+  left: 4.5rem;
+  top: 2.75rem;
+  width: 23.75rem;
+  height: 12.75rem;
+  border-radius: 0.75rem;
   background: #ffffff;
   box-shadow:
-    0 20px 44px -10px rgba(10, 7, 30, 0.48),
-    0 0 0 1px rgba(255, 255, 255, 0.85);
+    0 22px 48px -10px rgba(10, 6, 32, 0.54),
+    0 0 0 1px rgba(255, 255, 255, 0.88);
   overflow: hidden;
   z-index: 10;
   display: flex;
@@ -273,9 +272,9 @@
 }
 
 .wna-header {
-  height: 1.75rem;
+  height: 1.875rem;
   border-bottom: 1px solid #e6eaf2;
-  padding: 0 0.625rem;
+  padding: 0 0.6875rem;
   display: flex;
   align-items: center;
   gap: 0.4375rem;
@@ -284,7 +283,7 @@
 }
 
 .wna-title {
-  font-size: 0.5625rem;
+  font-size: 0.625rem;
   font-weight: 600;
   color: #101319;
   letter-spacing: -0.01em;
@@ -296,9 +295,9 @@
 .wna-ver-pill {
   margin-left: auto;
   flex-shrink: 0;
-  font-size: 0.5rem;
+  font-size: 0.53125rem;
   font-weight: 600;
-  padding: 0.09375rem 0.375rem;
+  padding: 0.09375rem 0.40625rem;
   border-radius: 0.3125rem;
   background: #f4f6fa;
   color: #475467;
@@ -308,8 +307,8 @@
 }
 
 .wna-globe {
-  width: 0.875rem;
-  height: 0.875rem;
+  width: 0.9375rem;
+  height: 0.9375rem;
   flex-shrink: 0;
   border-radius: 9999px;
   background: #efe8ff;
@@ -320,53 +319,27 @@
 }
 
 .wna-body {
+  position: relative;
   flex: 1;
   display: flex;
   min-height: 0;
 }
 
-.wna-sidebar {
-  width: 1.875rem;
-  background: #f8f7fe;
-  border-right: 1px solid #e6eaf2;
-  padding: 0.4375rem 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.375rem;
-  flex-shrink: 0;
-}
-
-.wna-nav-icon {
-  width: 1.25rem;
-  height: 1.25rem;
-  border-radius: 0.375rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #777d8d;
-}
-
-.wna-nav-icon-active {
-  background: #efe8ff;
-  color: #5d36dc;
-  box-shadow: inset 0 0 0 1px rgba(93, 54, 220, 0.16);
-}
-
 .wna-canvas {
+  position: relative;
   flex: 1;
   background: #f8f9fc;
-  padding: 0.5rem;
+  padding: 0.5625rem;
   display: grid;
-  grid-template-columns: 1.55fr 0.85fr;
-  gap: 0.4375rem;
+  grid-template-columns: 1.62fr 0.78fr;
+  gap: 0.5rem;
   min-width: 0;
 }
 
 .wna-left-col {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
+  gap: 0.4375rem;
   min-width: 0;
 }
 
@@ -374,7 +347,7 @@
   background: #ffffff;
   border: 1px solid #e6eaf2;
   border-radius: 0.5rem;
-  padding: 0.4375rem 0.5rem;
+  padding: 0.5rem 0.5625rem;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -391,47 +364,47 @@
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  font-size: 0.46875rem;
+  font-size: 0.53125rem;
   font-weight: 600;
   color: #344054;
 }
 
 .wna-chart-dot {
-  width: 0.3125rem;
-  height: 0.3125rem;
+  width: 0.34375rem;
+  height: 0.34375rem;
   border-radius: 9999px;
   background: #5d36dc;
 }
 
 .wna-delta {
-  font-size: 0.4375rem;
+  font-size: 0.5rem;
   font-weight: 600;
   color: #5d36dc;
   background: #efe8ff;
-  padding: 0.0625rem 0.25rem;
+  padding: 0.0625rem 0.28125rem;
   border-radius: 0.25rem;
   font-variant-numeric: tabular-nums;
 }
 
 .wna-kpi-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1.25fr;
-  gap: 0.3125rem;
-  height: 3rem;
+  grid-template-columns: 0.9fr 0.9fr 1.45fr;
+  gap: 0.375rem;
+  height: 3.375rem;
 }
 
 .wna-kpi-card {
   background: #ffffff;
   border: 1px solid #e6eaf2;
   border-radius: 0.4375rem;
-  padding: 0.3125rem 0.375rem;
+  padding: 0.375rem 0.4375rem;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
 }
 
 .wna-kpi-num {
-  font-size: 0.5625rem;
+  font-size: 0.625rem;
   font-weight: 700;
   color: #101319;
   line-height: 1;
@@ -443,7 +416,7 @@
   background: #ffffff;
   border: 1px solid #e6eaf2;
   border-radius: 0.4375rem;
-  padding: 0.3125rem 0.375rem;
+  padding: 0.375rem 0.4375rem;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -456,15 +429,15 @@
 }
 
 .wna-funnel-label {
-  font-size: 0.4375rem;
+  font-size: 0.5rem;
   font-weight: 600;
   color: #667085;
   line-height: 1;
 }
 
 .wna-funnel-check {
-  width: 0.625rem;
-  height: 0.625rem;
+  width: 0.6875rem;
+  height: 0.6875rem;
   border-radius: 9999px;
   background: #10b981;
   color: #ffffff;
@@ -481,8 +454,8 @@
 .wna-bars {
   display: flex;
   align-items: flex-end;
-  gap: 0.1875rem;
-  height: 1.375rem;
+  gap: 0.21875rem;
+  height: 1.5625rem;
 }
 
 .wna-orange-box {
@@ -531,27 +504,27 @@
   background: #ffffff;
   border: 1px solid #e6eaf2;
   border-radius: 0.5rem;
-  padding: 0.4375rem;
+  padding: 0.5rem;
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
+  gap: 0.40625rem;
 }
 
 .wna-review-card {
   position: absolute;
-  right: 1.125rem;
-  bottom: 2.625rem;
-  width: 10.125rem;
+  right: 0.5625rem;
+  bottom: 2.375rem;
+  width: 10.625rem;
   background: #ffffff;
   border-radius: 0.6875rem;
   padding: 0.5rem 0.5625rem;
   z-index: 30;
   box-shadow:
-    0 16px 32px -6px rgba(10, 7, 30, 0.38),
+    0 14px 30px -6px rgba(10, 7, 30, 0.32),
     0 0 0 1px rgba(224, 229, 241, 0.98);
   transform-origin: bottom right;
   opacity: 0;
-  transform: translateY(0.5rem) scale(0.92);
+  transform: translateY(0.4375rem) scale(0.92);
   transition:
     opacity 300ms ease,
     transform 400ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -578,18 +551,18 @@
   color: #ef6820;
   border-radius: 0.25rem;
   padding: 0.0625rem 0.3125rem;
-  font-size: 0.46875rem;
+  font-size: 0.5rem;
   font-weight: 600;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .wna-review-text {
   margin-top: 0.1875rem;
-  font-size: 0.5rem;
+  font-size: 0.53125rem;
   line-height: 1.3;
   color: #101319;
   font-weight: 500;
-  min-height: 0.6875rem;
+  min-height: 0.75rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -613,8 +586,8 @@
 
 .wna-fab {
   position: absolute;
-  right: 1.25rem;
-  bottom: 0.75rem;
+  right: 0.5625rem;
+  bottom: 0.5625rem;
   width: 1.5rem;
   height: 1.5rem;
   border-radius: 9999px;
@@ -625,7 +598,7 @@
   align-items: center;
   justify-content: center;
   box-shadow:
-    0 6px 14px rgba(10, 7, 30, 0.36),
+    0 6px 14px rgba(10, 7, 30, 0.28),
     inset 0 0 0 1px rgba(255, 255, 255, 0.14);
   transition:
     color 280ms ease,
@@ -692,11 +665,49 @@
   top: 0.625rem;
   background: #5d36dc;
   color: #ffffff;
-  font-size: 0.40625rem;
+  font-size: 0.4375rem;
   font-weight: 700;
   padding: 0.09375rem 0.3125rem;
   border-radius: 9999px;
   box-shadow: 0 3px 8px rgba(93, 54, 220, 0.38);
   white-space: nowrap;
   letter-spacing: 0.02em;
+}
+
+.wna-thumb {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      circle at 86% 18%,
+      rgba(196, 178, 255, 0.78) 0%,
+      rgba(124, 92, 250, 0.38) 38%,
+      transparent 74%
+    ),
+    linear-gradient(132deg, #100c26 0%, #24185a 46%, #5935d8 100%);
+}
+
+.wna-thumb-card {
+  position: absolute;
+  inset: 0.5rem 0.625rem -0.25rem;
+  border-radius: 0.4375rem 0.4375rem 0 0;
+  background: #ffffff;
+  box-shadow:
+    0 8px 18px -4px rgba(10, 6, 32, 0.48),
+    0 0 0 1px rgba(255, 255, 255, 0.85);
+  padding: 0.3125rem 0.4375rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.group:hover .wna-thumb-card {
+  transform: translateY(-2px);
+}
+
+.wna-thumb-mascot {
+  filter: drop-shadow(0 6px 10px rgba(16, 12, 42, 0.3));
 }

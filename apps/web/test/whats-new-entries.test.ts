@@ -60,16 +60,27 @@ test("an entry whose experiment is off is skipped, and shows once it is on", () 
   expect(pendingWhatsNew(entries, { ...off, experimentOn: () => true })).toEqual(["needs-docs"]);
 });
 
+test("an entry with includeNewcomers shows to people who joined after release until dismissed", () => {
+  const withAll: WhatsNewEntryData[] = [
+    ...entries,
+    { id: "artifacts", releasedAt: "2026-11-04T07:02:00Z", includeNewcomers: true },
+  ];
+  const newcomer = {
+    ...viewer,
+    joinedAt: new Date("2026-11-04T09:00:00Z"),
+  };
+  expect(pendingWhatsNew(withAll, newcomer)).toEqual(["artifacts"]);
+  expect(pendingWhatsNew(withAll, { ...newcomer, dismissed: ["artifacts"] })).toEqual([]);
+});
+
 test("an announced entry opens by itself once; the others wait for the row", () => {
   const data: WhatsNewEntryData[] = [
     { id: "small", releasedAt: "2026-11-04T07:00:00Z" },
     { id: "big", releasedAt: "2026-11-04T07:01:00Z", announce: true },
     { id: "bigger", releasedAt: "2026-11-04T07:02:00Z", announce: true },
   ];
-  // Only what still waits, in its order.
   expect(announcedWhatsNew(data, ["big", "small", "bigger"], [])).toEqual(["big", "bigger"]);
-  // One this browser already opened by itself is not opened again.
   expect(announcedWhatsNew(data, ["small", "big", "bigger"], ["big"])).toEqual(["bigger"]);
-  // An announced entry no longer pending (seen, or not yet released) does not open.
   expect(announcedWhatsNew(data, ["small"], [])).toEqual([]);
+  expect(announcedWhatsNew(WHATS_NEW_ENTRIES, ["artifacts"], [])).toEqual([]);
 });

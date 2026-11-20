@@ -6,23 +6,18 @@ import { opensKeyboard } from "#src/hooks/use-keyboard-field-focused";
 import { UnreadDot } from "#src/components/ui/unread-marker";
 import { m } from "#src/paraglide/messages";
 import { useWhatsNew } from "./use-whats-new";
+import { WHATS_NEW_CONTENT } from "./whats-new-content";
 import { WhatsNewDialog } from "./whats-new-dialog";
 import { announcedWhatsNew, WHATS_NEW_ENTRIES, type WhatsNewId } from "./whats-new-entries";
 
-/**
- * "What's new" (task #516): a row with a dot, only while entries wait (task #585). It opens the
- * dialog on them; whatever was reached is then seen, and once nothing waits the row goes until the
- * next release. The sidebar draws the row (`WhatsNewRow`, `WhatsNewRailButton`) and so does the
- * Me page, from the same state.
- */
-export function useWhatsNewEntry() {
+export function useWhatsNewEntry(base?: string) {
   const { pending, dismiss } = useWhatsNew();
-  // What the dialog pages through stays as it was when it opened.
   const [shown, setShown] = useState<readonly WhatsNewId[] | null>(null);
   const dialog = (
     <WhatsNewDialog
       ids={shown ?? []}
       open={shown !== null}
+      base={base}
       onClose={(seen) => {
         dismiss(seen.filter((id) => pending.includes(id)));
         setShown(null);
@@ -38,9 +33,7 @@ export function useWhatsNewEntry() {
   };
 }
 
-/** Where this browser keeps the entries it has opened unasked. */
 const ANNOUNCED_KEY = "coforge-whats-new-announced";
-/** How long the keyboard has to rest before an entry opens by itself. */
 const QUIET_MS = 3000;
 
 function readAnnounced(): string[] {
@@ -56,11 +49,10 @@ function writeAnnounced(ids: readonly string[]) {
   try {
     localStorage.setItem(ANNOUNCED_KEY, JSON.stringify(ids));
   } catch {
-    // Private mode or full storage: it may open once more on the next visit.
+    return;
   }
 }
 
-/** Whether the focused field holds something being written, which a dialog would interrupt. */
 function draftFocused() {
   const field = document.activeElement as HTMLElement | null;
   if (!field || !opensKeyboard(field)) return false;
@@ -68,15 +60,8 @@ function draftFocused() {
   return (text ?? "").trim() !== "";
 }
 
-/**
- * Opens the entries marked `announce` once, by themselves (Frank, 11-12: few people press the row
- * unasked), at a calm moment: the tab is in view, the keyboard has rested a while, no focused field
- * holds a draft and no other dialog is up.
- * This browser remembers them, so a reload does not reopen one. Closing it marks what was reached
- * seen, as from the row; whatever it did not reach keeps the row. Mounted once, by the shell.
- */
-export function WhatsNewAnnouncer() {
-  const entry = useWhatsNewEntry();
+export function WhatsNewAnnouncer({ base }: { base?: string } = {}) {
+  const entry = useWhatsNewEntry(base);
   const due = useEffectEvent(() =>
     announcedWhatsNew(WHATS_NEW_ENTRIES, entry.pending, readAnnounced()),
   );
@@ -88,7 +73,6 @@ export function WhatsNewAnnouncer() {
   });
   const pendingKey = entry.pending.join(" ");
   useEffect(() => {
-    // Nothing to open by itself, so nothing to wait for.
     if (!pendingKey || due().length === 0) return;
     let lastKey = Date.now();
     const onKey = () => {
@@ -110,33 +94,51 @@ export function WhatsNewAnnouncer() {
   return entry.dialog;
 }
 
-/** The row at the foot of the expanded sidebar. */
-export function WhatsNewRow() {
-  const entry = useWhatsNewEntry();
-  // The dialog stays mounted, so it closes in place once the row goes with the last entry.
+export function WhatsNewRow({ base }: { base?: string } = {}) {
+  const entry = useWhatsNewEntry(base);
+  const featuredId = entry.pending.at(-1);
+  const featured = featuredId ? WHATS_NEW_CONTENT[featuredId] : null;
+  const Thumb = featured?.thumbnail;
   return (
     <>
-      {entry.visible && (
-        <AriaButton
-          onPress={entry.open}
-          className="group flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm font-medium text-nav-fg outline-focus-ring transition-colors duration-100 ease-out hover:bg-sidebar-item-active hover:text-secondary focus-visible:outline-2 focus-visible:outline-offset-2"
-        >
-          <Announcement02
+      {entry.visible && featured && Thumb && (
+        <div className="relative pt-4 pb-1">
+          <img
+            src="/agent-avatars/mascot-purple-5.webp"
+            alt=""
             aria-hidden="true"
-            className="size-5 shrink-0 text-nav-fg transition-colors duration-100 ease-out group-hover:text-secondary"
+            decoding="async"
+            className="wna-thumb-mascot pointer-events-none absolute -top-0.5 right-3 z-10 size-9 -rotate-6 object-contain"
           />
-          <span className="min-w-0 flex-1 truncate text-left">{m.whats_new_entry()}</span>
-          <UnreadDot />
-        </AriaButton>
+          <AriaButton
+            onPress={entry.open}
+            aria-label={m.whats_new_entry()}
+            className="group relative flex w-full cursor-pointer flex-col rounded-xl bg-primary p-2.5 text-left ring-1 ring-secondary outline-focus-ring transition-colors duration-150 ease-out hover:bg-primary_hover focus-visible:outline-2 focus-visible:outline-offset-2"
+          >
+            <span className="flex items-center gap-1.5 text-[0.6875rem] font-semibold tracking-wider text-quaternary uppercase">
+              <UnreadDot />
+              <span className="truncate">{m.whats_new_entry()}</span>
+            </span>
+            <div
+              aria-hidden="true"
+              className="mt-2 h-16 w-full overflow-hidden rounded-lg ring-1 ring-secondary ring-inset"
+            >
+              <Thumb />
+            </div>
+            <span className="mt-2 block truncate text-xs font-semibold text-primary">
+              {featured.title()}
+            </span>
+            <span className="mt-0.5 line-clamp-2 text-xs text-tertiary">{featured.teaser()}</span>
+          </AriaButton>
+        </div>
       )}
       {entry.dialog}
     </>
   );
 }
 
-/** The same entry in the collapsed rail: the icon, named by its tooltip. */
-export function WhatsNewRailButton() {
-  const entry = useWhatsNewEntry();
+export function WhatsNewRailButton({ base }: { base?: string } = {}) {
+  const entry = useWhatsNewEntry(base);
   return (
     <>
       {entry.visible && (

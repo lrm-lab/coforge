@@ -12,14 +12,10 @@ import { workspacePath } from "#src/features/workspaces/workspace-url";
 import { m } from "#src/paraglide/messages";
 import { localizeHref } from "#src/paraglide/runtime";
 
-/**
- * The phone's Me tab: the signed-in person's avatar, name and email, then what the desktop's user
- * menu and sidebar offer them: personal settings, What's new (while entries wait) and sign out.
- */
 export function MePage() {
   const { user, onSignOut } = usePhoneShell();
   const workspaceSlug = useWorkspaceSlug();
-  const whatsNew = useWhatsNewEntry();
+  const whatsNew = useWhatsNewEntry(workspacePath(workspaceSlug));
   return (
     <ShellLinks>
       <div className="flex min-h-0 flex-1 flex-col">
