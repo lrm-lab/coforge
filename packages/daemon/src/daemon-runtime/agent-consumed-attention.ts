@@ -10,6 +10,7 @@ import { LatestThreadReadIndex } from "./latest-thread-read-index";
 import type { PreviewSeen } from "./inbox-preview-rows";
 import { noteFrontierSource, type FrontierSource } from "./agent-message-attention-frontier-source";
 import {
+  consumedReadBasis,
   consumedSnapshot,
   byNumber,
   containsSorted,
@@ -122,8 +123,10 @@ export class AgentConsumedAttention {
     if (this.#setAlias(agentId, spelling, canonical)) this.#persist(agentId);
   }
   hasSeen(agentId: string, target: string, sequence: number): boolean {
-    const entry = this.#consumedState(agentId).targets.get(target);
-    return (entry?.seq ?? 0) >= sequence || containsSorted(entry?.exactSeqs, sequence);
+    return this.readBasis(agentId, target, sequence) !== undefined;
+  }
+  readBasis(agentId: string, target: string, sequence: number) {
+    return consumedReadBasis(this.#consumedState(agentId).targets.get(target), sequence);
   }
   bindConversation(agentId: string, target: string, conversationId: string): void {
     const entry = this.#targetState(agentId, target);

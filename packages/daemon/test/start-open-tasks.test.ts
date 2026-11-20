@@ -237,7 +237,8 @@ describe("start open tasks propagation", () => {
       currentAttention: new Map(),
       seenDeliveryIds: new Set(),
       seenMessageIds: new Set(),
-      alreadyRead: () => false,
+      readBasis: () => undefined,
+      notificationInFlight: () => false,
       alreadyNotified: () => false,
       decide: () => {},
     });
@@ -266,7 +267,8 @@ describe("start open tasks propagation", () => {
       currentAttention: new Map(),
       seenDeliveryIds: new Set(),
       seenMessageIds: new Set(),
-      alreadyRead: () => false,
+      readBasis: () => undefined,
+      notificationInFlight: () => false,
       alreadyNotified: () => false,
       decide: () => {},
     });

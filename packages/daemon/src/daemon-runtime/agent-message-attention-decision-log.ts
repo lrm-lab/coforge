@@ -1,13 +1,26 @@
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
-import { containsSorted } from "./agent-message-attention-index-helpers";
+import {
+  consumedReadBasis,
+  containsSorted,
+  type ConsumedReadBasis,
+} from "./agent-message-attention-index-helpers";
 import { frontierSourceOf } from "./agent-message-attention-frontier-source";
 
 const logger = getLogger(["coforge", "daemon", "message-attention"]);
 
-export type AttentionDecisionOutcome = "notified" | "held" | "consumed" | "already_notified";
+export type AttentionDecisionOutcome =
+  | "notified"
+  | "held"
+  | "consumed"
+  | "already_notified"
+  | "notification_in_flight";
 
-export type AttentionDedupBasis = "accepted_message" | "delivery_generation";
+export type AttentionReadBasis = ConsumedReadBasis | "full_preview";
+export type AttentionDecisionBasis =
+  | AttentionReadBasis
+  | "accepted_message"
+  | "delivery_generation";
 
 export type AttentionDecisionMessage = {
   workspaceId: string;
@@ -30,15 +43,13 @@ export function logAttentionDecision(
   outcome: AttentionDecisionOutcome,
   state: AttentionDecisionState | undefined,
   target: string,
-  dedupBasis?: AttentionDedupBasis,
+  basis?: AttentionDecisionBasis,
 ): void {
   const entry = state?.targets.get(target);
-  const exactSeen = containsSorted(entry?.exactSeqs, message.sequence);
-  let basis: AttentionDedupBasis | "read_frontier" | "exact_read" | undefined;
-  if (outcome === "already_notified") basis = dedupBasis ?? "delivery_generation";
-  if (outcome === "consumed" && entry?.conversationId === message.conversationId) {
-    if ((entry?.seq ?? 0) >= message.sequence) basis = "read_frontier";
-    else if (exactSeen) basis = "exact_read";
+  if (basis === undefined) {
+    if (outcome === "already_notified") basis = "delivery_generation";
+    if (outcome === "consumed" && entry?.conversationId === message.conversationId)
+      basis = consumedReadBasis(entry, message.sequence);
   }
   logger.info("Agent delivery attention decided", {
     event: "agent.message.attention_decision",
@@ -57,7 +68,7 @@ export function logAttentionDecision(
     decision_basis: basis,
     model_seen_seq: entry?.seq ?? 0,
     frontier_source: frontierSourceOf(entry),
-    exact_seen: exactSeen,
+    exact_seen: containsSorted(entry?.exactSeqs, message.sequence),
   });
 }
 

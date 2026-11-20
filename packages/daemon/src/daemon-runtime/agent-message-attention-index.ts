@@ -26,7 +26,8 @@ import {
   logRecoveryNoticeAccepted,
   type AttentionDecisionMessage,
   type AttentionDecisionOutcome,
-  type AttentionDedupBasis,
+  type AttentionDecisionBasis,
+  type AttentionReadBasis,
 } from "./agent-message-attention-decision-log";
 import { planRecovery, type RecoveryNoticeOptions } from "./agent-message-attention-recovery";
 import { AgentConsumedAttention } from "./agent-consumed-attention";
@@ -101,15 +102,16 @@ export class AgentMessageAttentionIndex {
     const generation = this.#generation(message.agentId);
     if (attentionRecorded(generation, message.deliveryId)) {
       if (!generation.notified.has(message.deliveryId)) {
-        if (this.#alreadyRead(message.agentId, message)) {
-          this.logDecision(message, "consumed");
+        const readBasis = this.#readBasis(message.agentId, message);
+        if (readBasis) {
+          this.logDecision(message, "consumed", readBasis);
           await this.acknowledge(message);
           return;
         }
 
         if (this.hold.shouldHold(message.agentId)) return this.#hold(message);
         const attempt = generation.notificationAttempts.get(message.deliveryId);
-        this.logDecision(message, attempt ? "already_notified" : "notified");
+        this.logDecision(message, attempt ? "notification_in_flight" : "notified");
         await (attempt ?? this.#notify(message));
         if (this.#generations.get(message.agentId) !== generation) return;
       } else this.logDecision(message, "already_notified");
@@ -117,8 +119,9 @@ export class AgentMessageAttentionIndex {
       return;
     }
     rememberDelivery(generation, message.deliveryId);
-    if (this.#alreadyRead(message.agentId, message)) {
-      this.logDecision(message, "consumed");
+    const readBasis = this.#readBasis(message.agentId, message);
+    if (readBasis) {
+      this.logDecision(message, "consumed", readBasis);
       await this.acknowledge(message);
       return;
     }
@@ -147,10 +150,10 @@ export class AgentMessageAttentionIndex {
       await this.#notify(message, this.#recordAttention(message));
     } else if (
       !generation.notified.has(message.deliveryId) &&
-      !this.#alreadyRead(message.agentId, message)
+      !this.#readBasis(message.agentId, message)
     ) {
       const attempt = generation.notificationAttempts.get(message.deliveryId);
-      this.logDecision(message, attempt ? "already_notified" : "notified");
+      this.logDecision(message, attempt ? "notification_in_flight" : "notified");
       await (attempt ?? this.#notify(message));
     }
     return this.#generations.get(message.agentId) === generation ? "told" : "gone";
@@ -158,7 +161,7 @@ export class AgentMessageAttentionIndex {
   logDecision(
     message: AttentionDecisionMessage,
     outcome: AttentionDecisionOutcome,
-    basis?: AttentionDedupBasis,
+    basis?: AttentionDecisionBasis,
   ): void {
     logAttentionDecision(
       message,
@@ -168,7 +171,7 @@ export class AgentMessageAttentionIndex {
       basis,
     );
   }
-  #alreadyRead(
+  #readBasis(
     agentId: string,
     message: {
       target: string;
@@ -176,12 +179,13 @@ export class AgentMessageAttentionIndex {
       conversationId: string;
       reason?: string;
     },
-  ): boolean {
-    if (isCardEvent(message)) return false;
-    this.bindConversation(agentId, message.target, message.conversationId);
+  ): AttentionReadBasis | undefined {
+    if (isCardEvent(message)) return undefined;
+    const { target, sequence } = message;
+    this.bindConversation(agentId, target, message.conversationId);
     return (
-      this.hasSeen(agentId, message.target, message.sequence) ||
-      this.previewSeen.has(agentId, message.target, message.sequence)
+      this.#consumption.readBasis(agentId, target, sequence) ??
+      (this.previewSeen.has(agentId, target, sequence) ? "full_preview" : undefined)
     );
   }
   wasNotified(message: AgentMessageDelivery): boolean {
@@ -205,8 +209,9 @@ export class AgentMessageAttentionIndex {
         this.logDecision(message, "already_notified", "accepted_message");
         continue;
       }
-      if (this.#alreadyRead(agentId, message)) {
-        this.logDecision(message, "consumed");
+      const readBasis = this.#readBasis(agentId, message);
+      if (readBasis) {
+        this.logDecision(message, "consumed", readBasis);
         continue;
       }
       if (attentionRecorded(generation, message.deliveryId)) {
@@ -214,10 +219,6 @@ export class AgentMessageAttentionIndex {
         continue;
       }
       rememberDelivery(generation, message.deliveryId);
-      if (this.#alreadyRead(agentId, message)) {
-        this.logDecision(message, "consumed");
-        continue;
-      }
       this.#recordAttention(message);
       announced.push(message);
     }
@@ -250,7 +251,8 @@ export class AgentMessageAttentionIndex {
       currentAttention: this.#attention.get(agentId) ?? new Map<string, MessageAttention>(),
       seenDeliveryIds: generation.seenDeliveryIds,
       seenMessageIds: generation.seenMessageIds,
-      alreadyRead: (id, message) => this.#alreadyRead(id, message),
+      readBasis: (id, message) => this.#readBasis(id, message),
+      notificationInFlight: (message) => generation.notificationAttempts.has(message.deliveryId),
       alreadyNotified: (message) => this.#acceptedNotices.has(agentId, message),
       decide: (message, outcome, basis) =>
         this.logDecision({ ...message, workspaceId: this.#workspaceId, agentId }, outcome, basis),

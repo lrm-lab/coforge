@@ -23,7 +23,9 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   leaves the consumed cursor and reliable-message retry schedule independent.
 - To trace replay, match `agent.message.attention_decision` by Agent, daemon PID,
   conversation and message ID. Its decision basis distinguishes the read frontier,
-  an exact read, an accepted message identity and delivery-generation deduplication.
+  an exact read, a full preview, an accepted message identity and delivery-generation
+  deduplication. `notification_in_flight` records a duplicate while the existing attempt awaits
+  runtime acceptance.
   `agent.message.consumed_cursors_restored` and `agent.message.notice_context_resumed`
   report which state was recovered. `agent.message.recovery_notice_accepted` counts
   listed messages and summary unread separately after the runtime accepts the notice.

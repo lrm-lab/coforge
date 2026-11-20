@@ -40,6 +40,16 @@ export function containsSorted(values: readonly number[] | undefined, value: num
   return values[index] === value;
 }
 
+export type ConsumedReadBasis = "read_frontier" | "exact_read";
+
+export function consumedReadBasis(
+  entry: { seq?: number; exactSeqs?: readonly number[] } | undefined,
+  sequence: number,
+): ConsumedReadBasis | undefined {
+  if ((entry?.seq ?? 0) >= sequence) return "read_frontier";
+  if (containsSorted(entry?.exactSeqs, sequence)) return "exact_read";
+}
+
 /** The deliveries that carry news about a message the Agent itself authored: its action card was
  * answered, completed, or declined (`choice`) or expired (`expired`). The read state that already
  * covers the card cannot cover the event, so these always deserve a notice. */

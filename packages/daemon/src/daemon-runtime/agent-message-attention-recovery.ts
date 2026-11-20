@@ -6,7 +6,8 @@ import {
 import { composeRecoveryNotice } from "./agent-recovery-notice";
 import type {
   AttentionDecisionOutcome,
-  AttentionDedupBasis,
+  AttentionDecisionBasis,
+  AttentionReadBasis,
 } from "./agent-message-attention-decision-log";
 import type { MessageAttention } from "./agent-message-attention-index";
 import { foldMessageAttention, isDeliveryTarget } from "./message-attention-fields";
@@ -39,12 +40,13 @@ export function planRecovery(input: {
   currentAttention: ReadonlyMap<string, MessageAttention>;
   seenDeliveryIds: ReadonlySet<string>;
   seenMessageIds: ReadonlySet<string>;
-  alreadyRead(agentId: string, message: AgentRecoveryMessage): boolean;
+  readBasis(agentId: string, message: AgentRecoveryMessage): AttentionReadBasis | undefined;
+  notificationInFlight(message: AgentRecoveryMessage): boolean;
   alreadyNotified(message: AgentRecoveryMessage): boolean;
   decide(
     message: AgentRecoveryMessage,
     outcome: AttentionDecisionOutcome,
-    basis?: AttentionDedupBasis,
+    basis?: AttentionDecisionBasis,
   ): void;
 }): RecoveryPlan | undefined {
   const { agentId, messages, unreadSummary, decide } = input;
@@ -65,15 +67,19 @@ export function planRecovery(input: {
       !isValidMessageSender(message.latestSenderKind, message.latestSenderHandle)
     )
       throw new Error("invalid Agent recovery message");
-    if (input.alreadyRead(agentId, message)) {
-      decide(message, "consumed");
+    const readBasis = input.readBasis(agentId, message);
+    if (readBasis) {
+      decide(message, "consumed", readBasis);
       continue;
     }
     if (
       input.seenDeliveryIds.has(message.deliveryId) ||
       input.seenMessageIds.has(message.messageId)
     ) {
-      decide(message, "already_notified");
+      decide(
+        message,
+        input.notificationInFlight(message) ? "notification_in_flight" : "already_notified",
+      );
       continue;
     }
     if (input.alreadyNotified(message)) {
