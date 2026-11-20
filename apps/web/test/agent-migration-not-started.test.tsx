@@ -104,8 +104,11 @@ function renderSection({
     <QueryClientProvider client={queryClient}>
       <AgentMigrationSection
         agentId="agent-1"
-        onMove={() => {}}
+        agentName="Field Notes"
+        currentComputerId={null}
         canMove={canMove}
+        runtime="pi"
+        model="pi-default"
         agentOnline={agentOnline}
       />
     </QueryClientProvider>,
@@ -136,7 +139,7 @@ test("the not-started notice is gone once the Agent is online", () => {
   expect(html).not.toContain("Start manually");
 });
 
-test("the profile actions section omits the header change action", () => {
+test("the actions section offers its manager one change action", () => {
   const html = renderSection({
     status: {
       available: true,
@@ -147,8 +150,8 @@ test("the profile actions section omits the header change action", () => {
     },
     notStarted: null,
   });
-  expect(html).not.toContain("Disconnected from Old Studio");
-  expect(html).not.toContain("Change Computer");
+  expect(html).not.toContain("Access to Old Studio has been revoked");
+  expect(html).toContain("Change Computer");
   expect(html).not.toContain("doesn&#x27;t have a Computer");
 });
 
@@ -164,12 +167,12 @@ test("a viewer who cannot move gets no action", () => {
     notStarted: null,
     canMove: false,
   });
-  expect(html).not.toContain("Disconnected from Old Studio");
+  expect(html).not.toContain("Access to Old Studio has been revoked");
   expect(html).not.toContain("Change Computer");
   expect(html).not.toContain("Choose Computer");
 });
 
-test("an unassigned Agent has no duplicate placement action in the profile body", () => {
+test("an unassigned Agent offers Choose a Computer, not a move", () => {
   const html = renderSection({
     status: {
       available: true,
@@ -181,6 +184,6 @@ test("an unassigned Agent has no duplicate placement action in the profile body"
     notStarted: null,
   });
   expect(html).not.toContain("No Computer");
-  expect(html).not.toContain("Choose Computer");
+  expect(html).toContain("Choose Computer");
   expect(html).not.toContain("Move to another Computer");
 });
