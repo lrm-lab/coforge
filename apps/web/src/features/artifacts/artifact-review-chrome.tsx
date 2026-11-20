@@ -62,3 +62,36 @@ export function AnchorChip({
     </span>
   );
 }
+
+export function KbdHint({
+  children,
+  tone = "secondary",
+}: {
+  children: string;
+  tone?: "secondary" | "primary";
+}) {
+  return (
+    <kbd
+      aria-hidden="true"
+      className={cn(
+        "rounded-sm px-1 py-0.5 font-mono text-xs leading-none font-medium",
+        tone === "primary"
+          ? "bg-white/15 text-white/85 dark:bg-black/10 dark:text-gray-900/75"
+          : "border border-secondary bg-primary/80 text-tertiary",
+      )}
+    >
+      {children}
+    </kbd>
+  );
+}
+
+export function TooltipWithKey({ label, shortcut }: { label: string; shortcut: string }) {
+  return (
+    <>
+      {label}
+      <kbd className="ml-2 rounded-xs px-1 font-sans text-xs font-medium text-tooltip-supporting-text ring-1 ring-current ring-inset">
+        {shortcut}
+      </kbd>
+    </>
+  );
+}

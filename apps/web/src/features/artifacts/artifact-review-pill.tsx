@@ -5,12 +5,14 @@ import { ArrowRight, CursorClick01, Edit03, Plus, Trash01 } from "@untitledui/ic
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
+import { hotkeyKeycaps } from "#src/lib/hotkeys";
+import { isApplePlatform } from "#src/lib/platform";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { useCommentDraftActions, useCommentDrafts } from "./artifact-comment-drafts-context";
 import type { CommentDraftView } from "./artifact-comment-drafts-queries";
 import { useArtifactCommenting } from "./artifact-commenting";
-import { AnchorChip, formatAnchorTag } from "./artifact-review-chrome";
+import { AnchorChip, KbdHint, TooltipWithKey, formatAnchorTag } from "./artifact-review-chrome";
 import { draftFailure } from "./use-comment-drafts";
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -40,8 +42,15 @@ export function ArtifactReviewPill({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [focusedIdx, setFocusedIdx] = useState(-1);
+  const [apple, setApple] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const prevCount = useRef(drafts.drafts.length);
+
+  useEffect(() => {
+    setApple(isApplePlatform());
+  }, []);
+
+  const modEnter = hotkeyKeycaps("Mod+Enter", apple).join(apple ? "" : "+");
 
   const count = drafts.drafts.length;
   const locked = drafts.busy;
@@ -328,20 +337,24 @@ export function ArtifactReviewPill({
                   <AriaButton
                     isDisabled={saving}
                     onPress={exitComposeToList}
-                    className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-secondary bg-secondary px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-secondary_hover disabled:opacity-50"
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-secondary bg-secondary px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-secondary_hover disabled:opacity-50"
                   >
-                    {!editingDraft && count > 0
-                      ? m.av_dr_back_to_list({ count })
-                      : m.controls_cancel()}
+                    <span>
+                      {!editingDraft && count > 0
+                        ? m.av_dr_back_to_list({ count })
+                        : m.controls_cancel()}
+                    </span>
+                    <KbdHint>Esc</KbdHint>
                   </AriaButton>
                   <AriaButton
                     isDisabled={!canSave}
                     data-save-draft=""
                     onPress={() => void saveForm()}
-                    className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-primary-solid px-3.5 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-gray-950"
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-primary-solid px-3.5 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-gray-950"
                   >
                     {!editingDraft && <Plus aria-hidden="true" className="size-3.5" />}
                     <span>{editingDraft ? m.av_dr_save() : m.av_dr_add()}</span>
+                    <KbdHint tone="primary">{modEnter}</KbdHint>
                   </AriaButton>
                 </div>
               </div>
@@ -373,6 +386,7 @@ export function ArtifactReviewPill({
                         size="xs"
                         color="tertiary"
                         tooltip={m.av_cm_edit()}
+                        tooltipShortcut="E"
                         isDisabled={locked}
                         onClick={() => startEdit(draft)}
                       />
@@ -381,6 +395,7 @@ export function ArtifactReviewPill({
                         size="xs"
                         color="tertiary"
                         tooltip={m.av_cm_delete()}
+                        tooltipShortcut="⌫"
                         isDisabled={locked}
                         onClick={() => void actions.remove(draft)}
                       />
@@ -394,12 +409,15 @@ export function ArtifactReviewPill({
                   <AriaButton
                     isDisabled={locked || drafts.atLimit}
                     onPress={enterCompose}
-                    className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-secondary bg-secondary px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-secondary_hover disabled:cursor-not-allowed disabled:opacity-40"
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-secondary bg-secondary px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-secondary_hover disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <Plus aria-hidden="true" className="size-3.5" />
                     <span>{m.av_dr_new_comment()}</span>
+                    <KbdHint>N</KbdHint>
                   </AriaButton>
-                  <Tooltip title={m.av_dr_send_all_tip()}>
+                  <Tooltip
+                    title={<TooltipWithKey label={m.av_dr_send_all_tip()} shortcut={modEnter} />}
+                  >
                     <AriaButton
                       isDisabled={locked}
                       data-draft-send=""
@@ -408,6 +426,7 @@ export function ArtifactReviewPill({
                       className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-primary-solid px-3.5 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-gray-950"
                     >
                       <span>{m.av_dr_send_all()}</span>
+                      <KbdHint tone="primary">{modEnter}</KbdHint>
                       <ArrowRight aria-hidden="true" className="size-3.5" />
                     </AriaButton>
                   </Tooltip>
@@ -418,7 +437,14 @@ export function ArtifactReviewPill({
         </div>
       )}
 
-      <Tooltip title={annotating ? m.av_cm_annotating() : m.av_cm_annotate()}>
+      <Tooltip
+        title={
+          <TooltipWithKey
+            label={annotating ? m.av_cm_annotating() : m.av_cm_annotate()}
+            shortcut={annotating ? "Esc" : "C"}
+          />
+        }
+      >
         <AriaButton
           aria-pressed={annotating}
           aria-label={annotating ? m.av_cm_annotating() : m.av_cm_annotate()}
