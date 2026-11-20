@@ -9,8 +9,9 @@ the code:
   question by itself. On a card of one question, a one-pick option is the answer: picking it sends,
   so its rows are large, outlined and spaced apart against a mis-tap (Frank, 11-16).
 - Enter sends what is ticked; it takes the highlighted row only when nothing is ticked yet.
-- Paging, a card only grows: a shorter question leaves room under it rather than pulling the footer
-  up under the pointer that pressed Next.
+- A multi-question card sizes to its tallest question from the start (a CSS grid stack with inert
+  sizers), so paging never grows or shrinks the card or shifts the message stream on desktop or
+  mobile.
 - A card answered or declined while on screen keeps its height until the stream mounts it again
   (`useSettleInPlace`), so the messages below do not move: one question keeps its options with the
   pick marked, several turn into their answers. Mounted again it is compact (`data-question-card-view`).

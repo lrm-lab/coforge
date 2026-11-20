@@ -11,6 +11,7 @@ import { cardQuestions, givenAnswers, isMine, type AskingView } from "./question
 import { QuestionAsk } from "./question-card-ask";
 import { QuestionOptions } from "./question-card-options";
 import { QuestionPager } from "./question-card-pager";
+import { QuestionPageStack } from "./question-card-parts";
 import { cardStatus } from "./question-card-status";
 import { dropQuestionDrafts } from "./question-drafts";
 import { AnswerSummary, UnansweredQuestions } from "./question-card-summary";
@@ -27,8 +28,6 @@ export function QuestionCard({ card, asker }: { card: AskingView; asker: string 
   const timeZone = useTimeZone();
   const pending = view.state === "pending";
   const answered = view.state === "executed";
-  // Answered, declined or expired, here or anywhere else, the card keeps no draft. The card drops
-  // it, not the asking part, which is gone by the time the new state shows.
   useEffect(() => {
     if (!pending) dropQuestionDrafts(view.messageId);
   }, [pending, view.messageId]);
@@ -61,28 +60,45 @@ export function QuestionCard({ card, asker }: { card: AskingView; asker: string 
       </span>
     );
     if (settles) {
-      const question = questions[Math.min(tab, questions.length - 1)]!;
+      const activeTab = Math.min(tab, questions.length - 1);
+      const question = questions[activeTab]!;
+      const mode = answered ? "answered" : "off";
+      const promptClass = cn(
+        "px-3 pt-2 pb-1.5 text-sm wrap-anywhere",
+        several ? "font-medium" : "font-semibold",
+        answered ? "text-primary" : "text-tertiary",
+      );
       body = (
         <>
-          <p
-            data-question-prompt=""
-            className={cn(
-              "px-3 pt-2 pb-1.5 text-sm wrap-anywhere",
-              several ? "font-medium" : "font-semibold",
-              answered ? "text-primary" : "text-tertiary",
+          <QuestionPageStack
+            items={questions}
+            activeIndex={activeTab}
+            renderSizer={(each) => (
+              <>
+                <p className={promptClass}>{each.prompt}</p>
+                <QuestionOptions
+                  id=""
+                  question={each}
+                  draft={answers[each.id]}
+                  mode={mode}
+                  sizer
+                />
+              </>
             )}
           >
-            {question.prompt}
-          </p>
-          <QuestionOptions
-            key={question.id}
-            id={`${view.messageId}-q${tab}`}
-            question={question}
-            draft={answers[question.id]}
-            mode={answered ? "answered" : "off"}
-          />
+            <p data-question-prompt="" className={promptClass}>
+              {question.prompt}
+            </p>
+            <QuestionOptions
+              key={question.id}
+              id={`${view.messageId}-q${activeTab}`}
+              question={question}
+              draft={answers[question.id]}
+              mode={mode}
+            />
+          </QuestionPageStack>
           <div className="mt-auto flex min-h-10 flex-wrap items-center gap-x-3 pt-1 pl-3 text-xs text-quaternary max-sm:min-h-13">
-            {several && <QuestionPager tab={tab} total={questions.length} onTurn={setTab} />}
+            {several && <QuestionPager tab={activeTab} total={questions.length} onTurn={setTab} />}
             {statusLine}
           </div>
         </>
@@ -116,7 +132,7 @@ export function QuestionCard({ card, asker }: { card: AskingView; asker: string 
       data-no-row-tap
       tabIndex={-1}
       className={cn(
-        "mt-1 flex max-w-md flex-col rounded-xl border border-secondary bg-primary p-1 outline-none max-sm:max-w-none",
+        "mt-1 flex max-w-md flex-col rounded-xl border border-secondary bg-primary p-1 outline-none [overflow-anchor:none] max-sm:max-w-none",
         pending && "focus-within:border-primary",
       )}
     >

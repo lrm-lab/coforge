@@ -22,6 +22,8 @@ import {
   commitQuestionsActionCard,
   loadActionCardStates,
 } from "./action-cards.functions";
+import { useConversationId } from "./conversation-id";
+import { updateLoadedMessage } from "./conversation-queries";
 import {
   cardQuestions,
   fitDrafts,
@@ -73,6 +75,7 @@ export function QuestionCardsHost({
     ReadonlyMap<string, { base: ActionCardView; view: AskingView }>
   >(new Map());
   const queryClient = useQueryClient();
+  const conversationId = useConversationId();
   const refresh = useServerFn(loadActionCardStates);
   const commitChoice = useServerFn(commitChoiceActionCard);
   const commitQuestions = useServerFn(commitQuestionsActionCard);
@@ -137,9 +140,14 @@ export function QuestionCardsHost({
     const messageId = view.messageId;
     const states = await refresh({ data: { messageIds: [messageId] } });
     const next = states[messageId] as ActionCardView | undefined;
+    if (!isAskingView(next)) return;
+    if (conversationId)
+      updateLoadedMessage(queryClient, conversationId, messageId, (message) => ({
+        ...message,
+        actionCard: next,
+      }));
     const base = messages.find((message) => message.id === messageId)?.actionCard;
-    if (!isAskingView(next) || !base) return;
-    setFresh((all) => new Map(all).set(messageId, { base, view: next }));
+    if (base) setFresh((all) => new Map(all).set(messageId, { base, view: next }));
     if (next.state !== "pending") dropQuestionDrafts(messageId);
   }
 

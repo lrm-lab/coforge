@@ -1,3 +1,4 @@
+import type { Ref } from "react";
 import { CHOICE_OTHER_TEXT_MAX_LENGTH } from "@lrm/coforge-sdk/agent";
 
 import { cn } from "#src/lib/utils";
@@ -18,6 +19,7 @@ export function QuestionOptions({
   onHover,
   onPick,
   onDraft,
+  sizer = false,
 }: {
   id: string;
   question: CardQuestion;
@@ -25,14 +27,16 @@ export function QuestionOptions({
   mode: OptionsMode;
   hi?: number;
   kbd?: boolean;
-  otherRef?: (element: HTMLInputElement | null) => void;
+  otherRef?: Ref<HTMLInputElement>;
   onHover?: (row: number) => void;
   onPick?: (row: number) => void;
   onDraft?: (draft: Draft) => void;
+  sizer?: boolean;
 }) {
   const many = question.select === "many";
-  const live = mode === "live";
-  const listed = live || mode === "view";
+  const interactiveMode = mode === "live";
+  const live = !sizer && interactiveMode;
+  const listed = !sizer && (interactiveMode || mode === "view");
   const otherRow = question.options.length;
   const ownWords = draft?.text.trim() ?? "";
   const lit = (row: number) => live && kbd && row === hi && "pointer-fine:bg-secondary";
@@ -40,12 +44,26 @@ export function QuestionOptions({
   return (
     <div
       data-question-options={listed ? "" : undefined}
-      role="listbox"
+      role={sizer ? undefined : "listbox"}
       tabIndex={listed ? 0 : undefined}
-      aria-label={question.prompt}
-      aria-multiselectable={many || undefined}
-      aria-readonly={!live || undefined}
+      aria-label={sizer ? undefined : question.prompt}
+      aria-multiselectable={sizer ? undefined : many || undefined}
+      aria-readonly={sizer ? undefined : !live || undefined}
       aria-activedescendant={live && kbd && hi >= 0 ? `${id}-${hi}` : undefined}
+      onMouseDown={
+        listed
+          ? (event) => {
+              if (
+                event.button !== 0 ||
+                (event.target instanceof Element &&
+                  event.target.closest("input, textarea, button, a"))
+              )
+                return;
+              event.preventDefault();
+              event.currentTarget.focus({ preventScroll: true });
+            }
+          : undefined
+      }
       className="flex flex-col gap-1.5 px-1 outline-none"
     >
       {question.options.map((option, row) => {
@@ -54,16 +72,16 @@ export function QuestionOptions({
         return (
           <div
             key={option.id}
-            id={`${id}-${row}`}
-            role="option"
-            aria-selected={on}
+            id={sizer ? undefined : `${id}-${row}`}
+            role={sizer ? undefined : "option"}
+            aria-selected={sizer ? undefined : on}
             aria-keyshortcuts={live && row < 9 ? String(row + 1) : undefined}
-            data-question-option={option.id}
-            data-chosen={chosen ? "" : undefined}
+            data-question-option={sizer ? undefined : option.id}
+            data-chosen={!sizer && chosen ? "" : undefined}
             data-hi={live && kbd && row === hi ? "" : undefined}
-            onMouseMove={() => live && row !== hi && onHover?.(row)}
-            onClick={() => live && onPick?.(row)}
-            className={cn("group/row", OPTION_ROW, live && OPTION_ROW_LIVE, lit(row))}
+            onMouseMove={live ? () => row !== hi && onHover?.(row) : undefined}
+            onClick={live ? () => onPick?.(row) : undefined}
+            className={cn("group/row", OPTION_ROW, interactiveMode && OPTION_ROW_LIVE, lit(row))}
           >
             <Mark on={on} many={many} dim={muted} />
             <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -90,18 +108,18 @@ export function QuestionOptions({
                 <span
                   className={cn(
                     "text-xs wrap-anywhere",
-                    listed ? "text-tertiary" : "text-quaternary",
+                    interactiveMode || mode === "view" ? "text-tertiary" : "text-quaternary",
                   )}
                 >
                   {option.description}
                 </span>
               )}
             </span>
-            {live && row < 9 && (
+            {interactiveMode && row < 9 && (
               <Key
                 className={cn(
                   "ml-auto shrink-0 self-center pointer-coarse:hidden",
-                  kbd && row === hi ? "visible" : "invisible group-hover/row:visible",
+                  live && kbd && row === hi ? "visible" : "invisible group-hover/row:visible",
                 )}
               >
                 {row + 1}
@@ -111,7 +129,7 @@ export function QuestionOptions({
         );
       })}
       {question.other &&
-        (live || mode === "view" || ownWords) &&
+        (interactiveMode || mode === "view" || ownWords) &&
         (live ? (
           <div
             id={`${id}-${otherRow}`}
@@ -120,7 +138,9 @@ export function QuestionOptions({
             data-question-other=""
             data-hi={kbd && hi === otherRow ? "" : undefined}
             onMouseMove={() => hi !== otherRow && onHover?.(otherRow)}
-            onClick={(event) => event.currentTarget.querySelector("input")?.focus()}
+            onClick={(event) =>
+              event.currentTarget.querySelector("input")?.focus({ preventScroll: true })
+            }
             className={cn(OPTION_ROW, "cursor-text border-secondary", lit(otherRow))}
           >
             <Mark on={Boolean(ownWords)} many={many} />
@@ -143,12 +163,17 @@ export function QuestionOptions({
               className="h-5 min-w-0 flex-1 bg-transparent text-primary outline-none placeholder:text-placeholder pointer-coarse:text-base"
             />
           </div>
+        ) : sizer && interactiveMode ? (
+          <div className={cn(OPTION_ROW, "border-secondary")}>
+            <Mark on={false} many={many} />
+            <span className="h-5 min-w-0 flex-1" />
+          </div>
         ) : (
           <div
-            role="option"
-            aria-selected={Boolean(ownWords)}
-            data-question-other=""
-            data-chosen={mode === "answered" && ownWords ? "" : undefined}
+            role={sizer ? undefined : "option"}
+            aria-selected={sizer ? undefined : Boolean(ownWords)}
+            data-question-other={sizer ? undefined : ""}
+            data-chosen={!sizer && mode === "answered" && ownWords ? "" : undefined}
             className={OPTION_ROW}
           >
             <Mark on={Boolean(ownWords)} many={many} dim={muted} />

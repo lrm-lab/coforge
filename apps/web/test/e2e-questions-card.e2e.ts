@@ -187,11 +187,9 @@ test("a questions card is answered in the stream, question by question, then sen
       ),
     ).toBe(true);
     await evaluate(`(${card(messageId)}.scrollIntoView({ block: "center" }), true)`);
+    const paged = await settled();
     await shoot("question-1");
 
-    // The keyboard, from the composer: Alt+↓ puts the focus on the card's options; the first ↓
-    // only shows the highlight (and marks the card as keyed), the next moves it; Enter takes the
-    // highlighted option and goes on to the next question.
     await evaluate(focusComposer);
     expect(await evaluate<boolean>(inComposer)).toBe(true);
     await browser("press", "Alt+ArrowDown");
@@ -207,13 +205,11 @@ test("a questions card is answered in the stream, question by question, then sen
     await highlightTo("keep");
     await browser("press", "Enter");
     await waitFor(onQuestion(1));
-    // The pick is kept as a draft in the browser.
+    expect(await settled()).toEqual(paged);
     expect(
       await evaluate<boolean>(`localStorage.getItem(${JSON.stringify(draftKey)}) !== null`),
     ).toBe(true);
 
-    // A question may be skipped: its own words are an answer (Skip turns to Next), and taken back
-    // the question is skipped after all.
     expect(await evaluate<string>(nextLabel)).toBe("Skip");
     await browser(
       "fill",
@@ -222,12 +218,12 @@ test("a questions card is answered in the stream, question by question, then sen
     );
     await waitFor(`${nextLabel} === "Next"`);
     await shoot("question-other");
-    // Taken back key by key, as a person would: a fill with nothing types nothing.
     await browser("press", "End");
     for (const _ of "Ask me each time") await browser("press", "Backspace");
     await waitFor(`${nextLabel} === "Skip"`);
     await browser("click", nextButton);
     await waitFor(onQuestion(2));
+    expect(await settled()).toEqual(paged);
 
     // The last question picks several, and ends in Send instead of Skip or Next. A click ticks, a
     // digit ticks that row, Space ticks the highlighted one (and unticks it); nothing turns.

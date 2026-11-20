@@ -22,6 +22,7 @@ import { answered, cardQuestions, type AskingView, type Draft } from "./question
 import { QuestionOptions } from "./question-card-options";
 import { DeclineQuestion } from "./question-card-decline";
 import { QuestionPager } from "./question-card-pager";
+import { QuestionPageStack } from "./question-card-parts";
 
 const TURN_AFTER_PICK_MS = 260;
 
@@ -56,11 +57,10 @@ export function QuestionAsk({
   tabNow.current = tab;
   const [hi, setHi] = useState(() => firstPick({ questions, drafts }, 0));
   const [sending, setSending] = useState(false);
+  const sendingRef = useRef(false);
   const [error, setError] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLElement | null>(null);
-  const pageRef = useRef<HTMLDivElement>(null);
-  const tallest = useRef({ width: 0, height: 0 });
   const otherRef = useRef<HTMLInputElement | null>(null);
   const turnTimer = useRef<number | undefined>(undefined);
   const refocus = useRef(false);
@@ -76,16 +76,6 @@ export function QuestionAsk({
   const listId = `${useId()}-q${tab}`;
 
   useLayoutEffect(() => {
-    const page = pageRef.current;
-    if (!page) return;
-    page.style.minHeight = "";
-    if (!several || coarse) return;
-    const width = page.offsetWidth;
-    if (width !== tallest.current.width) tallest.current = { width, height: 0 };
-    tallest.current.height = Math.max(tallest.current.height, page.offsetHeight);
-    page.style.minHeight = `${tallest.current.height}px`;
-  }, [tab, several, coarse]);
-  useLayoutEffect(() => {
     if (!kbd) return;
     const active = document.activeElement;
     if (hi === otherRow) otherRef.current?.focus({ preventScroll: true });
@@ -96,8 +86,6 @@ export function QuestionAsk({
       ?.scrollIntoView({ block: "nearest" });
   }, [tab, hi, kbd, otherRow]);
 
-  // The options are a new list on every question, so the focus a turn took off the old one goes
-  // onto the new one in the same commit: a key pressed right after a turn still reaches the card.
   useLayoutEffect(() => {
     if (!refocus.current) return;
     refocus.current = false;
@@ -121,7 +109,8 @@ export function QuestionAsk({
   }
 
   async function submit(patch?: Record<string, Draft>) {
-    if (sending) return;
+    if (sendingRef.current) return;
+    sendingRef.current = true;
     setSending(true);
     setError("");
     const keys = rootRef.current?.contains(document.activeElement);
@@ -132,6 +121,7 @@ export function QuestionAsk({
     } catch {
       setError(m.question_card_send_failed());
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   }
@@ -143,6 +133,7 @@ export function QuestionAsk({
   }
 
   function pick(row: number) {
+    if (sendingRef.current) return;
     setHi(row);
     if (readOnly || row >= question.options.length) return;
     const id = question.options[row]!.id;
@@ -217,23 +208,34 @@ export function QuestionAsk({
   }
 
   const showSend = several ? last : question.select === "many" || Boolean(draft?.text.trim());
+  const promptClass = cn(
+    "px-3 pt-2 pb-1.5 text-sm wrap-anywhere text-primary",
+    several ? "font-medium" : "font-semibold",
+  );
+  const mode = readOnly ? "view" : "live";
   return (
     <div
       ref={rootRef}
       onKeyDown={onKeyDown}
+      onPointerDown={() => {
+        if (kbd) setKbd(false);
+      }}
       onPointerMove={(event) => {
         if (kbd && event.pointerType === "mouse") setKbd(false);
       }}
       className="flex flex-1 flex-col"
     >
-      <div ref={pageRef} className="flex flex-col">
-        <p
-          data-question-prompt=""
-          className={cn(
-            "px-3 pt-2 pb-1.5 text-sm wrap-anywhere text-primary",
-            several ? "font-medium" : "font-semibold",
-          )}
-        >
+      <QuestionPageStack
+        items={questions}
+        activeIndex={tab}
+        renderSizer={(each) => (
+          <>
+            <p className={promptClass}>{each.prompt}</p>
+            <QuestionOptions id="" question={each} draft={undefined} mode={mode} sizer />
+          </>
+        )}
+      >
+        <p data-question-prompt="" className={promptClass}>
           {question.prompt}
         </p>
         <QuestionOptions
@@ -241,17 +243,15 @@ export function QuestionAsk({
           id={listId}
           question={question}
           draft={draft}
-          mode={readOnly ? "view" : "live"}
+          mode={mode}
           hi={hi}
           kbd={kbd}
-          otherRef={(element) => {
-            otherRef.current = element;
-          }}
+          otherRef={otherRef}
           onHover={setHi}
           onPick={pick}
           onDraft={(next) => setDraft(question.id, next)}
         />
-      </div>
+      </QuestionPageStack>
       <div className="mt-auto flex flex-wrap items-center gap-x-3 pt-1 pl-3 text-xs text-quaternary">
         {due && (
           <span data-question-due="" className="whitespace-nowrap max-sm:basis-full max-sm:pt-1">

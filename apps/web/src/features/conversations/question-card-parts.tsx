@@ -50,3 +50,34 @@ export const OPTION_ROW =
 
 export const OPTION_ROW_LIVE =
   "cursor-pointer border-secondary pointer-fine:hover:bg-secondary active:bg-secondary";
+
+export function QuestionPageStack<T extends { id: string }>({
+  items,
+  activeIndex,
+  renderSizer,
+  children,
+}: {
+  items: readonly T[];
+  activeIndex: number;
+  renderSizer: (item: T) => ReactNode;
+  children: ReactNode;
+}) {
+  if (items.length <= 1) return <div className="flex flex-col">{children}</div>;
+  return (
+    <div className="grid">
+      {items.map((item, index) =>
+        index === activeIndex ? null : (
+          <div
+            key={item.id}
+            aria-hidden="true"
+            inert
+            className="pointer-events-none invisible col-start-1 row-start-1 flex min-w-0 flex-col select-none"
+          >
+            {renderSizer(item)}
+          </div>
+        ),
+      )}
+      <div className="col-start-1 row-start-1 flex min-w-0 flex-col">{children}</div>
+    </div>
+  );
+}
