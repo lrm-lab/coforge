@@ -148,7 +148,6 @@ export function ArtifactPageHeader({
               size="xs"
               color="tertiary"
               tooltip={pane.full ? m.doc_exit_fullscreen() : m.doc_fullscreen()}
-              className="max-md:hidden"
               onClick={pane.onToggleFull}
             />
             <ButtonUtility

@@ -400,16 +400,6 @@ function InlineEmbedFrame({
 
   return (
     <>
-      {expanded && (
-        <div
-          aria-hidden="true"
-          onClick={(event) => {
-            event.stopPropagation();
-            setExpanded(false);
-          }}
-          className="fixed inset-0 z-40 bg-modal-scrim/60 backdrop-blur-xs"
-        />
-      )}
       <div style={expanded ? { height: `${height}px` } : undefined} className="relative w-full">
         <div
           role={expanded ? "dialog" : "region"}
@@ -419,7 +409,7 @@ function InlineEmbedFrame({
           className={cn(
             "overflow-hidden",
             expanded
-              ? "fixed inset-3 z-50 flex flex-col rounded-xl border border-secondary bg-primary/95 shadow-2xl backdrop-blur-md md:inset-8"
+              ? "fixed inset-0 z-50 flex flex-col bg-primary"
               : "relative w-full rounded-lg bg-transparent",
           )}
         >
@@ -436,7 +426,7 @@ function InlineEmbedFrame({
             style={expanded ? undefined : { height: `${height}px` }}
             className={cn(
               "relative w-full",
-              expanded ? "min-h-0 flex-1 p-3 md:p-5" : "transition-[height] duration-200 ease-out",
+              expanded ? "min-h-0 flex-1" : "transition-[height] duration-200 ease-out",
             )}
           >
             <iframe
