@@ -149,7 +149,12 @@ test("the notice conversation reads only the notices the Agent can still read", 
 
     expect(await sequences({ before: "01a1f6d9-aaaa", limit: 2 })).toEqual([4, 5]);
     expect(await sequences({ after: first!.id.toUpperCase(), limit: 1 })).toEqual([2]);
-    await expect(read({ after: "zzzz", limit: 1 })).rejects.toThrow();
+    await expect(read({ after: "zzzz", limit: 1 })).rejects.toThrow(
+      "message anchor must be a short message id or a full UUID",
+    );
+    await expect(read({ after: "01a1f6dd-eeee", limit: 1 })).rejects.toThrow(
+      "message anchor not found in this conversation",
+    );
     expect(await sequences({ after: "01a1f6d9-aaaa", limit: 1 })).toEqual([]);
     await expect(read({ after: blockedId, limit: 1 })).rejects.toThrow(
       "message anchor not found in this conversation",
