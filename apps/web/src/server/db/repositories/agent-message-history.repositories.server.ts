@@ -19,7 +19,7 @@ import {
   sequenceAnchor,
 } from "./direct-conversation-anchor.server";
 import { readThroughOf } from "./thread-read-position.server";
-import { systemEventSourceFromDirectKey } from "#src/server/app-agent-events/app-event-target.server";
+import { systemEventTarget } from "#src/server/app-agent-events/app-event-target.server";
 import {
   noticePositionIsBlocked,
   readNoticePage,
@@ -80,13 +80,8 @@ export async function readAgentMessagePage(
   if ([page.before, page.after, page.around].filter(Boolean).length > 1)
     throw new Error("use only one range anchor");
   const anchorId = page.before ?? page.after ?? page.around;
-  const conversationKey = await db.conversation.findUnique({
-    where: { id: conversationId },
-    select: { directKey: true },
-  });
   const noticesOnly =
-    threadRootId === null &&
-    systemEventSourceFromDirectKey(conversationKey?.directKey) === "system.artifacts";
+    threadRootId === null && canonicalTarget === systemEventTarget("system.artifacts");
   const [agentMember, anchorResolved] = await Promise.all([
     db.conversationMember.findUnique({
       where: { conversationId_agentId: { conversationId, agentId } },

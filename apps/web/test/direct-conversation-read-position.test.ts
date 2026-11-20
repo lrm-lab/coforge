@@ -12,7 +12,10 @@ const channelReadStores = {
   ...readAdvanceStores,
   conversation: {
     findMany: async () => [],
-    findUnique: async () => ({ directKey: null, workspaceId: "w" }),
+    findUnique: async ({ select }: { select: { workspaceId?: boolean } }) => {
+      expect(select.workspaceId).toBe(true);
+      return { directKey: null, workspaceId: "w" };
+    },
   },
 };
 test("an unanchored canonical read advances across a missing sequence", async () => {
