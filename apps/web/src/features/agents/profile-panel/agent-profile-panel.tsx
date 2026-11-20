@@ -34,7 +34,8 @@ import {
 } from "#src/features/agents/agents.functions";
 import { AgentArchiveSection } from "./agent-archive-section";
 import { AgentMigrationSection } from "./agent-migration-section";
-import { useAgentMigrationStatus } from "./agent-migration-status";
+import { AlertTriangle } from "@untitledui/icons";
+import { m } from "#src/paraglide/messages";
 import { AgentRuntimeCredentialSection } from "./agent-runtime-credential-section";
 import {
   combineRuntimeSaveOutcomes,
@@ -126,8 +127,6 @@ export function AgentProfilePanel({
     profile.hosting !== "external" &&
     !profile.isWeeklyReportAssistant,
   );
-  const migrationStatus = useAgentMigrationStatus(agentId, placeable).data;
-  const migrationLeads = migrationStatus?.directPlacement === true;
   const owned = Boolean(profile?.ownedByCurrentUser) && !deleted;
   const migrationRuntime = agentMigrationRuntime(profile?.runtimeConfig);
   const loadComputers = useServerFn(listComputers);
@@ -288,27 +287,45 @@ export function AgentProfilePanel({
         onClose={onClose}
         back={back}
       />
-      {diagnosticFacts && !deleted && (
-        <AgentProfileStatus
-          key={agentId}
-          agent={diagnosticFacts}
-          display={display}
-          onActivityTab={tab === "activity"}
-          retry={{
-            onRetry: () => controls.submitStart(),
-            onResetSession: () => controls.openRestart("reset-session"),
-            busy: controls.startStopBusy,
-            deferred: controls.startDeferred,
-            note: controls.startNote,
-            computerOffline: profile?.computer?.online === false,
-          }}
-          onViewLogs={
-            tabOrder.tabs.includes("activity") ? () => onTabChange("activity") : undefined
-          }
-          wakeBlock={profile?.wakeBlock}
-          readiness={readinessData}
-          onOpenSettings={() => onTabChange("profile")}
-        />
+      {profile?.computerAccessRevoked && !deleted ? (
+        <p
+          role="status"
+          className="flex shrink-0 items-start gap-2 px-5 pb-2 text-sm text-secondary"
+        >
+          <AlertTriangle
+            aria-hidden="true"
+            className="mt-0.5 size-4 shrink-0 text-warning-primary"
+          />
+          <span className="min-w-0 [overflow-wrap:anywhere]">
+            {m.agent_migration_revoked_title({
+              computer: profile.computer?.label || m.agent_computer_unnamed(),
+            })}
+          </span>
+        </p>
+      ) : (
+        diagnosticFacts &&
+        !deleted && (
+          <AgentProfileStatus
+            key={agentId}
+            agent={diagnosticFacts}
+            display={display}
+            onActivityTab={tab === "activity"}
+            retry={{
+              onRetry: () => controls.submitStart(),
+              onResetSession: () => controls.openRestart("reset-session"),
+              busy: controls.startStopBusy,
+              deferred: controls.startDeferred,
+              note: controls.startNote,
+              computerOffline: profile?.computer?.online === false,
+            }}
+            onViewLogs={
+              tabOrder.tabs.includes("activity") ? () => onTabChange("activity") : undefined
+            }
+            wakeBlock={profile?.wakeBlock}
+            readiness={readinessData}
+            onOpenSettings={() => onTabChange("profile")}
+          />
+        )
       )}
       <AgentProfileTabs
         active={tab}
@@ -402,7 +419,6 @@ export function AgentProfilePanel({
                 />
               ) : undefined
             }
-            migrationLeads={migrationLeads}
             computerAccessRevoked={profile.computerAccessRevoked === true}
             migration={
               (profile.computer || placeable) && !deleted && migrationRuntime ? (

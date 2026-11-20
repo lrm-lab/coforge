@@ -261,36 +261,6 @@ export function AgentMigrationSection({
 
   return (
     <>
-      {direct && !inProgress && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-secondary bg-secondary px-3 py-2.5">
-          <FeaturedIcon color="warning" theme="light" size="sm" icon={AlertCircle} />
-          <p className="min-w-0 flex-1 basis-52 text-sm text-secondary">
-            {revoked
-              ? m.agent_migration_revoked_title({
-                  computer: sourceName || m.agent_computer_unnamed(),
-                })
-              : m.agent_migration_no_computer_title()}
-          </p>
-          {canMove && status.data.available && (
-            <Button
-              color="secondary"
-              size="sm"
-              iconLeading={SwitchHorizontal01}
-              onPress={() => {
-                setSelected(null);
-                setRefusal(null);
-                setOpen(true);
-              }}
-            >
-              {migration?.state === "failed" || migration?.state === "canceled"
-                ? m.agent_migration_retry()
-                : revoked
-                  ? m.agent_migration_action_change()
-                  : m.agent_migration_action_fresh()}
-            </Button>
-          )}
-        </div>
-      )}
       {notStartedOn && !agentOnline && (
         <AgentMigrationNotStarted
           computerName={notStartedOn.computerName}
@@ -313,7 +283,7 @@ export function AgentMigrationSection({
           canceling={canceling}
         />
       )}
-      {!direct && canMove && status.data.available && !inProgress && (
+      {canMove && status.data.available && !inProgress && (
         <Button
           color="secondary"
           className="w-full justify-center"
@@ -326,7 +296,11 @@ export function AgentMigrationSection({
         >
           {migration?.state === "failed" || migration?.state === "canceled"
             ? m.agent_migration_retry()
-            : m.agent_migration_action()}
+            : revoked
+              ? m.agent_migration_action_change()
+              : freshDirect
+                ? m.agent_migration_action_fresh()
+                : m.agent_migration_action()}
         </Button>
       )}
       <ModalOverlay

@@ -91,7 +91,6 @@ function AgentProfileTabBody({
   onStartDelete,
   onRefreshExternal,
   migration,
-  migrationLeads = false,
   computerAccessRevoked = false,
   archive,
   contextUsage,
@@ -109,7 +108,6 @@ function AgentProfileTabBody({
   /** What the launch actually observed for its Fast service tier, when the Agent asks for it. */
   fastMode?: AgentFastModeReading | null;
   migration?: ReactNode;
-  migrationLeads?: boolean;
   computerAccessRevoked?: boolean;
   /** An archived Agent's ARCHIVE section (`AgentArchiveSection`), for those who managed it. */
   archive?: ReactNode;
@@ -259,23 +257,15 @@ function AgentProfileTabBody({
                       {profile.computer?.label || m.agent_profile_computer_unassigned()}
                     </span>
                   </p>
-                  {profile.computer && (
+                  {profile.computer && !computerAccessRevoked && (
                     <p className="mt-1 flex items-center gap-1.5 text-xs font-normal text-tertiary">
                       <StatusDot
-                        tone={
-                          computerAccessRevoked
-                            ? "warning"
-                            : profile.computer.online
-                              ? "online"
-                              : "offline"
-                        }
+                        tone={profile.computer.online ? "online" : "offline"}
                         className="size-1.5"
                       />
-                      {computerAccessRevoked
-                        ? m.agent_profile_computer_access_revoked()
-                        : profile.computer.online
-                          ? m.agent_profile_computer_connected()
-                          : m.agent_profile_computer_offline()}
+                      {profile.computer.online
+                        ? m.agent_profile_computer_connected()
+                        : m.agent_profile_computer_offline()}
                       {profile.computer.computerVersion && (
                         <span>· {profile.computer.computerVersion}</span>
                       )}
@@ -295,7 +285,6 @@ function AgentProfileTabBody({
               </div>
             </FactRow>
           )}
-          {canManage && migrationLeads && migration}
           <FactRow label={m.agent_profile_created()}>
             <RelativeTime value={profile.createdAt} timeZone={timeZone} />
           </FactRow>
@@ -446,7 +435,7 @@ function AgentProfileTabBody({
         <AgentProfileActionsSection
           isExternal={isExternal}
           controls={controls}
-          migration={migrationLeads ? undefined : migration}
+          migration={migration}
           onStartDelete={onStartDelete}
         />
       )}

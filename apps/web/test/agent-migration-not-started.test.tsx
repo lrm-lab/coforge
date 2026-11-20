@@ -139,7 +139,7 @@ test("the not-started notice is gone once the Agent is online", () => {
   expect(html).not.toContain("Start manually");
 });
 
-test("a revoked placement reads as one status line and one action for its manager", () => {
+test("the actions section offers its manager one change action", () => {
   const html = renderSection({
     status: {
       available: true,
@@ -150,12 +150,12 @@ test("a revoked placement reads as one status line and one action for its manage
     },
     notStarted: null,
   });
-  expect(html).toContain("Disconnected from Old Studio");
+  expect(html).not.toContain("Disconnected from Old Studio");
   expect(html).toContain("Change Computer");
   expect(html).not.toContain("doesn&#x27;t have a Computer");
 });
 
-test("a viewer who cannot move reads the revoked line but gets no action", () => {
+test("a viewer who cannot move gets no action", () => {
   const html = renderSection({
     status: {
       available: true,
@@ -167,7 +167,7 @@ test("a viewer who cannot move reads the revoked line but gets no action", () =>
     notStarted: null,
     canMove: false,
   });
-  expect(html).toContain("Disconnected from Old Studio");
+  expect(html).not.toContain("Disconnected from Old Studio");
   expect(html).not.toContain("Change Computer");
   expect(html).not.toContain("Choose Computer");
 });
@@ -183,7 +183,7 @@ test("an unassigned Agent offers Choose a Computer, not a move", () => {
     },
     notStarted: null,
   });
-  expect(html).toContain("No Computer");
+  expect(html).not.toContain("No Computer");
   expect(html).toContain("Choose Computer");
   expect(html).not.toContain("Move to another Computer");
 });
