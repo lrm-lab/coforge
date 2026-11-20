@@ -44,6 +44,7 @@ let flagDirectory: string | undefined;
 let flagsPath = "";
 let stopListening: (() => void) | undefined;
 let previousDatabaseUrl: string | undefined;
+let previousCentrifugoUrl: string | undefined;
 const ON_SLUGS = [0, 1, 2, 3, 4].map((index) => `dark-on-${databaseName}-${index}`);
 
 /** The flag file, with `app-notifications` defined (on for `ON_SLUGS`) or not. The file always
@@ -99,6 +100,12 @@ function withDatabase(base: string, name: string) {
 
 beforeAll(async () => {
   if (!adminUrl) return;
+  // This suite owns the queue lifecycle and assumes no other feature needs the queue.
+  await stopAppNotificationQueue();
+  previousDatabaseUrl = Bun.env.DATABASE_URL;
+  previousCentrifugoUrl = Bun.env.COFORGE_CENTRIFUGO_API_URL;
+  delete Bun.env.DATABASE_URL;
+  delete Bun.env.COFORGE_CENTRIFUGO_API_URL;
   admin = new PrismaClient({ adapter: new PrismaPg({ connectionString: adminUrl }) });
   await admin.$executeRawUnsafe(`CREATE DATABASE ${databaseName}`);
   const migrate = Bun.spawn([process.execPath, "x", "--bun", "prisma", "migrate", "deploy"], {
@@ -114,15 +121,17 @@ beforeAll(async () => {
   await installFeatureFlags(
     await readFeatureFlagsConfiguration({ COFORGE_FEATURE_FLAGS_FILE: flagsPath }),
   );
-  previousDatabaseUrl = process.env.DATABASE_URL;
-  delete process.env.DATABASE_URL;
 }, 120_000);
 
 afterAll(async () => {
   stopListening?.();
   await stopAppNotificationQueue();
-  if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
-  else process.env.DATABASE_URL = previousDatabaseUrl;
+  if (adminUrl) {
+    if (previousDatabaseUrl === undefined) delete Bun.env.DATABASE_URL;
+    else Bun.env.DATABASE_URL = previousDatabaseUrl;
+    if (previousCentrifugoUrl === undefined) delete Bun.env.COFORGE_CENTRIFUGO_API_URL;
+    else Bun.env.COFORGE_CENTRIFUGO_API_URL = previousCentrifugoUrl;
+  }
   await installFeatureFlags({ status: "disabled" });
   if (flagDirectory) await rm(flagDirectory, { recursive: true, force: true });
   await db?.$disconnect();

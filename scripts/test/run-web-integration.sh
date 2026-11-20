@@ -80,4 +80,4 @@ for file in "$root"/apps/web/test/*.integration*.ts; do
   files+=("$file")
 done
 files+=("$root"/scripts/migration-safety/*.integration.ts)
-bun test "${files[@]}"
+bun test --preload ./test/web-integration-queue.preload.ts "${files[@]}"

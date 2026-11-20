@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { RedisClient } from "bun";
 import { Prisma, PrismaClient } from "#src/generated/prisma/client";
@@ -26,11 +26,29 @@ import { markActivityAllRead } from "#src/server/inbox/activity-inbox-writes.ser
 import { enrollGeneral } from "./helpers/general-channel-fixture";
 import { quietCentrifugo } from "./helpers/fake-centrifugo";
 import { recordingRealtime } from "./support/channel-sidebar-unread-realtime";
+import { createMigratedScratchDatabase, type ScratchDatabase } from "./support/scratch-database";
 
-const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
-if (!connectionString) throw new Error("CHANNEL_TEST_DATABASE_URL must point to local PostgreSQL");
+const adminUrl = Bun.env.CHANNEL_TEST_DATABASE_URL;
+if (!adminUrl) throw new Error("CHANNEL_TEST_DATABASE_URL must point to local PostgreSQL");
+let scratch: ScratchDatabase | undefined;
+let previousCentrifugoUrl: string | undefined;
+
+beforeAll(async () => {
+  // This suite tests a cold producer and fetches only the jobs it writes.
+  previousCentrifugoUrl = Bun.env.COFORGE_CENTRIFUGO_API_URL;
+  delete Bun.env.COFORGE_CENTRIFUGO_API_URL;
+  await stopAppNotificationQueue();
+  scratch = await createMigratedScratchDatabase(adminUrl, "channel_unreads");
+}, 120_000);
+
+afterAll(async () => {
+  if (previousCentrifugoUrl === undefined) delete Bun.env.COFORGE_CENTRIFUGO_API_URL;
+  else Bun.env.COFORGE_CENTRIFUGO_API_URL = previousCentrifugoUrl;
+  await scratch?.drop();
+});
 
 test("channel sidebar thread unreads: counts distinct followed non-task threads, separates channel vs thread @, and clears per Raft rules", async () => {
+  const connectionString = scratch!.url;
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const redis = new RedisClient(Bun.env.CHANNEL_TEST_REDIS_URL!);
   const suffix = crypto.randomUUID().slice(0, 8);
@@ -338,6 +356,10 @@ test("channel sidebar thread unreads: counts distinct followed non-task threads,
       Bun.env.COFORGE_CENTRIFUGO_API_URL = "http://127.0.0.1:1";
       Bun.env.COFORGE_CENTRIFUGO_API_KEY = "synthetic-channel-unread-test";
       expect(channelThreadUnreadQueueReady()).toBe(false);
+      await expect(
+        channels.setUserThreadFollowed(workspace.id, bob.id, empty.id, rootInB.id, false),
+      ).rejects.toMatchObject({ code: "TEMPORARILY_UNAVAILABLE" });
+      expect((await list([empty.id])).channels[0]?.unreadThreadCount).toBe(1);
       const boss = await prepareAppNotificationQueues(connectionString);
       expect(channelThreadUnreadQueueReady()).toBe(true);
       expect(isAppNotificationQueueStarted()).toBe(false);
