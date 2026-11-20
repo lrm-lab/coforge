@@ -179,7 +179,12 @@ test("an artifact in another workspace leaves its notice unreadable", async () =
   const foreign = await h.f.db.workspace.create({
     data: { slug: `foreign-${Date.now()}`, name: "Foreign" },
   });
-  await h.f.db.artifact.update({ where: { id: artifact }, data: { workspaceId: foreign.id } });
+  try {
+    await h.f.db.artifact.update({ where: { id: artifact }, data: { workspaceId: foreign.id } });
 
-  expect(await pending()).not.toContain(event.messageId);
+    expect(await pending()).not.toContain(event.messageId);
+  } finally {
+    await h.f.db.artifact.delete({ where: { id: artifact } });
+    await h.f.db.workspace.delete({ where: { id: foreign.id } });
+  }
 });
