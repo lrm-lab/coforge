@@ -207,11 +207,7 @@ export async function readAgentMessagePage(
       throughSequence: page.throughSequence,
       limit,
     });
-    const messages = map(
-      page.unread
-        ? notice.rows.filter((row) => row.sender === null || row.sender.agentId !== agentId)
-        : notice.rows,
-    );
+    const messages = map(notice.rows);
     const modelSeenUpToSeq = agentHistoryModelSeenBoundary({
       anchor: page.before ? "before" : page.after ? "after" : page.around ? undefined : "latest",
       anchorSequence: anchor?.sequence,

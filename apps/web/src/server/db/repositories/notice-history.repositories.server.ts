@@ -13,7 +13,15 @@ type Scope = {
   conversationId: string;
   fromSequence?: number;
   throughSequence?: number;
+  unreadOnly?: boolean;
 };
+
+const notSentByAgentSql = (scope: Scope) =>
+  scope.unreadOnly !== true
+    ? Prisma.empty
+    : Prisma.sql`AND NOT EXISTS (
+        SELECT 1 FROM "conversation_members" own
+        WHERE own."id" = msg."senderMemberId" AND own."agentId" = ${scope.agentId}::uuid)`;
 
 const rangeSql = (scope: Scope) => Prisma.sql`
   ${scope.fromSequence === undefined ? Prisma.empty : Prisma.sql`AND msg."sequence" >= ${scope.fromSequence}`}
@@ -47,6 +55,7 @@ function noticeIdsSql(
       AND msg."workspaceId" = ${scope.workspaceId}::uuid
       AND msg."threadRootId" IS NULL
       ${rangeSql(scope)}
+      ${notSentByAgentSql(scope)}
       ${boundSql(bound)}
       AND ${readableArtifactNoticeSql(scope.workspaceId, scope.agentId, Prisma.sql`msg."id"`)}
     ORDER BY msg."sequence" ${Prisma.raw(direction.toUpperCase())}
@@ -129,6 +138,7 @@ async function confirmPageAndProbeEdges(
         AND msg."workspaceId" = ${scope.workspaceId}::uuid
         AND msg."threadRootId" IS NULL
         ${rangeSql(scope)}
+        ${notSentByAgentSql(scope)}
         AND ${readableArtifactNoticeSql(scope.workspaceId, scope.agentId, Prisma.sql`msg."id"`)}
     ), "page" AS (
       SELECT r."id", r."sequence" FROM "readable" r WHERE ${pageRows}
@@ -159,6 +169,7 @@ export async function readNoticePage(
     conversationId: input.conversationId,
     ...(input.fromSequence === undefined ? {} : { fromSequence: input.fromSequence }),
     ...(input.throughSequence === undefined ? {} : { throughSequence: input.throughSequence }),
+    ...(input.unread ? { unreadOnly: true } : {}),
   };
   const { anchorSequence, limit } = input;
   const older = anchorSequence === undefined ? undefined : { below: anchorSequence };
