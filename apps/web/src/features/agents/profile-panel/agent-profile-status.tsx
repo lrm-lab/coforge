@@ -17,6 +17,7 @@ import type { AgentDiagnosticFacts } from "#src/features/agents/agent-diagnostic
 import { m } from "#src/paraglide/messages";
 import { agentDisplay } from "#src/features/agents/agent-status-display";
 import { AgentErrorBanner, type AgentRetry } from "./agent-error-banner";
+import { AgentReadinessNote, type AgentReadinessNoteData } from "./agent-readiness-note";
 import { AgentWakeBlockNote } from "./agent-wake-block-note";
 
 type Outcome = AgentTurnInterruptOutcome;
@@ -40,6 +41,8 @@ export function AgentProfileStatus({
   onViewLogs,
   retry,
   wakeBlock,
+  readiness,
+  onOpenSettings,
 }: {
   agent: AgentDiagnosticFacts;
   display?: AgentDisplaySnapshot;
@@ -47,6 +50,8 @@ export function AgentProfileStatus({
   onViewLogs?: () => void;
   retry?: AgentRetry;
   wakeBlock?: AgentWakeBlock | null;
+  readiness?: AgentReadinessNoteData;
+  onOpenSettings?: () => void;
 }) {
   const stalled = display?.detailKind === "runtime_stalled" && display.activityKind !== "offline";
   const note = wakeBlock ? <AgentWakeBlockNote block={wakeBlock} retry={retry} /> : null;
@@ -54,6 +59,20 @@ export function AgentProfileStatus({
     return (
       <>
         <StalledTurnStatus agentId={agent.id} />
+        {note}
+      </>
+    );
+  if (readiness && display?.activityKind !== "error")
+    return (
+      <>
+        <AgentReadinessNote
+          data={readiness}
+          agent={agent}
+          display={display}
+          onViewLogs={onViewLogs}
+          onOpenSettings={onOpenSettings}
+          retry={retry}
+        />
         {note}
       </>
     );

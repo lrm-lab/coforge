@@ -108,7 +108,12 @@ export function agentReadiness(input: AgentReadinessInput): AgentReadiness {
     state,
     ...READINESS_STATES[state],
     also,
-    detail: state === "launch_failed" ? input.failureReason : null,
+    detail:
+      state === "launch_failed"
+        ? input.failureReason
+        : state === "runtime_missing"
+          ? input.runtimeRefusal
+          : null,
   };
 }
 

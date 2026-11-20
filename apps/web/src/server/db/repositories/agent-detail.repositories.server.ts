@@ -43,6 +43,7 @@ export class PrismaAgentDetailSource implements AgentDetailSource {
             displayName: true,
             kind: true,
             computerVersion: true,
+            owner: { select: { username: true, displayName: true } },
           },
         },
         runtimeConfig: true,

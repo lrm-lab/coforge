@@ -64,6 +64,9 @@ import { AgentChatTab } from "./agent-chat-tab";
 import { useAgentPanelLoaders } from "./agent-profile-loaders";
 import { AgentProfileSkeleton } from "./agent-profile-skeleton";
 import { AgentProfileStatus } from "./agent-profile-status";
+import type { AgentReadinessNoteData } from "./agent-readiness-note";
+import { runtimeProviderLabel } from "../runtime-provider-display";
+import { humanLabel } from "#src/lib/human-label";
 import {
   resolveAgentProfileTab,
   type AgentProfileTab as ProfileTabId,
@@ -94,6 +97,7 @@ export function AgentProfilePanel({
   pageHeading?: boolean;
 }) {
   const timeZone = appRoute.useLoaderData().timeZone;
+  const workspaceSlug = appRoute.useParams().workspaceSlug;
   const router = useRouter();
   const root = useRef<HTMLDivElement>(null);
   useHotkey(
@@ -241,6 +245,29 @@ export function AgentProfilePanel({
   }
 
   const diagnosticFacts = profile && profileDiagnosticFacts(profile);
+  const readinessData: AgentReadinessNoteData | undefined =
+    profile && !deleted && profile.readiness.state !== "ready"
+      ? {
+          readiness: profile.readiness,
+          computer: profile.computer
+            ? {
+                id: profile.computer.id,
+                label: profile.computer.label,
+                ownerLabel: profile.computer.ownerLabel,
+                ownedByViewer: profile.computer.ownedByViewer,
+              }
+            : null,
+          canManageAgentRole: profile.canManageAgentRole,
+          canManageLogin: profile.canManageRuntimeLogin,
+          canStartAgent: profile.canControlAgentRuntime,
+          canManage,
+          agentOwnerLabel: humanLabel(profile.owner),
+          runtimeLabel: profile.runtimeConfig
+            ? runtimeProviderLabel(profile.runtimeConfig.runtime)
+            : "",
+          workspaceSlug,
+        }
+      : undefined;
 
   return (
     <div ref={root} className="flex h-full min-h-0 min-w-0 flex-col">
@@ -279,6 +306,8 @@ export function AgentProfilePanel({
             tabOrder.tabs.includes("activity") ? () => onTabChange("activity") : undefined
           }
           wakeBlock={profile?.wakeBlock}
+          readiness={readinessData}
+          onOpenSettings={() => onTabChange("profile")}
         />
       )}
       <AgentProfileTabs

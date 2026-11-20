@@ -30,6 +30,7 @@ import {
   computerRuntimeRefusal,
   storedRuntimeSelection,
 } from "#src/server/agents/computer-runtime-availability.server";
+import { agentReadinessPermissions } from "#src/server/agents/agent-readiness-permissions.server";
 import { getComputerUpgradeStore } from "#src/server/computers/computer-upgrade-store.server";
 import { isAdminLike, type WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
 import { agentAvatarUrl, agentMascot } from "#src/features/agents/agent-mascot";
@@ -158,6 +159,14 @@ export async function loadAgentProfileDetail(context: WorkspaceUserContext, agen
   const runtimeUsageVisible =
     !!usage?.offered &&
     (!codexUsage || (ownedByCurrentUser && live && result.hosting === "managed"));
+  const { canManageRuntimeLogin, canControlAgentRuntime } = await agentReadinessPermissions(db, {
+    userId: user.id,
+    workspaceId,
+    memberRole: viewerMembership?.role,
+    computerId: computer?.id,
+    provider: runtimeConfig?.runtime,
+    readiness,
+  });
   return {
     ...profile,
     readiness,
@@ -176,6 +185,8 @@ export async function loadAgentProfileDetail(context: WorkspaceUserContext, agen
     ownedByCurrentUser,
     runtimeCredential,
     canManageAgentRole,
+    canManageRuntimeLogin,
+    canControlAgentRuntime,
     canFullResetAgent,
     canDeleteAgent,
     visibility: normalizeAgentVisibility(result.visibility),

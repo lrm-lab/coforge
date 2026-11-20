@@ -7,11 +7,13 @@ import { canDirectMessageAgent } from "./agent-visibility.server";
 import { agentWakeBlock } from "./agent-wake-block.server";
 import { agentControlRevision } from "./agent-control-types.server";
 import { readableRuntimeConfig } from "./agent-runtime-config.server";
+import { humanLabel } from "#src/lib/human-label";
 
 type DetailComputer = {
   id: string;
   /** The Computer's owner: only they may scan or delete an Agent workspace on it. */
   ownerId?: string;
+  owner?: { username: string; displayName?: string | null } | null;
   name: string;
   displayName: string;
   kind: string;
@@ -96,6 +98,7 @@ function assignedComputer(agent: DetailAgent) {
     kind: computer.kind,
     computerVersion: computer.computerVersion ?? null,
     ...(computer.ownerId ? { ownerId: computer.ownerId } : {}),
+    ...(computer.owner ? { ownerLabel: humanLabel(computer.owner) } : {}),
   };
 }
 
