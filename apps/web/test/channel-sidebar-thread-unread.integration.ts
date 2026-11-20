@@ -34,7 +34,6 @@ let scratch: ScratchDatabase | undefined;
 let previousCentrifugoUrl: string | undefined;
 
 beforeAll(async () => {
-  // This suite tests a cold producer and fetches only the jobs it writes.
   previousCentrifugoUrl = Bun.env.COFORGE_CENTRIFUGO_API_URL;
   delete Bun.env.COFORGE_CENTRIFUGO_API_URL;
   await stopAppNotificationQueue();

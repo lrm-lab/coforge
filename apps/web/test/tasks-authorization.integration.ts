@@ -172,6 +172,19 @@ test("TaskBoard enforces conversation authorization, idempotency, and ownership 
       ),
     ).rejects.toThrow("CONFLICT");
 
+    const directSource = await db.message.create({
+      data: {
+        workspaceId: workspace.id,
+        conversationId: direct.id,
+        senderMemberId: direct.members.find((member) => member.userId === alice!.id)!.id,
+        sequence: 1,
+        body: "Ask the Agent to create a task",
+      },
+    });
+    await db.conversation.update({
+      where: { id: direct.id },
+      data: { lastSequence: directSource.sequence },
+    });
     const agentCreated = await board.execute(
       { workspaceId: workspace.id, agentId: agent!.id },
       {
@@ -179,8 +192,10 @@ test("TaskBoard enforces conversation authorization, idempotency, and ownership 
         idempotencyKey: crypto.randomUUID(),
         target: `@${alice!.username}`,
         title: "Agent-owned DM task",
+        messageId: directSource.id,
       },
     );
+    expect(agentCreated.tasks[0]?.sourceMessageId).toBe(directSource.id);
     expect(
       (
         await board.execute(
@@ -264,29 +279,34 @@ test("TaskBoard enforces conversation authorization, idempotency, and ownership 
       status: claimed.tasks[0]!.status,
       owner: claimed.tasks[0]!.owner,
     });
-    for (const operation of ["unclaim", "update"] as const) {
-      await expect(
-        board.execute(
-          { workspaceId: workspace.id, agentId: peerAgent!.id },
-          operation === "unclaim"
-            ? {
-                operation,
-                idempotencyKey: crypto.randomUUID(),
-                target: `#${publicChannel.channelName}`,
-                number: ownership.number,
-                expectedRevision: claimed.tasks[0]!.revision,
-              }
-            : {
-                operation,
-                idempotencyKey: crypto.randomUUID(),
-                target: `#${publicChannel.channelName}`,
-                number: ownership.number,
-                status: "done",
-                expectedRevision: claimed.tasks[0]!.revision,
-              },
-        ),
-      ).rejects.toThrow("ACCESS_DENIED");
-    }
+    await expect(
+      board.execute(
+        { workspaceId: workspace.id, agentId: peerAgent!.id },
+        {
+          operation: "unclaim",
+          idempotencyKey: crypto.randomUUID(),
+          target: `#${publicChannel.channelName}`,
+          number: ownership.number,
+          expectedRevision: claimed.tasks[0]!.revision,
+        },
+      ),
+    ).rejects.toThrow("ACCESS_DENIED");
+    const parked = await board.execute(
+      { workspaceId: workspace.id, agentId: peerAgent!.id },
+      {
+        operation: "update",
+        idempotencyKey: crypto.randomUUID(),
+        target: `#${publicChannel.channelName}`,
+        number: ownership.number,
+        status: "backlog",
+        expectedRevision: claimed.tasks[0]!.revision,
+      },
+    );
+    expect(parked.tasks[0]).toMatchObject({
+      status: "backlog",
+      owner: claimed.tasks[0]!.owner,
+      revision: claimed.tasks[0]!.revision + 1,
+    });
     const unclaimed = await board.execute(
       { workspaceId: workspace.id, agentId: agent!.id },
       {
@@ -294,11 +314,10 @@ test("TaskBoard enforces conversation authorization, idempotency, and ownership 
         idempotencyKey: crypto.randomUUID(),
         target: `#${publicChannel.channelName}`,
         number: ownership.number,
-        expectedRevision: claimed.tasks[0]!.revision,
+        expectedRevision: parked.tasks[0]!.revision,
       },
     );
-    // Releasing the assignment leaves no unowned Task in progress: it is open again.
-    expect(unclaimed.tasks[0]).toMatchObject({ status: "todo", owner: null });
+    expect(unclaimed.tasks[0]).toMatchObject({ status: "backlog", owner: null, claimedAt: null });
 
     const reclaimed = await board.execute(
       { workspaceId: workspace.id, agentId: agent!.id },
@@ -509,7 +528,7 @@ test("TaskBoard enforces conversation authorization, idempotency, and ownership 
           expectedRevision: ownerReleased.tasks[0]!.revision,
         },
       ),
-    ).rejects.toThrow();
+    ).rejects.toThrow("CONFLICT");
   } finally {
     await db.workspace.deleteMany({ where: { id: { in: [workspace.id, otherWorkspace.id] } } });
     await db.user.deleteMany({ where: { id: { in: users.map(({ id }) => id) } } });

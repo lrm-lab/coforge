@@ -128,18 +128,24 @@ test("Task changes record history events with their before and after state", asy
       },
       {
         seq: 3,
-        eventType: "status_changed",
-        ...byBob,
-        payload: { from: "todo", to: "in_progress" },
+        eventType: "priority_changed",
+        ...byAlice,
+        payload: { from: "none", to: "medium" },
       },
       {
         seq: 4,
         eventType: "status_changed",
         ...byBob,
-        payload: { from: "in_progress", to: "backlog" },
+        payload: { from: "todo", to: "in_progress" },
       },
       {
         seq: 5,
+        eventType: "status_changed",
+        ...byBob,
+        payload: { from: "in_progress", to: "backlog" },
+      },
+      {
+        seq: 6,
         eventType: "amended",
         ...byAlice,
         payload: {
@@ -148,19 +154,19 @@ test("Task changes record history events with their before and after state", asy
         },
       },
       {
-        seq: 6,
+        seq: 7,
         eventType: "status_changed",
         ...byAlice,
         payload: { from: "backlog", to: "done" },
       },
       {
-        seq: 7,
+        seq: 8,
         eventType: "status_changed",
         ...byAlice,
         payload: { from: "done", to: "todo" },
       },
       {
-        seq: 8,
+        seq: 9,
         eventType: "assignee_changed",
         ...byAlice,
         payload: { assigneeId: null, assigneeType: null },
@@ -185,24 +191,30 @@ test("Task changes record history events with their before and after state", asy
       },
       {
         seq: 2,
+        eventType: "priority_changed",
+        ...byAlice,
+        payload: { from: "none", to: "medium" },
+      },
+      {
+        seq: 3,
         eventType: "assignee_changed",
         ...byAgent,
         payload: agentAssignee,
       },
       {
-        seq: 3,
+        seq: 4,
         eventType: "status_changed",
         ...byAgent,
         payload: { from: "todo", to: "in_progress" },
       },
       {
-        seq: 4,
+        seq: 5,
         eventType: "assignee_changed",
         ...byAgent,
         payload: { assigneeId: null, assigneeType: null },
       },
       {
-        seq: 5,
+        seq: 6,
         eventType: "assignee_changed",
         ...byAlice,
         payload: agentAssignee,
@@ -230,6 +242,12 @@ test("Task changes record history events with their before and after state", asy
         ...byAgent,
         payload: agentAssignee,
       },
+      {
+        seq: 3,
+        eventType: "priority_changed",
+        ...byAgent,
+        payload: { from: "none", to: "medium" },
+      },
     ]);
 
     // Retries and no-op commands change nothing, so they record nothing.
@@ -252,6 +270,12 @@ test("Task changes record history events with their before and after state", asy
           ...byAlice,
           payload: { taskNumber: created.number, status: "todo" },
         },
+        {
+          seq: 2,
+          eventType: "priority_changed",
+          ...byAlice,
+          payload: { from: "none", to: "medium" },
+        },
       ]);
     const assignKey = crypto.randomUUID();
     const reassign = {
@@ -268,7 +292,7 @@ test("Task changes record history events with their before and after state", asy
     await run(asAlice, { operation: "unassign", number: task.number });
     expect(await history(task.number)).toHaveLength(9);
     await run(asAgent, { operation: "claim", number: started.number });
-    expect(await history(started.number)).toHaveLength(2);
+    expect(await history(started.number)).toHaveLength(3);
 
     const message = await db.message.create({
       data: {
@@ -286,6 +310,12 @@ test("Task changes record history events with their before and after state", asy
         eventType: "created",
         ...byBob,
         payload: { taskNumber: converted.number, status: "todo" },
+      },
+      {
+        seq: 2,
+        eventType: "priority_changed",
+        ...byBob,
+        payload: { from: "none", to: "medium" },
       },
     ]);
   } finally {

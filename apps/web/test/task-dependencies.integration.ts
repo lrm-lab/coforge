@@ -335,7 +335,7 @@ test("a create cannot link a new task to itself or to a sibling made by the same
 });
 
 test("adding a subtask needs the parent's owner, creator or a manager", async () => {
-  const { db, run, make, refusal, one } = await setup();
+  const { db, run, make, refusal, one, sourceMessageId } = await setup();
   try {
     const [parent] = await make("alice", 1);
     await run("alice", { operation: "assign", number: parent!, assignee: `agent:${one.id}` });
@@ -351,7 +351,16 @@ test("adding a subtask needs the parent's owner, creator or a manager", async ()
     );
     expect(amend.errorId).toBe("task_relation_denied");
     // The parent's owner and a manager may; leaving a parent needs only the child's permission.
-    await run("one", { operation: "create", title: "by the owner", parent: { number: parent! } });
+    const ownerCreated = await run("one", {
+      operation: "create",
+      title: "by the owner",
+      messageId: sourceMessageId,
+      parent: { number: parent! },
+    });
+    expect(ownerCreated.tasks[0]).toMatchObject({
+      sourceMessageId,
+      parent: { number: parent },
+    });
     await run("alice", { operation: "amend", number: mine!, parent: { number: parent! } });
     const detached = await run("bob", { operation: "amend", number: mine!, parent: null });
     expect(detached.tasks[0]).toMatchObject({ parent: null });

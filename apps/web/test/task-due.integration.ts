@@ -115,7 +115,6 @@ test("lists order by priority, then earliest due, undated last — the Agent que
   try {
     const day = 24 * 60 * 60 * 1000;
     const at = (days: number) => new Date(Date.now() + days * day).toISOString();
-    // Same level (none): the earliest due first, an undated Task behind every dated one.
     const [undated] = await make("alice", 1);
     const [inFive] = await make("alice", 1, { dueAt: at(5) });
     const [inTwo] = await make("alice", 1, { dueAt: at(2) });
@@ -123,9 +122,7 @@ test("lists order by priority, then earliest due, undated last — the Agent que
     const listed = await run("alice", { operation: "list" });
     expect(listed.tasks.map((task) => task.number)).toEqual([overdue, inTwo, inFive, undated]);
 
-    // A priority still outranks every due date: `low` sorts ahead of the undated `none` Tasks'
-    // level even though they all carry earlier dues.
-    await run("alice", { operation: "update", number: undated!, priority: "low" });
+    await run("alice", { operation: "update", number: undated!, priority: "high" });
     const reprioritised = await run("alice", { operation: "list" });
     expect(reprioritised.tasks.map((task) => task.number)).toEqual([
       undated,

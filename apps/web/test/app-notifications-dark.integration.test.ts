@@ -100,7 +100,6 @@ function withDatabase(base: string, name: string) {
 
 beforeAll(async () => {
   if (!adminUrl) return;
-  // This suite owns the queue lifecycle and assumes no other feature needs the queue.
   await stopAppNotificationQueue();
   previousDatabaseUrl = Bun.env.DATABASE_URL;
   previousCentrifugoUrl = Bun.env.COFORGE_CENTRIFUGO_API_URL;

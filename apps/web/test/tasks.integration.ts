@@ -493,6 +493,7 @@ test("TaskBoard creates, converts, claims and revision-checks Tasks", async () =
         idempotencyKey: crypto.randomUUID(),
         target: `#${channel.channelName}`,
         title: "deleted number must stay reserved",
+        messageId: ordinary.id,
       },
     );
     await board.execute(
@@ -511,6 +512,7 @@ test("TaskBoard creates, converts, claims and revision-checks Tasks", async () =
         idempotencyKey: crypto.randomUUID(),
         target: `#${channel.channelName}`,
         title: "number after deletion",
+        messageId: ordinary.id,
       },
     );
     expect(afterDelete.tasks[0]!.number).toBe(deleted.tasks[0]!.number + 1);

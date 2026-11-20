@@ -187,24 +187,22 @@ test("a parent with an unfinished subtask is never stale", async () => {
 test("highest priority first, oldest first within one; five listed, the rest in the backlog", async () => {
   const { db, make, assign, nudge, ref } = await world();
   try {
-    // `none` is not a choice a command may name (task #12): an unprioritized Task is made by
-    // leaving the field out, which still lands `none`.
     const priorities = ["low", undefined, "urgent", "medium", "high", "urgent", undefined] as const;
     const numbers: number[] = [];
     for (const priority of priorities) numbers.push(...(await make("alice", 1, { priority })));
     for (const number of numbers) await assign(number);
     const sent = await nudge();
-    const [low, none1, urgent1, medium, high, urgent2, none2] = numbers;
+    const [low, olderDefault, urgent1, medium, high, urgent2, newerDefault] = numbers;
     expect(sent.items.map((item) => item.taskNumber)).toEqual([
       urgent1,
       urgent2,
       high,
+      olderDefault,
       medium,
-      low,
     ]);
     // Every listed Task is actionable, so each carries its place in the Agent's queue.
     expect(sent.items.map((item) => item.queuePosition)).toEqual([1, 2, 3, 4, 5]);
-    expect(sent.backlog.map((item) => item.ref)).toEqual([ref(none1!), ref(none2!)]);
+    expect(sent.backlog.map((item) => item.ref)).toEqual([ref(newerDefault!), ref(low!)]);
     const lines = sent.text.split("\n");
     expect(lines[0]).toBe("[Idle task reminder] Your task queue first, then what waits on others:");
     expect(lines[1]).toBe(
@@ -213,12 +211,12 @@ test("highest priority first, oldest first within one; five listed, the rest in 
     expect(lines[6]).toBe(
       "Pick up the first queued task, or update a task's status if it is done or blocked. Read a task with `coforge task view '<ref>'`.",
     );
-    expect(lines[7]).toBe(`(2 more: ${ref(none1!)}, ${ref(none2!)})`);
+    expect(lines[7]).toBe(`(2 more: ${ref(newerDefault!)}, ${ref(low!)})`);
     expect(lines).toHaveLength(8);
 
     // The backlog was not reminded: the next hour lists it, still at its true queue places.
     const next = await nudge({}, 1.1);
-    expect(next.items.map((item) => item.taskNumber)).toEqual([none1, none2]);
+    expect(next.items.map((item) => item.taskNumber)).toEqual([newerDefault, low]);
     expect(next.items.map((item) => item.queuePosition)).toEqual([6, 7]);
     expect(next.text).not.toContain("more:");
   } finally {

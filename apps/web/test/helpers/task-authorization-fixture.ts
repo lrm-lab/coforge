@@ -9,7 +9,6 @@ export async function taskAuthorizationFixture() {
 
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
   const board = new TaskBoard(db);
-  // Fixture messages take the next free sequence: Task writes also post server notices.
   const nextSequence = async (conversationId: string) =>
     ((
       await db.message.findFirst({

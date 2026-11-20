@@ -115,6 +115,7 @@ export async function findSourceMessage(
   tx: Pick<Transaction, "message">,
   conversationId: string,
   messageId: string,
+  { allowThreadReply }: { allowThreadReply: boolean },
 ) {
   const anchor = MESSAGE_ANCHOR.test(messageId) ? messageId : undefined;
   if (!anchor && !UUID_LIKE_PATTERN.test(messageId)) throw new AppError("NOT_FOUND");
@@ -126,9 +127,11 @@ export async function findSourceMessage(
     mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
   } as const;
   const messages = await tx.message.findMany({
-    where: anchor
-      ? { conversationId, id: messageAnchorWhere(anchor) }
-      : { conversationId, id: messageId },
+    where: {
+      conversationId,
+      id: anchor ? messageAnchorWhere(anchor) : messageId,
+      ...(!allowThreadReply ? { threadRootId: null } : {}),
+    },
     take: 2,
     select,
   });

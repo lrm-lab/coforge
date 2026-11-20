@@ -102,7 +102,9 @@ export async function createConversationTasks(
       return { tasks: retried, created: false, notices: [], sourceThreadReplyId: undefined };
     }
     const source = command.messageId
-      ? await findSourceMessage(tx, scope.conversationId, command.messageId)
+      ? await findSourceMessage(tx, scope.conversationId, command.messageId, {
+          allowThreadReply: !convert,
+        })
       : null;
     const assignee = command.assignee
       ? await assigneeMember(tx, scope.conversationId, scope.workspaceId, command.assignee)

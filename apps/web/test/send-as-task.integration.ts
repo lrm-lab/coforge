@@ -120,7 +120,7 @@ test("a message sent as a task is the source of one Task and keeps all its uploa
         where: { sourceMessageId: legacy.id },
         select: { priority: true },
       }),
-    ).toEqual({ priority: "none" });
+    ).toEqual({ priority: "medium" });
   } finally {
     await db.workspace.delete({ where: { id: workspace.id } }).catch(() => undefined);
     await db.user.delete({ where: { id: user.id } }).catch(() => undefined);

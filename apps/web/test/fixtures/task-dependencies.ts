@@ -118,6 +118,10 @@ export async function setup({ dependencies }: { dependencies?: TaskBoardDependen
         body: `Seed request ${handle}`,
       },
     });
+    await db.conversation.update({
+      where: { id: conv.id },
+      data: { lastSequence: message.sequence },
+    });
     sourceMessages.set(conv.id, message.id);
   }
   const board = new TaskBoard(db, dependencies);
@@ -220,6 +224,7 @@ export async function setup({ dependencies }: { dependencies?: TaskBoardDependen
     other,
     admin,
     secret,
+    sourceMessageId: sourceMessages.get(channel.id)!,
     one,
     two,
   };

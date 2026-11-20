@@ -135,8 +135,43 @@ test("create makes a task with no message in the channel, followed by its creato
   expect(stored.params).toMatchObject({
     assignee: { memberId: agents.worker.memberId, handle: agents.worker.name },
   });
-  const history = await db.taskHistoryEvent.findMany({ where: { taskId: task.id } });
-  expect(history.map((event) => event.eventType)).toEqual(["created", "assignee_changed"]);
+  const history = await db.taskHistoryEvent.findMany({
+    where: { taskId: task.id },
+    orderBy: { seq: "asc" },
+  });
+  expect(history.map((event) => event.eventType)).toEqual([
+    "created",
+    "assignee_changed",
+    "priority_changed",
+  ]);
+  expect(history[2]!.payload).toEqual({ from: "none", to: "medium" });
+});
+
+test("Agent create from a reply records its top-level message as the source", async () => {
+  const root = await db.message.create({
+    data: {
+      workspaceId,
+      conversationId: channelId,
+      senderMemberId: agents.maker.memberId,
+      body: "A separate request",
+      sequence: 2,
+    },
+  });
+  const reply = await db.message.create({
+    data: {
+      workspaceId,
+      conversationId: channelId,
+      senderMemberId: agents.maker.memberId,
+      body: "Follow-up request",
+      threadRootId: root.id,
+      sequence: 3,
+    },
+  });
+  const [created] = (
+    await run("maker", { operation: "create", title: "Reply task", messageId: reply.id })
+  ).tasks;
+  expect(created?.sourceMessageId).toBe(root.id);
+  expect(created?.sourceMessage?.messageId).toBe(root.id);
 });
 
 test("a retried create answers with the first task", async () => {
