@@ -63,3 +63,59 @@ test("a notice stops being readable once the Agent loses the artifact", async ()
   });
   expect(systemMembership).not.toBeNull();
 });
+
+test("a blocked notice does not starve a later readable one in the same conversation", async () => {
+  await h.f.db.conversation.updateMany({ data: { visibility: "public" } });
+  await h.f.db.conversationMember.updateMany({
+    where: { agentId: h.f.agents.reader },
+    data: { leftAt: null },
+  });
+  const blockedArtifact = await h.f.make("Blocked gate");
+  const visibleArtifact = await h.f.make("Later gate");
+  const reader = await h.nameOf(h.f.agents.reader);
+  await h.create(blockedArtifact, `First, see @${reader}.`);
+  const blockedSent = await h.submit(blockedArtifact);
+  if (blockedSent.status !== "sent") throw new Error("not sent");
+  await h.create(visibleArtifact, `Second, see @${reader}.`);
+  const visibleSent = await h.submit(visibleArtifact);
+  if (visibleSent.status !== "sent") throw new Error("not sent");
+  const events = await Promise.all(
+    [
+      [blockedArtifact, blockedSent.reviewId],
+      [visibleArtifact, visibleSent.reviewId],
+    ].map(([artifact, reviewId]) =>
+      h.f.db.systemAgentEvent.findUniqueOrThrow({
+        where: {
+          source_agentId_externalEventId: {
+            source: "system.artifacts",
+            agentId: h.f.agents.reader,
+            externalEventId: `${artifact}:${reviewId}`,
+          },
+        },
+        select: { messageId: true, conversationId: true },
+      }),
+    ),
+  );
+  const [blocked, visible] = events;
+  expect(blocked.conversationId).toBe(visible.conversationId);
+
+  await h.f.db.artifact.update({
+    where: { id: blockedArtifact },
+    data: { deletedAt: new Date() },
+  });
+
+  const conversations = new PrismaDirectConversationRepository(h.f.db);
+  const pendingIds = () =>
+    conversations
+      .readPendingAgentDeliveries(h.f.workspaceId, h.f.agents.reader)
+      .then((rows) => rows.map((row) => row.messageId));
+  const recoveryIds = () =>
+    conversations
+      .readAgentRecoveryContext(h.f.workspaceId, h.f.agents.reader)
+      .then((context) => context.resumeMessages.map((message) => message.messageId));
+
+  expect(await pendingIds()).not.toContain(blocked.messageId);
+  expect(await pendingIds()).toContain(visible.messageId);
+  expect(await recoveryIds()).not.toContain(blocked.messageId);
+  expect(await recoveryIds()).toContain(visible.messageId);
+});
