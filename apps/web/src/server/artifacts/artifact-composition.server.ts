@@ -242,5 +242,6 @@ export function productionArtifactChecks(db: PrismaClient) {
     },
     enqueue: enqueueArtifactVersionCheckFromActiveQueue,
     timeoutMs: () => artifactCheckConfig()?.timeoutMs ?? 45_000,
+    dailyCap: () => artifactCheckConfig()?.dailyCap ?? 200,
   });
 }

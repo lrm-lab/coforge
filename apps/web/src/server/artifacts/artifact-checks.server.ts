@@ -1,5 +1,4 @@
 import {
-  ARTIFACT_CHECK_RETENTION_VERSIONS,
   ARTIFACT_CHECK_SHOT_MAX_BYTES,
   ARTIFACT_CHECK_VIEWPORTS,
   type ArtifactCheckResponse,
@@ -23,6 +22,7 @@ import {
   ALLOWED_CDN_HOSTS,
   buildCheckBundle,
   parseStoredScreenshots,
+  pruneOlderCheckScreenshots,
   sanitizeFindings,
   toCheckRecord,
   type StoredScreenshot,
@@ -32,6 +32,7 @@ import { PAGE_RUNTIME_PATH, pageRuntimeSource } from "./artifact-page-runtime.se
 import type { ArtifactReads } from "./artifact-reads.server";
 
 const TRANSIENT_ERROR_CLASSES = new Set(["worker_unreachable", "worker_http_5xx"]);
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type ArtifactChecksDeps = {
   db: PrismaClient;
@@ -41,6 +42,7 @@ export type ArtifactChecksDeps = {
   runner?: () => ArtifactCheckRunner | null;
   enqueue?: (job: ArtifactVersionCheckJob) => Promise<string | null>;
   timeoutMs?: () => number;
+  dailyCap?: () => number;
   logger?: ArtifactCheckLogger;
   now?: () => Date;
 };
@@ -99,20 +101,57 @@ export class ArtifactChecks {
     }
 
     const now = this.#now();
+    const createOrRead = async (
+      data: Prisma.ArtifactVersionCheckUncheckedCreateInput,
+    ): Promise<
+      | { created: true; id: string }
+      | {
+          created: false;
+          result: { scheduled: boolean; checkId: string; status: string; skipReason?: string };
+        }
+    > => {
+      try {
+        const created = await this.deps.db.artifactVersionCheck.create({
+          data,
+          select: { id: true },
+        });
+        return { created: true, id: created.id };
+      } catch (error) {
+        if ((error as { code?: string })?.code === "P2002") {
+          const raced = await this.deps.db.artifactVersionCheck.findUnique({
+            where: {
+              artifactId_version: { artifactId: input.artifactId, version: input.version },
+            },
+            select: { id: true, status: true, skipReason: true },
+          });
+          if (raced) {
+            return {
+              created: false,
+              result: {
+                scheduled: raced.status === "pending",
+                checkId: raced.id,
+                status: raced.status,
+                ...(raced.skipReason ? { skipReason: raced.skipReason } : {}),
+              },
+            };
+          }
+        }
+        throw error;
+      }
+    };
+
     if (!input.filesChanged) {
-      const row = await this.deps.db.artifactVersionCheck.create({
-        data: {
-          artifactId: input.artifactId,
-          version: input.version,
-          status: "skipped",
-          skipReason: "unchanged_files",
-          finishedAt: now,
-        },
-        select: { id: true },
+      const created = await createOrRead({
+        artifactId: input.artifactId,
+        version: input.version,
+        status: "skipped",
+        skipReason: "unchanged_files",
+        finishedAt: now,
       });
+      if (!created.created) return created.result;
       this.#logger.info({
         event: "artifact_check.skipped",
-        checkId: row.id,
+        checkId: created.id,
         workspaceId: input.workspaceId,
         artifactId: input.artifactId,
         version: input.version,
@@ -120,10 +159,53 @@ export class ArtifactChecks {
       });
       return {
         scheduled: false,
-        checkId: row.id,
+        checkId: created.id,
         status: "skipped",
         skipReason: "unchanged_files",
       };
+    }
+
+    const dailyCap = this.deps.dailyCap?.() ?? 0;
+    if (dailyCap > 0) {
+      const since = new Date(now.getTime() - DAY_MS);
+      const usedToday = await this.deps.db.artifactVersionCheck.count({
+        where: {
+          artifact: { workspaceId: input.workspaceId },
+          status: { in: ["pending", "running", "done", "failed"] },
+          createdAt: { gte: since },
+          NOT: {
+            artifactId: input.artifactId,
+            version: { lt: input.version },
+            status: "pending",
+          },
+        },
+      });
+      if (usedToday >= dailyCap) {
+        const created = await createOrRead({
+          artifactId: input.artifactId,
+          version: input.version,
+          status: "skipped",
+          skipReason: "workspace_daily_cap",
+          finishedAt: now,
+        });
+        if (!created.created) return created.result;
+        this.#logger.warn({
+          event: "artifact_check.skipped",
+          checkId: created.id,
+          workspaceId: input.workspaceId,
+          artifactId: input.artifactId,
+          version: input.version,
+          reason: "workspace_daily_cap",
+          usedToday,
+          dailyCap,
+        });
+        return {
+          scheduled: false,
+          checkId: created.id,
+          status: "skipped",
+          skipReason: "workspace_daily_cap",
+        };
+      }
     }
 
     const superseded = await this.deps.db.artifactVersionCheck.updateMany({
@@ -148,35 +230,13 @@ export class ArtifactChecks {
       });
     }
 
-    let row: { id: string };
-    try {
-      row = await this.deps.db.artifactVersionCheck.create({
-        data: {
-          artifactId: input.artifactId,
-          version: input.version,
-          status: "pending",
-        },
-        select: { id: true },
-      });
-    } catch (error) {
-      if ((error as { code?: string })?.code === "P2002") {
-        const raced = await this.deps.db.artifactVersionCheck.findUnique({
-          where: {
-            artifactId_version: { artifactId: input.artifactId, version: input.version },
-          },
-          select: { id: true, status: true, skipReason: true },
-        });
-        if (raced) {
-          return {
-            scheduled: raced.status === "pending",
-            checkId: raced.id,
-            status: raced.status,
-            ...(raced.skipReason ? { skipReason: raced.skipReason } : {}),
-          };
-        }
-      }
-      throw error;
-    }
+    const created = await createOrRead({
+      artifactId: input.artifactId,
+      version: input.version,
+      status: "pending",
+    });
+    if (!created.created) return created.result;
+    const row = { id: created.id };
 
     const job: ArtifactVersionCheckJob = {
       checkId: row.id,
@@ -385,7 +445,13 @@ export class ArtifactChecks {
             finishedAt,
           },
         });
-        return this.#pruneOlderScreenshots(tx, job.workspaceId, job.artifactId);
+        return pruneOlderCheckScreenshots({
+          tx,
+          blobs: this.deps.blobs,
+          logger: this.#logger,
+          workspaceId: job.workspaceId,
+          artifactId: job.artifactId,
+        });
       });
 
       this.#logger.info({
@@ -532,42 +598,5 @@ export class ArtifactChecks {
       sizeBytes: bytes.byteLength,
       data: Buffer.from(bytes).toString("base64"),
     };
-  }
-
-  async #pruneOlderScreenshots(
-    tx: Prisma.TransactionClient,
-    workspaceId: string,
-    artifactId: string,
-  ): Promise<number[]> {
-    const done = await tx.artifactVersionCheck.findMany({
-      where: { artifactId, status: "done" },
-      orderBy: { version: "desc" },
-      take: ARTIFACT_CHECK_RETENTION_VERSIONS + 25,
-      select: { id: true, version: true, screenshots: true },
-    });
-    const toPrune = done.slice(ARTIFACT_CHECK_RETENTION_VERSIONS);
-    const prunedVersions: number[] = [];
-    const releasedSha256s: string[] = [];
-    for (const row of toPrune) {
-      const shots = parseStoredScreenshots(row.screenshots);
-      if (shots.length === 0) continue;
-      for (const shot of shots) releasedSha256s.push(shot.sha256);
-      await tx.artifactVersionCheck.update({
-        where: { id: row.id },
-        data: { screenshots: [] },
-      });
-      prunedVersions.push(row.version);
-    }
-    if (releasedSha256s.length > 0) {
-      await this.deps.blobs.release(tx, workspaceId, releasedSha256s);
-      this.#logger.info({
-        event: "artifact_check.retention_pruned",
-        workspaceId,
-        artifactId,
-        prunedVersions,
-        releasedBlobCount: releasedSha256s.length,
-      });
-    }
-    return prunedVersions;
   }
 }

@@ -36,19 +36,38 @@ describe("artifactCheckConfig", () => {
     ).toBe(true);
   });
 
-  test("normalizes trailing slashes and clamps concurrency and timeout bounds", () => {
+  test("normalizes trailing slashes and clamps concurrency, timeout, and daily cap bounds", () => {
     const cfg = artifactCheckConfig({
       COFORGE_ARTIFACT_CHECK_WORKER_URL: "http://artifact-checker:3100///",
       COFORGE_ARTIFACT_CHECK_SECRET: "  top-secret  ",
       COFORGE_ARTIFACT_CHECK_CONCURRENCY: "99",
       COFORGE_ARTIFACT_CHECK_TIMEOUT_MS: "1000",
+      COFORGE_ARTIFACT_CHECK_DAILY_CAP: "50000",
     });
     expect(cfg).toEqual({
       workerUrl: "http://artifact-checker:3100",
       secret: "top-secret",
       concurrency: 4,
       timeoutMs: 5_000,
+      dailyCap: 10_000,
     });
+    expect(
+      artifactCheckConfig({
+        COFORGE_ARTIFACT_CHECK_WORKER_URL: "http://127.0.0.1:3100",
+      })?.dailyCap,
+    ).toBe(200);
+    expect(
+      artifactCheckConfig({
+        COFORGE_ARTIFACT_CHECK_WORKER_URL: "http://127.0.0.1:3100",
+        COFORGE_ARTIFACT_CHECK_DAILY_CAP: "0",
+      })?.dailyCap,
+    ).toBe(0);
+    expect(
+      artifactCheckConfig({
+        COFORGE_ARTIFACT_CHECK_WORKER_URL: "http://127.0.0.1:3100",
+        COFORGE_ARTIFACT_CHECK_DAILY_CAP: "-5",
+      })?.dailyCap,
+    ).toBe(200);
     expect(
       artifactChecksEnabled({
         COFORGE_ARTIFACT_CHECK_WORKER_URL: "http://artifact-checker:3100",
@@ -68,6 +87,7 @@ describe("createHttpArtifactCheckRunner", () => {
         secret: "s3cr3t",
         concurrency: 1,
         timeoutMs: 30_000,
+        dailyCap: 200,
       },
       {
         fetchImpl: (async (url: string | URL | Request, init?: RequestInit) => {
@@ -133,6 +153,7 @@ describe("createHttpArtifactCheckRunner", () => {
           secret: "",
           concurrency: 1,
           timeoutMs: 10_000,
+          dailyCap: 200,
         },
         {
           logger,

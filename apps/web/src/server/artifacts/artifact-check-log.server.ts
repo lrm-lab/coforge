@@ -40,6 +40,8 @@ export function summarizeFindings(findings: ArtifactCheckFindings) {
     inlineClipped: findings.inlineOverflow?.clipped ?? false,
     inlineHeightPx: findings.inlineOverflow?.contentHeight ?? null,
     pageCantScrollCount: findings.pageCantScroll?.length ?? 0,
+    brokenImageCount: findings.brokenImages?.length ?? 0,
+    failedAssetCount: findings.failedAssets?.length ?? 0,
   };
 }
 

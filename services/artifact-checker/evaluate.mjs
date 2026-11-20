@@ -147,6 +147,18 @@ export function collectDomDiagnosticsInPage(input) {
     };
   }
 
+  const brokenImages = [];
+  if (body) {
+    const imgs = body.querySelectorAll("img");
+    for (let i = 0; i < imgs.length && brokenImages.length < 10; i += 1) {
+      const img = imgs[i];
+      const src = img.currentSrc || img.getAttribute("src") || "";
+      if (src && img.complete && img.naturalWidth === 0) {
+        brokenImages.push(src.slice(0, 300));
+      }
+    }
+  }
+
   let scrollLock = null;
   if (shot === "desktop" || shot === "phone") {
     const heldBy = [];
@@ -181,15 +193,54 @@ export function collectDomDiagnosticsInPage(input) {
         }
       }
     }
-    if (heldBy.length > 0 && lockedOverflowHeight > innerHeight + 24) {
-      scrollLock = {
-        shot,
-        viewportWidth: Math.round(innerWidth),
-        viewportHeight: Math.round(innerHeight),
-        contentHeight: Math.round(lockedOverflowHeight),
-        hiddenHeight: Math.round(lockedOverflowHeight - innerHeight),
-        heldBy: heldBy.slice(0, 5),
-      };
+    let hasInnerScroller = false;
+    if (body && typeof getComputedStyle === "function") {
+      const containers = body.querySelectorAll("main, [role='main'], section, article, div");
+      for (let i = 0; i < Math.min(containers.length, 60); i += 1) {
+        const el = containers[i];
+        const cs = getComputedStyle(el);
+        const oy = cs.overflowY || cs.overflow;
+        if (
+          (oy === "auto" || oy === "scroll") &&
+          el.clientHeight >= innerHeight * 0.45 &&
+          el.scrollHeight > el.clientHeight + 24
+        ) {
+          hasInnerScroller = true;
+          break;
+        }
+      }
+    }
+    const docOverflowHeight = Math.max(
+      lockedOverflowHeight,
+      docEl.scrollHeight || 0,
+      body ? body.scrollHeight || 0 : 0,
+    );
+    const rootStyle = typeof getComputedStyle === "function" ? getComputedStyle(docEl) : null;
+    const bodyStyle =
+      body && typeof getComputedStyle === "function" ? getComputedStyle(body) : null;
+    const rootLocked =
+      heldBy.length > 0 ||
+      rootStyle?.overflowY === "hidden" ||
+      rootStyle?.overflowY === "clip" ||
+      bodyStyle?.overflowY === "hidden" ||
+      bodyStyle?.overflowY === "clip" ||
+      bodyStyle?.position === "fixed";
+    if (!hasInnerScroller && rootLocked && docOverflowHeight > innerHeight + 24) {
+      const prevX = window.scrollX || 0;
+      const prevY = window.scrollY || 0;
+      window.scrollTo({ top: 64, left: prevX, behavior: "instant" });
+      const moved = Math.abs((window.scrollY || 0) - prevY) > 1;
+      window.scrollTo({ top: prevY, left: prevX, behavior: "instant" });
+      if (!moved) {
+        scrollLock = {
+          shot,
+          viewportWidth: Math.round(innerWidth),
+          viewportHeight: Math.round(innerHeight),
+          contentHeight: Math.round(docOverflowHeight),
+          hiddenHeight: Math.round(docOverflowHeight - innerHeight),
+          heldBy: heldBy.slice(0, 5),
+        };
+      }
     }
   }
 
@@ -198,5 +249,6 @@ export function collectDomDiagnosticsInPage(input) {
     phoneOverflow,
     inlineOverflow,
     scrollLock,
+    brokenImages,
   };
 }

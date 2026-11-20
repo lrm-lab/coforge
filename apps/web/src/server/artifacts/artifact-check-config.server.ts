@@ -3,6 +3,7 @@ export type ArtifactCheckConfig = {
   secret: string;
   concurrency: number;
   timeoutMs: number;
+  dailyCap: number;
 };
 
 const DEFAULT_CONCURRENCY = 1;
@@ -10,6 +11,8 @@ const MAX_CONCURRENCY = 4;
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MIN_TIMEOUT_MS = 5_000;
 const MAX_TIMEOUT_MS = 120_000;
+const DEFAULT_DAILY_CAP = 200;
+const MAX_DAILY_CAP = 10_000;
 
 function parseBoundedInt(
   raw: string | undefined,
@@ -21,6 +24,13 @@ function parseBoundedInt(
   const parsed = Number.parseInt(raw.trim(), 10);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(min, Math.min(max, parsed));
+}
+
+function parseDailyCap(raw: string | undefined): number {
+  if (!raw) return DEFAULT_DAILY_CAP;
+  const parsed = Number.parseInt(raw.trim(), 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_DAILY_CAP;
+  return Math.min(MAX_DAILY_CAP, parsed);
 }
 
 function isLoopbackHost(hostname: string): boolean {
@@ -57,6 +67,7 @@ export function artifactCheckConfig(
       MIN_TIMEOUT_MS,
       MAX_TIMEOUT_MS,
     ),
+    dailyCap: parseDailyCap(env.COFORGE_ARTIFACT_CHECK_DAILY_CAP),
   };
 }
 

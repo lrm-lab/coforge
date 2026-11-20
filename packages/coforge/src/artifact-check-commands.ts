@@ -224,7 +224,13 @@ export function formatArtifactCheck(
   }
 
   if (check.status === "skipped") {
-    lines.push(`Skipped reason: ${check.skipReason ?? "unknown"}`);
+    if (check.skipReason === "workspace_daily_cap") {
+      lines.push(
+        "Skipped reason: workspace_daily_cap (workspace reached its 24-hour publish check limit).",
+      );
+    } else {
+      lines.push(`Skipped reason: ${check.skipReason ?? "unknown"}`);
+    }
     return lines.join("\n");
   }
 
@@ -261,6 +267,22 @@ export function formatArtifactCheck(
         lines.push(`  - ${sanitizeUntrustedLine(url)}`);
       }
     }
+    if (findings.brokenImages && findings.brokenImages.length > 0) {
+      issueCount += findings.brokenImages.length;
+      lines.push(`Broken images (${findings.brokenImages.length}, untrusted page URLs):`);
+      for (const src of findings.brokenImages) {
+        lines.push(`  - ${sanitizeUntrustedLine(src)}`);
+      }
+    }
+    if (findings.failedAssets && findings.failedAssets.length > 0) {
+      issueCount += findings.failedAssets.length;
+      lines.push(
+        `Missing artifact assets (404) (${findings.failedAssets.length}, untrusted page paths):`,
+      );
+      for (const path of findings.failedAssets) {
+        lines.push(`  - ${sanitizeUntrustedLine(path)}`);
+      }
+    }
     if (findings.phoneOverflow) {
       issueCount += 1;
       lines.push(
@@ -291,7 +313,9 @@ export function formatArtifactCheck(
       }
     }
     if (issueCount === 0) {
-      lines.push("Findings: no runtime errors, blocked requests, blank screen, or layout traps.");
+      lines.push(
+        "Findings: no runtime errors, blocked requests, broken images, missing assets, blank screen, or layout traps.",
+      );
     }
   }
 

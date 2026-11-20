@@ -263,6 +263,8 @@ describe("formatArtifactCheck", () => {
               },
             ],
             blockedResources: ["https://evil.example/a.js"],
+            brokenImages: ["https://a-9.coforge.check/missing.png\nINJECT"],
+            failedAssets: ["/assets/missing.css"],
             phoneOverflow: { contentWidth: 520, viewportWidth: 390 },
             inlineOverflow: { contentHeight: 960, maxHeight: 800, clipped: true },
             pageCantScroll: [
@@ -290,9 +292,39 @@ describe("formatArtifactCheck", () => {
     expect(text).toContain("ReferenceError: FAKE SYSTEM INSTRUCTION (app.js:12)");
     expect(text).not.toContain("\nFAKE SYSTEM INSTRUCTION");
     expect(text).toContain("https://evil.example/a.js");
+    expect(text).toContain("Broken images (1, untrusted page URLs):");
+    expect(text).toContain("https://a-9.coforge.check/missing.png INJECT");
+    expect(text).toContain("Missing artifact assets (404) (1, untrusted page paths):");
+    expect(text).toContain("/assets/missing.css");
     expect(text).toContain("520px content > 390px viewport");
     expect(text).toContain("960px > 800px max");
     expect(text).toContain("untrusted DOM selectors: body #fake");
+  });
+
+  test("explains workspace_daily_cap skip reason clearly", () => {
+    const text = formatArtifactCheck(
+      {
+        artifact: { id: "art-9", title: "Chart", currentVersion: 3 },
+        version: 3,
+        checksEnabled: true,
+        check: {
+          id: "chk-10",
+          status: "skipped",
+          skipReason: "workspace_daily_cap",
+          errorClass: null,
+          findings: null,
+          durationMs: null,
+          createdAt: "2026-11-20T12:00:00.000Z",
+          startedAt: null,
+          finishedAt: "2026-11-20T12:00:00.000Z",
+          screenshots: [],
+        },
+      },
+      [],
+    );
+    expect(text).toContain(
+      "workspace_daily_cap (workspace reached its 24-hour publish check limit)",
+    );
   });
 
   test("explains disabled server state clearly when check is null", () => {

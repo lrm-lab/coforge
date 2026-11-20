@@ -20,6 +20,8 @@ export const ARTIFACT_CHECK_VIEWPORTS: readonly ArtifactCheckViewport[] = [
 
 export const ARTIFACT_CHECK_MAX_CONSOLE_ERRORS = 10;
 export const ARTIFACT_CHECK_MAX_BLOCKED_RESOURCES = 20;
+export const ARTIFACT_CHECK_MAX_BROKEN_IMAGES = 10;
+export const ARTIFACT_CHECK_MAX_FAILED_ASSETS = 10;
 export const ARTIFACT_CHECK_SHOT_MAX_BYTES = 5 * 1024 * 1024;
 export const ARTIFACT_CHECK_REPORT_MAX_BYTES = 64 * 1024;
 export const ARTIFACT_CHECK_RETENTION_VERSIONS = 3;
@@ -58,6 +60,8 @@ export type ArtifactCheckFindings = {
   phoneOverflow: ArtifactCheckPhoneOverflow | null;
   inlineOverflow?: ArtifactCheckInlineOverflow | null;
   pageCantScroll?: ArtifactCheckScrollLock[];
+  brokenImages?: string[];
+  failedAssets?: string[];
 };
 
 export type ArtifactCheckScreenshotRef = {
