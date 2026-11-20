@@ -10,7 +10,6 @@ import {
 } from "@lrm/coforge-sdk/internal/agent-launch-apps";
 import { WORKSPACE_ASSISTANT_INSTRUCTIONS } from "./workspace-assistant-instructions";
 import type { AgentLaunchFeatures } from "./agent-feature-types";
-import { TASK_CONVERSATIONS_SECTION } from "./task-conversations-guidance";
 import { buildCoforgeCliGuideSections } from "./cli-guide-sections";
 export type AgentLaunchIdentity = {
   systemKind?: "workspace-assistant";
@@ -98,10 +97,12 @@ export function buildCoforgeAgentInstructions(context: CoforgeAgentPromptContext
   const who = rawName
     ? `You are "${sanitizeQuotedName(rawName)}", an AI agent in CoForge.`
     : "You are an AI agent in CoForge.";
-  const guide = buildCoforgeCliGuideSections(context);
+  const guide = buildCoforgeCliGuideSections({
+    ...context,
+    ...(context.identity?.features ? { features: context.identity.features } : {}),
+  });
   const sections = [who, buildRuntimeContextSection(context), COMMUNICATION_STYLE];
   sections.push(...Object.values(guide));
-  sections.push(TASK_CONVERSATIONS_SECTION);
   const apps = buildAppsSection(context.identity?.apps ?? []);
   if (apps) sections.push(apps);
   if (context.identity?.systemKind === "workspace-assistant")

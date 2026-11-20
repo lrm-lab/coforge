@@ -1,15 +1,11 @@
 import { foldUntrustedLine } from "../../internal";
 import {
-  buildCoforgeCliGuideSections,
   COMMUNICATION_STYLE,
+  renderCoforgeCliGuide,
   sanitizeQuotedName,
   stripHeadingMarkers,
 } from "./cli-guide";
-
-const EXTERNAL_GUIDE_STANDING_SECTIONS = [
-  COMMUNICATION_STYLE,
-  ...Object.values(buildCoforgeCliGuideSections({ audience: "external" })),
-].join("\n\n");
+import type { GuideFeatures } from "./types";
 
 export type ExternalAgentGuideInput = {
   agent: {
@@ -24,10 +20,11 @@ export type ExternalAgentGuideInput = {
     slug: string;
     name: string;
   };
+  features?: GuideFeatures;
 };
 
 export function buildExternalAgentGuide(input: ExternalAgentGuideInput): string {
-  const { agent, workspace } = input;
+  const { agent, workspace, features } = input;
   const rawName = agent.displayName || agent.name;
   const who = rawName
     ? `You are "${sanitizeQuotedName(rawName)}", an external AI agent in CoForge.`
@@ -49,5 +46,10 @@ export function buildExternalAgentGuide(input: ExternalAgentGuideInput): string 
 - Scheduled reminders (\`coforge reminder schedule|update|snooze\`) are unavailable to external Agents (\`reminders_unsupported_for_external_agents\`); use your own runtime's scheduler and state in the thread when you will follow up.
 - Daemon-local commands (\`coforge context search|read\`, \`coforge proc\`, GitHub credential helpers, \`--send-draft\`) are unavailable.`;
 
-  return [who, contextLines.join("\n"), setup, EXTERNAL_GUIDE_STANDING_SECTIONS].join("\n\n");
+  const standingSections = [
+    COMMUNICATION_STYLE,
+    ...renderCoforgeCliGuide({ audience: "external", ...(features ? { features } : {}) }),
+  ].join("\n\n");
+
+  return [who, contextLines.join("\n"), setup, standingSections].join("\n\n");
 }

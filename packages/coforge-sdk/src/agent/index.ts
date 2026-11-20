@@ -34,7 +34,7 @@ export * from "./context";
 export * from "./agent-context-response";
 export * from "./local-memory";
 export * from "./team-memory";
-export * from "./cli-guide-sections";
+export * from "./guide";
 export * from "./app-registration";
 export * from "./wake-hints";
 export * from "./proc";

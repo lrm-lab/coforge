@@ -1,15 +1,6 @@
-import { foldUntrustedLine, MESSAGE_LINE_SEPARATOR } from "../internal";
-
-export type GuideAudience = "managed" | "external";
-
-export type CoforgeCliGuideOptions = {
-  audience?: GuideAudience;
-  extraCriticalRules?: readonly string[];
-  capabilities?: {
-    cloudDesktop?: boolean;
-  };
-  cloudSkillsGuidance?: string;
-};
+import { foldUntrustedLine, MESSAGE_LINE_SEPARATOR } from "../../internal";
+import { resolveFeatureGuides } from "./registry";
+import type { CoforgeCliGuideOptions, CoforgeCliGuideSections } from "./types";
 
 export const CLI_CHANNEL_MESSAGE_EXAMPLE = `coforge message check --target '#channel'
 coforge message send --target '#channel' <<'COFORGE_MESSAGE'
@@ -30,7 +21,9 @@ export function stripHeadingMarkers(text: string): string {
     .join("\n");
 }
 
-export function buildCoforgeCliGuideSections(options: CoforgeCliGuideOptions = {}) {
+export function buildCoforgeCliGuideSections(
+  options: CoforgeCliGuideOptions = {},
+): CoforgeCliGuideSections {
   const audience = options.audience ?? "managed";
   const isExternal = audience === "external";
 
@@ -72,5 +65,22 @@ Current channel roles override names, history and memory. Without coordination a
 Sub-agents have no CoForge identity: instruct them never to send messages, update tasks, react, or schedule reminders.
 ${(options.extraCriticalRules ?? []).join("\n")}`.trim();
 
-  return { communication, messages, execution, queue, safety };
+  const sections: CoforgeCliGuideSections = {
+    communication,
+    messages,
+    execution,
+    queue,
+    safety,
+  };
+  const featureGuides = resolveFeatureGuides({
+    audience,
+    ...(options.features ? { features: options.features } : {}),
+    ...(options.capabilities ? { capabilities: options.capabilities } : {}),
+  });
+  for (const guide of featureGuides) sections[guide.id] = guide.section;
+  return sections;
+}
+
+export function renderCoforgeCliGuide(options: CoforgeCliGuideOptions = {}): string[] {
+  return Object.values(buildCoforgeCliGuideSections(options));
 }
