@@ -183,9 +183,21 @@ export async function readPendingAgentDeliveries(
       : chosenDeliveryIds.length === 0
         ? Prisma.sql`d."receivedAt" IS NULL`
         : Prisma.sql`(d."receivedAt" IS NULL OR d."deliveryId" IN (${Prisma.join(chosenDeliveryIds)}))`;
-  const page = await ports.db.$queryRaw<{ deliveryId: string }[]>(
-    pendingDeliveryPageSql(workspaceId, agentId, selected),
-  );
+  const candidates = (
+    await ports.db.$queryRaw<{ deliveryId: string }[]>(
+      pendingDeliveryPageSql(workspaceId, agentId, selected),
+    )
+  ).map((row) => row.deliveryId);
+  const page =
+    candidates.length === 0
+      ? []
+      : await ports.db.$queryRaw<{ deliveryId: string }[]>(
+          pendingDeliveryPageSql(
+            workspaceId,
+            agentId,
+            Prisma.sql`(${selected}) AND d."deliveryId" IN (${Prisma.join(candidates)})`,
+          ),
+        );
   const pageIds = page.map((row) => row.deliveryId);
   const fetched =
     pageIds.length === 0

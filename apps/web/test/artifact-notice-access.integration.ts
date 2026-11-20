@@ -329,3 +329,44 @@ test("one review tells the writer and the reader, and only the writer survives a
   expect(await pendingFor(h.f.agents.writer)).toContain(writerEvent.messageId);
   expect(await pendingFor(h.f.agents.reader)).not.toContain(readerEvent.messageId);
 });
+
+test("a revocation between selecting the page and loading it drops the notice", async () => {
+  const artifact = await h.f.make("Race gate");
+  const reader = await h.nameOf(h.f.agents.reader);
+  await h.create(artifact, `Race gate, see @${reader}.`);
+  const sent = await h.submit(artifact);
+  if (sent.status !== "sent") throw new Error("not sent");
+  const event = await h.f.db.systemAgentEvent.findUniqueOrThrow({
+    where: {
+      source_agentId_externalEventId: {
+        source: "system.artifacts",
+        agentId: h.f.agents.reader,
+        externalEventId: `${artifact}:${WEB_DRAFT_REVIEW_MARKER}:${sent.reviewId}`,
+      },
+    },
+    select: { messageId: true },
+  });
+  let statements = 0;
+  const racing = new Proxy(h.f.db, {
+    get(target, property, receiver) {
+      if (property !== "$queryRaw") return Reflect.get(target, property, receiver);
+      return async (...args: unknown[]) => {
+        statements += 1;
+        if (statements === 2)
+          await h.f.db.artifact.update({
+            where: { id: artifact },
+            data: { deletedAt: new Date() },
+          });
+        return (target.$queryRaw as (...inner: unknown[]) => Promise<unknown>)(...args);
+      };
+    },
+  }) as typeof h.f.db;
+
+  const pending = await new PrismaDirectConversationRepository(racing).readPendingAgentDeliveries(
+    h.f.workspaceId,
+    h.f.agents.reader,
+  );
+
+  expect(statements).toBeGreaterThanOrEqual(2);
+  expect(pending.map((delivery) => delivery.messageId)).not.toContain(event.messageId);
+});
