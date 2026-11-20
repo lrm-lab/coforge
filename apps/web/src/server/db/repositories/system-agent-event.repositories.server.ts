@@ -97,7 +97,7 @@ export class PrismaSystemAgentEventStore implements SystemAgentEventStore {
         };
       });
     } catch (error) {
-      if (isUniqueViolation(error)) return undefined;
+      if (scope === this.db && isUniqueViolation(error)) return undefined;
       throw error;
     }
   }
