@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  buildCoforgeCliGuideSections,
-  buildExternalAgentGuide,
-} from "../src/agent/cli-guide-sections";
+import { buildCoforgeCliGuideSections, buildExternalAgentGuide } from "../src/agent/guide";
 
 describe("cli-guide-sections", () => {
   test("managed audience preserves daemon standing prompt sections verbatim", () => {

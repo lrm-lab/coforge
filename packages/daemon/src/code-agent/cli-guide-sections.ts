@@ -14,7 +14,9 @@ export { CLI_CHANNEL_MESSAGE_EXAMPLE };
 export type CoforgeCliGuideOptions = Pick<
   CoforgeAgentPromptContext,
   "extraCriticalRules" | "capabilities" | "agentId"
->;
+> & {
+  features?: NonNullable<CoforgeAgentPromptContext["identity"]>["features"];
+};
 
 function cloudComputerSkillsGuidance(agentId: string | undefined): string {
   if (!isCloudComputerSkillsEnabled()) return "";
@@ -28,6 +30,7 @@ function cloudComputerSkillsGuidance(agentId: string | undefined): string {
 export function buildCoforgeCliGuideSections(options: CoforgeCliGuideOptions = {}) {
   return buildSharedCliGuideSections({
     audience: "managed",
+    ...(options.features ? { features: options.features } : {}),
     extraCriticalRules: options.extraCriticalRules,
     capabilities: options.capabilities,
     cloudSkillsGuidance: cloudComputerSkillsGuidance(options.agentId),
