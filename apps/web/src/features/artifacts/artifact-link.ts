@@ -3,7 +3,7 @@ import { ARTIFACT_SHORT_ID_PATTERN, decodeArtifactShortId } from "./artifact-sho
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const ID_TOKEN = `(?:${UUID}|${ARTIFACT_SHORT_ID_PATTERN})`;
 const DOC_PARAM = new RegExp(
-  String.raw`(?:[?&]doc=|(?:\/w\/[^\s/?#]+)?\/artifacts\/|\/a\/)(${ID_TOKEN})(?=[/?#.,;:!?)\]"'\s]|$)`,
+  String.raw`(?:[?&]doc=|(?:\/w\/[^\s/?#]+)?\/artifacts\/|\/a\/)(${ID_TOKEN})(?=[/?#&.,;:!?)\]"'\s]|$)`,
   "gi",
 );
 const APP_LINK =
@@ -17,17 +17,59 @@ function extractArtifactId(link: string): string | undefined {
   return undefined;
 }
 
-export function artifactIdsInBody(body: string, limit = 3): string[] {
-  const ids: string[] = [];
-  for (const link of body.match(APP_LINK) ?? [])
-    for (const match of link.matchAll(DOC_PARAM)) {
+export type ArtifactBodyLink = {
+  id: string;
+  embed: boolean;
+  version?: number;
+};
+
+const POSITIVE_INT = /^[1-9]\d*$/;
+
+function parseLinkOptions(link: string): { embed: boolean; version?: number } {
+  const queryStart = link.indexOf("?");
+  if (queryStart === -1) return { embed: false };
+  const hashStart = link.indexOf("#", queryStart);
+  const params = new URLSearchParams(
+    link.slice(queryStart + 1, hashStart === -1 ? undefined : hashStart),
+  );
+  const rawEmbed = params.get("embed");
+  const embed = rawEmbed !== null && (rawEmbed === "" || rawEmbed === "1" || rawEmbed === "true");
+  const rawVersion = params.get("version") ?? params.get("v");
+  const parsed = rawVersion && POSITIVE_INT.test(rawVersion) ? Number(rawVersion) : undefined;
+  const version = parsed !== undefined && Number.isSafeInteger(parsed) ? parsed : undefined;
+  return version === undefined ? { embed } : { embed, version };
+}
+
+export function artifactLinksInBody(body: string, limit = 3): ArtifactBodyLink[] {
+  const links: ArtifactBodyLink[] = [];
+  const byId = new Map<string, ArtifactBodyLink>();
+  for (const link of body.match(APP_LINK) ?? []) {
+    const cleaned = link.replace(TRAILING, "");
+    const options = parseLinkOptions(cleaned);
+    for (const match of cleaned.matchAll(DOC_PARAM)) {
       const id = decodeArtifactShortId(match[1]!);
-      if (id !== null && !ids.includes(id)) {
-        ids.push(id);
-        if (ids.length >= limit) return ids;
+      if (id === null) continue;
+      const existing = byId.get(id);
+      if (existing) {
+        if (options.embed) existing.embed = true;
+        if (existing.version === undefined && options.version !== undefined)
+          existing.version = options.version;
+        continue;
       }
+      if (links.length >= limit) return links;
+      const entry: ArtifactBodyLink =
+        options.version === undefined
+          ? { id, embed: options.embed }
+          : { id, embed: options.embed, version: options.version };
+      byId.set(id, entry);
+      links.push(entry);
     }
-  return ids;
+  }
+  return links;
+}
+
+export function artifactIdsInBody(body: string, limit = 3): string[] {
+  return artifactLinksInBody(body, limit).map((link) => link.id);
 }
 
 const LINK_IN_TEXT = new RegExp(String.raw`(\[[^\]]*\]\(|<)?(${APP_LINK.source})(\))?`, "g");

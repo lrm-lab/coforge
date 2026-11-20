@@ -255,7 +255,11 @@ export const MessageRow = memo(function MessageRow({
                 collapsible={collapsible}
                 onToggleExpanded={() => onToggleExpanded(message.id)}
               />
-              <MessageArtifactCards body={message.body} states={message.artifactCards} />
+              <MessageArtifactCards
+                body={message.body}
+                states={message.artifactCards}
+                selectionActive={Boolean(selection)}
+              />
               {message.weeklyReportSuggestion ? (
                 <WeeklyReportMessageCard
                   messageId={message.id}

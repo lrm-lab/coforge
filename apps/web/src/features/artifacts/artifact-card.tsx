@@ -10,7 +10,8 @@ import { CardBadges } from "./artifact-gallery-card";
 import { useScopeOf } from "./artifact-scope";
 import { MarkdownPreview } from "./artifact-preview";
 import { entryFactsLine } from "./artifact-entry-facts";
-import { artifactIdsInBody, bodyWithArtifactTitles } from "./artifact-link";
+import { artifactIdsInBody, artifactLinksInBody, bodyWithArtifactTitles } from "./artifact-link";
+import { ArtifactInlineEmbed } from "./artifact-inline-embed";
 import { ArtifactEditedLine, ArtifactIcon, kindLabel, useArtifactTime } from "./artifact-parts";
 import {
   artifactCardQuery,
@@ -28,20 +29,28 @@ export type ArtifactCardState = {
 export function MessageArtifactCards({
   body,
   states,
+  selectionActive = false,
 }: {
   body: string;
   states?: readonly ArtifactCardState[];
+  selectionActive?: boolean;
 }) {
-  const ids = artifactIdsInBody(body);
-  if (ids.length === 0) return null;
+  const links = artifactLinksInBody(body);
+  if (links.length === 0) return null;
   return (
     <div className="mt-1.5 flex flex-col gap-1.5">
-      {ids.map((id) => {
-        const state = states?.find((entry) => entry.artifactId === id)?.state;
+      {links.map((link) => {
+        const state = states?.find((entry) => entry.artifactId === link.id)?.state;
         return state === "forbidden" || state === "deleted" ? (
-          <ArtifactCardPlaceholder key={id} state={state} />
+          <ArtifactCardPlaceholder key={link.id} state={state} />
         ) : (
-          <ArtifactCardView key={id} artifactId={id} />
+          <ArtifactCardView
+            key={link.id}
+            artifactId={link.id}
+            embed={link.embed}
+            version={link.version}
+            selectionActive={selectionActive}
+          />
         );
       })}
     </div>
@@ -75,11 +84,28 @@ export function useBodyWithArtifactTitles(
   );
 }
 
-function ArtifactCardView({ artifactId }: { artifactId: string }) {
+function ArtifactCardView({
+  artifactId,
+  embed = false,
+  version,
+  selectionActive = false,
+}: {
+  artifactId: string;
+  embed?: boolean;
+  version?: number;
+  selectionActive?: boolean;
+}) {
   const { data: card } = useQuery(artifactCardQuery(artifactId));
-  const { data: marks } = useQuery(artifactMarksQuery(artifactId));
-  const linkTo = useArtifactLink();
   if (!card) return null;
+  if (embed && card.entryKind === "html") {
+    return <ArtifactInlineEmbed card={card} version={version} selectionActive={selectionActive} />;
+  }
+  return <ArtifactCardWithMarks card={card} />;
+}
+
+function ArtifactCardWithMarks({ card }: { card: ArtifactCard }) {
+  const { data: marks } = useQuery(artifactMarksQuery(card.id));
+  const linkTo = useArtifactLink();
   return (
     <ArtifactCardFace
       card={card}

@@ -69,3 +69,11 @@ test("a link with a placeholder card drops its own line but keeps its place in a
   const inline = `See ${LINK} first`;
   expect(bodyWithArtifactTitles(inline, new Map(), placeholders)).toBe(inline);
 });
+
+test("a standalone ?embed=1 artifact link drops its own line beside the inline embed", () => {
+  const embedLink = `https://coforge.example/w/acme/artifacts/${ID}?embed=1&version=2`;
+  expect(bodyWithArtifactTitles(`Chart:\n${embedLink}`, titles)).toBe("Chart:");
+  expect(bodyWithArtifactTitles(`See ${embedLink} now`, titles)).toBe(
+    `See [Launch plan](${embedLink}) now`,
+  );
+});

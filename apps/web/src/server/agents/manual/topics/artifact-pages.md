@@ -66,5 +66,11 @@ HTML, scripts and SVG are refused. `assets.url(name)` loads from `<img>`, `<audi
 
 Every call can fail: it rejects when refused, declined or sent too often (30 a minute per
 method; 600 for `db`). The page's own errors are reported to the reader with a button that asks you to fix them.
-CoForge sets `data-theme="light"` or `"dark"` on `<html>` and fires a `coforge:theme` event on
-`window` when the theme changes.
+CoForge sets `data-theme="light"` or `"dark"` and `data-display-mode="panel"` or `"inline"` on
+`<html>`, injects semantic theme variables (`--coforge-bg`, `--coforge-surface`,
+`--coforge-surface-subtle`, `--coforge-fg`, `--coforge-fg-secondary`, `--coforge-fg-muted`,
+`--coforge-border`, `--coforge-border-subtle`, `--coforge-brand`, `--coforge-brand-fg`,
+`--coforge-success`, `--coforge-warning`, `--coforge-error`, and `--coforge-chart-1` through
+`--coforge-chart-6`), and fires a `coforge:theme` event on `window` (`detail: { theme, displayMode }`)
+when the theme changes. In `inline` mode, the frame blends transparently into the message stream,
+sizes itself automatically to document content (clamped to 96px–800px), and omits `comments.open`.

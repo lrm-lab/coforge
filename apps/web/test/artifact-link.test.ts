@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { artifactIdsInBody } from "#src/features/artifacts/artifact-link";
+import { artifactIdsInBody, artifactLinksInBody } from "#src/features/artifacts/artifact-link";
 import { encodeArtifactShortId } from "#src/features/artifacts/artifact-short-id";
 
 const a = "0b5a1f2e-1111-4a2b-9c3d-000000000001";
@@ -42,4 +42,27 @@ test("Base58 short artifact links decode to canonical UUIDs and deduplicate agai
     `/a/${shortA}`,
   ].join("\n");
   expect(artifactIdsInBody(body)).toEqual([a, b]);
+});
+
+test("artifactLinksInBody parses inline embed markers and optional version pins", () => {
+  const shortA = encodeArtifactShortId(a);
+  const body = [
+    `https://coforge.cn/w/frank/artifacts/${shortA}?embed=1&version=3`,
+    `/w/frank/channel/c1?doc=${b}&embed=true&v=2`,
+  ].join("\n");
+  expect(artifactLinksInBody(body)).toEqual([
+    { id: a, embed: true, version: 3 },
+    { id: b, embed: true, version: 2 },
+  ]);
+  expect(artifactLinksInBody(`/a/${shortA}?embed`)).toEqual([{ id: a, embed: true }]);
+  expect(artifactLinksInBody(`/a/${shortA}?embed=0&version=0`)).toEqual([{ id: a, embed: false }]);
+  expect(artifactLinksInBody(`/a/${shortA}?embed=false&v=abc`)).toEqual([{ id: a, embed: false }]);
+});
+
+test("duplicate links for one artifact upgrade to embed when any occurrence requests it", () => {
+  const body = [
+    `Reference: /w/frank/artifacts/${a}`,
+    `/w/frank/artifacts/${a}?embed=1&version=4`,
+  ].join("\n");
+  expect(artifactLinksInBody(body)).toEqual([{ id: a, embed: true, version: 4 }]);
 });

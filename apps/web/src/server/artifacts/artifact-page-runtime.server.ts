@@ -39,10 +39,44 @@ function request(method, params, timeoutMs) {
     post({ id: id, method: method, params: params });
   });
 }
-function applyTheme(theme) {
-  if (theme !== "light" && theme !== "dark") return;
-  document.documentElement.setAttribute("data-theme", theme);
-  window.dispatchEvent(new CustomEvent("coforge:theme", { detail: { theme: theme } }));
+var displayMode = "panel";
+var initialized = false;
+var lastW = -1;
+var lastH = -1;
+var scheduleSize = function () {};
+var TOKEN_NAME = /^--coforge-[a-z0-9-]+$/;
+function ensureInlineDefaults() {
+  if (document.getElementById("__coforge-inline-defaults")) return;
+  var parent = document.head || document.documentElement;
+  if (!parent) return;
+  var style = document.createElement("style");
+  style.id = "__coforge-inline-defaults";
+  style.textContent = ":where(html[data-display-mode=\\"inline\\"]){background:transparent;height:auto}:where(html[data-display-mode=\\"inline\\"] body){background:transparent;margin:0;padding:0;height:auto;min-height:0;color:var(--coforge-fg)}";
+  parent.insertBefore(style, parent.firstChild);
+}
+function applyHostContext(context) {
+  if (!context || typeof context !== "object") return;
+  if (context.displayMode === "inline" || context.displayMode === "panel") {
+    displayMode = context.displayMode;
+    document.documentElement.setAttribute("data-display-mode", displayMode);
+    if (displayMode === "inline") ensureInlineDefaults();
+  }
+  if (context.tokens && typeof context.tokens === "object") {
+    Object.keys(context.tokens).forEach(function (name) {
+      var value = context.tokens[name];
+      if (TOKEN_NAME.test(name) && typeof value === "string" && value.length <= 128) {
+        document.documentElement.style.setProperty(name, value);
+      }
+    });
+  }
+  if (context.theme === "light" || context.theme === "dark") {
+    document.documentElement.setAttribute("data-theme", context.theme);
+    document.documentElement.style.colorScheme = context.theme;
+    window.dispatchEvent(new CustomEvent("coforge:theme", { detail: { theme: context.theme, displayMode: displayMode } }));
+  }
+  lastW = -1;
+  lastH = -1;
+  if (initialized) scheduleSize();
 }
 var overlay = null;
 var shadow = null;
@@ -132,8 +166,10 @@ function connect() {
   if (!handshake) {
     handshake = request("ui/initialize", { protocolVersion: "2026-01-26", appInfo: { name: "coforge-page", version: "1" }, appCapabilities: {} }, 3000).then(function (result) {
       var context = result && result.hostContext;
-      if (context) applyTheme(context.theme);
+      if (context) applyHostContext(context);
+      initialized = true;
       post({ method: "ui/notifications/initialized" });
+      scheduleSize();
       offer = result && result.experimental && result.experimental["coforge/runtime"];
       return offer && Array.isArray(offer.namespaces) ? offer : null;
     }).catch(function () { return null; });
@@ -231,7 +267,7 @@ if (framed) {
       if (message.error) waiting.reject(new Error(String(message.error.message || "Refused")));
       else waiting.resolve(message.result);
     } else if (message.method === "ui/notifications/host-context-changed") {
-      applyTheme(message.params && message.params.theme);
+      applyHostContext(message.params);
     } else if (message.method === "coforge/find") {
       find(message.params);
     } else if (annotateMessage(message.method, message.params)) {
@@ -259,16 +295,50 @@ if (framed) {
     report(event.reason && event.reason.message ? event.reason.message : String(event.reason));
   });
   var scheduled = false;
-  var observer = new ResizeObserver(function () {
+  var measureSize = function () {
+    var root = document.documentElement;
+    var body = document.body;
+    if (displayMode === "inline" && body) {
+      var rect = body.getBoundingClientRect();
+      return {
+        width: Math.ceil(Math.max(root.scrollWidth, body.scrollWidth)),
+        height: Math.ceil(Math.max(body.scrollHeight, body.offsetHeight, rect ? rect.height : 0)),
+      };
+    }
+    return {
+      width: Math.ceil(root.scrollWidth),
+      height: Math.ceil(root.scrollHeight),
+    };
+  };
+  scheduleSize = function () {
     if (scheduled) return;
     scheduled = true;
     requestAnimationFrame(function () {
       scheduled = false;
       scheduleRelocate();
-      post({ method: "ui/notifications/size-changed", params: { width: Math.ceil(document.documentElement.scrollWidth), height: Math.ceil(document.documentElement.scrollHeight) } });
+      if (!initialized) return;
+      var next = measureSize();
+      if (next.width === lastW && next.height === lastH) return;
+      lastW = next.width;
+      lastH = next.height;
+      post({ method: "ui/notifications/size-changed", params: next });
     });
-  });
+  };
+  var observer = new ResizeObserver(scheduleSize);
   observer.observe(document.documentElement);
+  var bodyObserved = false;
+  var observeBody = function () {
+    if (bodyObserved || !document.body) return;
+    bodyObserved = true;
+    observer.observe(document.body);
+    scheduleSize();
+  };
+  if (document.body) observeBody();
+  else document.addEventListener("DOMContentLoaded", observeBody, { once: true });
+  window.addEventListener("load", function () {
+    observeBody();
+    scheduleSize();
+  }, { once: true });
   startAnnotations();
   connect();
 }
