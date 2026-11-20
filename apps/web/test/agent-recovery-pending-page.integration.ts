@@ -102,6 +102,23 @@ test("the pending page keeps the attention rule and the notice permission, in or
       data: { workspaceId: workspace.id, conversationId: announcements.id, userId: user.id },
     });
 
+    const sealed = await db.conversation.create({
+      data: { workspaceId: workspace.id, channelName: `sealed-${suffix}`, visibility: "private" },
+    });
+    const sealedOwner = await db.conversationMember.create({
+      data: { workspaceId: workspace.id, conversationId: sealed.id, userId: user.id },
+    });
+    await db.conversationMember.create({
+      data: { workspaceId: workspace.id, conversationId: sealed.id, agentId: reader.id },
+    });
+
+    const vault = await db.conversation.create({
+      data: { workspaceId: workspace.id, channelName: `vault-${suffix}`, visibility: "private" },
+    });
+    const vaultOwner = await db.conversationMember.create({
+      data: { workspaceId: workspace.id, conversationId: vault.id, userId: user.id },
+    });
+
     const source = await db.conversation.create({
       data: { workspaceId: workspace.id, channelName: `source-${suffix}` },
     });
@@ -255,7 +272,24 @@ test("the pending page keeps the attention rule and the notice permission, in or
       },
     });
     const channelMessage = await seed({ conversationId: plans.id, senderMemberId: planner.id });
+    const seatedPrivate = await seed({
+      conversationId: sealed.id,
+      senderMemberId: sealedOwner.id,
+    });
     const unseatedDm = await seed({ conversationId: dm.id, senderMemberId: dmMember.id });
+    const privateMention = await seed({ conversationId: vault.id, senderMemberId: vaultOwner.id });
+    await db.pendingMentionAction.create({
+      data: {
+        messageId: privateMention.messageId,
+        conversationId: vault.id,
+        workspaceId: workspace.id,
+        senderMemberId: vaultOwner.id,
+        targetAgentId: reader.id,
+        targetHandle: "reader",
+        expiresAt: new Date(Date.now() + 86_400_000),
+        notifiedAt: new Date(),
+      },
+    });
     const notifiedMention = await seed({
       conversationId: announcements.id,
       senderMemberId: announcer.id,
@@ -283,7 +317,9 @@ test("the pending page keeps the attention rule and the notice permission, in or
       blockedNotice,
       readableNotice,
       channelMessage,
+      seatedPrivate,
       unseatedDm,
+      privateMention,
       notifiedMention,
     ];
     expect(new Set(seeded.map((row) => row.deliveryId)).size).toBe(seeded.length);
@@ -296,9 +332,11 @@ test("the pending page keeps the attention rule and the notice permission, in or
     expect(actual).toEqual([
       readableNotice.deliveryId,
       channelMessage.deliveryId,
+      seatedPrivate.deliveryId,
       unseatedDm.deliveryId,
       notifiedMention.deliveryId,
     ]);
+    expect(actual).not.toContain(privateMention.deliveryId);
 
     const chosen = {
       deliveryIds: [
