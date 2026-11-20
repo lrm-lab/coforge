@@ -83,7 +83,7 @@ test("an around page measures each side against its own rows, not the whole page
         },
       });
 
-    for (const sequence of [1, 2, 3, 4, 5, 6]) {
+    for (const sequence of [1, 2, 3, 4, 5]) {
       const blocked = await notice(sequence);
       await reviewed(blocked.id, crypto.randomUUID());
     }
@@ -126,7 +126,7 @@ test("an around page measures each side against its own rows, not the whole page
       canonicalTarget: "@app.system.artifacts",
       isChannel: false,
       isUserAgentDirectConversation: false,
-      page: { around: "7", limit: 3 } as never,
+      page: { around: "6", limit: 3 } as never,
       resolveAnchor: async (anchor) => {
         const rows = await db.message.findMany({
           where: { conversationId: conversation.id, id: anchor },
