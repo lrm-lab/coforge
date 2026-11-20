@@ -25,8 +25,8 @@ import {
   type PreparedComment,
 } from "./artifact-comment-write.server";
 import {
+  commentMentions,
   peopleMentionedIn,
-  reviewMentions,
   writeMentions,
 } from "./artifact-comment-mention-rows.server";
 import { idempotencyMismatch } from "./artifact-idempotency.server";
@@ -252,7 +252,7 @@ export async function submitDrafts(
     if (roots.size) await reopenThreads(tx, [...roots]);
     await tx.artifactCommentDraft.deleteMany({ where: { id: { in: rows.map((row) => row.id) } } });
     const place = { workspaceId, artifact };
-    const readers = await writeMentions(tx, place, reviewMentions(review, inserted, people));
+    const readers = await writeMentions(tx, place, commentMentions(inserted, people));
     await startFollowing(tx, artifact.id, [{ userId }]);
     return { kind: "written" as const, review, inserted, readers };
   });

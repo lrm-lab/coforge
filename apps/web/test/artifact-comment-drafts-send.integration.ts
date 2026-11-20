@@ -17,14 +17,15 @@ test("sending writes every draft as one review in the order they were saved, and
     path: "plan.md",
   });
   const reader = await h.nameOf(h.f.agents.reader);
+  const bob = await h.f.db.user.findUniqueOrThrow({ where: { id: h.f.bob } });
   const sha256 = await h.upload(artifact, 71);
-  await h.create(artifact, `First, @${reader}.`);
+  await h.create(artifact, `First, @${reader} and @${bob.username}.`);
   await h.create(artifact, "Whole artifact.", {
     path: undefined,
     anchor: undefined,
     images: [sha256],
   });
-  await h.create(artifact, `An answer, @${reader}.`, {
+  await h.create(artifact, `An answer, @${reader} and @${bob.username}.`, {
     path: undefined,
     anchor: undefined,
     replyTo: parent.id,
@@ -49,11 +50,21 @@ test("sending writes every draft as one review in the order they were saved, and
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
   expect(rows.map((row) => row.body)).toEqual([
-    `First, @${reader}.`,
+    `First, @${reader} and @${bob.username}.`,
     "Whole artifact.",
-    `An answer, @${reader}.`,
+    `An answer, @${reader} and @${bob.username}.`,
   ]);
   expect(rows.map((row) => row.id)).toEqual(sent.commentIds);
+  expect(
+    await h.f.db.artifactCommentMention.findMany({
+      where: { artifactId: artifact },
+      select: { commentId: true, reviewId: true, userId: true },
+      orderBy: { mentionedAt: "asc" },
+    }),
+  ).toEqual([
+    { commentId: sent.commentIds[0], reviewId: null, userId: h.f.bob },
+    { commentId: sent.commentIds[2], reviewId: null, userId: h.f.bob },
+  ]);
   expect(rows.every((row) => row.authorUserId === h.f.alice)).toBe(true);
   expect(rows[0]).toMatchObject({ path: "plan.md", anchor: lines });
   expect(rows[2]).toMatchObject({ rootId: parent.id, path: "plan.md" });
