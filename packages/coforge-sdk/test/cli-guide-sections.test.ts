@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { buildCoforgeCliGuideSections, buildExternalAgentGuide } from "../src/agent/guide";
+import {
+  buildCoforgeCliGuideSections,
+  buildExternalAgentGuide,
+  FIRST_PARTY_GUIDE_ENTRIES,
+  resolveFeatureGuides,
+} from "../src/agent/guide";
 
 describe("cli-guide-sections", () => {
   test("managed audience preserves daemon standing prompt sections verbatim", () => {
@@ -21,6 +26,11 @@ describe("cli-guide-sections", () => {
     expect(sections.safety).toContain("Sub-agents have no CoForge identity");
     expect(sections.safety).toContain("post a `page:fill` action card");
     expect(sections.safety).toContain("Extra rule.");
+    expect(sections.tasks).toContain("## Tasks\n");
+    expect(sections.artifacts).toContain("## Artifacts\n");
+    expect(sections.artifacts).toContain("coforge artifact push");
+    expect(sections.artifacts).toContain("?embed=1");
+    expect(sections.artifacts).toContain("coforge manual get artifacts");
   });
 
   test("external audience omits Computer/daemon/memory-file assumptions and keeps shared rules", () => {
@@ -44,6 +54,26 @@ describe("cli-guide-sections", () => {
     expect(combined).toContain("coforge message check");
     expect(combined).toContain("coforge task create --target");
     expect(combined).toContain("coforge task list --mine");
+    expect(combined).toContain("## Tasks\n");
+    expect(combined).toContain("## Artifacts\n");
+    expect(combined).toContain("?embed=1");
+  });
+
+  test("feature guide registry omits Artifacts when features.artifacts is false", () => {
+    expect(FIRST_PARTY_GUIDE_ENTRIES.map((entry) => entry.id)).toEqual(["tasks", "artifacts"]);
+    const enabled = resolveFeatureGuides({ audience: "managed" });
+    expect(enabled.map((entry) => entry.id)).toEqual(["tasks", "artifacts"]);
+    const disabled = resolveFeatureGuides({
+      audience: "managed",
+      features: { artifacts: false },
+    });
+    expect(disabled.map((entry) => entry.id)).toEqual(["tasks"]);
+    const sections = buildCoforgeCliGuideSections({
+      audience: "managed",
+      features: { artifacts: false },
+    });
+    expect(sections.artifacts).toBeUndefined();
+    expect(sections.tasks).toContain("## Tasks\n");
   });
 
   test("buildExternalAgentGuide renders identity, context, CLI setup and shared sections", () => {
@@ -65,5 +95,7 @@ describe("cli-guide-sections", () => {
     expect(guide).toContain("--profile <slug>");
     expect(guide).toContain("COFORGE_PROFILE=<slug>");
     expect(guide).toContain("reminders_unsupported_for_external_agents");
+    expect(guide).toContain("## Artifacts\n");
+    expect(guide).toContain("?embed=1");
   });
 });
