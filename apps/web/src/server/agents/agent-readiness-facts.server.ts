@@ -45,9 +45,9 @@ export function agentReadinessOf(
     stopReason: string | null;
     failureReason: string | null;
   },
-): AgentReadiness {
+): AgentReadiness & { upgradeRefreshAfterMs?: number } {
   if (!facts.computerId || facts.computerOnline === undefined) return READY;
-  return agentReadiness({
+  const readiness = agentReadiness({
     nowMs: facts.nowMs,
     computerOnline: facts.computerOnline,
     upgradeExpiresAtMs: reads.upgradeExpiresAtMs,
@@ -55,4 +55,11 @@ export function agentReadinessOf(
     stopReason: facts.stopReason,
     failureReason: facts.failureReason,
   });
+  if (readiness.state !== "computer_updating" || reads.upgradeExpiresAtMs === null) {
+    return readiness;
+  }
+  return {
+    ...readiness,
+    upgradeRefreshAfterMs: reads.upgradeExpiresAtMs - facts.nowMs,
+  };
 }

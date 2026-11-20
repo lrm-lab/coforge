@@ -196,6 +196,7 @@ export function ChannelSettingsPanel({
                   <AgentProfilePanel
                     key={profile.id}
                     agentId={profile.id}
+                    visible={open}
                     requestedTab={profileTab}
                     onTabChange={setProfileTab}
                     onClose={() => requestClose()}

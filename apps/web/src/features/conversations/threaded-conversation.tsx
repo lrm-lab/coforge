@@ -335,6 +335,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
       {visibleSlot === "profile" && profileAgentId && (
         <AgentProfilePanel
           agentId={profileAgentId}
+          visible={focus?.focused !== "chat"}
           requestedTab={agentProfile?.tab}
           onTabChange={(tab) => onAgentProfileTabChange?.(tab)}
           onClose={() => onCloseAgentProfile?.()}

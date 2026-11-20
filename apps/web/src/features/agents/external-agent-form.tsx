@@ -175,7 +175,7 @@ function ExternalAgentConnectStep({
   const profile = useQuery({
     ...agentProfileQuery(agent.id),
     refetchInterval: (query) =>
-      query.state.data?.externalSetup?.state === "online" ? false : 3000,
+      query.state.data?.profile?.externalSetup?.state === "online" ? false : 3000,
   });
   const setup = profile.data?.externalSetup ?? { state: "waiting" as const, lastSeenAt: null };
   const online = setup.state === "online";

@@ -57,20 +57,23 @@ test("an online Computer with its runtime and no upgrade is ready", async () => 
   expect(await readiness()).toEqual({ state: "ready" });
 });
 
-test("an accepted upgrade inside its window reads as the Computer updating", async () => {
-  expect(
-    await readiness(
-      {
-        latestUpgrade: async () => ({
-          requestId: "r",
-          status: "accepted",
-          expectedVersion: "1.0.0",
-          expiresAt: new Date(NOW + 60_000).toISOString(),
-        }),
-      },
-      { computerOnline: false },
-    ),
-  ).toMatchObject({ state: "computer_updating", also: ["computer_offline"] });
+test("the profile gets the time remaining on an accepted upgrade from the readiness clock", async () => {
+  const upgrade = {
+    latestUpgrade: async () => ({
+      requestId: "r",
+      status: "accepted" as const,
+      expectedVersion: "1.0.0",
+      expiresAt: new Date(NOW + 60_000).toISOString(),
+    }),
+  };
+  expect(await readiness(upgrade, { computerOnline: false, nowMs: NOW + 59_999 })).toMatchObject({
+    state: "computer_updating",
+    also: ["computer_offline"],
+    upgradeRefreshAfterMs: 1,
+  });
+  const expired = await readiness(upgrade, { computerOnline: false, nowMs: NOW + 60_000 });
+  expect(expired).toMatchObject({ state: "computer_offline" });
+  expect(expired).not.toHaveProperty("upgradeRefreshAfterMs");
 });
 
 test("an upgrade that is not accepted does not make the Computer updating", async () => {

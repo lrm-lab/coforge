@@ -293,7 +293,7 @@ export const getAgentProfile = createServerFn({ method: "GET" })
   .validator(agentIdSchema)
   .handler(async ({ data: agentId, context }) => {
     const result = await loadAgentProfileDetail(context, agentId);
-    if (!result) throw new Error("Agent not found");
+    if (!result) throw new AppError("NOT_FOUND");
     setResponseHeader("cache-control", "no-store");
     return result;
   });

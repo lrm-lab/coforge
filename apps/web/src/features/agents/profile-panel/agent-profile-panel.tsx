@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { useIsPresent } from "motion/react";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
-import { isAppErrorCode } from "#src/lib/app-error";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import {
   useLiveAgent,
@@ -75,7 +75,7 @@ import {
 import {
   agentEnvironmentKey,
   agentEnvironmentQuery,
-  agentProfileQuery,
+  useAgentProfile,
   canManageAgent,
   useInvalidateAgentProfile,
 } from "./agent-profile-queries";
@@ -89,6 +89,7 @@ export function AgentProfilePanel({
   onClose,
   back,
   pageHeading,
+  visible = true,
 }: {
   agentId: string;
   requestedTab: ProfileTabId | undefined;
@@ -96,6 +97,7 @@ export function AgentProfilePanel({
   onClose: () => void;
   back?: { label: string; onPress: () => void };
   pageHeading?: boolean;
+  visible?: boolean;
 }) {
   const timeZone = appRoute.useLoaderData().timeZone;
   const workspaceSlug = appRoute.useParams().workspaceSlug;
@@ -110,8 +112,8 @@ export function AgentProfilePanel({
     { ignoreInputs: true, preventDefault: false },
   );
   const liveAgent = useLiveAgent(agentId);
-  const query = useQuery(agentProfileQuery(agentId));
-  const profile = query.data;
+  const present = useIsPresent();
+  const { profile, unavailable, notVisible } = useAgentProfile(agentId, visible && present);
   const invalidate = useInvalidateAgentProfile(agentId);
   const display = liveAgent?.display ?? profile?.display;
 
@@ -238,8 +240,7 @@ export function AgentProfilePanel({
     });
   }
 
-  if (query.isError) {
-    const notVisible = isAppErrorCode(query.error, "AGENT_NOT_VISIBLE");
+  if (unavailable) {
     return <AgentProfileUnavailable notVisible={notVisible} back={back} onClose={onClose} />;
   }
 
