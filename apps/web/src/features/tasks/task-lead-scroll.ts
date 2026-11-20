@@ -47,11 +47,13 @@ export function useTaskLeadScroll({
 }) {
   const [titleElement, setTitleElement] = useState<HTMLElement | null>(null);
   const [scrolledOut, setScrolledOut] = useState(false);
+  const [canScrollToTop, setCanScrollToTop] = useState(false);
   const scrollerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!titleElement) {
       scrollerRef.current = null;
+      setCanScrollToTop(false);
       setScrolledOut(false);
       return;
     }
@@ -61,21 +63,28 @@ export function useTaskLeadScroll({
       (node) => getComputedStyle(node).overflowY,
     );
     scrollerRef.current = scroller;
-    if (!scroller || typeof IntersectionObserver === "undefined") {
+    setCanScrollToTop(Boolean(scroller && scroller.scrollTop > 0));
+    if (!scroller) {
       setScrolledOut(false);
       return;
     }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries.at(-1);
-        if (!entry) return;
-        setScrolledOut(isLeadScrolledOut(entry, scroller.scrollTop));
-      },
-      { root: scroller },
-    );
-    observer.observe(titleElement);
+    const updateScrollPosition = () => setCanScrollToTop(scroller.scrollTop > 0);
+    scroller.addEventListener("scroll", updateScrollPosition, { passive: true });
+    const observer =
+      typeof IntersectionObserver === "undefined"
+        ? null
+        : new IntersectionObserver(
+            (entries) => {
+              const entry = entries.at(-1);
+              if (!entry) return;
+              setScrolledOut(isLeadScrolledOut(entry, scroller.scrollTop));
+            },
+            { root: scroller },
+          );
+    observer?.observe(titleElement);
     return () => {
-      observer.disconnect();
+      observer?.disconnect();
+      scroller.removeEventListener("scroll", updateScrollPosition);
     };
   }, [titleElement, boundaryRef]);
 
@@ -85,5 +94,5 @@ export function useTaskLeadScroll({
     scrollContainerToTop(scroller, reducedMotion);
   }, [reducedMotion]);
 
-  return { setTitleElement, scrolledOut, scrollToTop };
+  return { setTitleElement, scrolledOut, canScrollToTop, scrollToTop };
 }

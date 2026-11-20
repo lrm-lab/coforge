@@ -217,7 +217,7 @@ export function TaskDetailDialog({
     onOpenChange,
   });
 
-  const { setTitleElement, scrolledOut, scrollToTop } = useTaskLeadScroll({
+  const { setTitleElement, scrolledOut, canScrollToTop, scrollToTop } = useTaskLeadScroll({
     boundaryRef: modalContentRef,
     reducedMotion: reduced,
   });
@@ -228,7 +228,6 @@ export function TaskDetailDialog({
     },
     [titleRef, setTitleElement],
   );
-  const canScrollToTop = scrolledOut && !history;
 
   useHotkey(
     "Escape",
@@ -306,15 +305,16 @@ export function TaskDetailDialog({
                   conversationName={conversationName}
                   onBack={stepBack}
                   onOpenRelated={onOpenRelated}
-                  onScrollToTop={canScrollToTop ? scrollToTop : undefined}
+                  onScrollToTop={scrolledOut && !history ? scrollToTop : undefined}
                 />
-                {canScrollToTop && (
+                {!history && (
                   <ButtonUtility
                     tooltip={m.tasks_scroll_to_top()}
                     tooltipPlacement="bottom"
                     icon={ArrowUp}
                     size="sm"
                     color="tertiary"
+                    isDisabled={!canScrollToTop}
                     onClick={scrollToTop}
                     className={PHONE_BAR_BUTTON}
                   />
@@ -361,7 +361,7 @@ export function TaskDetailDialog({
                   color="tertiary"
                   aria-label={m.tasks_close()}
                   onClick={requestClose}
-                  className={cn(PHONE_BAR_BUTTON, "max-sm:order-first")}
+                  className={cn(PHONE_BAR_BUTTON, "max-sm:order-first", !history && "max-sm:mr-11")}
                 />
               </div>
               <div

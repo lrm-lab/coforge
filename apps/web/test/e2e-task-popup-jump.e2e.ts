@@ -85,15 +85,22 @@ test("a Task popup offers no Jump to latest when nothing is unread", async () =>
     await mkdir(artifacts, { recursive: true });
     const page = `${origin}/en/w/${workspace.slug}/channel/${channel.id}?task=${number}`;
     const history = `document.querySelector('[role="dialog"] [data-scroll-restoration-id]')`;
+    const backToTop = `document.querySelector('[role="dialog"] button[aria-label="Back to top"]')`;
     const backToBottom = `([...document.querySelectorAll('[role="dialog"] button')].find((b) => /^jump to latest$/i.test(b.textContent.trim())) ?? null)`;
     await browser("set", "viewport", "1440", "900");
     await browser("open", page);
     await browser("wait", "--fn", `${pageHydrated} && ${history}?.textContent.includes("${tail}")`);
     // A short discussion, at the latest: nothing to go back to.
     expect(await evaluate<boolean>(`${backToBottom} === null`)).toBe(true);
+    expect(await evaluate<boolean>(`${backToTop}?.disabled`)).toBe(true);
     // The pane narrows until it overflows (a long draft, a status bar) and the reader goes up.
     await evaluate(`(${history}.style.maxHeight = "60px", true)`);
     await browser("wait", "--fn", `${history}.scrollHeight > ${history}.clientHeight + 48`);
+    await evaluate(`(${history}.scrollTop = 8, true)`);
+    await browser("wait", "--fn", `${backToTop}?.disabled === false`);
+    await evaluate(`(${backToTop}.focus(), true)`);
+    await browser("press", "Enter");
+    await browser("wait", "--fn", `${history}.scrollTop === 0 && ${backToTop}.disabled`);
     await evaluate(`(${history}.scrollTop = ${history}.scrollHeight, true)`);
     await browser("wait", "--fn", `${history}.scrollTop > 48`);
     await evaluate(
