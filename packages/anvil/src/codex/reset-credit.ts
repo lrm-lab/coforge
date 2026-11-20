@@ -2,7 +2,7 @@ import { getLogger } from "@logtape/logtape";
 import { type ResetCreditOutcome, RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { JsonlRequestError, asRecord, isVersionBelow } from "@lrm/coforge-anvil";
 
-import { openCodexAppServer } from "./app-server-session";
+import { codexVersion, openCodexAppServer } from "./app-server-session";
 import type { CodexUsageHost } from "./host";
 import { isNonSubscription } from "./usage";
 
@@ -74,7 +74,7 @@ export async function consumeCodexResetCredit(
   });
   try {
     const server = await session.start();
-    const version = codexVersion(server.userAgent);
+    const version = codexVersion(server.userAgent)?.split("-", 1)[0];
     if (version && isVersionBelow(version, CODEX_RESET_CREDIT_MINIMUM_VERSION))
       return settle("unsupported", "version_below_minimum");
     // An app-server that predates `account/read` is still asked.
@@ -106,12 +106,4 @@ export async function consumeCodexResetCredit(
 function failureKind(error: unknown): string {
   if (error instanceof ResetCreditTimeoutError) return "timeout";
   return error instanceof JsonlRequestError ? "error_reply" : "transport";
-}
-
-/** The Codex version in the app-server's `userAgent`, `<originator>/<version> (<os>; <arch>) …`,
- * as `get_codex_user_agent` builds it. */
-function codexVersion(userAgent: unknown): string | undefined {
-  return typeof userAgent === "string"
-    ? userAgent.match(/^[^/\s]+\/(\d+\.\d+\.\d+)/u)?.[1]
-    : undefined;
 }

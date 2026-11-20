@@ -23,22 +23,17 @@ export const CODEX_MODEL_LIST = {
   nextCursor: null,
 };
 
-/**
- * What `thread/start` must report for the fixture's single model: the selected model and effort,
- * and — because the Fast tier is opt-in per launch — the requested service tier exactly, so
- * neither a dropped nor a stray `serviceTier` passes.
- */
 export function hasExpectedThreadConfig(
   params: Record<string, unknown> | undefined,
-  expectsFastMode: boolean,
+  expectedServiceTier: "fast" | "default" | null,
 ): boolean {
   const config = params?.config as Record<string, unknown> | undefined;
   if (params?.model !== "gpt-5.6-sol" || config?.model_reasoning_effort !== "high") return false;
-  return expectsFastMode ? params?.serviceTier === "fast" : !("serviceTier" in (params ?? {}));
+  return params?.serviceTier === expectedServiceTier;
 }
 
 /** The tier codex echoes for a request, mirroring its real reply (measured on 0.163.0). */
 export function appliedServiceTier(requested: unknown): string | null {
   if (requested === "fast" || requested === "priority") return "priority";
-  return requested === undefined ? "default" : null;
+  return requested === undefined || requested === "default" ? "default" : null;
 }

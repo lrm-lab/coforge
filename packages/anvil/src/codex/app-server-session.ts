@@ -74,3 +74,9 @@ export function openCodexAppServer(
     dispose: () => process.dispose().catch(() => undefined),
   };
 }
+
+export function codexVersion(userAgent: unknown): string | undefined {
+  return typeof userAgent === "string"
+    ? userAgent.match(/^[^/\s]+\/(\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?)/u)?.[1]
+    : undefined;
+}

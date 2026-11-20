@@ -1,9 +1,10 @@
 import type { AgentSession, AgentSessionOptions, UsageSnapshot } from "@coforge/agent";
-import type { CodeAgentProvider } from "@lrm/coforge-anvil";
+import { asRecord, type CodeAgentProvider } from "@lrm/coforge-anvil";
 import { JsonlProcess } from "@lrm/coforge-anvil/execution";
 import { CodexAgentSession } from "./session";
 import { rejectServerRequests } from "./server-requests";
 import { codexAccountModel } from "./account-model";
+import { codexVersion } from "./app-server-session";
 import { openCodexThread } from "./thread-open";
 import { codexReasoningSummary } from "./reasoning-summary";
 import { readCodexRecycleBriefing } from "./recycle-briefing";
@@ -71,7 +72,7 @@ export class CodexProvider implements CodeAgentProvider {
     );
     rejectServerRequests(process, options.agentId, options.runtimeId);
     try {
-      await process.request({
+      const initialized = await process.request({
         method: "initialize",
         params: {
           clientInfo: this.#host.clientInfo,
@@ -90,6 +91,7 @@ export class CodexProvider implements CodeAgentProvider {
         options,
         environment,
         reasoningSummary,
+        codexVersion(asRecord(initialized.result)?.userAgent),
       );
       const model = await codexAccountModel(process, result, options.runtime?.model, {
         agent_id: options.agentId,

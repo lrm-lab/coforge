@@ -1,6 +1,6 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import type { AgentSessionOptions } from "@coforge/agent";
-import { asRecord, JsonlRequestError } from "@lrm/coforge-anvil";
+import { asRecord, isVersionBelow, JsonlRequestError } from "@lrm/coforge-anvil";
 import { type JsonlProcess } from "@lrm/coforge-anvil/execution";
 
 import { getLogger } from "@logtape/logtape";
@@ -31,10 +31,12 @@ export async function openCodexThread(
   options: AgentSessionOptions,
   environment: Readonly<Record<string, string>>,
   reasoningSummary?: string,
+  appServerVersion?: string,
 ): Promise<OpenedCodexThread> {
   const sessionId = options.sessionId;
+  const serviceTier = options.runtime?.fastMode ? "fast" : standardServiceTier(appServerVersion);
   const open = (resume?: string) =>
-    process.request(threadRequest(options, environment, resume, reasoningSummary));
+    process.request(threadRequest(options, environment, serviceTier, resume, reasoningSummary));
   const log = { agent_id: options.agentId, runtime_id: options.runtimeId };
   // The resumed thread, or why it could not be: any error that is not a known one is thrown.
   const resume = (id: string) =>
@@ -145,9 +147,20 @@ async function nameThread(
   }
 }
 
+const CODEX_EXPLICIT_STANDARD_TIER_MINIMUM_VERSION = "0.133.0";
+
+function standardServiceTier(version: string | undefined): "default" | null {
+  if (!version) return null;
+  const [stableVersion = "", prerelease] = version.split("-", 2);
+  const minimum = CODEX_EXPLICIT_STANDARD_TIER_MINIMUM_VERSION;
+  if (isVersionBelow(stableVersion, minimum) || (stableVersion === minimum && prerelease))
+    return null;
+  return "default";
+}
 function threadRequest(
   options: AgentSessionOptions,
   environment: Readonly<Record<string, string>>,
+  serviceTier: "fast" | "default" | null,
   sessionId?: string,
   reasoningSummary?: string,
 ) {
@@ -158,8 +171,7 @@ function threadRequest(
       cwd: options.agentWorkspaceDirectory,
       developerInstructions: options.instructions,
       ...(options.runtime?.model ? { model: options.runtime.model } : {}),
-      // Codex's own service tier for this thread; the ordinary tier is the absence of it.
-      ...(options.runtime?.fastMode ? { serviceTier: "fast" } : {}),
+      serviceTier,
       approvalPolicy: "never",
       sandbox: "danger-full-access",
       config: {

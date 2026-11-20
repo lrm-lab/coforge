@@ -9,7 +9,14 @@ const expectedSkill = process.argv
   ?.slice(15);
 const expectsCoforgeEnvironment = process.argv.includes("expected-coforge-environment");
 const expectsRuntimeConfig = process.argv.includes("expected-runtime-config");
-const expectsFastMode = process.argv.includes("expected-fast-mode");
+const expectedServiceTier = process.argv.includes("expected-fast-mode")
+  ? "fast"
+  : process.argv.includes("expected-legacy-standard-tier")
+    ? null
+    : "default";
+const appServerVersion = process.argv
+  .find((argument) => argument.startsWith("app-server-version="))
+  ?.slice("app-server-version=".length);
 const expectsAgentInstructions = process.argv.includes("expected-agent-instructions");
 const expectedSession = process.argv
   .find((argument) => argument.startsWith("expected-session="))
@@ -69,7 +76,7 @@ function handle(request: Request): void {
       result: {
         userAgent: usageVersion
           ? `coforge-daemon-usage/${usageVersion} (Mac OS 14.0; arm64) fixture`
-          : "fixture",
+          : `coforge_daemon/${appServerVersion ?? "0.169.0"} (Mac OS 14.0; arm64) fixture`,
       },
     });
     return;
@@ -164,7 +171,7 @@ function handle(request: Request): void {
       });
       return;
     }
-    if (expectsRuntimeConfig && !hasExpectedThreadConfig(request.params, expectsFastMode)) {
+    if (expectsRuntimeConfig && !hasExpectedThreadConfig(request.params, expectedServiceTier)) {
       write({
         id: request.id,
         error: { message: "missing selected runtime config" },

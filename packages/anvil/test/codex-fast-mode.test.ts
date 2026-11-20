@@ -1,6 +1,6 @@
 import { fixtureCodexHost } from "./fixtures/codex-host";
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -25,8 +25,6 @@ test("Codex asks for the Fast service tier only when the launch requests it", as
     join(skillDirectory, "SKILL.md"),
     "---\nname: fixture-skill\ndescription: Fixture skill\n---\n",
   );
-  // The fixture rejects thread/start unless `serviceTier` is exactly "fast", so a regression that
-  // drops the tier fails session creation rather than passing silently.
   const adapter = new CodexProvider({
     host: fixtureCodexHost,
     command: [
@@ -55,7 +53,6 @@ test("Codex asks for the Fast service tier only when the launch requests it", as
     session.subscribe((event) => events.push(event));
     await session.sendMessage("finish");
     await waitForEvent(events, "completed");
-    // codex's own thread/start reply said it applied the priority (Fast) tier.
     expect(events.filter((event) => event.type === "service-tier")).toEqual([
       { type: "service-tier", state: "on" },
     ]);
@@ -64,27 +61,58 @@ test("Codex asks for the Fast service tier only when the launch requests it", as
   }
 });
 
-test("a Codex launch that asks for nothing reports no service tier at all", async () => {
-  const agentWorkspaceDirectory = await mkdtemp(join(tmpdir(), "coforge-codex-no-fast-"));
-  const adapter = new CodexProvider({
-    host: fixtureCodexHost,
-    command: [
-      process.execPath,
-      new URL("./fixtures/codex-app-server.ts", import.meta.url).pathname,
-    ],
-  });
-
-  try {
-    const session = await adapter.createAgentSession({
-      agentWorkspaceDirectory,
-      instructions: TEST_AGENT_INSTRUCTIONS,
+test.each([
+  ["0.118.0", true],
+  ["0.133.0-alpha.1", true],
+  ["0.133.0", false],
+  ["0.169.0", false],
+] as const)(
+  "Codex %s resumes the saved thread at the standard tier when Fast is off",
+  async (version, legacy) => {
+    const agentWorkspaceDirectory = await mkdtemp(
+      join(await realpath(tmpdir()), "coforge-codex-no-fast-"),
+    );
+    const codexHome = join(agentWorkspaceDirectory, ".codex");
+    const adapter = new CodexProvider({
+      host: fixtureCodexHost,
+      command: [
+        process.execPath,
+        new URL("./fixtures/codex-app-server.ts", import.meta.url).pathname,
+        "expected-session=thread-1",
+        "expected-runtime-config",
+        `app-server-version=${version}`,
+        ...(legacy ? ["expected-legacy-standard-tier"] : []),
+      ],
     });
-    const events: AgentRuntimeEvent[] = [];
-    session.subscribe((event) => events.push(event));
-    await session.sendMessage("finish");
-    await waitForEvent(events, "completed");
-    expect(events.filter((event) => event.type === "service-tier")).toEqual([]);
-  } finally {
-    await rm(agentWorkspaceDirectory, { recursive: true, force: true });
-  }
-});
+
+    try {
+      const session = await adapter.createAgentSession({
+        agentWorkspaceDirectory,
+        instructions: TEST_AGENT_INSTRUCTIONS,
+        sessionId: "thread-1",
+        runtime: {
+          provider: "codex",
+          model: "gpt-5.6-sol",
+          reasoning: "high",
+        },
+        environment: {
+          HOME: agentWorkspaceDirectory,
+          CODEX_HOME: codexHome,
+          COFORGE_EXPECTED_HOME: agentWorkspaceDirectory,
+          COFORGE_EXPECTED_CODEX_HOME: codexHome,
+        },
+      });
+      try {
+        const events: AgentRuntimeEvent[] = [];
+        session.subscribe((event) => events.push(event));
+        await session.sendMessage("finish");
+        await waitForEvent(events, "completed");
+        expect(events.filter((event) => event.type === "service-tier")).toEqual([]);
+      } finally {
+        await session.dispose();
+      }
+    } finally {
+      await rm(agentWorkspaceDirectory, { recursive: true, force: true });
+    }
+  },
+);
