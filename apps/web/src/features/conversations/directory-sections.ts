@@ -1,22 +1,30 @@
-/**
- * Per-device collapse state for the Chat sidebar's CHANNELS / DIRECT MESSAGES groups.
- * Read only after mount (see `conversation-directory.tsx`) so SSR markup never depends on it —
- * same reasoning as `local-layout-storage.ts`, where touching `localStorage` during Nitro's
- * `renderToReadableStream` throws.
- */
-const DIRECTORY_SECTION_IDS = ["pinned", "channels", "agents"] as const;
-export type DirectorySectionId = (typeof DIRECTORY_SECTION_IDS)[number] | `custom:${string}`;
+import { chatSectionSortModes, type ChatSectionSortMode } from "./chat-section.schemas";
 
-/** The sections a member can collapse. Pinned is a section (it takes drops, it can be hidden when
- * empty) but not a collapsible one: the design mockup gives it a pin and no chevron. */
+const DIRECTORY_SECTION_IDS = ["pinned", "channels", "agents"] as const;
+export type BuiltInSectionId = (typeof DIRECTORY_SECTION_IDS)[number];
+export type DirectorySectionId = BuiltInSectionId | `custom:${string}`;
+
 const COLLAPSIBLE_SECTION_IDS = ["channels", "agents"] as const;
 export type CollapsibleSectionId = (typeof COLLAPSIBLE_SECTION_IDS)[number];
 
-const STORAGE_KEY = "coforge-chat-sections-collapsed";
+export const naturalSectionSortModes = ["recent", "alpha"] as const;
+export type NaturalSectionSortMode = (typeof naturalSectionSortModes)[number];
 
-/** Collapsed sections, as a set of ids. An unreadable or malformed value means "all expanded", and
- * so does an id that cannot collapse — including "pinned", stored by a device that collapsed it
- * back when it could. */
+export type BuiltInSectionSortModes = {
+  pinned: ChatSectionSortMode;
+  channels: NaturalSectionSortMode;
+  agents: NaturalSectionSortMode;
+};
+
+export const DEFAULT_BUILT_IN_SORT_MODES: BuiltInSectionSortModes = {
+  pinned: "manual",
+  channels: "alpha",
+  agents: "recent",
+};
+
+const STORAGE_KEY = "coforge-chat-sections-collapsed";
+const SORT_STORAGE_KEY = "coforge-chat-sections-sort";
+
 export function readCollapsedSections(): CollapsibleSectionId[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -32,19 +40,47 @@ export function readCollapsedSections(): CollapsibleSectionId[] {
 export function writeCollapsedSections(ids: CollapsibleSectionId[]) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
+  } catch {}
+}
+
+function parseMode<Mode extends string>(
+  value: unknown,
+  allowed: readonly Mode[],
+  fallback: Mode,
+): Mode {
+  return typeof value === "string" && (allowed as readonly string[]).includes(value)
+    ? (value as Mode)
+    : fallback;
+}
+
+export function readBuiltInSectionSortModes(): BuiltInSectionSortModes {
+  try {
+    const raw = localStorage.getItem(SORT_STORAGE_KEY);
+    if (!raw) return { ...DEFAULT_BUILT_IN_SORT_MODES };
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      return { ...DEFAULT_BUILT_IN_SORT_MODES };
+    const record = parsed as Record<string, unknown>;
+    return {
+      pinned: parseMode(record.pinned, chatSectionSortModes, DEFAULT_BUILT_IN_SORT_MODES.pinned),
+      channels: parseMode(
+        record.channels,
+        naturalSectionSortModes,
+        DEFAULT_BUILT_IN_SORT_MODES.channels,
+      ),
+      agents: parseMode(record.agents, naturalSectionSortModes, DEFAULT_BUILT_IN_SORT_MODES.agents),
+    };
   } catch {
-    // Private mode or blocked storage: the toggle still works for this page.
+    return { ...DEFAULT_BUILT_IN_SORT_MODES };
   }
 }
 
-/**
- * Whether a Chat sidebar section may be hidden by Settings → Hide empty sidebar sections: it has
- * no rows. While a row is dragged, a section that takes drops (Pinned) comes back so the row can
- * be dropped into it. Counts come from the lists as they were when the drag started, so a
- * section the row was dragged out of stays until it is dropped. The setting itself is a class on
- * <html> (`features/settings/hide-empty-sidebar-sections.ts`); Channels and Direct messages stay
- * visible.
- */
+export function writeBuiltInSectionSortModes(modes: BuiltInSectionSortModes) {
+  try {
+    localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify(modes));
+  } catch {}
+}
+
 export function directorySectionHideable({
   itemCount,
   dragging,

@@ -286,6 +286,7 @@
   "chat_section_create": "新建分组…",
   "chat_section_edit": "重命名 / 更换图标…",
   "chat_section_sort": "排序",
+  "chat_section_sort_for": "排序{name}",
   "chat_section_sort_manual": "手动",
   "chat_section_sort_recent": "最近",
   "chat_section_sort_alpha": "A-Z",

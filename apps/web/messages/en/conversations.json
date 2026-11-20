@@ -299,6 +299,7 @@
   "chat_section_create": "New Section…",
   "chat_section_edit": "Rename / Change Icon…",
   "chat_section_sort": "Sort",
+  "chat_section_sort_for": "Sort {name}",
   "chat_section_sort_manual": "Manual",
   "chat_section_sort_recent": "Recent",
   "chat_section_sort_alpha": "A-Z",
