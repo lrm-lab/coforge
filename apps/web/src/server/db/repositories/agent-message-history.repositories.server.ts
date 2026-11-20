@@ -202,7 +202,7 @@ export async function readAgentMessagePage(
       before: Boolean(page.before),
       after: Boolean(page.after),
       around: Boolean(page.around),
-      fromSequence: page.fromSequence,
+      fromSequence: page.unread ? (page.fromSequence ?? readThrough + 1) : page.fromSequence,
       throughSequence: page.throughSequence,
       limit,
     });
