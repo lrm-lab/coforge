@@ -38,6 +38,7 @@ import { coldStartRejectedReplay, coldStartResumedSession } from "./resumed-sess
 import { getLogger } from "@logtape/logtape";
 import type { AgentSessionReport } from "@lrm/coforge-sdk/internal";
 import { SystemCleaner } from "#src/system-cleaner/system-cleaner";
+import { composeAgentMemory } from "./agent-memory-composition";
 import { ColdIdleSweep } from "./cold-idle-sweep";
 import { TaskIdleNudge } from "./task-idle-nudge";
 import { TurnEndCompaction } from "./turn-end-compaction";
@@ -95,6 +96,7 @@ export type AgentLaunchCoordinatorPorts = {
   offlineResidency: AgentOfflineResidency;
   drafts: Drafts;
   systemCleaner: SystemCleaner;
+  authorizeMemory(context: string, key: string): string;
   isStopping: () => boolean;
   assertRunning: () => void;
   assertAgentNotStopping: (agentId: string) => void;
@@ -150,8 +152,10 @@ export class AgentLaunchCoordinator {
   readonly turnEndCompaction: TurnEndCompaction;
   readonly #liveWarmSweep: ColdIdleSweep;
   readonly idleNudge: TaskIdleNudge;
+  readonly memory: ReturnType<typeof composeAgentMemory>;
 
   constructor(readonly ports: AgentLaunchCoordinatorPorts) {
+    this.memory = composeAgentMemory(ports, (id) => this.turnEndCompaction.isCompacting(id));
     this.#owed = new OwedRecovery(ports.deliveryGate.inboxes);
     ports.lifecycle.subscribe(this.exits);
     const isAgentIdle = (agentId: string) => {
@@ -230,6 +234,7 @@ export class AgentLaunchCoordinator {
       },
       idle: isAgentIdle,
       beforeIdleAsk: (agentId) => {
+        this.memory.review.onIdle(agentId);
         if (this.turnEndCompaction.isCompacting(agentId)) return true;
         if (this.#liveWarmSweep.notifyIdle(agentId, { immediateOnly: true })) return true;
         if (this.turnEndCompaction.maybeCompact(agentId)) return true;
@@ -392,6 +397,7 @@ export class AgentLaunchCoordinator {
 
   /** Drops what the Agent was owed: a Stop a person made, or the Agent's delete. */
   dropOwedRecovery(agentId: string): void {
+    this.memory.review.forget(agentId);
     this.turnEndCompaction.noteTurnFinished(agentId);
     this.#liveWarmSweep.cancelWarmCheck(agentId);
     this.#owed.drop(agentId);
@@ -405,6 +411,7 @@ export class AgentLaunchCoordinator {
 
   /** Drops every debt, as a whole-runtime stop does: the cloud's next Start is the source then. */
   clearOwedRecovery(): void {
+    this.memory.review.clear();
     this.turnEndCompaction.disposeAll();
     this.#liveWarmSweep.stop();
     this.#owed.clear();

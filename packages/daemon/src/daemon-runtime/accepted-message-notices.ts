@@ -1,5 +1,5 @@
 import { getLogger } from "@logtape/logtape";
-import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import type { MessageSenderKind, RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import { isCardEvent } from "./agent-message-attention-index-helpers";
 
 export type NoticeMessage = Readonly<{
@@ -8,6 +8,12 @@ export type NoticeMessage = Readonly<{
   target?: string;
   reason?: string;
   mentionDelivery?: unknown;
+  latestSenderKind?: MessageSenderKind;
+  createdAtMs?: number;
+  source?: "app";
+  mentionsAgent?: boolean;
+  nonMemberMention?: boolean;
+  taskDiscussion?: boolean;
 }>;
 
 type Context = {

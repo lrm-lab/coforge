@@ -84,6 +84,21 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 
 - `runtime-publication-handlers.ts` binds cloud publications to the runtime and its background services.
 
+## Personal memory review
+
+- `agent-memory-composition.ts` assembles local API writes and review for the original Agent.
+- `memory-idle-review.ts` owns low-priority personal review admission; the existing idle facts
+  gate it behind messages, tool calls, background work, holds, migration and compaction.
+- Human activity comes only from typed human DM/mention/Task deliveries with creation timestamps;
+  replays cannot advance the watermark. System or Agent messages never qualify.
+- Successful local API writes enqueue key/revision pairs. Review writes never rearm review;
+  a newer human interaction restores ordinary write tracking. Only batch-matching receipts can
+  clear keys, and only while their queued revision still matches.
+- Checks use existing sessions only. Each admission consumes its human watermark and 24-hour
+  cooldown before notifying, so an ambiguous delivery or restart cannot repeatedly invoke models.
+- The two-minute prompt budget is advisory. No provider kill timer may interrupt a newly arrived
+  human task. Review candidates remain local and no background pass reads private chat history.
+
 ## Message attention and delivery
 
 Read the [message attention and delivery rules](../../../../docs/agents/daemon-message-attention.md) when changing that behavior.

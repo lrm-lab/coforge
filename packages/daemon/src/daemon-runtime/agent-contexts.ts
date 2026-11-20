@@ -2,6 +2,9 @@ import { getLogger } from "@logtape/logtape";
 import { parseRuntimeProvider, thrownMessage } from "@lrm/coforge-sdk/internal";
 import type { SessionResumeFacts } from "@lrm/coforge-anvil";
 import { createCodeAgentProvider } from "#src/code-agent/registry";
+import type { NoticeMessage } from "./accepted-message-notices";
+import { humanMemoryActivityTime } from "./memory-idle-review";
+import { MemoryReviewLedger } from "#src/persistence/memory-review-ledger";
 import { AgentContextLedger } from "#src/persistence/agent-context-ledger";
 import {
   AgentSessionSummaryLedger,
@@ -45,6 +48,23 @@ export class AgentContexts {
   readonly #memoryGenerations = new Map<string, number>();
 
   constructor(private readonly stateDb: (agentId: string) => AgentStateDb) {}
+
+  noteMemoryActivity(agentId: string, messages: readonly NoticeMessage[]): void {
+    try {
+      const times = messages.map(humanMemoryActivityTime).filter((time) => time !== undefined);
+      if (times.length) this.memoryReviewLedger(agentId).noteHuman(Math.max(...times));
+    } catch (error) {
+      logger.warn("Personal memory human activity could not be recorded", {
+        event: "memory_review:activity_failed",
+        agent_id: agentId,
+        error_code: error instanceof Error ? error.name : "unknown",
+      });
+    }
+  }
+
+  memoryReviewLedger(agentId: string): MemoryReviewLedger {
+    return new MemoryReviewLedger(this.stateDb(agentId).database);
+  }
 
   noteSession(agentId: string, sessionId: string | undefined, model: string): void {
     try {

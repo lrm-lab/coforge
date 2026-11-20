@@ -23,3 +23,7 @@ Rules for durable local state in `src/persistence/`. They extend
   runtime ledgers (`compactionFailures`, `contextGeneration`, `standingPrompt` — SHA-256 hash and
   metadata only, never raw prompt text — and `sessionSummary` for summary-backed idle session
   recycle).
+
+- `memory-review-ledger.ts` keeps personal review watermarks, active batch and pending key/revision
+  pairs in the existing `meta` table. It stores no memory bodies or chat text. Deletion and
+  migration use the existing Agent-state removal, with no separate storage cleanup path.

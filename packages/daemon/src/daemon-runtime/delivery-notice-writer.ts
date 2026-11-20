@@ -5,6 +5,7 @@
  * here, by the mechanisms that own them. The rule is one writer per message — not one writer in the
  * daemon — so a delivery that is both is written exactly once.
  */
+import type { NoticeMessage } from "./accepted-message-notices";
 import type { AgentConversationScope } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
 import { setContextViewMessageIds } from "./context-view-runtime-wiring";
@@ -32,6 +33,7 @@ export type AgentDeliveryQueue = {
   busy(agentId: string): void;
   /** Admission resolved or rejected; this is not a turn outcome. */
   noticeSettled?(agentId: string): void;
+  noticeAccepted?(agentId: string, messages: readonly NoticeMessage[]): void;
   /** The deliveries held for this Agent that it has not been shown yet. The notice counts
    * these, so its number is always a count of messages the daemon is holding right now rather
    * than a running total it would have to invalidate later. Concrete deliveries rather than a
