@@ -101,6 +101,13 @@ export function useArtifactPageBridge(input: {
           reportFind: setFound,
           frameStatus: () => setBlocked(true),
           onInitialized: () => onInitializedRef.current?.(),
+          onPreviewEscape: () => {
+            const iframe = frame.current;
+            if (!iframe || document.activeElement !== iframe || pending.current) return;
+            iframe
+              .closest("dialog:modal[data-artifact-preview]")
+              ?.dispatchEvent(new Event("cancel", { cancelable: true }));
+          },
           onSizeChanged: (size) => onSizeChangedRef.current?.(size),
           now: () => Date.now(),
         },

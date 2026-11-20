@@ -65,6 +65,7 @@ export type PageBridgeHost = {
   reportFind(result: { total: number; active: number }): void;
   frameStatus(status: PageFrameStatus): void;
   onInitialized?(): void;
+  onPreviewEscape?(): void;
   onSizeChanged?(size: PageFrameSize): void;
   now(): number;
 };
@@ -248,6 +249,14 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
         }
         annotations.ready();
         host.onInitialized?.();
+        return;
+      case "coforge/notifications/preview-escape":
+        try {
+          admit(method);
+        } catch {
+          return;
+        }
+        host.onPreviewEscape?.();
         return;
       case "ui/notifications/size-changed": {
         try {

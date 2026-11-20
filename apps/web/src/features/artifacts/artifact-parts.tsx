@@ -8,6 +8,7 @@ import {
   VideoRecorder,
 } from "@untitledui/icons";
 
+import { ArtifactPreviewFrame } from "./artifact-preview-frame";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { lastMessageTime } from "#src/features/conversations/last-message-time";
 import { useStartOfToday } from "#src/lib/start-of-today";
@@ -112,19 +113,29 @@ export function ArtifactActor({ actor }: { actor: ArtifactActorView | undefined 
   );
 }
 
-export function PaneFrame({ full, children }: { full?: boolean; children: React.ReactNode }) {
+export function PaneFrame({
+  full,
+  onExit,
+  children,
+}: {
+  full: boolean;
+  onExit: () => void;
+  children: React.ReactNode;
+}) {
   return (
-    <section
+    <ArtifactPreviewFrame
+      full={full}
+      onExit={onExit}
       aria-label={m.doc_pane_label()}
       className={cn(
         "@container/doc flex min-h-0 flex-col bg-primary animate-in fade-in slide-in-from-right-3 motion-enter-sm motion-reduce:animate-none",
         "max-md:w-full max-md:min-w-0 max-md:flex-1 max-md:border-l-0",
         full
-          ? "fixed inset-0 z-40 min-w-0"
-          : "w-[min(48rem,56%)] shrink-0 border-l border-secondary",
+          ? "fixed inset-0 size-full min-w-0"
+          : "relative w-[min(48rem,56%)] shrink-0 border-l border-secondary",
       )}
     >
       {children}
-    </section>
+    </ArtifactPreviewFrame>
   );
 }

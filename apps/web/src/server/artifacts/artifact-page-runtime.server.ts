@@ -295,6 +295,13 @@ if (framed) {
   window.addEventListener("unhandledrejection", function (event) {
     report(event.reason && event.reason.message ? event.reason.message : String(event.reason));
   });
+  window.addEventListener("keydown", function (event) {
+    if (event.key !== "Escape" || event.isComposing || event.repeat || !event.isTrusted) return;
+    if (event.defaultPrevented || document.querySelector("dialog:modal, :popover-open")) return;
+    queueMicrotask(function () {
+      if (!event.defaultPrevented) post({ method: "coforge/notifications/preview-escape", params: {} });
+    });
+  });
   var scheduled = false;
 ${INLINE_SIZE_RUNTIME_SOURCE}  scheduleSize = function () {
     if (scheduled) return;

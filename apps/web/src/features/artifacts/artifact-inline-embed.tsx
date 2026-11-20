@@ -20,6 +20,7 @@ import { isAppError } from "#src/lib/app-error";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { useArtifactLink } from "./artifact-beside-chat";
+import { ArtifactPreviewFrame } from "./artifact-preview-frame";
 import { PageConfirmDialog } from "./artifact-page-confirm";
 import type { PageFrameSize, PageSuggestHandler } from "./artifact-page-bridge";
 import { INLINE_DEFAULT_HEIGHT_PX, clampInlineFrameHeight } from "./artifact-page-theme";
@@ -312,9 +313,6 @@ function InlineEmbedFrame({
     onSizeChanged: handleSizeChanged,
   });
 
-  const confirmationRef = useRef(confirmation);
-  confirmationRef.current = confirmation;
-
   useEffect(() => {
     const skeletonTimer = window.setTimeout(() => setShowSkeleton(true), SKELETON_DELAY_MS);
     const timeoutTimer = window.setTimeout(() => {
@@ -339,19 +337,6 @@ function InlineEmbedFrame({
   }, [expanded, onExpandedChange, bridge]);
 
   useEffect(() => () => onExpandedChange(false), [onExpandedChange]);
-
-  useEffect(() => {
-    if (!expanded) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented || confirmationRef.current !== null)
-        return;
-      event.preventDefault();
-      event.stopPropagation();
-      setExpanded(false);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [expanded]);
 
   const postLoadTimer = useRef<number | null>(null);
   useEffect(
@@ -401,16 +386,16 @@ function InlineEmbedFrame({
   return (
     <>
       <div style={expanded ? { height: `${height}px` } : undefined} className="relative w-full">
-        <div
-          role={expanded ? "dialog" : "region"}
-          aria-modal={expanded || undefined}
+        <ArtifactPreviewFrame
+          full={expanded}
+          onExit={() => setExpanded(false)}
           aria-label={title}
           aria-busy={!ready}
           className={cn(
             "overflow-hidden",
             expanded
-              ? "fixed inset-0 z-50 flex flex-col bg-primary"
-              : "relative w-full rounded-lg bg-transparent",
+              ? "fixed inset-0 flex size-full flex-col bg-primary"
+              : "relative block w-full rounded-lg bg-transparent",
           )}
         >
           <div
@@ -454,9 +439,9 @@ function InlineEmbedFrame({
               onToggleExpand={() => setExpanded((current) => !current)}
             />
           )}
-        </div>
+          <PageConfirmDialog confirmation={confirmation} title={title} />
+        </ArtifactPreviewFrame>
       </div>
-      <PageConfirmDialog confirmation={confirmation} title={title} />
     </>
   );
 }
@@ -531,6 +516,7 @@ function InlineEmbedControls({
       )}
     >
       <ButtonUtility
+        data-artifact-expand=""
         icon={expanded ? Minimize01 : Maximize01}
         size="xs"
         color="tertiary"

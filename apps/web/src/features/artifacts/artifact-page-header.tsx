@@ -144,6 +144,7 @@ export function ArtifactPageHeader({
         {pane && (
           <>
             <ButtonUtility
+              data-artifact-expand=""
               icon={pane.full ? Minimize01 : Maximize01}
               size="xs"
               color="tertiary"

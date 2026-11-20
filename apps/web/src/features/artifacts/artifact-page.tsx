@@ -89,7 +89,7 @@ export function ArtifactPage({
 }: { artifactId: string } & ArtifactPlace) {
   if (!z.uuid().safeParse(artifactId).success)
     return pane ? (
-      <PaneFrame full={pane.full}>
+      <PaneFrame full={pane.full} onExit={pane.onToggleFull}>
         <ArtifactUnavailable gone />
       </PaneFrame>
     ) : (
@@ -322,7 +322,13 @@ function ArtifactPageFor({
         onClose={pane?.onClose}
       />
     );
-    return pane ? <PaneFrame full={pane.full}>{unavailable}</PaneFrame> : unavailable;
+    return pane ? (
+      <PaneFrame full={pane.full} onExit={pane.onToggleFull}>
+        {unavailable}
+      </PaneFrame>
+    ) : (
+      unavailable
+    );
   }
   const body = (
     <ArtifactCommentingContext.Provider value={commenting}>
@@ -507,7 +513,9 @@ function ArtifactPageFor({
   );
 
   return pane ? (
-    <PaneFrame full={pane.full}>{body}</PaneFrame>
+    <PaneFrame full={pane.full} onExit={pane.onToggleFull}>
+      {body}
+    </PaneFrame>
   ) : (
     <main
       data-artifact-page-frame=""
