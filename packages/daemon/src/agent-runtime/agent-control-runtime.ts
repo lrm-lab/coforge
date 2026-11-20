@@ -14,6 +14,8 @@ export type AgentControlRuntime = {
   stop(agentId: string): Promise<SessionIdentity | undefined>;
   /** A Stop passed every check and is about to run: what only a person's Stop ends, ends here. */
   stopAccepted?(agentId: string): void;
+  /** A Start passed fencing and replay checks and is about to launch or rebind. */
+  startAccepted?(agentId: string): Promise<void> | void;
   launch(
     intent: AgentStartIntent,
     launchId: string,

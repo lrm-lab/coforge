@@ -85,7 +85,7 @@ export type RuntimeStartupPorts = {
   operatingSystem: Pick<OperatingSystemInfo, "read" | "current">;
   upgradeResults: Pick<UpgradeResultReporter, "start" | "report" | "stop">;
   runtimeAuth: Pick<RuntimeAuthReporter, "refresh" | "refreshProvider" | "usageScanned">;
-  credentialHolds: Pick<CredentialInvalidHolds, "signedIn" | "isHeld">;
+  credentialHolds: Pick<CredentialInvalidHolds, "signedIn" | "signedOut" | "isHeld">;
   runtimeAuthFactory: (provider: RuntimeAuthProvider) => RuntimeAuthAdapter;
   codeAgentInventory: Pick<
     CodeAgentInventorySync,
@@ -236,6 +236,9 @@ export class RuntimeStartup {
       this.#authControl = auth?.controller;
       this.#subscribe(
         auth?.controller.onSignedIn((provider) => ports.credentialHolds.signedIn(provider)),
+      );
+      this.#subscribe(
+        auth?.controller.onSignedOut((provider) => ports.credentialHolds.signedOut(provider)),
       );
       this.#subscribe(auth?.unsubscribe);
       ports.upgradeResults.start();

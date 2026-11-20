@@ -442,6 +442,7 @@ export async function launchAgentProcess(
       )
         sweepAgentLaunchTagStrays(agentId, "exit");
     });
+    ports.lifecycle.processStarted(agentId);
     if (reused)
       wakeReusedAgent(runtime.session, (identity) =>
         ports.agentControl.wake(agentId, launch.launchId, identity),

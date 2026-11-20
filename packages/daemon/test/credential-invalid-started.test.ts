@@ -85,3 +85,46 @@ test("a credential that changes by itself still wakes an Agent with no process",
 
   expect(stopped.calls).toEqual([`endHold:${AGENT}`, `wake:${AGENT}`]);
 });
+
+test("a person's Start on a live held Codex Agent recycles its process without a competing wake", async () => {
+  const codex: AgentRuntimeConfig = { provider: "codex", model: "gpt-5", reasoning: "balanced" };
+  const heldSet = new Set<string>();
+  const calls: string[] = [];
+  const holds = new CredentialInvalidHolds({
+    deliveryGate: {
+      credentialHeld: (agentId) => heldSet.has(agentId),
+      heldFor: (reason) => (reason === "credential_invalid" ? [...heldSet] : []),
+      endHold: (agentId) => {
+        calls.push(`endHold:${agentId}`);
+        heldSet.delete(agentId);
+      },
+    },
+    hold: (agentId) => {
+      heldSet.add(agentId);
+      return true;
+    },
+    runningAgentIds: () => [AGENT, "agent-b"],
+    isRunning: () => true,
+    configOf: () => codex,
+    present: (agentId) => calls.push(`present:${agentId}`),
+    recycle: async (agentId, options) => {
+      calls.push(`recycle:${agentId}:${options?.skipWake === true ? "skipWake" : "wake"}`);
+    },
+    wake: (agentId) => calls.push(`wake:${agentId}`),
+    notice: () => {},
+    noticeText: () => "",
+    launchId: () => "launch-1",
+    restored: () => {},
+  });
+  holds.record(AGENT, codex, "user_reauth");
+  calls.length = 0;
+
+  await holds.started(AGENT);
+
+  expect(calls).toEqual([
+    "endHold:agent-b",
+    "recycle:agent-b:wake",
+    `endHold:${AGENT}`,
+    `recycle:${AGENT}:skipWake`,
+  ]);
+});

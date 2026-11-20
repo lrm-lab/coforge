@@ -8,7 +8,9 @@ import type { AgentDeliveryGate } from "./agent-delivery-gate";
 import type { AgentLifecycle } from "./agent-lifecycle";
 import { CredentialDiskWatch } from "./credential-disk-watch";
 import { CredentialInvalidHolds } from "./credential-invalid-holds";
+import { CredentialRecycle } from "./credential-recycle";
 import type { RuntimeErrorDeliveryHold } from "./runtime-error-delivery-hold";
+import type { RuntimeRelease } from "./runtime-release";
 import { runtimeDisplayName } from "./session-invalidate-activity";
 
 /**
@@ -23,8 +25,10 @@ export function assembleCredentialHolds(input: {
   errorHold(): Pick<RuntimeErrorDeliveryHold, "holdCredentialInvalid">;
   processManager(): Pick<
     AgentProcessManager,
-    "runningAgentIds" | "isRunning" | "runtime" | "restartConfig" | "session"
+    "runningAgentIds" | "isRunning" | "runtime" | "restartConfig" | "session" | "onRuntimeEnd"
   >;
+  runtimeRelease(): Pick<RuntimeRelease<never>, "coldIdleAgent" | "stopForCredentialChange">;
+  agentLaunches(): ReadonlyMap<string, unknown>;
   /** Each Agent's current launch (`currentActivityLaunches`). */
   launches(): ReadonlyMap<string, Pick<ActivityLaunch, "launchId">>;
   activityPublisher(): Pick<AgentActivityPublisher<ActivityLaunch>, "lastBusy" | "publishCurrent">;
@@ -40,11 +44,19 @@ export function assembleCredentialHolds(input: {
   /** Starts an Agent with nothing running for what its hold kept. */
   wake(agentId: string): void;
   transport(): Pick<DaemonConnectionClient, "sendAgentCredentialRestored">;
-}): CredentialInvalidHolds {
+}): Readonly<{ holds: CredentialInvalidHolds; recycle: CredentialRecycle }> {
   const configOf = (agentId: string) => {
     const processes = input.processManager();
     return processes.restartConfig(agentId)?.config ?? processes.runtime(agentId)?.config;
   };
+  let unsubscribeRuntimeEnd: (() => void) | undefined;
+  const recycle = new CredentialRecycle({
+    agent: (agentId) => input.runtimeRelease().coldIdleAgent(agentId, { ignoreParkedInbox: true }),
+    launching: (agentId) => input.agentLaunches().has(agentId),
+    launchOf: (agentId) => input.launches().get(agentId),
+    stopIdle: (agentId, options) =>
+      input.runtimeRelease().stopForCredentialChange(agentId, options),
+  });
   const holds: CredentialInvalidHolds = new CredentialInvalidHolds({
     deliveryGate: input.deliveryGate,
     hold: (agentId) => input.errorHold().holdCredentialInvalid(agentId),
@@ -52,6 +64,8 @@ export function assembleCredentialHolds(input: {
     isRunning: (agentId) => input.processManager().isRunning(agentId),
     configOf,
     present: input.presentKept,
+    recycle: (agentId, options) => recycle.request(agentId, options),
+    onCredentialsUpdated: (key) => watch.refreshLiveBaseline(key),
     wake: input.wake,
     notice: (agentId, text) => {
       // Only an idle Agent is shown it: a working one keeps showing its work.
@@ -82,16 +96,44 @@ export function assembleCredentialHolds(input: {
           ...report,
         })
         ?.catch(() => {}),
-    disposed: () => watch.stop(),
+    disposed: () => {
+      unsubscribeRuntimeEnd?.();
+      unsubscribeRuntimeEnd = undefined;
+      watch.stop();
+      recycle.dispose();
+    },
   });
   const watch = new CredentialDiskWatch({
     ledger: holds.ledger,
     release: (key) => holds.credentialsChanged(key),
+    onLiveCredentialsChanged: (key) => holds.credentialsChanged(key),
+    onLiveCredentialsSignedOut: (key) => holds.credentialsSignedOut(key),
     baseEnv: () => process.env,
   });
+  const syncLiveWatch = (excluding?: string) => {
+    const processes = input.processManager();
+    watch.syncLive(
+      processes.runningAgentIds().flatMap((agentId) => {
+        if (agentId === excluding || !processes.isRunning(agentId)) return [];
+        const config = processes.runtime(agentId)?.config;
+        return config ? [{ agentId, config }] : [];
+      }),
+    );
+  };
   input.lifecycle.subscribe({
-    stopped: (agentId) => holds.stopped(agentId),
-    processClosed: (agentId) => holds.closed(agentId),
+    stopped: (agentId) => {
+      recycle.stopped(agentId);
+      holds.stopped(agentId);
+      syncLiveWatch(agentId);
+    },
+    processStarted: () => {
+      unsubscribeRuntimeEnd ??= input.processManager().onRuntimeEnd(() => syncLiveWatch());
+      syncLiveWatch();
+    },
+    processClosed: (agentId) => {
+      holds.closed(agentId);
+      syncLiveWatch(agentId);
+    },
   });
-  return holds;
+  return { holds, recycle };
 }

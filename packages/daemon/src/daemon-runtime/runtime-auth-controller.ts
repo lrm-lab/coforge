@@ -57,6 +57,7 @@ export class RuntimeAuthController {
   readonly #logouts = new Map<RuntimeAuthProvider, Promise<void>>();
   readonly #seen = new Set<string>();
   readonly #signedIn = new Set<(provider: RuntimeAuthProvider) => void>();
+  readonly #signedOut = new Set<(provider: RuntimeAuthProvider) => void>();
   #stopped = false;
   constructor(private readonly ports: Ports) {}
 
@@ -65,6 +66,11 @@ export class RuntimeAuthController {
   onSignedIn(listener: (provider: RuntimeAuthProvider) => void): () => void {
     this.#signedIn.add(listener);
     return () => this.#signedIn.delete(listener);
+  }
+
+  onSignedOut(listener: (provider: RuntimeAuthProvider) => void): () => void {
+    this.#signedOut.add(listener);
+    return () => this.#signedOut.delete(listener);
   }
 
   /** Closes admission and releases pending prompts before the transport is stopped. */
@@ -218,6 +224,7 @@ export class RuntimeAuthController {
         event: "runtime_auth:refresh_failed",
       });
     });
+    if (result.kind === "logged_out") for (const tell of this.#signedOut) tell(intent.provider);
   }
 
   #remember(id: string): void {

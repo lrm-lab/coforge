@@ -277,11 +277,13 @@ export class DaemonRuntime {
 
   readonly #lifecycle = new AgentLifecycle();
 
-  readonly #credentialHolds = assembleCredentialHolds({
+  readonly #credentialState = assembleCredentialHolds({
     deliveryGate: this.#deliveryGate,
     lifecycle: this.#lifecycle,
     errorHold: () => this.#runtimeErrorHold,
     processManager: () => this.#agentProcessManager,
+    runtimeRelease: () => this.#runtimeRelease,
+    agentLaunches: () => this.#agentLaunches,
     launches: () => this.#currentActivityLaunches,
     activityPublisher: () => this.#activityPublisher,
     activity: (agentId, kind, level, detail) => this.#activity(agentId, kind, level, detail),
@@ -290,6 +292,8 @@ export class DaemonRuntime {
     wake: (agentId) => this.#exitedDelivery.backoffEnded(agentId),
     transport: () => this.#transport,
   });
+  readonly #credentialHolds = this.#credentialState.holds;
+  readonly #credentialRecycle = this.#credentialState.recycle;
   readonly #runtimeErrorHold = assembleRuntimeErrorDeliveryHold({
     stateDirectory: () => this.stateDirectory,
     deliveryGate: this.#deliveryGate,
@@ -558,6 +562,7 @@ export class DaemonRuntime {
       rebind: (intent, launchId) => this.#rebindAgent(intent, launchId),
       stops: this.#stopState,
       dropOwedRecovery: (agentId) => this.#launchCoordinator.dropOwedRecovery(agentId),
+      credentialStarted: (agentId) => this.#launchCoordinator.credentialStarted(agentId),
       startSettled: (agentId) => this.#exitedDelivery.releaseStartBuffer(agentId),
       reportSession: (report) => this.#reportAgentSession(report),
       transport: () => this.#transport,
@@ -588,6 +593,7 @@ export class DaemonRuntime {
       agentSessions: this.#agentSessions,
       systemCleaner: this.systemCleaner,
       configApply: this.#configApply,
+      credentialRecycle: this.#credentialRecycle,
       sessionSummary: createSessionSummaryObserver(
         this.#contexts,
         (agentId) => this.#stopState.sessionId(agentId),
@@ -1212,6 +1218,7 @@ export class DaemonRuntime {
     systemCleaner: this.systemCleaner,
     idleNudge: this.#launchCoordinator.idleNudge,
     configApply: this.#configApply,
+    credentialRecycle: this.#credentialRecycle,
     drafts: this.#drafts,
     activity: this.#activity,
     isWorking: this.#turn.isWorking,

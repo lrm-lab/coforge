@@ -13,7 +13,7 @@ const logger = getLogger(["coforge", "daemon", "runtime"]);
 
 /** Why a live runtime is ended, what is announced, and what is logged on either outcome. */
 export type RuntimeReleasePlan = Readonly<{
-  announce: Readonly<{ detailKind: string; text: string }>;
+  announce?: Readonly<{ detailKind: string; text: string }>;
   /** Logged once the announcement is out. */
   log: () => void;
   failure: Readonly<{ text: string; message: string; event: string }>;
@@ -150,6 +150,30 @@ export function configApplyRuntimePlan(restart: AgentRestartConfig): RuntimeRele
       failure: {
         message: "Agent config apply relaunch failed",
         event: "agent.runtime.config_apply_wake_failed",
+      },
+    },
+  };
+}
+
+export function credentialChangeRuntimePlan(restart: AgentRestartConfig): RuntimeReleasePlan {
+  const runtimeName = runtimeDisplayName(restart.config.provider);
+  return {
+    log: () =>
+      logger.info("Agent runtime stopped to reload updated credentials", {
+        event: "agent.runtime.credential_change_stop",
+        provider: restart.config.provider,
+      }),
+    failure: {
+      text: `Stopping the ${runtimeName} runtime to reload its credentials failed`,
+      message: "Agent credential-change stop failed",
+      event: "agent.runtime.credential_change_stop_failed",
+    },
+    wake: {
+      onlyIfParked: true,
+      awaited: false,
+      failure: {
+        message: "Agent credential-change relaunch failed",
+        event: "agent.runtime.credential_change_wake_failed",
       },
     },
   };

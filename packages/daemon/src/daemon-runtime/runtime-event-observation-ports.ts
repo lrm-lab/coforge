@@ -14,6 +14,7 @@ import type { RuntimeErrorDeliveryHold } from "./runtime-error-delivery-hold";
 import type { SystemCleaner } from "#src/system-cleaner/system-cleaner";
 import type { TaskIdleNudge } from "./task-idle-nudge";
 import type { AgentConfigApply } from "./agent-config-apply";
+import type { CredentialRecycle } from "./credential-recycle";
 
 export type Publish = (
   id: string,
@@ -51,6 +52,7 @@ export type RuntimeEventObservationPorts = Readonly<{
   systemCleaner: SystemCleaner;
   idleNudge?: Pick<TaskIdleNudge, "maybeAsk">;
   configApply?: Pick<AgentConfigApply, "settle">;
+  credentialRecycle?: Pick<CredentialRecycle, "settle">;
   sessionSummary?: SessionSummaryObserver;
   collectSkillAgents: ReadonlySet<string>;
   fastModeWarned: Set<string>;

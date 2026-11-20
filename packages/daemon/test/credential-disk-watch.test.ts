@@ -40,16 +40,20 @@ function subject(
   const disk = memoryFs();
   const ledger = new CredentialInvalidLedger();
   const released: string[] = [];
+  const liveChanged: string[] = [];
+  const liveSignedOut: string[] = [];
   const watch = new CredentialDiskWatch({
     ledger,
     release: (key) => void released.push(key),
+    onLiveCredentialsChanged: (key) => void liveChanged.push(key),
+    onLiveCredentialsSignedOut: (key) => void liveSignedOut.push(key),
     baseEnv: () => env,
     homeDir: "/home/frank",
     platform: options.platform ?? "linux",
     fs: disk.fs,
     ...(options.runSecurity ? { runSecurity: options.runSecurity } : {}),
   });
-  return { disk, ledger, released, watch };
+  return { disk, ledger, released, liveChanged, liveSignedOut, watch };
 }
 
 test("each runtime's credentials are found where its login keeps them", () => {
@@ -168,4 +172,85 @@ test("the Keychain is asked only when its file changed, and never for a secret",
   await watch.check();
   expect(asked).toHaveLength(2);
   expect(released).toEqual(["shared:claude-code"]);
+});
+
+test("a live Codex Agent ignores same-account token refreshes but notices account switches", async () => {
+  const { disk, liveChanged, liveSignedOut, watch } = subject();
+  disk.write(AUTH, JSON.stringify({ tokens: { account_id: "acct-a", access_token: "t1" } }));
+  watch.syncLive([{ agentId: "a", config: codex }]);
+  await watch.check();
+  expect(liveChanged).toEqual([]);
+
+  disk.write(AUTH, JSON.stringify({ tokens: { account_id: "acct-a", access_token: "t2" } }));
+  await watch.check();
+  expect(liveChanged).toEqual([]);
+  expect(liveSignedOut).toEqual([]);
+
+  disk.write(AUTH, JSON.stringify({ tokens: { account_id: "acct-b", access_token: "t3" } }));
+  await watch.check();
+  expect(liveChanged).toEqual(["shared:codex"]);
+  expect(liveSignedOut).toEqual([]);
+});
+
+test("a live Codex Agent notices external logout and subsequent same-account re-login", async () => {
+  const { disk, liveChanged, liveSignedOut, watch } = subject();
+  disk.write(AUTH, JSON.stringify({ tokens: { account_id: "acct-a", access_token: "t1" } }));
+  watch.syncLive([{ agentId: "a", config: codex }]);
+  await watch.check();
+
+  disk.remove(AUTH);
+  await watch.check();
+  expect(liveSignedOut).toEqual(["shared:codex"]);
+  expect(liveChanged).toEqual([]);
+
+  disk.write(AUTH, JSON.stringify({ tokens: { account_id: "acct-a", access_token: "t2" } }));
+  await watch.check();
+  expect(liveChanged).toEqual(["shared:codex"]);
+});
+
+test("a live Codex Agent with its own CODEX_HOME is watched on its own key and stops when closed", async () => {
+  const { disk, liveChanged, watch } = subject();
+  const own = { ...codex, envVars: { CODEX_HOME: "/agent/home" } };
+  disk.write("/agent/home/auth.json", JSON.stringify({ OPENAI_API_KEY: "sk-1" }));
+  watch.syncLive([
+    { agentId: "a", config: own },
+    { agentId: "b", config: { provider: "claude-code", model: "opus", reasoning: "balanced" } },
+  ]);
+  expect(watch.liveWatching).toBe(1);
+  await watch.check();
+
+  disk.write("/agent/home/auth.json", JSON.stringify({ OPENAI_API_KEY: "sk-2" }));
+  await watch.check();
+  expect(liveChanged).toEqual(["agent:a"]);
+
+  watch.syncLive([]);
+  expect(watch.liveWatching).toBe(0);
+});
+
+test("refreshLiveBaseline updates live Codex baseline after UI sign-in so the next poll neither double-recycles nor releases a new hold", async () => {
+  const { disk, ledger, released, liveChanged, liveSignedOut, watch } = subject();
+  disk.write(AUTH, JSON.stringify({ tokens: { account_id: "acct-a" } }));
+
+  watch.syncLive([
+    { agentId: "a", config: codex },
+    { agentId: "b", config: codex },
+  ]);
+  await watch.check();
+
+  disk.write(AUTH, JSON.stringify({ tokens: { account_id: "acct-b" } }));
+  watch.refreshLiveBaseline("shared:codex");
+  ledger.record("shared:codex", { reason: "user_model_access", recordedAtMs: 1 }, "a", codex);
+  await watch.check();
+  await watch.check();
+
+  expect(released).toEqual([]);
+  expect(liveChanged).toEqual([]);
+  expect(liveSignedOut).toEqual([]);
+  expect(ledger.hasInvalid("shared:codex")).toBe(true);
+
+  disk.write(AUTH, JSON.stringify({ tokens: { account_id: "acct-c" } }));
+  await watch.check();
+  expect(released).toEqual(["shared:codex"]);
+  expect(liveChanged).toEqual([]);
+  watch.stop();
 });

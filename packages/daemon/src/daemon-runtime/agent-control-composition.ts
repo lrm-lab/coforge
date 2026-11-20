@@ -40,6 +40,7 @@ export type AgentControlCompositionPorts = {
   rebind(intent: AgentStartIntent, launchId: string): Promise<SessionIdentity | undefined>;
   stops: Pick<AgentStopRegistry, "forgetSession">;
   dropOwedRecovery(agentId: string): void;
+  credentialStarted?(agentId: string): Promise<void> | void;
   startSettled(agentId: string): void;
   sendSessionInvalidate?(message: ReturnType<typeof connectionSessionInvalidate>): void;
   reportSession(report: AgentSessionReport): Promise<void>;
@@ -115,6 +116,7 @@ export function composeAgentControl(ports: AgentControlCompositionPorts): AgentC
         if (pendingJobStops.get(agentId) === stopping) pendingJobStops.delete(agentId);
       });
     },
+    startAccepted: (agentId) => ports.credentialStarted?.(agentId),
     launch: async (intent, launchId, replacedSessionId, invalidateReason) => {
       for (
         let inFlight = ports.launchInFlight(intent.agentId);

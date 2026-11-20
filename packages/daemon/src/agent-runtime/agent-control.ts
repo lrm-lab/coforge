@@ -284,6 +284,8 @@ export class AgentControl {
           .catch(() => {});
         throw new Error("agent_launch_id_required");
       }
+      const accepted = this.#context.runtime.startAccepted?.(scope.agentId);
+      if (accepted) await accepted.catch(() => undefined);
       if (this.#context.runtime.running(intent.agentId)) {
         const runningSessionId = record?.identity?.sessionId;
         // A different native session must not keep the previous process. Rebind

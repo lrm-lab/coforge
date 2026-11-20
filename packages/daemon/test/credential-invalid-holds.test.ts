@@ -30,6 +30,7 @@ function subject(
   const gate = new AgentDeliveryGate();
   const log = {
     present: [] as string[],
+    recycle: [] as Array<{ agentId: string; skipWake?: boolean }>,
     wake: [] as string[],
     notices: [] as Array<[string, string | undefined]>,
     restored: [] as CredentialRestored[],
@@ -45,6 +46,11 @@ function subject(
       isRunning: (agentId) => running.has(agentId),
       configOf: (agentId) => all[agentId],
       present: (agentId) => void log.present.push(agentId),
+      recycle: (agentId, options) =>
+        void log.recycle.push({
+          agentId,
+          ...(options?.skipWake !== undefined ? { skipWake: options.skipWake } : {}),
+        }),
       wake: (agentId) => void log.wake.push(agentId),
       notice: (agentId, text) => void log.notices.push([agentId, text]),
       noticeText: (_config, reason) => `notice ${reason}`,
@@ -217,4 +223,48 @@ test("forgetting an Agent ends the record of its own credentials", () => {
   s.holds.record("c", s.all.c!, "user_reauth");
   s.holds.forget("c");
   expect(s.holds.ledger.hasInvalid("agent:c")).toBe(false);
+});
+
+const codex = (changes: Partial<AgentRuntimeConfig> = {}): AgentRuntimeConfig => ({
+  provider: "codex",
+  model: "gpt-5",
+  reasoning: "balanced",
+  ...changes,
+});
+
+test("signing in to Codex recycles held and healthy shared-login Codex Agents, leaving own-home Agents untouched", () => {
+  const s = subject({
+    a: codex(),
+    b: codex(),
+    c: codex({ envVars: { CODEX_HOME: "/own/codex" } }),
+  });
+  s.holds.record("a", s.all.a!, "user_reauth");
+  s.holds.signedIn("codex");
+  expect(held(s)).toEqual([]);
+  expect(s.log.present).toEqual([]);
+  expect(s.log.recycle.map((each) => each.agentId).sort()).toEqual(["a", "b"]);
+});
+
+test("signing in to Codex recycles healthy live Codex Agents even with no invalid record", () => {
+  const s = subject({
+    a: codex(),
+    b: claude(),
+    c: codex({ envVars: { OPENAI_API_KEY: "sk-own" } }),
+  });
+  s.holds.signedIn("codex");
+  expect(s.log.recycle).toEqual([{ agentId: "a" }]);
+  expect(s.log.present).toEqual([]);
+});
+
+test("signing out of Codex recycles live shared-login Codex Agents without releasing invalid holds", () => {
+  const s = subject({
+    a: codex(),
+    b: codex(),
+    c: codex({ envVars: { CODEX_HOME: "/own/codex" } }),
+  });
+  s.holds.record("a", s.all.a!, "user_reauth");
+  s.holds.signedOut("codex");
+  expect(held(s)).toEqual(["a", "b"]);
+  expect(s.log.restored).toEqual([]);
+  expect(s.log.recycle.map((each) => each.agentId).sort()).toEqual(["a", "b"]);
 });

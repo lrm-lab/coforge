@@ -14,6 +14,7 @@ import {
   type CredentialReleaseCause,
   type LedgerChange,
 } from "./credential-invalid-ledger";
+import { restartsOnCredentialChange } from "./provider-credentials";
 import { scheduleUnrefTimer } from "./unref-timer";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
@@ -39,6 +40,7 @@ export type CredentialInvalidHoldsPorts = Readonly<{
   configOf(agentId: string): AgentRuntimeConfig | undefined;
   /** Tells a live Agent what its hold kept: held deliveries and tracked mentions, in one notice. */
   present(agentId: string): void;
+  recycle?(agentId: string, options?: Readonly<{ skipWake?: boolean }>): Promise<void> | void;
   /** Starts an Agent with no process for what its hold kept. */
   wake(agentId: string): void;
   /** Shows an idle Agent that another Agent found the shared sign-in unusable; `text` undefined
@@ -47,6 +49,7 @@ export type CredentialInvalidHoldsPorts = Readonly<{
   noticeText(config: AgentRuntimeConfig, reason: CredentialInvalidReason): string;
   launchId(agentId: string): string | undefined;
   restored(report: CredentialRestored): void;
+  onCredentialsUpdated?(key: CredentialKey): void;
   /** The holds are done with: whatever watches the credentials stops. */
   disposed?(): void;
 }>;
@@ -67,6 +70,9 @@ export class CredentialInvalidHolds {
   readonly ledger = new CredentialInvalidLedger();
   /** The closed Agents' probe timers, each with its cancel. */
   readonly #closed = new Map<string, () => void>();
+  #startingAgentId: string | undefined;
+  #startingRecycle: Promise<void> | undefined;
+  #recycledInChange: Set<string> | undefined;
 
   constructor(
     private readonly ports: CredentialInvalidHoldsPorts,
@@ -126,12 +132,35 @@ export class CredentialInvalidHolds {
 
   /** The credentials under `key` changed on disk. */
   credentialsChanged(key: CredentialKey): void {
-    this.ledger.release(key, "credentials_changed");
+    const alreadyRecycled = new Set<string>();
+    const prevStarting = this.#startingAgentId;
+    const prevRecycled = this.#recycledInChange;
+    this.#startingAgentId = undefined;
+    this.#recycledInChange = alreadyRecycled;
+    try {
+      this.ledger.release(key, "credentials_changed");
+    } finally {
+      this.#startingAgentId = prevStarting;
+      this.#recycledInChange = prevRecycled;
+    }
+    this.#recycleMatching(key, alreadyRecycled);
+  }
+
+  credentialsSignedOut(key: CredentialKey): void {
+    this.#recycleMatching(key);
   }
 
   /** The Computer's own login for `provider` was signed in again. */
   signedIn(provider: string): void {
-    this.credentialsChanged(sharedCredentialKey(provider));
+    const key = sharedCredentialKey(provider);
+    this.ports.onCredentialsUpdated?.(key);
+    this.credentialsChanged(key);
+  }
+
+  signedOut(provider: string): void {
+    const key = sharedCredentialKey(provider);
+    this.ports.onCredentialsUpdated?.(key);
+    this.credentialsSignedOut(key);
   }
 
   /** A person stopped the Agent: its credential records end, the others on the sign-in with them. */
@@ -152,15 +181,23 @@ export class CredentialInvalidHolds {
    * it when no process is running. Ending the hold is what makes that possible at all: the hold
    * keeps the delivery a turn would have needed to produce the model output it waits for.
    */
-  started(agentId: string): void {
+  started(agentId: string): Promise<void> | void {
     const config = this.ports.configOf(agentId);
     this.#cancelClosed(agentId);
     const keys = new Set<CredentialKey>([ownCredentialKey(agentId)]);
     if (config) keys.add(credentialKeyOf(agentId, config));
-    for (const key of keys) this.ledger.release(key, "explicit_start");
-    // A record that no longer answers to this Agent's keys (a sibling's on a shared sign-in, a
-    // model it has since left) still holds it: the person's Start ends that one with it.
-    if (this.isHeld(agentId)) this.#lift(agentId, "explicit_start");
+    this.#startingAgentId = agentId;
+    this.#startingRecycle = undefined;
+    try {
+      for (const key of keys) this.ledger.release(key, "explicit_start");
+      // A record that no longer answers to this Agent's keys (a sibling's on a shared sign-in, a
+      // model it has since left) still holds it: the person's Start ends that one with it.
+      if (this.isHeld(agentId)) this.#lift(agentId, "explicit_start");
+      return this.#startingRecycle;
+    } finally {
+      this.#startingAgentId = undefined;
+      this.#startingRecycle = undefined;
+    }
   }
 
   /** The Agent is gone (offline, deleted, relaunched fresh): it no longer waits on its own
@@ -257,6 +294,17 @@ export class CredentialInvalidHolds {
     }
   }
 
+  #recycleMatching(key: CredentialKey, skip?: ReadonlySet<string>): void {
+    if (!this.ports.recycle) return;
+    for (const agentId of Array.from(this.ports.runningAgentIds())) {
+      if (skip?.has(agentId)) continue;
+      const config = this.ports.configOf(agentId);
+      if (!config || !restartsOnCredentialChange(config.provider)) continue;
+      if (credentialKeyOf(agentId, config) !== key) continue;
+      this.#safely(() => void this.ports.recycle?.(agentId));
+    }
+  }
+
   /** The credential works again for the Agent: it is told what it kept, or started for it. */
   #lift(agentId: string, cause: CredentialReleaseCause): void {
     const live = this.ports.isRunning(agentId);
@@ -268,9 +316,24 @@ export class CredentialInvalidHolds {
       release_cause: cause,
       live,
     });
-    if (live) this.ports.present(agentId);
-    // A person's Start is the launch: waking here would start a second one beside it.
-    else if (cause !== "explicit_start") this.ports.wake(agentId);
+    if (live) {
+      const config = this.ports.configOf(agentId);
+      const shouldRecycle =
+        this.ports.recycle !== undefined &&
+        config !== undefined &&
+        restartsOnCredentialChange(config.provider) &&
+        (cause === "credentials_changed" || cause === "explicit_start");
+      if (shouldRecycle) {
+        this.#recycledInChange?.add(agentId);
+        const skipWake = cause === "explicit_start" && agentId === this.#startingAgentId;
+        const result = this.ports.recycle!(agentId, skipWake ? { skipWake: true } : undefined);
+        if (skipWake && result) this.#startingRecycle = result;
+        return;
+      }
+      this.ports.present(agentId);
+    } else if (cause !== "explicit_start") {
+      this.ports.wake(agentId);
+    }
   }
 
   #cancelClosed(agentId: string): void {

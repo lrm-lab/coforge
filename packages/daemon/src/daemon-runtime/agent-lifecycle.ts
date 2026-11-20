@@ -7,6 +7,7 @@ export type AgentLifecycleListener = Readonly<{
   /** A person (or an operator) stopped the Agent, or deleted it. A launch torn down by the Daemon
    * is not that. */
   stopped?(agentId: string): void;
+  processStarted?(agentId: string): void;
   /** The Agent's process ended, whatever ended it. */
   processClosed?(agentId: string): void;
 }>;
@@ -23,6 +24,10 @@ export class AgentLifecycle {
 
   stopped(agentId: string): void {
     this.#notify("stopped", (listener) => listener.stopped?.(agentId));
+  }
+
+  processStarted(agentId: string): void {
+    this.#notify("processStarted", (listener) => listener.processStarted?.(agentId));
   }
 
   processClosed(agentId: string): void {

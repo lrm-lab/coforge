@@ -21,6 +21,7 @@ import { stalledRuntime, type StalledRuntime } from "./runtime-release-stalled";
 import {
   coldIdleRuntimePlan,
   configApplyRuntimePlan,
+  credentialChangeRuntimePlan,
   freshConfigRuntimePlan,
   stalledRuntimePlan,
   type RuntimeEndPlan,
@@ -177,13 +178,17 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     if (!launch || !session || !restart) return;
     await this.#endAndWake(agentId, launch, session, freshConfigRuntimePlan(restart));
   }
-  coldIdleAgent(agentId: string): ColdIdleAgent | undefined {
+  coldIdleAgent(
+    agentId: string,
+    options?: Readonly<{ ignoreParkedInbox?: boolean }>,
+  ): ColdIdleAgent | undefined {
     const runtime = this.#ports.runtime(agentId);
     if (!runtime) return undefined;
     const launch = this.#ports.launch(agentId);
     const facts = this.#ports.daemonIdleFacts(agentId);
     const busyReason = idleBlocker({
       ...facts,
+      ...(options?.ignoreParkedInbox ? { deliveriesQueued: false, trackedMentionOpen: false } : {}),
       launched: launch?.progress !== undefined && launch.toolCalls !== undefined,
       hasLiveTurn: runtime.session.hasLiveTurn,
       openToolCall: launch?.toolCalls?.hasOpenToolCall ?? false,
@@ -219,6 +224,22 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     const restart = this.#ports.restartConfig(agentId);
     if (!launch || !session || !restart) return "busy";
     const ended = await this.#endAndWake(agentId, launch, session, configApplyRuntimePlan(restart));
+    return ended ? "stopped" : "failed";
+  }
+  async stopForCredentialChange(
+    agentId: string,
+    options?: Readonly<{ skipWake?: boolean }>,
+  ): Promise<"stopped" | "busy" | "failed"> {
+    const agent = this.coldIdleAgent(agentId, { ignoreParkedInbox: true });
+    if (!agent || agent.busyReason !== undefined || agent.sessionId === undefined) return "busy";
+    const launch = this.#ports.launch(agentId);
+    const session = this.#ports.runtime(agentId)?.session;
+    const restart = this.#ports.restartConfig(agentId);
+    if (!launch || !session || !restart) return "busy";
+    const plan = credentialChangeRuntimePlan(restart);
+    const ended = options?.skipWake
+      ? await this.#endThen(agentId, launch, session, plan, false, (_current, join) => join())
+      : await this.#endAndWake(agentId, launch, session, plan);
     return ended ? "stopped" : "failed";
   }
   async #endAndWake(

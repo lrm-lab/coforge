@@ -129,6 +129,10 @@ export class AgentDeliveryGate {
     this.#busy.add(agentId);
   }
 
+  clearBusy(agentId: string): void {
+    this.#busy.delete(agentId);
+  }
+
   /** Marks the Agent idle and returns everything held for it, oldest first, clearing the hold.
    * Empty when nothing was held or an explicit hold (`hold`) is still in effect. */
   idle(agentId: string): AgentMessageDelivery[] {

@@ -386,6 +386,7 @@ export function observeRuntimeEvent(
     ports.systemCleaner.onAgentWorkingToIdle(agentId);
     ports.idleNudge?.maybeAsk(agentId);
     void ports.configApply?.settle(agentId);
+    void ports.credentialRecycle?.settle(agentId);
   }
   if (collectorFailReason && ports.collectSkillAgents.has(agentId))
     void ports.failCollectorRunningSlots(agentId, collectorFailReason).catch(() => {});

@@ -54,11 +54,19 @@
 - `model_changed`：配置推送换了模型（`AgentConfigApply` 更新 restart config 时）。Agent 自己的键上缺 plan 的
   记录结束；共享键上只让这个 Agent 不再被它 hold，记录留给其他 Agent。
 - `credentials_changed`：Anvil 登录完成（`RuntimeAuthController.onSignedIn`），或凭据文件变化。
-  `credential-disk-watch.ts` 只在有键已知失效时每 30 秒看一次：Claude Code（macOS 的 Keychain 项只读属性、
+  `credential-disk-watch.ts` 在有键已知失效时每 30 秒看一次：Claude Code（macOS 的 Keychain 项只读属性、
   不读密钥；`.credentials.json`）、Codex 和 Grok 的 `auth.json`（位置表与账本共用
   `provider-credentials.ts`）；环境里的密钥、自定义 provider、其余 runtime 不监视。文件 stat 没变就不读，
   Keychain 文件没变就不起 `security`，同一凭据同时只看一次；首次读数是基线，凭据存在且与基线不同才释放，
-  登出（文件消失）不释放。
+  登出（文件消失）不释放。对在进程内缓存登录态的 runtime（Codex，`restartsOnCredentialChange`），
+  `credential-disk-watch.ts` 在有活进程时同样监视其 `auth.json`：忽略同账号的正常 token 刷新，只在账号
+  摘要变化或文件消失/重新出现时触发回收。
+- 进程内缓存凭据的 runtime（Codex）：`codex app-server` 不热重载外部修改的 `auth.json`，所以
+  `credentials_changed` 与活进程上的 `explicit_start` 释放 hold 时不把扣住的内容灌回旧进程，而是经
+  `credential-recycle.ts` 与 `RuntimeRelease.stopForCredentialChange` 在空闲（或当前 turn 结束）后静默
+  停掉旧进程，并在原 Session 上唤醒新进程（`explicit_start` 不另起唤醒，交给本次 Start 启动）；健康活进程在
+  登录、登出（`RuntimeAuthController.onSignedOut`）或磁盘账号变化/登出时同样在空闲后回收，保证下次发言
+  读取新登录态。
 
 每个释放按被记录的 Agent 发一次 `agent:v1:credential:restored`（`reason`、`releaseCause`、有 launch 时的
 `launchId`、`restoredAtMs`），包括记录的上报者、看到提示的 Agent 和被 Stop 的 Agent；发送失败只记日志，
@@ -82,7 +90,10 @@ daemon 实例）、之后一轮的模型输出（working/thinking），以及 `a
 
 - `credential-invalid-ledger.ts`：哪些键已知失效、各 Agent 看到过什么；释放时通知订阅者。
 - `credential-invalid-holds.ts`：账本之上的 hold 策略（上面的触发、范围、释放）；`assemble-credential-holds.ts`
-  把它接到 runtime 的协作者，并拥有 `credential-disk-watch.ts`。
-- `provider-credentials.ts`：各 runtime 登录放在哪里、什么环境变量会让它离开 Computer 的登录。
-- `agent-lifecycle.ts`：Agent 生命周期里多个模块关心的事件（`stopped`、`processClosed`），发出的模块
-  不需要知道谁在听。
+  把它接到 runtime 的协作者，并拥有 `credential-disk-watch.ts` 与 `credential-recycle.ts`。
+- `credential-recycle.ts`：对进程内缓存凭据的 runtime（Codex）在凭据变更、登出或显式 Start 时安排空闲回收，
+  不中断进行中的 turn。
+- `provider-credentials.ts`：各 runtime 登录放在哪里、什么环境变量会让它离开 Computer 的登录、哪些 runtime
+  凭据变更后需要重启进程以及账号摘要读取。
+- `agent-lifecycle.ts`：Agent 生命周期里多个模块关心的事件（`stopped`、`processStarted`、`processClosed`），
+  发出的模块不需要知道谁在听。

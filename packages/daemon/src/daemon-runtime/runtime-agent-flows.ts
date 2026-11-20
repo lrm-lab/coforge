@@ -151,7 +151,7 @@ export type AgentControlIntentPorts = {
   /** Drops what a cold start owed the Agent's next launch. */
   dropOwedRecovery(agentId: string): void;
   /** A person's Start ends a credential-invalid record the Agent was holding (task #39). */
-  credentialStarted(agentId: string): void;
+  credentialStarted(agentId: string): Promise<void> | void;
   startAgent(
     agentId: string,
     config: AgentRuntimeConfig,
@@ -236,9 +236,6 @@ export async function handleAgentStart(
   // A Start follows a stop already under way for the Agent, never adopts or races its process.
   const stopping = ports.stops.pendingStop(intent.agentId);
   if (stopping) await stopping.catch(() => undefined);
-  // A person pressed Start: their act is the probe for a credential the Agent showed unusable,
-  // so the record and its hold end before this launch, not after it fails the same way again.
-  ports.credentialStarted(intent.agentId);
   if (intent.controlEpoch) {
     await ports.controlStart(intent);
     await ports.replaySession(intent.agentId);
@@ -247,6 +244,8 @@ export async function handleAgentStart(
     return runtime;
   }
   if (ports.managed(intent.agentId)) throw new Error("Agent requires a fenced Start");
+  const recycling = ports.credentialStarted(intent.agentId);
+  if (recycling) await recycling.catch(() => undefined);
   return ports.startAgent(intent.agentId, runtimeConfigOf(intent), recoveryOf(intent), {
     sessionId: intent.sessionId,
     requestId: intent.requestId,

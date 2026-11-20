@@ -13,6 +13,7 @@ type ProviderCredentials = Readonly<{
   file: string;
   /** The login also lives in a macOS Keychain item. */
   keychain?: true;
+  restartsOnCredentialChange?: true;
 }>;
 
 const PROVIDER_CREDENTIALS: Readonly<Record<string, ProviderCredentials>> = {
@@ -28,9 +29,35 @@ const PROVIDER_CREDENTIALS: Readonly<Record<string, ProviderCredentials>> = {
     keyEnv: "OPENAI_API_KEY",
     homeDir: ".codex",
     file: "auth.json",
+    restartsOnCredentialChange: true,
   },
   [RUNTIME_PROVIDER.GROK]: { dirEnv: "GROK_HOME", homeDir: ".grok", file: "auth.json" },
 };
+
+export function restartsOnCredentialChange(provider: string): boolean {
+  return PROVIDER_CREDENTIALS[provider]?.restartsOnCredentialChange === true;
+}
+
+export function credentialAccountDigest(provider: string, content: Uint8Array): string | undefined {
+  if (provider !== RUNTIME_PROVIDER.CODEX) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(content));
+  } catch {
+    return undefined;
+  }
+  if (!parsed || typeof parsed !== "object") return undefined;
+  const record = parsed as Record<string, unknown>;
+  const tokens =
+    record.tokens && typeof record.tokens === "object"
+      ? (record.tokens as Record<string, unknown>)
+      : undefined;
+  const accountId = typeof tokens?.account_id === "string" ? tokens.account_id.trim() : "";
+  if (accountId) return new Bun.CryptoHasher("sha256").update(`chatgpt:${accountId}`).digest("hex");
+  const apiKey = typeof record.OPENAI_API_KEY === "string" ? record.OPENAI_API_KEY.trim() : "";
+  if (apiKey) return new Bun.CryptoHasher("sha256").update(`api_key:${apiKey}`).digest("hex");
+  return undefined;
+}
 
 export type CredentialEnv = Readonly<Record<string, string | undefined>>;
 

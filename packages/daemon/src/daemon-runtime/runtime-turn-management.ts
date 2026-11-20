@@ -10,6 +10,7 @@ import type { AgentDeliveryGate } from "./agent-delivery-gate";
 import type { AgentInboxCoordinator } from "./agent-inbox-coordinator";
 import type { TaskIdleNudge } from "./task-idle-nudge";
 import type { AgentConfigApply } from "./agent-config-apply";
+import type { CredentialRecycle } from "./credential-recycle";
 import type { AgentLaunchCustody } from "./agent-launch-custody";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
@@ -37,6 +38,7 @@ export type RuntimeTurnPorts = {
   idleNudge?: Pick<TaskIdleNudge, "maybeAsk">;
   /** A pushed configuration, applied when a turn leaves the Agent idle. */
   configApply?: Pick<AgentConfigApply, "settle">;
+  credentialRecycle?: Pick<CredentialRecycle, "settle" | "hasPending">;
   drafts: Drafts;
   activity(
     agentId: string,
@@ -94,11 +96,16 @@ export function showQuietTurn(
     ports.systemCleaner.onAgentWorkingToIdle(agentId);
     ports.idleNudge?.maybeAsk(agentId);
     void ports.configApply?.settle(agentId);
+    void ports.credentialRecycle?.settle(agentId);
     // A delivery accepted during this turn may remain pending for a short boundary grace period;
     // give the consumption watch one more chance before the normal five-second retry.
     const configApply = ports.configApply;
-    if (configApply)
-      setTimeout(() => void configApply.settle(agentId), DELIVERY_TURN_SETTLE_RETRY_MS).unref();
+    const credentialRecycle = ports.credentialRecycle;
+    if (configApply || credentialRecycle)
+      setTimeout(() => {
+        void configApply?.settle(agentId);
+        void credentialRecycle?.settle(agentId);
+      }, DELIVERY_TURN_SETTLE_RETRY_MS).unref();
   }
 }
 
@@ -152,6 +159,10 @@ export function isWorking(ports: RuntimeTurnPorts, agentId: string): boolean {
 }
 
 export function releaseTurnEndHolds(ports: RuntimeTurnPorts, agentId: string): void {
+  if (ports.credentialRecycle?.hasPending(agentId)) {
+    ports.deliveryGate.clearBusy(agentId);
+    return;
+  }
   const held = ports.deliveryGate.idle(agentId);
   if (held.length) flushHeldDeliveries(ports, agentId, held);
   if (!ports.deliveryGate.shouldHold(agentId)) ports.launchCustody.ensureInput(agentId);
