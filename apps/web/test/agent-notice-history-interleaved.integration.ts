@@ -143,6 +143,14 @@ test("an around page measures each side against its own rows, not the whole page
     expect(page.hasOlder).toBe(false);
     expect(page.hasNewer).toBe(false);
     expect(page.modelSeenUpToSeq).toBeNull();
+    expect(
+      (
+        await db.conversationMember.findUnique({
+          where: { id: seat.id },
+          select: { agentReadThroughSequence: true },
+        })
+      )?.agentReadThroughSequence,
+    ).toBe(0);
 
     const spare = await db.artifact.create({
       data: {
