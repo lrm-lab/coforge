@@ -81,11 +81,11 @@ function addressedUrl(request: Request): URL {
 
 export default {
   async fetch(request: Request): Promise<Response> {
-    if (!channelThreadUnreadQueueReady())
-      return new Response("Service unavailable", { status: 503 });
     // The web-page sandbox origin (task #490) serves its signed pages and nothing else: none of
     // the application's pages or APIs ever answer on it.
     if (isSandboxRequest(request, artifactSandboxOrigin())) return serveArtifactSandbox(request);
+    if (!channelThreadUnreadQueueReady() && new URL(request.url).pathname === "/health")
+      return new Response("Service unavailable", { status: 503 });
     return isNonLocalizedRequest(request)
       ? handler.fetch(request)
       : paraglideMiddleware(request, () => handler.fetch(request), {
