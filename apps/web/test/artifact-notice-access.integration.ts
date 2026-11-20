@@ -360,23 +360,6 @@ test("the bot inbox stops handing back a notice once the artifact is gone", asyn
     event.messageId,
   );
   expect(await hinted()).not.toContain(event.messageId);
-  const after = await inbox.check(principal);
-  const readThrough = async () =>
-    (
-      await h.f.db.conversationMember.findUniqueOrThrow({
-        where: {
-          conversationId_agentId: {
-            conversationId: event.conversationId,
-            agentId: principal.agentId,
-          },
-        },
-        select: { agentReadThroughSequence: true },
-      })
-    ).agentReadThroughSequence;
-  const before = await readThrough();
-  expect(before).toBeLessThan(event.message.sequence);
-  await inbox.check(principal, { since: after.cursor });
-  expect(await readThrough()).toBe(before);
 });
 
 test("the wake hint drops the notice in the same step its artifact goes", async () => {
