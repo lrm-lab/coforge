@@ -711,3 +711,14 @@
 .wna-thumb-mascot {
   filter: drop-shadow(0 6px 10px rgba(16, 12, 42, 0.3));
 }
+
+.wna-thumb-ver {
+  margin-left: auto;
+  border-radius: 0.25rem;
+  background: #5d36dc;
+  padding: 0.03125rem 0.25rem;
+  font-size: 0.4375rem;
+  line-height: 1.25;
+  font-weight: 600;
+  color: #ffffff;
+}

@@ -25,9 +25,7 @@ export function ArtifactsThumb() {
         <div className="flex items-center gap-1">
           <span className="size-1.5 rounded-full bg-[#5d36dc]" />
           <span className="h-[0.1875rem] w-12 rounded-full bg-[#101319]/75" />
-          <span className="ml-auto rounded bg-[#5d36dc] px-1 py-[0.03125rem] text-[0.4375rem] leading-tight font-semibold text-white">
-            v3
-          </span>
+          <span className="wna-thumb-ver">v3</span>
         </div>
         <div className="grid flex-1 grid-cols-[1.35fr_1fr] gap-1.5">
           <div className="flex flex-col justify-end rounded bg-[#f8f9fc] p-1">

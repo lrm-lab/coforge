@@ -115,7 +115,7 @@ export function WhatsNewRow({ base }: { base?: string } = {}) {
             aria-label={m.whats_new_entry()}
             className="group relative flex w-full cursor-pointer flex-col rounded-xl bg-primary p-2.5 text-left ring-1 ring-secondary outline-focus-ring transition-colors duration-150 ease-out hover:bg-primary_hover focus-visible:outline-2 focus-visible:outline-offset-2"
           >
-            <span className="flex items-center gap-1.5 text-[0.6875rem] font-semibold tracking-wider text-quaternary uppercase">
+            <span className="flex items-center gap-1.5 text-xs font-semibold tracking-wider text-quaternary uppercase">
               <UnreadDot />
               <span className="truncate">{m.whats_new_entry()}</span>
             </span>
