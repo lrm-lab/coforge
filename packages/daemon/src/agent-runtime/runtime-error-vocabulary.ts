@@ -10,6 +10,7 @@ export const RUNTIME_ERROR_CLASS = {
   BILLING: "BillingError",
   AUTH: "AuthError",
   MODEL_CONFIG: "ModelConfigError",
+  MODEL_REFUSAL: "ModelRefusalError",
   TIMEOUT: "TimeoutError",
   PROVIDER_CONNECTION: "ProviderConnectionError",
   PROVIDER_STREAM: "ProviderStreamError",

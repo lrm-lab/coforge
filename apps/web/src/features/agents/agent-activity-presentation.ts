@@ -183,7 +183,12 @@ function presentEntryItem(
 }
 
 function activityAtoms(observation: ActivityObservation): ActivityAtom[] {
-  const { detailKind: kind, level, detail } = observation;
+  const { detailKind: kind, level } = observation;
+  const detail =
+    kind === AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_ERROR &&
+    observation.runtimeError?.errorReason === "model_refusal"
+      ? m.agent_activity_model_refusal()
+      : observation.detail;
   if (
     kind === AGENT_ACTIVITY_DETAIL_KIND.MODEL_REQUEST_STARTED &&
     level !== "error" &&

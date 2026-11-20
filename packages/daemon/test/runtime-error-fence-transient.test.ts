@@ -74,6 +74,30 @@ test("the same provider server error, rate limit and 5xx each three times in one
   }
 });
 
+test("three model refusals are visible without fencing the Agent or holding deliveries", () => {
+  const { hold, held } = harness();
+  const launch: Launch = {};
+  const event = {
+    type: "error",
+    message: "The model declined to respond to this request (refusal).",
+    providerErrorReason: "model_refusal",
+  } as const;
+  try {
+    const classification = classifyRuntimeError(event);
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const result = hold.noteRuntimeFailure("agent", launch, event, classification);
+      expect(result.fence).toBeUndefined();
+      expect(held.get("agent")).toBeUndefined();
+      expect(result.built).toMatchObject({
+        level: "error",
+        runtimeError: { errorClass: "ModelRefusalError", errorReason: "model_refusal" },
+      });
+    }
+  } finally {
+    hold.disposeAll();
+  }
+});
+
 test("a failure that is nobody's transient problem still fences after three identical repeats", () => {
   // The fence keeps its job: a runtime stuck on the same unexplained failure goes offline
   // rather than backing off forever (task #726 leaves this class alone).

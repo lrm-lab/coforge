@@ -226,6 +226,7 @@ export class RuntimeErrorDeliveryHold {
     fence?: (RuntimeErrorFingerprintFenceState | RuntimeErrorClassFenceState) & { event: string };
   } {
     const built = buildRuntimeErrorActivity(event, classification);
+    if (classification.errorClass === RUNTIME_ERROR_CLASS.MODEL_REFUSAL) return { built };
     const classFence = (launch.runtimeErrorClassFence ??= new RuntimeErrorClassFence()).note(
       classification,
     );

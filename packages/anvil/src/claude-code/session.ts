@@ -14,7 +14,7 @@ import type { JsonlProcess } from "#src/jsonl-process";
 import type { SessionState, SessionInitialization, PendingNotice } from "./session-state";
 import { initializeClaudeSession } from "./initialize";
 import { ClaudeStreamEvents } from "./stream-events";
-import { claudeAssistantEvents, claudeToolResults } from "./message-events";
+import { claudeAssistantEvents, claudeRefusalEvent, claudeToolResults } from "./message-events";
 import { ClaudeSubagentLineage } from "./subagent-lineage";
 import { ClaudeRateLimitState } from "./rate-limit";
 import { ClaudeSessionObservations } from "./observations";
@@ -34,6 +34,7 @@ export class ClaudeCodeAgentSession implements AgentSession {
   readonly #listeners = new Set<(event: AgentRuntimeEvent) => void>();
   #state: SessionState = "idle";
   #nativeTurnQueued = false;
+  #turnRefused = false;
   /** Whether a top-level `result` has been seen. Set once and never reset: the fresh relau
    * (`#startFresh`) runs only before any progress, and a result is progress. */
   #resultObserved = false;
@@ -369,6 +370,15 @@ export class ClaudeCodeAgentSession implements AgentSession {
       if (snapshot) this.#emit({ type: AGENT_RUNTIME_EVENT_TYPE.USAGE, snapshot });
       return;
     }
+    const refusal =
+      this.#state === "running" &&
+      this.#nativeIdentityObserved &&
+      !this.#turnRefused &&
+      claudeRefusalEvent(record);
+    if (refusal) {
+      this.#turnRefused = true;
+      this.#emit(refusal);
+    }
     if (record.type === "stream_event") {
       for (const streamed of this.#streamEvents.read(record)) this.#emit(streamed);
       return;
@@ -418,10 +428,9 @@ export class ClaudeCodeAgentSession implements AgentSession {
       this.#state = "idle";
       this.#emit({
         type: "completed",
-        // A completed agent loop can still carry an API failure in is_error.
         status: interrupted
           ? "interrupted"
-          : record.subtype === "success" && record.is_error !== true
+          : record.subtype === "success" && record.is_error !== true && !this.#turnRefused
             ? "completed"
             : "failed",
       });
@@ -476,6 +485,7 @@ export class ClaudeCodeAgentSession implements AgentSession {
   /** Starts a turn while idle, consuming any queued native turn. */
   #beginNativeTurn(): void {
     this.#nativeTurnQueued = false;
+    this.#turnRefused = false;
     this.#state = "running";
   }
 

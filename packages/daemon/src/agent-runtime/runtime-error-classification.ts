@@ -23,9 +23,8 @@ export { isRuntimePlanAccessText } from "./runtime-error-rules";
  * retry decision, and the action only a person can take — independent of which code-agent
  * provider produced it. This is the one place that decision is made. It reads the failure's
  * own text, any HTTP status the text carries, or a provider's normalized `providerLimit` when
- * there is one (a closed vocabulary, unlike the free-form
- * `providerErrorCode`/`providerErrorClass`/`providerErrorReason` hints, which this table cannot
- * look up). `runtime-error-activity.ts` shows a provider's own class/reason hint as-is when it has
+ * there is one. An adapter's structured model refusal also has a stable reason.
+ * `runtime-error-activity.ts` shows a provider's remaining class/reason hints as-is when it has
  * one and no limit; `daemon-runtime/runtime.ts` uses the classification unconditionally to decide
  * whether a failure is worth backing off and retrying a held delivery for (see
  * `runtime-error-recovery.ts`) and whether it takes the Agent offline.
@@ -112,10 +111,18 @@ function billingClassification(
 export function classifyRuntimeError(
   event: Pick<
     Extract<AgentRuntimeEvent, { type: "error" }>,
-    "message" | "providerLimit" | "httpStatus"
+    "message" | "providerLimit" | "httpStatus" | "providerErrorReason"
   >,
 ): RuntimeErrorClassification {
   const limit = event.providerLimit;
+  if (!limit && event.providerErrorReason === "model_refusal")
+    return {
+      errorClass: RUNTIME_ERROR_CLASS.MODEL_REFUSAL,
+      errorReason: event.providerErrorReason,
+      retryDecision: TERMINAL,
+      requiredAction: "none",
+      takesAgentOffline: false,
+    };
   if (!limit) return classifyRuntimeErrorText(event.message, event.httpStatus);
   // An exhausted account quota is a wait only when its reset is known. Without one (a monthly
   // quota, or a provider that does not say) no retry can be planned: the Agent goes offline and

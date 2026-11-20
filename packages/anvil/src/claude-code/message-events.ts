@@ -2,6 +2,32 @@ import type { ActivitySubagent } from "@lrm/coforge-sdk/internal";
 import { isHttpErrorStatus, type AgentRuntimeEvent } from "#src/contract";
 import { asRecord, eventTime, nonEmptyString, textContent } from "#src/json-record";
 
+function isClaudeRefusal(record: Readonly<Record<string, unknown>>): boolean {
+  if (record.parent_tool_use_id != null || nonEmptyString(record.subagent_type)) return false;
+  if (record.type === "result")
+    return record.subtype === "success" && record.stop_reason === "refusal";
+  const stream = record.type === "stream_event" ? asRecord(record.event) : undefined;
+  const stopReason =
+    record.type === "assistant"
+      ? asRecord(record.message)?.stop_reason
+      : stream?.type === "message_delta"
+        ? asRecord(stream.delta)?.stop_reason
+        : undefined;
+  return stopReason === "refusal";
+}
+
+export function claudeRefusalEvent(
+  record: Readonly<Record<string, unknown>>,
+): AgentRuntimeEvent | undefined {
+  if (!isClaudeRefusal(record)) return;
+  return {
+    type: "error",
+    message: "The model declined to respond to this request (refusal).",
+    providerErrorReason: "model_refusal",
+    occurredAt: eventTime(record),
+  };
+}
+
 /**
  * What one Claude Code `assistant` record reports, block by block in order: a completed `thinking`
  * or `text` block's whole text (once; its partial deltas carry none, see `stream-events.ts`), and
@@ -43,7 +69,9 @@ export function claudeAssistantEvents(
       continue;
     }
     if (block?.type === "text" && typeof block.text === "string" && block.text) {
-      if (apiError || (!callsTools && readsAsApiFailure(block.text)))
+      const apiFailure = apiError || (!callsTools && readsAsApiFailure(block.text));
+      if ((apiFailure || record.is_api_error_message === true) && isClaudeRefusal(record)) continue;
+      if (apiFailure) {
         events.push({
           type: "error",
           message: block.text,
@@ -53,7 +81,7 @@ export function claudeAssistantEvents(
           ...(apiError ? { providerErrorCode: apiError } : {}),
           occurredAt: eventTime(record),
         });
-      else events.push({ type: "text-delta", text: block.text, ...subagent });
+      } else events.push({ type: "text-delta", text: block.text, ...subagent });
       continue;
     }
     if (block?.type !== "tool_use" || typeof block.id !== "string") continue;

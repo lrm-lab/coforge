@@ -51,7 +51,8 @@ These rules apply to `src/features/agents/`.
   `observedAtMs`, and the CoForge `level` extension in the Agent-owned timeline
   in this directory.
 - Localized: model-request waiting labels and elapsed-time captions (timeline, Agent card, chat
-  header), Online / Offline and the billing_exhausted stop status (`agentDisplay`); other Activity labels stay English.
+  header), model-refusal details in the timeline and Agent card, Online / Offline and the
+  billing_exhausted stop status (`agentDisplay`); other Activity labels stay English.
   Preserve provider content in its original language. Navigation, tabs, and general UI
   remain localized.
 - The model-wait clock uses the retained request observation, never heartbeat time.
