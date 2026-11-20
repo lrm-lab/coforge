@@ -199,7 +199,7 @@ export function AppShell(props: AppShellProps) {
       viewerId={props.user.id}
       enabled={props.canSeeUsageLimits ?? false}
     >
-      <WhatsNewAnnouncer />
+      <WhatsNewAnnouncer base={workspacePath(props.currentWorkspace.slug)} />
       <KeyboardShortcutsHost workspaceSlug={props.currentWorkspace.slug}>
         {chromeMounted ? (
           <WorkspaceChrome {...props} standalone={standalone} />

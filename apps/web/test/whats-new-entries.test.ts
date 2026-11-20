@@ -82,5 +82,5 @@ test("an announced entry opens by itself once; the others wait for the row", () 
   expect(announcedWhatsNew(data, ["big", "small", "bigger"], [])).toEqual(["big", "bigger"]);
   expect(announcedWhatsNew(data, ["small", "big", "bigger"], ["big"])).toEqual(["bigger"]);
   expect(announcedWhatsNew(data, ["small"], [])).toEqual([]);
-  expect(announcedWhatsNew(WHATS_NEW_ENTRIES, ["artifacts"], [])).toEqual([]);
+  expect(announcedWhatsNew(WHATS_NEW_ENTRIES, ["artifacts"], [])).toEqual(["artifacts"]);
 });

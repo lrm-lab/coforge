@@ -16,48 +16,6 @@ import {
 } from "./whats-new-artifacts-timeline";
 import "./whats-new-artifacts-scene.css";
 
-export function ArtifactsThumb() {
-  const uid = useId();
-  const gradId = `${uid}-thumb`;
-  return (
-    <div className="wna-thumb">
-      <div className="wna-thumb-card">
-        <div className="flex items-center gap-1">
-          <span className="size-1.5 rounded-full bg-[#5d36dc]" />
-          <span className="h-[0.1875rem] w-12 rounded-full bg-[#101319]/75" />
-          <span className="wna-thumb-ver">v3</span>
-        </div>
-        <div className="grid flex-1 grid-cols-[1.35fr_1fr] gap-1.5">
-          <div className="flex flex-col justify-end rounded bg-[#f8f9fc] p-1">
-            <svg viewBox="0 0 80 26" className="h-6 w-full overflow-visible">
-              <defs>
-                <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#7c5cfa" stopOpacity="0.42" />
-                  <stop offset="100%" stopColor="#7c5cfa" stopOpacity="0.02" />
-                </linearGradient>
-              </defs>
-              <path d="M 0 22 Q 18 12 38 15 T 80 5 L 80 25 L 0 25 Z" fill={`url(#${gradId})`} />
-              <path
-                d="M 0 22 Q 18 12 38 15 T 80 5"
-                fill="none"
-                stroke="#5d36dc"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-              />
-            </svg>
-          </div>
-          <div className="flex items-end gap-[0.1875rem] rounded border border-[#7c5cfa]/40 bg-[#f4f0ff] p-1">
-            <span className="h-[46%] flex-1 rounded-[1.5px] bg-[#ddd6fe]" />
-            <span className="h-[64%] flex-1 rounded-[1.5px] bg-[#ddd6fe]" />
-            <span className="h-[54%] flex-1 rounded-[1.5px] bg-[#ddd6fe]" />
-            <span className="h-[96%] flex-1 rounded-[1.5px] bg-[#5d36dc] shadow-[0_0_6px_rgba(93,54,220,0.5)]" />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function ArtifactsScene() {
   const reducedMotion = usePrefersReducedMotion();
   const rootRef = useRef<HTMLDivElement | null>(null);

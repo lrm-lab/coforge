@@ -32,7 +32,7 @@ export function WhatsNewDialog({
       }}
       isDismissable
     >
-      <Modal className="w-full max-w-[36rem] overflow-hidden">
+      <Modal className="w-full max-w-[40rem] overflow-hidden">
         <Dialog aria-label={m.whats_new_entry()}>
           {({ close }) => (
             <WhatsNewPages
@@ -85,10 +85,7 @@ function WhatsNewPages({
             "bg-overlay/30 text-white/90 ring-1 ring-white/15 backdrop-blur-sm hover:bg-overlay/50 hover:text-white",
         )}
       />
-      <div
-        aria-hidden="true"
-        className="relative h-56 overflow-hidden bg-secondary sm:h-[20.25rem]"
-      >
+      <div aria-hidden="true" className="relative h-56 overflow-hidden bg-secondary sm:h-[22.5rem]">
         <Illustration />
       </div>
       <div className="px-5 pt-5 pb-5 sm:px-7 sm:pt-6 sm:pb-7">

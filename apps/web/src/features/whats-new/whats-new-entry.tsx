@@ -6,7 +6,6 @@ import { opensKeyboard } from "#src/hooks/use-keyboard-field-focused";
 import { UnreadDot } from "#src/components/ui/unread-marker";
 import { m } from "#src/paraglide/messages";
 import { useWhatsNew } from "./use-whats-new";
-import { WHATS_NEW_CONTENT } from "./whats-new-content";
 import { WhatsNewDialog } from "./whats-new-dialog";
 import { announcedWhatsNew, WHATS_NEW_ENTRIES, type WhatsNewId } from "./whats-new-entries";
 
@@ -96,41 +95,20 @@ export function WhatsNewAnnouncer({ base }: { base?: string } = {}) {
 
 export function WhatsNewRow({ base }: { base?: string } = {}) {
   const entry = useWhatsNewEntry(base);
-  const featuredId = entry.pending.at(-1);
-  const featured = featuredId ? WHATS_NEW_CONTENT[featuredId] : null;
-  const Thumb = featured?.thumbnail;
   return (
     <>
-      {entry.visible && featured && Thumb && (
-        <div className="relative pt-4 pb-1">
-          <img
-            src="/agent-avatars/mascot-purple-5.webp"
-            alt=""
+      {entry.visible && (
+        <AriaButton
+          onPress={entry.open}
+          className="group flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm font-medium text-nav-fg outline-focus-ring transition-colors duration-100 ease-out hover:bg-sidebar-item-active hover:text-secondary focus-visible:outline-2 focus-visible:outline-offset-2"
+        >
+          <Announcement02
             aria-hidden="true"
-            decoding="async"
-            className="wna-thumb-mascot pointer-events-none absolute -top-0.5 right-3 z-10 size-9 -rotate-6 object-contain"
+            className="size-5 shrink-0 text-nav-fg transition-colors duration-100 ease-out group-hover:text-secondary"
           />
-          <AriaButton
-            onPress={entry.open}
-            aria-label={m.whats_new_entry()}
-            className="group relative flex w-full cursor-pointer flex-col rounded-xl bg-primary p-2.5 text-left ring-1 ring-secondary outline-focus-ring transition-colors duration-150 ease-out hover:bg-primary_hover focus-visible:outline-2 focus-visible:outline-offset-2"
-          >
-            <span className="flex items-center gap-1.5 text-xs font-semibold tracking-wider text-quaternary uppercase">
-              <UnreadDot />
-              <span className="truncate">{m.whats_new_entry()}</span>
-            </span>
-            <div
-              aria-hidden="true"
-              className="mt-2 h-16 w-full overflow-hidden rounded-lg ring-1 ring-secondary ring-inset"
-            >
-              <Thumb />
-            </div>
-            <span className="mt-2 block truncate text-xs font-semibold text-primary">
-              {featured.title()}
-            </span>
-            <span className="mt-0.5 line-clamp-2 text-xs text-tertiary">{featured.teaser()}</span>
-          </AriaButton>
-        </div>
+          <span className="min-w-0 flex-1 truncate text-left">{m.whats_new_entry()}</span>
+          <UnreadDot />
+        </AriaButton>
       )}
       {entry.dialog}
     </>

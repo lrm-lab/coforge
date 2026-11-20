@@ -10,7 +10,12 @@ export type WhatsNewEntryData = {
 
 export const WHATS_NEW_ENTRIES = [
   { id: "task-labels", releasedAt: "2026-11-04T08:01:00Z" },
-  { id: "artifacts", releasedAt: "2026-11-20T07:00:00Z", includeNewcomers: true },
+  {
+    id: "artifacts",
+    releasedAt: "2026-11-20T07:00:00Z",
+    announce: true,
+    includeNewcomers: true,
+  },
 ] as const satisfies readonly WhatsNewEntryData[];
 
 export type WhatsNewId = (typeof WHATS_NEW_ENTRIES)[number]["id"];
