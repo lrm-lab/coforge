@@ -179,6 +179,10 @@ export function createCheckerServer(options = {}) {
     if (slotState === "aborted") return;
 
     const controller = new AbortController();
+    const onResponseClose = () => {
+      if (!res.writableEnded) controller.abort();
+    };
+    res.once("close", onResponseClose);
     let timer;
     try {
       let payload;
@@ -233,6 +237,11 @@ export function createCheckerServer(options = {}) {
           shotCount: Array.isArray(result.screenshots) ? result.screenshots.length : 0,
           consoleErrorCount: result.findings?.consoleErrors?.length ?? 0,
           blockedCount: result.findings?.blockedResources?.length ?? 0,
+          brokenImageCount: result.findings?.brokenImages?.length ?? 0,
+          failedAssetCount: result.findings?.failedAssets?.length ?? 0,
+          scrollLockCount: result.findings?.pageCantScroll?.length ?? 0,
+          phoneOverflow: Boolean(result.findings?.phoneOverflow),
+          inlineClipped: Boolean(result.findings?.inlineOverflow?.clipped),
           blank: Boolean(result.findings?.blank),
           rssMb: rssMb(),
         });
@@ -259,6 +268,7 @@ export function createCheckerServer(options = {}) {
         sendJson(res, status, { error: error instanceof Error ? error.message : "Check failed" });
       }
     } finally {
+      res.off("close", onResponseClose);
       clearTimeout(timer);
       releaseSlot();
     }

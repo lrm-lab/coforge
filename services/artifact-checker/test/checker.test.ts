@@ -230,6 +230,12 @@ describe("artifact-checker HTTP server", () => {
         "artifact_checker.job_started",
         "artifact_checker.job_completed",
       ]);
+      const completedLog = logs.find((entry) => entry.event === "artifact_checker.job_completed");
+      expect(completedLog?.brokenImageCount).toBe(0);
+      expect(completedLog?.failedAssetCount).toBe(0);
+      expect(completedLog?.scrollLockCount).toBe(0);
+      expect(completedLog?.phoneOverflow).toBe(false);
+      expect(completedLog?.inlineClipped).toBe(false);
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

@@ -1,4 +1,3 @@
-import { lookup } from "node:dns/promises";
 import {
   buildInlineHostHtml,
   clampInlineHeight,
@@ -8,17 +7,15 @@ import {
   INLINE_MAX_HEIGHT_PX,
 } from "./evaluate.mjs";
 import {
+  fetchCdnSafely,
   isAllowedRequestUrl,
-  isPublicIpAddress,
   normalizeBundlePath,
 } from "./ssrf.mjs";
 
 const DEFAULT_IDLE_CLOSE_MS = 60_000;
 const PAGE_RUNTIME_PATH = "/_coforge/runtime.js";
 const SETTLE_MS = 450;
-const MAX_CDN_REDIRECTS = 3;
-const MAX_CDN_RESPONSE_BYTES = 10 * 1024 * 1024;
-const CDN_FETCH_TIMEOUT_MS = 10_000;
+const LOAD_WAIT_CAP_MS = 4_000;
 const SUBRESOURCE_CSP = "sandbox; default-src 'none'";
 
 function rssMb() {
@@ -39,72 +36,6 @@ function withTimeout(promise, timeoutMs, label) {
       timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
     }),
   ]).finally(() => clearTimeout(timer));
-}
-
-async function resolvePublicHost(hostname) {
-  const records = await lookup(hostname, { all: true });
-  if (!Array.isArray(records) || records.length === 0) return false;
-  return records.every((rec) => isPublicIpAddress(rec.address));
-}
-
-async function fetchCdnSafely(rawUrl, options) {
-  let currentUrl = rawUrl;
-  for (let hop = 0; hop <= MAX_CDN_REDIRECTS; hop += 1) {
-    const verdict = isAllowedRequestUrl(currentUrl, options);
-    if (!verdict.allowed || verdict.kind !== "cdn") {
-      return { ok: false, blockedUrl: currentUrl };
-    }
-    const isPublic = await resolvePublicHost(verdict.hostname).catch(() => false);
-    if (!isPublic) {
-      return { ok: false, blockedUrl: currentUrl };
-    }
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), CDN_FETCH_TIMEOUT_MS);
-    const onOuterAbort = () => controller.abort();
-    options.signal?.addEventListener("abort", onOuterAbort, { once: true });
-    let response;
-    try {
-      response = await fetch(currentUrl, {
-        method: options.method === "HEAD" ? "HEAD" : "GET",
-        redirect: "manual",
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timer);
-      options.signal?.removeEventListener("abort", onOuterAbort);
-    }
-
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get("location");
-      if (!location || hop === MAX_CDN_REDIRECTS) {
-        return { ok: false, blockedUrl: location || currentUrl };
-      }
-      try {
-        currentUrl = new URL(location, currentUrl).toString();
-      } catch {
-        return { ok: false, blockedUrl: location };
-      }
-      continue;
-    }
-
-    const declaredLength = Number.parseInt(response.headers.get("content-length") || "", 10);
-    if (Number.isFinite(declaredLength) && declaredLength > MAX_CDN_RESPONSE_BYTES) {
-      return { ok: false, blockedUrl: currentUrl };
-    }
-    const buf = Buffer.from(await response.arrayBuffer());
-    if (buf.byteLength > MAX_CDN_RESPONSE_BYTES) {
-      return { ok: false, blockedUrl: currentUrl };
-    }
-    const headers = {};
-    const contentType = response.headers.get("content-type");
-    if (contentType) headers["content-type"] = contentType;
-    const cacheControl = response.headers.get("cache-control");
-    if (cacheControl) headers["cache-control"] = cacheControl;
-    const acao = response.headers.get("access-control-allow-origin");
-    if (acao) headers["access-control-allow-origin"] = acao;
-    return { ok: true, status: response.status, headers, body: buf };
-  }
-  return { ok: false, blockedUrl: currentUrl };
 }
 
 export function createPlaywrightDriver(options = {}) {
@@ -287,6 +218,8 @@ export function createPlaywrightDriver(options = {}) {
               },
               { shot: "inline", width: 672, height: 800, deviceScaleFactor: 1, mode: "inline" },
             ];
+      const hasDesktopViewport = viewports.some((vp) => vp.shot === "desktop");
+      const cdnCache = new Map();
 
       for (const vp of viewports) {
         if (signal?.aborted) {
@@ -340,13 +273,20 @@ export function createPlaywrightDriver(options = {}) {
               return;
             }
             if (verdict.kind === "cdn") {
-              const fetched = await fetchCdnSafely(url, {
-                artifactOrigin: origin,
-                hostOrigin,
-                allowedCdnHosts,
-                method: route.request().method(),
-                signal,
-              }).catch(() => ({ ok: false, blockedUrl: url }));
+              const method = route.request().method() === "HEAD" ? "HEAD" : "GET";
+              const cacheKey = `${method}:${url}`;
+              let fetchPromise = cdnCache.get(cacheKey);
+              if (!fetchPromise) {
+                fetchPromise = fetchCdnSafely(url, {
+                  artifactOrigin: origin,
+                  hostOrigin,
+                  allowedCdnHosts,
+                  method,
+                  signal,
+                }).catch(() => ({ ok: false, blockedUrl: url }));
+                cdnCache.set(cacheKey, fetchPromise);
+              }
+              const fetched = await fetchPromise;
               if (!fetched.ok) {
                 addBlocked(fetched.blockedUrl || url);
                 await route.abort("blockedbyclient");
@@ -428,11 +368,13 @@ export function createPlaywrightDriver(options = {}) {
             }
           });
 
+          const loadWaitMs = Math.min(LOAD_WAIT_CAP_MS, perShotTimeout);
           if (vp.mode === "inline" || vp.shot === "inline") {
             await page.goto(`${hostOrigin}${INLINE_HOST_PATH}`, {
-              waitUntil: "load",
+              waitUntil: "domcontentloaded",
               timeout: perShotTimeout,
             });
+            await page.waitForLoadState("load", { timeout: loadWaitMs }).catch(() => {});
             await page.waitForTimeout(SETTLE_MS);
             const childFrame = page.frames().find((f) => f !== page.mainFrame());
             if (childFrame) {
@@ -444,7 +386,7 @@ export function createPlaywrightDriver(options = {}) {
                 perShotTimeout,
                 "inline evaluate",
               );
-              if (diag.blank) blank = true;
+              if (!hasDesktopViewport && diag.blank) blank = true;
               const reported = await withTimeout(
                 page.evaluate(() => window.__coforgeInlineSize),
                 perShotTimeout,
@@ -485,9 +427,10 @@ export function createPlaywrightDriver(options = {}) {
             });
           } else {
             await page.goto(entryUrl, {
-              waitUntil: "load",
+              waitUntil: "domcontentloaded",
               timeout: perShotTimeout,
             });
+            await page.waitForLoadState("load", { timeout: loadWaitMs }).catch(() => {});
             await page.waitForTimeout(SETTLE_MS);
             const diag = await withTimeout(
               page.evaluate(collectDomDiagnosticsInPage, {

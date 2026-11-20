@@ -1,6 +1,10 @@
+import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 
 const ARTIFACT_ORIGIN_PATTERN = /^https:\/\/a-[a-zA-Z0-9-]{1,64}\.coforge\.check$/;
+const MAX_CDN_REDIRECTS = 3;
+const MAX_CDN_RESPONSE_BYTES = 10 * 1024 * 1024;
+const CDN_FETCH_TIMEOUT_MS = 5_000;
 
 function parseIpv4Octets(ip) {
   const parts = ip.split(".");
@@ -125,4 +129,70 @@ export function normalizeBundlePath(pathname) {
   const segments = trimmed.split("/");
   if (segments.some((part) => part === "" || part === "." || part === "..")) return null;
   return segments.join("/");
+}
+
+async function resolvePublicHost(hostname) {
+  const records = await lookup(hostname, { all: true });
+  if (!Array.isArray(records) || records.length === 0) return false;
+  return records.every((rec) => isPublicIpAddress(rec.address));
+}
+
+export async function fetchCdnSafely(rawUrl, options) {
+  let currentUrl = rawUrl;
+  for (let hop = 0; hop <= MAX_CDN_REDIRECTS; hop += 1) {
+    const verdict = isAllowedRequestUrl(currentUrl, options);
+    if (!verdict.allowed || verdict.kind !== "cdn") {
+      return { ok: false, blockedUrl: currentUrl };
+    }
+    const isPublic = await resolvePublicHost(verdict.hostname).catch(() => false);
+    if (!isPublic) {
+      return { ok: false, blockedUrl: currentUrl };
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), CDN_FETCH_TIMEOUT_MS);
+    const onOuterAbort = () => controller.abort();
+    options.signal?.addEventListener("abort", onOuterAbort, { once: true });
+    let response;
+    try {
+      response = await fetch(currentUrl, {
+        method: options.method === "HEAD" ? "HEAD" : "GET",
+        redirect: "manual",
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+      options.signal?.removeEventListener("abort", onOuterAbort);
+    }
+
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location");
+      if (!location || hop === MAX_CDN_REDIRECTS) {
+        return { ok: false, blockedUrl: location || currentUrl };
+      }
+      try {
+        currentUrl = new URL(location, currentUrl).toString();
+      } catch {
+        return { ok: false, blockedUrl: location };
+      }
+      continue;
+    }
+
+    const declaredLength = Number.parseInt(response.headers.get("content-length") || "", 10);
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_CDN_RESPONSE_BYTES) {
+      return { ok: false, blockedUrl: currentUrl };
+    }
+    const buf = Buffer.from(await response.arrayBuffer());
+    if (buf.byteLength > MAX_CDN_RESPONSE_BYTES) {
+      return { ok: false, blockedUrl: currentUrl };
+    }
+    const headers = {};
+    const contentType = response.headers.get("content-type");
+    if (contentType) headers["content-type"] = contentType;
+    const cacheControl = response.headers.get("cache-control");
+    if (cacheControl) headers["cache-control"] = cacheControl;
+    const acao = response.headers.get("access-control-allow-origin");
+    if (acao) headers["access-control-allow-origin"] = acao;
+    return { ok: true, status: response.status, headers, body: buf };
+  }
+  return { ok: false, blockedUrl: currentUrl };
 }

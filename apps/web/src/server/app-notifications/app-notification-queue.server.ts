@@ -118,6 +118,7 @@ export function startAppNotificationQueue(
           {
             pollingIntervalSeconds: APP_NOTIFICATION_POLLING_INTERVAL_SECONDS,
             localConcurrency: checkConfig.concurrency,
+            includeMetadata: true,
           },
           async (jobs) => {
             const db = getDatabaseClient();
