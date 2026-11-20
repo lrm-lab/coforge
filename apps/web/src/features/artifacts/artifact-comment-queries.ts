@@ -2,10 +2,12 @@ import { useMemo } from "react";
 import {
   queryOptions,
   useInfiniteQuery,
+  useQuery,
   type InfiniteData,
   type QueryClient,
 } from "@tanstack/react-query";
 
+import type { Mentionable } from "#src/features/conversations/mention-text";
 import { ARTIFACTS_KEY, type ArtifactDocument } from "./artifact-queries";
 import {
   loadArtifactComments,
@@ -33,6 +35,32 @@ export const artifactMentionCandidatesQuery = (artifactId: string) =>
     queryFn: () => loadArtifactMentionCandidates({ data: { artifactId } }),
     staleTime: 30_000,
   });
+
+export function useArtifactMentionables(artifactId: string) {
+  const { data } = useQuery(artifactMentionCandidatesQuery(artifactId));
+  return useMemo(() => {
+    if (!data) return { offered: undefined, known: undefined };
+    const toMentionable =
+      (kind: Mentionable["kind"]) =>
+      (candidate: { id: string; handle: string; name: string }): Mentionable => ({
+        kind,
+        id: candidate.id,
+        handle: candidate.handle,
+        label: candidate.name,
+        description: "",
+        mentionScore: 0,
+      });
+    const people = data.people.map(toMentionable("user"));
+    const agents = data.agents.map(toMentionable("agent"));
+    return {
+      offered: {
+        people: people.filter((person) => person.id !== data.viewerId),
+        agents,
+      },
+      known: [...people, ...agents],
+    };
+  }, [data]);
+}
 
 const byTime = (left: ArtifactCommentView, right: ArtifactCommentView) =>
   new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime() ||

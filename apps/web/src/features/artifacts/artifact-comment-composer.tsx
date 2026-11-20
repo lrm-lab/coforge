@@ -6,7 +6,6 @@ import { readMessageReferences } from "@lrm/coforge-sdk/internal/message-referen
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { ComposerField } from "#src/features/conversations/composer-field";
-import type { Mentionable } from "#src/features/conversations/mention-text";
 import {
   COMMENT_FIELD_CLASS,
   COMMENT_FIELD_LAYOUT_CLASS,
@@ -36,7 +35,7 @@ import { useHoldComposer } from "./artifact-composer-holds";
 import { draftFailure } from "./use-comment-drafts";
 import { COMMENT_MENTIONS_MAX, type CommentAnchor } from "./artifact-comment-inputs";
 import { uploadCommentImage } from "./artifact-comment-images";
-import { artifactMentionCandidatesQuery } from "./artifact-comment-queries";
+import { useArtifactMentionables } from "./artifact-comment-queries";
 import { ARTIFACTS_KEY } from "./artifact-queries";
 
 export type CommentReplyTarget = { id: string; name: string };
@@ -63,38 +62,12 @@ type Attachment = {
 
 const AUDIENCE_DELAY_MS = 350;
 
-function useMentionables(artifactId: string) {
-  const { data } = useQuery(artifactMentionCandidatesQuery(artifactId));
-  return useMemo(() => {
-    if (!data) return { offered: undefined, known: undefined };
-    const toMentionable =
-      (kind: Mentionable["kind"]) =>
-      (candidate: { id: string; handle: string; name: string }): Mentionable => ({
-        kind,
-        id: candidate.id,
-        handle: candidate.handle,
-        label: candidate.name,
-        description: "",
-        mentionScore: 0,
-      });
-    const people = data.people.map(toMentionable("user"));
-    const agents = data.agents.map(toMentionable("agent"));
-    return {
-      offered: {
-        people: people.filter((person) => person.id !== data.viewerId),
-        agents,
-      },
-      known: [...people, ...agents],
-    };
-  }, [data]);
-}
-
 export function useKnownMentionables(artifactId: string) {
-  return useMentionables(artifactId).known;
+  return useArtifactMentionables(artifactId).known;
 }
 
 export function useCommentDraftText(artifactId: string, initial = "") {
-  const { offered } = useMentionables(artifactId);
+  const { offered } = useArtifactMentionables(artifactId);
   const [body, setBody] = useState(initial);
   const [pins, setPins] = useState<readonly MentionPin[]>([]);
 

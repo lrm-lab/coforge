@@ -111,7 +111,8 @@
     opacity 180ms var(--ease-out-strong) 40ms;
 }
 
-.artifact-review-editor:empty::before {
+.artifact-review-editor[data-review-empty="true"]::before {
+  position: absolute;
   content: attr(data-placeholder);
   color: var(--color-text-placeholder);
   pointer-events: none;

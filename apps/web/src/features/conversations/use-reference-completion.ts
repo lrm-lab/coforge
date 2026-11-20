@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { filterMentionables, mentionKey, type Mentionable } from "./mention-text";
 import { mentionInsertText } from "./mention-pins";
 import {
@@ -6,19 +6,12 @@ import {
   filterChannelSuggestions,
   insertReference,
   type ChannelSuggestion,
-  type ReferenceTrigger,
 } from "./reference-completion";
 
-/** One row of the composer's completion list: a member for `@`, a channel for `#`. */
 export type ReferenceSuggestion =
   | { kind: "mention"; mention: Mentionable }
   | { kind: "channel"; channel: ChannelSuggestion };
 
-/**
- * The `@` list: members first, then the people and Agents outside the channel, each ranked on its
- * own. While the two lists refetch after a membership change, someone can briefly be in both;
- * they are offered once, as a member.
- */
 function mentionCandidates(
   mentionables: readonly Mentionable[] | undefined,
   outsiders: readonly Mentionable[] | undefined,
@@ -37,73 +30,35 @@ function mentionCandidates(
   ];
 }
 
-/** The text a chosen suggestion puts in the draft (before its trailing space): a member by the name
- * they are shown by, which sending turns back into their handle (`mention-pins.ts`); a channel by
- * its name. */
 function referenceText(item: ReferenceSuggestion): string {
   return item.kind === "mention" ? mentionInsertText(item.mention) : `#${item.channel.name}`;
 }
 
-/**
- * The composer's reference completion, self-contained: tracks the in-progress `@query` or
- * `#query` token at the caret, owns the popup's open/highlight state and its keyboard
- * interaction (ArrowUp/Down cycle, Enter/Tab choose, Escape dismiss), and applies a chosen
- * member or channel by splicing `@name ` or `#name ` into the text through the caller's
- * `onChange`, telling the caller which member was picked (`onPickMention`) so it can pin who the
- * name means. IME compositions are left untouched. `textareaRef` must be attached to the
- * composer textarea; the hook restores the caret after an insertion.
- */
-export function useReferenceCompletion({
+type ReferenceCandidates = {
+  mentionables: readonly Mentionable[] | undefined;
+  mentionOutsiders?: readonly Mentionable[] | undefined;
+  recentHandles?: readonly string[] | undefined;
+  channels?: readonly ChannelSuggestion[] | undefined;
+  currentChannelId?: string | undefined;
+};
+
+type ActiveReference = NonNullable<ReturnType<typeof activeReferenceQuery>>;
+
+export function useReferenceSuggestions({
   mentionables,
   mentionOutsiders,
   recentHandles,
   channels,
   currentChannelId,
-  value,
-  onChange,
-  onPickMention,
-}: {
-  /** The conversation's @-completion candidates; empty/undefined keeps the `@` popup closed. */
-  mentionables: readonly Mentionable[] | undefined;
-  /** Candidates outside the channel, ranked on their own and listed after the members. */
-  mentionOutsiders?: readonly Mentionable[];
-  /** Handles that recently sent a message in this conversation, most-recent first; ranks
-   * completion candidates ahead of alphabetical order within a match tier. */
-  recentHandles?: readonly string[];
-  /** The Workspace's channels for `#`-completion; empty/undefined keeps the `#` popup closed. */
-  channels?: readonly ChannelSuggestion[];
-  /** This conversation's id: when it is a channel, that channel leads the `#` list. */
-  currentChannelId?: string;
-  /** The composer text (controlled). */
-  value: string;
-  /** Replaces the composer text after a candidate insertion. */
-  onChange: (value: string) => void;
-  /** A member was chosen from the `@` list: the composer pins them to the name just written. */
-  onPickMention?: (mention: Mentionable) => void;
-}): {
-  textareaRef: RefObject<HTMLTextAreaElement | null>;
-  open: boolean;
-  /** The trigger of the open list, which names it for assistive tech. */
-  trigger: ReferenceTrigger | undefined;
-  items: ReferenceSuggestion[];
-  activeIndex: number;
-  listboxId: string;
-  optionId: (index: number) => string;
-  /** Wire into the textarea's change/select: tracks the query as text or caret move. */
-  track: (text: string, caret: number | null) => void;
-  /** Wire into the textarea's keydown; true when the popup consumed the key. `composing`
-   * lets the caller extend IME detection beyond `nativeEvent.isComposing`. */
-  handleKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>, composing?: boolean) => boolean;
-  choose: (item: ReferenceSuggestion) => void;
-  close: () => void;
-  setActiveIndex: (index: number) => void;
-} {
+  onChoose,
+}: ReferenceCandidates & {
+  onChoose: (item: ReferenceSuggestion, query: ActiveReference) => void;
+}) {
   const baseId = useId();
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [query, setQuery] = useState<ReturnType<typeof activeReferenceQuery>>();
+  const [query, setQuery] = useState<ActiveReference>();
   const [highlighted, setHighlighted] = useState(0);
-  // A caret position to restore once React has committed the reference insertion.
-  const pendingCaretRef = useRef<number | undefined>(undefined);
+  const trackedTextRef = useRef("");
+  const dismissedRef = useRef<string | undefined>(undefined);
 
   const items: ReferenceSuggestion[] = !query
     ? []
@@ -120,21 +75,8 @@ export function useReferenceCompletion({
   const open = items.length > 0;
   const activeIndex = Math.min(highlighted, items.length - 1);
 
-  useEffect(() => {
-    if (pendingCaretRef.current === undefined) return;
-    const caret = pendingCaretRef.current;
-    pendingCaretRef.current = undefined;
-    const textarea = textareaRef.current;
-    textarea?.focus();
-    textarea?.setSelectionRange(caret, caret);
-  }, [value]);
-
-  // The text a dismissed list was shown for: Escape closes it until the text changes. The key's
-  // own keyup reports the caret again (React's onSelect), which would otherwise reopen it on the
-  // spot and take a second Escape (task #478).
-  const dismissedRef = useRef<string | undefined>(undefined);
-
   function track(text: string, caret: number | null) {
+    trackedTextRef.current = text;
     if (dismissedRef.current !== undefined && dismissedRef.current !== text)
       dismissedRef.current = undefined;
     setQuery(
@@ -146,17 +88,12 @@ export function useReferenceCompletion({
   }
 
   function choose(item: ReferenceSuggestion) {
-    const textarea = textareaRef.current;
-    if (!query || !textarea) return;
-    const caret = textarea.selectionStart ?? query.start + query.query.length + 1;
-    const next = insertReference(value, query.start, caret, referenceText(item));
-    pendingCaretRef.current = next.caret;
-    if (item.kind === "mention") onPickMention?.(item.mention);
-    onChange(next.value);
+    if (!query) return;
+    onChoose(item, query);
     setQuery(undefined);
   }
 
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>, composing?: boolean) {
+  function handleKeyDown(event: KeyboardEvent<HTMLElement>, composing?: boolean) {
     if (!open) return false;
     const ime = event.nativeEvent.isComposing || composing;
     if (!ime && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
@@ -171,10 +108,9 @@ export function useReferenceCompletion({
       return true;
     }
     if (event.key === "Escape") {
-      // Closing the list is all it does: a dialog or pane around the field must not close too.
       event.preventDefault();
       event.stopPropagation();
-      dismissedRef.current = value;
+      dismissedRef.current = trackedTextRef.current;
       setQuery(undefined);
       return true;
     }
@@ -182,17 +118,53 @@ export function useReferenceCompletion({
   }
 
   return {
-    textareaRef,
     open,
     trigger: open ? query?.trigger : undefined,
     items,
     activeIndex,
     listboxId: `${baseId}-references`,
-    optionId: (index) => `${baseId}-reference-${index}`,
+    optionId: (index: number) => `${baseId}-reference-${index}`,
     track,
     handleKeyDown,
     choose,
     close: () => setQuery(undefined),
     setActiveIndex: setHighlighted,
   };
+}
+
+export function useReferenceCompletion({
+  value,
+  onChange,
+  onPickMention,
+  ...candidates
+}: ReferenceCandidates & {
+  value: string;
+  onChange: (value: string) => void;
+  onPickMention?: (mention: Mentionable) => void;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const pendingCaretRef = useRef<number | undefined>(undefined);
+  const suggestions = useReferenceSuggestions({
+    ...candidates,
+    onChoose(item, query) {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      const caret = textarea.selectionStart ?? query.start + query.query.length + 1;
+      const next = insertReference(value, query.start, caret, referenceText(item));
+      pendingCaretRef.current = next.caret;
+      if (item.kind === "mention") onPickMention?.(item.mention);
+      onChange(next.value);
+    },
+  });
+
+  useEffect(() => {
+    if (pendingCaretRef.current === undefined) return;
+    const caret = pendingCaretRef.current;
+    pendingCaretRef.current = undefined;
+    const textarea = textareaRef.current;
+    textarea?.focus();
+    textarea?.setSelectionRange(caret, caret);
+  }, [value]);
+
+  return { ...suggestions, textareaRef };
 }

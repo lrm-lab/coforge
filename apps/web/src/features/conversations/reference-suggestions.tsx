@@ -21,6 +21,7 @@ export function ReferenceSuggestionList({
   onChoose,
   onHighlight,
   groupBy = "membership",
+  placement = "above",
 }: {
   id: string;
   trigger: ReferenceTrigger;
@@ -30,6 +31,7 @@ export function ReferenceSuggestionList({
   onChoose: (item: ReferenceSuggestion) => void;
   onHighlight: (index: number) => void;
   groupBy?: "membership" | "kind";
+  placement?: "above" | "inline";
 }) {
   const activeOptionRef = useRef<HTMLLIElement>(null);
   const liveAgents = useLiveAgents();
@@ -128,7 +130,10 @@ export function ReferenceSuggestionList({
       }
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
-      className="absolute inset-x-3 bottom-full z-20 mb-1 origin-bottom overflow-hidden rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt animate-in fade-in slide-in-from-bottom-1 motion-enter-sm motion-reduce:animate-none"
+      className={cx(
+        "origin-bottom overflow-hidden rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt animate-in fade-in slide-in-from-bottom-1 motion-enter-sm motion-reduce:animate-none",
+        placement === "above" ? "absolute inset-x-3 bottom-full z-20 mb-1" : "mt-1",
+      )}
     >
       <ul
         role="presentation"

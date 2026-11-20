@@ -1,14 +1,23 @@
 import {
   forwardRef,
-  useCallback,
+  useLayoutEffect,
   useImperativeHandle,
   useRef,
-  type ClipboardEvent,
   type KeyboardEvent,
 } from "react";
+import { closeHistory, history, redo, undo } from "@tiptap/pm/history";
+import { keymap } from "@tiptap/pm/keymap";
+import { Fragment, Schema, type Node as EditorNode } from "@tiptap/pm/model";
+import { EditorState, Selection, type Transaction } from "@tiptap/pm/state";
+import { EditorView } from "@tiptap/pm/view";
 import { Cursor02 } from "@untitledui/icons";
 
+import { activeReferenceQuery } from "#src/features/conversations/reference-completion";
+import { ReferenceSuggestionList } from "#src/features/conversations/reference-suggestions";
+import { useReferenceSuggestions } from "#src/features/conversations/use-reference-completion";
 import { cn } from "#src/lib/utils";
+import { useArtifactCommenting } from "./artifact-commenting";
+import { useArtifactMentionables } from "./artifact-comment-queries";
 import type { CommentAnchor } from "./artifact-comment-inputs";
 import {
   extractElementTag,
@@ -149,51 +158,63 @@ function createChipNode(ref: Omit<InlineElementRef, "kind">): HTMLSpanElement {
   return chip;
 }
 
-function collectSegments(root: HTMLElement): InlineSegment[] {
+const schema = new Schema({
+  nodes: {
+    doc: { content: "inline*" },
+    text: { group: "inline" },
+    elementRef: {
+      inline: true,
+      group: "inline",
+      atom: true,
+      selectable: false,
+      attrs: { tag: {}, selector: {}, quote: { default: null } },
+      toDOM: (node) => createChipNode(elementRefOf(node)),
+    },
+  },
+});
+
+function elementRefOf(node: EditorNode): InlineElementRef {
+  const { tag, selector, quote } = node.attrs as Omit<InlineElementRef, "kind">;
+  return { kind: "element", tag, selector, ...(quote ? { quote } : {}) };
+}
+
+function segmentsOf(doc: EditorNode): InlineSegment[] {
   const segments: InlineSegment[] = [];
-  const walk = (node: Node) => {
-    if (node.nodeType === Node.TEXT_NODE) {
-      const text = (node.textContent ?? "").replace(/\u200B/g, "");
-      if (text) segments.push({ kind: "text", text });
+  doc.forEach((node) => {
+    if (!node.isText) {
+      segments.push(elementRefOf(node));
       return;
     }
-    if (node.nodeType !== Node.ELEMENT_NODE) return;
-    const el = node as HTMLElement;
-    if (el.dataset.inlineEl === "true") {
-      const tag = el.dataset.tag ?? "el";
-      const selector = el.dataset.selector ?? "";
-      const quote = el.dataset.quote;
-      if (selector) {
-        segments.push({
-          kind: "element",
-          tag,
-          selector,
-          ...(quote ? { quote } : {}),
-        });
-      }
-      return;
-    }
-    if (el.tagName === "BR") {
-      segments.push({ kind: "text", text: "\n" });
-      return;
-    }
-    const isBlock = el !== root && (el.tagName === "DIV" || el.tagName === "P");
-    if (isBlock && segments.length > 0) segments.push({ kind: "text", text: "\n" });
-    el.childNodes.forEach(walk);
-  };
-  root.childNodes.forEach(walk);
+    const text = node.text?.replace(/\u200B/g, "");
+    if (text) segments.push({ kind: "text", text });
+  });
   return segments;
 }
 
-function placeCaretEnd(root: HTMLElement) {
-  root.focus();
-  const selection = window.getSelection();
-  if (!selection) return;
-  const range = document.createRange();
-  range.selectNodeContents(root);
-  range.collapse(false);
-  selection.removeAllRanges();
-  selection.addRange(range);
+function editorState(segments: readonly InlineSegment[] = []) {
+  const doc = schema.node(
+    "doc",
+    null,
+    segments.flatMap((segment) =>
+      segment.kind === "element"
+        ? [schema.node("elementRef", segment)]
+        : segment.text
+          ? [schema.text(segment.text)]
+          : [],
+    ),
+  );
+  return EditorState.create({
+    doc,
+    selection: Selection.atEnd(doc),
+    plugins: [history(), keymap({ "Mod-z": undo, "Shift-Mod-z": redo, "Mod-y": redo })],
+  });
+}
+
+const editorText = (doc: EditorNode) => doc.textBetween(0, doc.content.size, "\n", " ");
+
+function editAsOneStep(view: EditorView, transaction: Transaction) {
+  view.dispatch(closeHistory(transaction));
+  view.dispatch(closeHistory(view.state.tr));
 }
 
 export const ArtifactInlineEditor = forwardRef<
@@ -220,121 +241,132 @@ export const ArtifactInlineEditor = forwardRef<
   ref,
 ) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const savedRangeRef = useRef<Range | null>(null);
+  const viewRef = useRef<EditorView | null>(null);
+  const composingRef = useRef(false);
+  const { artifactId } = useArtifactCommenting();
+  const { offered } = useArtifactMentionables(artifactId);
+  const completion = useReferenceSuggestions({
+    mentionables: offered?.people,
+    mentionOutsiders: offered?.agents,
+    onChoose(item, query) {
+      const view = viewRef.current;
+      if (!view || item.kind !== "mention" || disabled) return;
+      const { doc, selection, tr } = view.state;
+      if (!selection.empty) return;
+      const source = editorText(doc);
+      const caret = selection.from;
+      const active = activeReferenceQuery(source, caret);
+      if (active?.trigger !== "@" || active.start !== query.start || active.query !== query.query)
+        return;
+      const followingText = doc.resolve(caret).nodeAfter?.text ?? "";
+      const separator = /^[ \t]/.exec(followingText)?.[0];
+      const end = caret + (separator?.length ?? 0);
+      const inserted = `@${item.mention.handle}${separator ?? " "}`;
+      view.focus();
+      editAsOneStep(view, tr.insertText(inserted, query.start, end));
+    },
+  });
 
-  const emitChange = useCallback(() => {
+  const trackCaret = (view: EditorView) => {
+    if (composingRef.current || view.composing) return;
+    const { doc, selection } = view.state;
+    completion.track(
+      editorText(doc),
+      !disabled && view.hasFocus() && selection.empty ? selection.from : null,
+    );
+  };
+
+  const callbacks = useRef({ onSegmentsChange, trackCaret, disabled });
+  callbacks.current = { onSegmentsChange, trackCaret, disabled };
+
+  useLayoutEffect(() => {
     const root = rootRef.current;
     if (!root) return;
-    const segments = collectSegments(root);
-    if (segments.length === 0 && root.innerHTML !== "") root.innerHTML = "";
-    onSegmentsChange(segments);
-  }, [onSegmentsChange]);
-
-  const rememberCaret = useCallback(() => {
-    const root = rootRef.current;
-    const selection = window.getSelection();
-    if (!root || !selection || selection.rangeCount === 0) return;
-    const range = selection.getRangeAt(0);
-    if (root.contains(range.commonAncestorContainer)) {
-      savedRangeRef.current = range.cloneRange();
-    }
+    const view = new EditorView(
+      { mount: root },
+      {
+        state: editorState(),
+        editable: () => !callbacks.current.disabled,
+        attributes: ({ doc }) => ({ "data-review-empty": String(doc.content.size === 0) }),
+        handlePaste(editor, event) {
+          const text = event.clipboardData?.getData("text/plain");
+          if (text) editAsOneStep(editor, editor.state.tr.insertText(text));
+          return true;
+        },
+        dispatchTransaction(transaction) {
+          view.updateState(view.state.apply(transaction));
+          if (transaction.docChanged)
+            callbacks.current.onSegmentsChange(segmentsOf(view.state.doc));
+          if (transaction.docChanged || transaction.selectionSet)
+            callbacks.current.trackCaret(view);
+        },
+      },
+    );
+    viewRef.current = view;
+    return () => {
+      viewRef.current = null;
+      view.destroy();
+    };
   }, []);
+
+  useLayoutEffect(() => {
+    const view = viewRef.current;
+    view?.setProps({ editable: () => !disabled });
+  }, [disabled]);
 
   useImperativeHandle(
     ref,
     () => ({
       focus() {
-        const root = rootRef.current;
-        if (!root) return;
-        placeCaretEnd(root);
-        rememberCaret();
+        const view = viewRef.current;
+        if (!view) return;
+        view.dispatch(view.state.tr.setSelection(Selection.atEnd(view.state.doc)));
+        view.focus();
       },
       clear() {
-        const root = rootRef.current;
-        if (!root) return;
-        root.innerHTML = "";
-        savedRangeRef.current = null;
+        viewRef.current?.updateState(editorState());
         onSegmentsChange([]);
       },
       setSegments(segments) {
-        const root = rootRef.current;
-        if (!root) return;
-        root.innerHTML = "";
-        for (const segment of segments) {
-          if (segment.kind === "element") {
-            root.appendChild(createChipNode(segment));
-          } else {
-            root.appendChild(document.createTextNode(segment.text));
-          }
-        }
-        placeCaretEnd(root);
-        rememberCaret();
+        const view = viewRef.current;
+        if (!view) return;
+        view.updateState(editorState(segments));
+        view.focus();
         onSegmentsChange([...segments]);
       },
       insertElement(elementRef) {
-        const root = rootRef.current;
-        if (!root || disabled) return;
-        root.focus();
-        const selection = window.getSelection();
-        let range: Range;
-        if (
-          selection &&
-          selection.rangeCount > 0 &&
-          root.contains(selection.getRangeAt(0).commonAncestorContainer)
-        ) {
-          range = selection.getRangeAt(0);
-        } else if (
-          savedRangeRef.current &&
-          root.contains(savedRangeRef.current.commonAncestorContainer)
-        ) {
-          range = savedRangeRef.current.cloneRange();
-        } else {
-          range = document.createRange();
-          range.selectNodeContents(root);
-          range.collapse(false);
-        }
-        range.deleteContents();
-        const chip = createChipNode(elementRef);
-        const space = document.createTextNode(" ");
-        range.insertNode(space);
-        range.insertNode(chip);
-        range.setStartAfter(space);
-        range.collapse(true);
-        selection?.removeAllRanges();
-        selection?.addRange(range);
-        savedRangeRef.current = range.cloneRange();
-        emitChange();
+        const view = viewRef.current;
+        if (!view || disabled) return;
+        const content = Fragment.fromArray([
+          schema.node("elementRef", elementRef),
+          schema.text(" "),
+        ]);
+        const { tr, selection } = view.state;
+        tr.replaceWith(selection.from, selection.to, content);
+        tr.setSelection(Selection.near(tr.doc.resolve(selection.from + content.size)));
+        editAsOneStep(view, tr);
+        view.focus();
       },
       readSegments() {
-        return rootRef.current ? collectSegments(rootRef.current) : [];
+        const view = viewRef.current;
+        return view ? segmentsOf(view.state.doc) : [];
       },
     }),
-    [disabled, emitChange, onSegmentsChange, rememberCaret],
+    [disabled, onSegmentsChange],
   );
 
-  const onPaste = (event: ClipboardEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const text = event.clipboardData.getData("text/plain");
-    if (!text) return;
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) return;
-    const range = selection.getRangeAt(0);
-    range.deleteContents();
-    const textNode = document.createTextNode(text);
-    range.insertNode(textNode);
-    range.setStartAfter(textNode);
-    range.collapse(true);
-    selection.removeAllRanges();
-    selection.addRange(range);
-    rememberCaret();
-    emitChange();
-  };
-
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.nativeEvent.isComposing) return;
+    if (disabled || event.nativeEvent.isComposing || composingRef.current) return;
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
       (onSubmitAndSend ?? onSubmit)();
+      return;
+    }
+    if (completion.handleKeyDown(event)) return;
+    if (event.key === "Enter" && event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      const view = viewRef.current;
+      if (view) view.dispatch(view.state.tr.insertText("\n"));
       return;
     }
     if (event.key === "Enter" && !event.shiftKey && !event.altKey) {
@@ -350,29 +382,51 @@ export const ArtifactInlineEditor = forwardRef<
   };
 
   return (
-    <div
-      ref={rootRef}
-      role="textbox"
-      aria-label={label}
-      aria-multiline="true"
-      contentEditable={!disabled}
-      suppressContentEditableWarning
-      data-placeholder={placeholder}
-      data-review-editor=""
-      onInput={() => {
-        rememberCaret();
-        emitChange();
-      }}
-      onKeyUp={rememberCaret}
-      onMouseUp={rememberCaret}
-      onBlur={rememberCaret}
-      onPaste={onPaste}
-      onKeyDown={onKeyDown}
-      className={cn(
-        "artifact-review-editor min-h-11 max-h-32 w-full overflow-y-auto bg-transparent text-sm leading-snug text-primary outline-hidden [overflow-wrap:anywhere]",
-        disabled && "pointer-events-none opacity-60",
+    <>
+      <div
+        ref={rootRef}
+        role="textbox"
+        aria-label={label}
+        aria-multiline="true"
+        aria-autocomplete="list"
+        aria-controls={completion.open ? completion.listboxId : undefined}
+        aria-activedescendant={
+          completion.open ? completion.optionId(completion.activeIndex) : undefined
+        }
+        data-placeholder={placeholder}
+        data-review-editor=""
+        onCompositionStart={() => {
+          composingRef.current = true;
+          completion.close();
+        }}
+        onCompositionEnd={() => {
+          composingRef.current = false;
+          requestAnimationFrame(() => {
+            const view = viewRef.current;
+            if (view) callbacks.current.trackCaret(view);
+          });
+        }}
+        onBlur={completion.close}
+        onKeyDownCapture={onKeyDown}
+        className={cn(
+          "artifact-review-editor relative min-h-11 max-h-32 w-full overflow-y-auto bg-transparent text-sm leading-snug text-primary whitespace-pre-wrap outline-hidden [overflow-wrap:anywhere]",
+          disabled && "pointer-events-none opacity-60",
+        )}
+      />
+      {completion.open && (
+        <ReferenceSuggestionList
+          id={completion.listboxId}
+          trigger="@"
+          items={completion.items}
+          activeIndex={completion.activeIndex}
+          optionId={completion.optionId}
+          onChoose={completion.choose}
+          onHighlight={completion.setActiveIndex}
+          groupBy="kind"
+          placement="inline"
+        />
       )}
-    />
+    </>
   );
 });
 
