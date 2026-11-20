@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { WEB_DRAFT_REVIEW_MARKER } from "#src/server/artifacts/artifact-notice-visibility.server";
+import { Prisma } from "#src/generated/prisma/client";
+import { readableArtifactNoticeSql } from "#src/server/artifacts/artifact-notice-visibility.server";
 import { readAgentMessagePage } from "#src/server/db/repositories/agent-message-history.repositories.server";
 
 const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
@@ -166,21 +168,36 @@ test("the notice conversation reads only the notices the Agent can still read", 
     expect(fromZero.hasOlder).toBe(false);
     expect(fromZero.hasNewer).toBe(true);
 
-    let statements = 0;
+    let revoke = async () => {};
     const revoking = new Proxy(db, {
       get(target, property, receiver) {
-        if (property !== "$queryRaw") return Reflect.get(target, property, receiver);
-        return async (...args: unknown[]) => {
-          statements += 1;
-          if (statements === 2)
-            await db.artifact.update({
-              where: { id: artifact.id },
-              data: { access: "conversation", homeKey: `conversation:${crypto.randomUUID()}` },
-            });
-          return (target.$queryRaw as (...input: unknown[]) => Promise<unknown>)(...args);
+        const value = Reflect.get(target, property, receiver);
+        if (property !== "message" || typeof value !== "object" || value === null) return value;
+        const message = value as { findMany: (...args: unknown[]) => Promise<unknown> };
+        return {
+          ...message,
+          findMany: async (...args: unknown[]) => {
+            const pending = revoke;
+            revoke = async () => {};
+            await pending();
+            return message.findMany(...args);
+          },
         };
       },
     });
+    revoke = async () => {
+      await db.artifact.update({
+        where: { id: artifact.id },
+        data: { access: "conversation", homeKey: `conversation:${crypto.randomUUID()}` },
+      });
+    };
+    const candidatesBefore = (
+      await db.$queryRaw<{ id: string }[]>`
+        SELECT msg."id" FROM "messages" msg
+        WHERE msg."conversationId" = ${conversation.id}::uuid AND msg."sequence" < 4
+          AND ${readableArtifactNoticeSql(workspace.id, agent.id, Prisma.sql`msg."id"`)}`
+    ).length;
+    expect(candidatesBefore).toBe(2);
     const revoked = await readAgentMessagePage(revoking, {
       workspaceId: workspace.id,
       agentId: agent.id,
@@ -197,6 +214,12 @@ test("the notice conversation reads only the notices the Agent can still read", 
     expect(revoked.messages.map((message) => message.sequence)).toEqual([1]);
     expect(revoked.hasOlder).toBe(false);
     expect(revoked.hasNewer).toBe(true);
+
+    await pinned("01a1f6db-cccc-7000-8000-000000000001", 10, "notice 10");
+    await reviewed("01a1f6db-cccc-7000-8000-000000000001", crypto.randomUUID());
+    const blockedTail = await read({ after: "9", limit: 2 });
+    expect(blockedTail.messages).toEqual([]);
+    expect(blockedTail.hasNewer).toBe(false);
     expect(fourth!.id).toContain("-");
   } finally {
     await db.workspace.deleteMany({ where: { id: workspace.id } });
