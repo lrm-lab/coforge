@@ -7,7 +7,7 @@ export class LocalMemoryRuntime {
   constructor(
     private readonly authorize: (context: string, key: string) => string,
     private readonly workspace: () => { workspaceRoot: string; workspaceId: string },
-    private readonly onWrite?: (agentId: string) => void,
+    private readonly onWrite?: (agentId: string, key: string, revision: string) => void,
   ) {}
 
   execute = (
@@ -33,7 +33,7 @@ export class LocalMemoryRuntime {
       .execute(request)
       .then((result) => {
         if (request.operation === "save" || request.operation === "archive")
-          this.onWrite?.(agentId);
+          this.onWrite?.(agentId, request.key, result.entries[0]!.revision);
         return result;
       })
       .finally(() => {

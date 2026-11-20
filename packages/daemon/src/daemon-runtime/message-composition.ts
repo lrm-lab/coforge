@@ -148,6 +148,7 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
           ports.launchCustody().noteTurnStarted(agentId, "delivery");
         ports.deliveryGate.busy(agentId);
       },
+      noticeAccepted: (id, messages) => ports.contexts.noteMemoryActivity(id, messages),
       noticeSettled: (agentId) => {
         const launch = ports.currentActivityLaunch(agentId);
         if (launch) ports.reconcileIdleTurn(agentId, launch);

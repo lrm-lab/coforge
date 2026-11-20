@@ -5,7 +5,6 @@ import { type AgentRuntimeConfig, type CodeAgentProvider } from "@lrm/coforge-an
 import { OperatingSystemInfo } from "#src/platform/operating-system";
 import { assembleInputDrain } from "./assemble-input-drain";
 import { launchInputPorts } from "./session-memory-hooks";
-import { LocalMemoryRuntime } from "./local-memory-runtime";
 import { rebindAgent } from "./agent-rebind";
 import { AgentLaunchCustody } from "./agent-launch-custody";
 import { AgentContexts } from "./agent-contexts";
@@ -652,6 +651,7 @@ export class DaemonRuntime {
 
   #createLaunchCoordinator(): AgentLaunchCoordinator {
     return new AgentLaunchCoordinator({
+      authorizeMemory: this.#authorizedAgent,
       connection: this.#connection,
       transport: () => this.#transport,
       runtimeInstanceId: this.#runtimeInstanceId,
@@ -1241,11 +1241,9 @@ export class DaemonRuntime {
   get version() {
     return this.localQueries.version.bind(this.localQueries);
   }
-  readonly agentMemory = new LocalMemoryRuntime(
-    (context, key) => this.#authorizedAgent(context, key),
-    () => this.#connection,
-    (id) => this.systemCleaner.onMemoryWrite(id),
-  ).execute;
+  get agentMemory() {
+    return this.#launchCoordinator.memory.local.execute;
+  }
   async agentTask(context: string, command: TaskCommand, agentApiKey: string): Promise<TaskResult> {
     return agentTask(this.#agentApiRemindersPorts(), context, command, agentApiKey);
   }
