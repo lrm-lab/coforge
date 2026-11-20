@@ -388,3 +388,68 @@ test("the wake hint drops the notice in the same step its artifact goes", async 
 
   expect(await hinted()).not.toContain(event.messageId);
 });
+
+test("a conversation whose only unread notice is blocked yields no cursor group", async () => {
+  const { AppBotInbox } = await import("#src/server/app-bots/app-bot-inbox.server");
+  const artifact = await h.f.make("Cursor gate");
+  const other = await h.nameOf(h.f.agents.other);
+  await h.create(artifact, `Cursor gate, see @${other}.`);
+  const sent = await h.submit(artifact);
+  if (sent.status !== "sent") throw new Error("not sent");
+  const event = await h.f.db.systemAgentEvent.findUniqueOrThrow({
+    where: {
+      source_agentId_externalEventId: {
+        source: "system.artifacts",
+        agentId: h.f.agents.other,
+        externalEventId: `${artifact}:${WEB_DRAFT_REVIEW_MARKER}:${sent.reviewId}`,
+      },
+    },
+    select: { messageId: true, conversationId: true },
+  });
+  await h.f.db.artifact.update({ where: { id: artifact }, data: { deletedAt: new Date() } });
+
+  const conversations = new PrismaDirectConversationRepository(h.f.db);
+  const pending = (
+    await conversations.readPendingAgentDeliveries(h.f.workspaceId, h.f.agents.other)
+  ).map((delivery) => delivery.messageId);
+  expect(pending).not.toContain(event.messageId);
+  expect(
+    await h.f.db.systemAgentEvent.count({
+      where: {
+        message: { conversationId: event.conversationId },
+        messageId: { notIn: pending },
+      },
+    }),
+  ).toBe(
+    await h.f.db.systemAgentEvent.count({
+      where: { message: { conversationId: event.conversationId } },
+    }),
+  );
+
+  const principal = { workspaceId: h.f.workspaceId, agentId: h.f.agents.other };
+  const inbox = new AppBotInbox(h.f.db);
+  const readThrough = async () =>
+    (
+      await h.f.db.conversationMember.findUniqueOrThrow({
+        where: {
+          conversationId_agentId: {
+            conversationId: event.conversationId,
+            agentId: h.f.agents.other,
+          },
+        },
+        select: { agentReadThroughSequence: true },
+      })
+    ).agentReadThroughSequence;
+  const before = await readThrough();
+  const pull = await inbox.check(principal);
+  const decoded = JSON.parse(Buffer.from(pull.cursor, "base64url").toString("utf8")) as {
+    groups: [conversationId: string, threadRootId: string | null, sequence: number][];
+    outside: string[];
+  };
+  expect(decoded.groups.map(([conversationId]) => conversationId)).not.toContain(
+    event.conversationId,
+  );
+  expect(decoded.outside).not.toContain(event.conversationId);
+  await inbox.check(principal, { since: pull.cursor });
+  expect(await readThrough()).toBe(before);
+});
