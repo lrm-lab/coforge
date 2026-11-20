@@ -2,7 +2,6 @@ import { useEffect, useState, type ReactNode, type RefObject } from "react";
 import { useFilter } from "react-aria";
 import {
   Autocomplete as AriaAutocomplete,
-  Button as AriaButton,
   Input as AriaInput,
   Menu as AriaMenu,
   MenuItem as AriaMenuItem,
@@ -12,15 +11,13 @@ import {
   type Placement,
   type Selection,
 } from "react-aria-components";
-import { Check, ChevronDown, Folder } from "@untitledui/icons";
+import { Check, Folder } from "@untitledui/icons";
 
 import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
 import { Dialog, DialogTrigger, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { HintText } from "#src/components/base/input/hint-text";
-import { Label } from "#src/components/base/input/label";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { channelGlyph } from "#src/features/conversations/channel-name";
 import type { ChannelVisibility } from "#src/features/conversations/channel-visibility";
@@ -28,7 +25,6 @@ import { ProjectImage } from "#src/features/projects/project-image";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { GroupAvatar, type GroupAvatarMember } from "#src/features/conversations/group-avatar";
-import { FIELD_STATES } from "#src/components/base/input/field-states";
 
 /**
  * One picker for every "choose a person, an Agent or a Project" in the app (task #415): a channel's
@@ -144,6 +140,9 @@ export const PICKER_LIST =
 /** Up to this many rows are read at a glance: a list inside another menu gets a search field
  * past it. */
 const SEARCH_FROM = 8;
+
+/** What a picker of one choice takes: the choice itself, and the menu it opens. */
+export type PickerSingleProps = MenuBase & SingleChoice;
 
 /** The picker's content: a search field, typed into as it opens, then one row per choice. */
 export function PickerMenu({
@@ -393,69 +392,6 @@ export function EntityPicker({
     <PickerSurface trigger={trigger} label={menu.label} placement={placement} className={className}>
       {({ phone, close }) => <PickerMenu {...menu} autoFocus={!phone} onClose={close} />}
     </PickerSurface>
-  );
-}
-
-/** A picker as a form field: its label, a box showing the chosen row's face and name, and a hint. */
-export function EntityPickerField({
-  fieldLabel,
-  hint,
-  placeholder,
-  isDisabled,
-  ...menu
-}: MenuProps & {
-  /** The field's visible label; `label` names the list. Absent where the form labels it. */
-  fieldLabel?: string;
-  hint?: string;
-  placeholder?: string;
-  isDisabled?: boolean;
-}) {
-  const chosen = menu.options.find((option) => option.id === menu.selectedKey);
-  return (
-    <div className="flex flex-col gap-1.5">
-      {fieldLabel && <Label>{fieldLabel}</Label>}
-      <PickerSurface
-        label={menu.label}
-        placement="bottom start"
-        className="w-(--trigger-width)"
-        trigger={
-          <AriaButton
-            isDisabled={isDisabled}
-            aria-label={chosen ? `${menu.label}: ${chosen.label}` : menu.label}
-            className={({ isFocusVisible, isPressed, isDisabled }) =>
-              cn(
-                "flex h-10 w-full cursor-pointer items-center gap-2 px-3 text-left outline-hidden",
-                FIELD_STATES.box,
-                (isFocusVisible || isPressed) && FIELD_STATES.typing,
-                isDisabled && FIELD_STATES.disabled,
-              )
-            }
-          >
-            {chosen?.face && <Face face={chosen.face} />}
-            <span
-              className={cn(
-                "min-w-0 flex-1 truncate text-md",
-                chosen ? "font-medium text-field-text" : "text-field-placeholder",
-              )}
-            >
-              {chosen?.label ?? placeholder}
-            </span>
-            {chosen?.addon && (
-              <span className="max-w-1/2 shrink-0 truncate text-sm text-quaternary">
-                {chosen.addon}
-              </span>
-            )}
-            <ChevronDown
-              aria-hidden="true"
-              className="size-4 shrink-0 stroke-[2.25px] text-fg-quaternary"
-            />
-          </AriaButton>
-        }
-      >
-        {({ phone, close }) => <PickerMenu {...menu} autoFocus={!phone} onClose={close} />}
-      </PickerSurface>
-      {hint && <HintText>{hint}</HintText>}
-    </div>
   );
 }
 

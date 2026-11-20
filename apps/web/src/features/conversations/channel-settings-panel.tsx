@@ -10,7 +10,8 @@ import {
 } from "#src/components/application/slideout-menus/slideout-menu";
 import { Select } from "#src/components/base/select/select";
 import { Toggle } from "#src/components/base/toggle/toggle";
-import { EntityPickerField, memberOption } from "#src/features/pickers/entity-picker";
+import { EntityPickerField } from "#src/features/pickers/entity-picker-field";
+import { memberOption } from "#src/features/pickers/entity-picker";
 import { useAppToast } from "#src/components/ui/toast";
 import { AgentProfilePanel } from "#src/features/agents/profile-panel/agent-profile-panel";
 import { PersonProfilePanel } from "#src/features/agents/person-profile-panel";
