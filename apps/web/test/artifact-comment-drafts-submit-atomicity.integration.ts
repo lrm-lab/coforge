@@ -114,3 +114,36 @@ test("a first push that fails leaves the delivery stored for recovery under the 
   });
   expect(deliveries).toHaveLength(1);
 });
+
+test("a duplicate event inside a transaction fails the whole transaction", async () => {
+  const { PrismaSystemAgentEventStore } =
+    await import("#src/server/db/repositories/system-agent-event.repositories.server");
+  const { inTransaction } = await import("#src/server/db/transaction.server");
+  const store = new PrismaSystemAgentEventStore(h.f.db);
+  const base = {
+    source: "system.artifacts" as const,
+    workspaceId: h.f.workspaceId,
+    agentId: h.f.agents.reader,
+    externalEventId: `dup-guard:${h.f.key()}`,
+    expiresAt: await store.expiryAfter(60),
+    body: "Duplicate guard.",
+  };
+  await store.write(base);
+  expect(await store.write(base)).toBeUndefined();
+
+  const rolledBackEventId = `dup-guard:${h.f.key()}`;
+  await expect(
+    inTransaction(h.f.db, async (tx) => {
+      const first = await store.write({ ...base, externalEventId: rolledBackEventId }, tx);
+      if (!first) throw new Error("the first staged write found an existing event");
+      await store.write(base, tx);
+    }),
+  ).rejects.toThrow();
+
+  expect(
+    await h.f.db.systemAgentEvent.count({ where: { externalEventId: rolledBackEventId } }),
+  ).toBe(0);
+  expect(
+    await h.f.db.systemAgentEvent.count({ where: { externalEventId: base.externalEventId } }),
+  ).toBe(1);
+});

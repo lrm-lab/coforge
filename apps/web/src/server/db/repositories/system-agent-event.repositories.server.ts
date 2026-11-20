@@ -6,11 +6,7 @@ import {
 import type { StoredAgentEvent } from "#src/server/app-agent-events/agent-events.server";
 import type { SystemAgentEventStore } from "#src/server/app-agent-events/system-agent-events.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
-import {
-  inTransaction,
-  isDatabaseClient,
-  type DatabaseScope,
-} from "#src/server/db/transaction.server";
+import { inTransaction, type DatabaseScope } from "#src/server/db/transaction.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import {
   eventConversation,
@@ -101,7 +97,7 @@ export class PrismaSystemAgentEventStore implements SystemAgentEventStore {
         };
       });
     } catch (error) {
-      if (isDatabaseClient(scope) && isUniqueViolation(error)) return undefined;
+      if (scope === this.db && isUniqueViolation(error)) return undefined;
       throw error;
     }
   }
