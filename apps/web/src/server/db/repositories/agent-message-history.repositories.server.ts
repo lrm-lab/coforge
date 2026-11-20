@@ -230,8 +230,11 @@ export async function readAgentMessagePage(
       hasNewer: notice.hasNewer,
       modelSeenUpToSeq,
       consumptionScope,
-      ...readPositionReport(page.unread, isHistoryRead, { readThrough }),
-      ...(page.unread && notice.hasNewer ? { moreUnread: true } : {}),
+      ...readPositionReport(page.unread, isHistoryRead, {
+        readThrough,
+        modelSeenUpToSeq,
+        hasMore: notice.hasNewer,
+      }),
       ...(agentReadThroughSequence ? { readPositionAfter: agentReadThroughSequence } : {}),
     };
   }
