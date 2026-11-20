@@ -2,11 +2,8 @@ import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { RedisClient } from "bun";
 import { Prisma, PrismaClient } from "#src/generated/prisma/client";
-import type { ViewerEvent } from "#src/features/conversations/conversation-realtime";
-import type { ConversationActivityEvent } from "#src/features/conversations/conversation-activity-event";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
-import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { RedisMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import { TaskConversations } from "#src/server/tasks/task-conversations.server";
 import {
@@ -28,31 +25,10 @@ import {
 import { markActivityAllRead } from "#src/server/inbox/activity-inbox-writes.server";
 import { enrollGeneral } from "./helpers/general-channel-fixture";
 import { quietCentrifugo } from "./helpers/fake-centrifugo";
+import { recordingRealtime } from "./support/channel-sidebar-unread-realtime";
 
 const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
 if (!connectionString) throw new Error("CHANNEL_TEST_DATABASE_URL must point to local PostgreSQL");
-
-function recordingRealtime() {
-  const viewerEvents: { userIds: readonly string[]; event: ViewerEvent }[] = [];
-  const activities: { userIds: readonly string[]; event: ConversationActivityEvent }[] = [];
-  const realtime: ConversationRealtime = {
-    async messageAvailable() {},
-    async memberChanged() {},
-    async channelUpdated() {},
-    async viewerChanged(input) {
-      viewerEvents.push(input);
-    },
-    async viewerEventsChanged(input) {
-      for (const event of input.events) viewerEvents.push({ userIds: input.userIds, event });
-    },
-    async conversationActivity(input) {
-      activities.push(input);
-    },
-    async conversationReadChanged() {},
-    async activityChanged() {},
-  };
-  return { realtime, viewerEvents, activities };
-}
 
 test("channel sidebar thread unreads: counts distinct followed non-task threads, separates channel vs thread @, and clears per Raft rules", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
