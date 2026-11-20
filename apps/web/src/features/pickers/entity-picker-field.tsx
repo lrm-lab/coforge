@@ -21,7 +21,7 @@ export function EntityPickerField({
   placeholder?: string;
   isDisabled?: boolean;
 }) {
-  const chosen = menu.options.find((option) => option.id === menu.selectedKey);
+  const chosen = menu.options?.find((option) => option.id === menu.selectedKey);
   return (
     <div className="flex flex-col gap-1.5">
       {fieldLabel && <Label>{fieldLabel}</Label>}

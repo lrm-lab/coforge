@@ -2,9 +2,11 @@ import { useEffect, useState, type ReactNode, type RefObject } from "react";
 import { useFilter } from "react-aria";
 import {
   Autocomplete as AriaAutocomplete,
+  Header as AriaHeader,
   Input as AriaInput,
   Menu as AriaMenu,
   MenuItem as AriaMenuItem,
+  Section as AriaMenuSection,
   SearchField as AriaSearchField,
   type Key,
   type MenuItemProps,
@@ -46,6 +48,7 @@ export type PickerFace =
       agentId?: string;
     }
   | { kind: "project"; name: string; src?: string | null }
+  | { kind: "icon"; icon: ReactNode }
   | {
       kind: "channel";
       visibility: ChannelVisibility;
@@ -74,7 +77,8 @@ export type PickerOption = {
 };
 
 /** A person's or Agent's picture (an Agent's mascot drawn whole, not clipped to a tile), a
- * Project's image or folder, or a channel's `#` (a lock when it is private). */
+ * Project's image or folder, a channel's `#` (a lock when it is private), or a glyph for a choice
+ * that is not an entity (who can see something). */
 export function Face({ face }: { face: PickerFace }) {
   if (face.kind === "channel" && face.members?.length)
     return <GroupAvatar members={face.members} className="avatar-group-xs" />;
@@ -89,6 +93,15 @@ export function Face({ face }: { face: PickerFace }) {
       </span>
     );
   }
+  if (face.kind === "icon")
+    return (
+      <span
+        aria-hidden="true"
+        className="flex size-5 shrink-0 items-center justify-center rounded-md bg-tertiary text-fg-quaternary [&>svg]:size-3.5"
+      >
+        {face.icon}
+      </span>
+    );
   if (face.kind === "project")
     return (
       <ProjectImage
@@ -120,10 +133,19 @@ type MultipleChoice = {
   onSelectedKeysChange: (ids: string[]) => void;
 };
 
+/** Choices that read apart: a place's fixed choices beside the entities that fill it. */
+export type PickerSection = {
+  id: string;
+  label: string;
+  options: readonly PickerOption[];
+};
+
 type MenuBase = {
   /** What is being chosen, as a screen reader hears the list and as the search field reads. */
   label: string;
-  options: readonly PickerOption[];
+  options?: readonly PickerOption[];
+  /** The same choices under headings, instead of one list. The search drops a heading left empty. */
+  sections?: readonly PickerSection[];
   /** What the search field asks for. */
   searchPlaceholder?: string;
   /** The caller searches, for a list too long to send whole: the field is always there, and the
@@ -131,23 +153,28 @@ type MenuBase = {
   onSearchChange?: (term: string) => void;
 };
 
+/** What a picker of one choice takes, and what one of several takes. */
+export type PickerSingleProps = MenuBase & SingleChoice;
+export type PickerMultipleProps = MenuBase & MultipleChoice;
+
 /** Every picker's search field and list, so the label picker and the member picker read alike. */
 export const PICKER_SEARCH_INPUT =
   "h-10 w-full border-b border-secondary bg-transparent px-3.5 text-sm text-primary outline-hidden placeholder:text-placeholder max-sm:h-12 max-sm:text-md";
 export const PICKER_LIST =
   "max-h-72 overflow-y-auto p-1 outline-hidden select-none max-sm:max-h-[50dvh]";
+/** A heading between two groups of choices: quieter than every row it names. */
+export const PICKER_SECTION_HEADING =
+  "px-2.5 pt-2 pb-1 text-xs font-medium text-quaternary max-sm:pt-2.5 max-sm:text-sm";
 
 /** Up to this many rows are read at a glance: a list inside another menu gets a search field
  * past it. */
 const SEARCH_FROM = 8;
 
-/** What a picker of one choice takes: the choice itself, and the menu it opens. */
-export type PickerSingleProps = MenuBase & SingleChoice;
-
 /** The picker's content: a search field, typed into as it opens, then one row per choice. */
 export function PickerMenu({
   label,
-  options,
+  options = [],
+  sections,
   searchPlaceholder = m.picker_search(),
   autoFocus = true,
   onClose,
@@ -166,18 +193,55 @@ export function PickerMenu({
   const [search, setSearch] = useState("");
   useEffect(() => () => onSearchChange?.(""), [onSearchChange]);
   const multiple = "selectedKeys" in choice;
+  const all = sections ? sections.flatMap((section) => section.options) : options;
   // In a list with faces, a row without one ("None", "Unassigned") gets an empty ring in its place,
   // so every name starts at one edge.
-  const faced = options.some((option) => option.face);
+  const faced = all.some((option) => option.face);
   // A handle tells apart two members of one name, and is noise otherwise (search still finds it).
   const named = new Map<string, number>();
-  for (const option of options) named.set(option.label, (named.get(option.label) ?? 0) + 1);
+  for (const option of all) named.set(option.label, (named.get(option.label) ?? 0) + 1);
+  const textOf = (option: PickerOption) =>
+    option.keywords ? `${option.label} ${option.keywords}` : option.label;
+  const row = (option: PickerOption) => (
+    <PickerRow
+      key={option.id}
+      id={option.id}
+      textValue={textOf(option)}
+      aria-label={option.ariaLabel}
+      leading={option.face ? <Face face={option.face} /> : faced && <NoFace />}
+      multiple={multiple}
+    >
+      <span className="truncate">{option.label}</span>
+      {option.addon && (named.get(option.label) ?? 0) > 1 && (
+        <span className="shrink-0 truncate text-quaternary">{option.addon}</span>
+      )}
+      {option.note && <span className="shrink-0 text-quaternary">{option.note}</span>}
+      {option.count !== undefined && (
+        <span className="ml-auto shrink-0 text-xs text-quaternary tabular-nums">
+          {option.count}
+        </span>
+      )}
+    </PickerRow>
+  );
+  // A section whose every row the search drops is dropped with it, as a filter's headings were
+  // before the picker drew them. The caller searches itself when it asked for `onSearchChange`.
+  const listed = sections
+    ? sections
+        .map((section) => ({
+          ...section,
+          options:
+            search && !onSearchChange
+              ? section.options.filter((option) => contains(textOf(option), search))
+              : section.options,
+        }))
+        .filter((section) => section.options.length > 0)
+    : undefined;
   const list = (
     <AriaMenu
       aria-label={label}
       escapeKeyBehavior="none"
       className={PICKER_LIST}
-      disabledKeys={options.filter((option) => option.isDisabled).map((option) => option.id)}
+      disabledKeys={all.filter((option) => option.isDisabled).map((option) => option.id)}
       renderEmptyState={() => (
         <p className="px-2.5 py-2 text-sm text-tertiary">{m.picker_no_matches()}</p>
       )}
@@ -203,37 +267,24 @@ export function PickerMenu({
             },
           })}
     >
-      {options.map((option) => (
-        <PickerRow
-          key={option.id}
-          id={option.id}
-          textValue={option.keywords ? `${option.label} ${option.keywords}` : option.label}
-          aria-label={option.ariaLabel}
-          leading={option.face ? <Face face={option.face} /> : faced && <NoFace />}
-          multiple={multiple}
-        >
-          <span className="truncate">{option.label}</span>
-          {option.addon && (named.get(option.label) ?? 0) > 1 && (
-            <span className="shrink-0 truncate text-quaternary">{option.addon}</span>
-          )}
-          {option.note && <span className="shrink-0 text-quaternary">{option.note}</span>}
-          {option.count !== undefined && (
-            <span className="ml-auto shrink-0 text-xs text-quaternary tabular-nums">
-              {option.count}
-            </span>
-          )}
-        </PickerRow>
-      ))}
+      {listed
+        ? listed.map((section) => (
+            <AriaMenuSection key={section.id} id={section.id}>
+              <AriaHeader className={PICKER_SECTION_HEADING}>{section.label}</AriaHeader>
+              {section.options.map(row)}
+            </AriaMenuSection>
+          ))
+        : options.map(row)}
     </AriaMenu>
   );
-  if (!onClose && !onSearchChange && options.length < SEARCH_FROM) return list;
+  if (!onClose && !onSearchChange && all.length < SEARCH_FROM) return list;
   const typed = (term: string) => {
     setSearch(term);
     onSearchChange?.(term);
   };
   return (
     <AriaAutocomplete
-      {...(!onSearchChange && { filter: contains })}
+      {...(!onSearchChange && listed === undefined && { filter: contains })}
       inputValue={search}
       onInputChange={typed}
     >
@@ -306,7 +357,7 @@ export function PickerRow({
   );
 }
 
-type MenuProps = MenuBase & SingleChoice;
+type MenuProps = PickerSingleProps | PickerMultipleProps;
 
 /**
  * Where a picker opens: under its trigger on a wide screen, and on a phone a sheet from the bottom

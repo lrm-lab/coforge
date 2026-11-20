@@ -235,8 +235,6 @@
   "ag_view_list": "List",
   "ag_search_conversations": "Search conversations",
   "ag_search_authors": "Search authors",
-  "ag_no_conversations": "No conversations found",
-  "ag_no_authors": "No authors found",
   "ag_conversation_chip": "Conversation: {name}",
   "ag_author_chip": "Author: {names}",
   "ag_clear_filters": "Clear filters",

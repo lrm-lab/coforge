@@ -197,8 +197,6 @@
   "ag_view_list": "列表",
   "ag_search_conversations": "搜索对话",
   "ag_search_authors": "搜索作者",
-  "ag_no_conversations": "找不到相关对话",
-  "ag_no_authors": "没有找到作者",
   "ag_conversation_chip": "对话 · {name}",
   "ag_author_chip": "作者：{names}",
   "ag_clear_filters": "清除筛选",
