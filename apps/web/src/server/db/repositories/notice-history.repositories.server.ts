@@ -148,8 +148,14 @@ export async function readNoticePage(
   const readable = rows.filter((row) => confirmed.has(row.id));
   const minSequence = readable[0]?.sequence;
   const maxSequence = readable.at(-1)?.sequence;
-  const olderFrom = around && anchorSequence !== undefined ? anchorSequence : minSequence;
-  const newerFrom = around && anchorSequence !== undefined ? anchorSequence : maxSequence;
+  const olderFrom =
+    around && anchorSequence !== undefined && minSequence === undefined
+      ? anchorSequence
+      : minSequence;
+  const newerFrom =
+    around && anchorSequence !== undefined && maxSequence === undefined
+      ? anchorSequence
+      : maxSequence;
   const olderThanPage =
     olderFrom === undefined
       ? false
