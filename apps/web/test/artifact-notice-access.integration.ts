@@ -345,7 +345,7 @@ test("the bot inbox stops handing back a notice once the artifact is gone", asyn
         externalEventId: `${artifact}:${WEB_DRAFT_REVIEW_MARKER}:${sent.reviewId}`,
       },
     },
-    select: { messageId: true, conversationId: true },
+    select: { messageId: true, conversationId: true, message: { select: { sequence: true } } },
   });
   const principal = { workspaceId: h.f.workspaceId, agentId: h.f.agents.reader };
   const { listWakeHints } = await import("#src/server/agents/external-wake-hints.server");
@@ -362,11 +362,18 @@ test("the bot inbox stops handing back a notice once the artifact is gone", asyn
   expect(await hinted()).not.toContain(event.messageId);
   const after = await inbox.check(principal);
   const decoded = JSON.parse(Buffer.from(after.cursor, "base64url").toString("utf8")) as {
-    groups: { conversationId: string }[];
-    outside: { conversationId: string }[];
+    groups: [conversationId: string, threadRootId: string | null, sequence: number][];
+    outside: string[];
   };
-  const cursored = [...decoded.groups, ...decoded.outside].map((group) => group.conversationId);
-  expect(cursored).not.toContain(event.conversationId);
+  const cursored = [
+    ...decoded.groups.map(([conversationId]) => conversationId),
+    ...decoded.outside,
+  ];
+  expect(cursored.length).toBeGreaterThan(0);
+  const acked = decoded.groups.find(
+    ([conversationId]) => conversationId === event.conversationId,
+  )?.[2];
+  expect(acked ?? Number.MAX_SAFE_INTEGER).toBeLessThan(event.message.sequence);
   const resumed = await inbox.check(principal, { since: after.cursor });
   expect(JSON.stringify(resumed.events)).not.toContain("Inbox gate");
 });
