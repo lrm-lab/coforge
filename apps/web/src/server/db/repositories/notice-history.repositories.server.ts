@@ -99,6 +99,43 @@ async function hydrate(db: PrismaClient, pageIds: string[]) {
   });
 }
 
+type EdgePart = { part: "page" | "older" | "newer"; id: string; sequence: number };
+
+async function confirmPageAndProbeEdges(
+  db: PrismaClient,
+  scope: Scope,
+  pageIds: string[],
+  older: { bound: number | null; fromPage: boolean },
+  newer: { bound: number | null; fromPage: boolean },
+) {
+  const pageRows =
+    pageIds.length === 0 ? Prisma.sql`FALSE` : Prisma.sql`r."id" IN (${Prisma.join(pageIds)})`;
+  const olderRow = older.fromPage
+    ? Prisma.sql`r."sequence" < COALESCE((SELECT min(page."sequence") FROM "page" page), ${older.bound}::int)`
+    : Prisma.sql`r."sequence" < ${older.bound}::int`;
+  const newerRow = newer.fromPage
+    ? Prisma.sql`r."sequence" > COALESCE((SELECT max(page."sequence") FROM "page" page), ${newer.bound}::int)`
+    : Prisma.sql`r."sequence" > ${newer.bound}::int`;
+  return db.$queryRaw<EdgePart[]>`
+    WITH "readable" AS (
+      SELECT msg."id", msg."sequence"
+      FROM "messages" msg
+      WHERE msg."conversationId" = ${scope.conversationId}::uuid
+        AND msg."workspaceId" = ${scope.workspaceId}::uuid
+        AND msg."threadRootId" IS NULL
+        AND ${readableArtifactNoticeSql(scope.workspaceId, scope.agentId, Prisma.sql`msg."id"`)}
+    ), "page" AS (
+      SELECT r."id", r."sequence" FROM "readable" r WHERE ${pageRows}
+    )
+    SELECT 'page' AS "part", page."id", page."sequence" FROM "page" page
+    UNION ALL
+    (SELECT 'older', r."id", r."sequence" FROM "readable" r
+      WHERE ${olderRow} ORDER BY r."sequence" DESC LIMIT 1)
+    UNION ALL
+    (SELECT 'newer', r."id", r."sequence" FROM "readable" r
+      WHERE ${newerRow} ORDER BY r."sequence" ASC LIMIT 1)`;
+}
+
 export async function readNoticePage(
   db: PrismaClient,
   input: Scope & {
@@ -144,39 +181,22 @@ export async function readNoticePage(
           ? (await ids(db, scope, { above: anchorSequence }, "asc", limit + 1)).slice(0, limit)
           : await ids(db, scope, {}, "desc", limit);
   const rows = (await hydrate(db, pageIds)).sort((a, b) => a.sequence - b.sequence);
-  const confirmed = new Set(
-    pageIds.length === 0 ? [] : await ids(db, scope, { restrictedTo: pageIds }, "asc", limit),
+  const anchor = anchorSequence ?? null;
+  const parts = await confirmPageAndProbeEdges(
+    db,
+    scope,
+    pageIds,
+    { bound: input.after ? (anchor === null ? null : anchor + 1) : anchor, fromPage: !input.after },
+    {
+      bound: input.before ? (anchor === null ? null : anchor - 1) : anchor,
+      fromPage: !input.before,
+    },
   );
+  const confirmed = new Set(parts.filter((row) => row.part === "page").map((row) => row.id));
   const readable = rows.filter((row) => confirmed.has(row.id));
-  const minSequence = readable[0]?.sequence;
-  const maxSequence = readable.at(-1)?.sequence;
-  const olderFrom =
-    around && anchorSequence !== undefined && minSequence === undefined
-      ? anchorSequence
-      : minSequence;
-  const newerFrom =
-    around && anchorSequence !== undefined && maxSequence === undefined
-      ? anchorSequence
-      : maxSequence;
-  const olderThanPage =
-    olderFrom === undefined
-      ? false
-      : (await ids(db, scope, { below: olderFrom }, "desc", 1)).length > 0;
-  const newerThanPage =
-    newerFrom === undefined
-      ? false
-      : (await ids(db, scope, { above: newerFrom }, "asc", 1)).length > 0;
-  const olderThanAnchor =
-    anchorSequence === undefined
-      ? false
-      : (await ids(db, scope, { atOrBelow: anchorSequence }, "desc", 1)).length > 0;
-  const newerThanAnchor =
-    anchorSequence === undefined
-      ? false
-      : (await ids(db, scope, { atOrAbove: anchorSequence }, "asc", 1)).length > 0;
   return {
     rows: readable,
-    hasOlder: input.after ? olderThanAnchor : olderThanPage,
-    hasNewer: input.before ? newerThanAnchor : newerThanPage,
+    hasOlder: parts.some((row) => row.part === "older"),
+    hasNewer: parts.some((row) => row.part === "newer"),
   };
 }
