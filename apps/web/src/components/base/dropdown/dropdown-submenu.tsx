@@ -1,13 +1,18 @@
 import {
   type KeyboardEvent,
   type ReactElement,
+  type ReactNode,
+  type TransitionEvent,
   useCallback,
+  useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
-import type { PopoverProps as AriaPopoverProps } from "react-aria-components";
-import { MenuContext, Popover as AriaPopover, PopoverContext } from "react-aria-components";
+import { createPortal } from "react-dom";
+import { MenuContext } from "react-aria-components";
 import {
   CascadeDepthProvider,
   CascadeSubmenuItemProvider,
@@ -15,12 +20,21 @@ import {
   useCascadeDepth,
   useCascadeMenu,
   useCascadeSubmenuPopover,
+  useCascadeSubmenuPortal,
 } from "#src/components/ui/cascade-menu-controller";
-import { useBreakpoint } from "#src/hooks/use-breakpoint";
-import { CASCADE_MENU_GEOMETRY } from "#src/lib/cascade-menu-safe-zone";
+import {
+  CASCADE_MENU_GEOMETRY,
+  CASCADE_MENU_TIMINGS,
+  resolveSubmenuSide,
+  type SubmenuSide,
+} from "#src/lib/cascade-menu-safe-zone";
 import { cx } from "#src/utils/cx";
 
 const SUBMENU_TITLE_OFFSET_PX = 22;
+
+export function isVerticalMenuNavKey(key: string): boolean {
+  return key === "ArrowDown" || key === "ArrowUp" || key === "Home" || key === "End";
+}
 
 interface DropdownSubmenuTriggerProps {
   children: [ReactElement, ReactElement];
@@ -30,10 +44,22 @@ export const DropdownSubmenuTrigger = ({ children }: DropdownSubmenuTriggerProps
   const cascade = useCascadeMenu();
   const depth = useCascadeDepth();
   const submenuId = useId();
+  const anchorName = useMemo(
+    () => `--cascade-${depth}-${submenuId.replace(/[^a-zA-Z0-9_-]/g, "")}`,
+    [depth, submenuId],
+  );
   const triggerRef = useRef<HTMLDivElement | null>(null);
   const focusFirstOnOpenRef = useRef(false);
 
   const isSubmenuOpen = cascade ? cascade.isSubmenuOpenAt(depth, submenuId) : false;
+  const [mounted, setMounted] = useState(isSubmenuOpen);
+  if (isSubmenuOpen && !mounted) {
+    setMounted(true);
+  }
+
+  const onExited = useCallback(() => {
+    setMounted(false);
+  }, []);
 
   const openSubmenuNow = useCallback(
     (focusFirstItem: boolean) => {
@@ -54,12 +80,15 @@ export const DropdownSubmenuTrigger = ({ children }: DropdownSubmenuTriggerProps
 
   const popoverContextValue = useMemo(
     () => ({
+      anchorName,
+      isOpen: isSubmenuOpen,
       triggerRef,
       defaultTitle,
       focusFirstOnOpenRef,
       onCloseSubmenu,
+      onExited,
     }),
-    [defaultTitle, onCloseSubmenu],
+    [anchorName, defaultTitle, isSubmenuOpen, onCloseSubmenu, onExited],
   );
 
   const itemContextValue = useMemo(
@@ -68,19 +97,15 @@ export const DropdownSubmenuTrigger = ({ children }: DropdownSubmenuTriggerProps
       isSubmenuOpen,
       triggerRef,
       openSubmenuNow,
-      popover: isSubmenuOpen && (
+      popover: mounted && (
         <CascadeDepthProvider depth={depth + 1}>
           <CascadeSubmenuPopoverProvider value={popoverContextValue}>
-            <MenuContext.Provider value={null}>
-              <PopoverContext.Provider value={{ trigger: "SubmenuTrigger", triggerRef }}>
-                {popoverElement}
-              </PopoverContext.Provider>
-            </MenuContext.Provider>
+            <MenuContext.Provider value={null}>{popoverElement}</MenuContext.Provider>
           </CascadeSubmenuPopoverProvider>
         </CascadeDepthProvider>
       ),
     }),
-    [depth, isSubmenuOpen, openSubmenuNow, popoverContextValue, popoverElement, submenuId],
+    [depth, isSubmenuOpen, mounted, openSubmenuNow, popoverContextValue, popoverElement, submenuId],
   );
 
   return (
@@ -90,29 +115,71 @@ export const DropdownSubmenuTrigger = ({ children }: DropdownSubmenuTriggerProps
   );
 };
 
-interface DropdownSubmenuPopoverProps
-  extends Omit<AriaPopoverProps, "placement" | "offset" | "className" | "title"> {
+interface DropdownSubmenuPopoverProps {
   className?: string;
   title?: string | false;
+  children?: ReactNode;
 }
 
 export const DropdownSubmenuPopover = ({
   className,
   title,
   children,
-  ...props
 }: DropdownSubmenuPopoverProps) => {
-  const wide = useBreakpoint("md");
   const cascade = useCascadeMenu();
   const depth = useCascadeDepth();
   const submenuPopover = useCascadeSubmenuPopover();
-  const resolvedTitle = title === false ? undefined : (title ?? submenuPopover?.defaultTitle);
+  const submenuPortal = useCascadeSubmenuPortal();
+  const popoverElRef = useRef<HTMLDivElement | null>(null);
+  const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [side, setSide] = useState<SubmenuSide>("right");
 
-  const setLevelRef = useCallback(
-    (el: HTMLElement | null) => {
-      cascade?.registerLevel(depth, el);
-      if (el && submenuPopover?.focusFirstOnOpenRef.current) {
-        submenuPopover.focusFirstOnOpenRef.current = false;
+  const resolvedTitle = title === false ? undefined : (title ?? submenuPopover?.defaultTitle);
+  const isOpen = submenuPopover?.isOpen ?? false;
+  const alignOffset =
+    CASCADE_MENU_GEOMETRY.LEVEL_PADDING_PX + (resolvedTitle ? SUBMENU_TITLE_OFFSET_PX : 0);
+
+  const onExited = submenuPopover?.onExited;
+  const finishExit = useCallback(() => {
+    if (exitTimerRef.current !== null) {
+      clearTimeout(exitTimerRef.current);
+      exitTimerRef.current = null;
+    }
+    onExited?.();
+  }, [onExited]);
+
+  const cascadeRef = useRef(cascade);
+  cascadeRef.current = cascade;
+  const triggerRef = submenuPopover?.triggerRef;
+  const anchorName = submenuPopover?.anchorName;
+  const focusFirstOnOpenRef = submenuPopover?.focusFirstOnOpenRef;
+
+  useLayoutEffect(() => {
+    const el = popoverElRef.current;
+    if (!el || !anchorName || !triggerRef) return;
+
+    triggerRef.current?.style.setProperty("anchor-name", anchorName);
+    el.style.setProperty("position-anchor", anchorName);
+    el.style.setProperty("--cascade-submenu-top-offset", `${alignOffset}px`);
+
+    if (isOpen) {
+      if (exitTimerRef.current !== null) {
+        clearTimeout(exitTimerRef.current);
+        exitTimerRef.current = null;
+      }
+      if (!el.matches(":popover-open")) {
+        el.showPopover();
+      }
+      cascadeRef.current?.registerLevel(depth, el);
+
+      const parentRect = cascadeRef.current?.getLevelRect(depth - 1);
+      const submenuRect = el.getBoundingClientRect();
+      if (parentRect && submenuRect.width > 0) {
+        setSide(resolveSubmenuSide(parentRect, submenuRect));
+      }
+
+      if (focusFirstOnOpenRef?.current) {
+        focusFirstOnOpenRef.current = false;
         requestAnimationFrame(() => {
           const firstItem = el.querySelector<HTMLElement>(
             '[role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]',
@@ -120,8 +187,39 @@ export const DropdownSubmenuPopover = ({
           firstItem?.focus();
         });
       }
+      return;
+    }
+
+    cascadeRef.current?.registerLevel(depth, null);
+    if (el.matches(":popover-open")) {
+      el.hidePopover();
+    }
+    exitTimerRef.current = setTimeout(finishExit, CASCADE_MENU_TIMINGS.LEVEL_TRANSFORM_MS + 40);
+  }, [alignOffset, anchorName, depth, finishExit, focusFirstOnOpenRef, isOpen, triggerRef]);
+
+  useEffect(() => {
+    const el = popoverElRef.current;
+    return () => {
+      if (exitTimerRef.current !== null) {
+        clearTimeout(exitTimerRef.current);
+        exitTimerRef.current = null;
+      }
+      cascadeRef.current?.registerLevel(depth, null);
+      triggerRef?.current?.style.removeProperty("anchor-name");
+      if (el?.isConnected && el.matches(":popover-open")) {
+        el.hidePopover();
+      }
+    };
+  }, [depth, triggerRef]);
+
+  const handleTransitionEnd = useCallback(
+    (event: TransitionEvent<HTMLDivElement>) => {
+      if (isOpen || event.target !== event.currentTarget) return;
+      if (event.propertyName === "display" || event.propertyName === "overlay") {
+        finishExit();
+      }
     },
-    [cascade, depth, submenuPopover],
+    [finishExit, isOpen],
   );
 
   const handleKeyDown = useCallback(
@@ -134,35 +232,30 @@ export const DropdownSubmenuPopover = ({
         event.preventDefault();
         event.stopPropagation();
         cascade?.closeAll(true);
+      } else if (isVerticalMenuNavKey(event.key)) {
+        cascade?.clearHoverAtDepth(depth);
       }
     },
-    [cascade, submenuPopover],
+    [cascade, depth, submenuPopover],
   );
 
-  const alignOffset =
-    CASCADE_MENU_GEOMETRY.LEVEL_PADDING_PX + (resolvedTitle ? SUBMENU_TITLE_OFFSET_PX : 0);
+  if (typeof document === "undefined") return null;
 
-  return (
-    <AriaPopover
-      {...props}
-      ref={setLevelRef}
-      isOpen={submenuPopover ? true : props.isOpen}
-      isNonModal={submenuPopover ? true : props.isNonModal}
-      triggerRef={submenuPopover?.triggerRef ?? props.triggerRef}
-      shouldFlip
-      placement={wide ? "end top" : "bottom start"}
-      offset={wide ? -CASCADE_MENU_GEOMETRY.SUBMENU_OVERLAP_PX : 0}
-      crossOffset={wide ? -alignOffset : 0}
+  return createPortal(
+    <div
+      ref={popoverElRef}
+      popover="manual"
       data-cascade-menu="true"
       data-cascade-level="submenu"
+      data-trigger="SubmenuTrigger"
+      data-placement={side}
+      onKeyDown={handleKeyDown}
+      onTransitionEnd={handleTransitionEnd}
       className={cx("cascade-menu-level max-w-[calc(100vw-1.5rem)]", className)}
     >
-      {(renderProps) => (
-        <div className="contents" onKeyDown={handleKeyDown}>
-          {resolvedTitle && <div className="cascade-menu-title">{resolvedTitle}</div>}
-          {typeof children === "function" ? children(renderProps) : children}
-        </div>
-      )}
-    </AriaPopover>
+      {resolvedTitle && <div className="cascade-menu-title">{resolvedTitle}</div>}
+      {children}
+    </div>,
+    submenuPortal ?? document.body,
   );
 };

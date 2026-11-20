@@ -54,12 +54,6 @@ export interface PointerTrail {
   readonly current: Point | null;
 }
 
-export interface SubmenuPosition {
-  readonly left: number;
-  readonly top: number;
-  readonly side: SubmenuSide;
-}
-
 const DEGENERATE_AREA_EPSILON = 1e-6;
 
 export function pointInRect(point: Point, rect: RectLike): boolean {
@@ -170,6 +164,28 @@ export function isPointInSafeZone(
   );
 }
 
+export type SafeWindowDecision = "wait" | "commit" | "cancel";
+
+export function evaluateSafeWindowTick(
+  point: Point | null,
+  parentRect: RectLike,
+  submenuRect: RectLike,
+  zone: SafeZoneTriangle | null,
+  elapsedMs: number,
+  maxWindowMs: number = CASCADE_MENU_TIMINGS.SAFE_WINDOW_MAX_MS,
+): SafeWindowDecision {
+  if (!point || pointInRect(point, submenuRect) || !pointInRect(point, parentRect)) {
+    return "cancel";
+  }
+  if (elapsedMs >= maxWindowMs) {
+    return "commit";
+  }
+  if (zone && isPointInSafeZone(point, parentRect, submenuRect, zone)) {
+    return "wait";
+  }
+  return "commit";
+}
+
 export function isPointInMenuOrBridge(
   point: Point,
   rects: readonly RectLike[],
@@ -186,47 +202,4 @@ export function isPointInMenuOrBridge(
     }
   }
   return false;
-}
-
-export function computeSubmenuPosition(
-  parentRect: RectLike,
-  rowRect: RectLike,
-  submenuWidth: number,
-  submenuHeight: number,
-  viewportWidth: number,
-  viewportHeight: number,
-  titleOffsetY = 0,
-): SubmenuPosition {
-  const { SUBMENU_OVERLAP_PX, LEVEL_PADDING_PX, VIEWPORT_MARGIN_PX } = CASCADE_MENU_GEOMETRY;
-  const rightLeft = parentRect.right - SUBMENU_OVERLAP_PX;
-  const leftLeft = parentRect.left + SUBMENU_OVERLAP_PX - submenuWidth;
-
-  let side: SubmenuSide;
-  let left: number;
-  if (rightLeft + submenuWidth <= viewportWidth - VIEWPORT_MARGIN_PX) {
-    side = "right";
-    left = rightLeft;
-  } else if (leftLeft >= VIEWPORT_MARGIN_PX) {
-    side = "left";
-    left = leftLeft;
-  } else {
-    const spaceRight = viewportWidth - VIEWPORT_MARGIN_PX - rightLeft;
-    const spaceLeft = parentRect.left + SUBMENU_OVERLAP_PX - VIEWPORT_MARGIN_PX;
-    if (spaceLeft > spaceRight) {
-      side = "left";
-      left = Math.max(VIEWPORT_MARGIN_PX, leftLeft);
-    } else {
-      side = "right";
-      left = Math.max(
-        VIEWPORT_MARGIN_PX,
-        Math.min(rightLeft, viewportWidth - VIEWPORT_MARGIN_PX - submenuWidth),
-      );
-    }
-  }
-
-  const desiredTop = rowRect.top - LEVEL_PADDING_PX - titleOffsetY;
-  const maxTop = Math.max(VIEWPORT_MARGIN_PX, viewportHeight - VIEWPORT_MARGIN_PX - submenuHeight);
-  const top = Math.max(VIEWPORT_MARGIN_PX, Math.min(desiredTop, maxTop));
-
-  return { left, top, side };
 }

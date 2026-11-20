@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { SafeZoneTriangle } from "#src/lib/cascade-menu-safe-zone";
 
@@ -20,10 +20,30 @@ export interface CascadeDebugZoneEntry {
 export interface CascadeMenuDebugOverlayProps {
   readonly zones: readonly CascadeDebugZoneEntry[];
   readonly timer: CascadeDebugTimer | null;
+  readonly openPathKey: string;
 }
 
-export function CascadeMenuDebugOverlay({ zones, timer }: CascadeMenuDebugOverlayProps) {
+export function CascadeMenuDebugOverlay({
+  zones,
+  timer,
+  openPathKey,
+}: CascadeMenuDebugOverlayProps) {
   const [now, setNow] = useState(() => performance.now());
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+
+  useLayoutEffect(() => {
+    const el = overlayRef.current;
+    if (!el) return;
+    if (el.matches(":popover-open")) {
+      el.hidePopover();
+    }
+    el.showPopover();
+    return () => {
+      if (el.isConnected && el.matches(":popover-open")) {
+        el.hidePopover();
+      }
+    };
+  }, [openPathKey]);
 
   useEffect(() => {
     if (!timer) return;
@@ -44,8 +64,10 @@ export function CascadeMenuDebugOverlay({ zones, timer }: CascadeMenuDebugOverla
 
   return createPortal(
     <div
+      ref={overlayRef}
+      popover="manual"
       aria-hidden="true"
-      className="pointer-events-none fixed inset-0 z-[9999]"
+      className="cascade-menu-debug-overlay pointer-events-none fixed inset-0 m-0 size-full border-0 bg-transparent p-0"
       data-cascade-debug-overlay="true"
     >
       <svg className="size-full overflow-visible">

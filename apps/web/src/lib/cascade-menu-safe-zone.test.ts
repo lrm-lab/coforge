@@ -4,8 +4,8 @@ import {
   CASCADE_MENU_GEOMETRY,
   CASCADE_MENU_TIMINGS,
   computeSafeBandWidth,
-  computeSubmenuPosition,
   crossProduct,
+  evaluateSafeWindowTick,
   getSafeZoneApex,
   isPointInMenuOrBridge,
   isPointInSafeBand,
@@ -169,30 +169,48 @@ describe("safe zone right and left placement", () => {
   });
 });
 
-describe("computeSubmenuPosition", () => {
+describe("evaluateSafeWindowTick", () => {
   const parentRect = { left: 100, right: 320, top: 100, bottom: 300, width: 220, height: 200 };
-  const rowRect = { left: 106, right: 314, top: 140, bottom: 172, width: 208, height: 32 };
+  const submenuRect = { left: 312, right: 532, top: 120, bottom: 280, width: 220, height: 160 };
+  const zone = buildSafeZone({ x: 240, y: 150 }, parentRect, submenuRect);
 
-  test("opens to the right with 8px overlap and first-row alignment when room exists", () => {
-    const pos = computeSubmenuPosition(parentRect, rowRect, 220, 180, 1280, 800, 0);
-    expect(pos.side).toBe("right");
-    expect(pos.left).toBe(312);
-    expect(pos.top).toBe(134);
+  test("waits while the pointer remains inside the safe zone before the max window expires", () => {
+    expect(evaluateSafeWindowTick({ x: 280, y: 170 }, parentRect, submenuRect, zone, 240)).toBe(
+      "wait",
+    );
   });
 
-  test("flips to the left with 8px overlap when right side lacks room", () => {
-    const nearRightParent = {
-      left: 900,
-      right: 1120,
-      top: 100,
-      bottom: 300,
-      width: 220,
-      height: 200,
-    };
-    const nearRightRow = { left: 906, right: 1114, top: 140, bottom: 172, width: 208, height: 32 };
-    const pos = computeSubmenuPosition(nearRightParent, nearRightRow, 220, 180, 1280, 800, 22);
-    expect(pos.side).toBe("left");
-    expect(pos.left).toBe(688);
-    expect(pos.top).toBe(112);
+  test("commits once the safe window reaches 1200ms while still on the parent menu", () => {
+    expect(
+      evaluateSafeWindowTick(
+        { x: 280, y: 170 },
+        parentRect,
+        submenuRect,
+        zone,
+        CASCADE_MENU_TIMINGS.SAFE_WINDOW_MAX_MS,
+      ),
+    ).toBe("commit");
+  });
+
+  test("commits immediately when the pointer leaves the safe zone onto the parent menu", () => {
+    expect(evaluateSafeWindowTick({ x: 200, y: 170 }, parentRect, submenuRect, zone, 80)).toBe(
+      "commit",
+    );
+  });
+
+  test("cancels when the pointer reaches the open submenu", () => {
+    expect(evaluateSafeWindowTick({ x: 350, y: 170 }, parentRect, submenuRect, zone, 80)).toBe(
+      "cancel",
+    );
+  });
+
+  test("cancels instead of committing when the pointer leaves the parent menu", () => {
+    expect(evaluateSafeWindowTick({ x: 60, y: 170 }, parentRect, submenuRect, zone, 80)).toBe(
+      "cancel",
+    );
+    expect(evaluateSafeWindowTick({ x: 280, y: 340 }, parentRect, submenuRect, zone, 1500)).toBe(
+      "cancel",
+    );
+    expect(evaluateSafeWindowTick(null, parentRect, submenuRect, zone, 1500)).toBe("cancel");
   });
 });

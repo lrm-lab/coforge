@@ -1,5 +1,5 @@
 import { createContext, type ReactNode, type RefObject, useContext } from "react";
-import type { Point } from "#src/lib/cascade-menu-safe-zone";
+import type { Point, RectLike } from "#src/lib/cascade-menu-safe-zone";
 
 export type CascadeRowState = "idle" | "hovered" | "active" | "skipped";
 
@@ -8,6 +8,7 @@ export interface CascadeMenuContextValue {
   readonly openPath: readonly string[];
   readonly isSubmenuOpenAt: (depth: number, submenuId: string) => boolean;
   readonly getRowState: (depth: number, rowId: string, submenuId: string | null) => CascadeRowState;
+  readonly getLevelRect: (depth: number) => RectLike | null;
   readonly registerAnchor: (el: HTMLElement | null) => void;
   readonly registerLevel: (depth: number, el: HTMLElement | null) => void;
   readonly onRowPointerEnter: (
@@ -18,6 +19,7 @@ export interface CascadeMenuContextValue {
     point: Point,
   ) => void;
   readonly onRowPointerLeave: (depth: number, rowId: string) => void;
+  readonly clearHoverAtDepth: (depth: number) => void;
   readonly onFolderDragEnter: (depth: number, rowId: string, submenuId: string) => void;
   readonly onFolderDragLeave: (depth: number, rowId: string) => void;
   readonly openSubmenuNow: (depth: number, submenuId: string) => void;
@@ -36,16 +38,20 @@ export interface CascadeSubmenuItemContextValue {
 }
 
 export interface CascadeSubmenuPopoverContextValue {
+  readonly anchorName: string;
+  readonly isOpen: boolean;
   readonly triggerRef: RefObject<HTMLDivElement | null>;
   readonly defaultTitle?: string;
   readonly focusFirstOnOpenRef: RefObject<boolean>;
   readonly onCloseSubmenu: () => void;
+  readonly onExited: () => void;
 }
 
 export const CascadeMenuContext = createContext<CascadeMenuContextValue | null>(null);
 export const CascadeDepthContext = createContext<number>(0);
 const CascadeSubmenuItemContext = createContext<CascadeSubmenuItemContextValue | null>(null);
 const CascadeSubmenuPopoverContext = createContext<CascadeSubmenuPopoverContextValue | null>(null);
+const CascadeSubmenuPortalContext = createContext<HTMLElement | null>(null);
 
 export function useCascadeMenu(): CascadeMenuContextValue | null {
   return useContext(CascadeMenuContext);
@@ -61,6 +67,10 @@ export function useCascadeSubmenuItem(): CascadeSubmenuItemContextValue | null {
 
 export function useCascadeSubmenuPopover(): CascadeSubmenuPopoverContextValue | null {
   return useContext(CascadeSubmenuPopoverContext);
+}
+
+export function useCascadeSubmenuPortal(): HTMLElement | null {
+  return useContext(CascadeSubmenuPortalContext);
 }
 
 export function CascadeDepthProvider({ depth, children }: { depth: number; children: ReactNode }) {
@@ -92,5 +102,19 @@ export function CascadeSubmenuPopoverProvider({
     <CascadeSubmenuPopoverContext.Provider value={value}>
       {children}
     </CascadeSubmenuPopoverContext.Provider>
+  );
+}
+
+export function CascadeSubmenuPortalProvider({
+  container,
+  children,
+}: {
+  container: HTMLElement | null;
+  children: ReactNode;
+}) {
+  return (
+    <CascadeSubmenuPortalContext.Provider value={container}>
+      {children}
+    </CascadeSubmenuPortalContext.Provider>
   );
 }

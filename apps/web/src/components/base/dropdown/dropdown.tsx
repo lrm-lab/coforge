@@ -35,12 +35,17 @@ import {
 } from "react-aria-components";
 import { Avatar } from "#src/components/base/avatar/avatar";
 import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
-import { DropdownSubmenuPopover, DropdownSubmenuTrigger } from "./dropdown-submenu";
+import {
+  DropdownSubmenuPopover,
+  DropdownSubmenuTrigger,
+  isVerticalMenuNavKey,
+} from "./dropdown-submenu";
 import { RadioButtonBase } from "#src/components/base/radio-buttons/radio-buttons";
 import { ToggleBase } from "#src/components/base/toggle/toggle";
 import { CascadeFolderIcon } from "#src/components/ui/cascade-folder-icon";
 import {
   CascadeMenuProvider,
+  CascadeSubmenuPortalProvider,
   useCascadeDepth,
   useCascadeMenu,
   useCascadeSubmenuItem,
@@ -406,6 +411,7 @@ const DropdownPopover = ({ title, children, ...props }: DropdownPopoverProps) =>
   const cascade = useCascadeMenu();
   const depth = useCascadeDepth();
   const popoverCtx = useContext(PopoverContext);
+  const [submenuPortalEl, setSubmenuPortalEl] = useState<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (depth !== 0 || !cascade) return;
@@ -430,9 +436,11 @@ const DropdownPopover = ({ title, children, ...props }: DropdownPopoverProps) =>
         event.preventDefault();
         event.stopPropagation();
         cascade?.closeAll(true);
+      } else if (isVerticalMenuNavKey(event.key)) {
+        cascade?.clearHoverAtDepth(depth);
       }
     },
-    [cascade],
+    [cascade, depth],
   );
 
   return (
@@ -450,10 +458,13 @@ const DropdownPopover = ({ title, children, ...props }: DropdownPopoverProps) =>
       }
     >
       {(renderProps) => (
-        <div className="contents" onKeyDown={handleKeyDown}>
-          {title && <div className="cascade-menu-title">{title}</div>}
-          {typeof children === "function" ? children(renderProps) : children}
-        </div>
+        <CascadeSubmenuPortalProvider container={submenuPortalEl}>
+          <div className="contents" onKeyDown={handleKeyDown}>
+            {title && <div className="cascade-menu-title">{title}</div>}
+            {typeof children === "function" ? children(renderProps) : children}
+          </div>
+          <div ref={setSubmenuPortalEl} className="contents" />
+        </CascadeSubmenuPortalProvider>
       )}
     </AriaPopover>
   );

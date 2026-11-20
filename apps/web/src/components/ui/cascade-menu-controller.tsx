@@ -2,6 +2,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import {
   buildSafeZone,
   CASCADE_MENU_TIMINGS,
+  evaluateSafeWindowTick,
   getSafeZoneApex,
   isPointInMenuOrBridge,
   isPointInSafeZone,
@@ -28,10 +29,12 @@ export {
   CascadeDepthProvider,
   CascadeSubmenuItemProvider,
   CascadeSubmenuPopoverProvider,
+  CascadeSubmenuPortalProvider,
   useCascadeDepth,
   useCascadeMenu,
   useCascadeSubmenuItem,
   useCascadeSubmenuPopover,
+  useCascadeSubmenuPortal,
 } from "#src/components/ui/cascade-menu-context";
 export type {
   CascadeMenuContextValue,
@@ -221,15 +224,23 @@ export function CascadeMenuProvider({
   const getZoneForDepth = useCallback(
     (
       depth: number,
+      measuredRects?: ReadonlyMap<number, RectLike>,
     ): { parentRect: RectLike; submenuRect: RectLike; zone: SafeZoneTriangle } | null => {
       if (openPathRef.current[depth] === undefined) return null;
       const apex = getSafeZoneApex(pointerTrailRef.current);
       if (!apex) return null;
-      const parentEl = levelElsRef.current.get(depth);
-      const submenuEl = levelElsRef.current.get(depth + 1);
-      if (!parentEl || !submenuEl) return null;
-      const parentRect = toRectLike(parentEl);
-      const submenuRect = toRectLike(submenuEl);
+      let parentRect = measuredRects?.get(depth);
+      let submenuRect = measuredRects?.get(depth + 1);
+      if (!parentRect) {
+        const parentEl = levelElsRef.current.get(depth);
+        if (!parentEl) return null;
+        parentRect = toRectLike(parentEl);
+      }
+      if (!submenuRect) {
+        const submenuEl = levelElsRef.current.get(depth + 1);
+        if (!submenuEl) return null;
+        submenuRect = toRectLike(submenuEl);
+      }
       const zone = buildSafeZone(apex, parentRect, submenuRect);
       return { parentRect, submenuRect, zone };
     },
@@ -284,28 +295,26 @@ export function CascadeMenuProvider({
           }
           const current = pointerTrailRef.current.current;
           const latestZone = getZoneForDepth(pending.depth);
-          if (current && latestZone && pointInRect(current, latestZone.submenuRect)) {
+          if (!latestZone) {
             clearSafeWindow();
             setSkippedByDepth((prev) => ({ ...prev, [pending.depth]: null }));
             setTimerBadge(null);
             return;
           }
-          const stillInZone =
-            current !== null &&
-            latestZone !== null &&
-            isPointInSafeZone(
-              current,
-              latestZone.parentRect,
-              latestZone.submenuRect,
-              latestZone.zone,
-            );
-          const elapsed = Date.now() - pending.startedAt;
-          if (!stillInZone || elapsed >= CASCADE_MENU_TIMINGS.SAFE_WINDOW_MAX_MS) {
-            clearSafeWindow();
-            setSkippedByDepth((prev) => ({ ...prev, [pending.depth]: null }));
+          const decision = evaluateSafeWindowTick(
+            current,
+            latestZone.parentRect,
+            latestZone.submenuRect,
+            latestZone.zone,
+            Date.now() - pending.startedAt,
+          );
+          if (decision === "wait") return;
+          clearSafeWindow();
+          setSkippedByDepth((prev) => ({ ...prev, [pending.depth]: null }));
+          setTimerBadge(null);
+          if (decision === "commit") {
             setHoveredByDepth((prev) => ({ ...prev, [pending.depth]: pending.rowId }));
             commitDepthSelection(pending.depth, pending.submenuId);
-            setTimerBadge(null);
           }
         }, CASCADE_MENU_TIMINGS.SAFE_ZONE_RECHECK_MS);
         return;
@@ -372,6 +381,10 @@ export function CascadeMenuProvider({
     [clearOpenTimer, clearSafeWindow, setTimerBadge],
   );
 
+  const clearHoverAtDepth = useCallback((depth: number) => {
+    setHoveredByDepth((prev) => (prev[depth] ? { ...prev, [depth]: null } : prev));
+  }, []);
+
   const onFolderDragEnter = useCallback(
     (depth: number, rowId: string, submenuId: string) => {
       clearCloseTimer();
@@ -419,9 +432,17 @@ export function CascadeMenuProvider({
       const point: Point = { x: event.clientX, y: event.clientY };
       pointerTrailRef.current = pushPointerPoint(pointerTrailRef.current, point);
 
+      const measuredLevels = new Map<number, RectLike>();
+      const rects: RectLike[] = [];
+      if (anchorElRef.current) {
+        rects.push(toRectLike(anchorElRef.current));
+      }
       let insideSubmenuDepth = -1;
       for (const [depth, el] of levelElsRef.current.entries()) {
-        if (depth >= 1 && pointInRect(point, toRectLike(el))) {
+        const rect = toRectLike(el);
+        measuredLevels.set(depth, rect);
+        rects.push(rect);
+        if (depth >= 1 && pointInRect(point, rect)) {
           insideSubmenuDepth = Math.max(insideSubmenuDepth, depth);
         }
       }
@@ -435,19 +456,11 @@ export function CascadeMenuProvider({
         }
       }
 
-      const rects: RectLike[] = [];
-      if (anchorElRef.current) {
-        rects.push(toRectLike(anchorElRef.current));
-      }
-      for (const el of levelElsRef.current.values()) {
-        rects.push(toRectLike(el));
-      }
-
       const activeZones: SafeZoneTriangle[] = [];
       const nextDebugZones: CascadeDebugZoneEntry[] = [];
       for (let depth = 0; depth < openPathRef.current.length; depth += 1) {
         if (insideSubmenuDepth > depth) continue;
-        const entry = getZoneForDepth(depth);
+        const entry = getZoneForDepth(depth, measuredLevels);
         if (!entry) continue;
         activeZones.push(entry.zone);
         if (debugSafeZone) {
@@ -508,6 +521,11 @@ export function CascadeMenuProvider({
     [hoveredByDepth, openPath, skippedByDepth],
   );
 
+  const getLevelRect = useCallback((depth: number): RectLike | null => {
+    const el = levelElsRef.current.get(depth);
+    return el ? toRectLike(el) : null;
+  }, []);
+
   const markSuppressRootClose = useCallback(() => {
     suppressRootCloseRef.current = true;
     queueMicrotask(() => {
@@ -527,10 +545,12 @@ export function CascadeMenuProvider({
       openPath,
       isSubmenuOpenAt,
       getRowState,
+      getLevelRect,
       registerAnchor,
       registerLevel,
       onRowPointerEnter,
       onRowPointerLeave,
+      clearHoverAtDepth,
       onFolderDragEnter,
       onFolderDragLeave,
       openSubmenuNow,
@@ -540,9 +560,11 @@ export function CascadeMenuProvider({
       consumeSuppressRootClose,
     }),
     [
+      clearHoverAtDepth,
       closeAll,
       closeFromDepth,
       consumeSuppressRootClose,
+      getLevelRect,
       getRowState,
       isRootOpen,
       isSubmenuOpenAt,
@@ -563,7 +585,11 @@ export function CascadeMenuProvider({
       <CascadeDepthContext.Provider value={0}>
         {children}
         {debugSafeZone && isRootOpen && (
-          <CascadeMenuDebugOverlay zones={debugZones} timer={debugTimer} />
+          <CascadeMenuDebugOverlay
+            zones={debugZones}
+            timer={debugTimer}
+            openPathKey={openPath.join("/")}
+          />
         )}
       </CascadeDepthContext.Provider>
     </CascadeMenuContext.Provider>

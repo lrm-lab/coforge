@@ -8,6 +8,11 @@
   --cascade-menu-shadow:
     0 18px 34px rgba(15, 23, 42, 0.12), 0 2px 4px rgba(15, 23, 42, 0.05),
     inset 0 1px 0 rgba(255, 255, 255, 0.74);
+  --cascade-menu-opacity-duration: 170ms;
+  --cascade-menu-transform-duration: 360ms;
+  --cascade-menu-transform-ease: cubic-bezier(0.2, 1.45, 0.35, 1);
+  --cascade-menu-folder-duration: 460ms;
+  --cascade-menu-theme-duration: 500ms;
 }
 
 .dark-mode {
@@ -22,12 +27,35 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
+@position-try --cascade-submenu-below-start {
+  left: anchor(left);
+  right: auto;
+  top: calc(anchor(bottom) + 4px);
+  bottom: auto;
+}
+
+@position-try --cascade-submenu-below-end {
+  right: anchor(right);
+  left: auto;
+  top: calc(anchor(bottom) + 4px);
+  bottom: auto;
+}
+
 @keyframes cascade-level-fade-in {
   from {
     opacity: 0;
   }
   to {
     opacity: 1;
+  }
+}
+
+@keyframes cascade-level-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
   }
 }
 
@@ -40,22 +68,17 @@
   }
 }
 
-@keyframes cascade-submenu-pop-right {
+@keyframes cascade-root-pop-out {
   from {
-    transform: translateX(-8px) scale(0.88, 0.98);
+    transform: translateY(0) scale(1, 1);
   }
   to {
-    transform: translateX(0) scale(1, 1);
+    transform: translateY(-6px) scale(0.96, 0.86);
   }
 }
 
-@keyframes cascade-submenu-pop-left {
-  from {
-    transform: translateX(8px) scale(0.88, 0.98);
-  }
-  to {
-    transform: translateX(0) scale(1, 1);
-  }
+.cascade-menu-debug-overlay::backdrop {
+  display: none;
 }
 
 .cascade-menu-level {
@@ -74,31 +97,79 @@
   -webkit-backdrop-filter: blur(18px) saturate(135%);
   will-change: transform, opacity;
   transition:
-    background-color var(--duration-sm) var(--ease-out),
-    border-color var(--duration-sm) var(--ease-out),
-    box-shadow var(--duration-sm) var(--ease-out),
-    color var(--duration-sm) var(--ease-out);
+    background-color var(--cascade-menu-theme-duration) var(--ease-out),
+    border-color var(--cascade-menu-theme-duration) var(--ease-out),
+    box-shadow var(--cascade-menu-theme-duration) var(--ease-out),
+    color var(--cascade-menu-theme-duration) var(--ease-out);
 }
 
 .cascade-menu-level[data-cascade-level="root"] {
   transform-origin: top left;
   animation:
-    cascade-level-fade-in var(--duration-sm-out) var(--ease-out) both,
-    cascade-root-pop-in var(--duration-sm) var(--ease-out) both;
+    cascade-level-fade-in var(--cascade-menu-opacity-duration) var(--ease-out) both,
+    cascade-root-pop-in var(--cascade-menu-transform-duration) var(--cascade-menu-transform-ease)
+      both;
 }
 
-.cascade-menu-level[data-cascade-level="submenu"] {
+.cascade-menu-level[data-cascade-level="root"][data-exiting] {
+  animation:
+    cascade-level-fade-out var(--duration-sm-out) var(--ease-in) both,
+    cascade-root-pop-out var(--duration-sm-out) var(--ease-in) both;
+}
+
+.cascade-menu-level[popover] {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  opacity: 0;
+  transition:
+    opacity var(--cascade-menu-opacity-duration) var(--ease-out),
+    transform var(--cascade-menu-transform-duration) var(--cascade-menu-transform-ease),
+    background-color var(--cascade-menu-theme-duration) var(--ease-out),
+    border-color var(--cascade-menu-theme-duration) var(--ease-out),
+    box-shadow var(--cascade-menu-theme-duration) var(--ease-out),
+    color var(--cascade-menu-theme-duration) var(--ease-out),
+    overlay var(--cascade-menu-transform-duration) allow-discrete,
+    display var(--cascade-menu-transform-duration) allow-discrete;
+}
+
+.cascade-menu-level[popover]::backdrop {
+  display: none;
+}
+
+.cascade-menu-level[popover][data-cascade-level="submenu"] {
+  left: calc(anchor(right) - 8px);
+  top: calc(anchor(top) - var(--cascade-submenu-top-offset, 28px));
+  position-try-fallbacks:
+    flip-inline,
+    flip-block,
+    flip-inline flip-block,
+    --cascade-submenu-below-start,
+    --cascade-submenu-below-end;
   transform-origin: left top;
-  animation:
-    cascade-level-fade-in var(--duration-sm-out) var(--ease-out) both,
-    cascade-submenu-pop-right var(--duration-sm) var(--ease-out) both;
+  transform: translateX(-8px) scale(0.88, 0.98);
 }
 
-.cascade-menu-level[data-cascade-level="submenu"][data-placement="left"] {
+.cascade-menu-level[popover][data-cascade-level="submenu"][data-placement="left"] {
   transform-origin: right top;
-  animation:
-    cascade-level-fade-in var(--duration-sm-out) var(--ease-out) both,
-    cascade-submenu-pop-left var(--duration-sm) var(--ease-out) both;
+  transform: translateX(8px) scale(0.88, 0.98);
+}
+
+.cascade-menu-level[popover]:popover-open {
+  opacity: 1;
+  transform: translate(0, 0) scale(1, 1);
+}
+
+@starting-style {
+  .cascade-menu-level[popover][data-cascade-level="submenu"]:popover-open {
+    opacity: 0;
+    transform: translateX(-8px) scale(0.88, 0.98);
+  }
+
+  .cascade-menu-level[popover][data-cascade-level="submenu"][data-placement="left"]:popover-open {
+    opacity: 0;
+    transform: translateX(8px) scale(0.88, 0.98);
+  }
 }
 
 .cascade-menu-title {
@@ -107,7 +178,7 @@
   line-height: 1.3;
   color: var(--cascade-menu-quiet);
   padding: 4px 8px 2px;
-  transition: color var(--duration-sm) var(--ease-out);
+  transition: color var(--cascade-menu-theme-duration) var(--ease-out);
 }
 
 .cascade-menu-list {
@@ -174,8 +245,8 @@
   transform-box: fill-box;
   transform-origin: center bottom;
   transition:
-    transform var(--duration-sm) var(--ease-out-strong),
-    opacity var(--duration-sm) var(--ease-out-strong);
+    transform var(--cascade-menu-folder-duration) var(--ease-out-strong),
+    opacity var(--cascade-menu-folder-duration) var(--ease-out-strong);
 }
 
 .cascade-folder-front-closed {
@@ -199,10 +270,29 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cascade-menu-level[data-cascade-level="root"],
-  .cascade-menu-level[data-cascade-level="submenu"],
-  .cascade-menu-level[data-cascade-level="submenu"][data-placement="left"] {
+  .cascade-menu-level[data-cascade-level="root"] {
     animation: cascade-level-fade-in 150ms var(--ease-out) both;
+  }
+
+  .cascade-menu-level[data-cascade-level="root"][data-exiting] {
+    animation: cascade-level-fade-out 150ms var(--ease-out) both;
+  }
+
+  .cascade-menu-level[popover][data-cascade-level="submenu"],
+  .cascade-menu-level[popover][data-cascade-level="submenu"][data-placement="left"] {
+    transform: none;
+    transition:
+      opacity 150ms var(--ease-out),
+      overlay 150ms allow-discrete,
+      display 150ms allow-discrete;
+  }
+
+  @starting-style {
+    .cascade-menu-level[popover][data-cascade-level="submenu"]:popover-open,
+    .cascade-menu-level[popover][data-cascade-level="submenu"][data-placement="left"]:popover-open {
+      opacity: 0;
+      transform: none;
+    }
   }
 
   .cascade-folder-front-closed,
