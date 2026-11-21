@@ -93,9 +93,6 @@ model UserPreference {
   timeZone                    String?
   observedTimeZone            String?
   browserNotificationsEnabled Boolean?
-  /// Retired open-mode preference. Out of the client, so no query names it; the column is dropped
-  /// once this release is live.
-  conversationOpenMode        String? @ignore
   /// Clock display: 12h or 24h. NULL follows the display language. Display only.
   timeFormat                  String?
   /// Interface language ("en" or "zh-CN"); NULL means the code's default. The server renders
