@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -134,7 +134,19 @@ async function runtimeWith({
     emptyCodeAgentDiscovery,
     stateDirectory,
   );
-  await runtime.start(connection);
+  const close = async () => {
+    try {
+      await runtime.stop();
+    } finally {
+      await rm(stateDirectory, { recursive: true, force: true });
+    }
+  };
+  try {
+    await runtime.start(connection);
+  } catch (error) {
+    await close();
+    throw error;
+  }
   return {
     runtime,
     results,
@@ -142,10 +154,7 @@ async function runtimeWith({
     disposed: () => disposed,
     phases: (requestId: string) =>
       results.filter((result) => result.requestId === requestId).map((result) => result.phase),
-    async close() {
-      await runtime.stop();
-      await rm(stateDirectory, { recursive: true, force: true });
-    },
+    close,
   };
 }
 
@@ -238,40 +247,93 @@ test("a Stop older than the launch in progress does not end it", async () => {
   }
 });
 
-test("a Stop of a process that ignores SIGTERM returns stopped within 20 seconds", async () => {
-  const owner = new ProcessTreeOwner();
-  const ignoring = join(tempRoot, "ignoring-sigterm");
-  const tree = owner.spawn(
-    [
-      process.execPath,
-      "-e",
-      `process.on('SIGTERM', () => {}); await Bun.write(${JSON.stringify(ignoring)}, ''); setInterval(() => {}, 1000)`,
-    ],
-    tempRoot,
-    { PATH: process.env.PATH ?? "" },
-  );
-  await within(10_000, untilExists(ignoring));
-  const h = await runtimeWith({
-    answers: true,
-    onDispose: () => cleanupOwnedTree(tree, tree.child),
-  });
+type StopFixture = {
+  directory: string;
+  readyFile: string;
+  tree: ReturnType<ProcessTreeOwner["spawn"]>;
+};
+
+async function closeStopFixtureProcess(tree: StopFixture["tree"]) {
+  if (!(await tree.waitForExit(0))) await tree.terminate(true);
+  if (!(await tree.waitForExit(2_000))) throw new Error("Stop fixture process survived cleanup");
+  await tree.child.exited;
+}
+
+async function withSigtermIgnoringFixture(run: (fixture: StopFixture) => Promise<void>) {
+  const directory = await mkdtemp(join(tempRoot, "coforge-stop-sigterm-"));
   try {
-    await within(2_000, runtime(h).handleAgentStart(start("start-1", 1, "launch-1")));
-    await within(20_000, runtime(h).handleAgentStop(stop("stop-1", 2)));
-    expect(h.phases("stop-1")).toContain("stopped");
-    expect(await tree.waitForExit(0)).toBe(true);
-    await tree.child.exited;
-    if (process.platform !== "win32") expect(tree.child.exitSignal).toBe("SIGKILL");
+    const readyFile = join(directory, "ignoring-sigterm");
+    const tree = new ProcessTreeOwner().spawn(
+      [
+        process.execPath,
+        "-e",
+        `process.on('SIGTERM', () => {}); await Bun.write(${JSON.stringify(readyFile)}, ''); setInterval(() => {}, 1000)`,
+      ],
+      directory,
+      { PATH: process.env.PATH ?? "" },
+    );
+    try {
+      await run({ directory, readyFile, tree });
+    } finally {
+      await closeStopFixtureProcess(tree);
+    }
   } finally {
-    await tree.terminate(true).catch(() => {});
-    await h.close();
+    await rm(directory, { recursive: true, force: true });
   }
+}
+
+test("a Stop of a process that ignores SIGTERM returns stopped within 20 seconds", async () => {
+  await withSigtermIgnoringFixture(async ({ tree, readyFile }) => {
+    await waitForReadyFile(readyFile);
+    const h = await runtimeWith({
+      answers: true,
+      onDispose: () => cleanupOwnedTree(tree, tree.child),
+    });
+    try {
+      await within(2_000, runtime(h).handleAgentStart(start("start-1", 1, "launch-1")));
+      await within(20_000, runtime(h).handleAgentStop(stop("stop-1", 2)));
+      expect(h.phases("stop-1")).toContain("stopped");
+      expect(await tree.waitForExit(0)).toBe(true);
+      await tree.child.exited;
+      if (process.platform !== "win32") expect(tree.child.exitSignal).toBe("SIGKILL");
+    } finally {
+      await h.close();
+    }
+  });
 }, 25_000);
+
+for (const failure of ["waiting for readiness", "starting the runtime"] as const) {
+  test(`the Stop fixture cleans up its process and files after failing while ${failure}`, async () => {
+    let spawned: StopFixture | undefined;
+    await expect(
+      withSigtermIgnoringFixture(async (fixture) => {
+        spawned = fixture;
+        if (failure === "waiting for readiness") {
+          await waitForReadyFile(join(fixture.directory, "missing"), 0);
+        } else {
+          await waitForReadyFile(fixture.readyFile);
+          throw new Error("runtime startup failed");
+        }
+      }),
+    ).rejects.toThrow(
+      failure === "waiting for readiness" ? "ready file did not appear" : "runtime startup failed",
+    );
+    expect(spawned?.directory).toBeDefined();
+    const { tree, directory, readyFile } = spawned!;
+    expect(await tree.waitForExit(0)).toBe(true);
+    expect(await Bun.file(readyFile).exists()).toBe(false);
+    await expect(stat(directory)).rejects.toMatchObject({ code: "ENOENT" });
+  }, 15_000);
+}
 
 function runtime(h: { runtime: DaemonRuntime }) {
   return h.runtime;
 }
 
-async function untilExists(path: string) {
-  while (!(await Bun.file(path).exists())) await Bun.sleep(10);
+async function waitForReadyFile(path: string, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!(await Bun.file(path).exists())) {
+    if (Date.now() >= deadline) throw new Error("Stop fixture ready file did not appear");
+    await Bun.sleep(10);
+  }
 }
