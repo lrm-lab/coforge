@@ -107,3 +107,18 @@ test.each([
     "private-value",
   );
 });
+
+test("local memory search explains how to recover from an unsupported limit", async () => {
+  const transport = { memory: async () => ({ entries: [] }) } as unknown as MessageTransport;
+  for (const limit of [["--limit", "1"], ["--limit=1"]]) {
+    await expect(
+      run(["memory", "search", "--query", "domain", ...limit], transport),
+    ).rejects.toMatchObject({
+      code: "INVALID_ARG",
+      message: expect.stringContaining("does not support --limit"),
+      suggestedNextAction: expect.stringContaining(
+        "coforge memory search --query 'preview domain'",
+      ),
+    });
+  }
+});
