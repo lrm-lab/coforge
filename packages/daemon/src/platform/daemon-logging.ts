@@ -11,7 +11,7 @@ import { markStartup } from "./startup-timing";
  * lines on 0.1.28 carried neither a count nor a reason). This list keeps the library's protections
  * and narrows only that one pattern: a field is redacted for containing `token` unless its whole
  * name is one of the known counters, so `token`, `access_token` and `tokens_key` are still dropped. */
-const TOKEN_COUNTER_NAMES = String.raw`(?:window_)?tokens(?:_(?:before|after|source|after_unavailable|used|limit))?`;
+const TOKEN_COUNTER_NAMES = String.raw`(?:(?:window_)?tokens(?:_(?:before|after|source|after_unavailable|used|limit))?|tokens_before_(?:age_ms|stale)|runtime_(?:pre|post)_tokens)`;
 const REDACT_FIELDS: FieldPattern[] = [
   ...DEFAULT_REDACT_FIELDS.filter(
     (pattern) => !(pattern instanceof RegExp && pattern.source === "token"),

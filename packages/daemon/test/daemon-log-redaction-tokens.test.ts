@@ -10,7 +10,6 @@ import { daemonLogPath } from "#src/platform/daemon-log-file";
 
 const tempRoot = realpathSync(tmpdir());
 
-/** Reads the JSON lines written so far, skipping any line still being flushed. */
 async function writtenLines(directory: string): Promise<Record<string, unknown>[]> {
   const text = await readFile(daemonLogPath(directory), "utf8");
   return text
@@ -23,7 +22,6 @@ test("a compaction line keeps its token counts, and credentials are still redact
   const directory = await mkdtemp(join(tempRoot, "coforge-log-redaction-"));
   try {
     await configureDaemonLogging(directory);
-    // A real logger, the real sink chain: what the daemon writes, not what a helper returns.
     getLogger(["coforge", "daemon", "test"]).info("Context compaction ended", {
       event: "agent.runtime.compaction_tokens",
       agent_id: "agent-a",
@@ -32,13 +30,17 @@ test("a compaction line keeps its token counts, and credentials are still redact
       tokens_after: 25_000,
       tokens_source: "runtime",
       window_tokens: 200_000,
-      // Credential-shaped: the sink must still drop these, or the narrowed pattern above is a leak.
-      token: "sk_live_must_not_appear",
-      api_key: "must_not_appear_either",
-      tokens_key: "looks_like_a_count_but_is_a_secret",
+      tokens_before_age_ms: 900_001,
+      tokens_before_stale: true,
+      runtime_pre_tokens: 120_000,
+      runtime_post_tokens: 28_000,
+      token: "fixture-value",
+      access_token: "fixture-value",
+      api_key: "fixture-value",
+      tokens_key: "fixture-value",
+      tokens_before_age_ms_token: "fixture-value",
+      runtime_session_tokens: "fixture-value",
     });
-    // The sink flushes every record; a turn of the event loop is enough for the file write.
-    await new Promise((resolve) => setTimeout(resolve, 50));
 
     const line = (await writtenLines(directory)).find(
       (record) => record.event === "agent.runtime.compaction_tokens",
@@ -48,9 +50,20 @@ test("a compaction line keeps its token counts, and credentials are still redact
       tokens_after: 25_000,
       tokens_source: "runtime",
       window_tokens: 200_000,
+      tokens_before_age_ms: 900_001,
+      tokens_before_stale: true,
+      runtime_pre_tokens: 120_000,
+      runtime_post_tokens: 28_000,
     });
-    for (const field of ["token", "api_key", "tokens_key"])
-      expect(line && field in line ? line[field] : undefined).toBeUndefined();
+    for (const field of [
+      "token",
+      "access_token",
+      "api_key",
+      "tokens_key",
+      "tokens_before_age_ms_token",
+      "runtime_session_tokens",
+    ])
+      expect(line).not.toHaveProperty(field);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
