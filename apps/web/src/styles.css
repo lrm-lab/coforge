@@ -529,6 +529,73 @@ html[data-drag-cursor] [data-drop-blocked] * {
   }
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  :where(
+    button:not(
+      :disabled,
+      [aria-disabled="true"],
+      [data-disabled],
+      [data-loading],
+      [data-dragging],
+      [data-no-press-scale],
+      [role="menuitem"],
+      [role="menuitemcheckbox"],
+      [role="menuitemradio"],
+      [role="option"],
+      [role="switch"],
+      [role="checkbox"]
+    )
+  ) {
+    transition:
+      color 100ms var(--ease-out),
+      background-color 100ms var(--ease-out),
+      border-color 100ms var(--ease-out),
+      outline-color 100ms var(--ease-out),
+      text-decoration-color 100ms var(--ease-out),
+      fill 100ms var(--ease-out),
+      stroke 100ms var(--ease-out),
+      opacity 100ms var(--ease-out),
+      box-shadow 100ms var(--ease-out),
+      transform 100ms var(--ease-out),
+      translate 100ms var(--ease-out),
+      rotate 100ms var(--ease-out),
+      scale var(--duration-md) var(--ease-spring);
+  }
+
+  :where(
+    button:not(
+      :disabled,
+      [aria-disabled="true"],
+      [data-disabled],
+      [data-loading],
+      [data-dragging],
+      [data-no-press-scale],
+      [role="menuitem"],
+      [role="menuitemcheckbox"],
+      [role="menuitemradio"],
+      [role="option"],
+      [role="switch"],
+      [role="checkbox"]
+    ):is(:active, [data-pressed])
+  ) {
+    scale: 0.97;
+    transition:
+      color 100ms var(--ease-out),
+      background-color 100ms var(--ease-out),
+      border-color 100ms var(--ease-out),
+      outline-color 100ms var(--ease-out),
+      text-decoration-color 100ms var(--ease-out),
+      fill 100ms var(--ease-out),
+      stroke 100ms var(--ease-out),
+      opacity 100ms var(--ease-out),
+      box-shadow 100ms var(--ease-out),
+      transform 100ms var(--ease-out),
+      translate 100ms var(--ease-out),
+      rotate 100ms var(--ease-out),
+      scale 120ms var(--ease-out);
+  }
+}
+
 ::highlight(artifact-comment-focus) {
   background-color: var(--color-bg-warning-secondary);
   color: var(--color-text-primary);
