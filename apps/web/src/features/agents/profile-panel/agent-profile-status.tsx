@@ -40,7 +40,7 @@ export function AgentProfileStatus({
   onViewLogs,
   retry,
   needsManualStart,
-  canStartAgent,
+  canRetryManualStart,
   wakeBlock,
   readiness,
   onOpenSettings,
@@ -51,7 +51,7 @@ export function AgentProfileStatus({
   onViewLogs?: () => void;
   retry?: AgentRetry;
   needsManualStart?: boolean;
-  canStartAgent?: boolean;
+  canRetryManualStart?: boolean;
   wakeBlock?: AgentWakeBlock | null;
   readiness?: AgentReadinessNoteData;
   onOpenSettings?: () => void;
@@ -75,7 +75,7 @@ export function AgentProfileStatus({
           display={display}
           onViewLogs={onViewLogs}
           onOpenSettings={onOpenSettings}
-          retry={retry}
+          retry={needsManualStart && !canRetryManualStart ? undefined : retry}
         />
         {note}
       </>
@@ -88,7 +88,7 @@ export function AgentProfileStatus({
         agent={agent}
         display={display!}
         needsManualStart={needsManualStart}
-        canStartAgent={canStartAgent}
+        canRetryManualStart={canRetryManualStart}
         onActivityTab={onActivityTab}
         onViewLogs={onViewLogs}
         retry={retry}

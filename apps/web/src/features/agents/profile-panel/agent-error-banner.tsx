@@ -15,7 +15,7 @@ export function AgentErrorBanner({
   onActivityTab,
   onViewLogs,
   needsManualStart,
-  canStartAgent,
+  canRetryManualStart,
   retry,
 }: {
   agent: AgentDiagnosticFacts;
@@ -23,7 +23,7 @@ export function AgentErrorBanner({
   onActivityTab: boolean;
   onViewLogs?: () => void;
   needsManualStart?: boolean;
-  canStartAgent?: boolean;
+  canRetryManualStart?: boolean;
   retry?: AgentRetry;
 }) {
   const status = agentDisplay(display);
@@ -32,7 +32,7 @@ export function AgentErrorBanner({
     retry && (!status.isOnline || status.alert) ? status.recovery : undefined;
   const recovery =
     needsManualStart && existingRecovery !== "reset_session"
-      ? canStartAgent
+      ? canRetryManualStart
         ? "retry"
         : undefined
       : existingRecovery;

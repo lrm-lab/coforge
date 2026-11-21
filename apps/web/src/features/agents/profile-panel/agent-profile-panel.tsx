@@ -248,7 +248,7 @@ export function AgentProfilePanel({
   const needsManualStart =
     !!profile && "needsManualStart" in profile && profile.needsManualStart === true;
   const readiness =
-    profile?.readiness.state === "ready" && needsManualStart
+    profile && needsManualStart
       ? { state: "launch_failed", detail: profile.failureReason }
       : profile?.readiness;
   const readinessData: AgentReadinessNoteData | undefined =
@@ -329,7 +329,9 @@ export function AgentProfilePanel({
               tabOrder.tabs.includes("activity") ? () => onTabChange("activity") : undefined
             }
             needsManualStart={needsManualStart}
-            canStartAgent={profile?.canControlAgentRuntime}
+            canRetryManualStart={
+              profile?.computer?.online === true && profile.canControlAgentRuntime
+            }
             wakeBlock={profile?.wakeBlock}
             readiness={readinessData}
             onOpenSettings={() => onTabChange("profile")}
