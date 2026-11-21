@@ -24,7 +24,7 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { ChevronRight, Pin01 } from "@untitledui/icons";
+import { ChevronRight } from "@untitledui/icons";
 import {
   DragRippleLine,
   rippleItemProps,
@@ -390,7 +390,6 @@ export function DirectoryDragOverlay({
   active: DirectoryDragActive | null;
   children: ReactNode;
 }) {
-  const Mark = active?.id === "group:pinned" ? Pin01 : ChevronRight;
   if (typeof document === "undefined") return null;
   const origin = active?.origin;
   return createPortal(
@@ -408,13 +407,9 @@ export function DirectoryDragOverlay({
         >
           {active.group ? (
             <span className="flex h-9 items-center gap-1.5 px-4">
-              <Mark
-                aria-hidden="true"
-                className={cx(
-                  "size-4 shrink-0",
-                  active.id === "group:pinned" ? "text-primary" : "text-fg-quaternary",
-                )}
-              />
+              <span className="inline-flex size-4 shrink-0 items-center justify-center">
+                <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-fg-quaternary" />
+              </span>
               <span className="min-w-0 truncate text-sm font-medium text-primary">
                 {active.label}
               </span>

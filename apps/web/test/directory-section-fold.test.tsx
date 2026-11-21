@@ -29,3 +29,12 @@ test("a fold the directory makes itself (no toggle pressed) changes at once", ()
   expect(render(false)).toContain("transition-none");
   expect(render(true)).toContain("transition-none");
 });
+
+test("a collapsible section places its chevron inside the heading button with no trailing chevron button", () => {
+  const closed = render(false);
+  const open = render(true);
+  expect(closed.match(/<button\b/g)).toHaveLength(1);
+  expect(closed).toContain("<svg");
+  expect(closed).not.toContain("rotate-90");
+  expect(open).toContain("rotate-90");
+});

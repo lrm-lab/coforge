@@ -1,5 +1,5 @@
 import { ChevronRight } from "@untitledui/icons";
-import { useId, useState, type FC, type ReactNode, type TransitionEvent } from "react";
+import { useId, useState, type ReactNode, type TransitionEvent } from "react";
 import { Button } from "#src/components/base/buttons/button";
 import { Fold } from "#src/components/ui/fold";
 import { cx } from "#src/utils/cx";
@@ -19,7 +19,6 @@ export function DirectorySection({
   label,
   count,
   empty,
-  icon: Icon,
   expanded,
   onToggle,
   headingProps,
@@ -30,7 +29,6 @@ export function DirectorySection({
   label: string;
   count: number;
   empty?: boolean;
-  icon?: FC<{ className?: string; "aria-hidden"?: boolean | "true" | "false" }>;
   expanded?: boolean;
   onToggle?: () => void;
   headingProps?: DirectoryDragActivation;
@@ -48,11 +46,17 @@ export function DirectorySection({
     )
       setEasesAfterToggle(false);
   };
-  const mark = Icon ? (
-    <Icon aria-hidden="true" className="size-4 shrink-0 text-primary" />
-  ) : (
-    <span aria-hidden="true" className="size-4 shrink-0" />
-  );
+  const mark = onToggle ? (
+    <span className="inline-flex size-4 shrink-0 items-center justify-center">
+      <ChevronRight
+        aria-hidden="true"
+        className={cx(
+          "size-3.5 shrink-0 text-fg-quaternary transition-transform duration-(--duration-sm) ease-in-out group-hover/section:text-fg-quaternary_hover motion-reduce:transition-none",
+          expanded && "rotate-90",
+        )}
+      />
+    </span>
+  ) : null;
   const caption = (
     <span className="flex w-full min-w-0 items-center gap-2">
       <span className="flex min-w-0 items-center gap-1.5">
@@ -67,35 +71,13 @@ export function DirectorySection({
     setEasesAfterToggle(true);
     onToggle?.();
   };
-  const trailingSlot =
-    trailing ?? (onToggle ? <span aria-hidden="true" className="w-7 shrink-0" /> : null);
-  const chevron = onToggle ? (
-    <Button
-      color="tertiary"
-      size="xs"
-      aria-hidden="true"
-      excludeFromTabOrder
-      preventFocusOnPress
-      onPress={toggle}
-      className="hover:bg-transparent! active:bg-transparent!"
-      iconLeading={
-        <ChevronRight
-          aria-hidden="true"
-          className={cx(
-            "size-4 shrink-0 transition-transform duration-(--duration-sm) ease-in-out motion-reduce:transition-none",
-            expanded && "rotate-90",
-          )}
-        />
-      }
-    />
-  ) : null;
   return (
     <>
       <div className={cx(DIRECTORY_INSET, "group/section")}>
         <div
           className={cx(
             "flex h-9 items-center gap-1 rounded-md pl-2 transition-colors duration-100 ease-out",
-            trailingSlot || chevron ? "pr-1" : "pr-2",
+            trailing ? "pr-1" : "pr-2",
             onToggle ? "group-hover/section:bg-primary_hover" : "cursor-pointer",
           )}
         >
@@ -119,8 +101,7 @@ export function DirectorySection({
               {caption}
             </span>
           )}
-          {trailingSlot}
-          {chevron}
+          {trailing}
         </div>
       </div>
       <div onTransitionEnd={stopEasingWhenFoldEnds}>

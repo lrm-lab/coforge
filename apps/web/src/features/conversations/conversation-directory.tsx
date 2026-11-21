@@ -1,4 +1,3 @@
-import { Pin01 } from "@untitledui/icons";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { DndContext } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -258,6 +257,7 @@ export function ConversationDirectory({
         <SavedDirectoryRow current={selectedSaved} />
         <DraftsDirectoryRow current={selectedDrafts} />
       </div>
+      <div aria-hidden="true" className="mx-5 my-2 border-t border-secondary" />
       {groups.status === "failed" && (
         <div role="alert" className={cx(DIRECTORY_INSET, "py-2 text-sm text-error-primary")}>
           <p>{m.chat_section_load_error()}</p>
@@ -298,7 +298,6 @@ export function ConversationDirectory({
                       label={m.conversation_pinned_section()}
                       count={base.pinned.length}
                       empty={pinnedEmpty}
-                      icon={Pin01}
                       headingProps={headingProps}
                       expanded={!drag.sortingSections && !collapsed.includes("pinned")}
                       onToggle={() => toggle("pinned")}
