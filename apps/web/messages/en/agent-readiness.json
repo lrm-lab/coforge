@@ -1,4 +1,13 @@
 {
+  "agent_manual_start_updating": "{computer} is updating. Wait for the update to finish.",
+  "agent_manual_start_offline_you": "{computer} is offline. Open CoForge on it first.",
+  "agent_manual_start_offline_other": "{computer} is offline. Ask {owner} to open CoForge on it.",
+  "agent_manual_start_unusable_you": "{runtime} on {computer} cannot run the Agent. Reinstall or update it first.",
+  "agent_manual_start_unusable_other": "{runtime} on {computer} cannot run the Agent. Ask {owner} to reinstall or update it.",
+  "agent_manual_start_unconfirmed_you": "{computer} has not reported {runtime} yet. Check that CoForge is running there.",
+  "agent_manual_start_unconfirmed_other": "{computer} has not reported {runtime} yet. Ask {owner} to check that CoForge is running there.",
+  "agent_manual_start_missing_you": "No usable {runtime} on {computer}. Install it first.",
+  "agent_manual_start_missing_other": "No usable {runtime} on {computer}. Ask {owner} to install it.",
   "agent_readiness_computer_updating": "{computer} is updating. It will resume on its own when the update finishes.",
   "agent_readiness_computer_offline_you": "{computer} is offline. Open CoForge on it and the Agent will resume.",
   "agent_readiness_computer_offline_other": "{computer} is offline. {owner} needs to open CoForge on it before the Agent can resume.",

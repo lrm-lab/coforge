@@ -16,6 +16,7 @@ import type { AgentWakeBlock } from "#src/server/agents/agent-wake-block.server"
 import type { AgentDiagnosticFacts } from "#src/features/agents/agent-diagnostics";
 import { m } from "#src/paraglide/messages";
 import { agentDisplay } from "#src/features/agents/agent-status-display";
+import { agentReadinessLine } from "./agent-readiness-line";
 import { AgentErrorBanner, type AgentRetry } from "./agent-error-banner";
 import { AgentReadinessNote, type AgentReadinessNoteData } from "./agent-readiness-note";
 import { AgentWakeBlockNote } from "./agent-wake-block-note";
@@ -65,7 +66,9 @@ export function AgentProfileStatus({
         {note}
       </>
     );
-  if (readiness && display?.activityKind !== "error")
+  const blockedManualStart =
+    needsManualStart && readiness && agentReadinessLine(readiness.readiness) !== "launch_failed";
+  if (readiness && (display?.activityKind !== "error" || blockedManualStart))
     return (
       <>
         <AgentReadinessNote
@@ -73,7 +76,7 @@ export function AgentProfileStatus({
           needsManualStart={needsManualStart}
           agent={agent}
           display={display}
-          onViewLogs={onViewLogs}
+          onViewLogs={blockedManualStart && onActivityTab ? undefined : onViewLogs}
           onOpenSettings={onOpenSettings}
           retry={needsManualStart && !canRetryManualStart ? undefined : retry}
         />

@@ -1,4 +1,13 @@
 {
+  "agent_manual_start_updating": "{computer} 正在更新，请等更新完成。",
+  "agent_manual_start_offline_you": "{computer} 已离线，请先在这台电脑上打开 CoForge。",
+  "agent_manual_start_offline_other": "{computer} 已离线，请让 {owner} 在这台电脑上打开 CoForge。",
+  "agent_manual_start_unusable_you": "{computer} 上的 {runtime} 无法运行 Agent，请先重新安装或更新。",
+  "agent_manual_start_unusable_other": "{computer} 上的 {runtime} 无法运行 Agent，请让 {owner} 重新安装或更新。",
+  "agent_manual_start_unconfirmed_you": "{computer} 尚未上报 {runtime}，请检查这台电脑上的 CoForge 是否正在运行。",
+  "agent_manual_start_unconfirmed_other": "{computer} 尚未上报 {runtime}，请让 {owner} 检查这台电脑上的 CoForge 是否正在运行。",
+  "agent_manual_start_missing_you": "{computer} 上没有可用的 {runtime}，请先安装。",
+  "agent_manual_start_missing_other": "{computer} 上没有可用的 {runtime}，请让 {owner} 先安装。",
   "agent_readiness_computer_updating": "{computer} 正在更新。更新完成后会自动恢复。",
   "agent_readiness_computer_offline_you": "{computer} 已离线。在该电脑上打开 CoForge 后 Agent 会恢复。",
   "agent_readiness_computer_offline_other": "{computer} 已离线。需要 {owner} 在该电脑上打开 CoForge，Agent 才能恢复。",

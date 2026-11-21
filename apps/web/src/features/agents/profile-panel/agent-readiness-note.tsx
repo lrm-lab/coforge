@@ -4,6 +4,7 @@ import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
 import { Button } from "#src/components/base/buttons/button";
 import { StatusDot } from "#src/components/ui/status-dot";
+import { agentDisplay } from "#src/features/agents/agent-status-display";
 import type { AgentDiagnosticFacts } from "#src/features/agents/agent-diagnostics";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -21,6 +22,7 @@ import type { AgentRetry } from "./agent-error-banner";
 
 export type AgentReadinessNoteData = {
   readiness: AgentReadinessFacts;
+  failureReason?: string | null;
   computer: {
     id: string;
     label: string;
@@ -95,13 +97,22 @@ function runtimeMissingText(
   kind: ReturnType<typeof runtimeMissingKind>,
   args: { computer: string; runtime: string; owner: string },
   canFixComputer: boolean,
+  needsManualStart = false,
 ): string {
   switch (kind) {
     case "unusable":
+      if (needsManualStart)
+        return canFixComputer
+          ? m.agent_manual_start_unusable_you(args)
+          : m.agent_manual_start_unusable_other(args);
       return canFixComputer
         ? m.agent_readiness_runtime_unusable_you(args)
         : m.agent_readiness_runtime_unusable_other(args);
     case "unconfirmed":
+      if (needsManualStart)
+        return canFixComputer
+          ? m.agent_manual_start_unconfirmed_you(args)
+          : m.agent_manual_start_unconfirmed_other(args);
       return canFixComputer
         ? m.agent_readiness_runtime_unconfirmed_you(args)
         : m.agent_readiness_runtime_unconfirmed_other(args);
@@ -110,6 +121,10 @@ function runtimeMissingText(
         ? m.agent_readiness_runtime_unknown_you(args)
         : m.agent_readiness_runtime_unknown_other(args);
     default:
+      if (needsManualStart)
+        return canFixComputer
+          ? m.agent_manual_start_missing_you(args)
+          : m.agent_manual_start_missing_other(args);
       return canFixComputer
         ? m.agent_readiness_runtime_missing_you(args)
         : m.agent_readiness_runtime_missing_other(args);
@@ -150,9 +165,17 @@ export function AgentReadinessNote({
 
   switch (line) {
     case "computer_updating":
-      text = m.agent_readiness_computer_updating({ computer });
+      text = needsManualStart
+        ? m.agent_manual_start_updating({ computer })
+        : m.agent_readiness_computer_updating({ computer });
       break;
     case "computer_offline":
+      if (needsManualStart) {
+        text = data.computer?.ownedByViewer
+          ? m.agent_manual_start_offline_you({ computer })
+          : m.agent_manual_start_offline_other({ computer, owner });
+        break;
+      }
       text = data.computer?.ownedByViewer
         ? m.agent_readiness_computer_offline_you({ computer })
         : m.agent_readiness_computer_offline_other({ computer, owner });
@@ -162,13 +185,17 @@ export function AgentReadinessNote({
         runtimeMissingKind(data.readiness.detail),
         { computer, runtime, owner },
         canFixComputer,
+        needsManualStart,
       );
       break;
     case "runtime_login_required": {
       const base = data.canManageLogin
         ? m.agent_readiness_login_you({ computer, runtime })
         : m.agent_readiness_login_other({ computer, runtime });
-      text = data.canStartAgent ? `${base} ${m.agent_readiness_login_start()}` : base;
+      text =
+        data.canStartAgent && !needsManualStart
+          ? `${base} ${m.agent_readiness_login_start()}`
+          : base;
       if (data.canManageLogin && computerId && data.workspaceSlug) {
         const workspaceSlug = data.workspaceSlug;
         action = (
@@ -230,7 +257,20 @@ export function AgentReadinessNote({
     }
   }
 
-  const tone = TONE[line];
+  const blockedManualStart = needsManualStart && line !== "launch_failed";
+  if (blockedManualStart) {
+    const failure = launchFailureReason(data.failureReason);
+    const displayError = display?.activityKind === "error" ? agentDisplay(display) : undefined;
+    const original = displayError
+      ? displayError.alertText || displayError.label
+      : reasonText(
+          launchFailureNeedsRuntime(failure) && !runtime ? "generic" : failure,
+          runtime,
+          computer,
+        );
+    text = `${original} ${text}`;
+  }
+  const tone = blockedManualStart ? "error" : TONE[line];
   return (
     <div
       role="status"
@@ -253,6 +293,14 @@ export function AgentReadinessNote({
       </span>
       {suffix && <span className="min-w-0 break-words text-tertiary">{suffix}</span>}
       {action}
+      {blockedManualStart && onViewLogs && (
+        <>
+          <CopyDiagnosticsButton agent={agent} display={display} />
+          <Button color="link-gray" size="sm" className={LINK_BUTTON} onPress={onViewLogs}>
+            {m.agent_error_banner_view_logs()}
+          </Button>
+        </>
+      )}
     </div>
   );
 }

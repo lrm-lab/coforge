@@ -248,13 +248,14 @@ export function AgentProfilePanel({
   const needsManualStart =
     !!profile && "needsManualStart" in profile && profile.needsManualStart === true;
   const readiness =
-    profile && needsManualStart
+    profile?.readiness.state === "ready" && needsManualStart
       ? { state: "launch_failed", detail: profile.failureReason }
       : profile?.readiness;
   const readinessData: AgentReadinessNoteData | undefined =
     profile && !deleted && readiness && readiness.state !== "ready"
       ? {
           readiness,
+          failureReason: profile.failureReason,
           computer: profile.computer
             ? {
                 id: profile.computer.id,
