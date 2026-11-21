@@ -81,8 +81,6 @@ import {
   decodeAgentInboxPurge,
   type ComputerUpgradeResult,
   decodeAgentMessageDelivery,
-  decodeComputerRestartIntent,
-  decodeComputerUpgradeIntent,
   encodeAgentActivity,
   encodeAgentStatus,
   type AgentCredentialRestored,
@@ -181,7 +179,7 @@ import {
   readyFailureStage,
   type ConnectOutage,
 } from "./connection-retry";
-import { acceptLifecycleRequest, sendUpgradeResultOnce } from "#src/connection/upgrade-result-send";
+import { ComputerLifecyclePublications } from "./upgrade-result-send";
 export { COMPUTER_STATUS_REFRESH_MS } from "./daemon-status-refresh";
 import { DaemonStatusRefresh } from "./daemon-status-refresh";
 const logger = getLogger(["coforge", "daemon", "connection"]);
@@ -291,9 +289,9 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     contextViewAvailability: AGENT_CONTEXT_VIEW_AVAILABILITY_METHOD,
   });
   readonly #latestStatuses = new Map<string, AgentStatus>();
-  readonly #restartRequestIds = new Set<string>();
-  readonly #upgradeRequestIds = new Set<string>();
-  readonly #reportedUpgradeRequestIds = new Set<string>();
+  readonly #computerLifecycle = new ComputerLifecyclePublications((method, bytes) =>
+    this.#rpc(method, bytes),
+  );
   readonly #statusRefresh = new DaemonStatusRefresh({
     client: () => this.#client,
     connected: () => this.#connected,
@@ -798,34 +796,7 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
         this.#readyPublications.deliver(this.#agentMigrationCancel, cancel);
         return true;
       }) ||
-      routePublication(data, decodeComputerUpgradeIntent, (upgrade) => {
-        const requestUpgrade = config.requestUpgrade;
-        if (
-          upgrade.protocolMajor !== 1 ||
-          !ownsDaemon(upgrade) ||
-          !requestUpgrade ||
-          this.#upgradeRequestIds.has(upgrade.requestId)
-        )
-          return false;
-        acceptLifecycleRequest(this.#upgradeRequestIds, upgrade.requestId, () =>
-          requestUpgrade(upgrade.requestId, upgrade.expectedVersion, upgrade.releaseChannel),
-        );
-        return true;
-      }) ||
-      routePublication(data, decodeComputerRestartIntent, (restart) => {
-        const requestRestart = config.requestRestart;
-        if (
-          restart.protocolMajor !== 1 ||
-          !ownsDaemon(restart) ||
-          !requestRestart ||
-          this.#restartRequestIds.has(restart.requestId)
-        )
-          return false;
-        acceptLifecycleRequest(this.#restartRequestIds, restart.requestId, () =>
-          requestRestart(restart.requestId),
-        );
-        return true;
-      }) ||
+      this.#computerLifecycle.route(data, config, ownsDaemon) ||
       routePublication(data, decodeAgentWorkspaceResetRequest, (request) => {
         if (request.workspaceId === workspaceId)
           this.#readyPublications.deliver(this.#agentWorkspaceReset, request);
@@ -888,11 +859,7 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     await this.#rpc(AGENT_TURN_INTERRUPT_RESULT_METHOD, encodeAgentTurnInterruptResult(result));
   }
   async sendUpgradeResult(result: ComputerUpgradeResult): Promise<boolean> {
-    return sendUpgradeResultOnce(
-      (method, payload) => this.#rpc(method, payload),
-      this.#reportedUpgradeRequestIds,
-      result,
-    );
+    return this.#computerLifecycle.sendUpgradeResult(result);
   }
   async sendShutdownNotice(notice: DaemonRuntimeShutdown): Promise<void> {
     return sendShutdownNoticeOver(this.#connected ? this.#client : undefined, this.timing, notice);
@@ -1107,9 +1074,7 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
       this.#pendingActivity,
       this.#supersededActivityLaunches,
       this.#latestStatuses,
-      this.#restartRequestIds,
-      this.#upgradeRequestIds,
-      this.#reportedUpgradeRequestIds,
+      this.#computerLifecycle,
       this.#latestObservedLaunchByAgent,
     ])
       collection.clear();

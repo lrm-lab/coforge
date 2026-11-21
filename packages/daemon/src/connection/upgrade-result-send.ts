@@ -1,14 +1,16 @@
 import {
   COMPUTER_UPGRADE_RESULT_METHOD,
+  decodeComputerRestartIntent,
+  decodeComputerUpgradeIntent,
   encodeComputerUpgradeResult,
   type ComputerUpgradeResult,
 } from "@lrm/coforge-sdk/internal";
+import type { DaemonConnectionConfig } from "./daemon-connection-client";
+import { routePublication } from "./publication-routing";
 
-/** How many lifecycle request ids a connection remembers as already reported. */
-export const REMEMBERED_REQUEST_IDS = 256;
+const REMEMBERED_REQUEST_IDS = 256;
 
-/** Runs one inbound lifecycle request once, keeping failed requests replayable. */
-export function acceptLifecycleRequest(
+function acceptLifecycleRequest(
   seen: Set<string>,
   requestId: string,
   run: () => Promise<void>,
@@ -25,20 +27,64 @@ export function acceptLifecycleRequest(
   }
 }
 
-/**
- * Reports one upgrade operation's terminal result. Returns whether this call was the one that
- * put it on the wire; a replay of an already reported operation is dropped, and a failed send
- * stays replayable, matching the dedupe discipline of the other lifecycle results.
- */
-export async function sendUpgradeResultOnce(
-  rpc: (method: string, payload: Uint8Array) => Promise<unknown>,
-  reportedRequestIds: Set<string>,
-  result: ComputerUpgradeResult,
-): Promise<boolean> {
-  if (reportedRequestIds.has(result.requestId)) return false;
-  await rpc(COMPUTER_UPGRADE_RESULT_METHOD, encodeComputerUpgradeResult(result));
-  if (reportedRequestIds.size >= REMEMBERED_REQUEST_IDS)
-    reportedRequestIds.delete(reportedRequestIds.values().next().value!);
-  reportedRequestIds.add(result.requestId);
-  return true;
+export class ComputerLifecyclePublications {
+  readonly #restartRequestIds = new Set<string>();
+  readonly #upgradeRequestIds = new Set<string>();
+  readonly #reportedUpgradeRequestIds = new Set<string>();
+
+  constructor(private readonly rpc: (method: string, payload: Uint8Array) => Promise<unknown>) {}
+
+  route(
+    data: Uint8Array,
+    config: Pick<DaemonConnectionConfig, "requestUpgrade" | "requestRestart">,
+    ownsDaemon: (value: { workspaceId: string; computerId?: string }) => boolean,
+  ): boolean {
+    return (
+      routePublication(data, decodeComputerUpgradeIntent, (upgrade) => {
+        const requestUpgrade = config.requestUpgrade;
+        if (
+          upgrade.protocolMajor !== 1 ||
+          !ownsDaemon(upgrade) ||
+          !requestUpgrade ||
+          this.#upgradeRequestIds.has(upgrade.requestId)
+        )
+          return false;
+        acceptLifecycleRequest(this.#upgradeRequestIds, upgrade.requestId, () =>
+          requestUpgrade(upgrade.requestId, upgrade.expectedVersion, upgrade.releaseChannel),
+        );
+        return true;
+      }) ||
+      routePublication(data, decodeComputerRestartIntent, (restart) => {
+        const requestRestart = config.requestRestart;
+        if (
+          restart.protocolMajor !== 1 ||
+          !ownsDaemon(restart) ||
+          !requestRestart ||
+          this.#restartRequestIds.has(restart.requestId)
+        )
+          return false;
+        acceptLifecycleRequest(this.#restartRequestIds, restart.requestId, () =>
+          requestRestart(restart.requestId),
+        );
+        return true;
+      })
+    );
+  }
+
+  async sendUpgradeResult(result: ComputerUpgradeResult): Promise<boolean> {
+    if (this.#reportedUpgradeRequestIds.has(result.requestId)) return false;
+    await this.rpc(COMPUTER_UPGRADE_RESULT_METHOD, encodeComputerUpgradeResult(result));
+    if (this.#reportedUpgradeRequestIds.size >= REMEMBERED_REQUEST_IDS)
+      this.#reportedUpgradeRequestIds.delete(
+        this.#reportedUpgradeRequestIds.values().next().value!,
+      );
+    this.#reportedUpgradeRequestIds.add(result.requestId);
+    return true;
+  }
+
+  clear(): void {
+    this.#restartRequestIds.clear();
+    this.#upgradeRequestIds.clear();
+    this.#reportedUpgradeRequestIds.clear();
+  }
 }
