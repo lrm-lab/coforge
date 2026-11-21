@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import type { AgentTaskIdleNudgeRequest } from "@lrm/coforge-sdk/agent";
+import { readAgentStartOpenTasks } from "#src/server/db/repositories/agent-start-open-tasks.repositories.server";
 import { idleNudge } from "#src/server/tasks/task-idle-reminder.server";
 import { TaskConversations } from "#src/server/tasks/task-conversations.server";
 import { setup } from "./fixtures/task-dependencies";
@@ -352,3 +353,41 @@ test("unassigned Todo Tasks created by the Agent surface once on idle and do not
     await db.$disconnect();
   }
 });
+
+for (const change of ["blocker", "reply"] as const) {
+  test(`a fresh session reports a ${change} change to an already listed task`, async () => {
+    const fixture = await world();
+    const { db, make, run, finish, nudge, reply, ref, one, channel } = fixture;
+    try {
+      const [original, blocker] = await make("alice", 2);
+      const number = original!;
+      await run("one", { operation: "claim", number });
+      if (change === "blocker")
+        await run("alice", { operation: "amend", number, blockedBy: [{ number: blocker! }] });
+      const startup = await readAgentStartOpenTasks(db, channel.workspaceId, one.id);
+      const [listed] = startup?.tasks ?? [];
+      expect(listed).toMatchObject({ ref: ref(number) });
+      if (change === "blocker") await finish("two", blocker!);
+      else await reply("two", number, "Changed during the startup turn");
+
+      const answer = await nudge({ freshSession: true }, 0.01);
+      expect(answer).toMatchObject({
+        send: true,
+        items: [
+          {
+            ...listed,
+            reason: "others_acted",
+            why:
+              change === "blocker"
+                ? `the task it waits for, ${ref(blocker!)}, is done`
+                : "someone else replied in its conversation",
+          },
+        ],
+      });
+      expect(answer.text).toContain(answer.items[0]!.why);
+      expect(await nudge({}, 2)).toMatchObject({ send: false, reason: "no_change" });
+    } finally {
+      await db.$disconnect();
+    }
+  });
+}

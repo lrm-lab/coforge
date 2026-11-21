@@ -57,8 +57,6 @@ function reasonFor(
     return { reason: "newly_assigned", why: "newly assigned to you" };
   if (task.unassigned && task.neverAssigned && task.createdAt > newSince)
     return { reason: "newly_assigned", why: "created by you with no assignee" };
-  if (input.freshSession && !task.ownReview)
-    return { reason: "new_session", why: withUnassignedNote("you started a new session") };
   if (task.blockerDone && after(task.blockerDone.at))
     return {
       reason: "others_acted",
@@ -75,6 +73,8 @@ function reasonFor(
     };
   if (after(task.othersChangedAt))
     return { reason: "others_acted", why: withUnassignedNote("someone else changed it") };
+  if (input.freshSession && !task.ownReview)
+    return { reason: "new_session", why: withUnassignedNote("you started a new session") };
   const quiet = now.getTime() - task.lastActivityAt.getTime() >= STALE_AFTER_MS;
   const staleAgain =
     !reminder?.staleRemindedAt ||
