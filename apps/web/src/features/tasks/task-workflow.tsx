@@ -239,7 +239,11 @@ export function TaskWorkflow<T extends TaskView>({
                           }}
                           data-task-drag-node
                           aria-busy={pending?.id === task.id}
-                          className={cn(landing === task.id && "opacity-0")}
+                          className={cn(
+                            layout === "list" &&
+                              "sm:not-any-pointer-coarse:[contain-intrinsic-block-size:2.5rem] sm:not-any-pointer-coarse:[content-visibility:auto]",
+                            landing === task.id && "opacity-0",
+                          )}
                         >
                           {renderTask(task, controls(task))}
                         </motion.div>
