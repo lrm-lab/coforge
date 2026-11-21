@@ -1,17 +1,20 @@
 import { expect, test } from "bun:test";
 
-import { bodyWithArtifactTitles } from "#src/features/artifacts/artifact-link";
+import {
+  analyzeBodyArtifacts,
+  bodyWithArtifactTitles,
+  splitBodyWithInlineEmbeds,
+} from "#src/features/artifacts/artifact-link";
 
 const ID = "0198a7c2-1111-7222-8333-444455556666";
+const ID_B = "0198a7c2-1111-7222-8333-444455557777";
 const LINK = `https://coforge.example/en/w/acme/channel/c1?doc=${ID}`;
 const titles = new Map([[ID, "Launch plan"]]);
 
-/** Task #385 (Frank): a document's long link in a message beside its card. */
 test("a body that is only a document link reads as nothing beside its card", () => {
   expect(bodyWithArtifactTitles(`  ${LINK}\n`, titles)).toBe("");
 });
 
-/** Task #514 (Raft): a link on its own line above its card says the same thing twice. */
 test("a line that is only a document link reads as nothing beside its card", () => {
   const other = `https://coforge.example/en/w/acme/channel/c1?doc=${ID.replace("4444", "9999")}`;
   expect(bodyWithArtifactTitles(`Both are up:\n${LINK}\n${other}\n`, titles)).toBe(
@@ -24,7 +27,6 @@ test("a line that is only a document link reads as nothing beside its card", () 
 test("a document link in ~~~ fenced or indented code stays as written", () => {
   const tildes = `Run this:\n~~~\n${LINK}\n~~~`;
   expect(bodyWithArtifactTitles(tildes, titles)).toBe(tildes);
-  // A ``` line inside a ~~~ fence does not close it.
   const mixed = `~~~\n\`\`\`\n${LINK}\n~~~`;
   expect(bodyWithArtifactTitles(mixed, titles)).toBe(mixed);
   const indented = `Run this:\n\n    ${LINK}\n\t${LINK}`;
@@ -59,8 +61,6 @@ test("a sentence's last mark stays outside the link, and code and <link> stay as
   expect(bodyWithArtifactTitles(angled, titles)).toBe(angled);
 });
 
-/** Artifacts task #2: a link whose card says only "no access" or "deleted" has no title to read as;
- * alone on its line it reads as nothing beside that card, and inside a sentence as written. */
 test("a link with a placeholder card drops its own line but keeps its place in a sentence", () => {
   const placeholders = new Set([ID]);
   expect(bodyWithArtifactTitles(`Have a look\n\n${LINK}`, new Map(), placeholders)).toBe(
@@ -76,4 +76,71 @@ test("a standalone ?embed=1 artifact link drops its own line beside the inline e
   expect(bodyWithArtifactTitles(`See ${embedLink} now`, titles)).toBe(
     `See [Launch plan](${embedLink}) now`,
   );
+});
+
+test("splitBodyWithInlineEmbeds places standalone ?embed=1 links inline between prose blocks", () => {
+  const embedA = `https://coforge.example/w/acme/artifacts/${ID}?embed=1&version=2`;
+  const cardB = `https://coforge.example/w/acme/artifacts/${ID_B}`;
+  const allTitles = new Map([
+    [ID, "Signup funnel"],
+    [ID_B, "Spec doc"],
+  ]);
+  const result = splitBodyWithInlineEmbeds(
+    `Intro paragraph.\n\n${embedA}\n\nConclusion referencing ${cardB}.`,
+    new Set([ID]),
+    allTitles,
+  );
+  expect(result).toEqual([
+    { kind: "text", text: "Intro paragraph." },
+    { kind: "embed", link: { id: ID, embed: true, version: 2 } },
+    { kind: "text", text: `Conclusion referencing [Spec doc](${cardB}).` },
+  ]);
+});
+
+test("splitBodyWithInlineEmbeds ignores embeds inside code blocks and deduplicates repeated standalone embeds", () => {
+  const embedA = `https://coforge.example/w/acme/artifacts/${ID}?embed=1`;
+  const result = splitBodyWithInlineEmbeds(
+    `Example:\n\`\`\`\n${embedA}\n\`\`\`\n${embedA}\n${embedA}\nDone.`,
+    new Set([ID]),
+    new Map([[ID, "Widget"]]),
+  );
+  expect(result).toEqual([
+    { kind: "text", text: `Example:\n\`\`\`\n${embedA}\n\`\`\`` },
+    { kind: "embed", link: { id: ID, embed: true } },
+    { kind: "text", text: "Done." },
+  ]);
+});
+
+test("splitBodyWithInlineEmbeds returns only the embed segment for an embed-only message", () => {
+  const embedA = `https://coforge.example/w/acme/artifacts/${ID}?embed=1`;
+  expect(
+    splitBodyWithInlineEmbeds(`  ${embedA}\n`, new Set([ID]), new Map([[ID, "Widget"]])),
+  ).toEqual([{ kind: "embed", link: { id: ID, embed: true } }]);
+});
+
+test("analyzeBodyArtifacts computes segments, trailingLinks, and text block indices in one pass", () => {
+  const embedA = `https://coforge.example/w/acme/artifacts/${ID}?embed=1&version=2`;
+  const cardB = `https://coforge.example/w/acme/artifacts/${ID_B}`;
+  const result = analyzeBodyArtifacts(
+    `Short intro.\n\n${embedA}\n\nMuch longer detailed conclusion referencing ${cardB}.`,
+    [
+      { id: ID, embed: true, version: 2 },
+      { id: ID_B, embed: false },
+    ],
+    new Set([ID]),
+    new Map([
+      [ID, "Funnel"],
+      [ID_B, "Spec"],
+    ]),
+  );
+  expect(result.segments).toEqual([
+    { kind: "text", text: "Short intro." },
+    { kind: "embed", link: { id: ID, embed: true, version: 2 } },
+    { kind: "text", text: `Much longer detailed conclusion referencing [Spec](${cardB}).` },
+  ]);
+  expect([...result.inlineEmbedIds]).toEqual([ID]);
+  expect(result.trailingLinks).toEqual([{ id: ID_B, embed: false }]);
+  expect(result.lastTextIndex).toBe(2);
+  expect(result.longestTextIndex).toBe(2);
+  expect(result.hasText).toBe(true);
 });

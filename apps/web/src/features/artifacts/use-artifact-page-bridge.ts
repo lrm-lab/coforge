@@ -29,16 +29,28 @@ export function useArtifactPageBridge(input: {
   artifact: PageArtifact;
   suggestions: RefObject<PageSuggestHandler | null>;
   displayMode?: PageDisplayMode;
+  expanded?: boolean;
   onInitialized?: () => void;
   onSizeChanged?: (size: PageFrameSize) => void;
 }) {
-  const { frame, origin, viewer, level, artifact, suggestions, displayMode = "panel" } = input;
+  const {
+    frame,
+    origin,
+    viewer,
+    level,
+    artifact,
+    suggestions,
+    displayMode = "panel",
+    expanded,
+  } = input;
   const toast = useAppToast();
   const [confirmation, setConfirmation] = useState<PageConfirmation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [blocked, setBlocked] = useState(false);
   const [found, setFound] = useState({ total: 0, active: 0 });
   const pending = useRef<PageConfirmation | null>(null);
+  const expandedRef = useRef(expanded);
+  expandedRef.current = expanded;
   const onInitializedRef = useRef(input.onInitialized);
   onInitializedRef.current = input.onInitialized;
   const onSizeChangedRef = useRef(input.onSizeChanged);
@@ -52,6 +64,9 @@ export function useArtifactPageBridge(input: {
           artifact,
           level,
           displayMode,
+          ...(expandedRef.current !== undefined
+            ? { expanded: () => Boolean(expandedRef.current) }
+            : {}),
           data: pageDataPort(artifact.id),
           assets: pageAssetsPort(artifact.id),
           theme: currentTheme,
@@ -131,7 +146,7 @@ export function useArtifactPageBridge(input: {
       const nextTheme = currentTheme();
       if (nextTheme === lastTheme) return;
       lastTheme = nextTheme;
-      bridge.notifyTheme();
+      bridge.notifyHostContext();
     });
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     return () => observer.disconnect();

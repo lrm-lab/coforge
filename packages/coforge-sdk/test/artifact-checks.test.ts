@@ -9,15 +9,17 @@ import {
 } from "../src/agent";
 
 describe("artifact-checks SDK contract", () => {
-  test("defines desktop, phone, and inline check viewports", () => {
-    expect(ARTIFACT_CHECK_SHOTS).toEqual(["desktop", "phone", "inline"]);
+  test("defines desktop, phone, inline, and inline-dark check viewports", () => {
+    expect(ARTIFACT_CHECK_SHOTS).toEqual(["desktop", "phone", "inline", "inline-dark"]);
     expect(ARTIFACT_CHECK_VIEWPORTS.map((v) => [v.shot, v.width, v.height])).toEqual([
       ["desktop", 1280, 800],
       ["phone", 390, 844],
       ["inline", 896, 800],
+      ["inline-dark", 896, 800],
     ]);
     expect(isArtifactCheckShot("desktop")).toBe(true);
     expect(isArtifactCheckShot("inline")).toBe(true);
+    expect(isArtifactCheckShot("inline-dark")).toBe(true);
     expect(isArtifactCheckShot("tablet")).toBe(false);
     expect(isArtifactCheckStatus("pending")).toBe(true);
     expect(isArtifactCheckStatus("done")).toBe(true);
@@ -46,6 +48,19 @@ describe("artifact-checks SDK contract", () => {
       artifact: "a1",
       version: 3,
       shot: "inline",
+    });
+    expect(
+      decodeAgentArtifactRequest({
+        operation: "check-shot",
+        artifact: "a1",
+        version: 3,
+        shot: "inline-dark",
+      }),
+    ).toEqual({
+      operation: "check-shot",
+      artifact: "a1",
+      version: 3,
+      shot: "inline-dark",
     });
     expect(
       decodeAgentArtifactRequest({

@@ -1,4 +1,4 @@
-export const ARTIFACT_CHECK_SHOTS = ["desktop", "phone", "inline"] as const;
+export const ARTIFACT_CHECK_SHOTS = ["desktop", "phone", "inline", "inline-dark"] as const;
 export type ArtifactCheckShot = (typeof ARTIFACT_CHECK_SHOTS)[number];
 
 export const ARTIFACT_CHECK_STATUSES = ["pending", "running", "done", "failed", "skipped"] as const;
@@ -16,6 +16,7 @@ export const ARTIFACT_CHECK_VIEWPORTS: readonly ArtifactCheckViewport[] = [
   { shot: "desktop", width: 1280, height: 800, deviceScaleFactor: 1, mobile: false },
   { shot: "phone", width: 390, height: 844, deviceScaleFactor: 2, mobile: true },
   { shot: "inline", width: 896, height: 800, deviceScaleFactor: 1, mobile: false },
+  { shot: "inline-dark", width: 896, height: 800, deviceScaleFactor: 1, mobile: false },
 ];
 
 export const ARTIFACT_CHECK_MAX_CONSOLE_ERRORS = 10;

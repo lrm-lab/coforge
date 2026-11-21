@@ -5,6 +5,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildInlineHostHtml,
   clampInlineHeight,
+  INLINE_DARK_TOKENS,
   INLINE_HOST_ORIGIN,
   INLINE_LIGHT_TOKENS,
 } from "../evaluate.mjs";
@@ -134,8 +135,21 @@ describe("artifact-checker inline host and helpers", () => {
     expect(html).toContain("frame.style.height =");
     expect(html).toContain("ui/initialize");
     expect(html).toContain(INLINE_LIGHT_TOKENS["--coforge-fg"]);
+    expect(html).toContain(JSON.stringify(INLINE_LIGHT_TOKENS["--coforge-font-sans"]));
     expect(html).not.toContain("</script><script>alert(1)");
     expect(html).toContain("\\u003c/script>");
+  });
+
+  test("builds dark-theme inline host HTML with dark tokens and dark host background", () => {
+    const html = buildInlineHostHtml({
+      entryUrl: "https://a-1.coforge.check/index.html",
+      artifactOrigin: "https://a-1.coforge.check",
+      theme: "dark",
+    });
+    expect(html).toContain('theme: "dark"');
+    expect(html).toContain(`background: ${INLINE_DARK_TOKENS["--coforge-bg"]}`);
+    expect(html).toContain(INLINE_DARK_TOKENS["--coforge-fg"]);
+    expect(html).toContain(JSON.stringify(INLINE_DARK_TOKENS["--coforge-font-sans"]));
   });
 });
 

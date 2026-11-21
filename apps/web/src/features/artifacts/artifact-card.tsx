@@ -10,7 +10,12 @@ import { CardBadges } from "./artifact-gallery-card";
 import { useScopeOf } from "./artifact-scope";
 import { MarkdownPreview } from "./artifact-preview";
 import { entryFactsLine } from "./artifact-entry-facts";
-import { artifactIdsInBody, artifactLinksInBody, bodyWithArtifactTitles } from "./artifact-link";
+import {
+  analyzeBodyArtifacts,
+  artifactLinksInBody,
+  type ArtifactBodyLink,
+  type BodyArtifactAnalysis,
+} from "./artifact-link";
 import { ArtifactInlineEmbed } from "./artifact-inline-embed";
 import { ArtifactEditedLine, ArtifactIcon, kindLabel, useArtifactTime } from "./artifact-parts";
 import {
@@ -28,14 +33,23 @@ export type ArtifactCardState = {
 
 export function MessageArtifactCards({
   body,
+  links: providedLinks,
   states,
   selectionActive = false,
+  excludeIds,
 }: {
   body: string;
+  links?: readonly ArtifactBodyLink[];
   states?: readonly ArtifactCardState[];
   selectionActive?: boolean;
+  excludeIds?: ReadonlySet<string>;
 }) {
-  const links = artifactLinksInBody(body);
+  const links = useMemo(() => {
+    const base = providedLinks ?? artifactLinksInBody(body);
+    return excludeIds && excludeIds.size > 0
+      ? base.filter((link) => !excludeIds.has(link.id))
+      : base;
+  }, [body, providedLinks, excludeIds]);
   if (links.length === 0) return null;
   return (
     <div className="mt-1.5 flex flex-col gap-1.5">
@@ -57,31 +71,51 @@ export function MessageArtifactCards({
   );
 }
 
+export type MessageArtifactLayout = BodyArtifactAnalysis & {
+  cardsById: ReadonlyMap<string, ArtifactCard>;
+};
+
+export function useMessageArtifactLayout(
+  body: string,
+  states?: readonly ArtifactCardState[],
+): MessageArtifactLayout {
+  const links = useMemo(() => artifactLinksInBody(body), [body]);
+  const untitled = m.doc_untitled();
+  const cards = useQueries({
+    queries: links.map((link) => artifactCardQuery(link.id)),
+    combine: (results) => {
+      const loaded: ArtifactCard[] = [];
+      for (const { data } of results) {
+        if (data) loaded.push(data);
+      }
+      return loaded;
+    },
+  });
+  return useMemo(() => {
+    const cardsById = new Map<string, ArtifactCard>();
+    const titles = new Map<string, string>();
+    const embedCandidates = new Set<string>();
+    const placeholders = new Set<string>();
+    for (const entry of states ?? []) {
+      if (entry.state !== "open") placeholders.add(entry.artifactId.toLowerCase());
+    }
+    for (const card of cards) {
+      cardsById.set(card.id, card);
+      titles.set(card.id, card.title || untitled);
+      if (card.entryKind === "html" && !placeholders.has(card.id.toLowerCase())) {
+        embedCandidates.add(card.id);
+      }
+    }
+    const analysis = analyzeBodyArtifacts(body, links, embedCandidates, titles, placeholders);
+    return { ...analysis, cardsById };
+  }, [body, links, cards, states, untitled]);
+}
+
 export function useBodyWithArtifactTitles(
   body: string,
   states?: readonly ArtifactCardState[],
 ): string {
-  const cards = useQueries({
-    queries: artifactIdsInBody(body).map((id) => artifactCardQuery(id)),
-  });
-  const shown = cards.flatMap(({ data }) =>
-    data ? [[data.id, data.title || m.doc_untitled()] as const] : [],
-  );
-  const titles = JSON.stringify(shown);
-  const placeholders = JSON.stringify(
-    (states ?? []).flatMap((entry) =>
-      entry.state === "open" ? [] : [entry.artifactId.toLowerCase()],
-    ),
-  );
-  return useMemo(
-    () =>
-      bodyWithArtifactTitles(
-        body,
-        new Map(JSON.parse(titles) as [string, string][]),
-        new Set(JSON.parse(placeholders) as string[]),
-      ),
-    [body, titles, placeholders],
-  );
+  return useMessageArtifactLayout(body, states).displayBody;
 }
 
 function ArtifactCardView({

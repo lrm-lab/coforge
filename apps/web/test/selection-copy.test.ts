@@ -49,6 +49,12 @@ describe("fragmentHtmlToMarkdown", () => {
   test("drops the toolbar's own UI if it ever lands inside a fragment", () => {
     expect(fragmentHtmlToMarkdown("<p>clean</p>")).toBe("clean");
   });
+
+  test("omits inline artifact embed containers when copying across interleaved prose", () => {
+    const html =
+      '<p>Before</p><div data-artifact-inline-embed="a1"><p>Loading Funnel · v2…</p><iframe src="https://example.com"></iframe></div><p>After</p>';
+    expect(fragmentHtmlToMarkdown(html)).toBe("Before\n\nAfter");
+  });
 });
 
 describe("messagePlainText", () => {

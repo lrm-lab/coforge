@@ -76,52 +76,181 @@ const LINK_IN_TEXT = new RegExp(String.raw`(\[[^\]]*\]\(|<)?(${APP_LINK.source})
 const INLINE_CODE = /(`[^`\n]*`)/;
 const TRAILING = /[.,;:!?]+$/;
 
+export type BodySegment =
+  | { kind: "text"; text: string }
+  | { kind: "embed"; link: ArtifactBodyLink };
+
+function standaloneArtifactLink(line: string): ArtifactBodyLink | null {
+  const sole = line.trim();
+  if (!sole || sole.match(APP_LINK)?.[0] !== sole) return null;
+  const cleaned = sole.replace(TRAILING, "");
+  const id = extractArtifactId(cleaned);
+  if (id === undefined) return null;
+  const options = parseLinkOptions(cleaned);
+  return options.version === undefined
+    ? { id, embed: options.embed }
+    : { id, embed: options.embed, version: options.version };
+}
+
+function titleArtifactLinksInLine(line: string, titles: ReadonlyMap<string, string>): string {
+  const titled = (text: string) =>
+    text.replace(LINK_IN_TEXT, (whole, named: string | undefined, found: string, close) => {
+      if (named) return whole;
+      const link = found.replace(TRAILING, "");
+      const id = extractArtifactId(link);
+      const title = id === undefined ? undefined : titles.get(id);
+      if (title === undefined) return whole;
+      const label = title.replace(/[[\]\\*_`]/g, (char) => `\\${char}`);
+      return `[${label}](${link})${found.slice(link.length)}${close ?? ""}`;
+    });
+  return line
+    .split(INLINE_CODE)
+    .map((piece, index) => (index % 2 ? piece : titled(piece)))
+    .join("");
+}
+
 export function bodyWithArtifactTitles(
   body: string,
   titles: ReadonlyMap<string, string>,
   placeholders: ReadonlySet<string> = new Set(),
 ): string {
   if (titles.size === 0 && placeholders.size === 0) return body;
-  const idOf = (link: string) => extractArtifactId(link);
-  const titleOf = (link: string) => {
-    const id = idOf(link);
-    return id === undefined ? undefined : titles.get(id);
-  };
   const isCardLine = (line: string) => {
-    const sole = line.trim();
-    if (sole.match(APP_LINK)?.[0] !== sole) return false;
-    const id = idOf(sole);
-    return id !== undefined && (titles.has(id) || placeholders.has(id));
+    const standalone = standaloneArtifactLink(line);
+    return standalone !== null && (titles.has(standalone.id) || placeholders.has(standalone.id));
   };
-  const titled = (text: string) =>
-    text.replace(LINK_IN_TEXT, (whole, named: string | undefined, found: string, close) => {
-      if (named) return whole;
-      const link = found.replace(TRAILING, "");
-      const title = titleOf(link);
-      if (title === undefined) return whole;
-      const label = title.replace(/[[\]\\*_`]/g, (char) => `\\${char}`);
-      return `[${label}](${link})${found.slice(link.length)}${close ?? ""}`;
-    });
   const lines = body.split("\n");
   const code = codeLines(lines);
   let dropped = false;
   const shown = lines.flatMap((line, at) => {
     if (code[at]) return [line];
     if (isCardLine(line)) return ((dropped = true), []);
-    // Split on inline code: the odd pieces are code.
-    return [
-      line
-        .split(INLINE_CODE)
-        .map((piece, index) => (index % 2 ? piece : titled(piece)))
-        .join(""),
-    ];
+    return [titleArtifactLinksInLine(line, titles)];
   });
   const text = shown.join("\n");
   return dropped ? text.trimEnd() : text;
 }
 
-/** Which lines are code: inside a ``` or ~~~ fence (closed by the same mark, at least as long),
- * the fence's own lines, or indented four spaces or a tab. */
+export function splitBodyWithInlineEmbeds(
+  body: string,
+  embedIds: ReadonlySet<string>,
+  titles: ReadonlyMap<string, string>,
+  placeholders: ReadonlySet<string> = new Set(),
+  limit = 3,
+): BodySegment[] {
+  if (embedIds.size === 0) {
+    const text = bodyWithArtifactTitles(body, titles, placeholders);
+    return text ? [{ kind: "text", text }] : [];
+  }
+  const lines = body.split("\n");
+  const code = codeLines(lines);
+  const segments: BodySegment[] = [];
+  let textLines: string[] = [];
+  let droppedText = false;
+  const emittedEmbeds = new Set<string>();
+
+  const flushText = () => {
+    if (textLines.length === 0) return;
+    const raw = textLines.join("\n");
+    const trimmed = droppedText || segments.length > 0 ? raw.trim() : raw;
+    if (trimmed) segments.push({ kind: "text", text: trimmed });
+    textLines = [];
+    droppedText = false;
+  };
+
+  for (let at = 0; at < lines.length; at++) {
+    const line = lines[at]!;
+    if (code[at]) {
+      textLines.push(line);
+      continue;
+    }
+    const standalone = standaloneArtifactLink(line);
+    if (standalone && standalone.embed && embedIds.has(standalone.id)) {
+      droppedText = true;
+      if (!emittedEmbeds.has(standalone.id) && emittedEmbeds.size < limit) {
+        flushText();
+        emittedEmbeds.add(standalone.id);
+        segments.push({ kind: "embed", link: standalone });
+      }
+      continue;
+    }
+    if (standalone && (titles.has(standalone.id) || placeholders.has(standalone.id))) {
+      droppedText = true;
+      continue;
+    }
+    textLines.push(titleArtifactLinksInLine(line, titles));
+  }
+  flushText();
+  return segments;
+}
+
+export type BodyArtifactAnalysis = {
+  displayBody: string;
+  segments: BodySegment[];
+  inlineEmbedIds: ReadonlySet<string>;
+  trailingLinks: ArtifactBodyLink[];
+  hasText: boolean;
+  lastTextIndex: number;
+  longestTextIndex: number;
+};
+
+export function analyzeBodyArtifacts(
+  body: string,
+  allLinks: readonly ArtifactBodyLink[],
+  embedIds: ReadonlySet<string>,
+  titles: ReadonlyMap<string, string>,
+  placeholders: ReadonlySet<string> = new Set(),
+  limit = 3,
+): BodyArtifactAnalysis {
+  const segments = splitBodyWithInlineEmbeds(body, embedIds, titles, placeholders, limit);
+  const inlineEmbedIds = new Set<string>();
+  let lastTextIndex = -1;
+  let longestTextIndex = -1;
+  let longestTextLength = -1;
+  let textCount = 0;
+  let firstText = "";
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i]!;
+    if (segment.kind === "embed") {
+      inlineEmbedIds.add(segment.link.id);
+    } else {
+      if (textCount === 0) firstText = segment.text;
+      textCount += 1;
+      lastTextIndex = i;
+      if (segment.text.length > longestTextLength) {
+        longestTextLength = segment.text.length;
+        longestTextIndex = i;
+      }
+    }
+  }
+  const displayBody =
+    inlineEmbedIds.size === 0
+      ? firstText
+      : textCount === 0
+        ? ""
+        : textCount === 1
+          ? firstText
+          : segments
+              .filter(
+                (segment): segment is { kind: "text"; text: string } => segment.kind === "text",
+              )
+              .map((segment) => segment.text)
+              .join("\n\n");
+  const trailingLinks =
+    inlineEmbedIds.size === 0
+      ? [...allLinks]
+      : allLinks.filter((link) => !inlineEmbedIds.has(link.id));
+  return {
+    displayBody,
+    segments,
+    inlineEmbedIds,
+    trailingLinks,
+    hasText: displayBody.trim().length > 0,
+    lastTextIndex,
+    longestTextIndex,
+  };
+}
+
 function codeLines(lines: readonly string[]): boolean[] {
   let fence: string | null = null;
   return lines.map((line) => {

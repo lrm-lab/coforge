@@ -9,12 +9,11 @@ import {
   type MouseEvent,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useRouter } from "@tanstack/react-router";
 import { ArrowUpRight, Browser, Maximize01, Minimize01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Skeleton } from "#src/components/ui/skeleton";
 import { useCoarsePointer } from "#src/hooks/use-coarse-pointer";
 import { isAppError } from "#src/lib/app-error";
 import { cn } from "#src/lib/utils";
@@ -22,6 +21,7 @@ import { m } from "#src/paraglide/messages";
 import { useArtifactLink } from "./artifact-beside-chat";
 import { ArtifactPreviewFrame } from "./artifact-preview-frame";
 import { PageConfirmDialog } from "./artifact-page-confirm";
+import { PageErrorBanner, usePageErrorReport } from "./artifact-page-notices";
 import type { PageFrameSize, PageSuggestHandler } from "./artifact-page-bridge";
 import {
   INLINE_DEFAULT_HEIGHT_PX,
@@ -33,7 +33,7 @@ import { loadArtifactSandboxLink } from "./artifact-sandbox.functions";
 import { useInlineEmbedPool } from "./inline-embed-pool-context";
 import { useArtifactPageBridge } from "./use-artifact-page-bridge";
 
-const SKELETON_DELAY_MS = 140;
+const LOADING_LABEL_DELAY_MS = 140;
 const POST_LOAD_REVEAL_MS = 2_000;
 const LOAD_TIMEOUT_MS = 10_000;
 
@@ -66,6 +66,7 @@ export function ArtifactInlineEmbed({
   const pool = useInlineEmbedPool();
   const hostRef = useRef<HTMLDivElement>(null);
   const linkTo = useArtifactLink();
+  const router = useRouter();
   const coarse = useCoarsePointer();
   const resolvedVersion = version ?? card.currentVersion;
   const heightKey = `${card.id}:${resolvedVersion}`;
@@ -136,6 +137,9 @@ export function ArtifactInlineEmbed({
   );
 
   const openProps = linkTo(card.id);
+  const handleOpenPanel = useCallback(() => {
+    void router.navigate(openProps);
+  }, [router, openProps]);
 
   const handleSize = useCallback(
     (size: PageFrameSize) => {
@@ -174,6 +178,7 @@ export function ArtifactInlineEmbed({
           coarse={coarse}
           selectionActive={selectionActive}
           openProps={openProps}
+          onOpenPanel={handleOpenPanel}
           onSizeChanged={handleSize}
           onExpandedChange={handleExpandedChange}
         />
@@ -192,6 +197,7 @@ function ActiveInlineEmbed({
   coarse,
   selectionActive,
   openProps,
+  onOpenPanel,
   onSizeChanged,
   onExpandedChange,
 }: {
@@ -204,10 +210,23 @@ function ActiveInlineEmbed({
   coarse: boolean;
   selectionActive: boolean;
   openProps: ReturnType<ReturnType<typeof useArtifactLink>>;
+  onOpenPanel: () => void;
   onSizeChanged: (size: PageFrameSize) => void;
   onExpandedChange: (expanded: boolean) => void;
 }) {
   const link = useQuery(inlineSandboxLinkQuery(slotId, card.id, version, resolvedVersion));
+  const [showLoading, setShowLoading] = useState(false);
+
+  useEffect(() => {
+    setShowLoading(false);
+    const timer = window.setTimeout(() => setShowLoading(true), LOADING_LABEL_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [card.id, resolvedVersion]);
+
+  const loadingLabel = m.doc_embed_loading_version({
+    title,
+    version: link.data?.version ?? resolvedVersion,
+  });
 
   const handleReload = useCallback(() => {
     void link.refetch();
@@ -225,7 +244,9 @@ function ActiveInlineEmbed({
       />
     );
   }
-  if (!link.data) return <InlineEmbedLoadingShell height={height} showSkeleton />;
+  if (!link.data) {
+    return <InlineEmbedLoadingShell height={height} showLabel={showLoading} label={loadingLabel} />;
+  }
   return (
     <InlineEmbedFrame
       key={link.data.url}
@@ -237,7 +258,10 @@ function ActiveInlineEmbed({
       coarse={coarse}
       selectionActive={selectionActive}
       retrying={link.isFetching}
+      showLoading={showLoading}
+      loadingLabel={loadingLabel}
       openProps={openProps}
+      onOpenPanel={onOpenPanel}
       onSizeChanged={onSizeChanged}
       onExpandedChange={onExpandedChange}
       onReload={handleReload}
@@ -254,7 +278,10 @@ function InlineEmbedFrame({
   coarse,
   selectionActive,
   retrying,
+  showLoading,
+  loadingLabel,
   openProps,
+  onOpenPanel,
   onSizeChanged,
   onExpandedChange,
   onReload,
@@ -267,7 +294,10 @@ function InlineEmbedFrame({
   coarse: boolean;
   selectionActive: boolean;
   retrying: boolean;
+  showLoading: boolean;
+  loadingLabel: string;
   openProps: ReturnType<ReturnType<typeof useArtifactLink>>;
+  onOpenPanel: () => void;
   onSizeChanged: (size: PageFrameSize) => void;
   onExpandedChange: (expanded: boolean) => void;
   onReload: () => void;
@@ -281,7 +311,6 @@ function InlineEmbedFrame({
   );
 
   const [phase, setPhase] = useState<"loading" | "ready" | "timeout">("loading");
-  const [showSkeleton, setShowSkeleton] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const acceptInlineSizeRef = useRef(true);
   if (expanded) acceptInlineSizeRef.current = false;
@@ -322,27 +351,33 @@ function InlineEmbedFrame({
     [onSizeChanged, maybeReveal],
   );
 
-  const { bridge, confirmation, blocked } = useArtifactPageBridge({
+  const { bridge, confirmation, error, dismissError, blocked } = useArtifactPageBridge({
     frame,
     origin,
     viewer: link.viewer,
     level: link.level,
     displayMode: "inline",
+    expanded,
     artifact,
     suggestions,
     onInitialized: handleInitialized,
     onSizeChanged: handleSizeChanged,
   });
 
+  const askAgent = usePageErrorReport({
+    version: link.version,
+    error,
+    frame,
+    dismissError,
+  });
+
   useEffect(() => {
-    const skeletonTimer = window.setTimeout(() => setShowSkeleton(true), SKELETON_DELAY_MS);
     const timeoutTimer = window.setTimeout(() => {
       if (revealedRef.current) return;
       if (loadedRef.current) reveal();
       else setPhase("timeout");
     }, LOAD_TIMEOUT_MS);
     return () => {
-      window.clearTimeout(skeletonTimer);
       window.clearTimeout(timeoutTimer);
     };
   }, [reveal]);
@@ -359,11 +394,12 @@ function InlineEmbedFrame({
         cancelAnimationFrame(collapseRaf.current);
         collapseRaf.current = null;
       }
+      if (!wasExpandedRef.current) bridge.notifyHostContext();
     } else if (wasExpandedRef.current) {
       collapseRaf.current = requestAnimationFrame(() => {
         collapseRaf.current = null;
         acceptInlineSizeRef.current = true;
-        bridge.notifyTheme();
+        bridge.notifyHostContext();
       });
     }
     wasExpandedRef.current = expanded;
@@ -432,6 +468,13 @@ function InlineEmbedFrame({
               : "relative block w-full rounded-lg bg-transparent",
           )}
         >
+          {error !== null && (
+            <PageErrorBanner
+              className={expanded ? "mx-4 mt-3 shrink-0" : "mb-2 shrink-0"}
+              onAskAgent={() => void askAgent()}
+              onClose={dismissError}
+            />
+          )}
           <div
             aria-hidden="true"
             className={cn(
@@ -461,7 +504,7 @@ function InlineEmbedFrame({
                 ready ? "opacity-100" : "pointer-events-none opacity-0",
               )}
             />
-            {!ready && <InlineEmbedLoadingOverlay showSkeleton={showSkeleton} />}
+            {!ready && <InlineEmbedLoadingOverlay showLabel={showLoading} label={loadingLabel} />}
             {selectionActive && !expanded && (
               <div aria-hidden="true" className="absolute inset-0 z-20" />
             )}
@@ -470,6 +513,7 @@ function InlineEmbedFrame({
             <InlineEmbedControls
               coarse={coarse}
               expanded={expanded}
+              onOpenPanel={onOpenPanel}
               onToggleExpand={() => setExpanded((current) => !current)}
             />
           )}
@@ -482,15 +526,17 @@ function InlineEmbedFrame({
 
 function InlineEmbedLoadingShell({
   height,
-  showSkeleton,
+  showLabel,
+  label,
 }: {
   height: number;
-  showSkeleton: boolean;
+  showLabel: boolean;
+  label: string;
 }) {
   return (
     <div
       role="status"
-      aria-label={m.doc_embed_loading()}
+      aria-label={label}
       style={{ height: `${height}px` }}
       className="relative w-full overflow-hidden rounded-lg bg-transparent"
     >
@@ -500,32 +546,21 @@ function InlineEmbedLoadingShell({
       >
         <div className="h-full rounded-full bg-brand-solid motion-safe:inline-embed-progress" />
       </div>
-      <InlineEmbedLoadingOverlay showSkeleton={showSkeleton} />
+      <InlineEmbedLoadingOverlay showLabel={showLabel} label={label} />
     </div>
   );
 }
 
-function InlineEmbedLoadingOverlay({ showSkeleton }: { showSkeleton: boolean }) {
+function InlineEmbedLoadingOverlay({ showLabel, label }: { showLabel: boolean; label: string }) {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 flex flex-col justify-between rounded-lg bg-transparent p-3"
+      className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-transparent px-4"
     >
-      {showSkeleton && (
-        <>
-          <div className="flex items-center justify-between gap-4">
-            <Skeleton className="h-3.5 w-28 bg-quaternary/60 motion-safe:animate-pulse" />
-            <Skeleton className="h-3.5 w-16 bg-quaternary/60 motion-safe:animate-pulse" />
-          </div>
-          <div className="flex flex-1 items-end gap-2 py-3">
-            <Skeleton className="h-1/2 flex-1 bg-quaternary/60 motion-safe:animate-pulse" />
-            <Skeleton className="h-3/4 flex-1 bg-quaternary/60 motion-safe:animate-pulse" />
-            <Skeleton className="h-3/5 flex-1 bg-quaternary/60 motion-safe:animate-pulse" />
-            <Skeleton className="h-5/6 flex-1 bg-quaternary/60 motion-safe:animate-pulse" />
-            <Skeleton className="h-2/3 flex-1 bg-quaternary/60 motion-safe:animate-pulse" />
-          </div>
-          <Skeleton className="h-3 w-24 bg-quaternary/60 motion-safe:animate-pulse" />
-        </>
+      {showLabel && (
+        <p className="min-w-0 max-w-full truncate text-center text-xs text-tertiary tabular-nums">
+          {label}
+        </p>
       )}
     </div>
   );
@@ -534,28 +569,46 @@ function InlineEmbedLoadingOverlay({ showSkeleton }: { showSkeleton: boolean }) 
 function InlineEmbedControls({
   coarse,
   expanded,
+  onOpenPanel,
   onToggleExpand,
 }: {
   coarse: boolean;
   expanded: boolean;
+  onOpenPanel: () => void;
   onToggleExpand: () => void;
 }) {
+  const buttonClass =
+    "rounded-md border border-secondary/60 bg-secondary/45 p-1 backdrop-blur-xs *:data-icon:size-3.5";
   return (
     <div
       className={cn(
-        "absolute top-1.5 right-1.5 z-10 transition-opacity duration-150",
+        "absolute top-1.5 right-1.5 z-10 flex items-center gap-1 transition-opacity duration-150",
         expanded || coarse
           ? "opacity-90"
           : "opacity-0 group-hover/embed:opacity-100 group-focus-within/embed:opacity-100",
       )}
     >
+      {!expanded && (
+        <ButtonUtility
+          data-artifact-open-panel=""
+          icon={ArrowUpRight}
+          size="xs"
+          color="tertiary"
+          tooltip={m.doc_embed_open_panel()}
+          className={buttonClass}
+          onClick={(event: MouseEvent) => {
+            event.stopPropagation();
+            onOpenPanel();
+          }}
+        />
+      )}
       <ButtonUtility
         data-artifact-expand=""
         icon={expanded ? Minimize01 : Maximize01}
         size="xs"
         color="tertiary"
         tooltip={expanded ? m.doc_exit_fullscreen() : m.doc_fullscreen()}
-        className="rounded-md border border-secondary/60 bg-secondary/45 p-1 backdrop-blur-xs *:data-icon:size-3.5"
+        className={buttonClass}
         onClick={(event: MouseEvent) => {
           event.stopPropagation();
           onToggleExpand();

@@ -1,25 +1,53 @@
-import { useState } from "react";
+import { useCallback, useState, type RefObject } from "react";
 import { ChevronDown, ChevronUp, SearchLg, XClose } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Alert } from "#src/components/ui/alert";
+import { useAppToast } from "#src/components/ui/toast";
+import { copyText } from "#src/lib/clipboard";
 import { cn } from "#src/lib/utils";
 import { FLOATING_SURFACE_CLASS } from "#src/features/conversations/review-chrome";
 import { m } from "#src/paraglide/messages";
 
+export function usePageErrorReport({
+  version,
+  error,
+  frame,
+  dismissError,
+}: {
+  version: number;
+  error: string | null;
+  frame: RefObject<HTMLIFrameElement | null>;
+  dismissError: () => void;
+}) {
+  const toast = useAppToast();
+  return useCallback(async () => {
+    const report = m.doc_page_error_report({
+      version,
+      width: frame.current?.clientWidth ?? window.innerWidth,
+      message: error ?? "",
+    });
+    if (await copyText(report)) toast.success(m.doc_page_error_copied());
+    else toast.error(m.conversation_copy_failed());
+    dismissError();
+  }, [version, error, frame, toast, dismissError]);
+}
+
 export function PageErrorBanner({
   onAskAgent,
   onClose,
+  className = "mx-4 mt-3 shrink-0",
 }: {
   onAskAgent: () => void;
   onClose: () => void;
+  className?: string;
 }) {
   return (
     <Alert
       color="error"
       title={m.doc_page_error_title()}
-      className="mx-4 mt-3 shrink-0"
+      className={className}
       actions={
         <>
           <Button size="sm" color="secondary" onClick={onAskAgent}>

@@ -27,22 +27,23 @@ token's path (`/_f/<token>/<path>`), so relative references (`css/site.css`, `im
   `downloads`, `db`, `assets`, and (in `panel` mode) `comments`, answered by the app's page over
   `postMessage` (the Manual's `artifact-pages` topic lists them). An `.html` file is read whole by
   the sandbox and may be at most 2 MiB to be shown.
-- Linking an `.html` artifact in a chat message with `?embed=1` (and optional `&version=N`) renders
-  it flush inline inside the message stream on the same isolated `a-<uuid>.<sandbox host>` origin.
-  The runtime sets `data-display-mode="inline"`, applies host `--coforge-*` theme variables and
-  transparent defaults, and reports content height (`ui/notifications/size-changed`, clamped to
-  96px–800px, up to 896px wide; once settled at a given width the frame holds its high-water height
-  to avoid tab-switch layout jumps until the container width changes). Active inline frames are
-  lazily activated in the viewport and bounded per conversation by an LRU pool.
+- Linking an `.html` artifact in a chat message with `?embed=1` (and optional `&version=N`) on its
+  own line renders it flush inline right at that spot inside the message stream on the same isolated
+  `a-<uuid>.<sandbox host>` origin. The runtime sets `data-display-mode="inline"` and
+  `data-expanded`, applies host `--coforge-*` theme and font variables with transparent `14px` body
+  defaults, and reports content height (`ui/notifications/size-changed`, clamped to 96px–800px, up
+  to 896px wide; once settled at a given width the frame holds its high-water height to avoid
+  tab-switch layout jumps until the container width changes). Active inline frames are lazily
+  activated in the viewport and bounded per conversation by an LRU pool.
 
 ## Publish check
 
 Enabled by default across local Compose, staging, and production via the isolated Playwright
 sidecar (`services/artifact-checker/`). Pushing an `.html` artifact schedules an asynchronous
-`pg-boss` job that renders the version across three viewports (`desktop` 1280×800, `phone`
-390×844 @2x, and `inline` 896×800 with light `--coforge-*` tokens) under the same CSP and CDN
-allowlist, and `coforge artifact push` prints the next `coforge artifact check` command right
-after `Open:`:
+`pg-boss` job that renders the version across four viewports (`desktop` 1280×800, `phone`
+390×844 @2x, `inline` 896×800 light, and `inline-dark` 896×800 dark with `--coforge-*` tokens)
+under the same CSP and CDN allowlist, and `coforge artifact push` prints the next
+`coforge artifact check` command right after `Open:`:
 
 - `coforge artifact check <id> [--rev <n>] [--wait] [--output <dir>] [--json]` prints findings
   (console errors, blocked requests, broken images, missing artifact 404 assets, blank page, phone

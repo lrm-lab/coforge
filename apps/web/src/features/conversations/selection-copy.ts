@@ -36,6 +36,10 @@ turndown.addRule("channelReference", {
     (node.hasAttribute("data-channel-id") || node.hasAttribute("data-thread-root-id")),
   replacement: (content) => content,
 });
+turndown.addRule("inlineArtifactEmbed", {
+  filter: (node) => node.nodeType === 1 && node.hasAttribute("data-artifact-inline-embed"),
+  replacement: () => "",
+});
 
 /** The rendered fragment under a selection, as an HTML string. */
 export function selectionFragmentHtml(range: Range): string {

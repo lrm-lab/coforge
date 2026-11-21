@@ -4,15 +4,18 @@ import { Browser } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Skeleton } from "#src/components/ui/skeleton";
-import { useAppToast } from "#src/components/ui/toast";
 import { isAppError } from "#src/lib/app-error";
-import { copyText } from "#src/lib/clipboard";
 import { m } from "#src/paraglide/messages";
 import { loadArtifactSandboxLink } from "./artifact-sandbox.functions";
 import { ARTIFACTS_KEY } from "./artifact-queries";
 import { PageConfirmDialog } from "./artifact-page-confirm";
 import { ArtifactFrameCommentLayer } from "./artifact-frame-comment-layer";
-import { PageErrorBanner, PageExpiredCard, PageFindBar } from "./artifact-page-notices";
+import {
+  PageErrorBanner,
+  PageExpiredCard,
+  PageFindBar,
+  usePageErrorReport,
+} from "./artifact-page-notices";
 import { blockedFrameStatus, FRAME_STATUS, type PageSuggestHandler } from "./artifact-page-bridge";
 import { useArtifactPageBridge } from "./use-artifact-page-bridge";
 
@@ -170,7 +173,6 @@ function PageFrame({
   onFindingChange: (finding: boolean) => void;
   onReload: () => void;
 }) {
-  const toast = useAppToast();
   const frame = useRef<HTMLIFrameElement>(null);
   const container = useRef<HTMLDivElement>(null);
   const suggestions = useRef<PageSuggestHandler | null>(null);
@@ -187,16 +189,7 @@ function PageFrame({
     artifact,
     suggestions,
   });
-  const askAgent = async () => {
-    const report = m.doc_page_error_report({
-      version,
-      width: frame.current?.clientWidth ?? window.innerWidth,
-      message: error ?? "",
-    });
-    if (await copyText(report)) toast.success(m.doc_page_error_copied());
-    else toast.error(m.conversation_copy_failed());
-    dismissError();
-  };
+  const askAgent = usePageErrorReport({ version, error, frame, dismissError });
   return (
     <>
       {error !== null && (

@@ -26,6 +26,8 @@ export const PAGE_THEME_TOKEN_MAP = {
   "--coforge-chart-4": "--color-utility-yellow-500",
   "--coforge-chart-5": "--color-utility-orange-500",
   "--coforge-chart-6": "--color-utility-pink-500",
+  "--coforge-font-sans": "--font-body",
+  "--coforge-font-mono": "--font-mono",
 } as const;
 
 export function readHostThemeTokens(root?: Element): PageThemeTokens {

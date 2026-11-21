@@ -51,6 +51,7 @@ export type PageBridgeHost = {
   artifact: PageArtifact;
   level: PageLevel;
   displayMode?: PageDisplayMode;
+  expanded?(): boolean;
   data: PageDataPort;
   assets: PageAssetsPort;
   theme(): PageTheme;
@@ -123,9 +124,11 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
   const hostContext = () => {
     const tokens = host.themeTokens?.();
     const hasTokens = tokens && Object.keys(tokens).length > 0;
+    const expanded = host.expanded?.();
     return {
       theme: host.theme(),
       displayMode,
+      ...(expanded !== undefined ? { expanded } : {}),
       ...(hasTokens ? { tokens } : {}),
     };
   };
@@ -315,6 +318,9 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
     },
     dispose() {
       dataCalls.dispose();
+    },
+    notifyHostContext() {
+      send({ method: "ui/notifications/host-context-changed", params: hostContext() });
     },
     notifyTheme() {
       send({ method: "ui/notifications/host-context-changed", params: hostContext() });

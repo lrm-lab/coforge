@@ -4,15 +4,21 @@ export const INLINE_DEFAULT_HEIGHT_PX = 200;
 export const INLINE_MAX_HEIGHT_PX = 800;
 export const INLINE_MIN_HEIGHT_PX = 96;
 
+const INLINE_FONT_TOKENS = Object.freeze({
+  "--coforge-font-sans": '"Inter", -apple-system, "Segoe UI", Roboto, Arial, sans-serif',
+  "--coforge-font-mono":
+    'ui-monospace, "Roboto Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+});
+
 export const INLINE_LIGHT_TOKENS = Object.freeze({
   "--coforge-bg": "#ffffff",
   "--coforge-surface": "#f9fafb",
   "--coforge-surface-subtle": "#f2f4f7",
-  "--coforge-fg": "#101828",
+  "--coforge-fg": "#101319",
   "--coforge-fg-secondary": "#344054",
   "--coforge-fg-muted": "#667085",
   "--coforge-border": "#d0d5dd",
-  "--coforge-border-subtle": "#eaecf0",
+  "--coforge-border-subtle": "#e0e5f1",
   "--coforge-brand": "#1570ef",
   "--coforge-brand-fg": "#ffffff",
   "--coforge-success": "#079455",
@@ -24,6 +30,30 @@ export const INLINE_LIGHT_TOKENS = Object.freeze({
   "--coforge-chart-4": "#ef6820",
   "--coforge-chart-5": "#ee46bc",
   "--coforge-chart-6": "#7a5af8",
+  ...INLINE_FONT_TOKENS,
+});
+
+export const INLINE_DARK_TOKENS = Object.freeze({
+  "--coforge-bg": "#0c0e12",
+  "--coforge-surface": "#13161b",
+  "--coforge-surface-subtle": "#1f242f",
+  "--coforge-fg": "#f7f7f7",
+  "--coforge-fg-secondary": "#cecfd2",
+  "--coforge-fg-muted": "#94979c",
+  "--coforge-border": "#373a41",
+  "--coforge-border-subtle": "#22262f",
+  "--coforge-brand": "#2e90fa",
+  "--coforge-brand-fg": "#ffffff",
+  "--coforge-success": "#47cd89",
+  "--coforge-warning": "#fdb022",
+  "--coforge-error": "#f97066",
+  "--coforge-chart-1": "#53b1fd",
+  "--coforge-chart-2": "#47cd89",
+  "--coforge-chart-3": "#fdb022",
+  "--coforge-chart-4": "#fb6514",
+  "--coforge-chart-5": "#f670c7",
+  "--coforge-chart-6": "#9b8afb",
+  ...INLINE_FONT_TOKENS,
 });
 
 function safeJsonForScript(value) {
@@ -40,17 +70,22 @@ export function buildInlineHostHtml({
   artifactOrigin,
   width = 896,
   maxHeight = INLINE_MAX_HEIGHT_PX,
+  theme = "light",
 }) {
+  const resolvedTheme = theme === "dark" ? "dark" : "light";
+  const resolvedTokens = resolvedTheme === "dark" ? INLINE_DARK_TOKENS : INLINE_LIGHT_TOKENS;
+  const hostBg = resolvedTokens["--coforge-bg"];
   const targetOrigin = artifactOrigin || new URL(entryUrl).origin;
   const safeSrc = safeJsonForScript(entryUrl);
   const safeOrigin = safeJsonForScript(targetOrigin);
-  const safeTokens = safeJsonForScript(INLINE_LIGHT_TOKENS);
+  const safeTokens = safeJsonForScript(resolvedTokens);
+  const safeTheme = safeJsonForScript(resolvedTheme);
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <style>
-  html, body { margin: 0; padding: 0; background: #ffffff; }
+  html, body { margin: 0; padding: 0; background: ${hostBg}; }
   #artifact-frame { display: block; width: ${Math.round(width)}px; height: ${INLINE_DEFAULT_HEIGHT_PX}px; border: 0; background: transparent; }
 </style>
 </head>
@@ -74,7 +109,7 @@ export function buildInlineHostHtml({
         id: msg.id,
         result: {
           protocolVersion: "2026-01-26",
-          hostContext: { theme: "light", displayMode: "inline", tokens: tokens }
+          hostContext: { theme: ${safeTheme}, displayMode: "inline", expanded: false, tokens: tokens }
         }
       }, targetOrigin);
       return;

@@ -33,5 +33,6 @@
   "doc_page_expired_reload": "重新加载",
   "doc_embed_open_panel": "在侧栏打开",
   "doc_embed_loading": "正在加载交互预览",
+  "doc_embed_loading_version": "正在加载 {title} · v{version}…",
   "doc_embed_timeout": "这个内嵌预览加载超时了。"
 }

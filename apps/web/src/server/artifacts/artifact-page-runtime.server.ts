@@ -41,6 +41,8 @@ function request(method, params, timeoutMs) {
   });
 }
 var displayMode = "panel";
+var expanded = false;
+var currentTheme = null;
 var initialized = false;
 var lastW = -1;
 var lastH = -1;
@@ -52,28 +54,42 @@ function ensureInlineDefaults() {
   if (!parent) return;
   var style = document.createElement("style");
   style.id = "__coforge-inline-defaults";
-  style.textContent = ":where(html[data-display-mode=\\"inline\\"]){background:transparent;height:auto}:where(html[data-display-mode=\\"inline\\"] body){background:transparent;margin:0;padding:0;height:auto;min-height:0;color:var(--coforge-fg)}";
+  style.textContent = ":where(html[data-display-mode=\\"inline\\"]){background:transparent;height:auto}:where(html[data-display-mode=\\"inline\\"] body){background:transparent;margin:0;padding:0;height:auto;min-height:0;color:var(--coforge-fg);font-family:var(--coforge-font-sans,system-ui,-apple-system,sans-serif);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}";
   parent.insertBefore(style, parent.firstChild);
 }
 function applyHostContext(context) {
   if (!context || typeof context !== "object") return;
+  var displayChanged = false;
   if (context.displayMode === "inline" || context.displayMode === "panel") {
+    if (displayMode !== context.displayMode) displayChanged = true;
     displayMode = context.displayMode;
     document.documentElement.setAttribute("data-display-mode", displayMode);
     if (displayMode === "inline") ensureInlineDefaults();
   }
+  if (typeof context.expanded === "boolean") {
+    if (expanded !== context.expanded) displayChanged = true;
+    expanded = context.expanded;
+    document.documentElement.setAttribute("data-expanded", expanded ? "true" : "false");
+  }
   if (context.tokens && typeof context.tokens === "object") {
     Object.keys(context.tokens).forEach(function (name) {
       var value = context.tokens[name];
-      if (TOKEN_NAME.test(name) && typeof value === "string" && value.length <= 128) {
+      if (TOKEN_NAME.test(name) && typeof value === "string" && value.length <= 256) {
         document.documentElement.style.setProperty(name, value);
       }
     });
   }
+  if (displayChanged) {
+    window.dispatchEvent(new CustomEvent("coforge:display", { detail: { displayMode: displayMode, expanded: expanded } }));
+  }
   if (context.theme === "light" || context.theme === "dark") {
+    var themeChanged = currentTheme !== context.theme;
+    currentTheme = context.theme;
     document.documentElement.setAttribute("data-theme", context.theme);
     document.documentElement.style.colorScheme = context.theme;
-    window.dispatchEvent(new CustomEvent("coforge:theme", { detail: { theme: context.theme, displayMode: displayMode } }));
+    if (themeChanged) {
+      window.dispatchEvent(new CustomEvent("coforge:theme", { detail: { theme: context.theme, displayMode: displayMode, expanded: expanded } }));
+    }
   }
   lastW = -1;
   lastH = -1;

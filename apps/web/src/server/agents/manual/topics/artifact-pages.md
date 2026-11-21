@@ -66,14 +66,52 @@ HTML, scripts and SVG are refused. `assets.url(name)` loads from `<img>`, `<audi
 
 Every call can fail: it rejects when refused, declined or sent too often (30 a minute per
 method; 600 for `db`). The page's own errors are reported to the reader with a button that asks you to fix them.
-CoForge sets `data-theme="light"` or `"dark"` and `data-display-mode="panel"` or `"inline"` on
-`<html>`, injects semantic theme variables (`--coforge-bg`, `--coforge-surface`,
-`--coforge-surface-subtle`, `--coforge-fg`, `--coforge-fg-secondary`, `--coforge-fg-muted`,
-`--coforge-border`, `--coforge-border-subtle`, `--coforge-brand`, `--coforge-brand-fg`,
-`--coforge-success`, `--coforge-warning`, `--coforge-error`, and `--coforge-chart-1` through
-`--coforge-chart-6`), and fires a `coforge:theme` event on `window` (`detail: { theme, displayMode }`)
-when the theme changes. In `inline` mode, the frame blends transparently into the message stream
-up to 896px wide, sizes itself automatically to document content (clamped to 96px–800px, holding
-its high-water height at fixed width so tab switches do not jolt the chat stream), and omits
-`comments.open`. For multi-tab inline pages, give tab panels a consistent `min-height` so switching
-tabs stays visually balanced.
+CoForge sets `data-theme="light"` or `"dark"`, `data-display-mode="panel"` or `"inline"`, and
+`data-expanded="true"` or `"false"` on `<html>`, injects semantic theme and font variables
+(`--coforge-bg`, `--coforge-surface`, `--coforge-surface-subtle`, `--coforge-fg`,
+`--coforge-fg-secondary`, `--coforge-fg-muted`, `--coforge-border`, `--coforge-border-subtle`,
+`--coforge-brand`, `--coforge-brand-fg`, `--coforge-success`, `--coforge-warning`,
+`--coforge-error`, `--coforge-chart-1` through `--coforge-chart-6`, `--coforge-font-sans`, and
+`--coforge-font-mono`), and fires `coforge:theme` (`detail: { theme, displayMode, expanded }`) and
+`coforge:display` (`detail: { displayMode, expanded }`) on `window` when theme or display state
+changes. In `inline` mode, the frame blends transparently into the message stream up to 896px wide
+with default `14px` host body typography, sizes itself automatically to document content (clamped to
+96px–800px, holding its high-water height at fixed width so tab switches do not jolt the chat
+stream), and omits `comments.open`. For multi-tab inline pages, give tab panels a consistent
+`min-height` so switching tabs stays visually balanced.
+
+```html
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      .row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--coforge-border-subtle);
+      }
+      .muted {
+        color: var(--coforge-fg-muted);
+        font-size: 12px;
+      }
+      .num {
+        font-family: var(--coforge-font-mono);
+        font-variant-numeric: tabular-nums;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="row"><span>Signups</span><span class="num">1,284</span></div>
+    <div class="row">
+      <span class="muted">Live host theme</span
+      ><span class="num" style="color: var(--coforge-brand)">+14%</span>
+    </div>
+    <script>
+      window.addEventListener("coforge:theme", () => {});
+    </script>
+  </body>
+</html>
+```

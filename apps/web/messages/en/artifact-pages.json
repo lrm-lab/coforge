@@ -33,5 +33,6 @@
   "doc_page_expired_reload": "Reload",
   "doc_embed_open_panel": "Open in side panel",
   "doc_embed_loading": "Loading interactive preview",
+  "doc_embed_loading_version": "Loading {title} · v{version}…",
   "doc_embed_timeout": "This inline preview took too long to load."
 }

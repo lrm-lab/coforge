@@ -158,7 +158,6 @@ export function createPlaywrightDriver(options = {}) {
       const entryPath = normalizeBundlePath(payload.entryPath || "index.html") || "index.html";
       const entryUrl = `${origin}/${entryPath}`;
       const timeoutMs = Math.max(5_000, Math.min(120_000, Number(payload.timeoutMs) || 45_000));
-      const perShotTimeout = Math.max(5_000, Math.floor(timeoutMs / 3));
 
       const consoleErrors = [];
       const seenErrors = new Set();
@@ -228,7 +227,16 @@ export function createPlaywrightDriver(options = {}) {
                 mode: "panel",
               },
               { shot: "inline", width: 896, height: 800, deviceScaleFactor: 1, mode: "inline" },
+              {
+                shot: "inline-dark",
+                width: 896,
+                height: 800,
+                deviceScaleFactor: 1,
+                mode: "inline",
+                theme: "dark",
+              },
             ];
+      const perShotTimeout = Math.max(5_000, Math.floor(timeoutMs / Math.max(1, viewports.length)));
       const hasDesktopViewport = viewports.some((vp) => vp.shot === "desktop");
       const cdnCache = new Map();
 
@@ -243,12 +251,16 @@ export function createPlaywrightDriver(options = {}) {
         const height = clampDim(vp.height, 800);
         const deviceScaleFactor = Math.max(1, Math.min(3, Number(vp.deviceScaleFactor) || 1));
         const isMobile = Boolean(vp.mobile || vp.shot === "phone");
+        const isInline =
+          vp.mode === "inline" || vp.shot === "inline" || vp.shot === "inline-dark";
+        const inlineTheme = vp.theme === "dark" || vp.shot === "inline-dark" ? "dark" : "light";
 
         const context = await instance.newContext({
           viewport: { width, height },
           deviceScaleFactor,
           isMobile,
           hasTouch: isMobile,
+          ...(isInline ? { colorScheme: inlineTheme } : {}),
           javaScriptEnabled: true,
           bypassCSP: false,
           serviceWorkers: "block",
@@ -327,6 +339,7 @@ export function createPlaywrightDriver(options = {}) {
                   artifactOrigin: origin,
                   width,
                   maxHeight: INLINE_MAX_HEIGHT_PX,
+                  theme: inlineTheme,
                 }),
               });
               return;
@@ -381,7 +394,7 @@ export function createPlaywrightDriver(options = {}) {
           });
 
           const loadWaitMs = Math.min(LOAD_WAIT_CAP_MS, perShotTimeout);
-          if (vp.mode === "inline" || vp.shot === "inline") {
+          if (isInline) {
             await page.goto(`${hostOrigin}${INLINE_HOST_PATH}`, {
               waitUntil: "domcontentloaded",
               timeout: perShotTimeout,
@@ -410,11 +423,13 @@ export function createPlaywrightDriver(options = {}) {
                   : 0;
               const measuredHeight =
                 reportedHeight > 0 ? reportedHeight : (diag.inlineOverflow?.contentHeight ?? 0);
-              inlineOverflow = {
-                contentHeight: measuredHeight,
-                maxHeight: INLINE_MAX_HEIGHT_PX,
-                clipped: measuredHeight > INLINE_MAX_HEIGHT_PX,
-              };
+              if (!inlineOverflow || measuredHeight > inlineOverflow.contentHeight) {
+                inlineOverflow = {
+                  contentHeight: measuredHeight,
+                  maxHeight: INLINE_MAX_HEIGHT_PX,
+                  clipped: measuredHeight > INLINE_MAX_HEIGHT_PX,
+                };
+              }
               const targetHeight = clampInlineHeight(measuredHeight);
               await page.setViewportSize({ width, height: targetHeight });
               await withTimeout(
@@ -433,7 +448,7 @@ export function createPlaywrightDriver(options = {}) {
               timeout: perShotTimeout,
             });
             screenshots.push({
-              shot: "inline",
+              shot: vp.shot === "inline-dark" ? "inline-dark" : "inline",
               contentType: "image/png",
               base64: png.toString("base64"),
             });

@@ -21,13 +21,16 @@ These rules apply to `src/features/artifacts/`. They extend
   (`links`, `data`, `assets`) has its own decline count, and only the `data` consent is kept for
   the frame.
 - Message-stream inline HTML embeds (`artifact-inline-embed.tsx`, triggered by `?embed=1` links
-  parsed in `artifact-link.ts`) reuse the same `coforgeusercontent` sandbox and `createPageBridge`
-  with `displayMode: "inline"`: the bridge injects live `--coforge-*` CSS tokens from
-  `artifact-page-theme.ts`, consumes validated `ui/notifications/size-changed` updates (clamped to
-  96px–800px), and omits `comments` and annotation messages. Each conversation pane scopes an LRU
-  pool (`inline-embed-pool.ts`, max 16 active iframes) that activates frames via
-  `IntersectionObserver`, evicts off-screen slots first, and preserves last measured heights; each
-  active frame toggles fullscreen expand/shrink in place without remounting or re-minting its ticket.
+  parsed in `artifact-link.ts` and placed in-flow between paragraphs via `splitBodyWithInlineEmbeds`
+  and `useMessageArtifactLayout`) reuse the same `coforgeusercontent` sandbox and `createPageBridge`
+  with `displayMode: "inline"`: the bridge injects live `--coforge-*` theme and font tokens from
+  `artifact-page-theme.ts` plus `expanded` state (`data-expanded` / `coforge:display`), consumes
+  validated `ui/notifications/size-changed` updates (clamped to 96px–800px), surfaces runtime errors
+  via `PageErrorBanner`, and omits `comments` and annotation messages. Loading uses a centered
+  versioned label without a fake chart skeleton; hover controls offer both open-in-panel and
+  in-place fullscreen expand/shrink without remounting or re-minting the ticket. Each conversation
+  pane scopes an LRU pool (`inline-embed-pool.ts`, max 16 active iframes) that activates frames via
+  `IntersectionObserver`, evicts off-screen slots first, and preserves last measured heights.
 - Who can see an artifact is the home conversation, the Workspace, or anyone with the link
   (`use-artifact-visibility.tsx`); narrowing and link changes confirm, and a person never sees a
   fixed "everyone, always" rule. Sending to people who cannot read it is held until the sender

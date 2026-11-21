@@ -14,8 +14,9 @@ import { MessageSenderLine } from "./message-sender-line";
 import { attachmentMessageDisplayBody } from "./attachment-file-name";
 import {
   MessageArtifactCards,
-  useBodyWithArtifactTitles,
+  useMessageArtifactLayout,
 } from "#src/features/artifacts/artifact-card";
+import { ArtifactInlineEmbed } from "#src/features/artifacts/artifact-inline-embed";
 import { CollapsibleMessageBody } from "./collapsible-message-body";
 import type { ChipMention } from "./message-reference-chips";
 import { messagePlainText } from "./selection-copy";
@@ -157,7 +158,8 @@ export const MessageRow = memo(function MessageRow({
     });
   const selection = useRowSelection({ message, conversationId, channelNames, inStream: showsTask });
   const writtenBody = attachmentMessageDisplayBody(message);
-  const displayBody = useBodyWithArtifactTitles(writtenBody, message.artifactCards);
+  const artifactLayout = useMessageArtifactLayout(writtenBody, message.artifactCards);
+  const displayBody = artifactLayout.displayBody;
   if (message.senderKind === "system")
     return (
       <SystemMessageRow
@@ -170,9 +172,10 @@ export const MessageRow = memo(function MessageRow({
     );
   const showsBody = !message.forwarded || writtenBody.trim() !== "";
   const textTicks =
-    readState && !message.actionCard && displayBody.trim() ? (
+    readState && !message.actionCard && artifactLayout.hasText ? (
       <OwnMessageTicks readState={readState} inline />
     ) : undefined;
+  const hasInFlowEmbeds = artifactLayout.inlineEmbedIds.size > 0;
   return (
     <li
       data-message-id={message.id}
@@ -241,22 +244,59 @@ export const MessageRow = memo(function MessageRow({
               onKeyUp={quoteSelection.read}
               className="relative min-w-0 text-md text-primary [overflow-wrap:anywhere]"
             >
-              <CollapsibleMessageBody
-                body={displayBody}
-                trailing={textTicks}
-                mentions={message.mentions}
-                plainMentions={plainMentions}
-                viewerId={viewerId}
-                onOpenTask={onOpenTask}
-                channelNames={channelNames}
-                onOpenAgentProfile={onOpenAgentProfile}
-                onOpenPersonProfile={onOpenPersonProfile}
-                expanded={expanded}
-                collapsible={collapsible}
-                onToggleExpanded={() => onToggleExpanded(message.id)}
-              />
+              {hasInFlowEmbeds ? (
+                <div className="flex flex-col gap-1.5">
+                  {artifactLayout.segments.map((segment, index) => {
+                    if (segment.kind === "embed") {
+                      const card = artifactLayout.cardsById.get(segment.link.id);
+                      if (!card) return null;
+                      return (
+                        <ArtifactInlineEmbed
+                          key={`embed:${segment.link.id}`}
+                          card={card}
+                          version={segment.link.version}
+                          selectionActive={Boolean(selection)}
+                        />
+                      );
+                    }
+                    return (
+                      <CollapsibleMessageBody
+                        key={`text:${index}`}
+                        body={segment.text}
+                        trailing={index === artifactLayout.lastTextIndex ? textTicks : undefined}
+                        mentions={message.mentions}
+                        plainMentions={plainMentions}
+                        viewerId={viewerId}
+                        onOpenTask={onOpenTask}
+                        channelNames={channelNames}
+                        onOpenAgentProfile={onOpenAgentProfile}
+                        onOpenPersonProfile={onOpenPersonProfile}
+                        expanded={expanded}
+                        collapsible={collapsible && index === artifactLayout.longestTextIndex}
+                        onToggleExpanded={() => onToggleExpanded(message.id)}
+                      />
+                    );
+                  })}
+                </div>
+              ) : (
+                <CollapsibleMessageBody
+                  body={displayBody}
+                  trailing={textTicks}
+                  mentions={message.mentions}
+                  plainMentions={plainMentions}
+                  viewerId={viewerId}
+                  onOpenTask={onOpenTask}
+                  channelNames={channelNames}
+                  onOpenAgentProfile={onOpenAgentProfile}
+                  onOpenPersonProfile={onOpenPersonProfile}
+                  expanded={expanded}
+                  collapsible={collapsible}
+                  onToggleExpanded={() => onToggleExpanded(message.id)}
+                />
+              )}
               <MessageArtifactCards
                 body={message.body}
+                links={artifactLayout.trailingLinks}
                 states={message.artifactCards}
                 selectionActive={Boolean(selection)}
               />
