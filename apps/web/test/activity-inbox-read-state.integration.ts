@@ -87,10 +87,9 @@ test("Done takes a pinned conversation out of Pinned like every row, until somet
     await pin(quiet.aliceMember, 0);
 
     const inbox = new ActivityInbox(db, {});
-    // The pinned conversation's row is the Pinned section's, once, and counts with the list.
     const listed = await inbox.list(workspace.id, alice.id, { filter: "all" });
-    expect(listed.pinned.map((item) => item.place.conversationId)).toEqual([quiet.conversation.id]);
-    expect(listed.pinned[0]!.place).toMatchObject({
+    expect(listed.pinned).toEqual([]);
+    expect(listed.items.filter(isConversation)[0]?.place).toMatchObject({
       kind: "channel",
       conversationId: quiet.conversation.id,
     });
@@ -110,15 +109,14 @@ test("Done takes a pinned conversation out of Pinned like every row, until somet
     ]);
     expect(page.activeItemCount).toBe(1);
 
-    // Something new lists it again under Pinned, counting only the new message.
     const fresh = await post(quiet.conversation.id, quiet.bobMember.id, "again");
     page = await inbox.list(workspace.id, alice.id, { filter: "all" });
-    expect(page.pinned.map((item) => [item.key, item.latest.id, item.unreadCount])).toEqual([
-      [`conversation:${quiet.conversation.id}`, fresh.id, 1],
-    ]);
+    expect(page.pinned).toEqual([]);
     expect(page.items.filter(isConversation).map((item) => item.place.conversationId)).toEqual([
+      quiet.conversation.id,
       general.conversation.id,
     ]);
+    expect(page.items[0]).toMatchObject({ latest: { id: fresh.id }, unreadCount: 1 });
     // Each item says whether the viewer pinned it.
     expect(
       [...page.pinned, ...page.items.filter(isConversation)].map((item) => item.pinned),
@@ -174,14 +172,15 @@ test("Pinned follows the pin order and leaves a pinned channel's threads and the
     await pin(silent.aliceMember, 3);
 
     const all = await inbox.list(workspace.id, alice.id, { filter: "all" });
-    expect(all.pinned.map((item) => item.place.conversationId)).toEqual([
-      quiet.conversation.id,
-      general.conversation.id,
-    ]);
-    expect(all.pinned[1]).toMatchObject({ unreadCount: 1, unreadMention: true });
+    expect(all.pinned).toEqual([]);
+    expect(
+      all.items.find((item) => item.key === `conversation:${general.conversation.id}`),
+    ).toMatchObject({ pinned: true, unreadCount: 1, unreadMention: true });
     // The pinned channel's followed thread is an item of its own and stays in the list.
     expect(all.items.filter(isConversation).map((item) => item.key)).toEqual([
       `conversation:${calm.conversation.id}`,
+      `conversation:${quiet.conversation.id}`,
+      `conversation:${general.conversation.id}`,
       `thread:${root.id}`,
     ]);
     // Pinning moves no count: every item still counts, wherever it is listed.
@@ -190,11 +189,11 @@ test("Pinned follows the pin order and leaves a pinned channel's threads and the
       before.unreadMentionItemCount,
     ]);
     expect([all.unreadItemCount, all.unreadMentionItemCount]).toEqual([4, 2]);
-    // The All view lists two pins and two items; a pin the inbox does not list counts for nothing.
+    // A pin the inbox does not list counts for nothing.
     expect(before.activeItemCount).toBe(4);
     expect(all.activeItemCount).toBe(4);
 
-    // A later page lists no pins, and none of the pinned conversations either.
+    // An unread pin participates in the same cursor as every other unread item.
     const first = await inbox.list(workspace.id, alice.id, { filter: "all", limit: 1 });
     const second = await inbox.list(workspace.id, alice.id, {
       filter: "all",
@@ -203,9 +202,9 @@ test("Pinned follows the pin order and leaves a pinned channel's threads and the
     });
     expect(second.pinned).toEqual([]);
     expect(second.items.filter(isConversation).map((item) => item.key)).toEqual([
-      `thread:${root.id}`,
+      `conversation:${quiet.conversation.id}`,
     ]);
-    expect(second.nextCursor).toBe(null);
+    expect(second.nextCursor).not.toBeNull();
 
     // Unread and Mentions have no Pinned section: a pinned conversation lists among their items.
     const unread = await inbox.list(workspace.id, alice.id, { filter: "unread" });
@@ -236,6 +235,16 @@ test("Pinned follows the pin order and leaves a pinned channel's threads and the
         .map((item) => item.key)
         .sort(),
     ).toEqual([`conversation:${general.conversation.id}`, `thread:${root.id}`].sort());
+    await inbox.markAllRead(workspace.id, alice.id, { before: new Date() });
+    const read = await inbox.list(workspace.id, alice.id, { filter: "all" });
+    expect(read.pinned.map((item) => item.place.conversationId)).toEqual([
+      quiet.conversation.id,
+      general.conversation.id,
+    ]);
+    expect(read.items.map((item) => item.key)).toEqual([
+      `conversation:${calm.conversation.id}`,
+      `thread:${root.id}`,
+    ]);
   } finally {
     await cleanup(db, suffix);
   }

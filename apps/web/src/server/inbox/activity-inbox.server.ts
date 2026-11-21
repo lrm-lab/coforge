@@ -1,3 +1,4 @@
+import { activityCursorForFilter } from "#src/features/inbox/activity-inbox.schemas";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import type {
   ActivityArtifactMark,
@@ -45,19 +46,21 @@ export class ActivityInbox {
   ) {
     await this.authorize(workspaceId, userId);
     const loadedAt = new Date();
+    const unreadFirst = options.filter === "all";
+    const cursor = activityCursorForFilter(options.filter, options.cursor);
     const limit = clampPageLimit(options.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
     const [rows, artifactRows] = await Promise.all([
       this.db.$queryRaw<ActivityPageRow[]>(
         activityPageSql(workspaceId, userId, {
           filter: options.filter,
-          cursor: options.cursor,
+          cursor,
           limit,
         }),
       ),
       this.db.$queryRaw<ArtifactListedRow[]>(
         artifactActivityPageSql(workspaceId, userId, {
           filter: options.filter,
-          cursor: options.cursor,
+          cursor,
           limit,
         }),
       ),
@@ -74,12 +77,14 @@ export class ActivityInbox {
           key: row.key!,
           latestAt: row.latestAt,
           latestSequence: row.latestSequence,
+          hasUnread: unreadFirst && row.hasUnread,
         })),
       ...artifactRows.filter(isListedArtifact).map((row) => ({
         row,
         key: row.key,
         latestAt: row.latestAt,
         latestSequence: 0,
+        hasUnread: unreadFirst && row.hasUnread === true,
       })),
     ].sort(compareActivityOrder);
     const shown = ordered.slice(0, limit);
@@ -119,6 +124,9 @@ export class ActivityInbox {
             at: last.latestAt.getTime(),
             sequence: last.latestSequence,
             key: last.key,
+            ...(unreadFirst
+              ? { order: "unread-first-v1" as const, hasUnread: last.hasUnread }
+              : {}),
           } satisfies ActivityInboxCursor)
         : null,
       loadedAt: loadedAt.getTime(),

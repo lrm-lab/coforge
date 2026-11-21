@@ -317,9 +317,13 @@ test("a channel's items carry the members its group avatar shows, as the Chat si
     // A channel thread's row shows its channel's avatar under the thread badge.
     expect(membersOf(threadItem)).toEqual(generalMembers);
     // A pinned channel shows its own members.
-    expect(page.pinned.map(membersOf)).toEqual([
+    const pinnedItem = page.items
+      .filter(isConversation)
+      .find((item) => item.place.conversationId === pinned.conversation.id);
+    expect(pinnedItem?.pinned).toBe(true);
+    expect(membersOf(pinnedItem)).toEqual(
       [alice.id, bob.id].map((id) => expect.objectContaining({ kind: "user", id })),
-    ]);
+    );
   } finally {
     await cleanup(db, suffix);
   }

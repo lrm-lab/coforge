@@ -6,6 +6,7 @@ import { readAfterStreamPositions } from "#src/server/conversations/chat-stream-
 import { browserActivityInbox } from "#src/server/inbox/browser-activity-inbox.server";
 import { waitingChoiceCards } from "#src/server/conversations/waiting-choice-cards.server";
 import {
+  activityCursorForFilter,
   activityDoneUndoSchema,
   activityInboxPageSchema,
   activityInboxReadAllSchema,
@@ -19,9 +20,10 @@ export const loadActivityInbox = createServerFn({ method: "GET" })
   .validator(activityInboxPageSchema)
   .handler(async ({ context, data }) => {
     const { db, workspaceId, user } = context;
+    const cursor = activityCursorForFilter(data.filter, data.cursor);
     const { streamPositions, data: page } = await readAfterStreamPositions(
-      data.cursor ? [] : [userConversationChannel(user.id)],
-      () => browserActivityInbox(db).list(workspaceId, user.id, data),
+      cursor ? [] : [userConversationChannel(user.id)],
+      () => browserActivityInbox(db).list(workspaceId, user.id, { ...data, cursor }),
     );
     return { ...page, streamPositions };
   });

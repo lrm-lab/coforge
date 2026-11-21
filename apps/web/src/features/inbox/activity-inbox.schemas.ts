@@ -3,12 +3,28 @@ import { z } from "zod";
 export const ACTIVITY_INBOX_FILTERS = ["all", "unread", "mentions", "artifacts"] as const;
 export type ActivityInboxFilter = (typeof ACTIVITY_INBOX_FILTERS)[number];
 
-export const activityInboxCursorSchema = z.object({
+const chronologicalCursorSchema = z.strictObject({
   at: z.number().int().min(0).max(253_402_300_799_999),
   sequence: z.number().int().min(0).max(2_147_483_647),
   key: z.string().min(1).max(64),
 });
+const unreadFirstCursorSchema = chronologicalCursorSchema.extend({
+  order: z.literal("unread-first-v1"),
+  hasUnread: z.boolean(),
+});
+export const activityInboxCursorSchema = z.union([
+  unreadFirstCursorSchema,
+  chronologicalCursorSchema,
+]);
 export type ActivityInboxCursor = z.infer<typeof activityInboxCursorSchema>;
+
+export function activityCursorForFilter(
+  filter: ActivityInboxFilter,
+  cursor: ActivityInboxCursor | undefined,
+): ActivityInboxCursor | undefined {
+  if (cursor && "order" in cursor === (filter === "all")) return cursor;
+  return undefined;
+}
 
 export const activityInboxPageSchema = z.object({
   filter: z.enum(ACTIVITY_INBOX_FILTERS),

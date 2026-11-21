@@ -97,10 +97,15 @@ export function artifactActivityPageSql(
   userId: string,
   options: { filter: ActivityInboxFilter; cursor?: ActivityInboxCursor | undefined; limit: number },
 ) {
-  const after = options.cursor
-    ? Prisma.sql`(listed."latestAt", 0, listed."key" COLLATE "C")
-        < (${new Date(options.cursor.at).toISOString()}::timestamp(3), ${options.cursor.sequence}::int,
-           ${options.cursor.key}::text COLLATE "C")`
+  const { cursor } = options;
+  const unreadFirst = options.filter === "all";
+  const unread = cursor && "hasUnread" in cursor ? Prisma.sql`listed."hasUnread",` : Prisma.empty;
+  const boundary =
+    cursor && "hasUnread" in cursor ? Prisma.sql`${cursor.hasUnread}::boolean,` : Prisma.empty;
+  const after = cursor
+    ? Prisma.sql`(${unread} listed."latestAt", 0, listed."key" COLLATE "C")
+        < (${boundary} ${new Date(cursor.at).toISOString()}::timestamp(3), ${cursor.sequence}::int,
+           ${cursor.key}::text COLLATE "C")`
     : Prisma.sql`TRUE`;
   return Prisma.sql`
     WITH follows AS MATERIALIZED (${followsSql(workspaceId, userId)}),
@@ -129,7 +134,8 @@ export function artifactActivityPageSql(
     ), page AS (
       SELECT * FROM listed
       WHERE ${viewSql(options.filter)} AND ${after}
-      ORDER BY listed."latestAt" DESC, listed."key" COLLATE "C" DESC
+      ORDER BY ${unreadFirst ? Prisma.sql`listed."hasUnread" DESC,` : Prisma.empty}
+        listed."latestAt" DESC, listed."key" COLLATE "C" DESC
       LIMIT ${options.limit + 1}
     ), counts AS (
       SELECT (COUNT(*) FILTER (WHERE listed."hasUnread"))::int AS "unreadItemCount",
@@ -140,7 +146,8 @@ export function artifactActivityPageSql(
     SELECT counts.*, page."artifactId", page."key", page."latestAt", page."hasUnread",
       page."unreadMention"
     FROM counts LEFT JOIN page ON TRUE
-    ORDER BY page."latestAt" DESC NULLS LAST, page."key" COLLATE "C" DESC`;
+    ORDER BY ${unreadFirst ? Prisma.sql`page."hasUnread" DESC NULLS LAST,` : Prisma.empty}
+      page."latestAt" DESC NULLS LAST, page."key" COLLATE "C" DESC`;
 }
 
 export function artifactUnreadKeysSql(workspaceId: string, userId: string, artifactId?: string) {

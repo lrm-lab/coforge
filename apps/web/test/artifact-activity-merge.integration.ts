@@ -124,3 +124,53 @@ test("the Unread and Mentions tabs agree with their counts and the nav dot", asy
   expect(all.unreadMentionItemCount).toBe(mentions.items.length);
   expect(all.activeItemCount).toBe(all.items.length);
 });
+
+test("all pages put older unreads ahead of read rows and merge ties across sources", async () => {
+  await inbox.markAllRead(f.workspaceId, f.bob, { before: new Date() });
+  const artifact = await artifactItem("Older unread tie", -20);
+  const artifactId = artifact.slice("artifact:".length);
+  await f.db.artifactVersion.updateMany({ where: { artifactId }, data: { createdAt: at(-20) } });
+
+  const tied = await conversationItem("tie", -20);
+  const tiedId = tied.slice("conversation:".length);
+  // Artifacts use zero as their sequence. Give this conversation that sequence to exercise a
+  // tie across both SQL sources and the merge.
+  await f.db.message.updateMany({ where: { conversationId: tiedId }, data: { sequence: 0 } });
+  await f.db.conversationMember.updateMany({
+    where: { conversationId: tiedId, userId: f.bob },
+    data: { readThroughSequence: -1, doneThroughSequence: -1 },
+  });
+
+  const newer = [];
+  for (let index = 0; index < 33; index++) {
+    const key = await conversationItem(`read-${index}`, 30 + index);
+    newer.push(key);
+    await f.db.conversationMember.updateMany({
+      where: { conversationId: key.slice("conversation:".length), userId: f.bob },
+      data: { readThroughSequence: 1 },
+    });
+  }
+
+  const list = (limit: number, cursor?: ActivityInboxCursor) =>
+    inbox.list(f.workspaceId, f.bob, { filter: "all", limit, cursor });
+  const first = await list(1);
+  expect(first.items.map((item) => item.key)).toEqual([tied]);
+  expect(first.nextCursor).toMatchObject({
+    order: "unread-first-v1",
+    hasUnread: true,
+    sequence: 0,
+  });
+  expect((await list(1, first.nextCursor!)).items.map((item) => item.key)).toEqual([artifact]);
+  expect(
+    (await list(1, { at: at(60).getTime(), sequence: 1, key: newer[30]! })).items.map(
+      (item) => item.key,
+    ),
+  ).toEqual([tied]);
+
+  const page = await list(30);
+  const rest = await list(100, page.nextCursor!);
+  const all = [...page.items, ...rest.items].map((item) => item.key);
+  expect(new Set(all).size).toBe(all.length);
+  expect(all).toEqual(expect.arrayContaining([artifact, tied, ...newer]));
+  expect(page.unreadItemCount).toBe(rest.unreadItemCount);
+});

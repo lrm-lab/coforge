@@ -22,10 +22,10 @@ test("Done takes a pinned conversation out of Pinned until something new arrives
       };
     };
 
-    // The pinned conversation's own row is the Pinned section's, once, and not below it.
+    // An unread pin stays with the unread items and appears once.
     expect(await listed()).toEqual({
-      pinned: [support.conversation.id],
-      items: [],
+      pinned: [],
+      items: [support.conversation.id],
       unreadItemCount: 1,
       activeItemCount: 1,
     });
@@ -52,11 +52,11 @@ test("Done takes a pinned conversation out of Pinned until something new arrives
     // Something new lists it again, still pinned, counting only the new message.
     await post(support.conversation.id, support.bobMember.id, "a newer question");
     const back = await inbox.list(workspace.id, alice.id, { filter: "all" });
-    expect(back.pinned.map((entry) => entry.place.conversationId)).toEqual([
+    expect(back.pinned).toEqual([]);
+    expect(back.items.filter(isConversation).map((entry) => entry.place.conversationId)).toEqual([
       support.conversation.id,
     ]);
-    expect(back.pinned[0]!.pinned).toBe(true);
-    expect(back.pinned[0]!.unreadCount).toBe(1);
+    expect(back.items[0]).toMatchObject({ pinned: true, unreadCount: 1 });
     expect(back.activeItemCount).toBe(1);
   } finally {
     await cleanup(db, suffix);

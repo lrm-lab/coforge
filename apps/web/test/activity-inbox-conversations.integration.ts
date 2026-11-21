@@ -223,8 +223,8 @@ test("direct messages between members, and a member's with themself, are listed 
         ]),
     ).toEqual([
       ["direct", withBob.conversationId, bobPeer, 1],
-      ["direct", withSelf.conversationId, peopleAt(alice, "alice"), 0],
       ["thread", withBob.conversationId, bobPeer, 1],
+      ["direct", withSelf.conversationId, peopleAt(alice, "alice"), 0],
     ]);
     expect(await inbox.navAttention(workspace.id, alice.id)).toMatchObject({ hasUnread: true });
 

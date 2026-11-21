@@ -52,13 +52,15 @@ function viewSql(filter: ActivityInboxFilter) {
   if (filter === "artifacts") return Prisma.sql`FALSE`;
   if (filter === "unread") return Prisma.sql`items."hasUnread"`;
   if (filter === "mentions") return Prisma.sql`items."firstMentionMessageId" IS NOT NULL`;
-  return Prisma.sql`items."pinOrder" IS NULL`;
+  return Prisma.sql`(items."pinOrder" IS NULL OR items."hasUnread")`;
 }
 
 function afterSql(cursor: ActivityInboxCursor | undefined) {
   if (!cursor) return Prisma.sql`TRUE`;
-  return Prisma.sql`(items."latestAt", items."latestSequence", items."key" COLLATE "C")
-    < (${new Date(cursor.at).toISOString()}::timestamp(3), ${cursor.sequence}::int,
+  const unread = "hasUnread" in cursor ? Prisma.sql`items."hasUnread",` : Prisma.empty;
+  const boundary = "hasUnread" in cursor ? Prisma.sql`${cursor.hasUnread}::boolean,` : Prisma.empty;
+  return Prisma.sql`(${unread} items."latestAt", items."latestSequence", items."key" COLLATE "C")
+    < (${boundary} ${new Date(cursor.at).toISOString()}::timestamp(3), ${cursor.sequence}::int,
        ${cursor.key}::text COLLATE "C")`;
 }
 
@@ -67,13 +69,15 @@ export function activityPageSql(
   userId: string,
   options: { filter: ActivityInboxFilter; cursor?: ActivityInboxCursor; limit: number },
 ) {
+  const unreadFirst = options.filter === "all";
   return Prisma.sql`
     WITH items AS MATERIALIZED (
       ${activityItemsSql(workspaceId, userId)}
     ), page AS (
       SELECT * FROM items
       WHERE items."pastDone" AND ${viewSql(options.filter)} AND ${afterSql(options.cursor)}
-      ORDER BY items."latestAt" DESC, items."latestSequence" DESC, items."key" COLLATE "C" DESC
+      ORDER BY ${unreadFirst ? Prisma.sql`items."hasUnread" DESC,` : Prisma.empty}
+        items."latestAt" DESC, items."latestSequence" DESC, items."key" COLLATE "C" DESC
       -- One past the page says whether there is a next one.
       LIMIT ${options.limit + 1}
     ), listed AS (
@@ -130,6 +134,7 @@ export function activityPageSql(
     ORDER BY listed."isPin" DESC,
       CASE WHEN listed."isPin" THEN listed."pinOrder" END,
       CASE WHEN listed."isPin" THEN listed."pinnedAt" END,
+      ${unreadFirst ? Prisma.sql`listed."hasUnread" DESC,` : Prisma.empty}
       listed."latestAt" DESC, listed."latestSequence" DESC, listed."key" COLLATE "C" DESC`;
 }
 
@@ -149,7 +154,8 @@ export function activityItemsSql(workspaceId: string, userId: string) {
 function pinsSql(filter: ActivityInboxFilter, cursor: ActivityInboxCursor | undefined) {
   return filter === "all" && !cursor
     ? Prisma.sql`UNION ALL
-      SELECT TRUE AS "isPin", items.* FROM items WHERE items."pinOrder" IS NOT NULL`
+      SELECT TRUE AS "isPin", items.* FROM items
+      WHERE items."pastDone" AND items."pinOrder" IS NOT NULL AND NOT items."hasUnread"`
     : Prisma.empty;
 }
 
