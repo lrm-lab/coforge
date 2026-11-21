@@ -14,6 +14,7 @@
   "tasks_change_priority": "修改优先级",
   "tasks_history_due_changed": "修改截止时间",
   "tasks_due": "截止时间",
+  "tasks_due_include_time": "指定时间",
   "tasks_due_set": "设置截止时间",
   "tasks_due_clear": "清除截止时间",
   "tasks_due_none": "无截止时间",

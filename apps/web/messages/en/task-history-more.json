@@ -14,6 +14,7 @@
   "tasks_change_priority": "Change priority",
   "tasks_history_due_changed": "Changed due date",
   "tasks_due": "Due date",
+  "tasks_due_include_time": "Include time",
   "tasks_due_set": "Set due date",
   "tasks_due_clear": "Clear due date",
   "tasks_due_none": "No due date",

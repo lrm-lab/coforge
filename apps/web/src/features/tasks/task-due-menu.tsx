@@ -2,8 +2,18 @@ import { Calendar } from "@untitledui/icons";
 import { useState, type ComponentProps } from "react";
 
 import { Button } from "#src/components/base/buttons/button";
-import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { Input } from "#src/components/base/input/input";
+import { Checkbox } from "#src/components/base/checkbox/checkbox";
+import { DateCalendar } from "#src/components/ui/date-calendar";
+import { parseDate, parseTime, Time } from "@internationalized/date";
+import {
+  DateInput,
+  DateSegment,
+  Dialog,
+  DialogTrigger,
+  I18nProvider,
+  Popover,
+  TimeField,
+} from "react-aria-components";
 import {
   formatTaskDueForDisplay,
   instantFromLocalDate,
@@ -37,43 +47,43 @@ export function TaskDueMenu({
   dueState?: "overdue" | "due_soon" | null;
   disabled: boolean;
   onSelect: (dueAt: string | null, dueHasTime?: boolean) => void;
-  placement?: ComponentProps<typeof Dropdown.Popover>["placement"];
+  placement?: ComponentProps<typeof Popover>["placement"];
 }) {
   const timeZone = useTimeZone();
   const timeFormat = useTimeFormat();
   const [open, setOpen] = useState(false);
-  const [withTime, setWithTime] = useState(Boolean(dueHasTime));
-  const [draft, setDraft] = useState<string | null>(null);
+  const [withTime, setWithTime] = useState(Boolean(dueAt && (dueHasTime ?? true)));
+  const [day, setDay] = useState("");
+  const [time, setTime] = useState<Time | null>(null);
   const shown = dueAt
     ? formatTaskDueForDisplay(dueAt, dueHasTime, timeZone, getLocale(), timeFormat)
     : m.tasks_due_none();
-  const value =
-    draft ??
-    (dueAt
+  const instant =
+    day && (!withTime || time)
       ? withTime
-        ? localDateTimeInput(dueAt, timeZone)
-        : localDateInput(dueAt, timeZone, dueHasTime ?? true)
-      : "");
-  const instant = (() => {
-    if (draft === null || !draft) return null;
-    try {
-      return withTime
-        ? instantFromLocalDateTime(draft, timeZone)
-        : instantFromLocalDate(draft, timeZone);
-    } catch {
-      return null;
-    }
-  })();
+        ? instantFromLocalDateTime(`${day}T${time}`, timeZone)
+        : instantFromLocalDate(day, timeZone)
+      : null;
+  const unchanged =
+    dueAt &&
+    day === localDateInput(dueAt, timeZone, dueHasTime ?? true) &&
+    withTime === (dueHasTime ?? true) &&
+    (!withTime || time?.toString().slice(0, 5) === localDateTimeInput(dueAt, timeZone).slice(11));
   const state = dueStateText(dueState);
   const close = () => setOpen(false);
   return (
-    <Dropdown.Root
+    <DialogTrigger
       isOpen={open}
       onOpenChange={(next) => {
         setOpen(next);
         if (next) {
-          setWithTime(Boolean(dueHasTime));
-          setDraft(null);
+          setWithTime(Boolean(dueAt && (dueHasTime ?? true)));
+          setDay(dueAt ? localDateInput(dueAt, timeZone, dueHasTime ?? true) : "");
+          setTime(
+            dueAt && (dueHasTime ?? true)
+              ? parseTime(localDateTimeInput(dueAt, timeZone).split("T")[1])
+              : new Time(17),
+          );
         }
       }}
     >
@@ -90,58 +100,73 @@ export function TaskDueMenu({
           <UnsetValue icon={Calendar} text={m.tasks_due_none()} field={m.tasks_due()} />
         )}
       </TaskFieldTrigger>
-      <Dropdown.Popover placement={placement} className="w-64 p-3">
-        <div className="flex flex-col gap-2">
-          <Input
-            type={withTime ? "datetime-local" : "date"}
-            aria-label={m.tasks_due()}
-            value={value}
-            onChange={setDraft}
-          />
-          <label className="flex cursor-pointer items-center gap-2 text-xs text-secondary select-none">
-            <input
-              type="checkbox"
-              checked={withTime}
-              onChange={(event) => {
-                const next = event.target.checked;
-                setWithTime(next);
-                if (next && value && !value.includes("T")) setDraft(`${value}T17:00`);
-                else if (!next && value.includes("T")) setDraft(value.slice(0, 10));
-              }}
+      <Popover
+        placement={placement}
+        className="untitled-ui w-72 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-secondary bg-primary p-3 shadow-lg"
+      >
+        <Dialog aria-label={m.tasks_due()} className="outline-hidden">
+          <I18nProvider locale={getLocale()}>
+            <DateCalendar
+              label={m.tasks_due()}
+              value={day ? parseDate(day) : null}
+              timeZone={timeZone}
+              onChange={(date) => setDay(date.toString())}
             />
-            <span>HH:mm</span>
-          </label>
-          <div className="flex items-center justify-end gap-2">
-            {dueAt && (
+            <div className="mt-2 flex min-h-11 items-center justify-between gap-2 border-t border-secondary py-2">
+              <Checkbox
+                label={m.tasks_due_include_time()}
+                isSelected={withTime}
+                onChange={setWithTime}
+              />
+              {withTime && (
+                <TimeField
+                  aria-label={m.tasks_due_include_time()}
+                  value={time}
+                  onChange={setTime}
+                  hourCycle={24}
+                  granularity="minute"
+                >
+                  <DateInput className="flex rounded-lg border border-primary px-2 py-1 text-sm text-primary">
+                    {(segment) => (
+                      <DateSegment
+                        segment={segment}
+                        className="rounded px-px tabular-nums outline-hidden focus:bg-brand-solid focus:text-white"
+                      />
+                    )}
+                  </DateInput>
+                </TimeField>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              {dueAt && (
+                <Button
+                  size="sm"
+                  color="tertiary"
+                  isDisabled={disabled}
+                  onClick={() => {
+                    onSelect(null);
+                    close();
+                  }}
+                >
+                  {m.tasks_due_clear()}
+                </Button>
+              )}
               <Button
                 size="sm"
-                color="tertiary"
-                isDisabled={disabled}
+                color="primary"
+                isDisabled={disabled || instant === null || Boolean(unchanged)}
                 onClick={() => {
-                  setDraft(null);
-                  onSelect(null);
+                  if (instant === null) return;
+                  onSelect(instant, withTime);
                   close();
                 }}
               >
-                {m.tasks_due_clear()}
+                {m.tasks_due_set()}
               </Button>
-            )}
-            <Button
-              size="sm"
-              color="primary"
-              isDisabled={disabled || instant === null}
-              onClick={() => {
-                if (instant === null) return;
-                onSelect(instant, withTime);
-                setDraft(null);
-                close();
-              }}
-            >
-              {m.tasks_due_set()}
-            </Button>
-          </div>
-        </div>
-      </Dropdown.Popover>
-    </Dropdown.Root>
+            </div>
+          </I18nProvider>
+        </Dialog>
+      </Popover>
+    </DialogTrigger>
   );
 }
