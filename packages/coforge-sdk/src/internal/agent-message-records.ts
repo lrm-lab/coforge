@@ -15,7 +15,7 @@ export function encodeAgentMessageRecords(records: readonly AgentMessageRecord[]
     sequence: BigInt(m.sequence),
     createdAt: m.createdAt,
     attachments: encodeLocalAttachments(m.attachments),
-    task: m.task,
+    tasks: m.tasks ?? [],
     ...(m.attachmentCommentAnchor !== undefined
       ? { attachmentCommentAnchorJson: JSON.stringify(m.attachmentCommentAnchor) }
       : {}),
@@ -37,7 +37,7 @@ export function decodeAgentMessageRecords(
     body: string;
     createdAt: string;
     attachments: readonly RawLocalAttachment[];
-    task?: Parameters<typeof decodeMessageTask>[0];
+    tasks?: readonly Parameters<typeof decodeMessageTask>[0][];
     mentionsAgent?: boolean;
     attachmentCommentAnchorJson?: string;
   }[],
@@ -54,7 +54,7 @@ export function decodeAgentMessageRecords(
       body: m.body,
       createdAt: m.createdAt,
       attachments: decodeLocalAttachments(m.attachments),
-      ...(m.task ? { task: decodeMessageTask(m.task) } : {}),
+      ...(m.tasks?.length ? { tasks: m.tasks.map(decodeMessageTask) } : {}),
       ...(m.mentionsAgent ? { mentionsAgent: true } : {}),
       ...anchorFromJson(m.attachmentCommentAnchorJson),
     };

@@ -1,5 +1,4 @@
 import { useState, type ComponentProps, type ReactNode } from "react";
-import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import { Camera01, Edit01 } from "@untitledui/icons";
 import { RUNTIME_PROVIDER, RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN } from "@lrm/coforge-sdk/internal";
 import { AgentAvatarDialog } from "#src/features/agents/agent-avatar-dialog";
@@ -197,7 +196,6 @@ function AgentProfileTabBody({
           ) : (
             profileAvatar
           )}
-          {profile.deletedAt && <DeletedAgentBadge />}
           {onMascotChange && (
             <AgentAvatarDialog
               name={profile.displayName}

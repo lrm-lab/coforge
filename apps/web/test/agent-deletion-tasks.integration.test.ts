@@ -144,22 +144,24 @@ test.skipIf(!connectionString)(
           where: { conversationId: general.id, agentId: agent.id },
         }),
       ]);
-      const { message } = await legacyMessageTask(db, {
+      const { task, message } = await legacyMessageTask(db, {
         conversationId: general.id,
         workspaceId: workspace.id,
         creatorMemberId: creator.id,
         ownerMemberId: holder.id,
         title: "Half-done work",
       });
+      await db.task.update({
+        where: { id: task.id },
+        data: { sourceMessageId: message.id },
+      });
       const conversations = new PrismaDirectConversationRepository(db);
-      // Read around the Task's message, so each read sees it whatever the reader's cursor.
       const taskLine = async () =>
         (
           await conversations.readMessages(workspace.id, reader.id, "#general", {
             around: message.id,
           })
-        ).find((message) => message.task)!.task;
-      // The handle carries no "@", like every other handle an Agent reads.
+        ).find((row) => row.tasks?.length)!.tasks![0];
       expect(await taskLine()).toMatchObject({
         owner: { displayName: "Doomed", handle: agent.name },
       });

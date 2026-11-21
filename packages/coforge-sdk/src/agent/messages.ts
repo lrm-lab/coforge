@@ -61,7 +61,7 @@ export type AgentMessage = {
     contentType: string;
     sizeBytes: number;
   }[];
-  task?: MessageTaskMetadata;
+  tasks?: MessageTaskMetadata[];
   forwardedMessages?: ForwardedMessage[];
   forwarded?: ForwardedMessage;
   attachmentCommentAnchor?: import("./attachment-comments").AgentAttachmentCommentAnchor;

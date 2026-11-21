@@ -485,7 +485,13 @@ describe("PrismaDirectConversationRepository", () => {
               createdAt: new Date(0),
               sender: { agentId: null, agent: null, user: { username: "frank", description: "" } },
               attachments: [],
-              task: read === 3 ? null : taskStates[Math.min(read++, 2)],
+              sourceOfTasks:
+                read === 3
+                  ? []
+                  : (() => {
+                      const state = taskStates[Math.min(read++, 2)];
+                      return state ? [state] : [];
+                    })(),
             },
           ];
         },
@@ -506,20 +512,24 @@ describe("PrismaDirectConversationRepository", () => {
     }
     const repository = new TestConversationRepository(db);
 
-    expect((await repository.readMessages("workspace-1", "agent-1", "@frank"))[0]?.task).toBe(
+    expect((await repository.readMessages("workspace-1", "agent-1", "@frank"))[0]?.tasks).toBe(
       undefined,
     );
-    expect((await repository.readMessages("workspace-1", "agent-1", "@frank"))[0]?.task).toEqual({
-      number: 31,
-      status: "todo",
-    });
-    expect((await repository.readMessages("workspace-1", "agent-1", "@frank"))[0]?.task).toEqual({
-      number: 31,
-      status: "in_review",
-      owner: { displayName: "Ada Lovelace", handle: "ada" },
-    });
+    expect((await repository.readMessages("workspace-1", "agent-1", "@frank"))[0]?.tasks).toEqual([
+      {
+        number: 31,
+        status: "todo",
+      },
+    ]);
+    expect((await repository.readMessages("workspace-1", "agent-1", "@frank"))[0]?.tasks).toEqual([
+      {
+        number: 31,
+        status: "in_review",
+        owner: { displayName: "Ada Lovelace", handle: "ada" },
+      },
+    ]);
     expect(
-      (await repository.readMessages("workspace-1", "agent-1", "@frank:12345678"))[0]?.task,
+      (await repository.readMessages("workspace-1", "agent-1", "@frank:12345678"))[0]?.tasks,
     ).toBe(undefined);
   });
 
@@ -548,11 +558,13 @@ describe("PrismaDirectConversationRepository", () => {
             createdAt: new Date(0),
             sender: { agentId: null, agent: null, user: { username: "frank", description: "" } },
             attachments: [],
-            task: {
-              number: 31,
-              status: "todo",
-              owner: { user: owners[read++], agent: null },
-            },
+            sourceOfTasks: [
+              {
+                number: 31,
+                status: "todo",
+                owner: { user: owners[read++], agent: null },
+              },
+            ],
           },
         ],
       },
@@ -572,7 +584,7 @@ describe("PrismaDirectConversationRepository", () => {
     const ownerLabels = [];
     for (const _ of owners) {
       const [message] = await repository.readMessages("workspace-1", "agent-1", "@frank");
-      ownerLabels.push(message?.task?.owner);
+      ownerLabels.push(message?.tasks?.[0]?.owner);
     }
 
     expect(ownerLabels).toEqual([

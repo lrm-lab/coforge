@@ -27,7 +27,7 @@ export type DirectConversationPage = {
     createdAt: Date;
     target: string;
     attachments: AttachmentMetadata[];
-    task?: MessageTaskMetadata;
+    tasks?: MessageTaskMetadata[];
   } & AgentFacingSender)[];
   hasOlder: boolean;
   hasNewer: boolean;
@@ -191,7 +191,7 @@ export type DirectConversationRepository = {
       createdAt: Date;
       target: string;
       attachments: AttachmentMetadata[];
-      task?: MessageTaskMetadata;
+      tasks?: MessageTaskMetadata[];
     } & AgentFacingSender)[]
   >;
   readMessagesPage?(
@@ -217,7 +217,7 @@ export type DirectConversationRepository = {
       createdAt: Date;
       target: string;
       attachments: AttachmentMetadata[];
-      task?: MessageTaskMetadata;
+      tasks?: MessageTaskMetadata[];
     } & AgentFacingSender
   >;
   setAgentMessageReaction?(
@@ -243,7 +243,7 @@ export type DirectConversationRepository = {
       createdAt: Date;
       target: string;
       attachments: AttachmentMetadata[];
-      task?: MessageTaskMetadata;
+      tasks?: MessageTaskMetadata[];
     } & AgentFacingSender)[];
     hasMore: boolean;
   }>;

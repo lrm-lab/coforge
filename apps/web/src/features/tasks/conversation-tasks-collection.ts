@@ -154,46 +154,31 @@ const MESSAGES_PER_READ = CONVERSATION_WINDOW_PAGE_SIZE;
 /** Task changes to apply: announced ones (`task.changed.v1`), or a command's own result. */
 export type TaskChanges = { tasks: readonly TaskView[]; deleted: readonly string[] };
 
-/**
- * The Tasks the collection holds, by id and by number, for readers of one Task; by the message
- * each is attached to (`messageId`: a Task's own id is not its message's, task #507); by the top-level
- * message each was made from (`sourceMessageId`, task conversations' "Send as Task"), in number
- * order, so that message shows its Task as one that became a Task does; and the numbers known to
- * name no Task: a read by number answered without them, or their Task's deletion was announced
- * (`apply`). A body's reference to one of those is plain words (`TaskReference`). A row the
- * collection drops because no read holds it any more is not one.
- */
 type HeldConversationTasks = {
   byId: ReadonlyMap<string, ConversationTask>;
   byNumber: ReadonlyMap<number, ConversationTask>;
-  byMessage: ReadonlyMap<string, ConversationTask>;
   bySource: ReadonlyMap<string, readonly ConversationTask[]>;
   missing: ReadonlySet<number>;
 };
 
-/** The stream message a Task was made from; none for a thread reply, which no stream row shows. */
 function streamSource(task: ConversationTask) {
   return task.sourceMessage && !task.sourceMessage.threadRootId
     ? task.sourceMessage.messageId
     : undefined;
 }
 
-/** A new store state from the collection's changes: unchanged Tasks keep their very objects. */
 function heldAfter(
   held: HeldConversationTasks,
   changes: readonly ChangeMessage<ConversationTask, string | number>[],
 ): HeldConversationTasks {
   const byId = new Map(held.byId);
   const byNumber = new Map(held.byNumber);
-  const byMessage = new Map(held.byMessage);
   let bySource: Map<string, readonly ConversationTask[]> | undefined;
   const sources = () => (bySource ??= new Map(held.bySource));
   let missing = held.missing;
   for (const { type, value } of changes) {
     const known = byId.get(value.id);
     if (known && byNumber.get(known.number) === known) byNumber.delete(known.number);
-    if (known?.messageId && byMessage.get(known.messageId) === known)
-      byMessage.delete(known.messageId);
     const knownSource = known && streamSource(known);
     if (knownSource) {
       const rest = sources()
@@ -202,12 +187,10 @@ function heldAfter(
       if (rest?.length) sources().set(knownSource, rest);
       else sources().delete(knownSource);
     }
-    // A delete here is also a row no read holds any more, so it says nothing about the Task.
     if (type === "delete") byId.delete(value.id);
     else {
       byId.set(value.id, value);
       byNumber.set(value.number, value);
-      if (value.messageId) byMessage.set(value.messageId, value);
       const source = streamSource(value);
       if (source)
         sources().set(
@@ -220,15 +203,10 @@ function heldAfter(
         missing = new Set([...missing].filter((number) => number !== value.number));
     }
   }
-  return { byId, byNumber, byMessage, bySource: bySource ?? held.bySource, missing };
+  return { byId, byNumber, bySource: bySource ?? held.bySource, missing };
 }
 
-/**
- * How long a live query's read stays held after nothing shows it: a window that moves keeps the
- * Tasks it showed until the next window's read has answered, rather than blanking their badges.
- */
 export const DEMAND_GC_TIME_MS = 10_000;
-/** A remount or focus within a few seconds of a read does not read again. */
 const READ_STALE_TIME_MS = 5_000;
 
 export function createConversationTasks(
@@ -236,14 +214,11 @@ export function createConversationTasks(
   conversationId: string,
   api: ConversationTasksApi = serverConversationTasksApi,
 ) {
-  // A read that started before a change must not put the older copy, or a deleted Task, back:
-  // each read is complete for its own subset, so this is the only thing that could.
   const announced = createAnnouncedTasks();
 
   const store = createStore<HeldConversationTasks>({
     byId: new Map(),
     byNumber: new Map(),
-    byMessage: new Map(),
     bySource: new Map(),
     missing: new Set<number>(),
   });

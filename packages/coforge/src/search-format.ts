@@ -218,7 +218,7 @@ export function formatSearchResults(
       `Source: ${message.target}`,
       `Sender: ${searchSender(message)}`,
       `Time: ${formatLocalTimeWithOffset(message.createdAt)}`,
-      ...(message.task ? [taskSuffix(message).trim()] : []),
+      ...(message.tasks?.length ? [taskSuffix(message).trim()] : []),
       "",
       "<preview>",
       fenceMessageBody(renderSearchPreview(message.body, query)),

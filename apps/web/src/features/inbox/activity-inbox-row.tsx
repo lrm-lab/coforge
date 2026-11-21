@@ -25,7 +25,6 @@ import { actionCardPreviewText } from "#src/features/conversations/action-card-p
 import { systemNoticeText } from "#src/features/conversations/system-notice-text";
 import { taskStatusColor } from "#src/features/tasks/task-workflow";
 import { cn } from "#src/lib/utils";
-import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 import { m } from "#src/paraglide/messages";
@@ -305,7 +304,6 @@ function ActivityItemBadges({
           ) : null}
         </Badge>
       )}
-      {task?.ownerDeleted && <DeletedAgentBadge />}
       {showMention && <ActivityMentionBadge />}
       {item.unreadCount > 0 && <ActivityUnreadCount count={item.unreadCount} />}
     </span>
