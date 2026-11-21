@@ -85,7 +85,6 @@ import { AgentStopCoordinator } from "./agent-stop-coordinator";
 import { AgentLaunchCoordinator } from "./agent-launch-coordinator";
 import { startAgent } from "./agent-start-coordinator";
 import { deleteWorkspace } from "./runtime-lifecycle-operations";
-import { startupLifecycle } from "./runtime-upgrade-lifecycle";
 import { assertOwnIntent } from "./runtime-intent-validation";
 import { failCollectorRunningSlots } from "./runtime-collector-failure";
 import { runtimeEnvelope } from "./runtime-envelope";
@@ -149,12 +148,12 @@ import { launchFailureActivity } from "./runtime-launch-failure-activity";
 import { shutdownReasonForHold, type RunnerHold } from "./shutdown-reason";
 import { CodeAgentInventorySync, type CodeAgentDiscovery } from "./code-agent-inventory-sync";
 import { RuntimeAuthReporter } from "./runtime-auth-reporter";
-import { RuntimeStartup } from "./runtime-startup";
+import { assembleRuntimeStartup } from "./assemble-runtime-startup";
+import type { RuntimeStartup } from "./runtime-startup";
 import { RuntimeStop } from "./runtime-stop";
 import { composeMessages } from "./message-composition";
 import { assembleExitedDelivery } from "./assemble-exited-delivery";
 import { composeRuntimeServices, type RuntimeServices } from "./runtime-services-composition";
-import { startupPublications } from "./runtime-startup-publications";
 import { AgentOperations } from "./agent-operations";
 import { composeAgentControl } from "./agent-control-composition";
 import {
@@ -716,7 +715,7 @@ export class DaemonRuntime {
   }
 
   #createStartup(): RuntimeStartup {
-    return new RuntimeStartup({
+    return assembleRuntimeStartup({
       transport: () => this.#transport,
       replaceTransport: () => this.#replaceTransport(),
       credentials: this.#credentials,
@@ -725,20 +724,17 @@ export class DaemonRuntime {
       computerVersion: this.computerVersion,
       releaseChannel: this.releaseChannel,
       isStopping: () => this.#stopping,
-      publications: startupPublications({
-        handlers: this,
-        controlIntentPorts: () => this.#controlIntentPorts(),
-        lifecycle: this.lifecycle,
-        services: this.#services,
-        sync: this.#sync,
-        readyRunningAgentIds: () => this.#readyRunningAgentIds(),
-      }),
+      workspaceId: this.#connection.workspaceId,
+      handlers: this,
+      controlIntentPorts: () => this.#controlIntentPorts(),
+      lifecycle: this.lifecycle,
+      services: this.#services,
+      sync: this.#sync,
       agentControl: this.#agentControl,
       agentSessions: this.#agentSessions,
       configApply: this.#configApply,
       readyRunningAgentIds: () => this.#readyRunningAgentIds(),
       operatingSystem: this.#operatingSystem,
-      upgradeResults: this.#services.upgradeResults,
       runtimeAuth: this.#runtimeAuth,
       credentialHolds: this.#credentialHolds,
       runtimeAuthFactory: this.runtimeAuthFactory,
@@ -750,22 +746,14 @@ export class DaemonRuntime {
       stateDirectory: this.stateDirectory,
       contextView: this.#contextViewService,
       sideAsk: this,
-      quotaState: this.#services.quotaState,
       agentApiKey: (agentId) => this.agentApiKeys.get(agentId),
       resolveProviderSource: (agentId, entry) =>
         resolveContextViewProviderSource(this, agentId, entry),
       deleteWorkspace: (request) => this.#deleteWorkspace(this.#connection, request),
-      lifecycle: startupLifecycle(
-        this.lifecycle,
-        this.#services.upgradeResults,
-        this.#connection.workspaceId,
-      ),
-      reminders: this.#services.reminders,
       resyncAppConfigs: () => this.#resyncAppConfigs(),
       activityPublisher: this.#activityPublisher,
       sweeps: this.#sweeps,
       machineStatus: this.#machineStatus,
-      procJobs: this.#services.procJobs,
     });
   }
 
