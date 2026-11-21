@@ -7,9 +7,9 @@ export const reminderHelp: Readonly<Record<string, HelpEntry>> = {
   },
   "reminder schedule": {
     syntax:
-      "coforge reminder schedule --title <title> (--target <target>|--channel <target>) (--message-id <id>|--msg-id <id>) [--delay-seconds <n|duration>|--fire-at <iso>] [--repeat <rule> [--tz <zone>]]",
+      "coforge reminder schedule --title <title> (--target <target>|--channel <target>) (--message-id <id>|--msg-id <id>) [--delay-seconds <n|duration>|--in <duration>|--by <duration>|--fire-at <iso>] [(--repeat <rule>|--cadence <rule>) [--tz <zone>]]",
     guidance:
-      "Give a time (--delay-seconds or --fire-at) or a --repeat rule; --tz only accompanies --repeat, and --repeat none is an update, not a schedule.",
+      "Give a time, a repeat rule, or both. Use --tz with --repeat or --cadence. Set the cadence to none with reminder update.",
     example:
       "coforge reminder schedule --title 'Check the deploy' --target '#general' --msg-id 01a1f2ec --delay-seconds 15m",
   },

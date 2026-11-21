@@ -340,6 +340,34 @@ test("reminder help names the flags its parser accepts", async () => {
   ).not.toThrow();
 });
 
+test("schedule help and error usage include each accepted time and cadence alias", async () => {
+  const schedule = [
+    "reminder",
+    "schedule",
+    "--title",
+    "t",
+    "--channel",
+    "@ada",
+    "--msg-id",
+    "abcd1234",
+  ];
+  for (const flag of ["--in", "--by"]) {
+    expect(() => parseArgs([...schedule, flag, "15m"])).not.toThrow();
+  }
+  expect(() =>
+    parseArgs([...schedule, "--cadence", "every:1d", "--tz", "Europe/Paris"]),
+  ).not.toThrow();
+  expect(() => parseArgs([...schedule, "--by", "15m", "--tz", "Europe/Paris"])).toThrow();
+  expect(() => parseArgs(["reminder", "list", "--all", "--status", "scheduled"])).toThrow();
+
+  const help = await run(["reminder", "schedule", "--help"], transport);
+  for (const flag of ["--in <duration>", "--by <duration>", "--cadence <rule>"]) {
+    expect(help).toContain(flag);
+    expect(() => parseArgs(schedule)).toThrow(flag);
+  }
+  expect(help).toContain("(--repeat <rule>|--cadence <rule>) [--tz <zone>]");
+});
+
 test("every reminder help example parses as written", () => {
   const tokenize = (line: string) =>
     line
