@@ -33,7 +33,6 @@ const OUTCOME_TEXT: Record<Outcome, () => string> = {
   failed: m.agent_turn_stop_failed,
 };
 
-/** The cloud decides when a turn is stalled; the panel only offers its scoped interrupt here. */
 export function AgentProfileStatus({
   agent,
   display,
@@ -76,7 +75,6 @@ export function AgentProfileStatus({
         {note}
       </>
     );
-  // A quota gone stops the Agent, so it is offline, yet someone still has to act on it.
   const alert = display?.activityKind === "error" || agentDisplay(display).alert;
   if (!alert) return note;
   return (
@@ -93,16 +91,12 @@ export function AgentProfileStatus({
   );
 }
 
-/** Unmounting on recovery also discards feedback from the preceding stalled turn. */
 function StalledTurnStatus({ agentId }: { agentId: string }) {
   const start = useServerFn(startAgentTurnInterrupt);
   const read = useServerFn(readAgentTurnInterrupt);
   const toast = useAppToast();
   const [pending, guard] = useSubmitGuard();
   const [failure, setFailure] = useState<Failure | null>(null);
-  // The Daemon ends the stalled display before it reports, which unmounts this panel while the
-  // poll runs. The poll is not cancelled and the toast is still shown; only this component's own
-  // state is guarded.
   const mounted = useRef(false);
   useEffect(() => {
     mounted.current = true;
