@@ -1,0 +1,120 @@
+{
+  "dataset": "synthetic",
+  "documents": [
+    {
+      "id": "old-certificate",
+      "title": "Preview TLS certificate",
+      "content": "Preview and the main product share a TLS certificate.",
+      "project": "staging",
+      "applicability": "preview"
+    },
+    {
+      "id": "archived-certificate",
+      "title": "Preview TLS certificate",
+      "content": "The staging preview domain uses its own certificate, issued by Caddy.",
+      "project": "staging",
+      "status": "archived",
+      "applicability": "preview"
+    },
+    {
+      "id": "new-certificate",
+      "title": "Preview TLS certificate",
+      "content": "The staging preview domain uses its own certificate, issued by Caddy.",
+      "project": "staging",
+      "applicability": "preview",
+      "supersedes": ["old-certificate"]
+    },
+    {
+      "id": "task-error",
+      "title": "TASK-128 and Prisma P2025",
+      "content": "A database record was absent. Refresh its exact revision and retry."
+    },
+    {
+      "id": "database-transaction",
+      "title": "数据库选型",
+      "content": "跨表写入必须保证事务一致性，因此使用关系型数据库。"
+    },
+    {
+      "id": "link-expiry",
+      "title": "附件签名",
+      "content": "分享链接到期返回 403，附件仍可在工作区查看。"
+    },
+    {
+      "id": "index-migration",
+      "title": "Embedding index migration",
+      "content": "After changing the encoder, regenerate vectors for every record in the index."
+    },
+    {
+      "id": "retention",
+      "title": "Retention policy",
+      "content": "Archived memory history is retained for verification."
+    },
+    {
+      "id": "invitation",
+      "title": "Workspace invitations",
+      "content": "An invitation link can be revoked by a workspace administrator."
+    },
+    {
+      "id": "upload-size",
+      "title": "Maximum attachment size",
+      "content": "Uploads over the workspace limit should be stored as a linked artifact."
+    },
+    {
+      "id": "task-blocker",
+      "title": "依赖关系",
+      "content": "前置任务未关闭时，领取任务会显示对应的阻塞原因。"
+    },
+    {
+      "id": "future-certificate",
+      "title": "Future preview TLS certificate",
+      "content": "Switch to an alternative issuer after a future release.",
+      "project": "staging",
+      "effectiveAt": "2999-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "production-certificate",
+      "title": "Production preview TLS certificate",
+      "content": "Production certificates are provisioned separately by the infrastructure team.",
+      "project": "production"
+    }
+  ],
+  "questions": [
+    {
+      "id": "exact-error",
+      "category": "identifier",
+      "query": "TASK-128 P2025",
+      "relevant": ["task-error"]
+    },
+    {
+      "id": "encoder-change",
+      "category": "cross-language",
+      "query": "更换语义模型后需要重新计算历史条目吗",
+      "relevant": ["index-migration"]
+    },
+    {
+      "id": "atomic-write",
+      "category": "paraphrase",
+      "query": "怎样保证两个数据集合同时写入或同时回滚",
+      "relevant": ["database-transaction"]
+    },
+    {
+      "id": "current-certificate",
+      "category": "revision",
+      "query": "Which TLS certificate does the preview domain currently use?",
+      "project": "staging",
+      "relevant": ["new-certificate"],
+      "obsolete": [
+        "old-certificate",
+        "archived-certificate",
+        "future-certificate",
+        "production-certificate"
+      ]
+    },
+    {
+      "id": "expired-link",
+      "category": "paraphrase",
+      "query": "别人发的文件链接过期后还能从哪里打开",
+      "relevant": ["link-expiry"]
+    }
+  ]
+}
