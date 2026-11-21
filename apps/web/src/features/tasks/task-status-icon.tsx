@@ -179,3 +179,22 @@ export function TaskNumberBadge({
     </BadgeWithIcon>
   );
 }
+
+export function TaskStatusBadge({ status }: { status: TaskStatus }) {
+  return (
+    <span data-task-status={status} className="inline-flex shrink-0">
+      <BadgeWithIcon
+        type="color"
+        size="sm"
+        color={taskStatusColor(status).badge}
+        iconLeading={
+          (STATUS_BADGE_ICON as Record<string, IconComponentType | undefined>)[status as string] ??
+          STATUS_BADGE_ICON.todo
+        }
+        className="inline-flex whitespace-nowrap"
+      >
+        {statusLabel(status)}
+      </BadgeWithIcon>
+    </span>
+  );
+}

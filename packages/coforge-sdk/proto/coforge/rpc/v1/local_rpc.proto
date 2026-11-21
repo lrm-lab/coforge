@@ -25,7 +25,8 @@ message AgentMessageRecord {
   string body = 7;
   string created_at = 8;
   repeated LocalAttachmentMetadata attachments = 9;
-  LocalMessageTaskMetadata task = 10;
+  reserved 10;
+  reserved "task";
   // Present when the sender knows whether this message personally @mentioned the reading Agent.
   optional bool mentions_agent = 11;
   reserved 12;
@@ -33,6 +34,7 @@ message AgentMessageRecord {
   // Where an attachment comment points, when this message is one: the anchor
   // {type, data} object as JSON. Absent for ordinary messages.
   optional string attachment_comment_anchor_json = 13;
+  repeated LocalMessageTaskMetadata tasks = 14;
 }
 
 message LocalAttachmentMetadata {

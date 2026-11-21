@@ -22,11 +22,12 @@ import {
   systemEventTargetFromDirectKey,
 } from "#src/server/app-agent-events/app-event-target.server";
 import type { DirectTargetOf, TargetConversation } from "./agent-peer-direct.repositories.server";
-const TASK_METADATA_SELECT = {
+const SOURCE_TASKS_METADATA_SELECT = {
+  where: { deletedAt: null },
+  orderBy: { number: "asc" as const },
   select: {
     number: true,
     status: true,
-    deletedAt: true,
     owner: {
       select: {
         user: { select: { username: true, displayName: true } },
@@ -34,7 +35,7 @@ const TASK_METADATA_SELECT = {
       },
     },
   },
-} satisfies NonNullable<Prisma.MessageInclude["task"]>;
+} satisfies Prisma.Message$sourceOfTasksArgs;
 const ACTION_CARD_STATE_SELECT = {
   select: {
     state: true,
@@ -56,7 +57,7 @@ export const AGENT_FORWARD_SELECT = {
 export const AGENT_MESSAGE_INCLUDE = {
   sender: MESSAGE_SENDER_SELECT,
   attachments: { orderBy: { position: "asc" }, omit: { imageWidth: true, imageHeight: true } },
-  task: TASK_METADATA_SELECT,
+  sourceOfTasks: SOURCE_TASKS_METADATA_SELECT,
   actionCard: ACTION_CARD_STATE_SELECT,
   mentions: MESSAGE_MENTIONS_SELECT,
   forwards: AGENT_FORWARD_SELECT,
@@ -146,7 +147,7 @@ function commentAnchor(
 export function toAgentMessage(
   row: Pick<DirectConversationMessageRow, "id" | "sequence" | "body" | "createdAt"> & {
     sender: Parameters<typeof agentMessageSender>[0];
-    task: Parameters<typeof messageTask>[0];
+    sourceOfTasks?: readonly MessageTaskRow[];
     attachments: (AttachmentMetadata & ForwardCopy)[];
     attachmentComment?: {
       attachmentId: string;
@@ -171,7 +172,7 @@ export function toAgentMessage(
   readerAgentId?: string,
   channelCoordination?: string,
 ) {
-  const task = messageTask(row.task);
+  const tasks = messageTasks(row.sourceOfTasks);
   const sender = agentMessageSender(row.sender);
   const anchor = commentAnchor(row.attachmentComment);
   return {
@@ -199,7 +200,7 @@ export function toAgentMessage(
       return attachment;
     }),
     ...(row._count?.replies ? { replyCount: row._count.replies } : {}),
-    ...(task ? { task } : {}),
+    ...(tasks ? { tasks } : {}),
     ...(anchor ? { attachmentCommentAnchor: anchor } : {}),
   };
 }
@@ -216,41 +217,41 @@ function taskStatus(value: string): TaskStatus {
       throw new Error("invalid persisted Task status");
   }
 }
-function messageTask(
-  task: {
-    deletedAt?: Date | null;
-    number: number;
-    status: string;
-    owner: {
-      user: HumanNames | null;
-      agent: {
-        name: string;
-        displayName: string;
-        deletedAt: Date | null;
-      } | null;
+type MessageTaskRow = {
+  number: number;
+  status: string;
+  owner: {
+    user: HumanNames | null;
+    agent: {
+      name: string;
+      displayName: string;
+      deletedAt: Date | null;
     } | null;
-  } | null,
-): MessageTaskMetadata | undefined {
-  if (!task) return undefined;
-  if (task.deletedAt)
-    return { deleted: true, number: task.number, status: taskStatus(task.status) };
-  const agent = task.owner?.agent;
-  const user = task.owner?.user;
-  const handle = agent ? agent.name : user?.username;
-  const displayName = agent ? agent.displayName || handle : user && humanLabel(user);
-  return {
-    number: task.number,
-    status: taskStatus(task.status),
-    ...(displayName && handle
-      ? {
-          owner: {
-            displayName,
-            handle,
-            ...(agent?.deletedAt ? { deleted: true } : {}),
-          },
-        }
-      : {}),
-  };
+  } | null;
+};
+function messageTasks(
+  rows: readonly MessageTaskRow[] | undefined,
+): MessageTaskMetadata[] | undefined {
+  if (!rows?.length) return undefined;
+  return rows.map((task) => {
+    const agent = task.owner?.agent;
+    const user = task.owner?.user;
+    const handle = agent ? agent.name : user?.username;
+    const displayName = agent ? agent.displayName || handle : user && humanLabel(user);
+    return {
+      number: task.number,
+      status: taskStatus(task.status),
+      ...(displayName && handle
+        ? {
+            owner: {
+              displayName,
+              handle,
+              ...(agent?.deletedAt ? { deleted: true } : {}),
+            },
+          }
+        : {}),
+    };
+  });
 }
 export async function readWindowAround(
   db: Pick<PrismaClient, "message">,

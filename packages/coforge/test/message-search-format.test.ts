@@ -37,21 +37,27 @@ test("formatSearchResults renders a query header, result blocks, and the context
   ).toBe(true);
 });
 
-test("formatSearchResults shows a result's task between its time and preview", () => {
+test("formatSearchResults shows a result's tasks between its time and preview", () => {
   const output = formatSearchResults("release", {
     messages: [
       message({
-        task: {
-          number: 7,
-          status: "in_progress",
-          owner: { handle: "ada", deleted: false },
-        } as AgentMessageRecord["task"],
+        tasks: [
+          {
+            number: 7,
+            status: "in_progress",
+            owner: { displayName: "Ada", handle: "ada", deleted: false },
+          },
+          {
+            number: 8,
+            status: "done",
+          },
+        ],
       }),
     ],
     hasMore: false,
   });
   expect(output).toContain(
-    "Time: 2026-09-07 18:00:00 +08:00\n[task #7 status=in_progress assignee=@ada]\n\n<preview>",
+    "Time: 2026-09-07 18:00:00 +08:00\n[tasks #general:#7 in_progress @ada, #general:#8 done]\n\n<preview>",
   );
 });
 

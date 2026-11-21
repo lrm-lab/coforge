@@ -1148,7 +1148,7 @@ test("message check prints one Tasks manual pointer for a window with tracked wo
           body: "Fix login",
           createdAt: "2026-09-03T10:00:00Z",
           attachments: [],
-          task: { number: 7, status: "todo" },
+          tasks: [{ number: 7, status: "todo" }],
         },
         {
           id: "message-8",
@@ -1160,7 +1160,7 @@ test("message check prints one Tasks manual pointer for a window with tracked wo
           body: "Fix logout",
           createdAt: "2026-09-03T10:01:00Z",
           attachments: [],
-          task: { number: 8, status: "todo" },
+          tasks: [{ number: 8, status: "todo" }],
         },
       ],
     }),
@@ -1169,8 +1169,8 @@ test("message check prints one Tasks manual pointer for a window with tracked wo
     view: async () => ({ bytes: new Uint8Array() }),
   });
 
-  expect(output).toContain("[task #7 status=todo]");
-  expect(output).toContain("[task #8 status=todo]");
+  expect(output).toContain("[tasks dm:@ada:#7 todo]");
+  expect(output).toContain("[tasks dm:@ada:#8 todo]");
   expect(output).toContain("Tracked Tasks: coforge manual get tasks");
   expect((output as string).split("coforge manual get tasks")).toHaveLength(2);
   expect(output).toContain("No more new inbox messages.");

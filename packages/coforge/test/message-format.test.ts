@@ -75,28 +75,29 @@ test("formatMessageLine renders the shared bracket line with attachment and task
       " diagram.png (id:bbbb2222-0000-4000-8000-000000000002) —" +
       " use `coforge attachment view --id <attachmentId> --output <path>` to download]",
   );
-  const withTask = message({
-    task: { number: 12, status: "in_progress", owner: { displayName: "Ada", handle: "ada" } },
+  const withTasks = message({
+    tasks: [
+      { number: 12, status: "in_progress", owner: { displayName: "Ada", handle: "ada" } },
+      { number: 13, status: "todo" },
+    ],
   });
-  expect(formatMessageLine(withTask)).toBe(
+  expect(formatMessageLine(withTasks)).toBe(
     "[target=#general msg=aaaaaaaa-0000 time=2026-09-07 10:00:00Z type=human] @ada: hello there" +
-      " [task #12 status=in_progress assignee=@ada]",
+      " [tasks #general:#12 in_progress @ada, #general:#13 todo]",
   );
   const withDeletedOwner = message({
-    task: {
-      number: 46,
-      status: "in_progress",
-      owner: { displayName: "Kiro", handle: "kiro", deleted: true },
-    },
+    target: "@frank",
+    tasks: [
+      {
+        number: 46,
+        status: "in_progress",
+        owner: { displayName: "Kiro", handle: "kiro", deleted: true },
+      },
+    ],
   });
   expect(formatMessageLine(withDeletedOwner)).toBe(
-    "[target=#general msg=aaaaaaaa-0000 time=2026-09-07 10:00:00Z type=human] @ada: hello there" +
-      " [task #46 status=in_progress assignee=@kiro [deleted]]",
-  );
-  const withTaskNoOwner = message({ task: { number: 3, status: "todo" } });
-  expect(formatMessageLine(withTaskNoOwner)).toBe(
-    "[target=#general msg=aaaaaaaa-0000 time=2026-09-07 10:00:00Z type=human] @ada: hello there" +
-      " [task #3 status=todo]",
+    "[target=@frank msg=aaaaaaaa-0000 time=2026-09-07 10:00:00Z type=human] @ada: hello there" +
+      " [tasks dm:@frank:#46 in_progress @kiro [deleted]]",
   );
 });
 test("channel role context precedes the line and does not consume the summary budget", () => {
@@ -385,11 +386,11 @@ test("tracked Tasks carry one workflow pointer per window, not per message", () 
   const ordinary = message();
   const first = message({
     id: "bbbbbbbb-0000-4000-8000-000000000002",
-    task: { number: 7, status: "todo" },
+    tasks: [{ number: 7, status: "todo" }],
   });
   const second = message({
     id: "cccccccc-0000-4000-8000-000000000003",
-    task: { number: 8, status: "in_progress" },
+    tasks: [{ number: 8, status: "in_progress" }],
   });
   expect(formatMessageLine(ordinary)).not.toContain("coforge manual get tasks");
   expect(formatMessageLine(first)).not.toContain("coforge manual get tasks");

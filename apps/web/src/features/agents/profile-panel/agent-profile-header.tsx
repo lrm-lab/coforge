@@ -12,7 +12,8 @@ import { AgentProfileActionsMenu } from "./agent-profile-actions-menu";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import type { AgentMascot } from "#src/features/agents/agent-mascot";
 import { AgentMascotAvatar } from "#src/features/agents/agent-mascot-avatar";
-import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
+import { DELETED_AGENT_NAME_CLASS, DeletedAgentLabel } from "#src/features/agents/deleted-agent";
+import { cn } from "#src/lib/utils";
 import { type AgentRuntimeControls } from "#src/features/agents/agent-runtime-controls";
 import { m } from "#src/paraglide/messages";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
@@ -81,10 +82,15 @@ export function AgentProfileHeader({
           deleted={deleted}
         />
       )}
-      <Name className="min-w-0 flex-1 truncate text-md font-medium tracking-tight text-secondary">
+      <Name
+        className={cn(
+          "min-w-0 flex-1 truncate text-md font-medium tracking-tight",
+          deleted ? DELETED_AGENT_NAME_CLASS : "text-secondary",
+        )}
+      >
         {agent.displayName}
       </Name>
-      {deleted && <DeletedAgentBadge />}
+      {deleted && <DeletedAgentLabel />}
       <div className="flex items-center gap-2">
         {canMessage && (
           <ButtonUtility

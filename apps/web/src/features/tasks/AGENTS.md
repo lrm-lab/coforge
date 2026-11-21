@@ -127,11 +127,11 @@ workspaceId]` Query its loader fills (`task-overview-collection.ts`,
   ids and `projects` holds Project ids, with `none` meaning no owner or no
   Project (`task-filters.ts`).
 - Read [Tasks board rows, cards and hidden columns](../../../../../docs/design/tasks-board.md) when changing a task row, card, status icon or `TaskNumberBadge`.
-- A message row's part reads its one Task through `useNumberedTask` /
-  `useMessageTask`, selectors over the collection's TanStack Store (`byId`,
-  `byNumber`, `byMessage`, `bySource`, where an unchanged Task keeps its object), never from a list
-  passed down. A message's Task is the one made from it
-  (`sourceMessageId`), which a message window reads by that message's sequence. They never read anything themselves, so a row adds no request.
+- A message row's part reads its Tasks through `useNumberedTask` /
+  `useMessageTasks`, selectors over the collection's TanStack Store (`byId`,
+  `byNumber`, `bySource`, where an unchanged Task keeps its object), never from a list
+  passed down. A message's Tasks are those made from it
+  (`sourceMessageId`), which a message window reads by that message's sequence, rendered as a compact bordered list card under the message. They never read anything themselves, so a row adds no request.
   A body's task reference whose number the collection does not hold yet opens
   the Task on a press; it is the plain words only once a read
   by number has answered without it or its Task was deleted (`missing`).

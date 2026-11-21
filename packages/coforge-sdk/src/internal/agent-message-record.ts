@@ -17,7 +17,7 @@ export type AgentMessageRecord = {
   channelCoordination?: string;
   createdAt: string;
   attachments: LocalAttachment[];
-  task?: MessageTaskMetadata;
+  tasks?: MessageTaskMetadata[];
   mentionsAgent?: boolean;
   nonMemberMention?: boolean;
   replyCount?: number;
@@ -26,7 +26,6 @@ export type AgentMessageRecord = {
   attachmentCommentAnchor?: import("../agent/attachment-comments").AgentAttachmentCommentAnchor;
 };
 export type MessageTaskMetadata = {
-  deleted?: boolean;
   number: number;
   status: import("./tasks").TaskStatus;
   owner?: {

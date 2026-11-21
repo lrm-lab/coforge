@@ -48,11 +48,17 @@ test("models the read route's own response shape, including multiple attachments
             sizeBytes: 10,
           },
         ],
-        task: {
-          number: 42,
-          status: "in_progress",
-          owner: { displayName: "Ada", handle: "ada" },
-        },
+        tasks: [
+          {
+            number: 42,
+            status: "in_progress",
+            owner: { displayName: "Ada", handle: "ada" },
+          },
+          {
+            number: 43,
+            status: "todo",
+          },
+        ],
       },
     ],
     hasOlder: false,
@@ -61,7 +67,9 @@ test("models the read route's own response shape, including multiple attachments
   };
   expect(response.messages[0]?.attachments).toHaveLength(2);
   expect(response.messages[0]?.attachments[0]?.contentType).toBe("text/plain");
-  expect(response.messages[0]?.task?.status).toBe("in_progress");
+  expect(response.messages[0]?.tasks).toHaveLength(2);
+  expect(response.messages[0]?.tasks?.[0]?.status).toBe("in_progress");
+  expect(response.messages[0]?.tasks?.[1]?.number).toBe(43);
 });
 
 test("models the dedicated search route's own response shape", () => {

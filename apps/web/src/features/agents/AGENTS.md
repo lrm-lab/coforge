@@ -168,8 +168,8 @@ These rules apply to `src/features/agents/`.
   diagnostics copy and a way to that tab
   for whoever gets that tab. Nothing else in the panel repeats it.
 - `profile-panel/agent-profile-status.tsx` owns ordinary errors and the localized `runtime_stalled` warning, the panel's only Stop Current Turn entry (text only), with its pending state and response feedback. It starts with `startAgentTurnInterrupt` and polls `readAgentTurnInterrupt` (`agent-turn-interrupt-poll.ts`; no outcome by its deadline ends as `failed`, which offers Retry). The poll is never cancelled: the Daemon clears the stalled display before it reports, which unmounts the panel, so the success toast is shown whether or not it is still mounted and only the panel's own failure state is guarded.
-- `deleted-agent.tsx` owns archived-sender rendering (grey avatar and `ARCHIVED`
-  badge) for every message-history surface. Use it rather than local styling.
+- `deleted-agent.tsx` owns archived-Agent rendering (`DELETED_AGENT_NAME_CLASS` muted
+  name beside the grey avatar on compact rows, plus `DeletedAgentLabel` plain text on DM and profile headers). Use it rather than local styling.
 - `agent-avatar-dialog.tsx` is the creator's mascot picker, opened by clicking
   the avatar in the Profile tab: a grid of the platform mascots
   (`agent-mascot.ts`) with the current one selected, saved only on Save. Agent

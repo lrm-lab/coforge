@@ -4,6 +4,7 @@ import { CliError } from "./cli-error";
 import { channelSummaryBody } from "./message-summary";
 import { fenceMessageBody } from "./message-body-format";
 import { shortId } from "./short-id";
+import { taskRefForTarget } from "./task-ref";
 import {
   formatUtcTimestamp,
   renderForwardedMessage,
@@ -59,18 +60,21 @@ export function forwardedSuffix(message: AgentMessageRecord): string {
 }
 
 export function taskSuffix(message: AgentMessageRecord): string {
-  if (!message.task) return "";
-  if (message.task.deleted) return " [task deleted]";
-  const owner = message.task.owner
-    ? ` assignee=@${foldUntrustedLine(message.task.owner.handle)}${message.task.owner.deleted ? " [deleted]" : ""}`
-    : "";
-  return ` [task #${message.task.number} status=${message.task.status}${owner}]`;
+  if (!message.tasks?.length) return "";
+  const items = message.tasks.map((task) => {
+    const ref = message.target ? taskRefForTarget(message.target, task.number) : `#${task.number}`;
+    const owner = task.owner
+      ? ` @${foldUntrustedLine(task.owner.handle)}${task.owner.deleted ? " [deleted]" : ""}`
+      : "";
+    return `${ref} ${task.status}${owner}`;
+  });
+  return ` [tasks ${items.join(", ")}]`;
 }
 
 export const TASK_WORKFLOW_HINT = "Tracked Tasks: coforge manual get tasks";
 
 export function formatTaskWorkflowHint(messages: readonly AgentMessageRecord[]): string {
-  return messages.some((message) => message.task) ? TASK_WORKFLOW_HINT : "";
+  return messages.some((message) => Boolean(message.tasks?.length)) ? TASK_WORKFLOW_HINT : "";
 }
 
 export const AGENT_DM_NOTICE =

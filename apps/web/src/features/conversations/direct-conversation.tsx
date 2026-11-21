@@ -6,7 +6,7 @@ import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { AgentMascotAvatar } from "#src/features/agents/agent-mascot-avatar";
 import { agentDisplay } from "#src/features/agents/agent-status-display";
 import { AgentStatusMarker, AgentStatusText } from "#src/features/agents/agent-status-marker";
-import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
+import { DELETED_AGENT_NAME_CLASS, DeletedAgentLabel } from "#src/features/agents/deleted-agent";
 import { useLiveAgent } from "#src/features/agents/workspace-agents-realtime";
 import { useWatchAgentDisplay } from "#src/features/agents/watched-agent-displays";
 import { cn } from "#src/lib/utils";
@@ -100,19 +100,25 @@ export function DirectConversationHeader({
               <AriaButton
                 onPress={openProfile}
                 aria-label={m.agent_open_profile({ name: conversation.agent.displayName })}
-                className="min-w-0 cursor-pointer rounded text-left text-md font-semibold text-primary outline-focus-ring hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
+                className={cn(
+                  "min-w-0 cursor-pointer rounded text-left text-md font-semibold outline-focus-ring hover:underline focus-visible:outline-2 focus-visible:outline-offset-2",
+                  deleted ? DELETED_AGENT_NAME_CLASS : "text-primary",
+                )}
               >
                 <h1 className="truncate">{conversation.agent.displayName}</h1>
               </AriaButton>
             ) : (
-              <h1 className="min-w-0 truncate text-md font-semibold">
+              <h1
+                className={cn(
+                  "min-w-0 truncate text-md font-semibold",
+                  deleted && DELETED_AGENT_NAME_CLASS,
+                )}
+              >
                 {conversation.agent.displayName}
               </h1>
             )}
-            {/* A deleted Agent has no live status to report, so the header states the delete instead
-                of the generic "Status unknown" an absent display would otherwise produce. */}
             {deleted ? (
-              <DeletedAgentBadge />
+              <DeletedAgentLabel />
             ) : (
               <div className={status.alert ? "flex w-full min-w-0 items-center gap-1" : "contents"}>
                 <AgentStatusMarker status={status} className="size-2" />

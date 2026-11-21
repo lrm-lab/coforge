@@ -1,11 +1,10 @@
 import type { TaskView } from "@lrm/coforge-sdk/internal";
 
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
-import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
+import { DELETED_AGENT_NAME_CLASS } from "#src/features/agents/deleted-agent";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 
-/** An avatar and name, as cards show the owner and the popup shows the assignee and creator. */
 export function TaskPerson({
   person,
   className,
@@ -35,29 +34,22 @@ export function TaskPerson({
         {...faceOf(person)}
       />
       <span
-        className={
-          wrap ? "min-w-0 text-left break-words [[data-layout=chips]_&]:truncate" : "truncate"
-        }
+        className={cn(
+          wrap ? "min-w-0 text-left break-words [[data-layout=chips]_&]:truncate" : "truncate",
+          person.deleted && DELETED_AGENT_NAME_CLASS,
+        )}
       >
         {person.name}
       </span>
-      {/* A Task's holder can be a deleted Agent: its Tasks stay readable, so the card says the
-          identity is gone rather than reading as a live owner. */}
-      {person.deleted && <DeletedAgentBadge />}
     </span>
   );
 }
 
-/** The owner as an avatar alone (its name for assistive tech), as list rows and board cards
- * show it; no owner is a dashed ring. A deleted Agent keeps its greyed avatar and its ARCHIVED
- * marker, as everywhere a Task names its holder. No tooltip: its trigger would add a tab stop to
- * every card. */
 export function TaskOwnerAvatar({
   owner,
   showName = false,
 }: {
   owner: TaskView["owner"];
-  /** Names the owner beside the face, on one line that truncates first when the row is tight. */
   showName?: boolean;
 }) {
   const name = owner?.name ?? m.tasks_unassigned();
@@ -82,15 +74,19 @@ export function TaskOwnerAvatar({
         )}
       </span>
       {showName && owner && (
-        <span aria-hidden="true" className="min-w-0 truncate text-xs text-secondary">
+        <span
+          aria-hidden="true"
+          className={cn(
+            "min-w-0 truncate text-xs",
+            owner.deleted ? DELETED_AGENT_NAME_CLASS : "text-secondary",
+          )}
+        >
           {owner.name}
         </span>
       )}
-      {owner?.deleted && <DeletedAgentBadge />}
     </span>
   );
 }
 
-/** Who a face is, so an Agent with no picture of its own still shows its mascot. */
 const faceOf = (person: { kind?: "user" | "agent"; id?: string }) =>
   person.kind === "agent" ? { agentId: person.id } : { userId: person.id };

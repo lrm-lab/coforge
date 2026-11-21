@@ -13,7 +13,7 @@ import { cx } from "#src/utils/cx";
 import { priorityLabel } from "./task-history-more";
 import { TaskPriorityIcon } from "./task-priority-icon";
 import { TaskLabelChip } from "./task-label-chip";
-import { TaskOwnerAvatar, TaskPerson } from "./task-owner";
+import { TaskPerson } from "./task-owner";
 import { TaskStatusIcon, statusLabel } from "./task-status-icon";
 
 type ChipTask = Pick<TaskView, "number" | "title" | "status" | "owner"> &
@@ -63,13 +63,11 @@ export function TaskChip({
   task,
   channel,
   place,
-  underMessage = false,
   onPress,
 }: {
   task: ChipTask;
   channel?: string;
   place?: string;
-  underMessage?: boolean;
   onPress?: () => void;
 }) {
   const chipRef = useRef<HTMLSpanElement>(null);
@@ -103,9 +101,8 @@ export function TaskChip({
             data-task-status={task.status}
             className="max-w-[20em] min-w-0 truncate font-medium text-primary max-sm:max-w-[10em]"
           >
-            {underMessage ? `#${task.number}` : task.title}
+            {task.title}
           </span>
-          {underMessage && task.owner && <TaskOwnerAvatar owner={task.owner} />}
         </>
       }
     >
