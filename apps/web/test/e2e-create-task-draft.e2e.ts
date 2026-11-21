@@ -57,7 +57,7 @@ test("a member creates a Task with themselves as owner and a label", async () =>
       evaluate(`(${expression}.setAttribute("data-e2e", ${JSON.stringify(name)}), true)`);
     const byText = (selector: string, text: string) =>
       `[...document.querySelectorAll(${JSON.stringify(selector)})].find((el) => el.textContent.trim() === ${JSON.stringify(text)})`;
-    const settled = `document.getAnimations().every((a) => a.playState !== "running")`;
+    const settled = `document.getAnimations().every((animation) => animation.playState !== "running" || animation.effect?.getComputedTiming().iterations === Infinity)`;
 
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}?view=tasks`);
@@ -85,7 +85,13 @@ test("a member creates a Task with themselves as owner and a label", async () =>
     );
 
     // A label from the Workspace's list.
+    await browser("wait", "--fn", `${menu} == null && ${settled}`);
     await browser("click", '[role="dialog"] button[aria-label="Edit labels"]');
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('[role="menu"][aria-label="Labels"]') != null && ${settled}`,
+    );
     await browser("fill", 'input[aria-label="Add or create a label…"]', label.name);
     const option = byText(
       '[role="menuitemcheckbox"], [role="menuitem"], [role="option"]',
@@ -93,6 +99,7 @@ test("a member creates a Task with themselves as owner and a label", async () =>
     );
     await browser("wait", "--fn", `${option} != null`);
     await mark(option, "label");
+    await browser("wait", "--fn", settled);
     await browser("click", '[data-e2e="label"]');
     // The first Escape clears the search, the next closes the menu.
     await browser("press", "Escape");

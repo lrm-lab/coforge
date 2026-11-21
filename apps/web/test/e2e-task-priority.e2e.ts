@@ -70,11 +70,10 @@ test("a Task's popup and the new Task form set its priority", async () => {
     await browser(
       "wait",
       "--fn",
-      `${pageHydrated} && document.querySelector('${trigger("No priority")}') != null`,
+      `${pageHydrated} && document.querySelector('${trigger("Medium")}') != null`,
     );
 
-    // The popup starts at none, and a pick is saved.
-    await browser("click", trigger("No priority"));
+    await browser("click", trigger("Medium"));
     await browser("find", "role", "menuitemradio", "click", "--name", "High");
     await browser("wait", "--fn", `document.querySelector('${trigger("High")}') != null`);
     expect(await priorityOf(number)).toBe("high");
