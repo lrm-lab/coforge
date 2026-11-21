@@ -9,6 +9,7 @@ const PORTRAIT_HEIGHT = 932;
 const reading = {
   measured: PORTRAIT_HEIGHT,
   installed: true,
+  fixedViewportHeight: PORTRAIT_HEIGHT,
   safeAreaTotal: IPHONE_SAFE_AREA_TOP_AND_BOTTOM,
   onScreenKeyboardMayBeUp: false,
   applied: undefined,
@@ -18,6 +19,18 @@ const reading = {
 describe("appHeight", () => {
   test("a browser tab uses what it measures, since its toolbars legitimately grow and shrink", () => {
     expect(appHeight({ ...reading, installed: false, measured: 700, tallestSeen: 932 })).toBe(700);
+  });
+
+  test("an older height cannot move the tab bar beyond the current fixed viewport", () => {
+    expect(
+      appHeight({
+        ...reading,
+        measured: 852,
+        fixedViewportHeight: 852,
+        tallestSeen: 877,
+        safeAreaTotal: 0,
+      }),
+    ).toBe(852);
   });
 
   test("an installed app with nothing recorded yet uses what it measures", () => {

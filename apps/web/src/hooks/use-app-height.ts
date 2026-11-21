@@ -6,7 +6,7 @@ import { appHeight, tallestHeightSeen, viewportShapeKey } from "#src/lib/app-hei
 const TALLEST_HEIGHTS_KEY = "coforge-app-height";
 const SETTLE_AFTER_SYSTEM_ANIMATION_MS = 300;
 const SAFE_AREA_PROBE_STYLE =
-  "position:fixed;top:0;left:0;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)";
+  "position:fixed;top:0;bottom:0;left:0;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)";
 
 type TallestHeights = Record<string, number>;
 
@@ -56,6 +56,7 @@ export function useAppHeight() {
       const applied = Number.parseFloat(root.style.getPropertyValue("--app-height"));
       const height = appHeight({
         measured,
+        fixedViewportHeight: probe.getBoundingClientRect().height,
         installed,
         safeAreaTotal:
           Number.parseFloat(probeStyle.paddingTop) + Number.parseFloat(probeStyle.paddingBottom),

@@ -1,5 +1,6 @@
 export type AppHeightReading = {
   measured: number;
+  fixedViewportHeight: number;
   installed: boolean;
   safeAreaTotal: number;
   onScreenKeyboardMayBeUp: boolean;
@@ -12,7 +13,8 @@ export function appHeight(reading: AppHeightReading): number {
     reading;
   if (onScreenKeyboardMayBeUp && applied !== undefined && measured < applied) return applied;
   if (!installed || tallestSeen === undefined) return measured;
-  return tallestSeen - measured > safeAreaTotal ? tallestSeen : measured;
+  if (tallestSeen - measured <= safeAreaTotal) return measured;
+  return Math.max(measured, Math.min(tallestSeen, reading.fixedViewportHeight));
 }
 
 export function viewportShapeKey(landscape: boolean, screenWidth: number): string {
