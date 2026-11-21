@@ -37,7 +37,7 @@ export function PhoneTabBar({
   const indicator = useSlidingIndicator(listRef, {
     activeKey: current,
     selector: '[aria-current="page"]',
-    variant: "underline",
+    variant: "pill",
   });
   const tabs: Tab[] = [
     {
@@ -54,7 +54,10 @@ export function PhoneTabBar({
       badge: activityUnread.count ? (
         <UnreadBadge
           count={activityUnread.count}
-          className="absolute -top-1.5 left-1/2 ml-1 h-4 min-w-4 px-1 ring-2 ring-sidebar"
+          className={cx(
+            "absolute -top-1.5 left-1/2 ml-1 h-4 min-w-4 px-1 ring-2",
+            current === "activity" ? "ring-nav-bg-current" : "ring-sidebar",
+          )}
         />
       ) : activityUnread.lit ? (
         <UnreadDot className="absolute top-0 right-0" />
@@ -91,16 +94,14 @@ export function PhoneTabBar({
       aria-label={m.navigation_label()}
       className="shrink-0 border-t border-secondary bg-sidebar pb-safe-bottom"
     >
-      <ul ref={listRef} className="relative grid grid-cols-4">
+      <ul ref={listRef} className="relative grid grid-cols-4 px-1.5 py-1">
         {indicator.visible && (
           <span
             ref={indicator.indicatorRef}
             aria-hidden="true"
             style={indicator.style}
-            className="pointer-events-none absolute top-0 left-0 flex justify-center will-change-transform"
-          >
-            <span className="h-0.5 w-8 rounded-full bg-nav-fg-current" />
-          </span>
+            className="pointer-events-none absolute top-0 left-0 z-0 rounded-xl bg-nav-bg-current will-change-transform"
+          />
         )}
         {tabs.map(({ key, label, href, icon, badge, unreadText }) => {
           const isCurrent = key === current;
@@ -110,8 +111,13 @@ export function PhoneTabBar({
                 href={href}
                 aria-current={isCurrent ? "page" : undefined}
                 className={cx(
-                  "flex h-14 flex-col items-center justify-center gap-0.5 text-xs outline-focus-ring transition-colors duration-150 focus-visible:outline-2 focus-visible:-outline-offset-2",
-                  isCurrent ? "font-semibold text-nav-fg-current" : "font-medium text-nav-fg",
+                  "relative z-10 flex h-12 flex-col items-center justify-center gap-0.5 rounded-xl text-xs outline-focus-ring transition-colors duration-150 focus-visible:outline-2 focus-visible:-outline-offset-2",
+                  isCurrent
+                    ? cx(
+                        "font-semibold text-nav-fg-current",
+                        !indicator.visible && "bg-nav-bg-current",
+                      )
+                    : "font-medium text-nav-fg",
                 )}
               >
                 <span className="relative flex">

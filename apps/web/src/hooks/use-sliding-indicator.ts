@@ -1,7 +1,23 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
-import { useBreakpoint } from "#src/hooks/use-breakpoint";
+import { spring } from "motion/react";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
-import { DURATION_MS, EASE_CSS } from "#src/utils/motion-tokens";
+
+export const SLIDE_SPRING = { stiffness: 400, damping: 30 } as const;
+
+export function computeSlideSpringTiming({
+  stiffness,
+  damping,
+}: { stiffness: number; damping: number } = SLIDE_SPRING): { duration: number; easing: string } {
+  const [duration = "0ms", ...curve] = String(
+    spring({ keyframes: [0, 1], stiffness, damping }),
+  ).split(" ");
+  return {
+    duration: Number.parseFloat(duration),
+    easing: curve.join(" "),
+  };
+}
+
+const SLIDE_TIMING = computeSlideSpringTiming();
 
 type IndicatorBox = {
   left: number;
@@ -82,7 +98,6 @@ export function useSlidingIndicator(
   visible: boolean;
 } {
   const reduced = usePrefersReducedMotion();
-  const desktop = useBreakpoint("lg");
   const indicatorRef = useRef<HTMLSpanElement>(null);
   const prevBoxRef = useRef<IndicatorBox | null>(null);
   const prevKeyRef = useRef<string | number | null | undefined>(activeKey);
@@ -127,10 +142,7 @@ export function useSlidingIndicator(
         return;
       if (Math.abs(start.left - next.left) < 0.5 && Math.abs(start.width - next.width) < 0.5)
         return;
-      const anim = indicator.animate(computeStretchKeyframes(start, next, variant), {
-        duration: desktop ? DURATION_MS.md : DURATION_MS.lg,
-        easing: EASE_CSS.inOut,
-      });
+      const anim = indicator.animate(computeStretchKeyframes(start, next, variant), SLIDE_TIMING);
       animRef.current = anim;
       anim.addEventListener("finish", () => {
         if (animRef.current === anim) animRef.current = null;
@@ -148,7 +160,7 @@ export function useSlidingIndicator(
     const observer = new ResizeObserver(() => sync(false));
     observer.observe(container);
     return () => observer.disconnect();
-  }, [activeKey, containerRef, desktop, paused, reduced, selector, variant]);
+  }, [activeKey, containerRef, paused, reduced, selector, variant]);
 
   const style: CSSProperties | undefined = box
     ? {
