@@ -24,11 +24,19 @@ export function useActiveTabInView(
       const glide = revealed;
       revealed = true;
       if (scroller.scrollWidth <= scroller.clientWidth) return;
-      const inset = parseFloat(getComputedStyle(scroller).paddingLeft) || 0;
+      const style = getComputedStyle(scroller);
+      const startInset = Math.max(
+        parseFloat(style.paddingLeft) || 0,
+        parseFloat(style.scrollPaddingLeft) || 0,
+      );
+      const endInset = Math.max(
+        parseFloat(style.paddingRight) || 0,
+        parseFloat(style.scrollPaddingRight) || 0,
+      );
       const origin = scroller.getBoundingClientRect().left - scroller.scrollLeft;
       const box = tab.getBoundingClientRect();
-      const start = box.left - origin - inset;
-      const end = box.right - origin + inset - scroller.clientWidth;
+      const start = box.left - origin - startInset;
+      const end = box.right - origin + endInset - scroller.clientWidth;
       const left =
         start < scroller.scrollLeft ? start : end > scroller.scrollLeft ? end : undefined;
       if (left === undefined) return;

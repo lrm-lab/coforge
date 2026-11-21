@@ -46,15 +46,19 @@ export function useScrollEdges<T extends HTMLElement = HTMLDivElement>(
   return { ref, ...edges };
 }
 
-/** A mask fading a horizontal scroller's edges past which content is scrolled out of view, over
- * `width` (the scroller's own inline padding, so a tab scrolled into view sits clear of it). */
+export const TAB_BAR_END_FADE_WIDTH = "3.5rem";
+
+const DEFAULT_EDGE_FADE_WIDTH = "1.25rem";
+
 export function edgeFadeStyle(
   { start, end }: { start: boolean; end: boolean },
-  width = "1.25rem",
+  width: string | { start?: string; end?: string } = DEFAULT_EDGE_FADE_WIDTH,
 ): CSSProperties | undefined {
   if (!start && !end) return undefined;
-  const mask = `linear-gradient(to right, ${start ? `transparent, black ${width}` : "black"}, ${
-    end ? `black calc(100% - ${width}), transparent` : "black"
+  const startWidth = typeof width === "string" ? width : (width.start ?? DEFAULT_EDGE_FADE_WIDTH);
+  const endWidth = typeof width === "string" ? width : (width.end ?? DEFAULT_EDGE_FADE_WIDTH);
+  const mask = `linear-gradient(to right, ${start ? `transparent, black ${startWidth}` : "black"}, ${
+    end ? `black calc(100% - ${endWidth}), transparent` : "black"
   })`;
   return { maskImage: mask, WebkitMaskImage: mask };
 }

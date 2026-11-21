@@ -9,7 +9,11 @@ import {
 
 import { ReorderableTabStrip } from "#src/components/ui/reorderable-tab-strip";
 import { usePanelTabOrder } from "#src/features/panel-tabs/panel-tab-order-context";
-import { edgeFadeStyle, useScrollEdges } from "#src/hooks/use-scroll-edges";
+import {
+  edgeFadeStyle,
+  TAB_BAR_END_FADE_WIDTH,
+  useScrollEdges,
+} from "#src/hooks/use-scroll-edges";
 import { m } from "#src/paraglide/messages";
 import { visibleAgentProfileTabs, type AgentProfileTab } from "./profile-panel-search";
 
@@ -58,8 +62,8 @@ export function AgentProfileTabs({
     <div className="relative shrink-0 before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-border-secondary">
       <div
         ref={fade.ref}
-        style={edgeFadeStyle(fade)}
-        className="scrollbar-hide flex items-end overflow-x-auto px-5 pt-1"
+        style={edgeFadeStyle(fade, { end: TAB_BAR_END_FADE_WIDTH })}
+        className="scrollbar-hide flex items-end overflow-x-auto overflow-y-hidden px-5 pt-1 scroll-ps-5 scroll-pe-14"
       >
         <ReorderableTabStrip
           aria-label={m.agent_profile_panel_tabs()}

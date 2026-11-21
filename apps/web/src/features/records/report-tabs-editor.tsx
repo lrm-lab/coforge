@@ -11,6 +11,7 @@ import { ChevronLeft, ChevronRight, Maximize02 as Maximize, XClose as X } from "
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { edgeFadeStyle, TAB_BAR_END_FADE_WIDTH } from "#src/hooks/use-scroll-edges";
 import { m } from "#src/paraglide/messages";
 import { LeaderFormatSectionsEditor } from "./leader-format-sections-editor";
 import { ReportSectionEditor } from "#src/features/records/report-editor/report-section-editor";
@@ -384,8 +385,12 @@ export function ReportTabsEditor({
         ref={scrollerRef}
         aria-label={m.records_template_dimension()}
         onScroll={updateTabOverflow}
+        style={edgeFadeStyle(
+          { start: false, end: tabOverflow.right },
+          { end: TAB_BAR_END_FADE_WIDTH },
+        )}
         className={cn(
-          "scrollbar-hide flex min-w-0 flex-1 items-center overflow-x-auto overscroll-x-contain pt-0",
+          "scrollbar-hide flex min-w-0 flex-1 items-center overflow-x-auto overflow-y-hidden overscroll-x-contain pt-0 scroll-pe-14",
           readingTabs ? "gap-8 sm:gap-10" : "gap-2",
         )}
       >

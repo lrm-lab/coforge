@@ -6,6 +6,11 @@ import { useServerFn } from "@tanstack/react-start";
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
 import { Button } from "#src/components/base/buttons/button";
 import { Empty, EmptyHeader, EmptyTitle } from "#src/components/ui/empty";
+import {
+  edgeFadeStyle,
+  TAB_BAR_END_FADE_WIDTH,
+  useScrollEdges,
+} from "#src/hooks/use-scroll-edges";
 import { m } from "#src/paraglide/messages";
 import { CreateWeeklyTemplateDialog } from "./create-weekly-template-dialog";
 import { KeyPointPromptEditor } from "./key-point-prompt-editor";
@@ -90,6 +95,7 @@ export function WeeklyReportSettings({
   const [editing, setEditing] = useState<WeeklyTemplateList[number] | null>(null);
   const [detail, setDetail] = useState<WeeklyTemplateList[number] | null>(null);
   const [busy, setBusy] = useState(false);
+  const topTabsFade = useScrollEdges("x", { observe: '[role="tab"]' });
 
   function readEditorText(): string {
     return textareaRef.current?.value ?? draftText;
@@ -221,14 +227,23 @@ export function WeeklyReportSettings({
           ) : (
             <BackToRecords />
           )}
-          <TabList
-            aria-label={m.records_settings()}
-            type="underline"
-            className="-mb-px min-w-0 flex-1 gap-4 self-end overflow-x-auto before:hidden"
+          <div
+            ref={topTabsFade.ref}
+            style={edgeFadeStyle(
+              { start: false, end: topTabsFade.end },
+              { end: TAB_BAR_END_FADE_WIDTH },
+            )}
+            className="scrollbar-hide -mb-px flex min-w-0 flex-1 self-end overflow-x-auto overflow-y-hidden scroll-pe-14"
           >
-            <Tab id="templates">{m.records_settings_tab_templates()}</Tab>
-            <Tab id="key_points">{m.records_settings_tab_key_points()}</Tab>
-          </TabList>
+            <TabList
+              aria-label={m.records_settings()}
+              type="underline"
+              className="w-max shrink-0 gap-4 before:hidden"
+            >
+              <Tab id="templates">{m.records_settings_tab_templates()}</Tab>
+              <Tab id="key_points">{m.records_settings_tab_key_points()}</Tab>
+            </TabList>
+          </div>
           {topTab === "templates" ? (
             <Button
               size="sm"
