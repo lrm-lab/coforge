@@ -5,7 +5,7 @@ import type { AgentDisplay } from "./agent-display.server";
 import { appLogoUrl } from "#src/server/apps/app-logo.server";
 import { canDirectMessageAgent } from "./agent-visibility.server";
 import { agentWakeBlock } from "./agent-wake-block.server";
-import { agentControlRevision } from "./agent-control-types.server";
+import { agentControlRevision, AUTOMATIC_START_STREAK_LIMIT } from "./agent-control-types.server";
 import { readableRuntimeConfig } from "./agent-runtime-config.server";
 import { humanLabel } from "#src/lib/human-label";
 
@@ -144,12 +144,18 @@ export class AgentDetailQuery {
     const bot = agent.appBot && appBotIdentity(agent.appBot);
     const control = (
       agent.controlState && typeof agent.controlState === "object" ? agent.controlState : undefined
-    ) as { phase?: string; errorCode?: string; configRevision?: string } | undefined;
+    ) as
+      | { phase?: string; errorCode?: string; configRevision?: string; failedStreak?: number }
+      | undefined;
     const runtimeConfig = readableRuntimeConfig(agent.runtimeConfig, agent.id);
     const isFailed =
       control?.phase === "failed" &&
       !!runtimeConfig &&
       control.configRevision === agentControlRevision(runtimeConfig);
+    const needsManualStart =
+      isFailed &&
+      typeof control?.failedStreak === "number" &&
+      control.failedStreak >= AUTOMATIC_START_STREAK_LIMIT;
     let failureReason: string | null = isFailed ? (control?.errorCode ?? "launch_failed") : null;
     if (!failureReason && !agent.stoppedAt) {
       const recentActivity = agent.latestActivity ?? agent.activity?.[0];
@@ -218,6 +224,7 @@ export class AgentDetailQuery {
       },
       computer: assigned,
       failureReason,
+      needsManualStart,
     };
   }
 }
