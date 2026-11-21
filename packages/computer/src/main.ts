@@ -173,6 +173,6 @@ if (Bun.argv[2] === "__pi-chat") {
     if (logging) await logging.close().catch(() => {});
   }
 } else {
-  const { runComputer } = await import("./cli");
+  const { runComputer } = await import("./computer-cli-entry");
   await runComputer({ callerIsAgentHosted });
 }

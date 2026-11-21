@@ -31,7 +31,7 @@ relative to `src/`.
 
 | Path                                                                                                                          | Boundary                                                                                                                                                                                |
 | ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `main.ts`, `cli.ts`, `cli/`                                                                                                   | Binary entrypoint, the Commander command tree and its command wiring and output                                                                                                         |
+| `main.ts`, `computer-cli-entry.ts`, `cli.ts`, `cli/`                                                                          | Binary dispatch, real CLI dependency assembly, and the Commander command tree and output                                                                                                |
 | `errors.ts`, `terminal-output.ts`, `logind-session-risk.ts`                                                                   | Stable CLI error stages, terminal-safe text, read-only Linux logind session-risk guidance                                                                                               |
 | `setup/`, `workspace/`, `registration/`, `cloud-rpc-transport.ts`                                                             | Setup flow, direct Workspace lookup, registration idempotency, User-authenticated HTTPS RPC (`workspace:get`, `computer:register`)                                                      |
 | `login.ts`, `oauth-device-client.ts`, `logout.ts`, `credential-store.ts`                                                      | Device-code authorization, local logout that keeps Workspace registrations, file-backed User credentials                                                                                |
@@ -89,8 +89,9 @@ mutex as the upgrade lock.
 
 ### Layer rules
 
-- `main.ts`, `cli.ts`, and `cli/` know about process arguments and terminal
-  concerns only.
+- `main.ts` dispatches internal commands before loading `computer-cli-entry.ts`.
+  The CLI entry assembles real dependencies and owns the logger lifetime. The
+  command tree in `cli.ts` accepts injected dependencies.
 - Command actions in `cli.ts` translate CLI input into application calls and
   translate results/errors into friendly output. They must not list
   Workspaces, scan runtimes, build registration payloads, read config files, or
