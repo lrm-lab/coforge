@@ -115,13 +115,63 @@ export function sleep(ms) {
 // Minimal CDP client (flat sessionId mode) — one browser-level WebSocket,
 // one attached page target reused for the whole sweep.
 // ---------------------------------------------------------------------------
-class CdpClient {
+export class CdpConnectionError extends Error {}
+
+export class CdpClient {
   constructor(ws) {
     this.ws = ws;
     this.nextId = 1;
     this.pending = new Map();
     this.listeners = new Map(); // method -> Set<fn>
+    this.fatalListeners = new Set();
+    this.closedError = null;
+    this.deadSessions = new Map();
     ws.addEventListener("message", (event) => this.onMessage(String(event.data)));
+    ws.addEventListener("close", () =>
+      this.failAll(new CdpConnectionError("CDP WebSocket closed")),
+    );
+    ws.addEventListener("error", () => this.failAll(new CdpConnectionError("CDP WebSocket error")));
+  }
+
+  onFatal(sessionId, fn) {
+    const entry = { sessionId, fn };
+    this.fatalListeners.add(entry);
+    return () => this.fatalListeners.delete(entry);
+  }
+
+  failAll(error) {
+    const connError =
+      error instanceof CdpConnectionError
+        ? error
+        : new CdpConnectionError(error instanceof Error ? error.message : String(error));
+    this.closedError ??= connError;
+    for (const [id, entry] of this.pending) {
+      this.pending.delete(id);
+      entry.reject(this.closedError);
+    }
+    for (const entry of this.fatalListeners) {
+      this.fatalListeners.delete(entry);
+      entry.fn(this.closedError);
+    }
+  }
+
+  failSession(sessionId, error) {
+    const connError =
+      error instanceof CdpConnectionError
+        ? error
+        : new CdpConnectionError(error instanceof Error ? error.message : String(error));
+    if (!this.deadSessions.has(sessionId)) this.deadSessions.set(sessionId, connError);
+    const sessionError = this.deadSessions.get(sessionId);
+    for (const [id, entry] of this.pending) {
+      if (entry.sessionId !== sessionId) continue;
+      this.pending.delete(id);
+      entry.reject(sessionError);
+    }
+    for (const entry of this.fatalListeners) {
+      if (entry.sessionId !== sessionId) continue;
+      this.fatalListeners.delete(entry);
+      entry.fn(sessionError);
+    }
   }
 
   onMessage(raw) {
@@ -139,18 +189,42 @@ class CdpClient {
       return;
     }
     if (msg.method) {
+      if (
+        msg.sessionId &&
+        (msg.method === "Inspector.targetCrashed" || msg.method === "Inspector.detached")
+      ) {
+        this.failSession(
+          msg.sessionId,
+          new CdpConnectionError(msg.params?.reason ?? `${msg.method} on target session`),
+        );
+      } else if (msg.method === "Target.detachedFromTarget" && msg.params?.sessionId) {
+        this.failSession(msg.params.sessionId, new CdpConnectionError("Target detached"));
+      }
       const set = this.listeners.get(msg.method);
       if (set) for (const fn of set) fn(msg.params, msg.sessionId);
     }
   }
 
   send(method, params = {}, sessionId) {
+    if (this.closedError) return Promise.reject(this.closedError);
+    if (sessionId && this.deadSessions.has(sessionId)) {
+      return Promise.reject(this.deadSessions.get(sessionId));
+    }
     const id = this.nextId++;
     const payload = { id, method, params };
     if (sessionId) payload.sessionId = sessionId;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.ws.send(JSON.stringify(payload));
+      this.pending.set(id, { resolve, reject, sessionId });
+      try {
+        this.ws.send(JSON.stringify(payload));
+      } catch (error) {
+        this.pending.delete(id);
+        const connError = new CdpConnectionError(
+          error instanceof Error ? error.message : String(error),
+        );
+        this.failAll(connError);
+        reject(connError);
+      }
     });
   }
 
@@ -180,6 +254,7 @@ export async function connectPage(port) {
   await cdp.send("Page.enable", {}, sessionId);
   await cdp.send("Runtime.enable", {}, sessionId);
   await cdp.send("DOM.enable", {}, sessionId);
+  await cdp.send("HeapProfiler.enable", {}, sessionId);
   return { cdp, sessionId, ws };
 }
 
@@ -245,16 +320,35 @@ export function pageCtx(cdp, sessionId) {
 
   async function navigate(url) {
     resetConsole();
-    const loaded = new Promise((resolve) => {
-      const off = cdp.on("Page.loadEventFired", (_p, sid) => {
+    let offLoad;
+    let offFatal;
+    let timer;
+    const loaded = new Promise((resolve, reject) => {
+      if (cdp.closedError) {
+        reject(cdp.closedError);
+        return;
+      }
+      if (cdp.deadSessions.has(sessionId)) {
+        reject(cdp.deadSessions.get(sessionId));
+        return;
+      }
+      offLoad = cdp.on("Page.loadEventFired", (_p, sid) => {
         if (sid !== sessionId) return;
-        off();
         resolve();
       });
-      setTimeout(resolve, 15_000);
+      offFatal = cdp.onFatal(sessionId, reject);
+      timer = setTimeout(resolve, 15_000);
     });
-    await cdp.send("Page.navigate", { url }, sessionId);
-    await loaded;
+    loaded.catch(() => {});
+    try {
+      await cdp.send("Page.navigate", { url }, sessionId);
+      await loaded;
+    } finally {
+      clearTimeout(timer);
+      offLoad?.();
+      offFatal?.();
+    }
+    await cdp.send("HeapProfiler.collectGarbage", {}, sessionId);
     // Let the SPA hydrate/settle and any post-load data fetches paint.
     await sleep(700);
   }

@@ -2,7 +2,14 @@
 
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { findChrome, launchChrome, connectPage, pageCtx, sleep } from "./cdp-browser.mjs";
+import {
+  CdpConnectionError,
+  findChrome,
+  launchChrome,
+  connectPage,
+  pageCtx,
+  sleep,
+} from "./cdp-browser.mjs";
 import { filterSweepOptions } from "./ui-sweep-helpers.mjs";
 import { CHECKS_EXPR } from "./ui-sweep-checks.mjs";
 import { sweepReporter } from "./ui-sweep-report.mjs";
@@ -77,6 +84,100 @@ async function discoverIds(page) {
   return ids;
 }
 
+export async function runSurfaceLoop({
+  page,
+  surfaces,
+  theme,
+  viewport,
+  outDir,
+  visited = 0,
+  total = surfaces.length,
+  evalChecks = runChecks,
+  onCaptured,
+}) {
+  const results = [];
+  for (const surface of surfaces) {
+    visited++;
+    const name = `${surface.key}--${theme}--${viewport.name}`;
+    const screenshotPath = path.join(outDir, `${name}.png`);
+    const record = {
+      surface: surface.key,
+      theme,
+      width: viewport.width,
+      height: viewport.height,
+      screenshot: `${name}.png`,
+      note: null,
+      findings: [],
+      consoleErrors: [],
+      consoleWarnings: [],
+      exceptions: [],
+      hasH1: null,
+      sidebarWidth: null,
+      dialogCountAfterEscape: null,
+    };
+
+    try {
+      await page.navigate(surface.url);
+      if (surface.prepare) {
+        const note = await surface.prepare(page);
+        if (note) record.note = note;
+      }
+
+      const checks = await evalChecks(page);
+      record.findings = checks.findings;
+      record.hasH1 = checks.hasH1;
+      record.sidebarWidth = checks.sidebarWidth;
+
+      const consoleState = page.consoleSnapshot();
+      record.consoleErrors = consoleState.errors;
+      record.consoleWarnings = consoleState.warnings;
+      record.exceptions = page.exceptionsSnapshot();
+      const hydrationWarnings = [...consoleState.errors, ...consoleState.warnings].filter((m) =>
+        /hydrat/i.test(m),
+      );
+      if (hydrationWarnings.length) {
+        record.findings.push({
+          check: "hydration-warning",
+          detail: hydrationWarnings.join(" | ").slice(0, 300),
+        });
+      }
+
+      await page.screenshot(screenshotPath);
+
+      if (surface.postEscape) {
+        await page.pressEscape();
+        let after = await page.evalJs('document.querySelectorAll("[role=dialog]").length');
+        for (let waited = 0; after !== 0 && waited < 1500; waited += 100) {
+          await sleep(100);
+          after = await page.evalJs('document.querySelectorAll("[role=dialog]").length');
+        }
+        record.dialogCountAfterEscape = after;
+        if (after !== 0) {
+          record.findings.push({
+            check: "escape-does-not-close-dialog",
+            detail: `${after} [role=dialog] element(s) remain after Escape`,
+          });
+        }
+      }
+
+      if (surface.cleanup) await surface.cleanup(page);
+    } catch (error) {
+      if (error instanceof CdpConnectionError) throw error;
+      record.note = `error: ${error instanceof Error ? error.message : String(error)}`;
+      try {
+        await page.screenshot(screenshotPath);
+      } catch (screenshotError) {
+        if (screenshotError instanceof CdpConnectionError) throw screenshotError;
+        record.screenshot = null;
+      }
+    }
+
+    results.push(record);
+    onCaptured?.(visited, total, record);
+  }
+  return { results, visited };
+}
+
 async function main() {
   await mkdir(OUT_DIR, { recursive: true });
 
@@ -114,87 +215,24 @@ async function main() {
         await page.setViewport(viewport.width, viewport.height);
         await page.setTheme(theme);
 
-        for (const surface of surfaces) {
-          visited++;
-          const name = `${surface.key}--${theme}--${viewport.name}`;
-          const screenshotPath = path.join(OUT_DIR, `${name}.png`);
-          const record = {
-            surface: surface.key,
-            theme,
-            width: viewport.width,
-            height: viewport.height,
-            screenshot: `${name}.png`,
-            note: null,
-            findings: [],
-            consoleErrors: [],
-            consoleWarnings: [],
-            exceptions: [],
-            hasH1: null,
-            sidebarWidth: null,
-            dialogCountAfterEscape: null,
-          };
-
-          try {
-            await page.navigate(surface.url);
-            if (surface.prepare) {
-              const note = await surface.prepare(page);
-              if (note) record.note = note;
+        const pass = await runSurfaceLoop({
+          page,
+          surfaces,
+          theme,
+          viewport,
+          outDir: OUT_DIR,
+          visited,
+          total,
+          onCaptured: (done, count, record) => {
+            if (done % 10 === 0 || done === count) {
+              console.log(
+                `  ${done}/${count} captured (${record.surface} · ${theme} · ${viewport.name})`,
+              );
             }
-
-            const checks = await runChecks(page);
-            record.findings = checks.findings;
-            record.hasH1 = checks.hasH1;
-            record.sidebarWidth = checks.sidebarWidth;
-
-            const consoleState = page.consoleSnapshot();
-            record.consoleErrors = consoleState.errors;
-            record.consoleWarnings = consoleState.warnings;
-            record.exceptions = page.exceptionsSnapshot();
-            const hydrationWarnings = [...consoleState.errors, ...consoleState.warnings].filter(
-              (m) => /hydrat/i.test(m),
-            );
-            if (hydrationWarnings.length) {
-              record.findings.push({
-                check: "hydration-warning",
-                detail: hydrationWarnings.join(" | ").slice(0, 300),
-              });
-            }
-
-            await page.screenshot(screenshotPath);
-
-            if (surface.postEscape) {
-              await page.pressEscape();
-              let after = await page.evalJs('document.querySelectorAll("[role=dialog]").length');
-              for (let waited = 0; after !== 0 && waited < 1500; waited += 100) {
-                await sleep(100);
-                after = await page.evalJs('document.querySelectorAll("[role=dialog]").length');
-              }
-              record.dialogCountAfterEscape = after;
-              if (after !== 0) {
-                record.findings.push({
-                  check: "escape-does-not-close-dialog",
-                  detail: `${after} [role=dialog] element(s) remain after Escape`,
-                });
-              }
-            }
-
-            if (surface.cleanup) await surface.cleanup(page);
-          } catch (error) {
-            record.note = `error: ${error instanceof Error ? error.message : String(error)}`;
-            try {
-              await page.screenshot(screenshotPath);
-            } catch {
-              record.screenshot = null;
-            }
-          }
-
-          results.push(record);
-          if (visited % 10 === 0 || visited === total) {
-            console.log(
-              `  ${visited}/${total} captured (${record.surface} · ${theme} · ${viewport.name})`,
-            );
-          }
-        }
+          },
+        });
+        results.push(...pass.results);
+        visited = pass.visited;
       }
     }
 
@@ -229,6 +267,7 @@ async function main() {
         await page.screenshot(path.join(OUT_DIR, `${name}.png`));
         await page.pressEscape();
       } catch (error) {
+        if (error instanceof CdpConnectionError) throw error;
         record.note = `error: ${error instanceof Error ? error.message : String(error)}`;
       }
       results.push(record);
@@ -238,7 +277,7 @@ async function main() {
       }
     }
 
-    writeReports(results, notes);
+    await writeReports(results, notes);
     printSummary(results);
     if (process.env.UI_SWEEP_STRICT === "1") {
       const failures = results.filter(

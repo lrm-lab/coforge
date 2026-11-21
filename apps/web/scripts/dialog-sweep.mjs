@@ -26,7 +26,14 @@
 
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { findChrome, launchChrome, connectPage, pageCtx, sleep } from "./cdp-browser.mjs";
+import {
+  CdpConnectionError,
+  findChrome,
+  launchChrome,
+  connectPage,
+  pageCtx,
+  sleep,
+} from "./cdp-browser.mjs";
 import { DIALOGS } from "./dialog-sweep-cases.mjs";
 
 const BASE_URL = (process.env.DIALOG_SWEEP_BASE ?? "http://127.0.0.1:8788").replace(/\/$/, "");
@@ -322,23 +329,32 @@ async function closeDialogs(page) {
   }
 }
 
-async function attemptDialog(page, dialog, workspacePath) {
+export async function attemptDialog(
+  page,
+  dialog,
+  workspacePath,
+  run = runStep,
+  capture = captureDialog,
+) {
   let where = "navigating";
   const work = (async () => {
     try {
       await page.navigate(`${BASE_URL}${workspacePath}`);
       for (const step of dialog.steps) {
         where = `step ${step.kind} ${step.role ?? step.target ?? step.key ?? ""}`;
-        await runStep(page, step, workspacePath);
+        await run(page, step, workspacePath);
       }
       where = "capturing";
-      await captureDialog(page, dialog);
+      await capture(page, dialog);
       return "ok";
     } catch (error) {
+      if (error instanceof CdpConnectionError) throw error;
       return error instanceof Error ? error.message : String(error);
     } finally {
       where = "closing";
-      await closeDialogs(page).catch(() => undefined);
+      await closeDialogs(page).catch((error) => {
+        if (error instanceof CdpConnectionError) throw error;
+      });
     }
   })();
   let timer;
@@ -355,12 +371,11 @@ async function attemptDialog(page, dialog, workspacePath) {
   }
 }
 
-async function runDialog(page, dialog, workspacePath) {
-  let result = await attemptDialog(page, dialog, workspacePath);
+export async function runDialog(page, dialog, workspacePath, attempt = attemptDialog) {
+  let result = await attempt(page, dialog, workspacePath);
   // A dev server compiles routes on first use, which can outlast a step's wait; a dialog the seed
   // cannot reach fails the same way twice, so only the others earn the second attempt.
-  if (result !== "ok" && !dialog.unreachable)
-    result = await attemptDialog(page, dialog, workspacePath);
+  if (result !== "ok" && !dialog.unreachable) result = await attempt(page, dialog, workspacePath);
   if (result === "ok") return result;
   return dialog.unreachable ? `failed: ${dialog.unreachable} (${result})` : `failed: ${result}`;
 }
