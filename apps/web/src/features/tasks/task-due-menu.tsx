@@ -24,10 +24,6 @@ function dueStateText(dueState: "overdue" | "due_soon" | null | undefined) {
   return null;
 }
 
-/**
- * A Task's due instant, in its popup and in the form that makes one. The field edits local wall
- * time; the stored value is the instant it names. Clearing returns the Task to no due date.
- */
 export function TaskDueMenu({
   dueAt,
   dueHasTime,
@@ -40,7 +36,6 @@ export function TaskDueMenu({
   dueHasTime?: boolean;
   dueState?: "overdue" | "due_soon" | null;
   disabled: boolean;
-  /** The new instant as ISO and whether it includes time, or null to clear. */
   onSelect: (dueAt: string | null, dueHasTime?: boolean) => void;
   placement?: ComponentProps<typeof Dropdown.Popover>["placement"];
 }) {
