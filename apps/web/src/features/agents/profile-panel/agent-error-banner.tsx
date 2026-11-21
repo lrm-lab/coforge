@@ -14,17 +14,28 @@ export function AgentErrorBanner({
   display,
   onActivityTab,
   onViewLogs,
+  needsManualStart,
+  canStartAgent,
   retry,
 }: {
   agent: AgentDiagnosticFacts;
   display: AgentDisplaySnapshot;
   onActivityTab: boolean;
   onViewLogs?: () => void;
+  needsManualStart?: boolean;
+  canStartAgent?: boolean;
   retry?: AgentRetry;
 }) {
   const status = agentDisplay(display);
   const label = status.alertText || status.label;
-  const recovery = retry && (!status.isOnline || status.alert) ? status.recovery : undefined;
+  const existingRecovery =
+    retry && (!status.isOnline || status.alert) ? status.recovery : undefined;
+  const recovery =
+    needsManualStart && existingRecovery !== "reset_session"
+      ? canStartAgent
+        ? "retry"
+        : undefined
+      : existingRecovery;
   const showRecovery = recovery && !(recovery === "retry" && retry?.computerOffline);
   const resetBlocked = recovery === "reset_session" && retry?.computerOffline === true;
   const retryNote = resetBlocked ? m.agent_error_banner_computer_offline() : retry?.note;
@@ -42,9 +53,15 @@ export function AgentErrorBanner({
         <ActivityMarker tone="error" className={ACTIVITY_MARKER_CLASS} />
       )}
       <div
-        className={cn("flex min-w-0 flex-1 items-start gap-3", status.alert && "flex-col gap-1")}
+        className={cn(
+          "flex min-w-0 flex-1 items-start gap-3",
+          (status.alert || needsManualStart) && "flex-col gap-1",
+        )}
       >
-        <span className="min-w-0 flex-1 text-sm break-words text-primary">{label}</span>
+        <span className="min-w-0 flex-1 text-sm break-words text-primary">
+          {label}
+          {needsManualStart && ` ${m.agent_automatic_start_stopped()}`}
+        </span>
         {(showRecovery || showLinks) && (
           <div className="-my-1 flex shrink-0 items-center gap-1">
             {showRecovery && retry && (

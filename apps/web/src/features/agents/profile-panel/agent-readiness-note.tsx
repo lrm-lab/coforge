@@ -124,6 +124,7 @@ export function AgentReadinessNote({
   display,
   onViewLogs,
   onOpenSettings,
+  needsManualStart,
   retry,
 }: {
   data: AgentReadinessNoteData;
@@ -131,6 +132,7 @@ export function AgentReadinessNote({
   display?: AgentDisplaySnapshot;
   onViewLogs?: () => void;
   onOpenSettings?: () => void;
+  needsManualStart?: boolean;
   retry?: Pick<AgentRetry, "onRetry" | "busy" | "deferred" | "note">;
 }) {
   const navigate = useNavigate();
@@ -246,6 +248,7 @@ export function AgentReadinessNote({
           )}
         >
           {text}
+          {needsManualStart && ` ${m.agent_automatic_start_stopped()}`}
         </span>
       </span>
       {suffix && <span className="min-w-0 break-words text-tertiary">{suffix}</span>}

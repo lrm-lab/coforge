@@ -322,6 +322,10 @@ export function AgentProfilePanel({
             onViewLogs={
               tabOrder.tabs.includes("activity") ? () => onTabChange("activity") : undefined
             }
+            needsManualStart={
+              !!profile && "needsManualStart" in profile && profile.needsManualStart === true
+            }
+            canStartAgent={profile?.canControlAgentRuntime}
             wakeBlock={profile?.wakeBlock}
             readiness={readinessData}
             onOpenSettings={() => onTabChange("profile")}

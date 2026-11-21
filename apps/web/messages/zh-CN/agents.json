@@ -263,6 +263,7 @@
   "agent_archive_delete_workspace": "删除电脑上的工作目录",
   "agent_archive_delete_workspace_description": "会删除 {computer} 上该 Agent 工作目录里的全部文件，无法恢复。资料页和消息仍然保留。",
   "agent_error_banner_view_logs": "查看日志",
+  "agent_automatic_start_stopped": "自动启动已停止，需要手动启动。",
   "agent_error_banner_retry": "重试",
   "agent_error_banner_reset_session": "重置会话",
   "agent_error_banner_computer_offline": "电脑离线",

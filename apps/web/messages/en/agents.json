@@ -265,6 +265,7 @@
   "agent_archive_delete_workspace": "Delete Workspace from Computer",
   "agent_archive_delete_workspace_description": "Deletes every file in this Agent's workspace on {computer}. This cannot be undone. The profile and messages stay.",
   "agent_error_banner_view_logs": "View logs",
+  "agent_automatic_start_stopped": "Automatic starts have stopped. Start the Agent manually.",
   "agent_error_banner_retry": "Retry",
   "agent_error_banner_reset_session": "Reset session",
   "agent_error_banner_computer_offline": "Computer offline",
