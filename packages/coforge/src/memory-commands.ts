@@ -30,6 +30,12 @@ export function parseMemoryArgs(args: readonly string[]): MemoryInvocation {
   let json = false;
   for (let index = 1; index < args.length; index++) {
     const flag = args[index]!;
+    if (operation === "search" && (flag === "--limit" || flag.startsWith("--limit=")))
+      throw invalidArg(
+        "Local memory search does not support --limit.",
+        "Remove --limit and its value. Try coforge memory search --query 'preview domain'. " +
+          "Use --offset if the results offer another page.",
+      );
     if (operation === "save") {
       const hint =
         flag === "--body"
