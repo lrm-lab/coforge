@@ -521,7 +521,7 @@ function ArtifactPageFor({
       data-artifact-page-frame=""
       aria-labelledby={current ? ARTIFACT_TITLE_ID : undefined}
       aria-label={current ? undefined : m.doc_pane_label()}
-      className="@container/doc flex h-full min-h-0 min-w-0 flex-1 flex-col bg-primary animate-in fade-in motion-enter-sm motion-reduce:animate-none"
+      className="@container/doc flex h-full min-h-0 min-w-0 flex-1 flex-col bg-primary lg:animate-in lg:fade-in lg:motion-enter-sm motion-reduce:animate-none"
     >
       {body}
     </main>

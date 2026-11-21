@@ -10,6 +10,10 @@ import { deLocalizeUrl, localizeUrl } from "#src/paraglide/runtime";
 import { PENDING_DELAY_MS, PENDING_MIN_MS } from "#src/lib/pending-policy";
 import { PRELOAD_STALE_MS } from "#src/lib/preload-policy";
 import { isNonLocalizedPath } from "#src/lib/non-localized-path";
+import {
+  installUAVisualTransitionTracker,
+  resolveSubpageViewTransitionTypes,
+} from "#src/components/layout/subpage-transition";
 import { routeTree } from "./routeTree.gen";
 
 /** The page for a URL no route matches, loaded on demand.
@@ -46,11 +50,15 @@ export function getRouter() {
   // TanStack DB's collections live on one `DbClient` per QueryClient, provided to the whole app:
   // every component that materializes a collection shares the one instance (`useDbClient`).
   const dbClient = new DbClient({ queryClient });
+  installUAVisualTransitionTracker();
   const router = createTanStackRouter({
     routeTree,
     context: { queryClient },
     Wrap: ({ children }) => <DbProvider client={dbClient}>{children}</DbProvider>,
     scrollRestoration: true,
+    defaultViewTransition: {
+      types: resolveSubpageViewTransitionTypes,
+    },
     // The pending fallback policy, stated once for every route (see lib/pending-policy.ts).
     defaultPendingMs: PENDING_DELAY_MS,
     defaultPendingMinMs: PENDING_MIN_MS,

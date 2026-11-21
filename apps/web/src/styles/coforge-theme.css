@@ -182,10 +182,12 @@
 :root {
   --toast-shadow: 0 1rem 2.25rem rgb(17 24 39 / 0.08), 0 0.1875rem 0.625rem rgb(17 24 39 / 0.05);
   --toast-sheen: rgb(255 255 255 / 0.75);
+  --subpage-slide-shadow: -0.75rem 0 2rem rgb(17 24 39 / 0.14);
 }
 .dark-mode {
   --toast-shadow: 0 1rem 2.25rem rgb(0 0 0 / 0.45), 0 0.1875rem 0.625rem rgb(0 0 0 / 0.3);
   --toast-sheen: rgb(255 255 255 / 0.07);
+  --subpage-slide-shadow: -0.75rem 0 2.5rem rgb(0 0 0 / 0.48);
 }
 
 @keyframes scrim-in {
