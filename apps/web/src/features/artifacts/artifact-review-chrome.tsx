@@ -10,21 +10,17 @@ import {
   XClose,
 } from "@untitledui/icons";
 
+import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
+import { FLOATING_SURFACE_CLASS } from "#src/features/conversations/review-chrome";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { CommentDraftView } from "./artifact-comment-drafts-queries";
 import type { CommentAnchor } from "./artifact-comment-inputs";
 import { InlineRefText } from "./artifact-inline-editor";
 import { extractElementTag } from "./artifact-inline-refs";
-
-export const SECONDARY_PILL_CLASS =
-  "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full bg-tertiary px-3.5 text-xs font-medium text-primary outline-focus-ring transition-colors duration-150 hover:bg-secondary_hover focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-40";
-
-export const PRIMARY_PILL_CLASS =
-  "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full bg-alpha-black px-3.5 text-xs font-medium text-alpha-white outline-focus-ring transition-opacity duration-150 hover:opacity-88 focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-40";
 
 export function formatAnchorTag(anchor: CommentAnchor | null, path?: string | null): string {
   if (anchor?.type === "element") {
@@ -68,14 +64,14 @@ export function AnchorChip({
   return (
     <span
       className={cn(
-        "inline-flex max-w-48 items-center gap-1 rounded-md bg-utility-orange-50 px-1.5 py-0.5 font-mono text-xs font-medium text-primary",
+        "inline-flex max-w-48 items-center gap-1 rounded-md bg-brand-secondary px-1.5 py-0.5 font-mono text-xs font-medium text-brand-secondary",
         className,
       )}
     >
       <Cursor02
         aria-hidden="true"
-        strokeWidth={1.25}
-        className="size-2.5 shrink-0 fill-current text-utility-orange-500"
+        strokeWidth={1.5}
+        className="size-2.5 shrink-0 text-fg-brand-primary"
       />
       <span className="truncate">{label}</span>
       {onRemove && (
@@ -188,26 +184,28 @@ export function ArtifactReviewQueue({
         <CoForgeMark className="h-3.5 shrink-0 opacity-60 transition-opacity duration-150 hover:opacity-90" />
         <div className="flex items-center gap-2">
           <Tooltip title={<TooltipWithKey label={m.av_dr_new_comment()} shortcut="N" />}>
-            <AriaButton
+            <Button
+              size="sm"
+              color="secondary"
+              iconLeading={Plus}
               isDisabled={locked || atLimit}
               onPress={onNewComment}
-              className={SECONDARY_PILL_CLASS}
             >
-              <Plus aria-hidden="true" className="size-3.5" />
-              <span>{m.av_dr_new_comment()}</span>
-            </AriaButton>
+              {m.av_dr_new_comment()}
+            </Button>
           </Tooltip>
           <Tooltip title={<TooltipWithKey label={m.av_dr_send_all_tip()} shortcut={modEnter} />}>
-            <AriaButton
+            <Button
+              size="sm"
+              color="primary"
+              iconTrailing={ArrowRight}
               isDisabled={locked}
               data-draft-send=""
               aria-label={m.av_dr_send_all_tip()}
               onPress={onSubmit}
-              className={PRIMARY_PILL_CLASS}
             >
-              <span>{m.av_dr_send_all()}</span>
-              <ArrowRight aria-hidden="true" className="size-3.5" />
-            </AriaButton>
+              {m.av_dr_send_all()}
+            </Button>
           </Tooltip>
         </div>
       </div>
@@ -215,50 +213,88 @@ export function ArtifactReviewQueue({
   );
 }
 
-export function ArtifactReviewFab({
+export function ArtifactReviewBar({
   annotating,
   count,
-  onPress,
+  cardOpen,
+  locked,
+  modEnter,
+  onToggleAnnotate,
+  onToggleCard,
+  onSubmit,
 }: {
   annotating: boolean;
   count: number;
-  onPress: () => void;
+  cardOpen: boolean;
+  locked: boolean;
+  modEnter: string;
+  onToggleAnnotate: () => void;
+  onToggleCard: () => void;
+  onSubmit: () => void;
 }) {
   return (
-    <Tooltip
-      title={
-        annotating ? (
-          <TooltipWithKey label={m.av_cm_annotating()} shortcut="Esc" />
-        ) : (
-          m.av_cm_annotate()
-        )
-      }
+    <div
+      role="toolbar"
+      aria-label={m.av_dr_tools()}
+      className={cn(
+        "pointer-events-auto flex items-center gap-1.5 px-2 py-1.5",
+        FLOATING_SURFACE_CLASS,
+      )}
     >
-      <AriaButton
-        aria-pressed={annotating}
-        aria-label={annotating ? m.av_cm_annotating() : m.av_cm_annotate()}
-        data-annotate-toggle=""
-        data-picking={String(annotating)}
-        onPress={onPress}
-        className={cn(
-          "artifact-review-fab pointer-events-auto relative flex size-10 cursor-pointer items-center justify-center rounded-full bg-terminal outline-focus-ring focus-visible:outline-2",
-          annotating ? "text-utility-orange-500" : "text-terminal-fg",
-        )}
+      <Tooltip
+        title={
+          annotating ? (
+            <TooltipWithKey label={m.av_cm_annotating()} shortcut="Esc" />
+          ) : (
+            m.av_cm_annotate()
+          )
+        }
       >
-        <span aria-hidden="true" className="artifact-review-fab-icon artifact-review-fab-bubble">
-          <MessageSquare01 strokeWidth={1.65} className="size-[1.125rem]" />
-        </span>
-        <span aria-hidden="true" className="artifact-review-fab-icon artifact-review-fab-pick">
-          <CursorBox strokeWidth={1.65} className="size-[1.125rem]" />
-        </span>
-        <span
-          aria-hidden="true"
-          data-visible={String(count > 0)}
-          className="artifact-review-fab-badge pointer-events-none absolute -top-1 -right-1 flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-utility-orange-500 px-1 text-xs leading-none font-semibold text-white tabular-nums shadow-xs"
+        <Button
+          size="sm"
+          color={annotating ? "secondary" : "tertiary"}
+          iconLeading={CursorBox}
+          aria-pressed={annotating}
+          aria-label={annotating ? m.av_cm_annotating() : m.av_cm_annotate()}
+          data-annotate-toggle=""
+          data-picking={String(annotating)}
+          onPress={onToggleAnnotate}
         >
-          {count}
-        </span>
-      </AriaButton>
-    </Tooltip>
+          {annotating ? m.av_cm_annotating() : m.av_cm_pick_element()}
+        </Button>
+      </Tooltip>
+      {count > 0 && (
+        <>
+          <span aria-hidden="true" className="h-4 w-px bg-border-secondary" />
+          <Button
+            size="sm"
+            color={cardOpen ? "secondary" : "tertiary"}
+            iconLeading={MessageSquare01}
+            aria-expanded={cardOpen}
+            onPress={onToggleCard}
+          >
+            <span>{m.av_dr_group()}</span>
+            <span
+              data-visible="true"
+              className="artifact-review-fab-badge ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-md bg-brand-secondary px-1 text-xs leading-none font-medium text-brand-secondary tabular-nums"
+            >
+              {count}
+            </span>
+          </Button>
+          <Tooltip title={<TooltipWithKey label={m.av_dr_send_all_tip()} shortcut={modEnter} />}>
+            <Button
+              size="sm"
+              color="primary"
+              isDisabled={locked}
+              data-draft-send=""
+              aria-label={m.av_dr_send_all_tip()}
+              onPress={onSubmit}
+            >
+              {m.av_dr_send_n({ count })}
+            </Button>
+          </Tooltip>
+        </>
+      )}
+    </div>
   );
 }

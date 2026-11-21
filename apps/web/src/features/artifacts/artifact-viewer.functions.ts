@@ -6,7 +6,7 @@ import { productionArtifacts } from "#src/server/artifacts/artifact-composition.
 import { browserActivityInbox } from "#src/server/inbox/browser-activity-inbox.server";
 import { artifactInputs } from "./artifact-inputs";
 import { ARTIFACT_ROSTER_SIZE } from "./artifact-presence-channel";
-import { ARTIFACT_TITLE_MAX } from "./artifact-title-limit";
+import { withinArtifactTitleLimit } from "./artifact-title-limit";
 
 const { id } = artifactInputs;
 
@@ -17,7 +17,14 @@ const placeOf = (
 
 export const renameArtifact = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(z.object({ artifactId: id, title: z.string().max(ARTIFACT_TITLE_MAX) }).strict())
+  .validator(
+    z
+      .object({
+        artifactId: id,
+        title: z.string().refine(withinArtifactTitleLimit),
+      })
+      .strict(),
+  )
   .handler(({ context, data }) =>
     productionArtifacts(context.db).renames.rename({
       ...placeOf(context, data),

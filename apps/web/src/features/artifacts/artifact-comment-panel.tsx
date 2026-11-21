@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button as AriaButton } from "react-aria-components";
-import { ChevronDown, ChevronRight } from "@untitledui/icons";
+import { ChevronDown, ChevronRight, SearchLg, SwitchVertical01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
+import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { Input } from "#src/components/base/input/input";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { plainMentionsByHandle } from "#src/features/conversations/message-markdown";
 import { SECTION_LABEL_CLASS } from "#src/features/conversations/review-chrome";
@@ -19,14 +22,18 @@ import { ArtifactSidePanel } from "./artifact-side-panel";
 import { CommentThreadView, type CommentContext } from "./artifact-comment-thread";
 import { useArtifactCommenting, useCommentPlaces, useCommentRequests } from "./artifact-commenting";
 import {
+  filterCommentGroups,
   findThreadForComment,
   orderAnchored,
+  sortThreadsByUpdated,
   versionSections,
   type CommentGroups,
+  type CommentSortOrder,
   type CommentThread,
 } from "./artifact-comment-threads";
 import { useFlash } from "./use-flash";
 import { useCommentDrafts } from "./artifact-comment-drafts-context";
+import { DraftList } from "./artifact-draft-group";
 import { ArtifactPendingReview } from "./artifact-pending-review";
 import { ReviewChip, ReviewComments, ReviewFilterMenu } from "./artifact-review-view";
 import type { ReviewFilter } from "./use-review-filter";
@@ -49,7 +56,7 @@ export function ArtifactCommentPanel({
   onClose: () => void;
 }) {
   const { entryPath, filePaths } = useArtifactCommenting();
-  const { focus, consumeFocus } = useCommentRequests();
+  const { focus, consumeFocus, prefill: activePrefill, consumePrefill } = useCommentRequests();
   const places = useCommentPlaces();
   const { query, comments } = list;
   const drafts = useCommentDrafts();
@@ -57,11 +64,23 @@ export function ArtifactCommentPanel({
   const plainMentions = useMemo(() => plainMentionsByHandle(known), [known]);
   const [replyTo, setReplyTo] = useState<CommentReplyTarget | null>(null);
   const [resolvedOpen, setResolvedOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortOrder, setSortOrder] = useState<CommentSortOrder>("page");
   const [flashId, flashThread] = useFlash<string>();
   const listElement = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (activePrefill) setReplyTo(null);
+  }, [activePrefill]);
+
+  const searching = searchQuery.trim() !== "";
+  const filteredGroups = useMemo(
+    () => filterCommentGroups(groups, searchQuery),
+    [groups, searchQuery],
+  );
   const sections = useMemo(
     () =>
-      versionSections(groups, shownVersion).map((section) => ({
+      versionSections(filteredGroups, shownVersion).map((section) => ({
         ...section,
         anchored: orderAnchored(
           section.anchored,
@@ -69,11 +88,27 @@ export function ArtifactCommentPanel({
           section.version === shownVersion ? places?.byId : undefined,
         ),
       })),
-    [groups, shownVersion, entryPath, filePaths, places],
+    [filteredGroups, shownVersion, entryPath, filePaths, places],
   );
+  const updatedThreads = useMemo(
+    () => sortThreadsByUpdated([...filteredGroups.whole, ...filteredGroups.anchored]),
+    [filteredGroups],
+  );
+  const resolvedThreads = useMemo(
+    () =>
+      sortOrder === "updated"
+        ? sortThreadsByUpdated(filteredGroups.resolved)
+        : filteredGroups.resolved,
+    [filteredGroups.resolved, sortOrder],
+  );
+
   const titled = sections.some((section) => section.version !== shownVersion);
   const context: CommentContext = { artifactId, plainMentions, flashId, onReply: setReplyTo };
-  const empty = sections.length === 0 && groups.resolved.length === 0;
+  const hasAnyPublished =
+    groups.whole.length > 0 || groups.anchored.length > 0 || groups.resolved.length > 0;
+  const filteredEmpty = sections.length === 0 && resolvedThreads.length === 0;
+  const showResolved = resolvedOpen || searching;
+
   useEffect(() => {
     if (focus === null) return;
     const match = findThreadForComment(groups, focus);
@@ -90,6 +125,7 @@ export function ArtifactCommentPanel({
     thread.scrollIntoView({ block: "nearest" });
     flashThread(targetId);
   }, [focus, groups, resolvedOpen, consumeFocus, flashThread]);
+
   if (pendingReview)
     return (
       <ArtifactSidePanel
@@ -104,14 +140,35 @@ export function ArtifactCommentPanel({
         />
       </ArtifactSidePanel>
     );
+
   return (
     <ArtifactSidePanel label={m.av_cm_title()} onClose={onClose}>
       <ReviewPanelHeader
         title={m.av_cm_title()}
         close={{ label: m.av_cm_close(), onPress: onClose }}
       >
+        {!review.active && <CommentSortMenu sortOrder={sortOrder} onChange={setSortOrder} />}
         <ReviewFilterMenu filter={review} />
       </ReviewPanelHeader>
+      {!review.active && (
+        <div className="shrink-0 border-b border-secondary px-3 py-2">
+          <Input
+            size="sm"
+            icon={SearchLg}
+            placeholder={m.av_cm_search_placeholder()}
+            aria-label={m.av_cm_search_placeholder()}
+            value={searchQuery}
+            onChange={setSearchQuery}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && searchQuery) {
+                event.preventDefault();
+                event.stopPropagation();
+                setSearchQuery("");
+              }
+            }}
+          />
+        </div>
+      )}
       <div
         ref={listElement}
         className="min-h-0 flex-1 overflow-y-auto px-3 py-3"
@@ -138,6 +195,17 @@ export function ArtifactCommentPanel({
           </div>
         ) : (
           <div className="flex flex-col gap-4">
+            {!searching && drafts.drafts.length > 0 && (
+              <section data-draft-group="" className="flex flex-col gap-2">
+                <h3 className={SECTION_LABEL_CLASS}>{m.av_dr_group()}</h3>
+                <DraftList
+                  artifactId={artifactId}
+                  comments={comments}
+                  plainMentions={plainMentions}
+                  refusal={null}
+                />
+              </section>
+            )}
             {query.hasNextPage && (
               <div className="flex flex-col items-center gap-1">
                 {query.isFetchNextPageError && (
@@ -155,54 +223,76 @@ export function ArtifactCommentPanel({
                 </Button>
               </div>
             )}
-            {empty && !query.hasNextPage && (
-              <p className="text-sm text-tertiary">{m.av_cm_empty()}</p>
+            {filteredEmpty && !query.hasNextPage && (
+              <div className="flex flex-col items-start gap-2">
+                <p className="text-sm text-tertiary">
+                  {searching && hasAnyPublished ? m.av_cm_search_empty() : m.av_cm_empty()}
+                </p>
+                {searching && hasAnyPublished && (
+                  <Button size="xs" color="secondary" onClick={() => setSearchQuery("")}>
+                    {m.ag_clear_search()}
+                  </Button>
+                )}
+              </div>
             )}
-            {sections.map((section) => (
-              <section
-                key={section.version}
-                data-version-section={section.version}
-                className="flex flex-col gap-3"
-              >
-                {titled && (
-                  <h3 className={cn(SECTION_LABEL_CLASS, "tabular-nums")}>
-                    {section.version === shownVersion
-                      ? m.av_cm_version_viewing({ version: section.version })
-                      : m.av_cm_version_section({
-                          version: section.version,
-                          count: section.whole.length + section.anchored.length,
-                        })}
-                  </h3>
-                )}
-                {section.whole.length > 0 && (
+            {sortOrder === "updated"
+              ? updatedThreads.length > 0 && (
                   <ThreadGroup
-                    title={m.av_cm_group_whole()}
-                    threads={section.whole}
+                    threads={updatedThreads}
                     context={context}
+                    shownVersion={shownVersion}
                   />
-                )}
-                {section.anchored.length > 0 && (
-                  <ThreadGroup threads={section.anchored} context={context} />
-                )}
-              </section>
-            ))}
-            {groups.resolved.length > 0 && (
+                )
+              : sections.map((section) => (
+                  <section
+                    key={section.version}
+                    data-version-section={section.version}
+                    className="flex flex-col gap-3"
+                  >
+                    {titled && (
+                      <h3 className={cn(SECTION_LABEL_CLASS, "tabular-nums")}>
+                        {section.version === shownVersion
+                          ? m.av_cm_version_viewing({ version: section.version })
+                          : m.av_cm_version_section({
+                              version: section.version,
+                              count: section.whole.length + section.anchored.length,
+                            })}
+                      </h3>
+                    )}
+                    {section.whole.length > 0 && (
+                      <ThreadGroup
+                        title={m.av_cm_group_whole()}
+                        threads={section.whole}
+                        context={context}
+                        shownVersion={shownVersion}
+                      />
+                    )}
+                    {section.anchored.length > 0 && (
+                      <ThreadGroup
+                        threads={section.anchored}
+                        context={context}
+                        shownVersion={shownVersion}
+                      />
+                    )}
+                  </section>
+                ))}
+            {resolvedThreads.length > 0 && (
               <section>
                 <AriaButton
-                  aria-expanded={resolvedOpen}
+                  aria-expanded={showResolved}
                   className="flex h-6 w-full cursor-pointer items-center gap-1 rounded-md text-left text-xs font-medium text-tertiary outline-focus-ring transition-colors duration-150 hover:text-secondary focus-visible:outline-2"
                   onPress={() => setResolvedOpen((open) => !open)}
                 >
-                  {resolvedOpen ? (
+                  {showResolved ? (
                     <ChevronDown aria-hidden="true" className="size-3.5" />
                   ) : (
                     <ChevronRight aria-hidden="true" className="size-3.5" />
                   )}
-                  {m.av_cm_resolved_group({ count: groups.resolved.length })}
+                  {m.av_cm_resolved_group({ count: resolvedThreads.length })}
                 </AriaButton>
-                {resolvedOpen && (
+                {showResolved && (
                   <ul className="mt-2 flex flex-col gap-2">
-                    {groups.resolved.map((thread) => (
+                    {resolvedThreads.map((thread) => (
                       <CommentThreadView
                         key={thread.root.id}
                         thread={thread}
@@ -217,14 +307,52 @@ export function ArtifactCommentPanel({
           </div>
         )}
       </div>
-      {replyTo && (
-        <ArtifactCommentComposer
-          artifactId={artifactId}
-          target={{ kind: "reply", ...replyTo, onCancel: () => setReplyTo(null) }}
-          onPosted={() => setReplyTo(null)}
-        />
-      )}
+      <ArtifactCommentComposer
+        artifactId={artifactId}
+        target={
+          replyTo
+            ? { kind: "reply", ...replyTo, onCancel: () => setReplyTo(null) }
+            : { kind: "panel", version: shownVersion }
+        }
+        prefill={activePrefill}
+        onConsumePrefill={consumePrefill}
+        onPosted={() => setReplyTo(null)}
+      />
     </ArtifactSidePanel>
+  );
+}
+
+function CommentSortMenu({
+  sortOrder,
+  onChange,
+}: {
+  sortOrder: CommentSortOrder;
+  onChange: (next: CommentSortOrder) => void;
+}) {
+  return (
+    <Dropdown.Root>
+      <ButtonUtility
+        icon={SwitchVertical01}
+        size="xs"
+        color="tertiary"
+        tooltip={m.av_cm_sort()}
+        data-comment-sort=""
+      />
+      <Dropdown.Popover placement="bottom end">
+        <Dropdown.Menu
+          aria-label={m.av_cm_sort()}
+          selectionMode="single"
+          selectedKeys={[sortOrder]}
+          disallowEmptySelection
+          onAction={(key) => {
+            if (key === "page" || key === "updated") onChange(key);
+          }}
+        >
+          <Dropdown.Item id="page" label={m.av_cm_sort_page()} />
+          <Dropdown.Item id="updated" label={m.av_cm_sort_updated()} />
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown.Root>
   );
 }
 
@@ -232,10 +360,12 @@ function ThreadGroup({
   title,
   threads,
   context,
+  shownVersion,
 }: {
   title?: string;
   threads: readonly CommentThread[];
   context: CommentContext;
+  shownVersion: number;
 }) {
   return (
     <section>
@@ -246,7 +376,7 @@ function ThreadGroup({
             key={thread.root.id}
             thread={thread}
             context={context}
-            versionTag={false}
+            versionTag={thread.root.version !== shownVersion}
           />
         ))}
       </ul>

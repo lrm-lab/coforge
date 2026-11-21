@@ -5,9 +5,11 @@ import { Button as AriaButton } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Skeleton } from "#src/components/ui/skeleton";
+import "#src/features/records/report-editor/styles/code.css";
 import { cn } from "#src/lib/utils";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
+import { highlightCodeLines } from "./artifact-code-highlight";
 import { parseCsv } from "./artifact-csv";
 import { artifactDownloadUrl } from "./artifact-download-url";
 import { ArtifactCommentSurface } from "./artifact-comment-surface";
@@ -49,7 +51,9 @@ export function ArtifactFileView({
         <Button size="sm" color="tertiary" iconLeading={ArrowLeft} onClick={onBack}>
           {m.av_file_back()}
         </Button>
-        <span className="min-w-0 flex-1 truncate text-sm font-medium text-secondary">{path}</span>
+        <span className="min-w-0 flex-1 truncate font-mono text-sm font-medium text-secondary">
+          {path}
+        </span>
         <Button size="sm" color="secondary" iconLeading={Download01} href={download}>
           {m.av_menu_download()}
         </Button>
@@ -66,7 +70,13 @@ export function ArtifactFileView({
           onFindingChange={onFindingChange}
         />
       ) : (
-        <ArtifactFile artifactId={artifactId} version={version} path={path} />
+        <ArtifactFile
+          artifactId={artifactId}
+          version={version}
+          path={path}
+          finding={finding}
+          onFindingChange={onFindingChange}
+        />
       )}
     </div>
   );
@@ -76,10 +86,14 @@ export function ArtifactFile({
   artifactId,
   version,
   path,
+  finding = false,
+  onFindingChange,
 }: {
   artifactId: string;
   version: number;
   path: string;
+  finding?: boolean;
+  onFindingChange?: (finding: boolean) => void;
 }) {
   const kind = artifactKindOfPath(path);
   if (kind === "pdf")
@@ -95,7 +109,33 @@ export function ArtifactFile({
     return (
       <ImageFile key={`${version}:${path}`} artifactId={artifactId} version={version} path={path} />
     );
-  return <FilePreview artifactId={artifactId} version={version} path={path} />;
+  if (kind === "video")
+    return (
+      <VideoFile key={`${version}:${path}`} artifactId={artifactId} version={version} path={path} />
+    );
+  return (
+    <FilePreview
+      artifactId={artifactId}
+      version={version}
+      path={path}
+      finding={finding}
+      onFindingChange={onFindingChange}
+    />
+  );
+}
+
+function FileLoadError({ url }: { url?: string }) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+      <p className="text-sm font-medium text-primary">{m.av_file_failed()}</p>
+      <p className="max-w-sm text-sm text-tertiary">{m.doc_load_failed_retry()}</p>
+      {url && (
+        <Button size="sm" color="secondary" iconLeading={Download01} href={url}>
+          {m.av_menu_download()}
+        </Button>
+      )}
+    </div>
+  );
 }
 
 function ImageFile({
@@ -109,11 +149,12 @@ function ImageFile({
 }) {
   const workspaceSlug = useWorkspaceSlug();
   const [failed, setFailed] = useState(false);
-  if (failed) return <p className="p-6 text-sm text-error-primary">{m.av_file_failed()}</p>;
+  const url = artifactDownloadUrl(workspaceSlug, artifactId, { path, version });
+  if (failed) return <FileLoadError url={url} />;
   return (
     <div className="flex min-h-0 flex-1 items-start justify-center overflow-auto p-4">
       <img
-        src={artifactDownloadUrl(workspaceSlug, artifactId, { path, version })}
+        src={url}
         alt={path}
         decoding="async"
         onError={() => setFailed(true)}
@@ -123,7 +164,7 @@ function ImageFile({
   );
 }
 
-function FilePreview({
+function VideoFile({
   artifactId,
   version,
   path,
@@ -132,26 +173,81 @@ function FilePreview({
   version: number;
   path: string;
 }) {
+  const workspaceSlug = useWorkspaceSlug();
+  const [failed, setFailed] = useState(false);
+  const url = artifactDownloadUrl(workspaceSlug, artifactId, { path, version });
+  if (failed) return <FileLoadError url={url} />;
+  return (
+    <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4">
+      <video
+        src={url}
+        controls
+        playsInline
+        preload="metadata"
+        aria-label={path}
+        onError={() => setFailed(true)}
+        className="max-h-full max-w-full rounded-lg border border-secondary bg-secondary"
+      />
+    </div>
+  );
+}
+
+function FilePreview({
+  artifactId,
+  version,
+  path,
+  finding,
+  onFindingChange,
+}: {
+  artifactId: string;
+  version: number;
+  path: string;
+  finding: boolean;
+  onFindingChange?: (finding: boolean) => void;
+}) {
   const preview = useQuery(artifactFilePreviewQuery(artifactId, version, path));
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-auto">
       {preview.isPending ? (
         <Skeleton className="m-4 h-40" />
       ) : preview.isError ? (
-        <p className="p-6 text-sm text-error-primary">{m.av_file_failed()}</p>
+        <FileLoadError />
       ) : (
-        <FileBody path={path} preview={preview.data} />
+        <FileBody
+          path={path}
+          preview={preview.data}
+          finding={finding}
+          onFindingChange={onFindingChange}
+        />
       )}
     </div>
   );
 }
 
-function FileBody({ path, preview }: { path: string; preview: { text: string | null } }) {
+function FileBody({
+  path,
+  preview,
+  finding,
+  onFindingChange,
+}: {
+  path: string;
+  preview: { text: string | null };
+  finding: boolean;
+  onFindingChange?: (finding: boolean) => void;
+}) {
   const kind = artifactKindOfPath(path);
   const { commenting } = useArtifactCommenting();
   if (preview.text === null)
     return <p className="p-6 text-sm text-tertiary">{m.av_file_no_preview()}</p>;
-  if (kind === "markdown") return <ArtifactMarkdown path={path} text={preview.text} />;
+  if (kind === "markdown")
+    return (
+      <ArtifactMarkdown
+        path={path}
+        text={preview.text}
+        findOpen={finding}
+        onFindClose={() => onFindingChange?.(false)}
+      />
+    );
   return (
     <ArtifactCommentSurface
       path={path}
@@ -165,7 +261,7 @@ function FileBody({ path, preview }: { path: string; preview: { text: string | n
       {kind === "csv" ? (
         <CsvTable text={preview.text} selectable={commenting} />
       ) : (
-        <CodeLines text={preview.text} selectable={commenting} />
+        <CodeLines path={path} text={preview.text} selectable={commenting} />
       )}
     </ArtifactCommentSurface>
   );
@@ -196,25 +292,50 @@ function LineNumber({
 }
 
 const CodeLines = memo(function CodeLines({
+  path,
   text,
   selectable,
 }: {
+  path: string;
   text: string;
   selectable: boolean;
 }) {
-  const lines = useMemo(() => text.replace(/\n$/, "").split("\n"), [text]);
+  const plainLines = useMemo(() => text.replace(/\n$/, "").split("\n"), [text]);
+  const highlightedLines = useMemo(() => highlightCodeLines(text, path), [text, path]);
   return (
-    <div className="font-mono text-xs/5 text-primary">
-      {lines.map((line, index) => (
-        <div key={index} data-anchor-line={index + 1} className="flex">
-          <LineNumber
-            line={index + 1}
-            selectable={selectable}
-            className="w-12 shrink-0 pr-3 text-right text-quaternary"
-          />
-          <span className="min-w-0 flex-1 pr-4 break-all whitespace-pre-wrap">{line}</span>
-        </div>
-      ))}
+    <div className="overflow-x-auto">
+      <div
+        className={cn(
+          "w-max min-w-full font-mono text-xs/5 text-primary",
+          highlightedLines && "rich-text-editor",
+        )}
+      >
+        {plainLines.map((line, index) => {
+          const tokens = highlightedLines?.[index];
+          return (
+            <div key={index} data-anchor-line={index + 1} className="flex">
+              <LineNumber
+                line={index + 1}
+                selectable={selectable}
+                className="w-12 shrink-0 pr-3 text-right text-quaternary"
+              />
+              <span className="flex-1 pr-4 whitespace-pre">
+                {tokens
+                  ? tokens.map((token, tokenIndex) =>
+                      token.className ? (
+                        <span key={tokenIndex} className={token.className}>
+                          {token.text}
+                        </span>
+                      ) : (
+                        token.text
+                      ),
+                    )
+                  : line}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 });

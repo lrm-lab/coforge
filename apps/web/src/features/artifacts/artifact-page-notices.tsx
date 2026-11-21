@@ -1,4 +1,4 @@
-import { useCallback, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { ChevronDown, ChevronUp, SearchLg, XClose } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -74,6 +74,8 @@ export function PageExpiredCard({ onReload }: { onReload: () => void }) {
   );
 }
 
+const FIND_DEBOUNCE_MS = 80;
+
 export function PageFindBar({
   found,
   onFind,
@@ -84,11 +86,21 @@ export function PageFindBar({
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+
+  const runImmediate = (nextQuery: string, step: number) => {
+    clearTimeout(timerRef.current);
+    onFind(nextQuery, step);
+  };
+
   return (
     <div
       role="search"
+      data-artifact-find-bar=""
       className={cn(
-        "absolute top-3 right-4 z-10 flex items-center gap-1 p-1 outline-focus-ring focus-within:outline-2 focus-within:outline-offset-2",
+        "absolute top-3 right-4 z-10 flex items-center gap-1 p-1 transition-colors duration-150 focus-within:border-primary",
         FLOATING_SURFACE_CLASS,
       )}
     >
@@ -101,11 +113,14 @@ export function PageFindBar({
           value={query}
           className="min-w-0 flex-1 bg-transparent text-sm text-primary outline-hidden placeholder:text-field-placeholder"
           onChange={(event) => {
-            setQuery(event.target.value);
-            onFind(event.target.value, 0);
+            const next = event.target.value;
+            setQuery(next);
+            clearTimeout(timerRef.current);
+            if (next === "") onFind("", 0);
+            else timerRef.current = setTimeout(() => onFind(next, 0), FIND_DEBOUNCE_MS);
           }}
           onKeyDown={(event) => {
-            if (event.key === "Enter") onFind(query, event.shiftKey ? -1 : 1);
+            if (event.key === "Enter") runImmediate(query, event.shiftKey ? -1 : 1);
             if (event.key === "Escape") onClose();
           }}
         />
@@ -119,7 +134,7 @@ export function PageFindBar({
         color="tertiary"
         tooltip={m.doc_page_find_prev()}
         isDisabled={found.total === 0}
-        onClick={() => onFind(query, -1)}
+        onClick={() => runImmediate(query, -1)}
       />
       <ButtonUtility
         icon={ChevronDown}
@@ -127,7 +142,7 @@ export function PageFindBar({
         color="tertiary"
         tooltip={m.doc_page_find_next()}
         isDisabled={found.total === 0}
-        onClick={() => onFind(query, 1)}
+        onClick={() => runImmediate(query, 1)}
       />
       <ButtonUtility
         icon={XClose}

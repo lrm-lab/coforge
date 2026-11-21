@@ -34,5 +34,5 @@ export function entryFactsLine(kind: ArtifactPathKind, facts: ArtifactEntryFacts
   if (kind === "image" && facts.width !== undefined && facts.height !== undefined)
     parts.push(m.doc_facts_pixels({ width: number(facts.width), height: number(facts.height) }));
   if (parts.length === 0) parts.push(formatFileSize(facts.sizeBytes));
-  return parts.join(" · ");
+  return parts.join(", ");
 }

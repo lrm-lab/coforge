@@ -22,7 +22,7 @@ export function ArtifactFrameCommentLayer({
   suggestions: RefObject<PageSuggestHandler | null>;
 }) {
   const { version, commenting, pickBus } = useArtifactCommenting();
-  const key = commenting ? `${path}@${version}` : null;
+  const key = `${path}@${version}`;
   const composingRef = useRef(false);
   const offers = useFrameOffer({
     bridge,
@@ -37,7 +37,7 @@ export function ArtifactFrameCommentLayer({
 
   useEffect(() => {
     if (!commenting) {
-      bridge.annotations.setDrafts([]);
+      if (!composingRef.current) bridge.annotations.setDrafts([]);
       return;
     }
     return pickBus.subscribeHighlightedAnchors((anchors) => {
@@ -47,7 +47,7 @@ export function ArtifactFrameCommentLayer({
 
   return (
     <>
-      {commenting && <DraftAffordance draft={draft} path={path} />}
+      <DraftAffordance draft={draft} path={path} />
       <PageSuggestion
         path={path}
         suggestions={suggestions}

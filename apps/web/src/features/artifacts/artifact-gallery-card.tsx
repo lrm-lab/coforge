@@ -1,20 +1,22 @@
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { Code01 } from "@untitledui/icons";
+import { Focusable } from "react-aria-components";
+import { MessageSquare01 } from "@untitledui/icons";
 
+import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { messageSlots } from "#src/lib/message-slots";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { commentsCap } from "./artifact-comment-threads";
 import type { GallerySort } from "./artifact-gallery-model";
 import { GalleryCardVisibility } from "./artifact-gallery-visibility";
 import { artifactDownloadUrl, artifactThumbnailUrl } from "./artifact-download-url";
-import { ArtifactActor, kindName } from "./artifact-parts";
+import { ArtifactActor, KIND_ICONS, kindName } from "./artifact-parts";
 import { artifactKindOfPath, type ArtifactPathKind } from "./artifact-path-kind";
-import { MarkdownPreview } from "./artifact-preview";
+import { MarkdownPreview, stripLeadingTitleHeading } from "./artifact-preview";
 import { useArtifactActor } from "./artifact-queries";
-import { artifactPageRoute, galleryEntryState } from "./artifact-search";
 import type { GalleryCard, useScopeOf } from "./artifact-scope";
 
 export function CardBadges({
@@ -28,11 +30,11 @@ export function CardBadges({
   if (card.mentionsYou) badges.push(m.av_card_mention());
   if (badges.length === 0) return null;
   return (
-    <span className="flex flex-wrap gap-1">
+    <span className="flex shrink-0 flex-wrap gap-1">
       {badges.map((badge) => (
         <span
           key={badge}
-          className="rounded-md bg-brand-secondary px-1.5 py-0.5 text-xs font-medium text-brand-secondary"
+          className="shrink-0 whitespace-nowrap rounded-md bg-brand-secondary px-1.5 py-0.5 text-xs font-medium text-brand-secondary"
         >
           {badge}
         </span>
@@ -52,15 +54,21 @@ function Preview({ card }: { card: GalleryCard }) {
         "[mask-image:linear-gradient(to_bottom,black_65%,transparent)]",
       )}
     >
-      <MarkdownPreview markdown={card.preview} />
+      <MarkdownPreview markdown={stripLeadingTitleHeading(card.preview, card.title)} />
     </div>
   );
 }
 
 function KindTag({ kind }: { kind: ArtifactPathKind }) {
+  const Icon = KIND_ICONS[kind];
   return (
     <div className="flex h-full flex-col items-center justify-center gap-2 bg-secondary text-fg-quaternary">
-      {kind === "html" && <Code01 aria-hidden="true" className="size-6" />}
+      <span
+        aria-hidden="true"
+        className="flex size-10 items-center justify-center rounded-lg bg-primary text-fg-tertiary ring-1 ring-secondary ring-inset"
+      >
+        <Icon className="size-5" />
+      </span>
       <span
         data-artifact-kind={kind}
         className="rounded-md bg-primary px-1.5 py-0.5 text-xs font-medium text-tertiary ring-1 ring-secondary ring-inset"
@@ -103,6 +111,7 @@ export function GalleryGridCard({
 }) {
   const workspaceSlug = useWorkspaceSlug();
   const actorOf = useArtifactActor();
+  const displayTitle = card.title || m.doc_untitled();
   return (
     <article className="relative flex flex-col overflow-hidden rounded-xl border border-secondary bg-primary transition-[border-color] duration-100 hover:border-primary has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-focus-ring">
       <div className="h-32 border-b border-secondary">
@@ -110,22 +119,39 @@ export function GalleryGridCard({
       </div>
       <div className="flex flex-col gap-1.5 p-3">
         <p className="flex min-w-0 items-baseline gap-1.5">
-          <Link
-            {...artifactPageRoute(workspaceSlug, card.id)}
-            state={galleryEntryState}
-            className="min-w-0 truncate text-sm font-semibold text-primary outline-none before:absolute before:inset-0"
-          >
-            <span className="inline-block max-w-full truncate align-bottom">
-              {card.title || m.doc_untitled()}
-            </span>
-          </Link>
+          <Tooltip title={displayTitle} placement="bottom start">
+            <Focusable>
+              <Link
+                to="/w/$workspaceSlug/artifacts"
+                params={{ workspaceSlug }}
+                search={{ artifact: card.id }}
+                resetScroll={false}
+                className="min-w-0 truncate text-sm font-semibold text-primary outline-none before:absolute before:inset-0"
+              >
+                <span className="inline-block max-w-full truncate align-bottom">
+                  {displayTitle}
+                </span>
+              </Link>
+            </Focusable>
+          </Tooltip>
           <span className="shrink-0 text-xs text-tertiary tabular-nums">
             v{card.currentVersion}
           </span>
         </p>
         <div className="flex items-center justify-between gap-2 text-xs text-tertiary">
           <ArtifactActor actor={actorOf(card.author)} />
-          <GalleryCardVisibility artifactId={card.id} tier={card.access} scope={scope} />
+          <div className="flex shrink-0 items-center gap-1.5">
+            {card.commentCount > 0 && (
+              <span
+                aria-label={m.ag_card_comments({ count: card.commentCount })}
+                className="inline-flex items-center gap-1 text-xs text-tertiary tabular-nums"
+              >
+                <MessageSquare01 aria-hidden="true" className="size-3.5 shrink-0" />
+                <span>{commentsCap(card.commentCount)}</span>
+              </span>
+            )}
+            <GalleryCardVisibility artifactId={card.id} tier={card.access} scope={scope} />
+          </div>
         </div>
         <CardBadges card={card} />
         <WhenLine card={card} sort={sort} className="text-xs text-quaternary" />

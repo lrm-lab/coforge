@@ -210,7 +210,7 @@ function CommentRow({
     >
       <CommentAuthorAvatar comment={comment} size="sm" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <header className="flex min-h-6 min-w-0 flex-wrap items-center gap-x-2 pr-16">
+        <header className="flex min-h-6 min-w-0 flex-wrap items-center gap-x-2 pointer-coarse:pe-24">
           <span className={cn(COMMENT_AUTHOR_CLASS, "min-w-0")}>{author.name}</span>
           {author.kind === "agent" && (
             <Badge size="sm" color="gray" type="modern">
@@ -220,9 +220,9 @@ function CommentRow({
           <RelativeTime value={comment.createdAt} plain className={COMMENT_META_CLASS} />
           {comment.editedAt && <span className={COMMENT_META_CLASS}>{m.av_cm_edited()}</span>}
           {versionTag && (
-            <span className={COMMENT_META_CLASS}>
+            <Badge size="sm" color="gray" type="modern" className="tabular-nums">
               {m.av_cm_version({ version: comment.version })}
-            </span>
+            </Badge>
           )}
         </header>
         {isRoot && (
@@ -257,8 +257,8 @@ function CommentRow({
         )}
         <CommentImages artifactId={context.artifactId} images={comment.images} />
         {resolved && comment.resolvedBy && comment.resolvedAt && (
-          <p className="text-xs text-tertiary">
-            {m.av_cm_resolved_by({ name: comment.resolvedBy.name })} ·{" "}
+          <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-tertiary">
+            <span>{m.av_cm_resolved_by({ name: comment.resolvedBy.name })}</span>
             <RelativeTime value={comment.resolvedAt} plain />
           </p>
         )}
@@ -266,8 +266,8 @@ function CommentRow({
       {!editing && (
         <div
           className={cn(
-            "absolute top-2 right-2 flex items-center",
-            "opacity-0 transition-opacity group-hover/comment:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100",
+            "absolute top-2 end-2 flex items-center rounded-md bg-primary ps-1 transition-[opacity,background-color] duration-150 group-hover/comment:bg-primary_hover",
+            "opacity-0 group-hover/comment:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100",
           )}
         >
           {rowActions

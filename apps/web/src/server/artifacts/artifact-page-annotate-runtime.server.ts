@@ -2,15 +2,12 @@ import {
   TRAIL_ANCESTORS_MAX,
   TRAIL_NAME_MAX,
 } from "#src/features/artifacts/artifact-page-annotations";
+import { ANNOTATE_OVERLAY_SOURCE } from "./artifact-page-annotate-overlays.server";
 
-export const ANNOTATE_DOM_SOURCE = String.raw`
+export const ANNOTATE_DOM_SOURCE = `${ANNOTATE_OVERLAY_SOURCE}${String.raw`
 var TRAIL_NAME_MAX = ${TRAIL_NAME_MAX};
 var TRAIL_ANCESTORS_MAX = ${TRAIL_ANCESTORS_MAX};
-var ACCENT = "#e06d3b";
 var annotate = { picking: false, selecting: false, showMarks: false, revision: 0, marks: [], drafts: [] };
-var BADGE_SIZE = 24;
-var BADGE_SHADOW = "0 1px 3px rgba(0,0,0,.35)";
-var BADGE_FLASH_SHADOW = BADGE_SHADOW + ",0 0 0 5px rgba(224,109,59,.4)";
 var placed = [];
 var placedById = new Map();
 var badges = new Map();
@@ -20,11 +17,18 @@ var indexDirty = true;
 var flashMark = null;
 var flashTimer = 0;
 var relocateTimer = 0;
+var selectionTimer = 0;
 var lastReported = null;
 var reportedSelection = false;
+var lastSelectionKey = null;
+var selectionPointerDown = false;
 var mutationObserver = null;
 var pickStart = null;
 var hoverBox = null;
+var hoverBadge = null;
+var hoverBadgeText = "";
+var hoverBadgeWidth = 0;
+var hoverBadgeHeight = 0;
 var hoverElement = null;
 var hoverFrame = 0;
 var lastPointer = null;
@@ -41,7 +45,14 @@ function drawDraft() {
   parent.textContent = "";
   annotate.drafts.forEach(function (anchor) {
     var target = locateAnchor(anchor);
-    if (target) paintTarget(parent, target, true);
+    if (!target) return;
+    if (target.kind === "element") {
+      target.rects().forEach(function (rect) {
+        paintBox(parent, rect, "border-radius:6px;border:2px solid " + ACCENT + ";background:" + ACCENT_FILL);
+      });
+    } else {
+      paintTarget(parent, target, true);
+    }
   });
 }
 function drawFlash() {
@@ -106,11 +117,17 @@ function drawMarks() {
     var badge = document.createElement("button");
     badge.type = "button";
     badge.setAttribute("data-id", mark.id);
-    badge.textContent = mark.draft ? "" : String(Math.min(mark.count, 999));
     badge.setAttribute("aria-label", mark.label);
-    if (mark.draft) badge.setAttribute("data-draft", "");
-    var look = mark.draft ? "border:2px dashed #fff;background:" + ACCENT + ";opacity:.75" : "border:2px solid #fff;background:" + ACCENT;
-    badge.style.cssText = "position:absolute;pointer-events:auto;cursor:pointer;margin:0;padding:0;width:" + BADGE_SIZE + "px;height:" + BADGE_SIZE + "px;border-radius:" + BADGE_SIZE / 2 + "px;" + look + ";color:#fff;font:600 11px/20px system-ui,sans-serif;text-align:center;left:" + left + "px;top:" + top + "px";
+    if (mark.draft) {
+      badge.setAttribute("data-draft", "");
+      badge.innerHTML = PIN_ICON_SVG;
+    } else {
+      badge.textContent = String(Math.min(mark.count, 999));
+    }
+    var look = mark.draft
+      ? "border:1px solid " + PIN_BORDER + ";background:" + PIN_BG + ";color:" + PIN_FG + ";border-radius:8px"
+      : "border:2px solid " + ACCENT_FG + ";background:" + ACCENT + ";color:" + ACCENT_FG + ";border-radius:" + BADGE_SIZE / 2 + "px";
+    badge.style.cssText = "position:absolute;pointer-events:auto;cursor:pointer;display:flex;align-items:center;justify-content:center;margin:0;padding:0;width:" + BADGE_SIZE + "px;height:" + BADGE_SIZE + "px;" + look + ";font:600 11px/1 var(--coforge-font-sans,system-ui,sans-serif);text-align:center;left:" + left + "px;top:" + top + "px";
     badge.style.boxShadow = flashMark && mark.id === flashMark.id ? BADGE_FLASH_SHADOW : BADGE_SHADOW;
     badges.set(mark.id, badge);
     parent.appendChild(badge);
@@ -140,6 +157,7 @@ function relocate() {
   placed = next;
   placedById = new Map(next.map(function (entry) { return [entry.mark.id, entry]; }));
   drawMarks();
+  drawDraftPins();
   drawFlash();
   drawDraft();
   if (document.readyState === "complete") reportFound();
@@ -229,14 +247,20 @@ function elementUnder(x, y) {
 }
 function drawHover() {
   hoverFrame = 0;
-  hoverElement = lastPointer && elementUnder(lastPointer.x, lastPointer.y);
-  if (!hoverElement) {
+  var nextElement = lastPointer && elementUnder(lastPointer.x, lastPointer.y);
+  if (!nextElement) {
     hideHover();
     return;
   }
+  var changed = nextElement !== hoverElement || !hoverBadge;
+  hoverElement = nextElement;
   var rect = hoverElement.getBoundingClientRect();
+  var viewportWidth = document.documentElement.clientWidth;
+  var scrollX = window.scrollX;
+  var scrollY = window.scrollY;
   if (hoverBox) placeBox(hoverBox, rect);
-  else hoverBox = paintBox(layer("pick-hover"), rect, "border-radius:4px;border:2px solid " + ACCENT + ";background:rgba(224,109,59,.10)");
+  else hoverBox = paintBox(layer("pick-hover"), rect, "border-radius:6px;border:2px solid " + ACCENT + ";background:" + ACCENT_FILL);
+  placeHoverBadge(hoverElement, rect, changed, viewportWidth, scrollX, scrollY);
 }
 function scheduleHover() {
   if (lastPointer && !hoverFrame) hoverFrame = requestAnimationFrame(drawHover);
@@ -245,7 +269,12 @@ function hideHover() {
   if (hoverFrame) cancelAnimationFrame(hoverFrame);
   hoverFrame = 0;
   if (hoverBox) hoverBox.remove();
+  if (hoverBadge) hoverBadge.remove();
   hoverBox = null;
+  hoverBadge = null;
+  hoverBadgeText = "";
+  hoverBadgeWidth = 0;
+  hoverBadgeHeight = 0;
   hoverElement = null;
   lastPointer = null;
 }
@@ -343,10 +372,17 @@ function stopPicking() {
 function clearReportedSelection() {
   if (!reportedSelection) return;
   reportedSelection = false;
+  lastSelectionKey = null;
   post({ method: "coforge/notifications/annotate-unselected" });
+}
+function selectionEditable() {
+  var active = document.activeElement;
+  if (!active) return false;
+  return /^(INPUT|TEXTAREA)$/.test(active.tagName) || active.isContentEditable === true;
 }
 function reportSelection() {
   if (!annotate.selecting) return;
+  if (!annotate.picking && selectionEditable()) return clearReportedSelection();
   var selection = window.getSelection();
   if (!selection || selection.rangeCount === 0 || selection.isCollapsed || !document.body) return clearReportedSelection();
   var range = selection.getRangeAt(0);
@@ -356,8 +392,17 @@ function reportSelection() {
   var span = selectionOffsets(index, range);
   var anchor = span && quoteAnchor(index.text, span.start, span.end);
   if (!anchor) return clearReportedSelection();
+  var rect = boxOf(range.getBoundingClientRect());
+  if (rect.width === 0 && rect.height === 0) return clearReportedSelection();
+  var key = anchor.quote + "|" + Math.round(rect.left) + "|" + Math.round(rect.top) + "|" + Math.round(rect.width) + "|" + Math.round(rect.height);
+  if (reportedSelection && key === lastSelectionKey) return;
   reportedSelection = true;
-  post({ method: "coforge/notifications/annotate-selected", params: { type: "text", data: anchor, rect: boxOf(range.getBoundingClientRect()) } });
+  lastSelectionKey = key;
+  post({ method: "coforge/notifications/annotate-selected", params: { type: "text", data: anchor, rect: rect } });
+}
+function scheduleSelection(delay) {
+  clearTimeout(selectionTimer);
+  selectionTimer = setTimeout(reportSelection, delay || 0);
 }
 function setMode(params) {
   var next = params || {};
@@ -366,11 +411,15 @@ function setMode(params) {
     else stopPicking();
   }
   annotate.selecting = next.selecting === true;
-  if (!annotate.selecting) reportedSelection = false;
+  if (!annotate.selecting) {
+    reportedSelection = false;
+    lastSelectionKey = null;
+  }
   var showMarks = next.showMarks === true;
   if (showMarks !== annotate.showMarks) {
     annotate.showMarks = showMarks;
     drawMarks();
+    drawDraftPins();
   }
   post({ method: "coforge/notifications/annotate-mode", params: { picking: annotate.picking } });
 }
@@ -384,16 +433,33 @@ function annotateMessage(method, params) {
   }
 }
 function startAnnotations() {
-  window.addEventListener("pointerup", function () { setTimeout(reportSelection, 0); }, true);
+  window.addEventListener("pointerdown", function () { selectionPointerDown = true; }, true);
+  window.addEventListener("pointercancel", function () { selectionPointerDown = false; }, true);
+  window.addEventListener("pointerup", function () { selectionPointerDown = false; scheduleSelection(0); }, true);
+  window.addEventListener("mouseup", function () { selectionPointerDown = false; scheduleSelection(0); }, true);
+  window.addEventListener("keydown", function (event) {
+    if (!annotate.selecting || !event.isTrusted || event.isComposing || event.repeat) return;
+    if ((event.metaKey || event.ctrlKey) && event.altKey && (event.code === "KeyM" || String(event.key).toLowerCase() === "m")) {
+      reportSelection();
+      if (reportedSelection) {
+        event.preventDefault();
+        post({ method: "coforge/notifications/annotate-compose", params: {} });
+      }
+    }
+  }, true);
   window.addEventListener("keyup", function (event) {
     if (event.shiftKey || /^(Arrow|Home$|End$|Page)/.test(event.key) || ((event.ctrlKey || event.metaKey) && event.key === "a")) reportSelection();
   }, true);
   document.addEventListener("selectionchange", function () {
     var selection = window.getSelection();
-    if (reportedSelection && (!selection || selection.isCollapsed)) clearReportedSelection();
+    if (!selection || selection.isCollapsed) {
+      if (reportedSelection) clearReportedSelection();
+      return;
+    }
+    if (annotate.selecting && !selectionPointerDown) scheduleSelection(80);
   });
   window.addEventListener("resize", scheduleRelocate);
   window.addEventListener("load", scheduleRelocate);
   document.addEventListener("DOMContentLoaded", relocate);
 }
-`;
+`}`;

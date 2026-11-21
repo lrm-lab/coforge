@@ -3,6 +3,8 @@ import type { ThreadPlaces } from "./artifact-commenting";
 
 export type CommentThread = { root: ArtifactCommentView; replies: ArtifactCommentView[] };
 
+export type CommentSortOrder = "page" | "updated";
+
 export type CommentGroups = {
   whole: CommentThread[];
   anchored: CommentThread[];
@@ -110,4 +112,66 @@ export const canSaveCommentEdit = ({
 
 export function commentsCap(total: number): string {
   return total > 999 ? "999+" : String(total);
+}
+
+function commentTimestamp(value: Date | string | null | undefined): number {
+  if (!value) return 0;
+  const time = value instanceof Date ? value.getTime() : new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+export function threadUpdatedAt(thread: CommentThread): number {
+  let latest = commentTimestamp(thread.root.createdAt);
+  if (!("deleted" in thread.root)) {
+    latest = Math.max(latest, commentTimestamp(thread.root.editedAt));
+  }
+  for (const reply of thread.replies) {
+    latest = Math.max(latest, commentTimestamp(reply.createdAt));
+    if (!("deleted" in reply)) {
+      latest = Math.max(latest, commentTimestamp(reply.editedAt));
+    }
+  }
+  return latest;
+}
+
+export function sortThreadsByUpdated(threads: readonly CommentThread[]): CommentThread[] {
+  return [...threads].sort(
+    (left, right) =>
+      threadUpdatedAt(right) - threadUpdatedAt(left) ||
+      commentTimestamp(right.root.createdAt) - commentTimestamp(left.root.createdAt) ||
+      left.root.id.localeCompare(right.root.id),
+  );
+}
+
+function anchorSearchText(comment: Exclude<ArtifactCommentView, { deleted: true }>): string {
+  if (!comment.anchor) return "";
+  const { data } = comment.anchor;
+  const parts: string[] = [];
+  for (const key of ["quote", "label", "name", "selector"] as const) {
+    const value = data[key];
+    if (typeof value === "string" && value) parts.push(value);
+  }
+  return parts.join(" ");
+}
+
+export function matchesCommentSearch(thread: CommentThread, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  for (const comment of [thread.root, ...thread.replies]) {
+    if ("deleted" in comment) continue;
+    if (comment.body.toLowerCase().includes(needle)) return true;
+    if (comment.author.name.toLowerCase().includes(needle)) return true;
+    if (comment.path && comment.path.toLowerCase().includes(needle)) return true;
+    if (anchorSearchText(comment).toLowerCase().includes(needle)) return true;
+  }
+  return false;
+}
+
+export function filterCommentGroups(groups: CommentGroups, query: string): CommentGroups {
+  if (!query.trim()) return groups;
+  return {
+    whole: groups.whole.filter((thread) => matchesCommentSearch(thread, query)),
+    anchored: groups.anchored.filter((thread) => matchesCommentSearch(thread, query)),
+    resolved: groups.resolved.filter((thread) => matchesCommentSearch(thread, query)),
+  };
 }

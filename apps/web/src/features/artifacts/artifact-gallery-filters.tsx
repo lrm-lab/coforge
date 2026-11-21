@@ -1,7 +1,18 @@
-import { useRef } from "react";
+import { useRef, type ComponentType } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button as AriaButton } from "react-aria-components";
-import { ChevronDown, Globe02, Grid01, List, Users01, XClose } from "@untitledui/icons";
+import {
+  ChevronDown,
+  Globe02,
+  Grid01,
+  List,
+  MessageChatCircle,
+  Star01,
+  SwitchVertical01,
+  User01,
+  Users01,
+  XClose,
+} from "@untitledui/icons";
 
 import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
@@ -24,17 +35,26 @@ import { useConversationName } from "./use-conversation-name";
 
 const chipClass = (active: boolean) =>
   cn(
-    "flex shrink-0 cursor-pointer items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm font-medium outline-focus-ring ring-1 ring-inset focus-visible:outline-2",
+    "flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium outline-focus-ring ring-1 ring-inset focus-visible:outline-2",
     active
       ? "bg-active text-primary ring-primary"
       : "text-tertiary ring-secondary hover:bg-primary_hover",
   );
 
-function ChipTrigger({ label, active }: { label: string; active: boolean }) {
+function ChipTrigger({
+  icon: Icon,
+  label,
+  active,
+}: {
+  icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  label: string;
+  active: boolean;
+}) {
   return (
     <AriaButton className={chipClass(active)}>
+      <Icon aria-hidden={true} className="size-4 shrink-0 text-fg-quaternary" />
       <span className="max-w-48 truncate">{label}</span>
-      <ChevronDown aria-hidden="true" className="size-3.5" />
+      <ChevronDown aria-hidden="true" className="size-3.5 shrink-0" />
     </AriaButton>
   );
 }
@@ -130,6 +150,7 @@ export function ConversationFilter({
         onSelect={(key) => onChange(scopeOf(key))}
         trigger={
           <ChipTrigger
+            icon={MessageChatCircle}
             label={scope ? m.ag_conversation_chip({ name: label }) : label}
             active={scope !== undefined}
           />
@@ -153,11 +174,17 @@ export function AuthorFilter({
     label: agent.name,
     face: { kind: "identity", name: agent.name, agentId: agent.id },
   }));
-  const names = authorIds.map((id) => agents.find((agent) => agent.id === id)?.name ?? "");
+  const names = authorIds
+    .map((id) => agents.find((agent) => agent.id === id)?.name ?? "")
+    .filter(Boolean);
+  const shownNames = names.slice(0, 2).join(", ");
+  const overflow = names.length - 2;
   const label =
-    authorIds.length === 0
+    names.length === 0
       ? m.ag_filter_author()
-      : m.ag_author_chip({ names: names.slice(0, 2).join(", ") });
+      : m.ag_author_chip({
+          names: overflow > 0 ? `${shownNames} +${overflow}` : shownNames,
+        });
   return (
     <div className="flex shrink-0 items-center">
       <EntityPicker
@@ -166,7 +193,7 @@ export function AuthorFilter({
         options={options}
         selectedKeys={authorIds}
         onSelectedKeysChange={onChange}
-        trigger={<ChipTrigger label={label} active={authorIds.length > 0} />}
+        trigger={<ChipTrigger icon={User01} label={label} active={authorIds.length > 0} />}
       />
       {authorIds.length > 0 && <ClearButton onClear={() => onChange([])} />}
     </div>
@@ -176,7 +203,8 @@ export function AuthorFilter({
 export function RelatedToggle({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
   return (
     <AriaButton aria-pressed={on} className={chipClass(on)} onPress={() => onChange(!on)}>
-      {m.ag_related()}
+      <Star01 aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
+      <span>{m.ag_related()}</span>
     </AriaButton>
   );
 }
@@ -192,8 +220,9 @@ export function SortMenu({
   return (
     <Dropdown.Root>
       <AriaButton aria-label={m.ag_sort()} className={chipClass(false)}>
-        {words && (sort === "opened" ? m.ag_sort_opened() : m.ag_sort_updated())}
-        <ChevronDown aria-hidden="true" className="size-3.5" />
+        <SwitchVertical01 aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
+        {words && <span>{sort === "opened" ? m.ag_sort_opened() : m.ag_sort_updated()}</span>}
+        <ChevronDown aria-hidden="true" className="size-3.5 shrink-0" />
       </AriaButton>
       <Dropdown.Popover placement="bottom end">
         <Dropdown.Menu

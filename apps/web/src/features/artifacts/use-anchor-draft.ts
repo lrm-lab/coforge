@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useHotkey } from "@tanstack/react-hotkeys";
 
 import { selectionAffordancePlacement } from "#src/features/conversations/message-quote";
 import type { AnchorDraft } from "./artifact-anchor-places";
@@ -42,6 +43,7 @@ export function useAnchorDraft({
   frame,
   paintOffer,
   autoCompose = false,
+  composeRequest = 0,
   onDismiss,
 }: {
   key: string | null;
@@ -49,10 +51,12 @@ export function useAnchorDraft({
   frame: RefObject<Element | null>;
   paintOffer: boolean;
   autoCompose?: boolean;
+  composeRequest?: number;
   onDismiss: () => void;
 }) {
   const { holds } = useArtifactCommenting();
   const openings = useRef(0);
+  const lastComposeRequest = useRef(composeRequest);
   const [composingState, setComposing] = useState<{
     key: string;
     draft: PlacedDraft;
@@ -89,6 +93,21 @@ export function useAnchorDraft({
   const retarget = useCallback((draft: AnchorDraft) => {
     setComposing((current) => current && { ...current, draft: { ...current.draft, draft } });
   }, []);
+
+  useHotkey("Mod+Alt+M", () => compose(), {
+    enabled: Boolean(offer && !composing),
+  });
+
+  useEffect(() => {
+    if (composeRequest === lastComposeRequest.current) return;
+    if (!offered || composing) {
+      lastComposeRequest.current = composeRequest;
+      return;
+    }
+    if (!offer) return;
+    lastComposeRequest.current = composeRequest;
+    compose();
+  }, [composeRequest, offered, offer, composing, compose]);
 
   useEffect(() => {
     if (key === null || !placedOffer || placedOffer.draft !== offered) return;

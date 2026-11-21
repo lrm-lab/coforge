@@ -69,9 +69,9 @@ export function CommentAnchorLine({
       )}
       onPress={() => commenting.revealThread({ version, path, anchor })}
     >
-      <span>
+      <span className="flex flex-wrap items-baseline gap-x-1.5">
         <span className="font-medium text-secondary">{m.av_cm_in_file({ path })}</span>
-        {place && ` · ${place}`}
+        {place && <span>{place}</span>}
       </span>
       {excerpt && <span className="line-clamp-2 block">{excerpt}</span>}
     </AriaButton>

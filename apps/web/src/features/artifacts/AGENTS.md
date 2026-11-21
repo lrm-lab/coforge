@@ -37,12 +37,23 @@ These rules apply to `src/features/artifacts/`. They extend
   chooses to widen, share by link, or send anyway.
 - The viewer's actions live in the page header and the ⋯ menu (`artifact-more-menu.tsx`); show an
   action only when the viewer may do it.
-- An artifact's own page owns the window: its route sets `staticData.standalone`, which makes
-  `AppShell` skip the sidebar, its queries and the tab bar (`useIsStandalonePage`); the gallery keeps
-  the shell. The header reads, left to right, back link, title, version, who can see, home
-  conversation (only when it is not the scope), who is viewing, then find, copy link and more. The
-  back link returns to the gallery when the viewer came from it (`galleryEntryState`), else to the
-  home conversation or the Workspace home (`homeLinkProps`).
+- An artifact's own standalone route (`/w/$workspaceSlug/artifacts/$artifactId`) sets
+  `staticData.standalone`, which makes `AppShell` skip the sidebar, its queries and the tab bar
+  (`useIsStandalonePage`). The gallery (`/w/$workspaceSlug/artifacts/`) keeps the shell and opens
+  artifacts in an in-workspace overlay via `?artifact=<id>` (with `Open full page` and `Close`).
+  The beside-chat pane (`ConversationArtifactSplit`) uses `react-resizable-panels` persisted in
+  `localLayoutStorage` with `Expand / Restore` and `Shift+←/→` resizing. The header consolidates
+  visibility, version history, home/origin links, and the live presence roster into
+  `ArtifactDetailsPopover` on the title (or via `Details` in `⋯` anchored to the title container in
+  chat split beside `RecentArtifactsMenu`), stacks mobile (`< sm`) visibility + presence quietly
+  inside the title column, and shows a combined HTML element-picker + `Comments` dropdown (`Show all
+comments` / `Doesn't display well here`, which prefills the whole-artifact composer via
+  `useDisplayReportPrefill`). Scoped `Mod+F` opens
+  find-in-page on HTML and Markdown artifacts (`ArtifactMarkdown` also renders a wide-container
+  sticky outline TOC via `ArtifactMarkdownOutline` and highlights matches via CSS Custom Highlights);
+  `ArtifactFileView` syntax-highlights code lines and renders native `<video controls>` previews.
+  The back link returns to the gallery when the viewer came from it (`galleryEntryState`), else to
+  the home conversation or the Workspace home (`homeLinkProps`).
 - The open call records the viewer and answers with the roster, which seeds the viewers query; the
   presence chip reads it only after that (`useRecordOpen`). Who is viewing now is the artifact's
   Centrifugo presence channel (`artifactPresenceChannel`, join and leave, no polling); the roster is
@@ -66,7 +77,7 @@ These rules apply to `src/features/artifacts/`. They extend
   the line its record starts on, header = line 1, and a quoted multi-line cell advances the count).
   The kind picks an adapter (`textAdapter`, `linesAdapter`: `build`, `locate`, `fromSelection`) once.
   The surface keeps one cached index per content revision (`useSurfaceIndex`: the observer only marks
-  it dirty and runs only while comment mode is on or the panel is open) and publishes one
+  it dirty and stays active for zero-mode text selection as well as comment mode or an open panel) and publishes one
   `ThreadPlaces` map (comment id to found or neutral) through `publishPlaces`; panel
   order, the anchor line's status and reveal all read that map. Comments follow their version: the page
   hands surfaces only the shown version's threads (`useShownThreads`), a surface places only drafts
@@ -86,23 +97,30 @@ These rules apply to `src/features/artifacts/`. They extend
   consume-once handoffs (`useCommentHandoff`): one is dropped when a newer one replaces it or its file or comment mode moves away, and a reveal is consumed only once the surface has located it against a settled index (`useSurfaceIndex.settled`), so a partial render does not spend it. Stable
   values, the thread list, the handoffs and the places are separate contexts
   (`artifact-commenting.ts`). The composer's target is one union (`ComposerTarget`).
-- Comment mode (canvas picking) and the comments panel are independent states in `useCommentMode`:
-  the header comment button and `⋯` toggle only the comments panel without hijacking canvas clicks,
-  while the bottom-right `ArtifactReviewPill` toggles canvas annotate mode (click to enter, `Escape` to exit)
-  alongside draft undo/redo/discard/send. The panel docks beside the page, but while the artifact
-  area is under 48rem (beside chat) it floats over the page's right side so the page keeps its width
-  (Frank's choice over the docked-only panel); on a phone it fills the screen. A thread link opens the panel alone; closing the panel keeps the mode. Everything
-  is drawn beside the content (the observed content node is never touched); highlights use the CSS
-  Custom Highlight API (`lib/css-highlight.ts`). The text index skips `data-anchor-chrome` widgets
-  (the code block's toolbar and previews), so a quote is what the reader sees; a quote shorter than
-  12 characters is found only where some context still matches.
+- Comment mode (element picking) and the comments panel are independent states in `useCommentMode`:
+  the header `Comments` button toggles only the comments panel without hijacking canvas clicks, while
+  the HTML header `Comment` picker button toggles element-pick mode (`Escape` exits). Text selections in Markdown and HTML offer the floating `Comment` pill
+  immediately without entering annotate mode (`Mod+Alt+M` opens the composer directly). All comment
+  composers offer hybrid `Save draft` + immediate `Send` (primary swaps to `Save draft` once 1+
+  drafts exist). The comments sidebar supports search (`Search comments`), sort (`Page order` /
+  `Last updated`), `Your drafts`, and a bottom whole-artifact composer. The panel docks beside the
+  page with a persisted drag-resize handle (`18rem`–`32rem`) when the artifact area is `>= 48rem`,
+  floats over the right edge under `48rem` (beside chat), and uses a draggable bottom sheet
+  (`ArtifactMobileSheet`) on `< sm`. A thread link opens the panel alone; closing the panel keeps
+  the mode. Everything is drawn beside the content (the observed content node is never touched);
+  highlights use the CSS Custom Highlight API (`lib/css-highlight.ts`). The text index skips
+  `data-anchor-chrome` widgets (the code block's toolbar, outline TOC and previews), so a quote is
+  what the reader sees; a quote shorter than 12 characters is found only where some context still
+  matches.
 - Comments on an HTML page go through the bridge's annotation channel
   (`artifact-page-bridge-annotate.ts`); the host never touches the page's DOM. Host to frame:
   `coforge/annotate/mode`, `marks`, `focus`, `draft`. Frame to host:
-  `coforge/notifications/annotate-selected|unselected|unanchorable|found|activated` (and an
+  `coforge/notifications/annotate-selected|unselected|unanchorable|found|activated|annotate-compose` (and an
   `annotate-mode` acknowledgement the host ignores). The host keeps a gate as a filter: an `element`
-  anchor is accepted while picking is on and the viewer is active, each time; a `text` anchor in
-  comment mode; `unanchorable` only while picking and the viewer is active; `found` and `activated` name only ids the host
+  anchor is accepted while picking is on and the viewer is active, each time; a `text` anchor and
+  `annotate-compose` (`Mod+Alt+M`) are accepted whenever `selecting` is enabled (including outside
+  pick mode, with `userActive()` required for `annotate-compose`); `unanchorable` only while picking
+  and the viewer is active; `found` and `activated` name only ids the host
   sent, for the current marks revision; `ui/notifications/initialized` replays mode, marks and draft
   (rate limited with `ui/initialize`; a replay sends anchors clipped to the incoming limits).
   Everything arriving is validated again (`parsePicked`) with the anchor limits (selector 1000,
@@ -140,13 +158,12 @@ These rules apply to `src/features/artifacts/`. They extend
   `use-submit-drafts.ts` owns send; both run under the store's one `exclusive` lock and busy state,
   so a send blocks draft edits and the reverse). The provider `artifact-drafts-provider.tsx` splits a
   state context (`useCommentDrafts`) from a stable actions context (`useCommentDraftActions`). The
-  bottom-right `ArtifactReviewPill` owns the 4-state review flow (idle `MessageSquare01` FAB →
-  picking/composing `CursorBox` FAB + inline rich editor → inline `<tag>` chips → queued draft list
-  with edit/delete, `+ New comment`, and `Send →` batch submit). Undo and redo (a 60-step
+  contextual centered `ArtifactReviewPill` (`ArtifactReviewBar`) appears only while element picking is
+  active or unsent drafts exist (picking/composing inline rich editor with `<tag>` chips → queued
+  draft list with edit/delete, `+ New comment`, and `Send →` batch submit; no idle floating orb). Undo and redo (a 60-step
   reducer, `artifact-draft-history.ts`, replaying server operations including edited anchor/path;
   drafts with images are not recorded; a step the server refuses for good is dropped with its toast,
   a transient failure keeps it; a restored draft keeps its creation time) run via Mod+Z, Shift+Mod+Z
   and Mod+Y outside text fields and modal dialogs, ignore handled events, and prevent the default
-  only when they act. Hide the annotation button at the button itself. Restore it with Mod+period or three taps in its original spot.
-  A refused send opens the pending panel with the failing draft outlined. `?review=<id>` filters the
+  only when they act. A refused send opens the pending panel with the failing draft outlined. `?review=<id>` filters the
   panel to one review through the existing review read.

@@ -48,7 +48,7 @@ export const kindName = (kind: ArtifactPathKind) => KIND_LABELS[kind]();
 
 export const kindLabel = (entryPath: string) => kindName(artifactKindOfPath(entryPath));
 
-const KIND_ICONS = {
+export const KIND_ICONS = {
   html: Browser,
   markdown: File02,
   text: FileCode01,
@@ -100,7 +100,7 @@ export function ArtifactEditedLine({
 export function ArtifactActor({ actor }: { actor: ArtifactActorView | undefined }) {
   if (!actor) return null;
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5">
+    <span className="inline-flex max-w-full min-w-0 items-center gap-1.5">
       <ActorAvatar
         presence={false}
         size="xs"
@@ -130,9 +130,7 @@ export function PaneFrame({
       className={cn(
         "@container/doc flex min-h-0 flex-col bg-primary animate-in fade-in slide-in-from-right-3 motion-enter-sm motion-reduce:animate-none",
         "max-md:w-full max-md:min-w-0 max-md:flex-1 max-md:border-l-0",
-        full
-          ? "fixed inset-0 size-full min-w-0"
-          : "relative w-[min(48rem,56%)] shrink-0 border-l border-secondary",
+        full ? "fixed inset-0 size-full min-w-0" : "relative w-full min-w-0 flex-1",
       )}
     >
       {children}

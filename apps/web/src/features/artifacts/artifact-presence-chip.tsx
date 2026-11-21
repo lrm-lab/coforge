@@ -1,7 +1,14 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button as AriaButton, Dialog, DialogTrigger, Popover } from "react-aria-components";
+import {
+  Button as AriaButton,
+  Dialog,
+  DialogTrigger,
+  Focusable,
+  Popover,
+} from "react-aria-components";
 
+import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { ActorAvatarStack } from "#src/features/avatars/actor-avatar-stack";
@@ -77,7 +84,7 @@ export function useRecordOpen(artifactId: string, version: number): boolean {
   return opened;
 }
 
-function useNameNewViewers(
+export function useNameNewViewers(
   artifactId: string,
   roster: ArtifactViewers | undefined,
   present: ReadonlySet<string> | undefined,
@@ -100,7 +107,7 @@ function useNameNewViewers(
   }, [artifactId, unnamed, viewingKey, queryClient]);
 }
 
-function shapeRoster(roster: ArtifactViewers, viewing: ReadonlySet<string>) {
+export function shapeRoster(roster: ArtifactViewers, viewing: ReadonlySet<string>) {
   const viewingNow = roster.seen
     .filter((person) => viewing.has(person.userId))
     .sort((a, b) => Number(b.userId === roster.you) - Number(a.userId === roster.you));
@@ -181,7 +188,7 @@ export function ArtifactPresenceChip({
             <p className="px-2 pt-1 pb-2 text-xs text-tertiary">
               {summary.map((part, index) => (
                 <Fragment key={part}>
-                  {index > 0 && " · "}
+                  {index > 0 && ", "}
                   <span className="whitespace-nowrap">{part}</span>
                 </Fragment>
               ))}
@@ -205,7 +212,7 @@ export function ArtifactPresenceChip({
                   <>
                     <RelativeTime value={person.openedAt} plain />
                     {person.seenVersion < data.currentVersion &&
-                      ` · ${m.av_presence_saw({ version: person.seenVersion })}`}
+                      `, ${m.av_presence_saw({ version: person.seenVersion })}`}
                   </>
                 }
               />
@@ -227,9 +234,18 @@ function PresenceRow({
   detail: ReactNode;
 }) {
   return (
-    <li className="flex h-9 items-center gap-2 rounded-md px-2 text-sm">
+    <li className="flex h-8 items-center gap-2 rounded-md px-2 text-sm">
       <PersonFace person={person} />
-      <span className="min-w-0 flex-1 truncate font-medium text-secondary">{name}</span>
+      <Tooltip title={name} placement="top start">
+        <Focusable>
+          <span
+            tabIndex={0}
+            className="min-w-0 flex-1 cursor-default truncate rounded-sm text-left font-medium text-secondary outline-focus-ring focus-visible:outline-2"
+          >
+            {name}
+          </span>
+        </Focusable>
+      </Tooltip>
       <span className="shrink-0 text-xs text-tertiary">{detail}</span>
     </li>
   );

@@ -16,6 +16,7 @@ export type Offer = {
   offered: AnchorDraft | null;
   paintOffer: boolean;
   autoCompose?: boolean;
+  composeRequest?: number;
   onDismiss: () => void;
   onContentClick?: (event: MouseEvent) => void;
 };
@@ -28,6 +29,7 @@ export function useTextOffer({ get, content, key, composing }: OfferInput<TextIn
     if (key === null || !element) return;
     let pointerDown = false;
     let holding = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const evaluate = () => {
       if (composing.current) return;
       const selection = window.getSelection();
@@ -51,13 +53,15 @@ export function useTextOffer({ get, content, key, composing }: OfferInput<TextIn
       holding = false;
       if (!pointerDown) return;
       pointerDown = false;
-      window.setTimeout(evaluate, 0);
+      clearTimeout(timer);
+      timer = setTimeout(evaluate, 0);
     };
     document.addEventListener("selectionchange", onChange);
     document.addEventListener("pointerdown", onDown);
     document.addEventListener("pointerup", onUp);
     document.addEventListener("pointercancel", onUp);
     return () => {
+      clearTimeout(timer);
       document.removeEventListener("selectionchange", onChange);
       document.removeEventListener("pointerdown", onDown);
       document.removeEventListener("pointerup", onUp);

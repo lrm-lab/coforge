@@ -6,6 +6,7 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { FLOATING_SURFACE_CLASS } from "#src/features/conversations/review-chrome";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { POPOVER_MOTION } from "#src/utils/popover-motion";
 import { describeAnchor } from "./artifact-comment-anchor";
 import { ArtifactCommentComposer } from "./artifact-comment-composer";
 import type { AnchorDraft, DraftTrail } from "./artifact-anchor-places";
@@ -47,7 +48,8 @@ export function ArtifactCommentPopover({
       data-comment-popover=""
       style={{ top, left }}
       className={cn(
-        "absolute z-20 w-88 max-w-[calc(100%-1rem)] origin-top animate-in fade-in zoom-in-[0.97] motion-enter-sm",
+        "absolute z-20 w-88 max-w-[calc(100%-1rem)] origin-top animate-in fade-in zoom-in-[0.96] motion-enter-sm motion-reduce:animate-none",
+        POPOVER_MOTION,
         FLOATING_SURFACE_CLASS,
       )}
       onKeyDown={(event) => {
@@ -72,7 +74,7 @@ export function ArtifactCommentPopover({
           anchor,
           suggestion,
           header: (
-            <div className="flex items-start gap-2">
+            <div className="flex items-start gap-2 border-b border-secondary pb-2">
               <div className="min-w-0 flex-1 space-y-1 pt-1.5 text-xs text-tertiary">
                 {trail && (
                   <TrailLine trail={trail} onStep={(index) => onRetarget?.(trail.step(index))} />

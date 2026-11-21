@@ -8,7 +8,7 @@ import { m } from "#src/paraglide/messages";
 import { loadArtifactMarks } from "./artifact-gallery.functions";
 import { CardBadges } from "./artifact-gallery-card";
 import { useScopeOf } from "./artifact-scope";
-import { MarkdownPreview } from "./artifact-preview";
+import { MarkdownPreview, stripLeadingTitleHeading } from "./artifact-preview";
 import { entryFactsLine } from "./artifact-entry-facts";
 import {
   analyzeBodyArtifacts,
@@ -211,7 +211,7 @@ export function ArtifactCardFace({
         )}
         {card.preview && (
           <div className="mt-0.5 line-clamp-2 text-sm text-tertiary">
-            <MarkdownPreview markdown={card.preview} />
+            <MarkdownPreview markdown={stripLeadingTitleHeading(card.preview, card.title)} />
           </div>
         )}
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">

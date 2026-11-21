@@ -4,8 +4,8 @@
   "doc_filter_all": "All",
   "doc_filter_artifacts": "Artifacts",
   "doc_filter_files": "Files",
-  "doc_list_empty": "No artifacts here yet.",
-  "doc_list_failed": "Couldn't load the artifacts.",
+  "doc_list_empty": "No artifacts here yet",
+  "doc_list_failed": "Couldn't load the artifacts",
   "doc_kind_markdown": "Markdown",
   "doc_kind_html": "Web page",
   "doc_kind_text": "Text",
@@ -69,11 +69,11 @@
   "doc_delete": "Delete artifact",
   "doc_delete_title": "Delete “{title}”?",
   "doc_delete_body": "The artifact is deleted, and its cards in chat stop opening. This can't be undone.",
-  "doc_delete_failed": "Couldn't delete the artifact.",
+  "doc_delete_failed": "Couldn't delete the artifact",
   "doc_filter_label": "Filter by type",
   "doc_back": "Back",
   "doc_unavailable_title": "Can't open this",
-  "doc_page_preview_failed": "This page didn't load.",
+  "doc_page_preview_failed": "This page didn't load",
   "doc_page_preview_off": "Web pages can't be shown on this deployment yet.",
   "doc_page_preview_retry": "Try again",
   "doc_retry": "Try again",
@@ -84,12 +84,12 @@
   "doc_send_title": "Send “{title}”",
   "doc_send_send": "Send",
   "doc_send_join_and_send": "Join and send",
-  "doc_send_sent_to": "Sent to {target}.",
+  "doc_send_sent_to": "Sent to {target}",
   "doc_send_sent_to_many": "Sent to {count} destinations",
   "doc_send_partial": "Sent to {delivered} of {total} destinations. Try the remaining destinations.",
   "doc_send_none": "Couldn't send to the selected destinations. Review the selection and try again.",
   "doc_send_uncertain": "We couldn't confirm whether it was sent. It's safe to try again.",
-  "doc_send_gone": "This artifact is no longer available.",
+  "doc_send_gone": "This artifact is no longer available",
   "doc_card_forbidden": "You don't have access to this artifact",
   "doc_card_deleted": "This artifact was deleted",
   "doc_send_send_to": "Send to {count}",
@@ -97,7 +97,7 @@
   "navigation_artifacts": "Artifacts",
   "av_version_switch": "v{version}, switch version",
   "av_version_latest": "Latest",
-  "av_version_by": "{name} · {time}",
+  "av_version_by": "{name}, {time}",
   "av_versions": "Version history",
   "av_viewing_version": "Viewing v{version}",
   "av_back_to_latest": "Back to latest",
@@ -169,9 +169,20 @@
   "av_rename_title": "Rename artifact",
   "av_rename_label": "Title",
   "av_rename_save": "Save",
-  "av_rename_failed": "Couldn't rename the artifact.",
+  "av_rename_failed": "Couldn't rename the artifact",
   "av_menu_files": "Files",
   "av_files_close": "Close files",
+  "av_files_summary": [
+    {
+      "declarations": ["input count", "input size", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} file, {size}",
+        "countPlural=other": "{count} files, {size}"
+      }
+    }
+  ],
+  "av_outline": "Outline",
   "av_file_entry": "Entry",
   "av_file_download": "Download {name}",
   "av_menu_download": "Download",
@@ -183,7 +194,7 @@
   "av_file_no_preview": "No preview here",
   "public_file_sign_in": "Sign in to CoForge to view this file",
   "av_file_back": "Back to the artifact",
-  "av_file_failed": "Couldn't load this file.",
+  "av_file_failed": "Couldn't load this file",
   "av_card_updates": "Has updates",
   "av_card_new_comments": "{count} new comments",
   "av_card_mention": "Mentions you",
@@ -240,12 +251,12 @@
   "av_cm_group_whole": "Whole artifact",
   "av_cm_resolved_group": "Resolved ({count})",
   "av_cm_older": "Load earlier comments",
-  "av_cm_older_failed": "Couldn't load earlier comments.",
-  "av_cm_load_failed": "Couldn't load the comments.",
+  "av_cm_older_failed": "Couldn't load earlier comments",
+  "av_cm_load_failed": "Couldn't load the comments",
   "av_cm_retry": "Try again",
   "av_cm_edited": "edited",
   "av_cm_version": "v{version}",
-  "av_cm_version_viewing": "v{version} · Viewing",
+  "av_cm_version_viewing": "v{version} (Viewing)",
   "av_cm_version_section": "v{version} ({count})",
   "av_cm_in_file": "In {path}",
   "av_cm_line": "Line {line}",
@@ -261,7 +272,7 @@
   "av_cm_delete_title": "Delete this comment?",
   "av_cm_delete_body": "Nobody will be able to see it afterwards.",
   "av_cm_delete_confirm": "Delete comment",
-  "av_cm_delete_failed": "Couldn't delete the comment.",
+  "av_cm_delete_failed": "Couldn't delete the comment",
   "av_cm_resolved_toast": "Thread resolved",
   "av_cm_reopened_toast": "Thread reopened",
   "av_cm_action_failed": "That didn't go through. Try again.",
@@ -276,7 +287,7 @@
   "av_cm_remove_image": "Remove image",
   "av_cm_image_alt": "Attached image",
   "av_cm_images_max": "A comment holds up to {count} images.",
-  "av_cm_image_failed": "That image couldn't be uploaded.",
+  "av_cm_image_failed": "That image couldn't be uploaded",
   "av_cm_will_notify": "Will notify {names}",
   "av_cm_on_file": "Commenting on {path}",
   "av_cm_clear_target": "Comment on the whole artifact instead",
@@ -372,11 +383,11 @@
   ],
   "av_dr_discard_body": "This can't be undone.",
   "av_dr_discard_confirm": "Discard drafts",
-  "av_dr_discard_failed": "Couldn't discard your drafts.",
+  "av_dr_discard_failed": "Couldn't discard your drafts",
   "av_dr_delete_title": "Delete this draft?",
   "av_dr_delete_body": "Its images are deleted with it, and that can't be undone.",
   "av_dr_delete_confirm": "Delete draft",
-  "av_dr_delete_failed": "Couldn't delete the draft.",
+  "av_dr_delete_failed": "Couldn't delete the draft",
   "av_dr_deleted": "Draft deleted",
   "av_dr_save_failed": "Couldn't save the draft. Try again.",
   "av_dr_limit": [
@@ -389,8 +400,8 @@
       }
     }
   ],
-  "av_dr_undo_failed": "Couldn't undo that step.",
-  "av_dr_redo_failed": "Couldn't redo that step.",
+  "av_dr_undo_failed": "Couldn't undo that step",
+  "av_dr_redo_failed": "Couldn't redo that step",
   "av_dr_pending_title": [
     {
       "declarations": ["input count", "local countPlural = count: plural"],
@@ -404,7 +415,7 @@
   "av_dr_pending_refused": "Nothing was sent. Fix or delete the outlined draft, then send again.",
   "av_dr_pending_changed": "Your drafts changed since you last looked. Check the list, then send again.",
   "av_dr_send_failed": "Couldn't send. Your drafts are all still here, so try again.",
-  "av_dr_load_failed": "Couldn't load your drafts.",
+  "av_dr_load_failed": "Couldn't load your drafts",
   "av_dr_back": "Back",
   "av_dr_sent": [
     {
@@ -426,7 +437,50 @@
   "av_dr_filter_all": "All comments",
   "av_dr_filter_review": "{name}'s review",
   "av_dr_filter_clear": "Show all comments",
-  "av_dr_review_failed": "Couldn't load this review's comments.",
-  "av_dr_review_missing": "This review isn't part of this artifact.",
-  "av_dr_review_summary": "Review summary"
+  "av_dr_review_failed": "Couldn't load this review's comments",
+  "av_dr_review_missing": "This review isn't part of this artifact",
+  "av_dr_review_summary": "Review summary",
+  "av_details_label": "Details",
+  "av_details_trigger": "{title}, details",
+  "av_details_version": "Version",
+  "av_details_home": "Home conversation",
+  "av_details_origin": "Origin",
+  "av_cm_pick_element": "Comment on page",
+  "av_cm_show_all": "Show all comments",
+  "av_cm_show_all_count": "Show all comments ({count})",
+  "av_cm_display_issue": "Doesn't display well here",
+  "av_open_full_page": "Open full page",
+  "av_resize_artifact_pane": "Resize artifact pane",
+  "av_resize_side_panel": "Resize side panel",
+  "av_sheet_drag_label": "Drag to resize or close",
+  "ag_count": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} artifact",
+        "countPlural=other": "{count} artifacts"
+      }
+    }
+  ],
+  "ag_count_more": "{count}+ artifacts",
+  "ag_card_comments": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} comment",
+        "countPlural=other": "{count} comments"
+      }
+    }
+  ],
+  "av_cm_save_draft": "Save draft",
+  "av_cm_send": "Send",
+  "av_cm_save_draft_tip": "Save as draft",
+  "av_cm_send_tip": "Send comment",
+  "av_cm_search_placeholder": "Search comments",
+  "av_cm_search_empty": "No comments match your search",
+  "av_cm_sort": "Sort comments",
+  "av_cm_sort_page": "Page order",
+  "av_cm_sort_updated": "Last updated"
 }

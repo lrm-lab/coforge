@@ -1,0 +1,9 @@
+::highlight(artifact-find) {
+  background-color: var(--color-utility-yellow-100);
+  color: var(--color-text-primary);
+}
+
+::highlight(artifact-find-active) {
+  background-color: var(--color-utility-yellow-300);
+  color: var(--color-text-primary);
+}

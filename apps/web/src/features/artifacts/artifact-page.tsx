@@ -23,7 +23,6 @@ import {
   ShownThreadsContext,
   type ArtifactCommenting,
   type CommentRequests,
-  type PickedCommentAnchor,
   type PublishedPlaces,
 } from "./artifact-commenting";
 import { groupThreads } from "./artifact-comment-threads";
@@ -37,8 +36,13 @@ import { useRevealOnArrival, useThreadReveal } from "./use-thread-reveal";
 import { useCommentMode, type ArtifactPanelName } from "./use-comment-mode";
 import { ArtifactFilesPanel } from "./artifact-files-panel";
 import { ArtifactMarkdown } from "./artifact-markdown";
-import type { ArtifactPaneControls } from "./artifact-page-header";
-import { ArtifactPageHost, ArtifactViewerHeader } from "./artifact-page-shell";
+import type { ArtifactOverlayControls, ArtifactPaneControls } from "./artifact-page-header";
+import {
+  ArtifactPageHost,
+  ArtifactViewerHeader,
+  useArtifactDisplayReport,
+  useArtifactShellHotkeys,
+} from "./artifact-page-shell";
 import { homeConversationOf, homeLinkProps, type ArtifactHome } from "./artifact-home";
 import { useArtifactLinkSharing } from "./artifact-link-sharing";
 import { useKeepSeen, useRecordOpen } from "./artifact-presence-chip";
@@ -58,6 +62,7 @@ import { useArtifactVisibility } from "./use-artifact-visibility";
 
 type ArtifactPlace = {
   pane?: ArtifactPaneControls;
+  overlay?: ArtifactOverlayControls;
   reviewId?: string | undefined;
   commentId?: string | undefined;
   version?: number | undefined;
@@ -73,6 +78,7 @@ const shownEntry = (shown: {
 export function ArtifactPage({
   artifactId,
   pane,
+  overlay,
   reviewId,
   commentId,
   version,
@@ -85,13 +91,14 @@ export function ArtifactPage({
         <ArtifactUnavailable gone />
       </PaneFrame>
     ) : (
-      <ArtifactUnavailable gone />
+      <ArtifactUnavailable gone onClose={overlay?.onClose} />
     );
   return (
     <ArtifactPageFor
       key={artifactId}
       artifactId={artifactId}
       pane={pane}
+      overlay={overlay}
       reviewId={reviewId}
       commentId={commentId}
       version={version}
@@ -104,6 +111,7 @@ export function ArtifactPage({
 function ArtifactPageFor({
   artifactId,
   pane,
+  overlay,
   reviewId,
   commentId,
   version,
@@ -130,6 +138,8 @@ function ArtifactPageFor({
   const [places, setPlaces] = useState<PublishedPlaces>(null);
   const [holds] = useState(createComposerHolds);
   const [pickBus] = useState(createArtifactPickBus);
+  const openComments = useCallback(() => setPanel("comments"), []);
+  const displayReport = useArtifactDisplayReport({ openComments, shownVersion });
   const review = useReviewFilter(artifactId, reviewId, () => onClearReview?.());
   useEffect(() => {
     if (reviewId !== undefined) setPanel("comments");
@@ -181,7 +191,26 @@ function ArtifactPageFor({
   const locating = panel === "locating";
   const commentsOpen = commentMode.mode || commentPanelOpen || locating;
   const { openPath, source, framesPage, openFile, openThread } = useOpenFile(entryPath, webPage);
+  const openMarkdownFile = openPath !== null && artifactKindOfPath(openPath) === "markdown";
   const shownPath = openPath ?? entryPath;
+  const startFrameFind = useCallback(() => setFinding(true), []);
+  const stopFrameFind = useCallback(() => setFinding(false), []);
+  const shell = useArtifactShellHotkeys({
+    loaded: current !== undefined,
+    framesPage,
+    openMarkdownFile,
+    showingMarkdown: !openPath && entryKind === "markdown",
+    shownVersion,
+    openPath,
+    finding,
+    onStartFrameFind: startFrameFind,
+    onStopFrameFind: stopFrameFind,
+    panelOpen: panel !== null,
+    modalBusy: sendingTo || deleting || visibility.confirming,
+    annotating: commentMode.mode,
+    overlay,
+  });
+
   const [focus, postFocus, consumeFocus] = useCommentHandoff<string>(() => panel === "comments");
   useEffect(() => {
     if (commentId === undefined) return;
@@ -207,7 +236,6 @@ function ArtifactPageFor({
     () => groups.anchored.filter(({ root }) => root.version === shownVersion),
     [groups.anchored, shownVersion],
   );
-  const [pickedAnchor, setPickedAnchor] = useState<PickedCommentAnchor | null>(null);
   const commenting = useMemo<ArtifactCommenting>(
     () => ({
       artifactId,
@@ -216,8 +244,6 @@ function ArtifactPageFor({
       filePaths,
       commenting: commentMode.mode,
       panelOpen: commentPanelOpen || locating,
-      pickedAnchor,
-      setPickedAnchor,
       revealThread: (target) => {
         if (!docked) setPanel("locating");
         revealThread(target);
@@ -240,7 +266,6 @@ function ArtifactPageFor({
       commentPanelOpen,
       locating,
       docked,
-      pickedAnchor,
       revealThread,
       postFocus,
       publishPlaces,
@@ -253,8 +278,22 @@ function ArtifactPageFor({
     setPanel((current) => (current === "locating" ? null : current));
   }, [consumeReveal]);
   const requests = useMemo<CommentRequests>(
-    () => ({ reveal, consumeReveal: finishReveal, focus, consumeFocus }),
-    [reveal, finishReveal, focus, consumeFocus],
+    () => ({
+      reveal,
+      consumeReveal: finishReveal,
+      focus,
+      consumeFocus,
+      prefill: displayReport.prefill,
+      consumePrefill: displayReport.consumePrefill,
+    }),
+    [
+      reveal,
+      finishReveal,
+      focus,
+      consumeFocus,
+      displayReport.prefill,
+      displayReport.consumePrefill,
+    ],
   );
   const title = current?.artifact.title || m.doc_untitled();
   const copy = async (text: string, done: string) => {
@@ -272,6 +311,7 @@ function ArtifactPageFor({
   };
   const backHome = () => {
     if (pane) pane.onClose();
+    else if (overlay) overlay.onClose();
     else void router.navigate(homeLinkProps(home, workspaceSlug));
   };
   const viewLatest = () => {
@@ -295,7 +335,7 @@ function ArtifactPageFor({
     link,
     loaded: current !== undefined,
     actions: {
-      find: () => setFinding(true),
+      find: shell.openFind,
       "copy-link": () => void copyLink(),
       send: () => setSendingTo(true),
       comments: () => setPanel("comments"),
@@ -303,7 +343,6 @@ function ArtifactPageFor({
       delete: () => setDeleting(true),
     },
   });
-  const phone = !docked;
   const failure = read.error;
   if (isGone(failure) || (failure && !current)) {
     const unavailable = (
@@ -311,7 +350,7 @@ function ArtifactPageFor({
         gone={isGone(failure)}
         retrying={read.isFetching}
         onRetry={() => void read.refetch()}
-        onClose={pane?.onClose}
+        onClose={pane?.onClose ?? overlay?.onClose}
       />
     );
     return pane ? (
@@ -322,157 +361,171 @@ function ArtifactPageFor({
       unavailable
     );
   }
-  const body = (
-    <ArtifactCommentingContext.Provider value={commenting}>
-      <ArtifactDraftsProvider enabled={current !== undefined}>
-        <ShownThreadsContext.Provider value={shownThreads}>
-          <CommentRequestsContext.Provider value={requests}>
-            <CommentPlacesContext.Provider value={places}>
-              <ArtifactViewerHeader
-                artifactId={artifactId}
-                workspaceId={workspaceId}
-                entryPath={entryPath}
-                title={title}
-                loaded={current !== undefined}
-                shownVersion={shownVersion}
-                commentCount={current?.commentCount}
-                fileCount={files.length}
-                canDelete={current?.canDelete === true}
-                origin={current?.artifact.origin}
-                home={home}
-                homeName={homeName}
-                nameOf={nameOf}
-                visibility={visibility}
-                presenceReady={opened}
-                framesPage={framesPage}
-                commentsPanelActive={panel === "comments"}
-                phone={phone}
-                following={following}
-                pane={pane}
-                onChooseVersion={choose}
-                onFind={() => setFinding(true)}
-                onCopyLink={() => void copyLink()}
-                onToggleCommentsPanel={commentMode.togglePanel}
-                onMoreAction={onMoreAction}
-              />
-              <div className="@container/artifact relative flex min-h-0 flex-1">
+  return (
+    <ArtifactPageHost pane={pane} overlay={overlay} hasTitle={current !== undefined}>
+      <ArtifactCommentingContext.Provider value={commenting}>
+        <ArtifactDraftsProvider enabled={current !== undefined}>
+          <ShownThreadsContext.Provider value={shownThreads}>
+            <CommentRequestsContext.Provider value={requests}>
+              <CommentPlacesContext.Provider value={places}>
+                <ArtifactViewerHeader
+                  artifactId={artifactId}
+                  workspaceId={workspaceId}
+                  entryPath={entryPath}
+                  title={title}
+                  loaded={current !== undefined}
+                  shownVersion={shownVersion}
+                  latestVersion={latest}
+                  commentCount={current?.commentCount}
+                  fileCount={files.length}
+                  canDelete={current?.canDelete === true}
+                  origin={current?.artifact.origin}
+                  home={home}
+                  homeName={homeName}
+                  nameOf={nameOf}
+                  visibility={visibility}
+                  presenceReady={opened}
+                  framesPage={framesPage}
+                  annotating={commentMode.mode}
+                  commentsPanelActive={panel === "comments"}
+                  canFind={shell.canFind}
+                  findShortcut={shell.findShortcut}
+                  phone={!docked}
+                  following={following}
+                  pane={pane}
+                  overlay={overlay}
+                  onChooseVersion={choose}
+                  onFind={shell.openFind}
+                  onCopyLink={() => void copyLink()}
+                  onToggleAnnotate={commentMode.toggleMode}
+                  onToggleCommentsPanel={commentMode.togglePanel}
+                  onDisplayReport={() => displayReport.trigger()}
+                  onMoreAction={onMoreAction}
+                />
                 <div
-                  inert={!docked && (commentPanelOpen || panel === "files")}
-                  className="relative flex min-w-0 flex-1 flex-col"
+                  data-markdown-find-open={
+                    shell.markdownFindOpen || (openMarkdownFile && finding) ? "true" : undefined
+                  }
+                  className="@container/artifact relative flex min-h-0 flex-1"
                 >
-                  {incoming !== null && incoming > latest && (
-                    <ArtifactUpdateBanner
+                  <div
+                    ref={displayReport.canvasRef}
+                    inert={!docked && (commentPanelOpen || panel === "files")}
+                    className="relative flex min-w-0 flex-1 flex-col"
+                  >
+                    {incoming !== null && incoming > latest && (
+                      <ArtifactUpdateBanner
+                        artifactId={artifactId}
+                        incoming={incoming}
+                        onView={viewLatest}
+                      />
+                    )}
+                    {pinned !== null && pinned !== latest && (
+                      <ViewingVersionNotice
+                        version={pinned}
+                        failed={pinnedRead.isError}
+                        onBack={unpin}
+                      />
+                    )}
+                    {!current ? (
+                      <LoadingBody />
+                    ) : openPath ? (
+                      <ArtifactFileView
+                        artifactId={artifactId}
+                        version={shownVersion}
+                        title={title}
+                        entryPath={shownEntry(current)}
+                        path={openPath}
+                        source={source}
+                        finding={finding}
+                        onFindingChange={setFinding}
+                        onBack={() => openFile(null)}
+                      />
+                    ) : webPage ? (
+                      <ArtifactWebPage
+                        key={shownVersion}
+                        artifactId={artifactId}
+                        version={shownVersion}
+                        title={title}
+                        entryPath={shownEntry(current)}
+                        path={shownEntry(current)}
+                        finding={finding}
+                        onFindingChange={setFinding}
+                      />
+                    ) : entryKind === "markdown" ? (
+                      <ArtifactMarkdown
+                        path={shownEntry(current)}
+                        text={current.text}
+                        findOpen={shell.markdownFindOpen}
+                        onFindClose={shell.closeMarkdownFind}
+                      />
+                    ) : (
+                      <ArtifactFile
+                        artifactId={artifactId}
+                        version={shownVersion}
+                        path={shownEntry(current)}
+                      />
+                    )}
+                    {current && (
+                      <ArtifactReviewPill
+                        activePath={shownPath}
+                        annotating={commentMode.mode}
+                        onToggleAnnotate={commentMode.toggleMode}
+                        onExitAnnotate={commentMode.exitMode}
+                        onTogglePanel={commentMode.togglePanel}
+                      />
+                    )}
+                  </div>
+                  {commentPanelOpen && current && (
+                    <ArtifactCommentPanel
                       artifactId={artifactId}
-                      incoming={incoming}
-                      onView={viewLatest}
+                      shownVersion={shownVersion}
+                      pendingReview={panel === "pending"}
+                      list={list}
+                      groups={groups}
+                      review={review}
+                      onClose={commentMode.closePanel}
                     />
                   )}
-                  {pinned !== null && pinned !== latest && (
-                    <ViewingVersionNotice
-                      version={pinned}
-                      failed={pinnedRead.isError}
-                      onBack={unpin}
-                    />
-                  )}
-                  {!current ? (
-                    <LoadingBody />
-                  ) : openPath ? (
-                    <ArtifactFileView
+                  {panel === "files" && current && (
+                    <ArtifactFilesPanel
                       artifactId={artifactId}
                       version={shownVersion}
-                      title={title}
                       entryPath={shownEntry(current)}
-                      path={openPath}
-                      source={source}
-                      finding={finding}
-                      onFindingChange={setFinding}
-                      onBack={() => openFile(null)}
-                    />
-                  ) : webPage ? (
-                    <ArtifactWebPage
-                      key={shownVersion}
-                      artifactId={artifactId}
-                      version={shownVersion}
-                      title={title}
-                      entryPath={shownEntry(current)}
-                      path={shownEntry(current)}
-                      finding={finding}
-                      onFindingChange={setFinding}
-                    />
-                  ) : entryKind === "markdown" ? (
-                    <ArtifactMarkdown path={shownEntry(current)} text={current.text} />
-                  ) : (
-                    <ArtifactFile
-                      artifactId={artifactId}
-                      version={shownVersion}
-                      path={shownEntry(current)}
-                    />
-                  )}
-                  {current && (
-                    <ArtifactReviewPill
-                      activePath={shownPath}
-                      annotating={commentMode.mode}
-                      onToggleAnnotate={commentMode.toggleMode}
-                      onExitAnnotate={commentMode.exitMode}
-                      onTogglePanel={commentMode.togglePanel}
+                      files={files}
+                      openPath={openPath}
+                      onOpen={openFile}
+                      onClose={() => setPanel(null)}
                     />
                   )}
                 </div>
-                {commentPanelOpen && current && (
-                  <ArtifactCommentPanel
+                {visibility.dialog}
+                {dialogs}
+                {sendingTo && (
+                  <ArtifactSendDialog
                     artifactId={artifactId}
-                    shownVersion={shownVersion}
-                    pendingReview={panel === "pending"}
-                    list={list}
-                    groups={groups}
-                    review={review}
-                    onClose={commentMode.closePanel}
+                    title={title}
+                    canChange={canChange}
+                    tier={current?.artifact.access ?? "conversation"}
+                    linkAvailable={link.available}
+                    onClose={() => setSendingTo(false)}
                   />
                 )}
-                {panel === "files" && current && (
-                  <ArtifactFilesPanel
-                    artifactId={artifactId}
-                    version={shownVersion}
-                    entryPath={shownEntry(current)}
-                    files={files}
-                    openPath={openPath}
-                    onOpen={openFile}
-                    onClose={() => setPanel(null)}
-                  />
-                )}
-              </div>
-              {visibility.dialog}
-              {dialogs}
-              {sendingTo && (
-                <ArtifactSendDialog
-                  artifactId={artifactId}
+                <ArtifactDeleteConfirm
+                  open={deleting}
+                  onClose={() => setDeleting(false)}
                   title={title}
-                  canChange={canChange}
-                  tier={current?.artifact.access ?? "conversation"}
-                  linkAvailable={link.available}
-                  onClose={() => setSendingTo(false)}
+                  onDelete={async () => {
+                    await deleteArtifact({ data: { artifactId } });
+                    void refreshArtifact(queryClient, artifactId, homeId ?? null);
+                    backHome();
+                  }}
                 />
-              )}
-              <ArtifactDeleteConfirm
-                open={deleting}
-                onClose={() => setDeleting(false)}
-                title={title}
-                onDelete={async () => {
-                  await deleteArtifact({ data: { artifactId } });
-                  void refreshArtifact(queryClient, artifactId, homeId ?? null);
-                  backHome();
-                }}
-              />
-            </CommentPlacesContext.Provider>
-          </CommentRequestsContext.Provider>
-        </ShownThreadsContext.Provider>
-      </ArtifactDraftsProvider>
-    </ArtifactCommentingContext.Provider>
-  );
-
-  return (
-    <ArtifactPageHost pane={pane} hasTitle={current !== undefined}>
-      {body}
+              </CommentPlacesContext.Provider>
+            </CommentRequestsContext.Provider>
+          </ShownThreadsContext.Provider>
+        </ArtifactDraftsProvider>
+      </ArtifactCommentingContext.Provider>
     </ArtifactPageHost>
   );
 }

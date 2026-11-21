@@ -15,6 +15,7 @@ export type PageAnnotationEvent =
   | ({ kind: "selected" } & PickedAnchor)
   | { kind: "unselected" }
   | { kind: "unanchorable" }
+  | { kind: "compose" }
   | { kind: "found"; revision: number; ids: string[] }
   | { kind: "activated"; id: string };
 
@@ -114,6 +115,9 @@ export function createAnnotationChannel(
           return;
         case "coforge/notifications/annotate-unanchorable":
           if (mode.picking && userActive()) emit({ kind: "unanchorable" });
+          return;
+        case "coforge/notifications/annotate-compose":
+          if (mode.selecting && userActive()) emit({ kind: "compose" });
           return;
         case "coforge/notifications/annotate-found":
           if (params.revision === revision)

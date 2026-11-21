@@ -34,9 +34,14 @@ export function ArtifactCommentSurface({
 }) {
   const shared = { path, contentClassName, children };
   return kind === "text" ? (
-    <Surface<TextIndex> {...shared} adapter={textAdapter} useOffer={useTextOffer} />
+    <Surface<TextIndex> {...shared} adapter={textAdapter} useOffer={useTextOffer} alwaysOffer />
   ) : (
-    <Surface<LineIndex> {...shared} adapter={linesAdapter} useOffer={useLinesOffer} />
+    <Surface<LineIndex>
+      {...shared}
+      adapter={linesAdapter}
+      useOffer={useLinesOffer}
+      alwaysOffer={false}
+    />
   );
 }
 
@@ -44,12 +49,14 @@ function Surface<Index>({
   path,
   adapter,
   useOffer,
+  alwaysOffer,
   contentClassName,
   children,
 }: {
   path: string;
   adapter: Pick<SurfaceAdapter<Index, never>, "build" | "locate">;
   useOffer: (input: OfferInput<Index>) => Offer;
+  alwaysOffer: boolean;
   contentClassName?: string;
   children: ReactNode;
 }) {
@@ -62,8 +69,9 @@ function Surface<Index>({
   const content = useRef<HTMLDivElement>(null);
   const composingRef = useRef(false);
   const [flashed, flash] = useFlash<{ version: number; range: Range }>();
-  const active = commenting || panelOpen;
-  const key = commenting ? `${path}@${version}` : null;
+  const offerActive = commenting || alwaysOffer;
+  const active = offerActive || panelOpen;
+  const key = offerActive ? `${path}@${version}` : null;
 
   const { get, settled, revision } = useSurfaceIndex(content, adapter.build, active);
 
@@ -137,7 +145,7 @@ function Surface<Index>({
         <div ref={content} className={contentClassName} onClickCapture={offers.onContentClick}>
           {children}
         </div>
-        {commenting && <DraftAffordance draft={draft} path={path} />}
+        {offerActive && <DraftAffordance draft={draft} path={path} />}
       </div>
     </div>
   );

@@ -7,10 +7,12 @@ import {
   DotsHorizontal,
   Download01,
   Edit03,
+  InfoCircle,
   Link01,
   LinkBroken01,
   LinkExternal01,
   MessageSquare01,
+  Monitor02,
   SearchLg,
   Send01,
   Stars01,
@@ -43,40 +45,60 @@ export function ArtifactMoreMenu({
   artifactId,
   shownVersion,
   phone,
+  showCopyLink,
+  showDisplayReport = false,
   fileCount,
   canDelete,
   canFind,
   following,
   visibility,
   onChooseVersion,
+  onOpenDetails,
+  onDisplayReport,
   onAction,
 }: {
   artifactId: string;
   shownVersion: number;
   phone: boolean;
+  showCopyLink?: boolean;
+  showDisplayReport?: boolean;
   fileCount: number;
   canDelete: boolean;
   canFind: boolean;
   following: boolean;
   visibility: ArtifactVisibility;
   onChooseVersion: (version: number) => void;
+  onOpenDetails?: () => void;
+  onDisplayReport?: () => void;
   onAction: (action: MoreAction) => void;
 }) {
+  const copyInMenu = showCopyLink ?? phone;
   return (
     <Dropdown.Root>
-      <ButtonUtility icon={DotsHorizontal} size="xs" color="tertiary" tooltip={m.doc_more()} />
+      <ButtonUtility
+        icon={DotsHorizontal}
+        size="xs"
+        color="tertiary"
+        tooltip={m.doc_more()}
+        className="size-8"
+      />
       <Dropdown.Popover placement="bottom end">
         <Dropdown.Menu
           aria-label={m.doc_more()}
           onAction={(key) => {
             if (key === "revoke-legacy-link") visibility.revokeLegacyLink();
+            else if (key === "details") onOpenDetails?.();
+            else if (key === "display-report") onDisplayReport?.();
             else onAction(key as MoreAction);
           }}
         >
+          {onOpenDetails && (
+            <Dropdown.Item id="details" icon={InfoCircle} label={m.av_details_label()} />
+          )}
           {phone && canFind && (
             <Dropdown.Item id="find" icon={SearchLg} label={m.doc_page_find()} />
           )}
-          {phone && <Dropdown.Item id="copy-link" icon={Link01} label={m.doc_copy_link()} />}
+          {copyInMenu && <Dropdown.Item id="copy-link" icon={Link01} label={m.doc_copy_link()} />}
           {visibility.canEmbed && (
             <Dropdown.Item id="embed" icon={Code01} label={m.av_menu_embed()} />
           )}
@@ -132,6 +154,9 @@ export function ArtifactMoreMenu({
             </Dropdown.SubmenuPopover>
           </Dropdown.SubmenuTrigger>
           <Dropdown.Item id="comments" icon={MessageSquare01} label={m.av_cm_title()} />
+          {showDisplayReport && onDisplayReport && (
+            <Dropdown.Item id="display-report" icon={Monitor02} label={m.av_cm_display_issue()} />
+          )}
           <Dropdown.Item id="files" icon={Copy01} label={m.av_menu_files()} />
           <Dropdown.Item
             id="download"

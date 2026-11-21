@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image01, XClose } from "@untitledui/icons";
 import { ARTIFACT_COMMENT_IMAGES_MAX, COMMENT_BODY_MAX } from "@lrm/coforge-sdk/agent";
 import { readMessageReferences } from "@lrm/coforge-sdk/internal/message-references";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { ComposerField } from "#src/features/conversations/composer-field";
+import { ComposerField, focusDraftEnd } from "#src/features/conversations/composer-field";
 import {
   COMMENT_FIELD_CLASS,
   COMMENT_FIELD_LAYOUT_CLASS,
@@ -27,15 +27,15 @@ import { formatList } from "#src/lib/format-list";
 import { useDebouncedValue } from "#src/lib/use-debounced-value";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { previewArtifactCommentAudience } from "./artifact-comments.functions";
+import { postArtifactComment, previewArtifactCommentAudience } from "./artifact-comments.functions";
 import { ComposerActions } from "./artifact-comment-composer-actions";
 import { useCommentDraftActions, useCommentDrafts } from "./artifact-comment-drafts-context";
-import { useArtifactCommenting } from "./artifact-commenting";
+import { useArtifactCommenting, type ComposerPrefill } from "./artifact-commenting";
 import { useHoldComposer } from "./artifact-composer-holds";
 import { draftFailure } from "./use-comment-drafts";
 import { COMMENT_MENTIONS_MAX, type CommentAnchor } from "./artifact-comment-inputs";
 import { uploadCommentImage } from "./artifact-comment-images";
-import { useArtifactMentionables } from "./artifact-comment-queries";
+import { syncOwnComments, useArtifactMentionables } from "./artifact-comment-queries";
 import { ARTIFACTS_KEY } from "./artifact-queries";
 
 export type CommentReplyTarget = { id: string; name: string };
@@ -75,10 +75,10 @@ export function useCommentDraftText(artifactId: string, initial = "") {
     setBody(value);
     setPins((current) => pinsInText(value, current));
   };
-  const resetBody = (value = "") => {
+  const resetBody = useCallback((value = "") => {
     setBody(value);
     setPins([]);
-  };
+  }, []);
   const completion = useReferenceCompletion({
     mentionables: offered?.people,
     mentionOutsiders: offered?.agents,
@@ -138,25 +138,33 @@ export function ArtifactCommentComposer({
   artifactId,
   target,
   focusRequest = 0,
+  prefill = null,
+  onConsumePrefill,
   className,
   onPosted,
 }: {
   artifactId: string;
   target: ComposerTarget;
   focusRequest?: number;
+  prefill?: ComposerPrefill | null | undefined;
+  onConsumePrefill?: (() => void) | undefined;
   className?: string;
   onPosted: () => void;
 }) {
+  const queryClient = useQueryClient();
   const workspaceSlug = useWorkspaceSlug();
   const drafts = useCommentDrafts();
   const { create: createDraft } = useCommentDraftActions();
   const { version: shownVersion } = useArtifactCommenting();
-  const [saving, setSaving] = useState(false);
+  const [submitting, setSubmitting] = useState<"draft" | "send" | null>(null);
   const { body, wireBody, changeBody, resetBody, completion, audience, tooLong, mentionError } =
     useCommentDraftText(artifactId, target.kind === "anchor" ? (target.suggestion ?? "") : "");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [failure, setFailure] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const consumedPrefillId = useRef<number | null>(null);
+  const idempotencyRef = useRef<{ key: string; id: string } | null>(null);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     if (focusRequest > 0) completion.textareaRef.current?.focus();
@@ -165,6 +173,15 @@ export function ArtifactCommentComposer({
   useEffect(() => {
     if (replyId !== null) completion.textareaRef.current?.focus();
   }, [replyId, completion.textareaRef]);
+  useEffect(() => {
+    if (!prefill || consumedPrefillId.current === prefill.id) return;
+    consumedPrefillId.current = prefill.id;
+    resetBody(prefill.text);
+    setFailure(null);
+    onConsumePrefill?.();
+    const frame = requestAnimationFrame(() => focusDraftEnd(completion.textareaRef.current));
+    return () => cancelAnimationFrame(frame);
+  }, [prefill, onConsumePrefill, resetBody, completion.textareaRef]);
 
   const uploading = attachments.some((attachment) => attachment.state === "uploading");
   const ready = attachments.flatMap((attachment) =>
@@ -172,8 +189,24 @@ export function ArtifactCommentComposer({
   );
   const empty = body.trim() === "" && ready.length === 0;
   const invalid = empty || uploading || tooLong || mentionError !== null;
-  const cannotSave = invalid || saving || drafts.busy || drafts.atLimit;
+  const busy = submitting !== null;
+  const preferDraft = drafts.drafts.length > 0;
+  const cannotSave = invalid || busy || drafts.busy || drafts.atLimit;
+  const cannotSend = invalid || busy;
   useHoldComposer(!empty || attachments.length > 0);
+
+  const version = target.kind === "reply" ? shownVersion : target.version;
+  const sendPayloadKey = useMemo(
+    () => JSON.stringify({ version, body: wireBody, ...placement(target), images: ready }),
+    [version, wireBody, target, ready],
+  );
+
+  function sendIdempotencyKey(): string {
+    if (idempotencyRef.current?.key !== sendPayloadKey) {
+      idempotencyRef.current = { key: sendPayloadKey, id: crypto.randomUUID() };
+    }
+    return idempotencyRef.current.id;
+  }
 
   function addFiles(files: readonly File[]) {
     const images = files.filter((file) => INLINE_IMAGE_TYPES.has(file.type));
@@ -222,12 +255,13 @@ export function ArtifactCommentComposer({
   }
 
   async function saveDraft() {
-    if (cannotSave) return;
-    setSaving(true);
+    if (cannotSave || submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting("draft");
     setFailure(null);
     try {
       await createDraft({
-        version: target.kind === "reply" ? shownVersion : target.version,
+        version,
         body: wireBody,
         ...placement(target),
         ...(ready.length ? { images: ready } : {}),
@@ -237,10 +271,52 @@ export function ArtifactCommentComposer({
     } catch (error) {
       setFailure(draftFailure(error));
     } finally {
-      setSaving(false);
+      submittingRef.current = false;
+      setSubmitting(null);
       completion.textareaRef.current?.focus();
     }
   }
+
+  async function sendNow() {
+    if (cannotSend || submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting("send");
+    setFailure(null);
+    try {
+      const { id } = await postArtifactComment({
+        data: {
+          artifactId,
+          version,
+          comment: {
+            body: wireBody,
+            ...placement(target),
+            ...(ready.length ? { images: ready } : {}),
+            idempotencyKey: sendIdempotencyKey(),
+          },
+        },
+      });
+      idempotencyRef.current = null;
+      await syncOwnComments(queryClient, artifactId, "posted", [id]);
+      clear();
+      onPosted();
+    } catch (error) {
+      setFailure(commentWriteFailure(error, m.av_cm_err_send()));
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(null);
+      completion.textareaRef.current?.focus();
+    }
+  }
+
+  const submitPrimary = () => {
+    if (preferDraft) void saveDraft();
+    else void sendNow();
+  };
+
+  const submitSecondary = () => {
+    if (preferDraft) void sendNow();
+    else void saveDraft();
+  };
 
   const names = audience.data?.notified ?? [];
   const notifyLine =
@@ -249,14 +325,30 @@ export function ArtifactCommentComposer({
       : null;
   const error = tooLong
     ? m.av_cm_err_too_long({ count: COMMENT_BODY_MAX })
-    : (mentionError ?? failure ?? (drafts.atLimit ? m.av_dr_limit({ count: drafts.limit }) : null));
+    : (mentionError ??
+      failure ??
+      (drafts.atLimit && preferDraft ? m.av_dr_limit({ count: drafts.limit }) : null));
 
   return (
     <form
       className={cn("shrink-0 space-y-2 border-t border-secondary p-3", className)}
+      onKeyDownCapture={(event) => {
+        if (
+          event.key === "Enter" &&
+          (event.metaKey || event.ctrlKey) &&
+          !event.shiftKey &&
+          !event.altKey &&
+          !event.nativeEvent.isComposing &&
+          !completion.open
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+          submitSecondary();
+        }
+      }}
       onSubmit={(event) => {
         event.preventDefault();
-        void saveDraft();
+        submitPrimary();
       }}
     >
       {target.kind === "reply" ? (
@@ -290,9 +382,9 @@ export function ArtifactCommentComposer({
           placeholder={
             target.kind === "reply" ? m.av_cm_reply_placeholder() : m.av_cm_placeholder()
           }
-          onSubmit={() => void saveDraft()}
-          sendDisabled={cannotSave}
-          isReadOnly={saving}
+          onSubmit={submitPrimary}
+          sendDisabled={preferDraft ? cannotSave : cannotSend}
+          isReadOnly={busy}
           mentionGroups="kind"
           alwaysStacked
           attachmentCount={attachments.length}
@@ -309,7 +401,16 @@ export function ArtifactCommentComposer({
             />
           )}
           actions={(className) => (
-            <ComposerActions className={className} canSave={!cannotSave} saving={saving} />
+            <ComposerActions
+              className={className}
+              canSave={!cannotSave}
+              canSend={!cannotSend}
+              saving={submitting === "draft"}
+              sending={submitting === "send"}
+              preferDraft={preferDraft}
+              onSaveDraft={() => void saveDraft()}
+              onSend={() => void sendNow()}
+            />
           )}
           below={
             attachments.length > 0 && (

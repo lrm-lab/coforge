@@ -578,7 +578,7 @@ function InlineEmbedControls({
   onToggleExpand: () => void;
 }) {
   const buttonClass =
-    "rounded-md border border-secondary/60 bg-secondary/45 p-1 backdrop-blur-xs *:data-icon:size-3.5";
+    "rounded-md border border-secondary/60 bg-primary/90 p-1 *:data-icon:size-3.5";
   return (
     <div
       className={cn(

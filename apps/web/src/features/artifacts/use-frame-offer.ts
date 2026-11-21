@@ -25,15 +25,18 @@ export function useFrameOffer({
   const { commenting, pickBus } = useArtifactCommenting();
   const toast = useAppToast();
   const [selected, setSelected] = useState<{ key: string; draft: AnchorDraft } | null>(null);
+  const [composeRequest, setComposeRequest] = useState(0);
 
   useEffect(() => {
-    if (!commenting) setSelected(null);
+    if (!commenting) {
+      setSelected((current) => (current?.draft.anchor.type === "element" ? null : current));
+    }
   }, [commenting]);
 
   useEffect(() => {
     bridge.annotations.configure({
       picking: commenting,
-      selecting: commenting,
+      selecting: true,
       showMarks: false,
     });
   }, [bridge, commenting]);
@@ -81,6 +84,9 @@ export function useFrameOffer({
           case "unanchorable":
             toast.notice(m.av_cm_pick_failed());
             return;
+          case "compose":
+            setComposeRequest((count) => count + 1);
+            return;
         }
       }),
     [bridge, frame, path, key, composing, pickBus, toast],
@@ -92,6 +98,7 @@ export function useFrameOffer({
     offered,
     paintOffer: false,
     autoCompose: offered?.anchor.type === "element",
+    composeRequest,
     onDismiss,
   };
 }

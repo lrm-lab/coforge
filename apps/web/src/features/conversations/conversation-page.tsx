@@ -7,12 +7,11 @@ import { useLiveAgent } from "#src/features/agents/workspace-agents-realtime";
 import { ACTIVITY_INBOX_LISTS_KEY } from "#src/features/inbox/activity-inbox-queries";
 import { ConversationTaskBoard } from "#src/features/tasks/conversation-task-board";
 import { ArtifactsBesideChat } from "#src/features/artifacts/artifact-beside-chat";
-import { ConversationArtifactPane } from "#src/features/artifacts/artifact-side-pane";
+import { ConversationArtifactSplit } from "#src/features/artifacts/artifact-side-pane";
 import { ConversationFilesWithDocuments } from "#src/features/artifacts/artifact-files";
 import { activityItemKey } from "#src/features/inbox/activity-unread-count";
 import { useReportViewingItem } from "#src/features/inbox/viewing-items";
 import { usePageTitleLabel } from "#src/lib/browser-tab";
-import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { markPublicChannelRead } from "./channels.functions";
 import { ChannelConversation, ChannelConversationHeader } from "./channel-conversation";
@@ -302,26 +301,13 @@ type ConversationPageBodyProps = {
 
 function ConversationPageBody(props: ConversationPageProps & ConversationPageBodyProps) {
   const { doc, docFull } = props.search;
-  const open = doc !== undefined;
   return (
     <ArtifactsBesideChat>
-      <div className="@container/page flex min-h-0 min-w-0 flex-1">
-        <div
-          className={cn(
-            "flex min-h-0 min-w-0 flex-1 flex-col",
-            open && "max-md:hidden",
-            open && docFull && "hidden",
-          )}
-        >
-          <ConversationPageMain {...props} />
-        </div>
-        {open && (
-          <ConversationArtifactPane
-            conversationId={props.page.conversation.conversationId}
-            search={{ doc, docFull }}
-          />
-        )}
-      </div>
+      <ConversationArtifactSplit
+        chat={<ConversationPageMain {...props} />}
+        conversationId={props.page.conversation.conversationId}
+        search={{ doc, docFull }}
+      />
     </ArtifactsBesideChat>
   );
 }

@@ -23,6 +23,7 @@ import {
   type EmptyGalleryState,
   type GalleryFilters,
 } from "./artifact-gallery-model";
+import { ArtifactPage } from "./artifact-page";
 import { ArtifactIcon } from "./artifact-parts";
 import { ARTIFACTS_KEY } from "./artifact-queries";
 import { useScopeOf } from "./artifact-scope";
@@ -50,7 +51,23 @@ function useGallery(filters: GalleryFilters) {
   });
 }
 
-export function ArtifactGalleryPage() {
+export function ArtifactGalleryPage({
+  openArtifactId,
+  version,
+  commentId,
+  reviewId,
+  arrival,
+  onCloseArtifact,
+  onClearReview,
+}: {
+  openArtifactId?: string | undefined;
+  version?: number | undefined;
+  commentId?: string | undefined;
+  reviewId?: string | undefined;
+  arrival?: string | undefined;
+  onCloseArtifact?: (() => void) | undefined;
+  onClearReview?: (() => void) | undefined;
+} = {}) {
   const [filters, setFilters] = useState<GalleryFilters>(initialFilters);
   const [typed, setTyped] = useState("");
   const [view, setView] = useGalleryView();
@@ -71,90 +88,120 @@ export function ArtifactGalleryPage() {
     setTyped("");
     setFilters({ ...initialFilters, sort: filters.sort });
   };
+  const overlayOpen = Boolean(openArtifactId && onCloseArtifact);
+  const countLabel =
+    !gallery.isPending && cards.length > 0
+      ? gallery.hasNextPage
+        ? m.ag_count_more({ count: cards.length })
+        : m.ag_count({ count: cards.length })
+      : null;
+
   return (
-    <main className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-primary">
-      <header className="flex shrink-0 flex-col gap-3 border-b border-secondary px-4 py-3 sm:px-6">
-        <h1 className="text-lg font-semibold text-primary">{m.ag_title()}</h1>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="w-full sm:w-64">
-            <Input
-              size="sm"
-              icon={SearchLg}
-              aria-label={m.ag_search_aria()}
-              placeholder={m.ag_search()}
-              value={typed}
-              onChange={setTyped}
-            />
+    <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col bg-primary">
+      <div
+        inert={overlayOpen || undefined}
+        aria-hidden={overlayOpen || undefined}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <header className="flex shrink-0 flex-col gap-3 border-b border-secondary px-4 py-3 sm:px-6">
+          <div className="flex items-baseline gap-2.5">
+            <h1 className="text-lg font-semibold text-primary">{m.ag_title()}</h1>
+            {countLabel && <span className="text-sm text-tertiary tabular-nums">{countLabel}</span>}
           </div>
-          <ConversationFilter scope={filters.scope} onChange={(scope) => update({ scope })} />
-          <AuthorFilter
-            authorIds={filters.authorAgentIds}
-            onChange={(authorAgentIds) => update({ authorAgentIds })}
-          />
-          <RelatedToggle on={filters.related} onChange={(related) => update({ related })} />
-          <span className="flex-1" />
-          <SortMenu sort={filters.sort} onChange={(sort) => update({ sort })} />
-          <ViewSwitch view={view} onChange={setView} />
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="w-full sm:w-64">
+              <Input
+                size="sm"
+                icon={SearchLg}
+                aria-label={m.ag_search_aria()}
+                placeholder={m.ag_search()}
+                value={typed}
+                onChange={setTyped}
+              />
+            </div>
+            <ConversationFilter scope={filters.scope} onChange={(scope) => update({ scope })} />
+            <AuthorFilter
+              authorIds={filters.authorAgentIds}
+              onChange={(authorAgentIds) => update({ authorAgentIds })}
+            />
+            <RelatedToggle on={filters.related} onChange={(related) => update({ related })} />
+            <span className="flex-1" />
+            <SortMenu sort={filters.sort} onChange={(sort) => update({ sort })} />
+            <ViewSwitch view={view} onChange={setView} />
+          </div>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+          {gallery.isPending ? (
+            <Loading />
+          ) : gallery.isError && cards.length === 0 ? (
+            <Notice title={m.ag_error()}>
+              <Button size="sm" color="secondary" onClick={() => void gallery.refetch()}>
+                {m.ag_retry()}
+              </Button>
+            </Notice>
+          ) : cards.length === 0 ? (
+            <EmptyGallery
+              state={emptyState}
+              onClear={clearAll}
+              onSeeAll={() => update({ related: false })}
+            />
+          ) : (
+            <>
+              {view === "grid" ? (
+                <div className="grid grid-cols-1 gap-3 min-[24rem]:grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(15.5rem,1fr))]">
+                  {cards.map((card) => (
+                    <GalleryGridCard
+                      key={card.id}
+                      card={card}
+                      sort={filters.sort}
+                      scope={scopeOf(card)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <GalleryList cards={cards} sort={filters.sort} />
+              )}
+              {gallery.hasNextPage && (
+                <div className="mt-4 flex flex-col items-center gap-2">
+                  <Button
+                    size="sm"
+                    color="secondary"
+                    isLoading={gallery.isFetchingNextPage}
+                    onClick={() => void gallery.fetchNextPage()}
+                  >
+                    {m.ag_load_more()}
+                  </Button>
+                  {gallery.isFetchNextPageError && (
+                    <p role="alert" className="text-sm text-error-primary">
+                      {m.ag_more_failed()}
+                    </p>
+                  )}
+                </div>
+              )}
+            </>
+          )}
         </div>
-      </header>
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
-        {gallery.isPending ? (
-          <Loading />
-        ) : gallery.isError && cards.length === 0 ? (
-          <Notice title={m.ag_error()}>
-            <Button size="sm" color="secondary" onClick={() => void gallery.refetch()}>
-              {m.ag_retry()}
-            </Button>
-          </Notice>
-        ) : cards.length === 0 ? (
-          <EmptyGallery
-            state={emptyState}
-            onClear={clearAll}
-            onSeeAll={() => update({ related: false })}
-          />
-        ) : (
-          <>
-            {view === "grid" ? (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(15.5rem,1fr))]">
-                {cards.map((card) => (
-                  <GalleryGridCard
-                    key={card.id}
-                    card={card}
-                    sort={filters.sort}
-                    scope={scopeOf(card)}
-                  />
-                ))}
-              </div>
-            ) : (
-              <GalleryList cards={cards} sort={filters.sort} />
-            )}
-            {gallery.hasNextPage && (
-              <div className="mt-4 flex flex-col items-center gap-2">
-                <Button
-                  size="sm"
-                  color="secondary"
-                  isLoading={gallery.isFetchingNextPage}
-                  onClick={() => void gallery.fetchNextPage()}
-                >
-                  {m.ag_load_more()}
-                </Button>
-                {gallery.isFetchNextPageError && (
-                  <p role="alert" className="text-sm text-error-primary">
-                    {m.ag_more_failed()}
-                  </p>
-                )}
-              </div>
-            )}
-          </>
-        )}
       </div>
+      {openArtifactId && onCloseArtifact && (
+        <div className="absolute inset-0 z-20 flex min-h-0 flex-col bg-primary">
+          <ArtifactPage
+            artifactId={openArtifactId}
+            overlay={{ onClose: onCloseArtifact }}
+            version={version}
+            commentId={commentId}
+            reviewId={reviewId}
+            arrival={arrival}
+            onClearReview={onClearReview}
+          />
+        </div>
+      )}
     </main>
   );
 }
 
 function Loading() {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(15.5rem,1fr))]">
+    <div className="grid grid-cols-1 gap-3 min-[24rem]:grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(15.5rem,1fr))]">
       {Array.from({ length: 6 }, (_, index) => (
         <Skeleton key={index} className="h-56 rounded-xl" />
       ))}

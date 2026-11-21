@@ -29,18 +29,15 @@ import {
 } from "./artifact-inline-refs";
 
 const CHIP_SURFACE_CLASS =
-  "inline-flex max-w-44 items-center gap-1 rounded-md bg-utility-orange-50 px-1.5 py-0.5 align-baseline font-mono text-xs font-medium text-primary whitespace-nowrap select-all";
-
-const CURSOR_SVG_MARKUP =
-  '<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" stroke="none" aria-hidden="true" class="size-2.5 shrink-0 text-utility-orange-500"><path d="M20.506 10.775c.616-.24.925-.36 1.012-.53a.5.5 0 0 0-.006-.465c-.091-.168-.403-.28-1.026-.503L4.596 3.573c-.51-.183-.764-.275-.93-.217a.5.5 0 0 0-.31.309c-.057.167.034.421.217.931l5.704 15.89c.224.623.335.934.503 1.025a.5.5 0 0 0 .466.006c.17-.086.29-.395.53-1.012l2.596-6.677c.047-.121.07-.181.107-.232a.501.501 0 0 1 .117-.117c.05-.036.111-.06.232-.107l6.678-2.597Z"/></svg>';
+  "inline-flex max-w-44 items-center gap-1 rounded-md bg-brand-secondary px-1.5 py-0.5 align-baseline font-mono text-xs font-medium text-brand-secondary whitespace-nowrap select-all";
 
 export function InlineElementChip({ tag, className }: { tag: string; className?: string }) {
   return (
     <span className={cn(CHIP_SURFACE_CLASS, className)}>
       <Cursor02
         aria-hidden="true"
-        strokeWidth={1.25}
-        className="size-2.5 shrink-0 fill-current text-utility-orange-500"
+        strokeWidth={1.5}
+        className="size-2.5 shrink-0 text-fg-brand-primary"
       />
       <span className="truncate">{`<${tag}>`}</span>
     </span>
@@ -83,7 +80,7 @@ export function InlineRefText({
         (badge.kind === "element" ? (
           <InlineElementChip tag={badge.tag} className="mr-1.5" />
         ) : (
-          <span className="mr-1.5 inline-flex max-w-44 truncate rounded-md bg-utility-orange-50 px-1.5 py-0.5 align-baseline font-mono text-xs font-medium text-utility-orange-700">
+          <span className="mr-1.5 inline-flex max-w-44 truncate rounded-md bg-brand-secondary px-1.5 py-0.5 align-baseline font-mono text-xs font-medium text-brand-secondary">
             {badge.label}
           </span>
         ))}
@@ -142,7 +139,10 @@ export type ArtifactInlineEditorHandle = {
   readSegments(): InlineSegment[];
 };
 
-function createChipNode(ref: Omit<InlineElementRef, "kind">): HTMLSpanElement {
+function createChipNode(
+  ref: Omit<InlineElementRef, "kind">,
+  iconHost: HTMLElement | null = null,
+): HTMLSpanElement {
   const chip = document.createElement("span");
   chip.contentEditable = "false";
   chip.dataset.inlineEl = "true";
@@ -150,7 +150,8 @@ function createChipNode(ref: Omit<InlineElementRef, "kind">): HTMLSpanElement {
   chip.dataset.selector = ref.selector;
   if (ref.quote) chip.dataset.quote = ref.quote;
   chip.className = `${CHIP_SURFACE_CLASS} mx-0.5`;
-  chip.innerHTML = CURSOR_SVG_MARKUP;
+  const svg = iconHost?.querySelector("svg");
+  if (svg) chip.appendChild(svg.cloneNode(true));
   const label = document.createElement("span");
   label.className = "truncate";
   label.textContent = `<${ref.tag}>`;
@@ -241,6 +242,7 @@ export const ArtifactInlineEditor = forwardRef<
   ref,
 ) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const cursorIconRef = useRef<HTMLSpanElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const composingRef = useRef(false);
   const { artifactId } = useArtifactCommenting();
@@ -288,6 +290,11 @@ export const ArtifactInlineEditor = forwardRef<
         state: editorState(),
         editable: () => !callbacks.current.disabled,
         attributes: ({ doc }) => ({ "data-review-empty": String(doc.content.size === 0) }),
+        nodeViews: {
+          elementRef: (node) => ({
+            dom: createChipNode(elementRefOf(node), cursorIconRef.current),
+          }),
+        },
         handlePaste(editor, event) {
           const text = event.clipboardData?.getData("text/plain");
           if (text) editAsOneStep(editor, editor.state.tr.insertText(text));
@@ -383,6 +390,13 @@ export const ArtifactInlineEditor = forwardRef<
 
   return (
     <>
+      <span ref={cursorIconRef} hidden aria-hidden="true">
+        <Cursor02
+          aria-hidden="true"
+          strokeWidth={1.5}
+          className="size-2.5 shrink-0 text-fg-brand-primary"
+        />
+      </span>
       <div
         ref={rootRef}
         role="textbox"

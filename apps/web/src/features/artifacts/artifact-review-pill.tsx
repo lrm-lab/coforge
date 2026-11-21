@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button as AriaButton } from "react-aria-components";
-import { Cursor02, Plus } from "@untitledui/icons";
+import { Cursor02 } from "@untitledui/icons";
 
-import { Tooltip } from "#src/components/base/tooltip/tooltip";
-import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
-import { useAppToast } from "#src/components/ui/toast";
+import { FLOATING_SURFACE_CLASS } from "#src/features/conversations/review-chrome";
 import { isRecordingShortcut } from "#src/features/shortcuts/shortcut-bindings";
-import { hotkeyKeycaps, hotkeyMatchesEvent } from "#src/lib/hotkeys";
+import { hotkeyKeycaps } from "#src/lib/hotkeys";
 import { isApplePlatform } from "#src/lib/platform";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -26,14 +23,14 @@ import {
 } from "./artifact-inline-refs";
 import {
   AnchorChip,
-  ArtifactReviewFab,
+  ArtifactReviewBar,
   ArtifactReviewQueue,
-  PRIMARY_PILL_CLASS,
-  SECONDARY_PILL_CLASS,
-  TooltipShortcutRows,
-  TooltipWithKey,
   formatAnchorTag,
 } from "./artifact-review-chrome";
+import {
+  ArtifactReviewComposeFooter,
+  useImmediateReviewSend,
+} from "./artifact-review-compose-footer";
 import { draftFailure } from "./use-comment-drafts";
 import "./artifact-review-pill.css";
 
@@ -61,7 +58,7 @@ export function ArtifactReviewPill({
   onExitAnnotate: () => void;
   onTogglePanel: () => void;
 }) {
-  const { version, pickedAnchor, pickBus } = useArtifactCommenting();
+  const { artifactId, version, pickBus } = useArtifactCommenting();
   const drafts = useCommentDrafts();
   const actions = useCommentDraftActions();
   const [cardOpen, setCardOpen] = useState(false);
@@ -71,33 +68,26 @@ export function ArtifactReviewPill({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [focusedIdx, setFocusedIdx] = useState(-1);
   const [apple, setApple] = useState(false);
-  const toast = useAppToast();
-  const [hidden, setHidden] = useState(false);
-  const restoreKey = useRef<string | null>(null);
-  const taps = useRef<number[]>([]);
   const editorRef = useRef<ArtifactInlineEditorHandle>(null);
   const pickedPathRef = useRef<string | undefined>(undefined);
   const hydratedEditRef = useRef<string | null>(null);
+  const savingRef = useRef(false);
+  const prevAnnotatingRef = useRef(annotating);
 
   useEffect(() => {
     setApple(isApplePlatform());
-    setHidden(localStorage.getItem("artifact-annotation-hidden") === "true");
   }, []);
 
   const modEnter = hotkeyKeycaps("Mod+Enter", apple).join(apple ? " " : "+");
   const count = drafts.drafts.length;
+  const preferDraft = count > 0;
   const locked = drafts.busy;
   const editingDraft = editingId
     ? (drafts.drafts.find((item) => item.id === editingId) ?? null)
     : null;
-  const isCompose = editingDraft !== null || annotating || pickedAnchor !== null;
-  const showCard = !hidden && cardOpen && (isCompose || count > 0);
-  const nonElementPicked =
-    pickedAnchor && pickedAnchor.anchor.type !== "element" ? pickedAnchor : null;
-
-  useEffect(() => {
-    if (annotating || pickedAnchor) setCardOpen(true);
-  }, [annotating, pickedAnchor]);
+  const isCompose = editingDraft !== null || annotating;
+  const active = annotating || count > 0 || editingDraft !== null;
+  const showCard = cardOpen && active;
 
   useEffect(() => {
     if (!showCard || !isCompose) {
@@ -160,15 +150,22 @@ export function ArtifactReviewPill({
 
   const exitComposeToList = useCallback(() => {
     resetCompose();
-    pickedAnchor?.onClear();
     if (annotating) onExitAnnotate();
     if (count === 0) setCardOpen(false);
-  }, [resetCompose, pickedAnchor, annotating, onExitAnnotate, count]);
+  }, [resetCompose, annotating, onExitAnnotate, count]);
+
+  useEffect(() => {
+    const prev = prevAnnotatingRef.current;
+    prevAnnotatingRef.current = annotating;
+    if (prev && !annotating && !editingDraft) {
+      resetCompose();
+      if (count === 0) setCardOpen(false);
+    }
+  }, [annotating, editingDraft, count, resetCompose]);
 
   const startEdit = useCallback(
     (draft: CommentDraftView) => {
       if (locked) return;
-      pickedAnchor?.onClear();
       hydratedEditRef.current = null;
       setEditingId(draft.id);
       setSaveError(null);
@@ -177,18 +174,19 @@ export function ArtifactReviewPill({
       if (canPickElements && !annotating) onToggleAnnotate();
       else if (!canPickElements && annotating) onExitAnnotate();
     },
-    [locked, pickedAnchor, annotating, onToggleAnnotate, onExitAnnotate],
+    [locked, annotating, onToggleAnnotate, onExitAnnotate],
   );
 
   const saveForm = useCallback(
     async (sendAfter = false) => {
-      if (saving || locked) return;
+      if (saving || locked || savingRef.current) return;
       const currentSegments = editorRef.current?.readSegments() ?? segments;
       const serialized = serializeInlineSegments(currentSegments);
       const primaryElement = firstElementAnchorFromSegments(currentSegments);
 
       if (editingDraft) {
         if (!serialized && editingDraft.images.length === 0) return;
+        savingRef.current = true;
         setSaving(true);
         setSaveError(null);
         let saved = false;
@@ -213,6 +211,7 @@ export function ArtifactReviewPill({
         } catch (error) {
           setSaveError(draftFailure(error));
         } finally {
+          savingRef.current = false;
           setSaving(false);
         }
         if (saved && sendAfter) {
@@ -225,7 +224,6 @@ export function ArtifactReviewPill({
       if (!serialized) {
         if (sendAfter && count > 0) {
           resetCompose();
-          pickedAnchor?.onClear();
           if (annotating) onExitAnnotate();
           setCardOpen(false);
           await actions.submit();
@@ -233,29 +231,25 @@ export function ArtifactReviewPill({
         return;
       }
       if (drafts.atLimit) return;
+      savingRef.current = true;
       setSaving(true);
       setSaveError(null);
       let saved = false;
       try {
-        const targetAnchor = nonElementPicked ? nonElementPicked.anchor : primaryElement;
-        const targetPath = nonElementPicked
-          ? nonElementPicked.path
-          : targetAnchor
-            ? (pickedPathRef.current ?? activePath)
-            : activePath;
+        const targetPath = primaryElement ? (pickedPathRef.current ?? activePath) : activePath;
         await actions.create({
-          version: nonElementPicked?.version ?? version,
+          version,
           body: serialized,
           ...(targetPath ? { path: targetPath } : {}),
-          ...(targetAnchor ? { anchor: targetAnchor } : {}),
+          ...(primaryElement ? { anchor: primaryElement } : {}),
         });
         resetCompose();
-        pickedAnchor?.onClear();
         if (annotating) onExitAnnotate();
         saved = true;
       } catch (error) {
         setSaveError(draftFailure(error));
       } finally {
+        savingRef.current = false;
         setSaving(false);
       }
       if (saved) {
@@ -279,67 +273,36 @@ export function ArtifactReviewPill({
       onExitAnnotate,
       count,
       drafts.atLimit,
-      nonElementPicked,
       version,
-      pickedAnchor,
     ],
   );
 
-  const toggleVisibility = useCallback(() => {
-    const message = m.av_annotation_hidden({ shortcut: apple ? "⌘ + ." : "Ctrl + ." });
-    taps.current = [];
-    if (hidden) toast.dismissShown(message);
-    else {
-      onExitAnnotate();
-      setCardOpen(false);
-      toast.notice(message);
-    }
-    setHidden(!hidden);
-    localStorage.setItem("artifact-annotation-hidden", String(!hidden));
-  }, [apple, hidden, toast, onExitAnnotate]);
-
-  useEffect(() => {
-    const release = () => {
-      restoreKey.current = null;
-    };
-    const keyUp = (event: KeyboardEvent) => {
-      if ((event.code || event.key) === restoreKey.current) release();
-    };
-    const restore = (event: KeyboardEvent) => {
-      const key = event.code || event.key;
-      const repeatingRestore = event.repeat && restoreKey.current === key;
-      if (
-        !repeatingRestore &&
-        (!hidden ||
-          event.defaultPrevented ||
-          isRecordingShortcut() ||
-          isEditableTarget(event.target) ||
-          !hotkeyMatchesEvent("Mod+.", event, apple))
-      )
-        return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      if (!event.repeat) {
-        restoreKey.current = key;
-        toggleVisibility();
-      }
-    };
-    window.addEventListener("keydown", restore, true);
-    window.addEventListener("keyup", keyUp, true);
-    window.addEventListener("blur", release);
-    return () => {
-      window.removeEventListener("keydown", restore, true);
-      window.removeEventListener("keyup", keyUp, true);
-      window.removeEventListener("blur", release);
-    };
-  }, [hidden, apple, toggleVisibility]);
+  const sendImmediate = useImmediateReviewSend({
+    artifactId,
+    version,
+    activePath,
+    readSegments: useCallback(() => editorRef.current?.readSegments() ?? segments, [segments]),
+    pickedPath: useCallback(() => pickedPathRef.current, []),
+    busy: saving || locked || editingDraft !== null,
+    onStart: useCallback(() => {
+      setSaving(true);
+      setSaveError(null);
+    }, []),
+    onError: setSaveError,
+    onDone: useCallback(() => {
+      resetCompose();
+      if (annotating) onExitAnnotate();
+      if (count === 0) setCardOpen(false);
+    }, [resetCompose, annotating, onExitAnnotate, count]),
+    onFinally: useCallback(() => setSaving(false), []),
+  });
 
   const keyHandlerRef = useRef<(event: KeyboardEvent) => void>(() => {});
   keyHandlerRef.current = (event: KeyboardEvent) => {
     if (event.defaultPrevented || isRecordingShortcut() || isEditableTarget(event.target)) return;
 
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-      if (showCard && !isCompose && count > 0 && !locked) {
+      if (active && !isCompose && count > 0 && !locked) {
         event.preventDefault();
         void actions.submit();
       }
@@ -404,51 +367,26 @@ export function ArtifactReviewPill({
     return () => window.removeEventListener("keydown", listener);
   }, []);
 
-  const onOrbPress = () => {
-    if (!showCard) {
-      setCardOpen(true);
-      if (count === 0 && !annotating) onToggleAnnotate();
-      return;
-    }
-    if (isCompose) {
-      exitComposeToList();
-      return;
-    }
-    setCardOpen(false);
-  };
+  if (!active) return null;
 
   const editorHasContent = hasContent(segments);
-  const canHide = !editingDraft && !pickedAnchor && !editorHasContent && !saving;
   const canSave = editingDraft
     ? (editorHasContent || editingDraft.images.length > 0) && !saving && !locked
     : editorHasContent && !saving && !locked && !drafts.atLimit;
+  const canSend = !editingDraft && editorHasContent && !saving && !locked;
 
-  if (hidden)
-    return (
-      <AriaButton
-        aria-label={m.av_show_annotation_button()}
-        className="absolute right-4 bottom-4 z-20 size-10 touch-manipulation rounded-full bg-transparent outline-focus-ring focus-visible:outline-2"
-        onPress={(event) => {
-          const now = performance.now();
-          taps.current = [...taps.current.filter((time) => now - time < 850), now];
-          if (
-            event.pointerType === "keyboard" ||
-            event.pointerType === "virtual" ||
-            taps.current.length === 3
-          )
-            toggleVisibility();
-        }}
-      />
-    );
   return (
     <div
       data-artifact-review-pill=""
-      className="pointer-events-none absolute right-4 bottom-4 z-20 flex max-w-[calc(100%-2rem)] flex-col items-end gap-2"
+      className="pointer-events-none absolute inset-x-4 bottom-4 z-20 flex flex-col items-center gap-2"
     >
       {showCard && (
         <div
           data-review-card=""
-          className="artifact-review-card pointer-events-auto w-[23.5rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-[1.125rem] bg-primary"
+          className={cn(
+            "artifact-review-card pointer-events-auto w-[23.5rem] max-w-[calc(100vw-2rem)] overflow-hidden",
+            FLOATING_SURFACE_CLASS,
+          )}
         >
           {isCompose ? (
             <>
@@ -456,25 +394,15 @@ export function ArtifactReviewPill({
                 <div className="mb-2 flex items-center gap-1.5 text-xs text-tertiary select-none">
                   <Cursor02
                     aria-hidden="true"
-                    strokeWidth={1.25}
-                    className="size-3 shrink-0 fill-current"
+                    strokeWidth={1.5}
+                    className="size-3 shrink-0 text-fg-brand-primary"
                   />
                   <span>{m.av_cm_pick_hint()}</span>
                 </div>
-                {nonElementPicked ? (
+                {editingDraft?.anchor && editingDraft.anchor.type !== "element" && (
                   <div className="mb-2 flex items-center">
-                    <AnchorChip
-                      label={formatAnchorTag(nonElementPicked.anchor, nonElementPicked.path)}
-                      onRemove={nonElementPicked.onClear}
-                    />
+                    <AnchorChip label={formatAnchorTag(editingDraft.anchor, editingDraft.path)} />
                   </div>
-                ) : (
-                  editingDraft?.anchor &&
-                  editingDraft.anchor.type !== "element" && (
-                    <div className="mb-2 flex items-center">
-                      <AnchorChip label={formatAnchorTag(editingDraft.anchor, editingDraft.path)} />
-                    </div>
-                  )
                 )}
                 <ArtifactInlineEditor
                   ref={editorRef}
@@ -482,8 +410,15 @@ export function ArtifactReviewPill({
                   placeholder={m.av_dr_compose_placeholder()}
                   disabled={saving || locked}
                   onSegmentsChange={handleSegmentsChange}
-                  onSubmit={() => void saveForm(false)}
-                  onSubmitAndSend={() => void saveForm(true)}
+                  onSubmit={() => {
+                    if (editingDraft || preferDraft) void saveForm(false);
+                    else void sendImmediate();
+                  }}
+                  onSubmitAndSend={() => {
+                    if (editingDraft) void saveForm(true);
+                    else if (preferDraft) void sendImmediate();
+                    else void saveForm(false);
+                  }}
                   onCancel={exitComposeToList}
                 />
                 {saveError && (
@@ -492,46 +427,17 @@ export function ArtifactReviewPill({
                   </p>
                 )}
               </div>
-              <div className="flex items-center justify-between gap-2 border-t border-secondary/70 px-3.5 py-2.5">
-                <CoForgeMark className="h-3.5 shrink-0 opacity-60 transition-opacity duration-150 hover:opacity-90" />
-                <div className="flex items-center gap-2">
-                  <Tooltip title={<TooltipWithKey label={m.controls_cancel()} shortcut="Esc" />}>
-                    <AriaButton
-                      isDisabled={saving}
-                      onPress={exitComposeToList}
-                      className={SECONDARY_PILL_CLASS}
-                    >
-                      <span>{m.controls_cancel()}</span>
-                    </AriaButton>
-                  </Tooltip>
-                  <Tooltip
-                    title={
-                      <TooltipShortcutRows
-                        rows={[
-                          {
-                            label: editingDraft ? m.av_dr_save() : m.av_dr_add_tip(),
-                            shortcut: "Enter",
-                          },
-                          {
-                            label: m.av_dr_add_and_send_tip(),
-                            shortcut: modEnter,
-                          },
-                        ]}
-                      />
-                    }
-                  >
-                    <AriaButton
-                      isDisabled={!canSave}
-                      data-save-draft=""
-                      onPress={() => void saveForm(false)}
-                      className={PRIMARY_PILL_CLASS}
-                    >
-                      {!editingDraft && <Plus aria-hidden="true" className="size-3.5" />}
-                      <span>{editingDraft ? m.av_dr_save() : m.av_dr_add()}</span>
-                    </AriaButton>
-                  </Tooltip>
-                </div>
-              </div>
+              <ArtifactReviewComposeFooter
+                editing={editingDraft !== null}
+                preferDraft={preferDraft}
+                saving={saving}
+                canSave={canSave}
+                canSend={canSend}
+                modEnter={modEnter}
+                onCancel={exitComposeToList}
+                onSaveDraft={() => void saveForm(false)}
+                onSend={() => void sendImmediate()}
+              />
             </>
           ) : (
             <ArtifactReviewQueue
@@ -549,21 +455,16 @@ export function ArtifactReviewPill({
           )}
         </div>
       )}
-
-      <div className="group/fab pointer-events-auto relative flex items-center">
-        {canHide && (
-          <AriaButton
-            onPress={toggleVisibility}
-            className={cn(
-              showCard && "pointer-coarse:pointer-events-auto pointer-coarse:opacity-100",
-              "pointer-events-none absolute right-full whitespace-nowrap rounded-lg bg-primary px-2 py-1 text-xs text-secondary opacity-0 shadow-sm ring-1 ring-secondary transition-opacity group-hover/fab:pointer-events-auto group-hover/fab:opacity-100 group-focus-within/fab:pointer-events-auto group-focus-within/fab:opacity-100",
-            )}
-          >
-            {m.av_hide_annotation_button()}
-          </AriaButton>
-        )}
-        <ArtifactReviewFab annotating={annotating} count={count} onPress={onOrbPress} />
-      </div>
+      <ArtifactReviewBar
+        annotating={annotating}
+        count={count}
+        cardOpen={showCard}
+        locked={locked}
+        modEnter={modEnter}
+        onToggleAnnotate={onToggleAnnotate}
+        onToggleCard={() => setCardOpen((open) => !open)}
+        onSubmit={() => void actions.submit()}
+      />
     </div>
   );
 }

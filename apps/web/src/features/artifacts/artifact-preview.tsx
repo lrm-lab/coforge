@@ -32,6 +32,25 @@ const PREVIEW_COMPONENTS: Components = {
   input: () => null,
 };
 
+const normalizeHeading = (text: string) =>
+  text
+    .replace(/[*_`~]/g, "")
+    .replace(/\s+#*\s*$/, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
+export function stripLeadingTitleHeading(markdown: string, title?: string): string {
+  if (!title) return markdown;
+  const trimmedTitle = normalizeHeading(title);
+  if (!trimmedTitle) return markdown;
+  const match = /^\s*#\s+([^\n]+)(?:\n+|$)/.exec(markdown);
+  if (!match) return markdown;
+  if (normalizeHeading(match[1] ?? "") !== trimmedTitle) return markdown;
+  const rest = markdown.slice(match[0].length).trimStart();
+  return rest || markdown;
+}
+
 export const MarkdownPreview = memo(function MarkdownPreview({ markdown }: { markdown: string }) {
   return (
     <Markdown remarkPlugins={MESSAGE_REMARK_PLUGINS} components={PREVIEW_COMPONENTS}>

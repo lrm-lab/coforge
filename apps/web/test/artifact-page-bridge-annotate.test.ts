@@ -428,4 +428,20 @@ describe("the annotation channel", () => {
     bridge.annotations.setDrafts([]);
     expect(sent("coforge/annotate/draft").at(-1)?.params).toEqual({ anchor: null });
   });
+
+  test("annotate-compose is accepted only while selecting is enabled and the viewer is active", async () => {
+    let active = true;
+    const { bridge, events, tell } = setup({ userActive: () => active });
+    await tell("annotate-compose", {});
+    expect(events).toEqual([]);
+
+    bridge.annotations.configure({ picking: false, selecting: true, showMarks: false });
+    active = false;
+    await tell("annotate-compose", {});
+    expect(events).toEqual([]);
+
+    active = true;
+    await tell("annotate-compose", {});
+    expect(events).toEqual([{ kind: "compose" }]);
+  });
 });

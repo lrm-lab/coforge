@@ -85,16 +85,32 @@ export function DraftCard({
       data-draft-id={draft.id}
       aria-invalid={flagged || undefined}
       className={cn(
-        "flex flex-col gap-2 rounded-lg border bg-primary p-3",
-        flagged ? "border-error" : "border-dashed border-primary",
+        "flex flex-col gap-2 rounded-lg border p-3",
+        flagged ? "border-error bg-primary" : "border-dashed border-secondary bg-secondary",
       )}
     >
-      <div className="-my-1 flex min-h-8 min-w-0 items-center gap-2">
-        <span className="min-w-0 flex-1 text-xs text-tertiary tabular-nums">
-          {m.av_cm_version({ version: draft.version })}
-        </span>
+      <div className="-my-1 flex min-h-8 min-w-0 items-start gap-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5 gap-y-0.5 py-1.5 text-xs text-tertiary">
+          <span className="shrink-0 tabular-nums">
+            {m.av_cm_version({ version: draft.version })}
+          </span>
+          {draft.replyTo !== null ? (
+            <span className="min-w-0 font-medium text-secondary [overflow-wrap:anywhere]">
+              {parent ? m.av_dr_replying_to({ name: parent.name }) : m.av_dr_replying_earlier()}
+            </span>
+          ) : draft.path === null ? (
+            <span className="min-w-0 font-medium text-secondary">{m.av_cm_group_whole()}</span>
+          ) : (
+            <CommentAnchorLine
+              commentId={draft.id}
+              version={draft.version}
+              path={draft.path}
+              anchor={draft.anchor}
+            />
+          )}
+        </div>
         {!editing && (
-          <>
+          <div className="flex shrink-0 items-center">
             <ButtonUtility
               icon={Edit03}
               size="xs"
@@ -113,29 +129,13 @@ export function DraftCard({
               data-draft-delete=""
               onClick={() => (hasImages(draft) ? setConfirming(true) : void actions.remove(draft))}
             />
-          </>
+          </div>
         )}
       </div>
-      {draft.replyTo !== null ? (
-        <p className="text-xs text-tertiary [overflow-wrap:anywhere]">
-          <span className="font-medium text-secondary">
-            {parent ? m.av_dr_replying_to({ name: parent.name }) : m.av_dr_replying_earlier()}
-          </span>
-          {parent?.excerpt && (
-            <span className="line-clamp-2 block">
-              {m.av_cm_anchor_quote({ quote: parent.excerpt })}
-            </span>
-          )}
+      {draft.replyTo !== null && parent?.excerpt && (
+        <p className="line-clamp-2 text-xs text-tertiary [overflow-wrap:anywhere]">
+          {m.av_cm_anchor_quote({ quote: parent.excerpt })}
         </p>
-      ) : draft.path === null ? (
-        <p className="text-xs font-medium text-secondary">{m.av_cm_group_whole()}</p>
-      ) : (
-        <CommentAnchorLine
-          commentId={draft.id}
-          version={draft.version}
-          path={draft.path}
-          anchor={draft.anchor}
-        />
       )}
       {editing ? (
         <CommentEditor
