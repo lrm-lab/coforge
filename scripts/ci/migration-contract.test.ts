@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -25,7 +25,88 @@ model UserPreference {
   ],
 ]);
 
+function checkOpenModeDrop(
+  field: string,
+  snapshot: "production" | "fallback" | "current",
+  source = "",
+) {
+  const prisma = `
+model UserPreference {
+  id String @id
+  conversationOpenMode String ${field}
+  @@map("user_preferences")
+}
+`;
+  return findContractViolationsInSnapshot(
+    extractDrops('ALTER TABLE "user_preferences" DROP COLUMN "conversation_open_mode";').map(
+      (drop) => ({ file: "migration.sql", drop }),
+    ),
+    snapshot,
+    new Map([["users.prisma", prisma]]),
+    new Map([["prefs.server.ts", source]]),
+    { allowIgnoredFields: snapshot === "production" },
+  );
+}
+
 describe("migration-contract hard rule (#37)", () => {
+  test("only the tagged production snapshot tolerates a genuinely ignored field", () => {
+    const field = '@map("conversation_open_mode") @ignore';
+    expect(
+      checkOpenModeDrop(field, "production", "db.userPreference.findUnique({ where: { id } })"),
+    ).toEqual([]);
+    expect(checkOpenModeDrop(field, "fallback")[0]?.found).toContain("still maps");
+    expect(checkOpenModeDrop(field, "current")[0]?.found).toContain("still maps");
+    expect(
+      checkOpenModeDrop(
+        '@default("https://example.test/ignored") @ignore @map("conversation_open_mode")',
+        "production",
+      ),
+    ).toEqual([]);
+  });
+
+  test("production rejects active mappings when @ignore is only in a literal or comment", () => {
+    const fields = [
+      '@map("conversation_open_mode")',
+      '@map("conversation_open_mode") @default("@ignore")',
+      '@map("conversation_open_mode") @default("before \\" @ignore")',
+      '@map("conversation_open_mode") // @ignore',
+    ];
+    for (const field of fields) {
+      expect(checkOpenModeDrop(field, "production")[0]?.found).toContain("still maps");
+    }
+  });
+
+  test("production source references block ignored column drops through Prisma names and raw SQL", () => {
+    const sources = [
+      "db.userPreference.findUnique({ select: { conversationOpenMode: true } })",
+      'db.$queryRaw`SELECT p."conversation_open_mode" FROM "user_preferences" AS p`',
+      "db.$queryRaw`SELECT p.conversation_open_mode FROM user_preferences AS p`",
+      "db.$queryRaw`SELECT p.CONVERSATION_OPEN_MODE FROM USER_PREFERENCES AS p`",
+    ];
+    for (const source of sources) {
+      expect(
+        checkOpenModeDrop('@ignore @map("conversation_open_mode")', "production", source)[0]?.found,
+      ).toContain("code (prefs.server.ts) still references it");
+    }
+  });
+
+  test("the production allowance leaves table and constraint checks in force", () => {
+    const drops = extractDrops(
+      'ALTER TABLE "user_preferences" DROP CONSTRAINT "user_preferences_id_uniq"; DROP TABLE "user_preferences";',
+    ).map((drop) => ({ file: "migration.sql", drop }));
+    const violations = findContractViolationsInSnapshot(
+      drops,
+      "production",
+      PRISMA_MODELS,
+      new Map(),
+      { allowIgnoredFields: true },
+    );
+    expect(violations.map(({ found }) => found)).toEqual([
+      expect.stringContaining("Prisma schema still declares it"),
+      expect.stringContaining("Prisma model UserPreference still maps to it"),
+    ]);
+  });
+
   test("extractDrops parses DROP TABLE, DROP COLUMN, and DROP CONSTRAINT", () => {
     const sql = `
       ALTER TABLE "public"."user_preferences" DROP COLUMN IF EXISTS "conversation_open_mode", DROP CONSTRAINT "user_preferences_id_uniq";
@@ -152,7 +233,7 @@ model UserPreference {
     if (!res.ok) expect(res.detail).toContain("SHADOW_DATABASE_URL");
   });
 
-  test("resolveContractBaseline prefers refs/tags/web-production over range base and falls back when absent", () => {
+  test("only a freshly fetched production tag allows an ignored field through the migration gate", () => {
     const dir = mkdtempSync(join(tmpdir(), "migration-contract-base-"));
     try {
       const run = (args: string[]) =>
@@ -167,8 +248,14 @@ model UserPreference {
           },
         });
       run(["init"]);
-      writeFileSync(join(dir, "a.txt"), "v1\n");
-      run(["add", "a.txt"]);
+      const schemaPath = "apps/web/prisma/models/users.prisma";
+      const migrationDir = "apps/web/prisma/migrations/20261121120000_drop_open_mode";
+      mkdirSync(join(dir, "apps/web/prisma/models"), { recursive: true });
+      writeFileSync(
+        join(dir, schemaPath),
+        PRISMA_MODELS.get(schemaPath)!.replace('@default("split")', "@ignore"),
+      );
+      run(["add", schemaPath]);
       run(["commit", "-m", "v1"]);
       const firstSha = run(["rev-parse", "HEAD"]).stdout.toString().trim();
 
@@ -177,21 +264,46 @@ model UserPreference {
       run(["commit", "-m", "v2"]);
       const secondSha = run(["rev-parse", "HEAD"]).stdout.toString().trim();
 
-      const withoutTag = resolveContractBaseline(
-        { kind: "range", base: secondSha, head: secondSha },
-        dir,
-        false,
+      mkdirSync(join(dir, migrationDir), { recursive: true });
+      writeFileSync(
+        join(dir, migrationDir, "migration.sql"),
+        'ALTER TABLE "user_preferences" DROP COLUMN "conversation_open_mode";\n',
       );
-      expect(withoutTag.revision).toBe(secondSha);
+      writeFileSync(
+        join(dir, schemaPath),
+        PRISMA_MODELS.get(schemaPath)!.replace(/.*conversationOpenMode.*\n/, ""),
+      );
+      expect(run(["add", "apps"]).exitCode).toBe(0);
 
-      run(["tag", "web-production", firstSha]);
-      const withTag = resolveContractBaseline(
-        { kind: "range", base: secondSha, head: secondSha },
-        dir,
-        false,
+      const checkStagedMigration = () => {
+        const result = Bun.spawnSync(
+          [
+            process.execPath,
+            "--eval",
+            `import { migrationContractViolations } from ${JSON.stringify(
+              join(import.meta.dir, "migration-contract.ts"),
+            )};
+             console.log(JSON.stringify(migrationContractViolations({ kind: "staged" })));`,
+          ],
+          { cwd: dir },
+        );
+        expect(result.exitCode, result.stderr.toString()).toBe(0);
+        return JSON.parse(result.stdout.toString().trim().split("\n").at(-1)!);
+      };
+
+      expect(checkStagedMigration()[0]?.found).toContain("base (HEAD) Prisma model");
+      expect(run(["tag", "web-production", firstSha]).exitCode).toBe(0);
+      expect(checkStagedMigration()[0]?.found).toContain(
+        "production (web-production) Prisma model",
       );
-      expect(withTag.revision).toBe("refs/tags/web-production");
-      expect(withTag.label).toBe("production (web-production)");
+
+      expect(run(["init", "--bare", "remote.git"]).exitCode).toBe(0);
+      expect(run(["push", "./remote.git", `${secondSha}:refs/tags/web-production`]).exitCode).toBe(
+        0,
+      );
+      expect(run(["remote", "add", "origin", "./remote.git"]).exitCode).toBe(0);
+      expect(checkStagedMigration()).toEqual([]);
+      expect(resolveContractBaseline({ kind: "staged" }, dir).revision).toBe(secondSha);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -25,7 +25,7 @@ export type DropTarget =
 export type PrismaModelInfo = {
   modelName: string;
   tableName: string;
-  fields: Array<{ name: string; columnName: string }>;
+  fields: Array<{ name: string; columnName: string; ignored: boolean }>;
   constraintMaps: string[];
 };
 
@@ -130,13 +130,23 @@ export function extractDrops(sql: string): DropTarget[] {
   return drops;
 }
 
+function hasPrismaFieldIgnore(line: string): boolean {
+  let depth = 0;
+  for (const [token] of line.matchAll(/"(?:\\.|[^"\\])*"|@@?\w+|[()]/g)) {
+    if (token === "(") depth++;
+    if (token === ")") depth--;
+    if (token === "@ignore" && depth === 0) return true;
+  }
+  return false;
+}
+
 export function parsePrismaSchemaModels(schemaFiles: Map<string, string>): PrismaModelInfo[] {
   const models: PrismaModelInfo[] = [];
   for (const text of schemaFiles.values()) {
     const lines = text.split(/\r?\n/);
     let current: PrismaModelInfo | null = null;
     for (const rawLine of lines) {
-      const line = rawLine.replace(/\/\/.*$/, "").trim();
+      const line = rawLine.replace(/("(?:\\.|[^"\\])*")|\/\/.*$/g, "$1").trim();
       if (!line) continue;
       const modelMatch = /^model\s+(\w+)\s*\{/.exec(line);
       if (modelMatch) {
@@ -167,7 +177,11 @@ export function parsePrismaSchemaModels(schemaFiles: Map<string, string>): Prism
         if (fieldMatch) {
           const fieldName = fieldMatch[1]!;
           const colMap = /@map\(\s*"([^"]+)"\s*\)/.exec(line);
-          current.fields.push({ name: fieldName, columnName: colMap ? colMap[1]! : fieldName });
+          current.fields.push({
+            name: fieldName,
+            columnName: colMap ? colMap[1]! : fieldName,
+            ignored: line.includes("@ignore") && hasPrismaFieldIgnore(line),
+          });
         }
       }
     }
@@ -192,6 +206,7 @@ export function findContractViolationsInSnapshot(
   revisionLabel: string,
   prismaFiles: Map<string, string>,
   sourceFiles: Map<string, string>,
+  { allowIgnoredFields = false } = {},
 ): Array<{ location: string; found: string }> {
   if (drops.length === 0) return [];
   const models = parsePrismaSchemaModels(prismaFiles);
@@ -226,8 +241,11 @@ export function findContractViolationsInSnapshot(
           .filter((f) => sameIdentifier(f.columnName, drop.column))
           .map((f) => ({ model: m, field: f })),
       );
-      if (matchingFields.length > 0) {
-        const { model, field } = matchingFields[0]!;
+      const activeMapping = matchingFields.find(
+        ({ field }) => !allowIgnoredFields || !field.ignored,
+      );
+      if (activeMapping) {
+        const { model, field } = activeMapping;
         violations.push({
           location: `${file}:${drop.line}`,
           found: `DROP COLUMN "${drop.table}"."${drop.column}" while ${revisionLabel} Prisma model ${model.modelName}.${field.name} still maps to it`,
@@ -235,13 +253,19 @@ export function findContractViolationsInSnapshot(
         continue;
       }
       const contextPatterns = [
-        new RegExp(`["'\`\\b]${escapeRegex(drop.table)}["'\`\\b]`),
+        new RegExp(`\\b${escapeRegex(drop.table)}\\b`, "i"),
         ...matchingModels.map((m) => new RegExp(`\\b${escapeRegex(camelCase(m.modelName))}\\b`)),
         ...matchingModels.map((m) => new RegExp(`\\b${escapeRegex(m.modelName)}\\b`)),
       ];
-      const colPattern = new RegExp(`\\b${escapeRegex(drop.column)}\\b`);
+      const columnPatterns = [
+        new RegExp(`\\b${escapeRegex(drop.column)}\\b`, "i"),
+        ...matchingFields.map(({ field }) => new RegExp(`\\b${escapeRegex(field.name)}\\b`)),
+      ];
       for (const [srcPath, content] of sourceFiles) {
-        if (contextPatterns.some((re) => re.test(content)) && colPattern.test(content)) {
+        if (
+          contextPatterns.some((re) => re.test(content)) &&
+          columnPatterns.some((re) => re.test(content))
+        ) {
           violations.push({
             location: `${file}:${drop.line}`,
             found: `DROP COLUMN "${drop.table}"."${drop.column}" while ${revisionLabel} code (${srcPath}) still references it`,
@@ -298,9 +322,8 @@ function pathsInRevision(revision: string, prefix: string[]): string[] {
 export function resolveContractBaseline(
   source: ChangeSource,
   cwd?: string,
-  fetchTag = true,
-): { revision: string; label: string } {
-  if (fetchTag) {
+): { revision: string; label: string; allowIgnoredFields: boolean } {
+  const fetchedProductionTag =
     Bun.spawnSync(
       ["git", "fetch", "--force", "origin", "refs/tags/web-production:refs/tags/web-production"],
       {
@@ -314,16 +337,22 @@ export function resolveContractBaseline(
           GIT_HTTP_LOW_SPEED_TIME: "15",
         },
       },
-    );
-  }
+    ).exitCode === 0;
   const tagCheck = Bun.spawnSync(
     ["git", "rev-parse", "--verify", "--quiet", "refs/tags/web-production^{commit}"],
     { cwd, stdout: "pipe", stderr: "ignore" },
   );
   if (tagCheck.exitCode === 0) {
-    const sha = tagCheck.stdout.toString().trim().slice(0, 9);
-    console.info(`migration-contract: using refs/tags/web-production (${sha}) as baseline.`);
-    return { revision: "refs/tags/web-production", label: "production (web-production)" };
+    const revision = tagCheck.stdout.toString().trim();
+    const source = fetchedProductionTag ? "fetched" : "cached";
+    console.info(
+      `migration-contract: using ${source} refs/tags/web-production (${revision.slice(0, 9)}) as baseline.`,
+    );
+    return {
+      revision,
+      label: "production (web-production)",
+      allowIgnoredFields: fetchedProductionTag,
+    };
   }
   const hasOriginMain =
     Bun.spawnSync(["git", "rev-parse", "--verify", "--quiet", "origin/main^{commit}"], {
@@ -335,7 +364,7 @@ export function resolveContractBaseline(
   console.warn(
     `migration-contract: web-production tag not found; falling back to ${fallback} as baseline.`,
   );
-  return { revision: fallback, label: `base (${fallback})` };
+  return { revision: fallback, label: `base (${fallback})`, allowIgnoredFields: false };
 }
 
 export function migrationContractViolations(source: ChangeSource) {
@@ -349,7 +378,7 @@ export function migrationContractViolations(source: ChangeSource) {
   if (drops.length === 0) return [];
 
   const base = resolveContractBaseline(source);
-  const checkRevision = (revision: string, label: string) => {
+  const checkRevision = (revision: string, label: string, allowIgnoredFields = false) => {
     const prismaPaths = pathsInRevision(revision, ["apps/web/prisma"]).filter((p) =>
       PRISMA_PATH.test(p),
     );
@@ -361,10 +390,12 @@ export function migrationContractViolations(source: ChangeSource) {
       label,
       readFiles(revision, prismaPaths),
       readFiles(revision, sourcePaths),
+      { allowIgnoredFields },
     );
   };
 
-  return [...checkRevision(base.revision, base.label), ...checkRevision(resultRev, "current")].map(
-    (v) => ({ rule: "migration-contract" as const, ...v }),
-  );
+  return [
+    ...checkRevision(base.revision, base.label, base.allowIgnoredFields),
+    ...checkRevision(resultRev, "current"),
+  ].map((v) => ({ rule: "migration-contract" as const, ...v }));
 }
