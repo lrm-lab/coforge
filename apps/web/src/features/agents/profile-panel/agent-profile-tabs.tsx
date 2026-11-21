@@ -9,11 +9,7 @@ import {
 
 import { ReorderableTabStrip } from "#src/components/ui/reorderable-tab-strip";
 import { usePanelTabOrder } from "#src/features/panel-tabs/panel-tab-order-context";
-import {
-  edgeFadeStyle,
-  TAB_BAR_END_FADE_WIDTH,
-  useScrollEdges,
-} from "#src/hooks/use-scroll-edges";
+import { edgeFadeStyle, TAB_BAR_END_FADE_WIDTH, useScrollEdges } from "#src/hooks/use-scroll-edges";
 import { m } from "#src/paraglide/messages";
 import { visibleAgentProfileTabs, type AgentProfileTab } from "./profile-panel-search";
 

@@ -6,11 +6,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
 import { Button } from "#src/components/base/buttons/button";
 import { Empty, EmptyHeader, EmptyTitle } from "#src/components/ui/empty";
-import {
-  edgeFadeStyle,
-  TAB_BAR_END_FADE_WIDTH,
-  useScrollEdges,
-} from "#src/hooks/use-scroll-edges";
+import { edgeFadeStyle, TAB_BAR_END_FADE_WIDTH, useScrollEdges } from "#src/hooks/use-scroll-edges";
 import { m } from "#src/paraglide/messages";
 import { CreateWeeklyTemplateDialog } from "./create-weekly-template-dialog";
 import { KeyPointPromptEditor } from "./key-point-prompt-editor";
