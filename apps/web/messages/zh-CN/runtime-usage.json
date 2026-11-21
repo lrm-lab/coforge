@@ -2,7 +2,7 @@
   "computer_agent_usage_unavailable": "Agent 用量暂不可用",
   "computer_usage_percent_left": "剩余 {percent}",
   "computer_usage_used_up": "已用完",
-  "computer_runtime_account_visibility": "只有这台 Computer 的主人和 Workspace 的 owner、admin 能看到账号。",
+  "computer_runtime_account_visibility": "只有这台电脑的主人和工作区的所有者、管理员能看到账号。",
   "runtime_reset_credit_use": "使用重置，剩余 {count} 次",
   "runtime_reset_credit_action": "使用重置 · {count}",
   "runtime_reset_credit_left": "剩余 {count} 次重置",
@@ -21,6 +21,6 @@
   "runtime_reset_credit_unsupported": "{runtime} 暂不支持在这里使用重置。",
   "runtime_reset_credit_unknown": "没能确认这次重置的结果。请重试，不会重复消耗。",
   "runtime_reset_credit_failed": "没能使用重置，请重试。",
-  "runtime_reset_credit_forbidden": "只有这台 Computer 的主人和 Workspace 的 owner、admin 能使用重置。",
-  "runtime_reset_credit_needs_upgrade": "升级这台 Computer 后才能在这里使用重置。"
+  "runtime_reset_credit_forbidden": "只有这台电脑的主人和工作区的所有者、管理员能使用重置。",
+  "runtime_reset_credit_needs_upgrade": "升级这台电脑后才能在这里使用重置。"
 }

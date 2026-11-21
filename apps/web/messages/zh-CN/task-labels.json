@@ -38,7 +38,7 @@
   "labels_settings_load_failed": "标签没有加载出来。",
   "labels_settings_empty": "还没有标签。可以在这里建，也可以在任务的标签选择框里建。",
   "labels_settings_no_match": "没有匹配的标签。",
-  "labels_settings_members_note": "所有人都能新建标签；改名、改颜色、归档和删除只有 Workspace 所有者和管理员能做。",
+  "labels_settings_members_note": "所有人都能新建标签；改名、改颜色、归档和删除只有工作区所有者和管理员能做。",
   "labels_settings_ungrouped": "标签",
   "labels_settings_archived": "已归档（{count}）",
   "labels_settings_task_count": [
@@ -81,6 +81,6 @@
     }
   ],
   "labels_settings_name_taken": "已经有一个叫“{name}”的标签了。",
-  "labels_settings_denied": "只有 Workspace 所有者和管理员能修改标签。",
+  "labels_settings_denied": "只有工作区所有者和管理员能修改标签。",
   "labels_settings_save_failed": "这次修改没有保存成功。"
 }

@@ -19,7 +19,7 @@
   "tasks_clear_parent": "移除父任务",
   "tasks_pick_blocker": "选择前置任务",
   "tasks_pick_parent": "选择父任务",
-  "tasks_relation_denied": "只有相关任务的负责人或创建者，或 Workspace 所有者、管理员，才能修改。",
+  "tasks_relation_denied": "只有相关任务的负责人或创建者，或工作区所有者、管理员，才能修改。",
   "tasks_relation_invalid": "无法建立这个关系：会形成循环、嵌套超过 {depth} 层，或要先等的任务超过 {blockers} 个。",
   "tasks_menu_change_parent": "更换父任务…",
   "tasks_blocked_by_count": "等 {count} 个任务",
@@ -53,6 +53,6 @@
   "tasks_subtask_loading": "正在加载任务…",
   "tasks_subtask_under_hidden": "在一个你看不到的任务下",
   "tasks_pick_refused": "{name}，不可选：{reason}",
-  "tasks_relation_denied_named": "无法关联 {name}：只有相关任务的负责人或创建者，或 Workspace 所有者、管理员，才能修改。",
+  "tasks_relation_denied_named": "无法关联 {name}：只有相关任务的负责人或创建者，或工作区所有者、管理员，才能修改。",
   "tasks_relation_invalid_named": "无法关联 {name}：会形成循环、嵌套超过 {depth} 层，或要先等的任务超过 {blockers} 个。"
 }

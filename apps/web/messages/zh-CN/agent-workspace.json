@@ -4,7 +4,7 @@
   "agent_workspace_section": "工作目录",
   "agent_workspace_copy_path": "复制路径",
   "agent_workspace_hidden_files_hidden": "显示隐藏文件",
-  "agent_workspace_hidden_files_shown": "隐藏隐藏文件",
+  "agent_workspace_hidden_files_shown": "不显示隐藏文件",
   "agent_workspace_refresh": "刷新",
   "agent_workspace_loading": "正在加载工作目录…",
   "agent_workspace_empty": "还没有文件",

@@ -8,8 +8,8 @@
   "agent_turn_stop_interrupted": "已停止本轮。",
   "agent_turn_stop_not_running": "没有正在运行的轮次。",
   "agent_turn_stop_restarted": "为停止本轮，Agent 已重启；对话上下文已保留。",
-  "agent_turn_stop_upgrade": "请升级这位 Agent 的 Computer 以支持停止单轮。你仍可停止整个 Agent。",
-  "agent_turn_stop_offline": "这位 Agent 的 Computer 已离线。",
+  "agent_turn_stop_upgrade": "请升级这个 Agent 所在的电脑，以支持停止单轮。你仍可停止整个 Agent。",
+  "agent_turn_stop_offline": "这个 Agent 所在的电脑已离线。",
   "agent_turn_stop_failed": "未能停止本轮。",
   "agent_turn_stop_unsupported": "这位 Agent 的运行时不支持单独停止其中的任务。",
   "agent_turn_stop_retry": "重试"

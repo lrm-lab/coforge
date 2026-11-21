@@ -99,7 +99,7 @@
   "pi_chat_phase_answering": "正在生成回复…",
   "pi_chat_phase_tool": "正在调用 {tool}…",
   "pi_chat_phase_retrying": "模型请求正在重试…",
-  "pi_chat_phase_compacting": "正在压缩会话上下文…",
+  "pi_chat_phase_compacting": "正在精简对话记录…",
   "pi_chat_phase_wait": "已有 {seconds} 秒未收到新进展，可追加指令或停止。",
   "pi_chat_inputs_interrupted": "未能确认这些追加消息是否已执行。请检查历史后再决定是否重新发送。",
   "pi_chat_sending": "正在发送…",
@@ -121,7 +121,7 @@
   "pi_chat_files_resize": "拖动或使用左右方向键调整文件栏宽度",
   "pi_chat_files_open": "打开文件",
   "workspace_assistant_computer_required": "你的助手需要一台电脑来运行，而你还没有把电脑接入这个工作区。添加一台后再重新发送。",
-  "pi_chat_off": "AI Workbench 已关闭",
+  "pi_chat_off": "AI 工作台已关闭",
   "pi_chat_off_settings": "去设置里打开",
   "pi_chat_load_error": "没能读取会话。请确认所选电脑已连接，再重试。",
   "pi_chat_action_error": "没能完成，请重试。"

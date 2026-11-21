@@ -55,7 +55,7 @@
   "channel_settings_description_placeholder": "这个群聊是做什么的？",
   "channel_settings_coordinator_title": "协调模式",
   "channel_settings_coordinator_label": "协调 Agent",
-  "channel_settings_coordinator_hint": "新的顶层请求会先发送给此 Agent。",
+  "channel_settings_coordinator_hint": "群聊里新发起的消息会先发给此 Agent 处理。",
   "channel_settings_coordinator_none": "不指定协调 Agent",
   "channel_settings_coordinator_error": "协调 Agent 更新失败，请重试。",
   "channel_settings_view_repository": "在 GitHub 上查看 {repository}",
