@@ -12,7 +12,6 @@ import { m } from "#src/paraglide/messages";
 import { deleteArtifact } from "./artifacts.functions";
 import { ArtifactDeleteConfirm } from "./artifact-delete-confirm";
 import { ArtifactFile, ArtifactFileView } from "./artifact-file-view";
-import { ArtifactCommentButton } from "./artifact-comment-button";
 import { ArtifactCommentPanel } from "./artifact-comment-panel";
 import { ArtifactDraftsProvider } from "./artifact-drafts-provider";
 import { ArtifactReviewPill } from "./artifact-review-pill";
@@ -38,17 +37,11 @@ import { useRevealOnArrival, useThreadReveal } from "./use-thread-reveal";
 import { useCommentMode, type ArtifactPanelName } from "./use-comment-mode";
 import { ArtifactFilesPanel } from "./artifact-files-panel";
 import { ArtifactMarkdown } from "./artifact-markdown";
-import { ArtifactMoreMenu } from "./artifact-more-menu";
-import {
-  ARTIFACT_TITLE_ID,
-  ArtifactPageHeader,
-  type ArtifactPaneControls,
-} from "./artifact-page-header";
+import type { ArtifactPaneControls } from "./artifact-page-header";
+import { ArtifactPageHost, ArtifactViewerHeader } from "./artifact-page-shell";
 import { homeConversationOf, homeLinkProps, type ArtifactHome } from "./artifact-home";
 import { useArtifactLinkSharing } from "./artifact-link-sharing";
-import { ArtifactHomeChip } from "./artifact-home-chip";
-import { ArtifactOriginLink } from "./artifact-origin-link";
-import { ArtifactPresenceChip, useKeepSeen, useRecordOpen } from "./artifact-presence-chip";
+import { useKeepSeen, useRecordOpen } from "./artifact-presence-chip";
 import { ArtifactSendDialog } from "./artifact-send-dialog";
 import { ArtifactUpdateBanner, ViewingVersionNotice } from "./artifact-update-banner";
 import { artifactKindOfPath } from "./artifact-path-kind";
@@ -58,7 +51,6 @@ import { artifactHomeConversation, refreshArtifact } from "./artifact-queries";
 import { artifactPageRoute } from "./artifact-search";
 import { encodeArtifactShortId, publicArtifactPath } from "./artifact-short-id";
 import { ArtifactWebPage } from "./artifact-web-page";
-import { VisibilityPill } from "./artifact-visibility-pill";
 import { useConversationName } from "./use-conversation-name";
 import { useArtifactActions } from "./use-artifact-actions";
 import { useArtifactPageRealtime } from "./use-artifact-page-realtime";
@@ -336,66 +328,32 @@ function ArtifactPageFor({
         <ShownThreadsContext.Provider value={shownThreads}>
           <CommentRequestsContext.Provider value={requests}>
             <CommentPlacesContext.Provider value={places}>
-              <ArtifactPageHeader
+              <ArtifactViewerHeader
                 artifactId={artifactId}
+                workspaceId={workspaceId}
                 entryPath={entryPath}
                 title={title}
-                shownVersion={current ? shownVersion : undefined}
+                loaded={current !== undefined}
+                shownVersion={shownVersion}
+                commentCount={current?.commentCount}
+                fileCount={files.length}
+                canDelete={current?.canDelete === true}
+                origin={current?.artifact.origin}
                 home={home}
                 homeName={homeName}
+                nameOf={nameOf}
+                visibility={visibility}
+                presenceReady={opened}
+                framesPage={framesPage}
+                commentsPanelActive={panel === "comments"}
+                phone={phone}
+                following={following}
                 pane={pane}
                 onChooseVersion={choose}
-                onFind={framesPage ? () => setFinding(true) : undefined}
-                onCopyLink={current && (() => void copyLink())}
-                comments={
-                  current && (
-                    <ArtifactCommentButton
-                      total={current.commentCount}
-                      active={panel === "comments"}
-                      onToggle={commentMode.togglePanel}
-                    />
-                  )
-                }
-                pills={
-                  current && (
-                    <>
-                      <VisibilityPill visibility={visibility} />
-                      {home && (
-                        <span className="contents @max-2xl/header:hidden">
-                          <ArtifactHomeChip
-                            home={home}
-                            homeName={homeName}
-                            scope={visibility.current}
-                          />
-                        </span>
-                      )}
-                      <ArtifactOriginLink origin={current.artifact.origin} nameOf={nameOf} />
-                      <span className="contents @max-2xl/header:hidden">
-                        <ArtifactPresenceChip
-                          workspaceId={workspaceId}
-                          artifactId={artifactId}
-                          ready={opened}
-                        />
-                      </span>
-                    </>
-                  )
-                }
-                menu={
-                  current && (
-                    <ArtifactMoreMenu
-                      artifactId={artifactId}
-                      shownVersion={shownVersion}
-                      phone={phone}
-                      fileCount={files.length}
-                      canDelete={current.canDelete}
-                      canFind={framesPage}
-                      following={following}
-                      visibility={visibility}
-                      onChooseVersion={choose}
-                      onAction={onMoreAction}
-                    />
-                  )
-                }
+                onFind={() => setFinding(true)}
+                onCopyLink={() => void copyLink()}
+                onToggleCommentsPanel={commentMode.togglePanel}
+                onMoreAction={onMoreAction}
               />
               <div className="@container/artifact relative flex min-h-0 flex-1">
                 <div
@@ -512,18 +470,9 @@ function ArtifactPageFor({
     </ArtifactCommentingContext.Provider>
   );
 
-  return pane ? (
-    <PaneFrame full={pane.full} onExit={pane.onToggleFull}>
+  return (
+    <ArtifactPageHost pane={pane} hasTitle={current !== undefined}>
       {body}
-    </PaneFrame>
-  ) : (
-    <main
-      data-artifact-page-frame=""
-      aria-labelledby={current ? ARTIFACT_TITLE_ID : undefined}
-      aria-label={current ? undefined : m.doc_pane_label()}
-      className="@container/doc flex h-full min-h-0 min-w-0 flex-1 flex-col bg-primary lg:animate-in lg:fade-in lg:motion-enter-sm motion-reduce:animate-none"
-    >
-      {body}
-    </main>
+    </ArtifactPageHost>
   );
 }
