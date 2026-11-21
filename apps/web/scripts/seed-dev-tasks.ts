@@ -1,3 +1,4 @@
+import type { TaskWriteStatus } from "@lrm/coforge-sdk/internal";
 import type { getDatabaseClient } from "../src/server/db/client.server";
 
 type SeedDatabase = NonNullable<ReturnType<typeof getDatabaseClient>>;
@@ -7,7 +8,7 @@ export type SeedTask = {
   conversationId: string;
   number: number;
   title: string;
-  status: "todo" | "in_progress" | "in_review" | "done" | "closed";
+  status: TaskWriteStatus;
   creatorMemberId: string;
   ownerMemberId?: string;
   senderMemberId: string;

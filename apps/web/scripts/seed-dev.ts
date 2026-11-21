@@ -831,7 +831,7 @@ await ensureTask({
   conversationId: generalId,
   number: 2,
   title: "Standardize loading and toast feedback across settings tabs",
-  status: "in_review",
+  status: "in_progress",
   creatorMemberId: devInGeneral,
   ownerMemberId: atlasInGeneral,
   senderMemberId: atlasInGeneral,
@@ -912,7 +912,7 @@ await db.$transaction(async (tx) => {
 await insertPendingAttachments();
 await insertPendingTasks();
 
-console.log("Tasks: todo (unowned), todo (owned), in_progress, in_review, done, closed");
+console.log("Tasks: todo (unowned), todo (owned), in_progress (two), done, closed");
 
 // ---------------------------------------------------------------------------
 // Reminders: 2, agent-owned.
