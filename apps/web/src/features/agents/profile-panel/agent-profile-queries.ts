@@ -1,7 +1,11 @@
+import {
+  useAgentControlState,
+  type AgentControlState,
+} from "#src/features/agents/agent-control-realtime";
 import { MEMBER_DIRECTORY_KEY } from "#src/features/agents/member-directory-queries";
 import { AGENT_MODELS_KEY } from "#src/features/agents/agent-models";
 import { type Query, queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLayoutEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import { isRedirect, useRouter } from "@tanstack/react-router";
 import { isAppErrorCode } from "#src/lib/app-error";
 
@@ -10,6 +14,7 @@ import { getAgentChannels } from "#src/features/agents/agent-channels.functions"
 import { getAgentPeerConversations } from "#src/features/agents/agent-peer-conversations.functions";
 
 const agentProfileKey = (agentId: string) => ["agent-profile", agentId] as const;
+const refreshedControlEvents = new WeakMap<Query, AgentControlState>();
 const attemptedProfileDeadlines = new WeakMap<Query, number>();
 
 export const agentEnvironmentKey = (agentId: string) => ["agent-environment", agentId] as const;
@@ -48,6 +53,23 @@ export function agentProfileQuery(agentId: string | undefined) {
 export function useAgentProfile(agentId: string, visible: boolean) {
   const queryClient = useQueryClient();
   const query = useQuery(agentProfileReadQuery(agentId));
+  const hasProfile = Boolean(query.data?.profile);
+  const control = useAgentControlState(agentId);
+  useEffect(() => {
+    if (
+      !visible ||
+      !hasProfile ||
+      !control ||
+      control.phase === "accepted" ||
+      control.phase === "pending"
+    )
+      return;
+    const queryKey = agentProfileKey(agentId);
+    const cached = queryClient.getQueryCache().find({ queryKey, exact: true });
+    if (!cached || refreshedControlEvents.get(cached) === control) return;
+    refreshedControlEvents.set(cached, control);
+    void queryClient.invalidateQueries({ queryKey, exact: true });
+  }, [agentId, control, hasProfile, queryClient, visible]);
   const { data, dataUpdatedAt } = query;
   const profile = data?.profile;
   const redirecting = isRedirect(query.error);
