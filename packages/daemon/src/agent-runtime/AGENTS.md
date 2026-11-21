@@ -40,8 +40,8 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   in place of session recovery; a process gets at most one, and one queued when a
   process crashes is its relaunch's; the server alone decides whether one is owed.
 - Restart recovery must not eagerly load all canonical Message history.
-- A resumed session without pending messages uses its session context first, acts on any `openTasks` carried by the Start intent (otherwise reading memory and tasks only when context does not establish current work), and stays silent when no actionable work remains; it never repeats its introduction.
-- A fresh session without an introduction recovers from existing memory files and any `openTasks` carried by the Start intent (or assigned unfinished tasks) once. Reset Session, Full Reset, migration and a lost native session can all take this path; only files still present are read, and a fresh session never implies a new Agent.
+- A resumed session without pending messages uses its session context first and stays silent when no actionable work remains. A fresh session without an introduction reads available memory files. Both use a nonempty `openTasks` list from the Start intent. An explicit empty list skips the instruction to check assigned tasks; a missing list keeps that instruction, conditional on missing work context for a resumed session.
+- Reset Session, Full Reset, migration and a lost native session can lead to a fresh session. A fresh session keeps the same Agent and its introduction history. A previous launch's empty task list does not confirm zero for a new launch.
 - `agent-desktop.ts` holds one Agent's screen on the image's localhost control
   port and releases it when that process ends. The hold's variables are that
   process's display, authority file, and per-agent XDG directories. A missing

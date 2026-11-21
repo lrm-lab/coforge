@@ -182,6 +182,7 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
     expect(await repo.readAgentRecoveryContext(workspace.id, unrelated!.id)).toEqual({
       resumeMessages: [],
       unreadSummary: {},
+      openTasks: { tasks: [], more: 0 },
     });
     const receipt = receipts[0]!;
 

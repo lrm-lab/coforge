@@ -44,7 +44,7 @@ export function assertAgentStartOpenTasks(
     fail("more count is out of range");
   if (openTasks.tasks.length === 0) {
     if (openTasks.more > 0) fail("more count requires at least one task");
-    return undefined;
+    return openTasks;
   }
   if (openTasks.tasks.length > AGENT_START_OPEN_TASKS_MAX)
     fail(`more than ${AGENT_START_OPEN_TASKS_MAX} tasks`);
@@ -67,6 +67,8 @@ export function normalizeAgentStartOpenTasks(
     | undefined,
 ): AgentStartOpenTasks | undefined {
   if (!openTasks) return undefined;
+  if (openTasks.tasks.length === 0)
+    return openTasks.more === 0 ? { tasks: [], more: 0 } : undefined;
   const tasks: AgentStartOpenTask[] = [];
   let overflow = 0;
   for (const task of openTasks.tasks) {

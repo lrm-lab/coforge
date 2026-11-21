@@ -30,13 +30,14 @@ export async function readAgentStartOpenTasks(
   workspaceId: string,
   agentId: string,
 ): Promise<AgentStartOpenTasks | undefined> {
-  const where = {
+  const scope = {
     workspaceId,
     deletedAt: null,
-    owner: { workspaceId, agentId },
     status: { in: [...START_OPEN_TASK_STATUSES] },
     conversation: ownTaskScope({ agentId }).conversations,
   } satisfies Prisma.TaskWhereInput;
+  const owner = { workspaceId, agentId };
+  const where = { ...scope, owner };
 
   const rows = await db.task.findMany({
     where,
@@ -56,7 +57,14 @@ export async function readAgentStartOpenTasks(
       message: { select: { mentions: MESSAGE_MENTIONS_SELECT } },
     },
   });
-  if (rows.length === 0) return undefined;
+  if (rows.length === 0) {
+    const remaining = await db.task.findMany({
+      where: { ...scope, OR: [{ owner }, { ownerMemberId: null, creator: { agentId } }] },
+      take: 1,
+      select: { id: true },
+    });
+    return remaining.length === 0 ? { tasks: [], more: 0 } : undefined;
+  }
 
   const overflow = rows.length > AGENT_START_OPEN_TASKS_MAX;
   const kept = overflow ? rows.slice(0, AGENT_START_OPEN_TASKS_MAX) : rows;

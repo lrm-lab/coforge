@@ -1,6 +1,7 @@
 import { getLogger } from "@logtape/logtape";
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import { thrownMessage, type AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
+import { hasStartOpenTasks } from "../agent-runtime/start-open-tasks";
 import type { MessageAttention } from "./agent-message-attention-index";
 import type { AgentRecoveryContext } from "./runtime-launch-intent";
 import { LaunchInboxes } from "./launch-inbox";
@@ -84,12 +85,14 @@ export function carriedStart(
   }
   for (const { target } of parked) add(target, 1);
   const { recovery } = started;
+  const { openTasks, ...unreadRecovery } = recovery ?? {};
   return carriedOf({
     ...started,
     ...(recovery || counts.size
       ? {
           recovery: {
-            ...recovery,
+            ...unreadRecovery,
+            ...(hasStartOpenTasks(openTasks) ? { openTasks } : {}),
             unreadSummary: Object.fromEntries(counts),
             summaryIncludesResumeMessages: undefined,
             countedDeliveries,
@@ -111,7 +114,7 @@ export function mergeCarried(own: CarriedStart, owed: CarriedStart): CarriedStar
     ...(b?.resumeMessages ?? []).filter(({ deliveryId }) => !ownIds.has(deliveryId)),
   ];
   const conversationIds = { ...b?.unreadConversationIds, ...a?.unreadConversationIds };
-  const openTasks = a?.openTasks ?? b?.openTasks;
+  const openTasks = a?.openTasks ?? (hasStartOpenTasks(b?.openTasks) ? b.openTasks : undefined);
   const countedDeliveries = [
     ...(a?.countedDeliveries ?? []).filter(({ target }) => !b?.unreadSummary?.[target ?? ""]),
     ...(b?.countedDeliveries ?? []).filter(({ target }) => !a?.unreadSummary?.[target ?? ""]),

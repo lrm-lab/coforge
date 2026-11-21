@@ -1,4 +1,4 @@
-import { create, toBinary } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { expect, test } from "bun:test";
 import { AgentStartIntentSchema } from "#src/internal/gen/coforge/rpc/v1/workspace_pb";
 import {
@@ -388,7 +388,7 @@ test("a scope is refused when any part of it is missing or not a provider", () =
   ])
     expect(() => decodeAgentStartIntentScope(rejected(over)), JSON.stringify(over)).toThrow();
 });
-test("round-trips openTasks on a start intent and omits empty openTasks", () => {
+test("round-trips nonempty openTasks on a start intent", () => {
   const openTasks = {
     tasks: [
       { ref: "#coforge:#12", title: "Ship start open tasks", status: "in_progress" as const },
@@ -398,10 +398,16 @@ test("round-trips openTasks on a start intent and omits empty openTasks", () => 
   };
   const decoded = decodeAgentStartIntent(encodeAgentStartIntent({ ...base, openTasks }));
   expect(decoded.openTasks).toEqual(openTasks);
-  expect(
-    decodeAgentStartIntent(encodeAgentStartIntent({ ...base, openTasks: { tasks: [], more: 0 } })),
-  ).not.toHaveProperty("openTasks");
-  expect(decodeAgentStartIntent(encodeAgentStartIntent(base))).not.toHaveProperty("openTasks");
+});
+test("preserves presence of an explicitly empty openTasks submessage", () => {
+  const openTasks = { tasks: [], more: 0 };
+  const empty = encodeAgentStartIntent({ ...base, openTasks });
+  const absent = encodeAgentStartIntent(base);
+
+  expect(fromBinary(AgentStartIntentSchema, empty).openTasks).toBeDefined();
+  expect(fromBinary(AgentStartIntentSchema, absent).openTasks).toBeUndefined();
+  expect(decodeAgentStartIntent(empty).openTasks).toEqual(openTasks);
+  expect(decodeAgentStartIntent(absent)).not.toHaveProperty("openTasks");
 });
 test("rejects malformed openTasks on encode", () => {
   const task = { ref: "#coforge:#1", title: "Fix bug", status: "todo" as const };
@@ -451,15 +457,20 @@ test("normalizes future statuses and overflow openTasks on decode", () => {
   const decoded = decodeAgentStartIntent(bytes);
   expect(decoded.openTasks?.tasks).toHaveLength(20);
   expect(decoded.openTasks?.more).toBe(5);
-  const allInvalid = toBinary(
-    AgentStartIntentSchema,
-    create(AgentStartIntentSchema, {
-      ...base,
-      messageType: AGENT_START_MESSAGE_TYPE,
-      openTasks: { tasks: [{ ref: "#coforge:#1", title: "Done", status: "done" }], more: 2 },
-    }),
-  );
-  expect(decodeAgentStartIntent(allInvalid)).not.toHaveProperty("openTasks");
+  for (const malformed of [
+    { tasks: [{ ref: "#coforge:#1", title: "Done", status: "done" }], more: 0 },
+    { tasks: [], more: 2 },
+  ]) {
+    const allInvalid = toBinary(
+      AgentStartIntentSchema,
+      create(AgentStartIntentSchema, {
+        ...base,
+        messageType: AGENT_START_MESSAGE_TYPE,
+        openTasks: malformed,
+      }),
+    );
+    expect(decodeAgentStartIntent(allInvalid)).not.toHaveProperty("openTasks");
+  }
 
   const paddedAndEmoji = toBinary(
     AgentStartIntentSchema,

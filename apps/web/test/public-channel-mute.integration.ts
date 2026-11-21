@@ -100,6 +100,7 @@ test("Agent channel mute suppresses ordinary notices, preserves mentions and rea
     expect(await repo.readAgentRecoveryContext(workspace.id, agent.id)).toEqual({
       resumeMessages: [],
       unreadSummary: {},
+      openTasks: { tasks: [], more: 0 },
     });
     expect(
       (await repo.readMessages(workspace.id, agent.id, "#general")).map((m) => [

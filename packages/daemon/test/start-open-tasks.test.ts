@@ -11,7 +11,7 @@ import { formatStartOpenTaskLines } from "#src/agent-runtime/start-open-tasks";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { noticeGeneration } from "#src/daemon-runtime/agent-wakeup-unavailable-error";
 import { planRecovery } from "#src/daemon-runtime/agent-message-attention-recovery";
-import { mergeCarried } from "#src/daemon-runtime/provider-replay-recovery";
+import { carriedStart, mergeCarried } from "#src/daemon-runtime/provider-replay-recovery";
 import { DaemonRuntime, type DaemonConfig } from "#src/daemon-runtime/runtime";
 import { recoveryOf, type AgentInputQueue } from "#src/daemon-runtime/runtime-launch-intent";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
@@ -185,6 +185,15 @@ describe("start open tasks formatting", () => {
     expect(freshWithMemory).not.toContain("check unfinished tasks assigned to you once");
   });
 
+  test("a confirmed empty list omits the task check in fresh and resumed starters", () => {
+    for (const resuming of [false, true]) {
+      const input = agentStartupInput(resuming, false, { tasks: [], more: 0 });
+      expect(input).toContain("end this turn silently");
+      expect(input).not.toContain("check unfinished tasks assigned to you once");
+      expect(input).not.toContain("Open tasks currently assigned to you");
+    }
+  });
+
   test("agentStartupCatchupInput appends open tasks on summary-only catch-up", () => {
     const plain = agentStartupCatchupInput(["#general 2 new messages"]);
     expect(plain).toContain("then end this turn");
@@ -292,9 +301,42 @@ describe("start open tasks propagation", () => {
     );
     expect(merged.recovery?.openTasks).toEqual(sampleOpenTasks);
   });
+
+  test("only the current Start can confirm there are no open tasks", () => {
+    const openTasks = { tasks: [], more: 0 };
+    const unreadSummary = { "#ops": 1 };
+    const empty = { recovery: { openTasks } };
+    const absent = { recovery: { unreadSummary } };
+    const nonempty = { recovery: { openTasks: sampleOpenTasks } };
+
+    expect(mergeCarried(absent, empty).recovery?.openTasks).toBeUndefined();
+    expect(mergeCarried(empty, nonempty).recovery?.openTasks).toEqual(openTasks);
+    expect(mergeCarried(nonempty, empty).recovery?.openTasks).toEqual(sampleOpenTasks);
+    expect(carriedStart({ recovery: { openTasks, unreadSummary } }, []).recovery).toMatchObject({
+      unreadSummary,
+    });
+    expect(carriedStart(empty, []).recovery?.openTasks).toBeUndefined();
+  });
 });
 
 describe("DaemonRuntime start openTasks integration", () => {
+  test("the provider only receives the fallback task check when the Start omits the list", async () => {
+    for (const openTasks of [undefined, { tasks: [], more: 0 }]) {
+      const { runtime, inputs, connection } = await createRuntimeHarness();
+      try {
+        await runtime.handleAgentStart(
+          baseStartIntent(connection, { sessionId: "native-1", openTasks }),
+        );
+        expect(inputs).toHaveLength(1);
+        expect(inputs[0]?.includes("check unfinished tasks assigned to you once")).toBe(
+          openTasks === undefined,
+        );
+      } finally {
+        await runtime.stop();
+      }
+    }
+  });
+
   test("startup turn lists openTasks when no unread messages are pending", async () => {
     const { runtime, inputs, connection } = await createRuntimeHarness();
     try {

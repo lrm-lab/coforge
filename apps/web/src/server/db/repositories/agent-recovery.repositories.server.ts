@@ -10,6 +10,7 @@ import {
 } from "./direct-conversation-agent-message.server";
 import { recoveryRefs, directTargets } from "./agent-peer-direct.repositories.server";
 import { readAgentStartOpenTasks } from "./agent-start-open-tasks.repositories.server";
+import { errorType } from "#src/server/errors/error-type.server";
 import { Prisma } from "#src/generated/prisma/client";
 import {
   APP_EVENTS_KIND,
@@ -287,7 +288,17 @@ export async function readAgentRecoveryContext(
     FROM ranked
     WHERE "globalRank" <= ${AGENT_RECOVERY_MESSAGE_LIMIT} OR "targetRank" = 1
     ORDER BY "globalRank"`,
-    readAgentStartOpenTasks(ports.db, workspaceId, agentId),
+    readAgentStartOpenTasks(ports.db, workspaceId, agentId).catch((error: unknown) => {
+      console.warn(
+        JSON.stringify({
+          event: "agent_recovery:open_tasks_read_failed",
+          workspace_id: workspaceId,
+          agent_id: agentId,
+          error_type: errorType(error),
+        }),
+      );
+      return undefined;
+    }),
   ]);
   const rows = ranked;
   const resumeMessages: AgentFacing<AgentRecoveryContext["resumeMessages"][number]>[] = [];

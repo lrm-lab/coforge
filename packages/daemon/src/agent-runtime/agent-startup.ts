@@ -17,17 +17,15 @@ export function agentStartupInput(
   openTasks?: AgentStartOpenTasks,
 ): string {
   const withOpenTasks = hasStartOpenTasks(openTasks);
+  const taskCheck =
+    openTasks === undefined ? ", and check unfinished tasks assigned to you once" : "";
   const lead = [
     resuming
       ? "You are back online. No new messages are pending."
       : "You are starting a fresh session. No new messages are pending.",
     resuming
-      ? withOpenTasks
-        ? "Use your existing session context first. If it does not establish your current work, read MEMORY.md and notes/active-context.md if present."
-        : "Use your existing session context first. If it does not establish your current work, read MEMORY.md and notes/active-context.md if present, and check unfinished tasks assigned to you once."
-      : withOpenTasks
-        ? `To recover your work without previous session context, read ${memoryInContext ? "" : "MEMORY.md and "}notes/active-context.md if present.`
-        : `To recover your work without previous session context, read ${memoryInContext ? "" : "MEMORY.md and "}notes/active-context.md if present, and check unfinished tasks assigned to you once.`,
+      ? `Use your existing session context first. If it does not establish your current work, read MEMORY.md and notes/active-context.md if present${taskCheck}.`
+      : `To recover your work without previous session context, read ${memoryInContext ? "" : "MEMORY.md and "}notes/active-context.md if present${taskCheck}.`,
     "Use only tools allowed by your role and skip unsupported recovery steps.",
   ];
   if (withOpenTasks) {
@@ -35,7 +33,9 @@ export function agentStartupInput(
   }
   return [
     ...lead,
-    "Open the task you are resuming for its current details and relevant team memory.",
+    ...(openTasks === undefined
+      ? ["Open the task you are resuming for its current details and relevant team memory."]
+      : []),
     "Resume only actionable work already requested or assigned to you; do not invent work or scan unrelated channels and projects.",
     "If no actionable work remains, end this turn silently. Do not send a startup announcement or repeat your introduction.",
   ].join(" ");

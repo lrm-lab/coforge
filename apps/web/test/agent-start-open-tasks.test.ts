@@ -16,7 +16,7 @@ import { pendingRuntimeConfig } from "./helpers/agent-control-store";
 import { recoverySecondPassStubs } from "./helpers/recovery-second-pass-stubs";
 
 describe("readAgentStartOpenTasks", () => {
-  test("returns undefined and skips count and conversation queries when the Agent has no open tasks", async () => {
+  test("confirms zero and skips count and conversation queries when the Agent has no open tasks", async () => {
     let countCalls = 0;
     let conversationCalls = 0;
     const db = {
@@ -35,10 +35,41 @@ describe("readAgentStartOpenTasks", () => {
       },
     } as unknown as PrismaClient;
 
-    expect(await readAgentStartOpenTasks(db, "ws-1", "agent-1")).toBeUndefined();
+    expect(await readAgentStartOpenTasks(db, "ws-1", "agent-1")).toEqual({ tasks: [], more: 0 });
     expect(countCalls).toBe(0);
     expect(conversationCalls).toBe(0);
   });
+
+  test.each([null, "agent-member-1"])(
+    "does not confirm zero when a self-created task has owner %s at the confirmation read",
+    async (ownerMemberId) => {
+      const reads: Record<string, unknown>[] = [];
+      const db = {
+        task: {
+          findMany: async (args: Record<string, unknown>) => {
+            reads.push(args);
+            return reads.length === 1 ? [] : [{ id: "task-1", ownerMemberId }];
+          },
+        },
+      } as unknown as PrismaClient;
+
+      expect(await readAgentStartOpenTasks(db, "ws-1", "agent-1")).toBeUndefined();
+      expect(reads).toHaveLength(2);
+      expect(reads[1]).toMatchObject({
+        take: 1,
+        where: {
+          workspaceId: "ws-1",
+          deletedAt: null,
+          conversation: expect.any(Object),
+          status: { in: ["in_progress", "todo"] },
+          OR: [
+            { owner: { workspaceId: "ws-1", agentId: "agent-1" } },
+            { ownerMemberId: null, creator: { agentId: "agent-1" } },
+          ],
+        },
+      });
+    },
+  );
 
   test("skips conversation lookup for channel-only tasks, renders mentions, and enforces scope", async () => {
     let conversationCalls = 0;
@@ -226,6 +257,24 @@ describe("readAgentStartOpenTasks", () => {
 });
 
 describe("recovery context and AgentControlPublisher openTasks propagation", () => {
+  test("a task query failure preserves the recovery context without confirming zero", async () => {
+    const db = {
+      ...recoverySecondPassStubs,
+      $queryRaw: async () => [],
+      task: {
+        findMany: async () => {
+          throw new Error("task query failed");
+        },
+      },
+    } as unknown as PrismaClient;
+
+    const recovery = await new PrismaDirectConversationRepository(db).readAgentRecoveryContext(
+      "ws-1",
+      "agent-1",
+    );
+    expect(recovery).toEqual({ resumeMessages: [], unreadSummary: {} });
+  });
+
   test("readAgentRecoveryContext attaches openTasks alongside unread state", async () => {
     const db = {
       agent: { findMany: async () => [] },
@@ -255,13 +304,15 @@ describe("recovery context and AgentControlPublisher openTasks propagation", () 
     });
   });
 
-  test("AgentControlPublisher.sendStart encodes recovery.openTasks into AgentStartIntent", async () => {
+  test("AgentControlPublisher sends nonempty, confirmed empty and failed reads distinctly", async () => {
     const published: Uint8Array[] = [];
     const store = {
       get: async () => undefined,
       replace: async () => true,
       memberRole: async () => "owner",
     } as unknown as AgentControlStore;
+    let recoveryOpenTasks: AgentStartOpenTasks | undefined;
+    let readFails = false;
     const publisher = new AgentControlPublisher(
       store,
       {
@@ -270,6 +321,13 @@ describe("recovery context and AgentControlPublisher openTasks propagation", () 
         },
       },
       () => 1_700_000_000_000,
+      undefined,
+      {
+        async readAgentRecoveryContext() {
+          if (readFails) throw new Error("task query failed");
+          return { resumeMessages: [], unreadSummary: {}, openTasks: recoveryOpenTasks };
+        },
+      },
     );
     const openTasks: AgentStartOpenTasks = {
       tasks: [{ ref: "#coforge:#12", title: "Ship open tasks", status: "in_progress" }],
@@ -301,12 +359,13 @@ describe("recovery context and AgentControlPublisher openTasks propagation", () 
       sessionSequence: 1,
     } as AgentControlState;
 
-    const ok = await publisher.sendStart(agent, state, "launch-1", {
-      recovery: { resumeMessages: [], unreadSummary: {}, openTasks },
-    });
-    expect(ok).toBe(true);
-    expect(published).toHaveLength(1);
-    const decoded = decodeAgentStartIntent(published[0]!);
-    expect(decoded.openTasks).toEqual(openTasks);
+    for (const tasks of [openTasks, { tasks: [], more: 0 }, undefined]) {
+      recoveryOpenTasks = tasks;
+      readFails = tasks === undefined;
+      const recovery = await publisher.readRecovery(agent.workspaceId, agent.id);
+      expect(await publisher.sendStart(agent, state, "launch-1", { recovery })).toBe(true);
+      expect(decodeAgentStartIntent(published.at(-1)!).openTasks).toEqual(tasks);
+    }
+    expect(published).toHaveLength(3);
   });
 });
