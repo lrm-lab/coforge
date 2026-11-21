@@ -14,8 +14,6 @@ const attemptedProfileDeadlines = new WeakMap<Query, number>();
 
 export const agentEnvironmentKey = (agentId: string) => ["agent-environment", agentId] as const;
 
-/** The Agent profile panel's own data seam: a light server read shared by the Members
- * directory panel and every conversation panel. */
 async function readAgentProfile(agentId: string) {
   try {
     return { profile: await getAgentProfile({ data: agentId }) };
@@ -114,7 +112,6 @@ export function useAgentProfile(agentId: string, visible: boolean) {
   };
 }
 
-/** The Chat tab's Agent DMs cards: the last message of each of the Agent's conversations with other Agents. */
 export function agentPeerConversationsQuery(agentId: string) {
   return queryOptions({
     queryKey: ["agent-peer-conversations", agentId] as const,
@@ -123,7 +120,6 @@ export function agentPeerConversationsQuery(agentId: string) {
   });
 }
 
-/** The Chat tab's Channels rows: the open channels the Agent is an active member of. */
 export function agentChannelsQuery(agentId: string) {
   return queryOptions({
     queryKey: ["agent-channels", agentId] as const,
@@ -132,23 +128,14 @@ export function agentChannelsQuery(agentId: string) {
   });
 }
 
-/** Whether the viewer manages this Agent (its creator, or a Workspace owner/admin): who gets the
- * panel's manager tabs, Activity among them, and the Agent card's recent Activity. */
 export function canManageAgent(profile: {
   canManageAgentRole: boolean;
   ownedByCurrentUser: boolean;
-  /** An app's bot is changed only by granting and revoking it in Settings → Applications. */
   appBot?: { appKey: string } | null;
 }): boolean {
   return !profile.appBot && (profile.canManageAgentRole || profile.ownedByCurrentUser);
 }
 
-/**
- * The RUNTIME CONFIG section's masked env chips and the Runtime config dialog's Advanced rows
- * share this one load: owner-only (the GET itself enforces it; `enabled` just avoids firing the
- * request for a viewer who can never get anything back), short `staleTime` since it reflects a
- * value that can change from another surface (deferred save + external restart).
- */
 export function agentEnvironmentQuery(agentId: string | undefined, enabled: boolean) {
   return queryOptions({
     queryKey: agentEnvironmentKey(agentId ?? ""),
@@ -158,14 +145,6 @@ export function agentEnvironmentQuery(agentId: string | undefined, enabled: bool
   });
 }
 
-/**
- * Re-fetches every surface that still shows this Agent after a panel edit.
- * The panel itself is query-cached (`agent-profile`); the DM list and conversation
- * header come from the Workspace layout loader (`listAgents` → LiveAgents); message
- * `senderName` lives on the conversation query; the Members grid lives on `member-directory`. The full Agent detail page uses
- * `router.invalidate` for the loader; settings avatar upload also invalidates
- * `["conversation"]` so already-open threads pick up the new identity.
- */
 export function useInvalidateAgentProfile(agentId: string | undefined) {
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -174,9 +153,7 @@ export function useInvalidateAgentProfile(agentId: string | undefined) {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: agentProfileKey(agentId) }),
       queryClient.invalidateQueries({ queryKey: ["conversation"] }),
-      // The Members grid pages its cards through the Query cache, not the route loader.
       queryClient.invalidateQueries({ queryKey: MEMBER_DIRECTORY_KEY }),
-      // The message headers' description line (`agent-models.ts`).
       queryClient.invalidateQueries({ queryKey: AGENT_MODELS_KEY }),
       router.invalidate({ sync: true }),
     ]);
