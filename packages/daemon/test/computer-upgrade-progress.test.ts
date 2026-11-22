@@ -9,7 +9,10 @@ import {
   snapshotUpgradeBindings,
   writeUpgradeProgressFile,
 } from "../src/platform/computer-upgrade-progress";
+import { LocalDaemonLauncher } from "../src/daemon-host/launcher";
 import { DaemonConfigStore } from "../src/persistence/daemon-config";
+import { MachineSupervisor } from "../src/supervisor/machine-supervisor";
+import { workspaceUpgradeRecovery } from "../src/supervisor/workspace-upgrade-recovery";
 import { UpgradeProgressReporter } from "../src/daemon-runtime/upgrade-progress-reporter";
 
 const scratch: string[] = [];
@@ -18,7 +21,7 @@ afterEach(async () => {
 });
 
 async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "coforge-upgrade-progress-"));
+  const root = await mkdtemp(join(tmpdir(), "cf-upgrade-"));
   scratch.push(root);
   const installRoot = join(root, "install");
   const stateDirectory = join(root, "daemon");
@@ -34,29 +37,47 @@ async function fixture() {
 
 const journalName = "installer-transaction.json";
 
-async function runWorkspaceActivation(
-  installRoot: string,
-  version: string,
-  stateDirectory: string,
-) {
-  const path = import.meta.resolve("../src/platform/computer-upgrade-progress.ts");
-  const child = Bun.spawn(
+function spawnWorkspaceActivation(installRoot: string, version: string, stateDirectory: string) {
+  const recovery = import.meta.resolve("../src/supervisor/workspace-upgrade-recovery.ts");
+  const localRpc = import.meta.resolve("../src/local-rpc.ts");
+  return Bun.spawn(
     [
       process.execPath,
       "--eval",
-      `const { readUpgradeActivation } = await import(${JSON.stringify(path)});
+      `const { readWorkspaceUpgradeActivation } = await import(${JSON.stringify(recovery)});
+       const { startDaemonLocalRpcServer } = await import(${JSON.stringify(localRpc)});
+       const { join } = await import("node:path");
        const [root, version, state] = Bun.argv.slice(-3);
-       await Bun.file(state + "/config.json").json();
-       console.log(JSON.stringify((await readUpgradeActivation(root, version, performance.timeOrigin)) ?? null));`,
+       const binding = await Bun.file(join(state, "config.json")).json();
+       const server = await startDaemonLocalRpcServer({
+         socketPath: join(state, "daemon.sock"), version, validateCredential: () => false,
+         runtime: {}, credentials: {},
+       });
+       try {
+         if (await new Response(Bun.stdin.stream()).text() !== "start") throw new Error("missing fixture start");
+         const activation = await readWorkspaceUpgradeActivation(root, state, binding, version, performance.timeOrigin, new AbortController().signal);
+         console.log(JSON.stringify(activation ?? null));
+       } finally {
+         await server.close();
+       }`,
       installRoot,
       version,
       stateDirectory,
     ],
-    { stdout: "pipe", stderr: "inherit" },
+    { stdin: "pipe", stdout: "pipe", stderr: "inherit" },
   );
+}
+
+async function workspaceActivationResult(child: ReturnType<typeof spawnWorkspaceActivation>) {
+  child.stdin.write("start");
+  child.stdin.end();
   const output = await new Response(child.stdout).json();
   expect(await child.exited).toBe(0);
   return output;
+}
+
+function runWorkspaceActivation(installRoot: string, version: string, directory: string) {
+  return workspaceActivationResult(spawnWorkspaceActivation(installRoot, version, directory));
 }
 
 test("workspace processes can recover the same activation after a process exits or another binding fails to save", async () => {
@@ -114,6 +135,92 @@ test("workspace processes can recover the same activation after a process exits 
   expect(await runWorkspaceActivation(installRoot, version, alphaState)).toBeNull();
   await rm(join(directory, "receipt.json"));
   expect(await readUpgradeActivation(installRoot, version, completedAt - 1)).toBeUndefined();
+});
+
+test("only the failed binding can attest the supervised retry after Installer settlement", async () => {
+  const { installRoot, directory, context, requestId, version, stateDirectory } = await fixture();
+  const alpha = {
+    workspaceId: "alpha",
+    computerId: "computer",
+    workspaceRoot: stateDirectory,
+    enabled: true,
+  };
+  const beta = { ...alpha, workspaceId: "beta" };
+  const pathFor = (id: string) => join(stateDirectory, id);
+  const activation = {
+    observedUpgradeRequestId: requestId,
+    upgradeActivationGeneration: context.generation,
+  };
+  await mkdir(stateDirectory);
+  await writeFile(pathFor(beta.workspaceId), "blocked");
+  const evidence = { generation: context.generation, version, at: Date.now() - 10_000 };
+  await writeUpgradeProgressFile(installRoot, journalName, { request_id: requestId, to: version });
+  await writeUpgradeProgressFile(directory, "activated.json", { ...evidence, kind: "activated" });
+  await snapshotUpgradeBindings(installRoot, requestId, async () =>
+    [alpha, beta].map((binding) => ({
+      ...binding,
+      processId: 1,
+      instanceId: "previous",
+      version,
+    })),
+  );
+  const recovery = await workspaceUpgradeRecovery(installRoot, version, Date.now() - 1000);
+  const children = new Map<string, ReturnType<typeof spawnWorkspaceActivation>>();
+  const live = new Map<string, string>();
+  const supervisor = new MachineSupervisor(
+    { load: async () => [alpha, beta], save: async () => {} },
+    {
+      start(binding, options) {
+        const path = pathFor(binding.workspaceId);
+        return recovery.start(binding, options?.reconciling === true, path, async (arm) => {
+          await new DaemonConfigStore(path).save(binding);
+          await arm();
+          const child = spawnWorkspaceActivation(installRoot, version, path);
+          children.set(binding.workspaceId, child);
+          const launcher = new LocalDaemonLauncher({
+            executablePath: process.execPath,
+            socketPath: join(path, "daemon.sock"),
+            spawn: () => {},
+          });
+          const until = Date.now() + 3_000;
+          let identity;
+          while (!identity && Date.now() < until) {
+            identity = await launcher.identity(100).catch(() => undefined);
+            if (!identity) await Bun.sleep(25);
+          }
+          if (!identity || identity.processId !== child.pid) {
+            child.kill();
+            throw new Error("fixture Workspace handshake missing");
+          }
+          const { daemonId } = identity;
+          const invocationId = crypto.randomUUID();
+          live.set(binding.workspaceId, invocationId);
+          return { invocationId, daemonId, processId: child.pid };
+        });
+      },
+      stop: async () => {},
+      instance: async (binding) => live.get(binding.workspaceId) ?? null,
+    },
+  );
+  await expect(supervisor.recover()).rejects.toThrow("Workspace recovery incomplete");
+  expect(await workspaceActivationResult(children.get(alpha.workspaceId)!)).toEqual(activation);
+  expect(children.has(beta.workspaceId)).toBeFalse();
+  expect(recovery.pendingWorkspaceIds()).toEqual([beta.workspaceId]);
+
+  const settled = { ...evidence, at: Date.now() };
+  await writeUpgradeProgressFile(directory, "healthy.json", { ...settled, kind: "healthy" });
+  await writeUpgradeProgressFile(directory, "receipt.json", {
+    ...settled,
+    kind: "receipt",
+    outcome: "promoted",
+  });
+  await rm(join(installRoot, journalName));
+  await rm(pathFor(beta.workspaceId));
+  await supervisor.reconcile(recovery.pendingWorkspaceIds());
+  expect(await workspaceActivationResult(children.get(beta.workspaceId)!)).toEqual(activation);
+  expect(recovery.pendingWorkspaceIds()).toEqual([]);
+  expect(await runWorkspaceActivation(installRoot, version, pathFor(alpha.workspaceId))).toBeNull();
+  expect(await runWorkspaceActivation(installRoot, version, pathFor(beta.workspaceId))).toBeNull();
 });
 
 test("the drain snapshot preserves running, stopped and unconfirmed workspaces", async () => {

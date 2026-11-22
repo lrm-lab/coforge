@@ -1,3 +1,4 @@
+import { readWorkspaceUpgradeActivation } from "#src/supervisor/workspace-upgrade-recovery";
 import { resolveComputerInstallDirectory } from "#src/platform/computer-install-directory";
 import type { DaemonConfig } from "./runtime-connection-config";
 import type { DaemonRuntimeLifecycle } from "./runtime-lifecycle";
@@ -5,7 +6,6 @@ import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
   computerUpgradeProgressRoot,
-  readUpgradeActivation,
   readLocalUpgradeContext,
   readUpgradeProgressFile,
   UPGRADE_EVIDENCE_WINDOW_MS,
@@ -182,7 +182,14 @@ export function startUpgradeProgressReporter(
   });
   void reporter.resume(lifecycle.recoveredUpgradeRequestIds ?? []).catch(() => {});
   return {
-    activation: readUpgradeActivation(installRoot, version, startedAt),
+    activation: readWorkspaceUpgradeActivation(
+      installRoot,
+      stateDirectory,
+      connection,
+      version,
+      startedAt,
+      signal,
+    ),
     acceptReceipt: (receipt: string) => {
       void reporter.acceptReceipt(receipt).catch(() => {});
     },

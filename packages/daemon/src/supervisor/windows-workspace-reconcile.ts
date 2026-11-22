@@ -7,27 +7,23 @@ import { WORKSPACE_RELAUNCH_SECONDS } from "./workspace-instance";
  */
 export const WINDOWS_WORKSPACE_RECONCILE_MS = WORKSPACE_RELAUNCH_SECONDS * 1_000;
 
-export type WindowsWorkspaceReconcileLoop = {
+export type WorkspaceReconcileLoop = {
   stop: () => void;
 };
 
-/**
- * Starts the Windows-only Workspace failure-restart poll. Returns null on other platforms so
- * callers can share one startup path. Errors from `reconcile` are reported and never throw out
- * of the timer (a degraded Workspace must not take down the Coordinator).
- */
-export function startWindowsWorkspaceReconcileLoop(
-  reconcile: () => Promise<void>,
+export function startWorkspaceReconcileLoop(
+  reconcile: (workspaceIds?: readonly string[]) => Promise<void>,
   options: {
     platform?: NodeJS.Platform;
+    pendingUpgradeWorkspaces?: () => readonly string[];
     intervalMs?: number;
     setIntervalFn?: typeof setInterval;
     clearIntervalFn?: typeof clearInterval;
     onError?: (error: unknown) => void;
   } = {},
-): WindowsWorkspaceReconcileLoop | null {
+): WorkspaceReconcileLoop | null {
   const platform = options.platform ?? process.platform;
-  if (platform !== "win32") return null;
+  if (platform !== "win32" && !options.pendingUpgradeWorkspaces?.().length) return null;
   const intervalMs = options.intervalMs ?? WINDOWS_WORKSPACE_RECONCILE_MS;
   const schedule = options.setIntervalFn ?? setInterval;
   const clear = options.clearIntervalFn ?? clearInterval;
@@ -35,8 +31,14 @@ export function startWindowsWorkspaceReconcileLoop(
   let inFlight = false;
   const timer = schedule(() => {
     if (inFlight) return;
+    const workspaceIds =
+      platform === "win32" ? undefined : (options.pendingUpgradeWorkspaces?.() ?? []);
+    if (workspaceIds?.length === 0) {
+      clear(timer);
+      return;
+    }
     inFlight = true;
-    void reconcile()
+    void reconcile(workspaceIds)
       .catch(onError)
       .finally(() => {
         inFlight = false;

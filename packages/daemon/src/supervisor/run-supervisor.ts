@@ -28,7 +28,8 @@ import { dispose, getLogger, withContext } from "@logtape/logtape";
 import { configureDaemonLogging } from "#src/platform/daemon-logging";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
 import { platformWorkspaceInstance, workspaceInstanceConfig } from "./platform-workspace-instance";
-import { startWindowsWorkspaceReconcileLoop } from "./windows-workspace-reconcile";
+import { workspaceUpgradeRecovery } from "./workspace-upgrade-recovery";
+import { startWorkspaceReconcileLoop } from "./windows-workspace-reconcile";
 import { workspaceStateDirectory, type WorkspaceInstance } from "./workspace-instance";
 import { WorkspaceHealthJournal, workspaceHealthJournalPath } from "./workspace-health-journal";
 import { askWorkspaceRunnerHold } from "./runner-hold";
@@ -128,6 +129,11 @@ async function runWithSupervisorLock(
   await writeFile(join(lockMarker, "owner"), String(process.pid), { mode: 0o600 });
   const workspaceDirectory = (id: string) => workspaceStateDirectory(stateDirectory, id);
   const installRoot = resolveComputerInstallDirectory();
+  const upgradeRecovery = await workspaceUpgradeRecovery(
+    installRoot,
+    COFORGE_DAEMON_VERSION,
+    performance.timeOrigin,
+  );
   const workspaceHealth = (id: string) =>
     new WorkspaceHealthJournal(workspaceHealthJournalPath(workspaceDirectory(id)));
   const startPorts: WorkspaceStartPorts = {
@@ -228,8 +234,10 @@ async function runWithSupervisorLock(
         workspaceInstance,
         adoptions,
         startPorts,
+        upgradeRecovery,
       }),
       async stop(binding) {
+        upgradeRecovery.discard(binding.workspaceId);
         const child = adoptions.get(binding.workspaceId);
         // Includes recovery after enabled=false was persisted but OS stop was interrupted.
         // systemd sends SIGTERM to the Workspace main, then kills residual cgroup members.
@@ -362,18 +370,22 @@ async function runWithSupervisorLock(
     await settlePendingUpgradeOperations();
     for (const operation of await pendingUpgradeOperations())
       watchPendingUpgrade(operation.workspaceId, operation.requestId, operation.requestedAt);
-    const windowsReconcile = startWindowsWorkspaceReconcileLoop(() => supervisor.reconcile(), {
-      onError: (error) => {
-        if (error instanceof WorkspaceRecoveryError) {
-          supervisorLogger.error("Windows Workspace reconcile incomplete: {error}", { error });
-          return;
-        }
-        supervisorLogger.error("Windows Workspace reconcile failed", {
-          event: "workspace:windows_reconcile_failed",
-          error_message: thrownMessage(error),
-        });
+    const workspaceReconcile = startWorkspaceReconcileLoop(
+      (workspaceIds) => supervisor.reconcile(workspaceIds),
+      {
+        pendingUpgradeWorkspaces: () => upgradeRecovery.pendingWorkspaceIds(),
+        onError: (error) => {
+          if (error instanceof WorkspaceRecoveryError) {
+            supervisorLogger.error("Workspace reconcile incomplete: {error}", { error });
+            return;
+          }
+          supervisorLogger.error("Workspace reconcile failed", {
+            event: "workspace:windows_reconcile_failed",
+            error_message: thrownMessage(error),
+          });
+        },
       },
-    });
+    );
     const upgradeDrainWatcher = supervisorUpgradeDrainWatcher({
       stateDirectory,
       installRoot,
@@ -442,7 +454,7 @@ async function runWithSupervisorLock(
       await stopRequested;
     } finally {
       upgradeDrainWatcher.stop();
-      windowsReconcile?.stop();
+      workspaceReconcile?.stop();
     }
   } finally {
     await upgradeReceipts.stop();

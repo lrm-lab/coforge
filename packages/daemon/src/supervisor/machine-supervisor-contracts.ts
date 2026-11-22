@@ -65,7 +65,10 @@ export type CommandProgress = {
 
 export interface WorkspaceProcesses {
   /** Gives up with `signal.reason` once `signal` aborts (a stop or configure took over). */
-  start(binding: ManagedBinding, options?: { signal?: AbortSignal }): Promise<string>;
+  start(
+    binding: ManagedBinding,
+    options?: { signal?: AbortSignal; reconciling?: boolean },
+  ): Promise<string>;
   stop(binding: ManagedBinding): Promise<void>;
   instance(binding: ManagedBinding): Promise<string | null>;
   /**

@@ -120,10 +120,10 @@ export class MachineSupervisor {
    * on Windows (no OS-level Workspace restart), by a periodic poll that replaces systemd/launchd
    * failure restart.
    */
-  reconcile() {
+  reconcile(workspaceIds?: readonly string[]) {
     return this.#serialize(async () => {
       await this.#refresh();
-      await this.#reconcileBindings();
+      await this.#reconcileBindings(workspaceIds);
     });
   }
 
@@ -296,9 +296,10 @@ export class MachineSupervisor {
     return stopEveryBinding(this.#commandOps);
   }
 
-  async #reconcileBindings(): Promise<void> {
+  async #reconcileBindings(workspaceIds?: readonly string[]): Promise<void> {
     const failures: Error[] = [];
     for (const workspaceId of this.#bindings.map((binding) => binding.workspaceId)) {
+      if (workspaceIds && !workspaceIds.includes(workspaceId)) continue;
       await this.#refresh();
       const binding = this.#bindings.find((entry) => entry.workspaceId === workspaceId)!;
       try {
@@ -306,7 +307,7 @@ export class MachineSupervisor {
         else if (await this.processes.parkedReason?.(binding)) continue;
         else if (binding.restart)
           await this.#track(workspaceId, (signal) => this.#advanceRestart(binding, signal));
-        else await this.#track(workspaceId, (signal) => this.#start(binding, signal));
+        else await this.#track(workspaceId, (signal) => this.#start(binding, signal, true));
         await this.#clearFailure(workspaceId);
       } catch (cause) {
         failures.push(new Error(`Workspace ${workspaceId} recovery failed`, { cause }));
@@ -351,12 +352,19 @@ export class MachineSupervisor {
   #exclusive<T>(write: () => Promise<T>): Promise<T> {
     return this.#writing.run(write);
   }
-  async #start(binding: ManagedBinding, signal?: AbortSignal): Promise<string> {
+  async #start(
+    binding: ManagedBinding,
+    signal?: AbortSignal,
+    reconciling?: boolean,
+  ): Promise<string> {
     const expected = this.#instances.get(binding.workspaceId);
     if (expected && (await this.processes.instance(binding)) === expected) return expected;
     this.#instances.delete(binding.workspaceId);
     signal?.throwIfAborted();
-    const instanceId = await this.processes.start(binding, signal ? { signal } : {});
+    const instanceId = await this.processes.start(binding, {
+      ...(signal ? { signal } : {}),
+      ...(reconciling ? { reconciling } : {}),
+    });
     this.#instances.set(binding.workspaceId, instanceId);
     return instanceId;
   }
