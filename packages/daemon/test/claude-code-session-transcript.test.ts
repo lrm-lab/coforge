@@ -200,3 +200,54 @@ test("an empty transcript yields no fields", async () => {
     await readClaudeSessionResumeFacts({ sessionId: "sess-1", envVars: claude.envVars }),
   ).toEqual({});
 });
+
+test("facts: extracts 5m and 1h prompt-cache tiers from non-sidechain assistant cache_creation", async () => {
+  const claude = await fixture();
+  await claude.transcript("sess-5m", [
+    assistantRecord({
+      timestamp: "2026-10-23T01:00:00.000Z",
+      usage: {
+        input: 10,
+        cacheRead: 100_000,
+        cacheCreate: 5_000,
+        cacheCreation: { ephemeral_5m_input_tokens: 5_000, ephemeral_1h_input_tokens: 0 },
+      },
+    }),
+    assistantRecord({
+      timestamp: "2026-10-23T01:01:00.000Z",
+      usage: {
+        input: 5,
+        cacheRead: 1_000,
+        cacheCreate: 2_000,
+        cacheCreation: { ephemeral_1h_input_tokens: 2_000 },
+      },
+      isSidechain: true,
+    }),
+  ]);
+  expect(
+    await readClaudeSessionResumeFacts({ sessionId: "sess-5m", envVars: claude.envVars }),
+  ).toEqual({
+    lastActivityAtMs: Date.parse("2026-10-23T01:01:00.000Z"),
+    lastContextTokens: 105_010,
+    cacheTier: "5m",
+  });
+
+  await claude.transcript("sess-1h", [
+    assistantRecord({
+      timestamp: "2026-10-23T02:00:00.000Z",
+      usage: {
+        input: 20,
+        cacheRead: 150_000,
+        cacheCreate: 1_000,
+        cacheCreation: { ephemeral_5m_input_tokens: 500, ephemeral_1h_input_tokens: 500 },
+      },
+    }),
+  ]);
+  expect(
+    await readClaudeSessionResumeFacts({ sessionId: "sess-1h", envVars: claude.envVars }),
+  ).toEqual({
+    lastActivityAtMs: Date.parse("2026-10-23T02:00:00.000Z"),
+    lastContextTokens: 151_020,
+    cacheTier: "1h",
+  });
+});

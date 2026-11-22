@@ -101,6 +101,7 @@ export class WakeRecycle {
           session_id: sessionId,
           last_activity_at_ms: facts?.lastActivityAtMs,
           last_context_tokens: facts?.lastContextTokens,
+          ...(facts?.cacheTier ? { cache_tier: facts.cacheTier } : {}),
         });
       return undefined;
     }
@@ -137,6 +138,7 @@ export class WakeRecycle {
       prior_session_id: sessionId,
       idle_ms: decision.idleMs,
       prior_context_tokens: decision.priorContextTokens,
+      ...(facts?.cacheTier ? { cache_tier: facts.cacheTier } : {}),
       has_memory_block: memoryBlock !== undefined,
       has_provider_briefing: providerBriefing !== undefined && providerBriefing.length > 0,
     });

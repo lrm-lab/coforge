@@ -152,13 +152,12 @@ Rules for Agent lifecycle, control, Session state, and Activity in
 
 ## Idle recycle of a cold, large session
 
-- On by default. A native session whose last context exceeds 128k tokens is not resumed once it
-  has been idle past that runtime's prompt-cache lifetime (`idleRecycleMinColdGapMs`: Claude Code
-  60 minutes, Codex 30 minutes, default 60 minutes), and warm bloated sessions recycle past 250k
-  tokens after 2 minutes quiet or immediately past 500k tokens. `wake-session-recycle.ts` holds the
-  provider-neutral decision and env knobs (`docs/observability/agent-status-and-activity/runtime-lifecycle.md`).
-  An Agent's runtime variables override the daemon environment and the provider's declaration. Only
-  the sweep period is daemon-wide.
+- On by default. A native session exceeding 128k tokens recycles once idle past its prompt-cache
+  lifetime (`idleRecycleMinColdGapMs`: Claude Code 60m, Codex 30m, default 60m; Claude 5m cache
+  tier uses 12m, and known-tier sessions past the full gap lower the bar to 64k); warm bloated
+  sessions recycle past 250k after 2m quiet or immediately past 500k. `wake-session-recycle.ts`
+  owns the decision and env knobs (`docs/observability/agent-status-and-activity/runtime-lifecycle.md`).
+  Agent runtime vars override daemon env and provider declarations; only sweep period is daemon-wide.
 - Codex's 30 minutes is shorter on purpose. On this Mac, over three to four days of Codex use,
   cache hits were nearly complete inside 35 minutes and about half gone after one to three hours.
   The models were gpt-6.1-sol and gpt-6.1-terra; OpenAI's default prompt cache is at least 30

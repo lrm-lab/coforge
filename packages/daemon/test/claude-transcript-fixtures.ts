@@ -3,7 +3,15 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 /** Record shapes observed in Claude Code 2.1.309 session transcripts (`<configDir>/projects`). */
-export type Usage = { input: number; cacheRead: number; cacheCreate: number };
+export type Usage = {
+  input: number;
+  cacheRead: number;
+  cacheCreate: number;
+  cacheCreation?: {
+    ephemeral_5m_input_tokens?: number;
+    ephemeral_1h_input_tokens?: number;
+  };
+};
 
 export function assistantRecord(options: {
   timestamp: string;
@@ -25,6 +33,7 @@ export function assistantRecord(options: {
               input_tokens: usage.input,
               cache_read_input_tokens: usage.cacheRead,
               cache_creation_input_tokens: usage.cacheCreate,
+              ...(usage.cacheCreation ? { cache_creation: usage.cacheCreation } : {}),
             },
           }
         : {}),

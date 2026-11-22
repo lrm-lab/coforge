@@ -101,9 +101,11 @@ export async function resolveSessionResumeFacts(
       ? Math.max(native.lastActivityAtMs, summary.lastActivityAtMs)
       : (native.lastActivityAtMs ?? summary.lastActivityAtMs);
   const lastContextTokens = native.lastContextTokens ?? summary.lastContextTokens;
+  const cacheTier = native.cacheTier ?? summary.cacheTier;
   return {
     ...(lastActivityAtMs !== undefined ? { lastActivityAtMs } : {}),
     ...(lastContextTokens !== undefined ? { lastContextTokens } : {}),
+    ...(cacheTier !== undefined ? { cacheTier } : {}),
   };
 }
 export class ColdIdleSweep {

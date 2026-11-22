@@ -1,6 +1,6 @@
 import type { ClaudeHistoryHost } from "./host";
 import { isAbsolute, join } from "node:path";
-import { type SessionResumeFacts } from "#src/contract";
+import { type PromptCacheTier, type SessionResumeFacts } from "#src/contract";
 import { asRecord } from "#src/json-record";
 import { claudeUsageContextTokens } from "./observations";
 import { readTailLines } from "#src/transcript-tail";
@@ -100,6 +100,18 @@ function contextTokens(usage: unknown): number | undefined {
   return total > 0 ? total : undefined;
 }
 
+function positiveFinite(value: unknown): boolean {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function usageCacheTier(usage: unknown): PromptCacheTier | undefined {
+  const creation = asRecord(asRecord(usage)?.cache_creation);
+  if (!creation) return undefined;
+  if (positiveFinite(creation.ephemeral_1h_input_tokens)) return "1h";
+  if (positiveFinite(creation.ephemeral_5m_input_tokens)) return "5m";
+  return undefined;
+}
+
 /** The latest modification time of `path` and what lies under it (down to `depth` levels). */
 async function latestMtimeUnder(
   path: string,
@@ -143,19 +155,23 @@ export async function readClaudeSessionResumeFacts(
   if (!lines) return;
   let lastActivityAtMs: number | undefined;
   let lastContextTokens: number | undefined;
+  let cacheTier: PromptCacheTier | undefined;
   for (const record of transcriptRecords(lines)) {
     if (typeof record.timestamp === "string") {
       const parsed = Date.parse(record.timestamp);
       if (Number.isFinite(parsed)) lastActivityAtMs = Math.max(lastActivityAtMs ?? 0, parsed);
     }
-    // A sidechain (subagent) request is activity, but its context is not the session's.
-    if (record.type === "assistant" && record.isSidechain !== true)
-      lastContextTokens = contextTokens(asRecord(record.message)?.usage) ?? lastContextTokens;
+    if (record.type === "assistant" && record.isSidechain !== true) {
+      const usage = asRecord(record.message)?.usage;
+      lastContextTokens = contextTokens(usage) ?? lastContextTokens;
+      cacheTier = usageCacheTier(usage) ?? cacheTier;
+    }
   }
   const sidecar = await latestMtimeUnder(path.replace(/\.jsonl$/, ""), host);
   if (sidecar !== undefined) lastActivityAtMs = Math.max(lastActivityAtMs ?? 0, sidecar);
   return {
     ...(lastActivityAtMs !== undefined ? { lastActivityAtMs } : {}),
     ...(lastContextTokens !== undefined ? { lastContextTokens } : {}),
+    ...(cacheTier !== undefined ? { cacheTier } : {}),
   };
 }

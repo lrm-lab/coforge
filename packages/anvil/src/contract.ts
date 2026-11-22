@@ -81,9 +81,12 @@ export interface CodeAgentProvider {
   readonly supportsSessionSummaryRecycle?: boolean;
   readonly standingPromptRefreshesOnResume?: boolean;
 }
+export type PromptCacheTier = "5m" | "1h";
+
 export type SessionResumeFacts = {
   lastActivityAtMs?: number;
   lastContextTokens?: number;
+  cacheTier?: PromptCacheTier;
 };
 
 /** Runtime providers whose native authentication status is exposed to the Computer. */

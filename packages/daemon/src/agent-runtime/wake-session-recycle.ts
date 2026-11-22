@@ -1,5 +1,5 @@
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
-import type { SessionResumeFacts } from "@lrm/coforge-anvil";
+import type { PromptCacheTier, SessionResumeFacts } from "@lrm/coforge-anvil";
 
 /**
  * Idle recycle of a long, cold native session, as the reference client does at wake
@@ -13,6 +13,8 @@ const WAKE_RECYCLE_ENV = {
   enabled: "COFORGE_WAKE_RECYCLE",
   minContextTokens: "COFORGE_WAKE_RECYCLE_MIN_CONTEXT_TOKENS",
   minColdGapMs: "COFORGE_WAKE_RECYCLE_MIN_COLD_GAP_MS",
+  minColdGap5mTierMs: "COFORGE_WAKE_RECYCLE_MIN_COLD_GAP_5M_TIER_MS",
+  minContextTokensPastTier: "COFORGE_WAKE_RECYCLE_MIN_CONTEXT_TOKENS_PAST_TIER",
   warmMinContextTokens: "COFORGE_WAKE_RECYCLE_WARM_MIN_CONTEXT_TOKENS",
   warmQuietMs: "COFORGE_WAKE_RECYCLE_WARM_QUIET_MS",
   immediateContextTokens: "COFORGE_WAKE_RECYCLE_IMMEDIATE_CONTEXT_TOKENS",
@@ -21,8 +23,9 @@ const WAKE_RECYCLE_ENV = {
 } as const;
 
 const DEFAULT_WAKE_RECYCLE_MIN_CONTEXT_TOKENS = 128_000;
-/** The reference client's cold gap: past the longest prompt-cache lifetime it counts on. */
 const DEFAULT_WAKE_RECYCLE_MIN_COLD_GAP_MS = 60 * 60_000;
+const DEFAULT_WAKE_RECYCLE_MIN_COLD_GAP_5M_TIER_MS = 12 * 60_000;
+const DEFAULT_WAKE_RECYCLE_MIN_CONTEXT_TOKENS_PAST_TIER = 64_000;
 export const DEFAULT_WARM_RECYCLE_MIN_CONTEXT_TOKENS = 250_000;
 export const DEFAULT_WARM_RECYCLE_QUIET_MS = 2 * 60_000;
 export const DEFAULT_IMMEDIATE_RECYCLE_CONTEXT_TOKENS = 500_000;
@@ -33,9 +36,8 @@ export type WakeRecycleConfig = Readonly<{
   enabled: boolean;
   minContextTokens: number;
   minColdGapMs: number;
-  /** Token budget of the provider's briefing. The memory block's two shares are the same for
-   * every fresh session (`STARTUP_MEMORY_BUDGET_TOKENS` and
-   * `STARTUP_ACTIVE_CONTEXT_BUDGET_TOKENS`), never a recycle-only setting. */
+  minColdGap5mTierMs: number;
+  minContextTokensPastTier: number;
   panelTokens: number;
 }>;
 
@@ -62,17 +64,11 @@ function positiveGap(value: number | undefined): number | undefined {
   return value !== undefined && Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
-/**
- * On by default. An Agent's own runtime variables override the daemon's process environment, as
- * the reference client's `pick` does; an unparseable value falls back to the default. The cold
- * gap falls through to the provider's declared prompt-cache lifetime, then to 60 minutes.
- */
 export function resolveWakeRecycleConfig(
   agentEnvVars?: Environment,
   processEnv: Environment = Bun.env,
   providerMinColdGapMs?: number,
 ): WakeRecycleConfig {
-  // An empty value counts as unset, at either level.
   const set = (value: string | undefined) => (value?.trim() ? value : undefined);
   const pick = (key: string) => set(agentEnvVars?.[key]) ?? set(processEnv[key]);
   return {
@@ -84,6 +80,12 @@ export function resolveWakeRecycleConfig(
       positiveInteger(pick(WAKE_RECYCLE_ENV.minColdGapMs)) ??
       positiveGap(providerMinColdGapMs) ??
       DEFAULT_WAKE_RECYCLE_MIN_COLD_GAP_MS,
+    minColdGap5mTierMs:
+      positiveInteger(pick(WAKE_RECYCLE_ENV.minColdGap5mTierMs)) ??
+      DEFAULT_WAKE_RECYCLE_MIN_COLD_GAP_5M_TIER_MS,
+    minContextTokensPastTier:
+      positiveInteger(pick(WAKE_RECYCLE_ENV.minContextTokensPastTier)) ??
+      DEFAULT_WAKE_RECYCLE_MIN_CONTEXT_TOKENS_PAST_TIER,
     panelTokens:
       positiveInteger(pick(WAKE_RECYCLE_ENV.panelTokens)) ?? DEFAULT_WAKE_RECYCLE_PANEL_TOKENS,
   };
@@ -107,7 +109,6 @@ export function resolveWarmRecycleConfig(
   };
 }
 
-/** The sweep period belongs to the daemon, not to one Agent: the process environment only. */
 export function resolveWakeRecycleSweepMs(processEnv: Environment = Bun.env): number {
   return positiveInteger(processEnv[WAKE_RECYCLE_ENV.sweepMs]) ?? DEFAULT_WAKE_RECYCLE_SWEEP_MS;
 }
@@ -132,51 +133,63 @@ type WakeRecycleDecision =
 
 export type WakeRecycleInput = Readonly<{
   config: WakeRecycleConfig;
-  /** Optional warm/immediate bloat thresholds (>250k after 2m quiet, >500k immediate). */
   warmConfig?: WarmRecycleConfig;
-  /** The provider can read a session's facts and build a briefing. */
   supported: boolean;
-  /** The session the launch would resume. */
   sessionId: string | undefined;
   hasResumePrompt: boolean;
-  /** `undefined` when the provider could not read the session at all. */
   facts: SessionResumeFacts | undefined;
   nowMs: number;
 }>;
 
-/** Why a session is not cold and large: the facts are missing, or it is not idle long enough, or
- * its context is not big enough. */
 type ColdLargeBlocker =
   | "session_facts_unavailable"
   | "cache_possibly_warm"
   | "context_below_threshold";
 
-/**
- * The one policy of both the wake and the sweep: a session is cold and large when it has been idle
- * for more than the cold gap and its last context is above the threshold. Facts that are missing
- * are never cold and large. Returns the idle time and context, or what blocks it.
- */
+function effectiveColdThresholds(
+  config: WakeRecycleConfig,
+  cacheTier: PromptCacheTier | undefined,
+  idleMs: number,
+): Readonly<{ minColdGapMs: number; minContextTokens: number }> {
+  if (!cacheTier) {
+    return {
+      minColdGapMs: config.minColdGapMs,
+      minContextTokens: config.minContextTokens,
+    };
+  }
+  return {
+    minColdGapMs:
+      cacheTier === "5m"
+        ? Math.min(config.minColdGap5mTierMs, config.minColdGapMs)
+        : config.minColdGapMs,
+    minContextTokens:
+      idleMs > config.minColdGapMs
+        ? Math.min(config.minContextTokensPastTier, config.minContextTokens)
+        : config.minContextTokens,
+  };
+}
+
 function judgeColdAndLarge(
   config: WakeRecycleConfig,
   nowMs: number,
   lastActiveAtMs: number | undefined,
   contextTokens: number | undefined,
+  cacheTier: PromptCacheTier | undefined,
 ): Readonly<{ idleMs: number; contextTokens: number }> | ColdLargeBlocker {
   if (lastActiveAtMs === undefined || contextTokens === undefined)
     return "session_facts_unavailable";
   const idleMs = nowMs - lastActiveAtMs;
-  if (idleMs <= config.minColdGapMs) return "cache_possibly_warm";
-  if (contextTokens <= config.minContextTokens) return "context_below_threshold";
+  const thresholds = effectiveColdThresholds(config, cacheTier, idleMs);
+  if (idleMs <= thresholds.minColdGapMs) return "cache_possibly_warm";
+  if (contextTokens <= thresholds.minContextTokens) return "context_below_threshold";
   return { idleMs, contextTokens };
 }
 
-/** Resume the session, or start a fresh one with a briefing: the reference client's one decision. */
 export function decideWakeRecycle(input: WakeRecycleInput): WakeRecycleDecision {
   const { config, warmConfig } = input;
   if (!config.enabled) return { action: "resume", reason: "disabled" };
   if (!input.supported) return { action: "resume", reason: "unsupported" };
   if (!input.sessionId) return { action: "resume", reason: "no_prior_session" };
-  // A user's explicit guidance for this launch belongs to the session it was written for.
   if (input.hasResumePrompt) return { action: "resume", reason: "explicit_resume_prompt" };
   const lastActiveAtMs = input.facts?.lastActivityAtMs;
   const contextTokens = input.facts?.lastContextTokens;
@@ -194,7 +207,13 @@ export function decideWakeRecycle(input: WakeRecycleInput): WakeRecycleDecision 
       };
     }
   }
-  const verdict = judgeColdAndLarge(config, input.nowMs, lastActiveAtMs, contextTokens);
+  const verdict = judgeColdAndLarge(
+    config,
+    input.nowMs,
+    lastActiveAtMs,
+    contextTokens,
+    input.facts?.cacheTier,
+  );
   if (typeof verdict === "string") return { action: "resume", reason: verdict };
   return {
     action: "recycle",
@@ -204,32 +223,25 @@ export function decideWakeRecycle(input: WakeRecycleInput): WakeRecycleDecision 
   };
 }
 
-/** Joins the non-empty sections of a wake input with a blank line, as the reference client does. */
 export function composeWakeSections(...sections: ReadonlyArray<string | undefined>): string {
   return sections.filter((section) => section !== undefined && section.length > 0).join("\n\n");
 }
 
-/** "73m" or "~412k": how a recycle names the idle time and the context it retires. */
 export function describeRecycledSession(idleMs: number, contextTokens: number): string {
   return `idle ${Math.round(idleMs / 60_000)}m, ~${Math.round(contextTokens / 1000)}k context`;
 }
 
-/** One live Agent as a sweep sees it. */
 export type ColdIdleSweepView = Readonly<{
   agentId: string;
   provider: RuntimeProvider;
   envVars?: Readonly<Record<string, string>>;
-  /** Why the daemon cannot call the Agent idle, or `undefined` when it can. */
   busyReason: string | undefined;
-  /** The provider can read a session's facts. */
   supported: boolean;
-  /** The provider's prompt-cache lifetime, when it declares one. */
   providerMinColdGapMs?: number;
   sessionId: string | undefined;
-  /** When the runtime last reported an event; the clock from which its silence is measured. */
   lastEventAtMs: number | undefined;
-  /** Live context tokens observed on the running session, enabling warm/immediate recycle stops. */
   lastContextTokens?: number;
+  lastCacheTier?: PromptCacheTier;
 }>;
 
 export type ColdIdleStop = Readonly<{
@@ -244,15 +256,9 @@ type ColdIdleSelectionOptions = Readonly<{
   processEnv?: Environment;
   warmConfig?: boolean | WarmRecycleConfig;
   readFacts(view: ColdIdleSweepView, sessionId: string): Promise<SessionResumeFacts | undefined>;
-  /** Called once per Agent that is not stopped, with why (a busy reason or a skip reason). */
   onSkip?(agentId: string, reason: string): void;
 }>;
 
-/**
- * The Agents whose runtime should be stopped: idle by the daemon's own state, silent for longer
- * than the cold gap (or eligible for warm/immediate bloat recycle when live context tokens exceed
- * threshold), and carrying more than the context threshold. Anything unknown is a skip, never a stop.
- */
 export async function selectColdIdleStops(
   views: readonly ColdIdleSweepView[],
   options: ColdIdleSelectionOptions,
@@ -265,6 +271,10 @@ export async function selectColdIdleStops(
       options.processEnv,
       view.providerMinColdGapMs,
     );
+    const preReadColdGapMs =
+      view.lastCacheTier === "5m"
+        ? Math.min(config.minColdGap5mTierMs, config.minColdGapMs)
+        : config.minColdGapMs;
     const warm =
       options.warmConfig !== undefined && options.warmConfig !== false
         ? typeof options.warmConfig === "object"
@@ -294,8 +304,7 @@ export async function selectColdIdleStops(
     else if (!view.supported) skip("unsupported");
     else if (!view.sessionId || view.lastEventAtMs === undefined || eventIdleMs === undefined)
       skip("no_session");
-    else if (!warmImmediate && !warmQuiet && eventIdleMs <= config.minColdGapMs)
-      skip("recent_event");
+    else if (!warmImmediate && !warmQuiet && eventIdleMs <= preReadColdGapMs) skip("recent_event");
     else {
       const facts = await options.readFacts(view, view.sessionId).catch(() => undefined);
       const lastActiveAtMs =
@@ -319,7 +328,13 @@ export async function selectColdIdleStops(
           continue;
         }
       }
-      const verdict = judgeColdAndLarge(config, options.nowMs, lastActiveAtMs, contextTokens);
+      const verdict = judgeColdAndLarge(
+        config,
+        options.nowMs,
+        lastActiveAtMs,
+        contextTokens,
+        facts?.cacheTier ?? view.lastCacheTier,
+      );
       if (typeof verdict === "string")
         skip(verdict === "cache_possibly_warm" ? "recent_activity" : verdict);
       else

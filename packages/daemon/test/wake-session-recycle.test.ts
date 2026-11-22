@@ -30,6 +30,8 @@ test("the defaults are the reference client's thresholds, on", () => {
     enabled: true,
     minContextTokens: 128_000,
     minColdGapMs: 60 * MINUTE,
+    minColdGap5mTierMs: 12 * MINUTE,
+    minContextTokensPastTier: 64_000,
     panelTokens: 8_000,
   });
   expect(resolveWakeRecycleSweepMs({})).toBe(10 * MINUTE);
@@ -53,6 +55,8 @@ test("an Agent's variables override the process environment, and bad values fall
     enabled: false,
     minContextTokens: 50_000,
     minColdGapMs: 60 * MINUTE,
+    minColdGap5mTierMs: 12 * MINUTE,
+    minContextTokensPastTier: 64_000,
     panelTokens: 1_000,
   });
   expect(
@@ -260,4 +264,86 @@ test("an unreadable session is a skip, and each Agent uses its own thresholds", 
     "unreadable:session_facts_unavailable",
     "default-bar:context_below_threshold",
   ]);
+});
+
+test("prompt-cache tier gating recycles 5m-tier sessions after 12m and lowers the context bar past 60m", () => {
+  expect(
+    decideWakeRecycle(
+      wake({
+        facts: { lastActivityAtMs: NOW - 15 * MINUTE, lastContextTokens: 150_000, cacheTier: "5m" },
+      }),
+    ),
+  ).toEqual({
+    action: "recycle",
+    priorSessionId: "session-1",
+    idleMs: 15 * MINUTE,
+    priorContextTokens: 150_000,
+  });
+  expect(
+    decideWakeRecycle(
+      wake({
+        facts: { lastActivityAtMs: NOW - 12 * MINUTE, lastContextTokens: 150_000, cacheTier: "5m" },
+      }),
+    ),
+  ).toEqual({ action: "resume", reason: "cache_possibly_warm" });
+  expect(
+    decideWakeRecycle(
+      wake({
+        facts: { lastActivityAtMs: NOW - 30 * MINUTE, lastContextTokens: 200_000, cacheTier: "1h" },
+      }),
+    ),
+  ).toEqual({ action: "resume", reason: "cache_possibly_warm" });
+  expect(
+    decideWakeRecycle(
+      wake({
+        facts: { lastActivityAtMs: NOW - 70 * MINUTE, lastContextTokens: 70_000, cacheTier: "1h" },
+      }),
+    ),
+  ).toEqual({
+    action: "recycle",
+    priorSessionId: "session-1",
+    idleMs: 70 * MINUTE,
+    priorContextTokens: 70_000,
+  });
+  expect(
+    decideWakeRecycle(
+      wake({
+        facts: { lastActivityAtMs: NOW - 70 * MINUTE, lastContextTokens: 64_000, cacheTier: "5m" },
+      }),
+    ),
+  ).toEqual({ action: "resume", reason: "context_below_threshold" });
+  const custom = resolveWakeRecycleConfig({
+    COFORGE_WAKE_RECYCLE_MIN_COLD_GAP_5M_TIER_MS: String(5 * MINUTE),
+    COFORGE_WAKE_RECYCLE_MIN_CONTEXT_TOKENS_PAST_TIER: "40000",
+  });
+  expect(
+    decideWakeRecycle(
+      wake({
+        config: custom,
+        facts: { lastActivityAtMs: NOW - 6 * MINUTE, lastContextTokens: 150_000, cacheTier: "5m" },
+      }),
+    ).action,
+  ).toBe("recycle");
+  expect(
+    decideWakeRecycle(
+      wake({
+        config: custom,
+        facts: { lastActivityAtMs: NOW - 70 * MINUTE, lastContextTokens: 50_000, cacheTier: "1h" },
+      }),
+    ).action,
+  ).toBe("recycle");
+});
+
+test("cold idle sweep uses the 5m cache-tier cold gap when a live session reports 5m tier", async () => {
+  const fiveMin = view({
+    provider: "claude-code",
+    lastEventAtMs: NOW - 15 * MINUTE,
+    lastCacheTier: "5m",
+  });
+  const result = await select([fiveMin], {
+    lastActivityAtMs: NOW - 15 * MINUTE,
+    lastContextTokens: 150_000,
+    cacheTier: "5m",
+  });
+  expect(result.stops.map((stop) => stop.idleMs)).toEqual([15 * MINUTE]);
 });
