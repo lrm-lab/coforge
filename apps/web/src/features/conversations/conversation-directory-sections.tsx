@@ -44,6 +44,7 @@ function sortControl<Mode extends ChatSectionSortMode>(
 export function ConversationDirectorySections({
   sectionOrder,
   sections,
+  sectionsReady,
   orderReady,
   savingSections,
   base,
@@ -51,12 +52,15 @@ export function ConversationDirectorySections({
   collapsed,
   builtInSortModes,
   hideEmpty,
+  showJoinedOnly,
   retryInSection,
   sectionRetryNote,
   onToggleBuiltIn,
   onChangeBuiltInSortMode,
   onToggleCustomSection,
   onSortCustomSection,
+  onCreateChannel,
+  onShowJoinedOnlyChange,
   onHideEmptyChange,
   onEditSection,
   onCreateSection,
@@ -65,6 +69,7 @@ export function ConversationDirectorySections({
 }: {
   sectionOrder: readonly DirectorySectionId[];
   sections: readonly ChatSection[];
+  sectionsReady: boolean;
   orderReady: boolean;
   savingSections: ReadonlySet<string>;
   base: DirectoryLayout;
@@ -72,6 +77,7 @@ export function ConversationDirectorySections({
   collapsed: readonly CollapsibleSectionId[];
   builtInSortModes: BuiltInSectionSortModes;
   hideEmpty: boolean;
+  showJoinedOnly: boolean;
   retryInSection?: string;
   sectionRetryNote: ReactNode;
   onToggleBuiltIn: (id: CollapsibleSectionId) => void;
@@ -81,6 +87,8 @@ export function ConversationDirectorySections({
   ) => void;
   onToggleCustomSection: (section: ChatSection) => void;
   onSortCustomSection: (section: ChatSection, sortMode: ChatSectionSortMode) => void;
+  onCreateChannel?: () => void;
+  onShowJoinedOnlyChange: (joinedOnly: boolean) => void;
   onHideEmptyChange: (hide: boolean) => void;
   onEditSection: (section: ChatSection) => void;
   onCreateSection: () => void;
@@ -129,6 +137,20 @@ export function ConversationDirectorySections({
                       chatSectionSortModes,
                       (mode) => onChangeBuiltInSortMode("pinned", mode),
                     )}
+                    wrapTitle={(toggleButton) => (
+                      <ChatSectionMenu
+                        name={m.conversation_pinned_section()}
+                        sortMode={builtInSortModes.pinned}
+                        sortModes={chatSectionSortModes}
+                        hideEmpty={hideEmpty}
+                        createDisabled={!sectionsReady}
+                        onSort={(mode) => onChangeBuiltInSortMode("pinned", mode)}
+                        onHideEmptyChange={onHideEmptyChange}
+                        onCreate={onCreateSection}
+                      >
+                        {toggleButton}
+                      </ChatSectionMenu>
+                    )}
                   >
                     <div className={DIRECTORY_INSET}>
                       <DirectoryDropList
@@ -174,6 +196,23 @@ export function ConversationDirectorySections({
                       naturalSectionSortModes,
                       (mode) => onChangeBuiltInSortMode("channels", mode),
                     )}
+                    wrapTitle={(toggleButton) => (
+                      <ChatSectionMenu
+                        name={m.channels_title()}
+                        sortMode={builtInSortModes.channels}
+                        sortModes={naturalSectionSortModes}
+                        hideEmpty={hideEmpty}
+                        showJoinedOnly={showJoinedOnly}
+                        createDisabled={!sectionsReady}
+                        onCreateChannel={onCreateChannel}
+                        onSort={(mode) => onChangeBuiltInSortMode("channels", mode)}
+                        onShowJoinedOnlyChange={onShowJoinedOnlyChange}
+                        onHideEmptyChange={onHideEmptyChange}
+                        onCreate={onCreateSection}
+                      >
+                        {toggleButton}
+                      </ChatSectionMenu>
+                    )}
                   >
                     <div className={DIRECTORY_INSET}>
                       <DirectoryDropList
@@ -216,6 +255,20 @@ export function ConversationDirectorySections({
                       builtInSortModes.agents,
                       naturalSectionSortModes,
                       (mode) => onChangeBuiltInSortMode("agents", mode),
+                    )}
+                    wrapTitle={(toggleButton) => (
+                      <ChatSectionMenu
+                        name={m.messages_agents_action()}
+                        sortMode={builtInSortModes.agents}
+                        sortModes={naturalSectionSortModes}
+                        hideEmpty={hideEmpty}
+                        createDisabled={!sectionsReady}
+                        onSort={(mode) => onChangeBuiltInSortMode("agents", mode)}
+                        onHideEmptyChange={onHideEmptyChange}
+                        onCreate={onCreateSection}
+                      >
+                        {toggleButton}
+                      </ChatSectionMenu>
                     )}
                   >
                     <div className={DIRECTORY_INSET}>
@@ -277,17 +330,20 @@ export function ConversationDirectorySections({
                     chatSectionSortModes,
                     sortSection,
                   )}
-                  wrapTitle={(toggle) => (
+                  wrapTitle={(toggleButton) => (
                     <ChatSectionMenu
-                      section={section}
+                      name={section.name}
+                      sortMode={section.sortMode}
+                      sortModes={chatSectionSortModes}
                       hideEmpty={hideEmpty}
+                      createDisabled={!sectionsReady}
                       onSort={sortSection}
                       onHideEmptyChange={onHideEmptyChange}
                       onEdit={() => onEditSection(section)}
                       onCreate={onCreateSection}
                       onDelete={() => onDeleteSection(section)}
                     >
-                      {toggle}
+                      {toggleButton}
                     </ChatSectionMenu>
                   )}
                 >

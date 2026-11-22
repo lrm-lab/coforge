@@ -26,6 +26,7 @@ type LayoutInput = {
   viewerId?: string;
   sections: readonly ChatSection[];
   builtInSortModes?: BuiltInSectionSortModes;
+  joinedChannelsOnly?: boolean;
 };
 
 export function recentConversationIds({
@@ -33,11 +34,13 @@ export function recentConversationIds({
   directRows,
   sections,
   builtInSortModes = DEFAULT_BUILT_IN_SORT_MODES,
+  joinedChannelsOnly = false,
 }: {
-  channels: readonly Pick<DirectoryChannel, "id" | "pinned">[];
+  channels: readonly Pick<DirectoryChannel, "id" | "pinned" | "joined">[];
   directRows: readonly Pick<ListedDirect, "conversationId" | "pinned" | "hidden">[];
   sections: readonly Pick<ChatSection, "sortMode" | "conversationIds">[];
   builtInSortModes?: BuiltInSectionSortModes;
+  joinedChannelsOnly?: boolean;
 }): string[] {
   const ids = new Set<string>();
   for (const section of sections) {
@@ -50,7 +53,9 @@ export function recentConversationIds({
     for (const direct of directRows) if (direct.pinned) ids.add(direct.conversationId);
   }
   if (builtInSortModes.channels === "recent") {
-    for (const channel of channels) ids.add(channel.id);
+    for (const channel of channels) {
+      if (!joinedChannelsOnly || channel.joined) ids.add(channel.id);
+    }
   }
   if (builtInSortModes.agents === "recent") {
     for (const direct of directRows) {
@@ -68,10 +73,18 @@ export function useDirectoryLayout(input: LayoutInput) {
     viewerId,
     sections,
     builtInSortModes = DEFAULT_BUILT_IN_SORT_MODES,
+    joinedChannelsOnly = false,
   } = input;
   const recentIds = useMemo(
-    () => recentConversationIds({ channels, directRows, sections, builtInSortModes }),
-    [channels, directRows, sections, builtInSortModes],
+    () =>
+      recentConversationIds({
+        channels,
+        directRows,
+        sections,
+        builtInSortModes,
+        joinedChannelsOnly,
+      }),
+    [channels, directRows, sections, builtInSortModes, joinedChannelsOnly],
   );
   const lastMessageTimes = useLastMessageTimes(recentIds);
   return useMemo(
@@ -83,10 +96,20 @@ export function useDirectoryLayout(input: LayoutInput) {
         viewerId,
         sections,
         builtInSortModes,
+        joinedChannelsOnly,
         lastMessageTimes,
         locale: getLocale(),
       }),
-    [channels, agents, directRows, viewerId, sections, builtInSortModes, lastMessageTimes],
+    [
+      channels,
+      agents,
+      directRows,
+      viewerId,
+      sections,
+      builtInSortModes,
+      joinedChannelsOnly,
+      lastMessageTimes,
+    ],
   );
 }
 
@@ -145,6 +168,7 @@ export function directoryLayout({
   viewerId,
   sections,
   builtInSortModes = DEFAULT_BUILT_IN_SORT_MODES,
+  joinedChannelsOnly = false,
   lastMessageTimes,
   locale,
 }: LayoutInput & {
@@ -170,8 +194,11 @@ export function directoryLayout({
         },
   );
   const pinnedKeys = new Set(pinnedRows.map((row) => row.key));
+  const listedChannels = joinedChannelsOnly
+    ? sortedChannels.filter((channel) => channel.joined)
+    : sortedChannels;
   const natural = {
-    channels: sortChannelGroup(sortedChannels, builtInSortModes.channels, lastMessageTimes, locale),
+    channels: sortChannelGroup(listedChannels, builtInSortModes.channels, lastMessageTimes, locale),
     agents: sortDirectGroup(
       directRows.filter((direct) => direct.pinned || !direct.hidden),
       builtInSortModes.agents,

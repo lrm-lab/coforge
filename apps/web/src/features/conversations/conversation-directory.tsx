@@ -37,6 +37,7 @@ import {
   readHideEmptySidebarSections,
   writeHideEmptySidebarSections,
 } from "#src/features/settings/hide-empty-sidebar-sections";
+import { useShowJoinedChannelsOnly } from "#src/features/settings/show-joined-channels-only";
 
 export function ConversationDirectory({
   channels,
@@ -47,6 +48,7 @@ export function ConversationDirectory({
   selectedDmId,
   selectedSaved,
   selectedDrafts,
+  onCreateChannel,
 }: {
   channels: DirectoryChannel[];
   agents: AgentDirectoryEntry[];
@@ -56,10 +58,12 @@ export function ConversationDirectory({
   selectedDmId?: string;
   selectedSaved?: boolean;
   selectedDrafts?: boolean;
+  onCreateChannel?: () => void;
 }) {
   const groups = useChatSections();
   const { sortModes: builtInSortModes, setSortMode: changeBuiltInSortMode } =
     useBuiltInSectionSortModes();
+  const [showJoinedOnly, setShowJoinedOnly] = useShowJoinedChannelsOnly();
   const { sortedChannels, directRows, base, natural } = useDirectoryLayout({
     channels,
     agents,
@@ -67,6 +71,7 @@ export function ConversationDirectory({
     viewerId,
     sections: groups.sections,
     builtInSortModes,
+    joinedChannelsOnly: showJoinedOnly,
   });
   const toast = useAppToast();
   const actions = useSidebarActions();
@@ -245,6 +250,7 @@ export function ConversationDirectory({
       <ConversationDirectorySections
         sectionOrder={sectionOrder}
         sections={groups.sections}
+        sectionsReady={sectionsReady}
         orderReady={groups.orderReady}
         savingSections={savingSections}
         base={base}
@@ -252,6 +258,7 @@ export function ConversationDirectory({
         collapsed={collapsed}
         builtInSortModes={builtInSortModes}
         hideEmpty={hideEmpty}
+        showJoinedOnly={showJoinedOnly}
         retryInSection={retryInSection}
         sectionRetryNote={sectionRetryNote}
         onToggleBuiltIn={toggle}
@@ -265,6 +272,8 @@ export function ConversationDirectory({
         onSortCustomSection={(section, sortMode) =>
           changeSection(() => actions.updateSection(section.id, { sortMode }), section.id)
         }
+        onCreateChannel={onCreateChannel}
+        onShowJoinedOnlyChange={setShowJoinedOnly}
         onHideEmptyChange={changeHideEmpty}
         onEditSection={setEditingSection}
         onCreateSection={newSection}

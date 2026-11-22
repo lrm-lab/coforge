@@ -5,11 +5,7 @@ import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Button } from "#src/components/base/buttons/button";
 import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
-import {
-  chatSectionSortModes,
-  type ChatSection,
-  type ChatSectionSortMode,
-} from "./chat-section.schemas";
+import type { ChatSectionSortMode } from "./chat-section.schemas";
 
 function sortLabel(mode: ChatSectionSortMode): string {
   if (mode === "recent") return m.chat_section_sort_recent();
@@ -92,59 +88,101 @@ export function SectionSortMenu<Mode extends ChatSectionSortMode>({
   );
 }
 
-export function ChatSectionMenu({
-  section,
+export function ChatSectionMenu<Mode extends ChatSectionSortMode>({
+  name,
+  sortMode,
+  sortModes,
   hideEmpty,
+  showJoinedOnly = false,
+  createDisabled = false,
+  onCreateChannel,
   onSort,
+  onShowJoinedOnlyChange,
   onHideEmptyChange,
   onEdit,
   onCreate,
   onDelete,
   children,
 }: {
-  section: ChatSection;
+  name: string;
+  sortMode: Mode;
+  sortModes: readonly Mode[];
   hideEmpty: boolean;
-  onSort: (mode: ChatSectionSortMode) => void;
+  showJoinedOnly?: boolean;
+  createDisabled?: boolean;
+  onCreateChannel?: () => void;
+  onSort: (mode: Mode) => void;
+  onShowJoinedOnlyChange?: (joinedOnly: boolean) => void;
   onHideEmptyChange: (hide: boolean) => void;
-  onEdit: () => void;
+  onEdit?: () => void;
   onCreate: () => void;
-  onDelete: () => void;
+  onDelete?: () => void;
   children: ReactNode;
 }) {
-  const label = m.chat_section_menu({ name: section.name });
+  const [open, setOpen] = useState(false);
+  const label = m.chat_section_menu({ name });
+  const displayKeys = [
+    ...(onShowJoinedOnlyChange && showJoinedOnly ? ["show-joined-only"] : []),
+    ...(hideEmpty ? ["hide-empty"] : []),
+  ];
   return (
-    <Dropdown.Root trigger="contextMenu">
+    <Dropdown.Root trigger="contextMenu" isOpen={open} onOpenChange={setOpen}>
       {children}
       <Dropdown.Popover placement="bottom start">
         <Dropdown.Menu
           aria-label={label}
+          disabledKeys={createDisabled ? ["create"] : undefined}
           onAction={(key) => {
-            if (key === "edit") onEdit();
-            if (key === "create") onCreate();
-            if (key === "delete") onDelete();
+            if (key === "create-channel") {
+              setOpen(false);
+              onCreateChannel?.();
+            }
+            if (key === "edit") {
+              setOpen(false);
+              onEdit?.();
+            }
+            if (key === "create") {
+              setOpen(false);
+              onCreate();
+            }
+            if (key === "delete") {
+              setOpen(false);
+              onDelete?.();
+            }
           }}
         >
+          {onCreateChannel && (
+            <>
+              <Dropdown.Item
+                id="create-channel"
+                icon={Plus}
+                label={m.channel_create()}
+                selectionIndicator="none"
+              />
+              <Dropdown.Separator />
+            </>
+          )}
           <Dropdown.Section
             aria-label={m.chat_section_sort()}
             selectionMode="single"
             disallowEmptySelection
-            selectedKeys={[section.sortMode]}
+            selectedKeys={[sortMode]}
             onSelectionChange={(selection) => {
-              const mode = chatSectionSortModes.find((entry) => entry === onlyKey(selection));
-              if (mode && mode !== section.sortMode) onSort(mode);
+              const mode = sortModes.find((entry) => entry === onlyKey(selection));
+              if (mode && mode !== sortMode) onSort(mode);
             }}
           >
             <Dropdown.SectionHeader className={SECTION_HEADER_CLASS}>
               {m.chat_section_sort()}
             </Dropdown.SectionHeader>
-            {chatSectionSortModes.map((mode) => (
+            {sortModes.map((mode) => (
               <Dropdown.Item
                 key={mode}
                 id={mode}
                 textValue={sortLabel(mode)}
                 selectionIndicator="none"
               >
-                <Choice label={sortLabel(mode)} selected={section.sortMode === mode} />
+                <Choice label={sortLabel(mode)} selected={sortMode === mode} />
               </Dropdown.Item>
             ))}
           </Dropdown.Section>
@@ -152,14 +190,28 @@ export function ChatSectionMenu({
           <Dropdown.Section
             aria-label={m.chat_section_display()}
             selectionMode="multiple"
-            selectedKeys={hideEmpty ? ["hide-empty"] : []}
-            onSelectionChange={(selection) =>
-              onHideEmptyChange(selection === "all" || selection.has("hide-empty"))
-            }
+            selectedKeys={displayKeys}
+            onSelectionChange={(selection) => {
+              if (onShowJoinedOnlyChange) {
+                const nextJoined = selection === "all" || selection.has("show-joined-only");
+                if (nextJoined !== showJoinedOnly) onShowJoinedOnlyChange(nextJoined);
+              }
+              const nextHideEmpty = selection === "all" || selection.has("hide-empty");
+              if (nextHideEmpty !== hideEmpty) onHideEmptyChange(nextHideEmpty);
+            }}
           >
             <Dropdown.SectionHeader className={SECTION_HEADER_CLASS}>
               {m.chat_section_display()}
             </Dropdown.SectionHeader>
+            {onShowJoinedOnlyChange && (
+              <Dropdown.Item
+                id="show-joined-only"
+                textValue={m.chat_section_joined_channels_only()}
+                selectionIndicator="none"
+              >
+                <Choice label={m.chat_section_joined_channels_only()} selected={showJoinedOnly} />
+              </Dropdown.Item>
+            )}
             <Dropdown.Item
               id="hide-empty"
               textValue={m.chat_section_hide_empty()}
@@ -169,25 +221,31 @@ export function ChatSectionMenu({
             </Dropdown.Item>
           </Dropdown.Section>
           <Dropdown.Separator />
-          <Dropdown.Item
-            id="edit"
-            icon={Edit01}
-            label={m.chat_section_edit()}
-            selectionIndicator="none"
-          />
+          {onEdit && (
+            <Dropdown.Item
+              id="edit"
+              icon={Edit01}
+              label={m.chat_section_edit()}
+              selectionIndicator="none"
+            />
+          )}
           <Dropdown.Item
             id="create"
             icon={FolderPlus}
             label={m.chat_section_create()}
             selectionIndicator="none"
           />
-          <Dropdown.Separator />
-          <Dropdown.Item
-            id="delete"
-            icon={Trash01}
-            label={m.chat_section_delete()}
-            selectionIndicator="none"
-          />
+          {onDelete && (
+            <>
+              <Dropdown.Separator />
+              <Dropdown.Item
+                id="delete"
+                icon={Trash01}
+                label={m.chat_section_delete()}
+                selectionIndicator="none"
+              />
+            </>
+          )}
         </Dropdown.Menu>
       </Dropdown.Popover>
     </Dropdown.Root>

@@ -10,10 +10,6 @@ import {
 } from "#src/features/conversations/directory-layout";
 import type { ListedDirect } from "#src/features/conversations/sidebar-rows";
 
-/**
- * Task #361: the lists no longer carry each row's last message (it is read per row), so a section
- * sorted by Recent takes its times from `useLastMessageTimes`.
- */
 const channel = (id: string, overrides?: Partial<DirectoryChannel>): DirectoryChannel => ({
   id,
   name: id,
@@ -283,4 +279,41 @@ test("recentConversationIds collects only ids belonging to Recent-sorted section
       builtInSortModes: { pinned: "recent", channels: "recent", agents: "alpha" },
     }).sort(),
   ).toEqual(["dm", "newer", "none", "older", "open-ch", "pinned-ch", "pinned-dm"]);
+});
+
+test("joinedChannelsOnly hides unjoined channels from Channels and omits them from Recent subscriptions", () => {
+  const channels = [
+    channel("zeta", { joined: true }),
+    channel("alpha", { joined: true }),
+    channel("unjoined-a", { joined: false }),
+    channel("unjoined-b", { joined: false }),
+  ];
+  const lastMessageTimes = new Map<string, string | null>([
+    ["zeta", "2026-10-05T00:00:00Z"],
+    ["alpha", "2026-10-01T00:00:00Z"],
+    ["unjoined-a", "2026-10-10T00:00:00Z"],
+  ]);
+
+  const layout = directoryLayout({
+    channels,
+    agents: [],
+    directRows: [],
+    sections: [],
+    builtInSortModes: { pinned: "manual", channels: "recent", agents: "recent" },
+    joinedChannelsOnly: true,
+    lastMessageTimes,
+    locale: "en",
+  });
+  expect(layout.base.channels).toEqual(["channel:zeta", "channel:alpha"]);
+  expect(layout.natural.channels).toEqual(["channel:zeta", "channel:alpha"]);
+
+  expect(
+    recentConversationIds({
+      channels,
+      directRows: [],
+      sections: [],
+      builtInSortModes: { pinned: "manual", channels: "recent", agents: "alpha" },
+      joinedChannelsOnly: true,
+    }).sort(),
+  ).toEqual(["alpha", "zeta"]);
 });

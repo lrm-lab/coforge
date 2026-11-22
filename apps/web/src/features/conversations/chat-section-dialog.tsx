@@ -16,7 +16,6 @@ import {
   useDialogControlSize,
 } from "#src/components/ui/dialog-actions";
 
-/** Mounted for each create/edit, preserving input after an unsuccessful save. */
 export function ChatSectionDialog({
   section,
   deleting = false,
@@ -26,12 +25,10 @@ export function ChatSectionDialog({
   section?: ChatSection;
   deleting?: boolean;
   onClose: () => void;
-  /** What follows a new section's creation (moving the row it was made from into it). */
   onCreated?: (section: ChatSection) => void;
 }) {
   const controlSize = useDialogControlSize();
   const [name, setName] = useState(section?.name ?? "");
-  // A new section starts with the folder mark already chosen; an edited one keeps its own (or none).
   const [emoji, setEmoji] = useState<string | null>(
     section ? section.emoji : DEFAULT_SECTION_EMOJI,
   );
@@ -50,7 +47,10 @@ export function ChatSectionDialog({
       if (section && deleting) await actions.removeSection(section.id);
       else if (parsed.success) {
         if (section) await actions.updateSection(section.id, parsed.data);
-        else onCreated?.(await actions.createSection(parsed.data));
+        else {
+          const created = await actions.createSection(parsed.data);
+          onCreated?.(created);
+        }
       }
       onClose();
     } catch {

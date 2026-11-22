@@ -342,6 +342,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
                       selectedDmId={openDm?.dmId}
                       selectedSaved={pathname === workspacePath(workspaceSlug, "/saved")}
                       selectedDrafts={pathname === workspacePath(workspaceSlug, "/drafts")}
+                      onCreateChannel={() => setCreating(true)}
                     />
                   </div>
                   <ConversationListResizeHandle />
