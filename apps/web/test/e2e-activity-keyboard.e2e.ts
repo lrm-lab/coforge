@@ -10,13 +10,6 @@ import {
 import { openParam, rowItems } from "./helpers/activity-inbox-e2e";
 import { seedActivityKeys } from "./helpers/activity-keys-seed";
 
-/**
- * The Activity list's keyboard in a real browser: Down and Up (and j and k) move the selection,
- * R reads and unreads the selected row, E marks it Done and selects the next row, keys typed in an
- * input do nothing, and Enter opens the selected row.
- *
- * Opt-in like the other browser E2Es: real local Web + `agent-browser`.
- */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 
 test("the Activity list moves, reads, marks Done and opens from the keyboard", async () => {
@@ -25,15 +18,11 @@ test("the Activity list moves, reads, marks Done and opens from the keyboard", a
     browserPath,
     `activity-keys-${process.pid}`,
   );
-  /** Every row's text, in page order; the seeded ones carry `e2e-keys`. */
   const rows = `[...document.querySelectorAll(${rowItems})]`;
   const seeded = `${rows}.filter((row) => row.textContent.includes("e2e-keys"))`;
-  /** The index of the row holding focus among all rows, or -1. */
   const focused = `${rows}.findIndex((row) => row.contains(document.activeElement))`;
   const focusSeeded = (index: number) =>
     evaluate(`(${seeded}[${index}].querySelector("a").focus(), true)`);
-  /** Whether the seeded row `index` says it has new messages: its count is named "N new" (the
-   * number alone is what shows, since the row's redesign on 11-09). */
   const unreadExpression = (index: number) =>
     `[...${seeded}[${index}].querySelectorAll("[aria-label]")].some((el) => /\\d+ new/.test(el.getAttribute("aria-label")))`;
   const isUnread = (index: number) => evaluate<boolean>(unreadExpression(index));
@@ -43,15 +32,12 @@ test("the Activity list moves, reads, marks Done and opens from the keyboard", a
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}/en/w/${workspace.slug}/activity`);
     await waitFor(`${seeded}.length === 4 && ${pageHydrated}`, 40_000);
-    // Only the selected row is a tab stop.
     expect(
       await evaluate<number>(
         `${rows}.filter((row) => row.hasAttribute("data-activity-row") && row.querySelector("a").tabIndex === 0).length`,
       ),
     ).toBe(1);
 
-    // Arrows and j and k move the selection one row at a time, and stop at the ends.
-    // Let the first reads and the realtime join settle: a refresh then would not move focus.
     await Bun.sleep(2_000);
     await focusSeeded(0);
     const start = await evaluate<number>(focused);
@@ -70,7 +56,6 @@ test("the Activity list moves, reads, marks Done and opens from the keyboard", a
       ),
     ).toBe(1);
 
-    // R reads the selected unread row, and unreads it again.
     const unreadAt = await evaluate<number>(
       `${seeded}.findIndex((row) => row.textContent.includes("e2e-keys-design") && !row.textContent.includes("launch"))`,
     );
@@ -85,12 +70,10 @@ test("the Activity list moves, reads, marks Done and opens from the keyboard", a
     ).toBeGreaterThanOrEqual(5);
     await browser("press", "r");
     await waitFor(unreadExpression(unreadAt));
-    // The row kept the selection through both.
     expect(await evaluate<boolean>(`${seeded}[${unreadAt}].contains(document.activeElement)`)).toBe(
       true,
     );
 
-    // Keys typed in an input inside the list do nothing: no Done, no read, no move.
     const before = await evaluate<string[]>(`${seeded}.map((row) => row.textContent)`);
     await evaluate(`(() => {
       const input = document.createElement("input");
@@ -105,7 +88,6 @@ test("the Activity list moves, reads, marks Done and opens from the keyboard", a
     expect(await evaluate<string[]>(`${seeded}.map((row) => row.textContent)`)).toEqual(before);
     await evaluate(`(document.getElementById("keys-probe")?.remove(), true)`);
 
-    // E marks the selected row Done: it leaves, and the row after it is selected.
     await focusSeeded(0);
     const doneText = await evaluate<string>(`${seeded}[0].textContent`);
     const nextText = await evaluate<string>(
@@ -125,7 +107,6 @@ test("the Activity list moves, reads, marks Done and opens from the keyboard", a
     });
     expect(done.some((member) => member.doneThroughSequence !== null)).toBe(true);
 
-    // Enter opens the selected row on the page, as a click does.
     expect(await evaluate<string | null>(openParam)).toBeNull();
     await browser("press", "Enter");
     await waitFor(`${openParam} !== null`);
