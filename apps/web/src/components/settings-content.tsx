@@ -1,3 +1,4 @@
+import type { DateTimePreferenceUpdate } from "#src/features/settings/settings.schemas";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { useEffect, useId, useState } from "react";
 import { ChevronLeft, Share01 } from "@untitledui/icons";
@@ -84,10 +85,7 @@ export interface SettingsContentProps {
   onThemeChange: (theme: Theme) => void;
   onMessageFullWidthChange: (full: boolean) => void;
   onHideEmptySidebarSectionsChange: (hide: boolean) => void;
-  onDateTimeSave: (input: {
-    timeZone: string | null;
-    timeFormat: TimeFormat | null;
-  }) => Promise<void>;
+  onDateTimeSave: (input: DateTimePreferenceUpdate) => Promise<void>;
   onBrowserNotificationsChange: (enabled: boolean) => Promise<void>;
   onEnableBrowserNotifications: () => Promise<void>;
   onTestBrowserNotification: () => Promise<TestDelivery | null>;

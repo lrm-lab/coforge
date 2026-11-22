@@ -22,15 +22,18 @@ export const getUserPreferences = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(({ context }) => preferences().read(context.user.id));
 
-/** The Language & region page saves its Date & time group as one unit. */
 export const saveDateTimePreferences = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(saveDateTimePreferencesInputSchema)
   .handler(async ({ data, context }) => {
     const userId = context.user.id;
     return {
-      timeZone: await preferences().set(userId, data.timeZone),
-      timeFormat: await preferences().setTimeFormat(userId, data.timeFormat),
+      ...(data.timeZone !== undefined && {
+        timeZone: await preferences().set(userId, data.timeZone),
+      }),
+      ...(data.timeFormat !== undefined && {
+        timeFormat: await preferences().setTimeFormat(userId, data.timeFormat),
+      }),
     };
   });
 

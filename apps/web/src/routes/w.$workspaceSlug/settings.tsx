@@ -38,7 +38,7 @@ import {
 } from "#src/features/settings/hide-empty-sidebar-sections";
 import { readMessageFullWidth, writeMessageFullWidth } from "#src/features/settings/message-width";
 import { isAppError } from "#src/lib/app-error";
-import type { TimeFormat } from "#src/lib/time-format";
+import type { DateTimePreferenceUpdate } from "#src/features/settings/settings.schemas";
 import { m } from "#src/paraglide/messages";
 import {
   loadArchivedChannels,
@@ -229,7 +229,7 @@ function SettingsPage() {
     await router.invalidate({ sync: true });
   }
 
-  async function changeDateTime(input: { timeZone: string | null; timeFormat: TimeFormat | null }) {
+  async function changeDateTime(input: DateTimePreferenceUpdate) {
     await saveDateTime({ data: input });
     await router.invalidate({ sync: true });
   }

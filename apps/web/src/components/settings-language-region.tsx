@@ -1,34 +1,18 @@
-import { STAY_PENDING, useSubmitGuard } from "#src/hooks/use-submit-guard";
-import { useEffect, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { Clock as Clock3, Translate01 as Languages } from "@untitledui/icons";
-import {} from "#src/components/layout/page-header";
-import { Button } from "#src/components/base/buttons/button";
-import {} from "#src/components/base/buttons/button-utility";
 import { Select } from "#src/components/base/select/select";
 import { SelectItem } from "#src/components/base/select/select-item";
-import {} from "#src/components/base/toggle/toggle";
-import {} from "#src/components/base/checkbox/checkbox";
 import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
-import {} from "#src/features/workspaces/workspace-members-panel";
-import {} from "#src/features/integrations/github-settings";
-import {} from "#src/features/apps/apps-settings";
-import {} from "#src/features/settings/server-connection-settings";
-import {} from "#src/features/settings/experiments-settings";
-import {} from "#src/features/settings/settings-navigation-group";
 import { isTimeFormat, localeTimeFormat, type TimeFormat } from "#src/lib/time-format";
-import {} from "#src/lib/utils";
 import {
   SettingsCard,
-  SettingsCardFooter,
   SettingsField,
   SettingsGroup,
   SettingsPage,
 } from "#src/components/settings-layout";
-import { saveErrorFrom, SaveErrorMessage, type SaveError } from "#src/components/save-error";
+import { saveErrorFrom, SaveErrorMessage } from "#src/components/save-error";
 import { m } from "#src/paraglide/messages";
-import {} from "./settings-preferences";
-import {} from "./settings-workspace-profile";
-import type { Locale, SettingsContentProps } from "./settings-content";
+import type { SettingsContentProps } from "./settings-content";
 
 export function LanguageRegionSettings({
   locale,
@@ -41,51 +25,20 @@ export function LanguageRegionSettings({
   "locale" | "timeZone" | "timeFormat" | "onLocaleChange" | "onDateTimeSave"
 >) {
   const timeZoneOptions = getTimeZoneOptions(m.preferences_system());
-  // Until the viewer saves a choice, the page shows the cycle their language already uses.
-  const effectiveTimeFormat = timeFormat ?? localeTimeFormat(locale);
-  const [draftTimeZone, setDraftTimeZone] = useState(timeZone ?? "");
-  const [draftTimeFormat, setDraftTimeFormat] = useState<TimeFormat>(effectiveTimeFormat);
-  const [saving, guard] = useSubmitGuard();
-  const [saveError, setSaveError] = useState<SaveError | null>(null);
-  const [savingLocale, guardLocale] = useSubmitGuard();
-  const [localeError, setLocaleError] = useState<SaveError | null>(null);
-
-  useEffect(() => {
-    setDraftTimeZone(timeZone ?? "");
-    setDraftTimeFormat(effectiveTimeFormat);
-  }, [timeZone, effectiveTimeFormat]);
-
-  const dateTimeChanged =
-    draftTimeZone !== (timeZone ?? "") || draftTimeFormat !== effectiveTimeFormat;
-
-  function chooseLocale(next: Locale) {
-    if (next === locale) return;
-    setLocaleError(null);
-    void guardLocale(async () => {
-      try {
-        await onLocaleChange(next);
-        return STAY_PENDING;
-      } catch (cause) {
-        setLocaleError(saveErrorFrom(m.settings_save_error(), cause));
-      }
-    });
-  }
-
-  function saveDateTime() {
-    void guard(async () => {
-      setSaveError(null);
-      try {
-        await onDateTimeSave({
-          timeZone: draftTimeZone || null,
-          // Keep following the language when the viewer left the format untouched.
-          timeFormat:
-            timeFormat === null && draftTimeFormat === effectiveTimeFormat ? null : draftTimeFormat,
-        });
-      } catch (cause) {
-        setSaveError(saveErrorFrom(m.settings_save_error(), cause));
-      }
-    });
-  }
+  const saveOptions = { scope: { id: "language-region" }, networkMode: "always" } as const;
+  const language = useMutation({ ...saveOptions, mutationFn: onLocaleChange });
+  const zone = useMutation({
+    ...saveOptions,
+    mutationFn: (timeZone: string | null) => onDateTimeSave({ timeZone }),
+  });
+  const format = useMutation({
+    ...saveOptions,
+    mutationFn: (timeFormat: TimeFormat) => onDateTimeSave({ timeFormat }),
+  });
+  const selectedZone = zone.isPending ? zone.variables : timeZone;
+  const selectedFormat = format.isPending
+    ? format.variables
+    : (timeFormat ?? localeTimeFormat(locale));
 
   return (
     <SettingsPage>
@@ -98,17 +51,19 @@ export function LanguageRegionSettings({
             <Select
               aria-label={m.language_region_display_language()}
               className="max-w-sm"
-              value={locale}
-              isDisabled={savingLocale}
+              value={language.isPending ? language.variables : locale}
+              isDisabled={language.isPending}
               onChange={(key) => {
-                if (key === "en" || key === "zh-CN") chooseLocale(key);
+                if ((key === "en" || key === "zh-CN") && key !== locale) language.mutate(key);
               }}
             >
               <SelectItem id="en" label={m.preferences_english()} />
               <SelectItem id="zh-CN" label={m.preferences_chinese()} />
             </Select>
           </SettingsField>
-          {localeError && <SaveErrorMessage error={localeError} />}
+          {language.isError && (
+            <SaveErrorMessage error={saveErrorFrom(m.settings_save_error(), language.error)} />
+          )}
         </SettingsCard>
       </SettingsGroup>
 
@@ -122,14 +77,19 @@ export function LanguageRegionSettings({
               aria-label={m.preferences_time_zone()}
               className="max-w-sm"
               items={timeZoneOptions}
-              value={draftTimeZone || "system"}
+              value={selectedZone ?? "system"}
+              isDisabled={language.isPending}
               onChange={(key) => {
-                if (key !== null) setDraftTimeZone(key === "system" ? "" : String(key));
+                if (key !== null && key !== (selectedZone ?? "system"))
+                  zone.mutate(key === "system" ? null : String(key));
               }}
             >
               {(option) => <SelectItem id={option.id} label={option.label} />}
             </Select>
           </SettingsField>
+          {zone.isError && (
+            <SaveErrorMessage error={saveErrorFrom(m.settings_save_error(), zone.error)} />
+          )}
           <SettingsField
             label={m.language_region_time_format()}
             description={m.language_region_time_format_description()}
@@ -137,27 +97,21 @@ export function LanguageRegionSettings({
             <ButtonGroup
               aria-label={m.language_region_time_format()}
               size="sm"
-              selectedKeys={[draftTimeFormat]}
+              selectedKeys={[selectedFormat]}
+              isDisabled={language.isPending}
               disallowEmptySelection
               onSelectionChange={(keys) => {
                 const next = [...keys][0];
-                if (isTimeFormat(next)) setDraftTimeFormat(next);
+                if (isTimeFormat(next) && next !== selectedFormat) format.mutate(next);
               }}
             >
               <ButtonGroupItem id="12h">{m.language_region_time_format_12h()}</ButtonGroupItem>
               <ButtonGroupItem id="24h">{m.language_region_time_format_24h()}</ButtonGroupItem>
             </ButtonGroup>
           </SettingsField>
-          <SettingsCardFooter error={saveError}>
-            <Button
-              type="button"
-              size="sm"
-              isDisabled={saving || !dateTimeChanged}
-              onPress={saveDateTime}
-            >
-              {saving ? m.settings_group_saving() : m.settings_group_save()}
-            </Button>
-          </SettingsCardFooter>
+          {format.isError && (
+            <SaveErrorMessage error={saveErrorFrom(m.settings_save_error(), format.error)} />
+          )}
         </SettingsCard>
       </SettingsGroup>
     </SettingsPage>
