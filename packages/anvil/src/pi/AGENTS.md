@@ -9,3 +9,6 @@
   its isolated bundled resources and `.builtin-sessions`; for skills, the Pi SDK still loads the
   user's `~/.agents/skills`, so that is the one Global root its Skills metadata reports.
 - The embedding host supplies environment composition, its default Pi agent directory, and reply-intent command recognition. Keep the shared SDK Session factory free of CoForge product setup; the daemon owns its built-in provider.
+- `provider-finish-error.ts` owns the one continuation from a saved tool result. Use the SDK's
+  pre-settlement boundary for an eligible empty error so extension work queued at settlement
+  starts in a separate run.

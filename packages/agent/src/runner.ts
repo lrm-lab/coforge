@@ -3,6 +3,7 @@ import {
   createAgentSessionFromServices,
   createAgentSessionServices,
   createBashTool,
+  type ExtensionFactory,
   ModelRuntime,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
@@ -82,7 +83,7 @@ export const createRuntime: CreateAgentSessionRuntimeFactory = async ({
     diagnostics: services.diagnostics,
   };
 };
-export async function createSession(options: CreateSessionOptions) {
+export async function createSession(options: CreateSessionOptions, extension?: ExtensionFactory) {
   const cwd = options.cwd;
   const environment = options.environment
     ? { ...options.environment }
@@ -151,7 +152,10 @@ export async function createSession(options: CreateSessionOptions) {
         environment,
         disableHostPiInjection:
           evalDisablesHostPiInjection(options.environment) || evalDisablesHostPiInjection(),
-        extensionFactories: [createCompactionGuardExtension(() => resolvedContextWindow)],
+        extensionFactories: [
+          createCompactionGuardExtension(() => resolvedContextWindow),
+          ...(extension ? [extension] : []),
+        ],
       }),
     });
     if (sessionKind === "coforge") {

@@ -19,6 +19,7 @@ import { errorMessage } from "#src/json-record";
 import { promptCacheLogFields } from "#src/prompt-cache-usage";
 import { SessionExit } from "#src/session-exit";
 import type { PiSessionHost } from "./host";
+import { createPiFinishErrorRecovery } from "./provider-finish-error";
 import { PiReplyIntents } from "./reply-intents";
 import { piPromptCacheUsage, piSessionEvents } from "./session-events";
 
@@ -30,9 +31,12 @@ export async function createPiAgentSession(
   onSessionId: AgentSessionOptions["onSessionId"],
   host: PiSessionHost,
 ): Promise<AgentSession> {
-  const created = await createSession(nativeOptions).catch((error: unknown) => {
-    throw typedLaunchError(error, nativeOptions.model);
-  });
+  const finishErrorRecovery = createPiFinishErrorRecovery();
+  const created = await createSession(nativeOptions, finishErrorRecovery.extension).catch(
+    (error: unknown) => {
+      throw typedLaunchError(error, nativeOptions.model);
+    },
+  );
   try {
     await onSessionId?.(created.sessionId, created.replacedSessionId);
   } catch (error) {
@@ -43,6 +47,7 @@ export async function createPiAgentSession(
     created,
     nativeOptions.sessionId !== undefined && !created.replacedSessionId,
     host,
+    finishErrorRecovery,
   );
 }
 
@@ -108,6 +113,7 @@ class AgentSessionImpl implements AgentSession {
     runtime: Awaited<ReturnType<typeof createSession>>,
     resumed: boolean,
     host: PiSessionHost,
+    finishErrorRecovery: ReturnType<typeof createPiFinishErrorRecovery>,
   ) {
     this.#runtime = runtime;
     this.#identity = {
@@ -166,7 +172,9 @@ class AgentSessionImpl implements AgentSession {
       return stream(model, context, options);
     };
     const replyIntents = new PiReplyIntents(host);
+    const isCancelled = () => this.#disposed || this.#interrupting;
     runtime.session.subscribe((event) => {
+      finishErrorRecovery.observe(event, runtime.session, isCancelled);
       if (event.type === "agent_start" && (this.#disposed || this.#interrupting)) {
         // A host preflight hook may finish after cancellation began. The SDK
         // only makes that prompt abortable once its run starts.
