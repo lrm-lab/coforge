@@ -10,6 +10,9 @@ import { z } from "zod";
 
 import { PROJECT_SLUG_MAX_LENGTH } from "#src/features/projects/projects.schemas";
 
+export const TASK_TITLE_MAX_LENGTH = 8_000;
+export const TASK_DESCRIPTION_MAX_LENGTH = 50_000;
+
 const taskOperations = [
   "list",
   "show",
@@ -35,8 +38,8 @@ const taskCommandFields = z
     target: z.never().optional(),
     number: z.number().int().positive().optional(),
     messageId: z.string().min(8).max(36).optional(),
-    title: z.string().trim().min(1).max(8_000).optional(),
-    titles: z.array(z.string().trim().min(1).max(8_000)).min(1).optional(),
+    title: z.string().trim().min(1).max(TASK_TITLE_MAX_LENGTH).optional(),
+    titles: z.array(z.string().trim().min(1).max(TASK_TITLE_MAX_LENGTH)).min(1).optional(),
     numbers: z.array(z.number().int().positive()).min(1).optional(),
     messageIds: z.array(z.string().min(8).max(36)).min(1).optional(),
     mine: z.boolean().optional(),
@@ -46,7 +49,7 @@ const taskCommandFields = z
     removeLabels: z.array(z.string().trim().min(1).max(32)).max(5).optional(),
     assignee: z.string().nullable().optional(),
     reason: z.string().optional(),
-    description: z.string().max(50_000).nullable().optional(),
+    description: z.string().max(TASK_DESCRIPTION_MAX_LENGTH).nullable().optional(),
     project: z.string().trim().min(1).max(PROJECT_SLUG_MAX_LENGTH).nullable().optional(),
     createsResource: z.boolean().optional(),
     alongside: z.boolean().optional(),

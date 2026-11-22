@@ -7,6 +7,7 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
+import { validateTaskCommand } from "#src/server/tasks/task-command-validation.server";
 
 /**
  * `TaskBoard.execute` refuses a malformed command as `INVALID_INPUT` before it reads anything; a
@@ -108,9 +109,10 @@ const refused: [string, TaskCommand][] = [
   // refuses it (task-conversations-create.integration.ts), which needs the experiment's switch.
   ["alongside on a list", command({ operation: "list", alongside: true })],
   ["an amend with a blank title", command({ operation: "amend", number: 1, title: " " })],
+  ["an amend with a newline-only title", command({ operation: "amend", number: 1, title: " \n " })],
   [
-    "an amend title over 10000 characters",
-    command({ operation: "amend", number: 1, title: "x".repeat(10_001) }),
+    "an amend title over 8000 characters",
+    command({ operation: "amend", number: 1, title: "x".repeat(8_001) }),
   ],
   [
     "an amend title that is not text",
@@ -270,7 +272,7 @@ const accepted: [string, TaskPrincipal, TaskCommand][] = [
     command({
       operation: "amend",
       number: 1,
-      title: "x".repeat(10_000),
+      title: "x".repeat(8_000),
       description: "y".repeat(50_000),
     }),
   ],
@@ -311,4 +313,21 @@ const accepted: [string, TaskPrincipal, TaskCommand][] = [
 
 test.each(accepted)("execute takes %s past validation", async (_, principal, input) => {
   await expect(board.execute(principal, input)).rejects.toThrow(DATABASE_REACHED);
+});
+
+test("validateTaskCommand normalizes newlines in create and amend titles", () => {
+  const createSingle = command({ operation: "create", title: "  First line \r\n  second line\n" });
+  validateTaskCommand(createSingle);
+  expect(createSingle.title).toBe("First line second line");
+
+  const createMany = command({
+    operation: "create",
+    titles: ["Alpha\n\nBeta", "  Gamma \r\n Delta  "],
+  });
+  validateTaskCommand(createMany);
+  expect(createMany.titles).toEqual(["Alpha Beta", "Gamma Delta"]);
+
+  const amendTitle = command({ operation: "amend", number: 1, title: "Updated\n  task\ntitle" });
+  validateTaskCommand(amendTitle);
+  expect(amendTitle.title).toBe("Updated task title");
 });

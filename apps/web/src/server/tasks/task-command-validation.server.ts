@@ -8,10 +8,18 @@ import {
   taskStatusReasonProblem,
   type TaskCommand,
 } from "@lrm/coforge-sdk/internal";
+import {
+  TASK_DESCRIPTION_MAX_LENGTH,
+  TASK_TITLE_MAX_LENGTH,
+} from "#src/features/tasks/task-command-schema";
 import { AppError } from "#src/lib/app-error";
 import { LABEL_NAME_MAX, LABELS_PER_TASK_MAX } from "./labels.server";
 import { refuseAssignReason, refuseStatusReason } from "./task-assign-reason.server";
 import { TASK_PRIORITY_INVALID } from "./task-priority.server";
+
+export function normalizeTaskTitle(value: string): string {
+  return value.replace(/\s*[\r\n]+\s*/g, " ").trim();
+}
 
 export function validateTaskCommand(command: TaskCommand) {
   const operations = [
@@ -115,21 +123,28 @@ export function validateTaskCommand(command: TaskCommand) {
   if (command.operation === "unassign" && command.assignee !== undefined)
     throw new AppError("INVALID_INPUT");
   if (command.operation === "create") {
+    if (command.title !== undefined && command.titles !== undefined)
+      throw new AppError("INVALID_INPUT");
+    if (command.title !== undefined) {
+      if (typeof command.title !== "string") throw new AppError("INVALID_INPUT");
+      command.title = normalizeTaskTitle(command.title);
+    }
+    if (command.titles !== undefined) {
+      if (
+        !Array.isArray(command.titles) ||
+        command.titles.some((value) => typeof value !== "string")
+      )
+        throw new AppError("INVALID_INPUT");
+      command.titles = command.titles.map(normalizeTaskTitle);
+    }
     const titles = command.titles ?? (command.title === undefined ? [] : [command.title]);
     if (
       titles.length === 0 ||
-      (command.title !== undefined && command.titles !== undefined) ||
-      titles.some((value) => !value.trim() || value.trim().length > 8_000)
+      titles.some((value) => !value || value.length > TASK_TITLE_MAX_LENGTH)
     )
       throw new AppError("INVALID_INPUT");
-    // `messageId` names the source message under task conversations; the board refuses it where
-    // they are off.
     if (command.number !== undefined) throw new AppError("INVALID_INPUT");
   }
-  // A priority is set on create, convert or by an update (with or without a status), and only
-  // ever to one of the four levels — `none` is the stored level of an unprioritized Task,
-  // never a choice a command may name (task #12). An absent priority is still accepted on
-  // create and convert while older Computers send none; the Agent route logs those.
   if (
     command.priority !== undefined &&
     (!(TASK_PRIORITY_LEVELS as readonly unknown[]).includes(command.priority) ||
@@ -164,12 +179,8 @@ export function validateTaskCommand(command: TaskCommand) {
       command.labelDescription.length > 500)
   )
     throw new AppError("INVALID_INPUT");
-  // Only an amendment takes a label off; a new Task starts with the labels it is given, and a list
-  // filters by them.
   if (command.operation !== "amend" && command.removeLabels !== undefined)
     throw new AppError("INVALID_INPUT");
-  // Null files a new Task under no Project, whatever the viewer last used, and takes an amended
-  // Task out of its own.
   if (command.project !== undefined) {
     if (
       (command.operation !== "create" && command.operation !== "amend") ||
@@ -177,8 +188,6 @@ export function validateTaskCommand(command: TaskCommand) {
     )
       throw new AppError("INVALID_INPUT");
   }
-  // A due instant is set on create and changed or cleared (null) on amend; nothing else takes
-  // one, and the instant must be an ISO datetime (task #13).
   if (command.dueAt !== undefined) {
     const clearing = command.dueAt === null && command.operation === "amend";
     if (
@@ -211,7 +220,6 @@ export function validateTaskCommand(command: TaskCommand) {
       throw new AppError("INVALID_INPUT");
   }
   if (command.parent !== undefined) {
-    // Only an amendment detaches (null); a new Task is made under a parent or at the top.
     const detaching = command.parent === null && command.operation === "amend";
     if (!relational || (!detaching && !isTaskRef(command.parent)))
       throw new AppError("INVALID_INPUT");
@@ -226,17 +234,17 @@ export function validateTaskCommand(command: TaskCommand) {
   )
     throw new AppError("INVALID_INPUT");
   if (command.operation === "amend") {
-    if (
-      command.title !== undefined &&
-      (typeof command.title !== "string" ||
-        !command.title.trim() ||
-        command.title.trim().length > 10_000)
-    )
-      throw new AppError("INVALID_INPUT");
+    if (command.title !== undefined) {
+      if (typeof command.title !== "string") throw new AppError("INVALID_INPUT");
+      command.title = normalizeTaskTitle(command.title);
+      if (!command.title || command.title.length > TASK_TITLE_MAX_LENGTH)
+        throw new AppError("INVALID_INPUT");
+    }
     if (
       command.description !== undefined &&
       command.description !== null &&
-      (typeof command.description !== "string" || command.description.length > 50_000)
+      (typeof command.description !== "string" ||
+        command.description.length > TASK_DESCRIPTION_MAX_LENGTH)
     )
       throw new AppError("INVALID_INPUT");
   }
@@ -256,7 +264,6 @@ export function validateTaskCommand(command: TaskCommand) {
     !command.number
   )
     throw new AppError("INVALID_INPUT");
-  // An update moves the status, sets the priority, or both.
   if (command.operation === "update" && !command.status && command.priority === undefined)
     throw new AppError("INVALID_INPUT");
   if (

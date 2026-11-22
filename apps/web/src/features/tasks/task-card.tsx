@@ -1,16 +1,18 @@
 import type { TaskView } from "@lrm/coforge-sdk/internal";
 import { useRef, type PointerEvent, type ReactNode } from "react";
+import { useHydrated } from "@tanstack/react-router";
 
 import { ProgressBarBase } from "#src/components/base/progress-indicators/progress-indicators";
 import { ChannelPlace } from "#src/features/conversations/channel-name";
 import { ProjectImage } from "#src/features/projects/project-image";
+import { formatNumber } from "#src/lib/format-number";
 import { rememberSharedRect } from "#src/lib/shared-element-rect";
 import { cn } from "#src/lib/utils";
-import { formatMonthDay } from "#src/lib/dates";
 import { useTimeZone } from "#src/lib/time-zone-context";
 import { getLocale } from "#src/paraglide/runtime";
 import { m } from "#src/paraglide/messages";
 import { Calendar, Folder, MessageChatCircle, Paperclip } from "@untitledui/icons";
+import { formatTaskCardDate } from "./task-card-date";
 import { taskStepsProgressClass } from "./task-steps-progress";
 
 import type { FilterableTask } from "./task-filters";
@@ -26,15 +28,20 @@ import { TaskStatusIcon } from "./task-status-icon";
 import type { TaskControls } from "./task-workflow";
 
 function TaskCreatedAt({ at }: { at: string | Date }) {
+  const hydrated = useHydrated();
   const timeZone = useTimeZone();
   return (
-    <span className="shrink-0 text-xs whitespace-nowrap text-tertiary tabular-nums">
-      {formatMonthDay(at, timeZone, getLocale())}
-    </span>
+    <time
+      dateTime={new Date(at).toISOString()}
+      className="shrink-0 text-xs whitespace-nowrap text-tertiary tabular-nums"
+    >
+      {hydrated ? formatTaskCardDate(at, timeZone, getLocale()) : "\u00A0"}
+    </time>
   );
 }
 
 function TaskDueAt({ task }: { task: TaskView }) {
+  const hydrated = useHydrated();
   const timeZone = useTimeZone();
   if (!task.dueAt) return null;
   const state = task.dueState;
@@ -58,11 +65,11 @@ function TaskDueAt({ task }: { task: TaskView }) {
       )}
     >
       <Calendar aria-hidden="true" className="size-3.5" />
-      {formatMonthDay(
-        task.dueHasTime === false ? new Date(Date.parse(task.dueAt) - 1) : task.dueAt,
-        timeZone,
-        getLocale(),
-      )}
+      <time dateTime={new Date(task.dueAt).toISOString()}>
+        {hydrated
+          ? formatTaskCardDate(task.dueAt, timeZone, getLocale(), undefined, task.dueHasTime)
+          : "\u00A0"}
+      </time>
     </span>
   );
 }
@@ -84,13 +91,13 @@ function TaskCount({
       className="flex shrink-0 items-center gap-1 text-xs text-tertiary tabular-nums"
     >
       <Icon aria-hidden="true" className="size-3.5" />
-      {count}
+      {formatNumber(count)}
     </span>
   );
 }
 
 export const TASK_TITLE_CLASS =
-  "block w-full rounded-sm text-left outline-none hover:underline hover:decoration-fg-quaternary hover:underline-offset-2 focus-visible:ring-2 focus-visible:ring-focus-ring";
+  "block w-full rounded-sm text-start outline-none hover:underline hover:decoration-fg-quaternary hover:underline-offset-2 focus-visible:ring-2 focus-visible:ring-focus-ring any-pointer-coarse:relative any-pointer-coarse:after:absolute any-pointer-coarse:after:inset-x-0 any-pointer-coarse:after:-inset-y-2.5";
 
 function Pill({ children, className }: { children: ReactNode; className?: string }) {
   return (
@@ -186,7 +193,7 @@ export function TaskCard({
         ref={cardRef}
         onClickCapture={rememberCard}
         onPointerEnter={onPointerEnter}
-        className="relative flex min-h-10 items-center gap-3 px-4 py-1.5 transition-colors hover:bg-primary_hover"
+        className="relative flex min-h-10 items-center gap-3 px-4 py-1.5 transition-colors hover:bg-primary_hover any-pointer-coarse:min-h-11"
       >
         <span className="hidden size-3.5 shrink-0 sm:flex">{priorityMark("size-3.5")}</span>
         <span className="hidden w-9 shrink-0 text-xs text-tertiary tabular-nums sm:block">
@@ -197,7 +204,7 @@ export function TaskCard({
           <h3 ref={titleRef} className="text-sm font-medium text-primary [overflow-wrap:anywhere]">
             {renderTitle(<span className="line-clamp-2 sm:line-clamp-1">{task.title}</span>)}
           </h3>
-          <p className="flex items-center gap-1 text-xs text-tertiary tabular-nums sm:hidden">
+          <p className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-tertiary tabular-nums sm:hidden">
             {priorityMark("size-3 shrink-0")}
             {channel ? (
               <TaskLocator task={{ number: task.number, channel }} shrink />
@@ -208,7 +215,7 @@ export function TaskCard({
               </span>
             )}
             {task.dueAt && (
-              <span className="ml-auto shrink-0">
+              <span className="ms-auto shrink-0">
                 <TaskDueAt task={task} />
               </span>
             )}
@@ -239,7 +246,7 @@ export function TaskCard({
             <TaskDueAt task={task} />
           </span>
         )}
-        <TaskOwnerAvatar owner={task.owner} />
+        <TaskOwnerAvatar owner={task.owner} tooltip />
         {tools}
       </article>
     );
@@ -261,18 +268,18 @@ export function TaskCard({
           </span>
         )}
         <span className="shrink-0 text-quaternary">#{task.number}</span>
-        {priorityMark("ml-auto size-3.5 text-fg-quaternary")}
+        {priorityMark("ms-auto size-3.5 text-fg-quaternary")}
       </div>
       <h3 ref={titleRef} className="text-sm font-medium text-primary [overflow-wrap:anywhere]">
         {renderTitle(<span className="line-clamp-2">{task.title}</span>)}
       </h3>
       {waitingOn ? (
-        <p className="-mt-1 flex items-start gap-1.5 text-xs text-warning-primary">
+        <p className="-mt-1 flex min-w-0 items-start gap-1.5 text-xs text-warning-primary">
           <span
             aria-hidden="true"
             className="mt-1.5 size-1.5 shrink-0 rounded-full bg-fg-warning-secondary"
           />
-          <span className="line-clamp-2">
+          <span className="min-w-0 line-clamp-2 wrap-anywhere">
             {m.task_board_waiting({ number: waitingOn.number, title: waitingOn.title })}
           </span>
         </p>
@@ -305,10 +312,10 @@ export function TaskCard({
         data-task-card-footer
         className={cn(
           "flex min-h-7 items-center justify-between gap-2",
-          tools && "any-pointer-coarse:pr-16",
+          tools && "any-pointer-coarse:pe-16",
         )}
       >
-        <TaskOwnerAvatar owner={task.owner} showName />
+        <TaskOwnerAvatar owner={task.owner} tooltip />
         <span className="flex shrink-0 items-center gap-3">
           <TaskCount
             icon={MessageChatCircle}
@@ -325,7 +332,7 @@ export function TaskCard({
         </span>
       </div>
       {tools && (
-        <div className="absolute top-2 right-1.5 rounded-md bg-primary opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 has-[[aria-expanded=true]]:opacity-100 any-pointer-coarse:top-auto any-pointer-coarse:bottom-2.5 any-pointer-coarse:opacity-100">
+        <div className="absolute top-2 end-1.5 rounded-md bg-primary opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 has-[[aria-expanded=true]]:opacity-100 any-pointer-coarse:top-auto any-pointer-coarse:bottom-2.5 any-pointer-coarse:opacity-100">
           {tools}
         </div>
       )}

@@ -29,6 +29,7 @@ import { useTaskAssignmentAccess } from "./use-task-assignment-access";
 import { useLastTaskProject } from "./use-last-task-project";
 import { draftLabels, useWorkspaceLabels } from "./workspace-labels";
 import { emptyDraft, type TaskDraft } from "./task-draft";
+import { TASK_DESCRIPTION_MAX_LENGTH, TASK_TITLE_MAX_LENGTH } from "./task-command-schema";
 import { registerUnsavedTemporaryState } from "#src/features/updates/build-update";
 
 export function CreateTaskDialog({
@@ -259,7 +260,7 @@ export function CreateTaskDialog({
                       event.preventDefault();
                       if (!event.repeat) event.currentTarget.form?.requestSubmit();
                     }}
-                    maxLength={500}
+                    maxLength={TASK_TITLE_MAX_LENGTH}
                     disabled={saving}
                     autoFocus
                     rows={1}
@@ -271,7 +272,7 @@ export function CreateTaskDialog({
                   placeholder={m.tasks_new_description()}
                   value={draft.description}
                   onChange={(event) => change({ description: event.target.value })}
-                  maxLength={50_000}
+                  maxLength={TASK_DESCRIPTION_MAX_LENGTH}
                   disabled={saving}
                   rows={3}
                   className="mt-2 block w-full resize-none bg-transparent px-4 pb-4 text-md text-secondary outline-hidden placeholder:text-placeholder sm:px-6"

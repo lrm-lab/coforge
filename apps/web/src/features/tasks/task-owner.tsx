@@ -1,5 +1,6 @@
 import type { TaskView } from "@lrm/coforge-sdk/internal";
 
+import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { DELETED_AGENT_NAME_CLASS } from "#src/features/agents/deleted-agent";
 import { cn } from "#src/lib/utils";
@@ -49,16 +50,17 @@ export function TaskPerson({
 export function TaskOwnerAvatar({
   owner,
   showName = false,
+  tooltip = false,
 }: {
   owner: TaskView["owner"];
   showName?: boolean;
+  tooltip?: boolean;
 }) {
   const name = owner?.name ?? m.tasks_unassigned();
-  return (
+  const label = `${m.tasks_overview_owner()}: ${name}`;
+  const content = (
     <span className={cn("flex items-center gap-1.5", showName ? "min-w-0" : "shrink-0")}>
-      <span className="sr-only">
-        {m.tasks_overview_owner()}: {name}
-      </span>
+      {!tooltip && <span className="sr-only">{label}</span>}
       <span aria-hidden="true" className="flex">
         {owner ? (
           <ActorAvatar
@@ -87,6 +89,17 @@ export function TaskOwnerAvatar({
         </span>
       )}
     </span>
+  );
+  if (!tooltip) return content;
+  return (
+    <Tooltip title={label}>
+      <TooltipTrigger
+        aria-label={label}
+        className="relative inline-flex shrink-0 rounded-full outline-focus-ring focus-visible:outline-2 any-pointer-coarse:after:absolute any-pointer-coarse:after:-inset-2"
+      >
+        {content}
+      </TooltipTrigger>
+    </Tooltip>
   );
 }
 

@@ -214,27 +214,33 @@ export function TaskToolbar({
             </Dropdown.Menu>
           </Dropdown.Popover>
         </Dropdown.Root>
-        <TagGroup
-          aria-label={m.tasks_filters_in_use()}
-          className="max-w-full min-w-0"
-          onRemove={(keys) => {
-            for (const chip of chips) if (keys.has(chip.id)) chip.remove();
-          }}
-        >
-          <TagList className="flex min-w-0 flex-wrap items-center gap-2">
-            {chips.map((chip) => (
-              <Tag
-                key={chip.id}
-                id={chip.id}
-                textValue={chip.label}
-                className="inline-flex h-7 max-w-full min-w-0 cursor-default items-center gap-1 rounded-md border border-secondary pe-1.5 ps-2.5 text-xs text-secondary outline-focus-ring focus-visible:outline-2 sm:max-w-[20rem]"
-              >
-                <span className="min-w-0 truncate">{chip.content ?? chip.label}</span>
-                <TagCloseX size="md" aria-label={m.tasks_filter_remove()} />
-              </Tag>
-            ))}
-          </TagList>
-        </TagGroup>
+        {chips.length > 0 && (
+          <TagGroup
+            aria-label={m.tasks_filters_in_use()}
+            className="max-w-full min-w-0"
+            onRemove={(keys) => {
+              for (const chip of chips) if (keys.has(chip.id)) chip.remove();
+            }}
+          >
+            <TagList className="flex min-w-0 flex-wrap items-center gap-2">
+              {chips.map((chip) => (
+                <Tag
+                  key={chip.id}
+                  id={chip.id}
+                  textValue={chip.label}
+                  className="inline-flex h-7 max-w-full min-w-0 cursor-default items-center gap-1 rounded-md border border-secondary pe-1.5 ps-2.5 text-xs text-secondary outline-focus-ring focus-visible:outline-2 sm:max-w-[20rem]"
+                >
+                  <span className="min-w-0 truncate">{chip.content ?? chip.label}</span>
+                  <TagCloseX
+                    size="md"
+                    aria-label={m.tasks_filter_remove()}
+                    className="relative any-pointer-coarse:after:absolute any-pointer-coarse:after:-inset-2.5"
+                  />
+                </Tag>
+              ))}
+            </TagList>
+          </TagGroup>
+        )}
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <LayoutSwitch layout={layout} onLayoutChange={onLayoutChange} />

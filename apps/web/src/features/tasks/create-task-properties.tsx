@@ -16,7 +16,6 @@ import { TaskPriorityMenu } from "./task-priority-menu";
 import { BARE_CHIP, TaskProperty } from "./task-property";
 import { StatusPicker } from "./task-status-menu";
 
-/** What a new Task's chips row can change in its draft. */
 export type CreateTaskDraftPatch = {
   assignee?: string;
   labels?: string[];
@@ -26,10 +25,6 @@ export type CreateTaskDraftPatch = {
   project?: TaskProjectRef | null;
 };
 
-/**
- * What else a new Task starts with, as the chips under its description: its status on a board,
- * owner, priority, due date, Project and labels — the properties the Task popup edits, in a form.
- */
 export function CreateTaskProperties({
   board,
   assignable,
@@ -48,7 +43,6 @@ export function CreateTaskProperties({
   assignable?: readonly Mentionable[];
   task: Pick<TaskView, "owner" | "labels" | "project">;
   offersProject: boolean;
-  /** In a conversation's form: the Project the viewer last filed a Task under, offered first. */
   lastUsed?: TaskProjectRef | null;
   draft: {
     labels: string[];
@@ -62,7 +56,7 @@ export function CreateTaskProperties({
   return (
     <div
       data-layout="create"
-      className="flex shrink-0 flex-wrap gap-2 px-4 pt-1 pb-5 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:overscroll-x-contain max-sm:border-t max-sm:border-secondary max-sm:py-2 max-sm:[scrollbar-width:none] sm:px-6"
+      className="flex shrink-0 flex-wrap gap-2 px-4 pt-1 pb-5 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:overscroll-x-contain max-sm:border-t max-sm:border-secondary max-sm:py-2 max-sm:pe-6 max-sm:[mask-image:linear-gradient(to_right,black_calc(100%-1.25rem),transparent)] max-sm:[scrollbar-width:none] sm:px-6 rtl:max-sm:[mask-image:linear-gradient(to_left,black_calc(100%-1.25rem),transparent)]"
     >
       {board && (
         <TaskProperty label={m.tasks_overview_status()}>
@@ -116,7 +110,6 @@ export function CreateTaskProperties({
       )}
       <TaskProperty
         label={m.tasks_labels()}
-        // As in the popup: labels are chips of their own, not a name to truncate.
         className={cn("[[data-layout=create]_&]:max-w-none", draft.labels.length > 0 && BARE_CHIP)}
       >
         <TaskLabelsField

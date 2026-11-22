@@ -49,7 +49,10 @@ export function TaskLabelChip({
       color={badgeColor(color)}
       className={
         full
-          ? cn("h-auto w-fit max-w-full whitespace-normal text-left", className)
+          ? cn(
+              "h-auto w-fit max-w-full items-start whitespace-normal text-start [&>svg]:mt-1.25 [&>svg]:shrink-0",
+              className,
+            )
           : cn("w-auto max-w-full min-w-0 overflow-hidden", className)
       }
     >
@@ -133,7 +136,7 @@ export function ManageableLabelChip({ label }: { label: TaskLabel }) {
       >
         <AriaButton
           aria-label={m.tasks_label_color_change({ name: label.name })}
-          className="max-w-full min-w-0 cursor-pointer rounded-md text-left outline-focus-ring focus-visible:outline-2"
+          className="relative max-w-full min-w-0 cursor-pointer rounded-md text-start outline-focus-ring focus-visible:outline-2 any-pointer-coarse:after:absolute any-pointer-coarse:after:-inset-x-1 any-pointer-coarse:after:-inset-y-2.5"
         >
           <TaskLabelChip label={label} full />
         </AriaButton>

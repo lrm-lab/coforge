@@ -25,6 +25,7 @@ import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { channelGlyph } from "#src/features/conversations/channel-name";
 import type { ChannelVisibility } from "#src/features/conversations/channel-visibility";
 import { ProjectImage } from "#src/features/projects/project-image";
+import { formatNumber } from "#src/lib/format-number";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { GroupAvatar, type GroupAvatarMember } from "#src/features/conversations/group-avatar";
@@ -174,8 +175,8 @@ export function PickerMenu({
       )}
       {option.note && <span className="shrink-0 text-quaternary">{option.note}</span>}
       {option.count !== undefined && (
-        <span className="ml-auto shrink-0 text-xs text-quaternary tabular-nums">
-          {option.count}
+        <span className="ms-auto shrink-0 text-xs text-quaternary tabular-nums">
+          {formatNumber(option.count)}
         </span>
       )}
     </PickerRow>
@@ -354,7 +355,7 @@ export function PickerSurface({
   return (
     <DialogTrigger isOpen={open} onOpenChange={setOpen}>
       {trigger}
-      <ModalOverlay isDismissable className="px-0 [--modal-pb:0px]">
+      <ModalOverlay isDismissable className="px-0 [--modal-pb:0rem]">
         <Modal className="w-full rounded-t-2xl rounded-b-none">
           <Dialog aria-label={label} className="pb-safe-bottom outline-hidden">
             <div

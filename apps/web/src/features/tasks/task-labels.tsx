@@ -18,9 +18,11 @@ import { Button } from "#src/components/base/buttons/button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { EmptyState } from "#src/components/ui/empty";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
+import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { LabelColorSwatches } from "./label-color-swatches";
 import { newLabelColor } from "./label-colors";
+import { LABEL_NAME_MAX_LENGTH } from "./label-settings-model";
 import { createTaskLabel } from "./labels.functions";
 import { LabelDot, ManageableLabelChip, TaskLabelChip } from "./task-label-chip";
 import { TaskFieldTrigger } from "./task-field-trigger";
@@ -34,22 +36,14 @@ import {
   PickerSurface,
 } from "#src/features/pickers/entity-picker";
 
-/** A Task carries at most this many labels (the server refuses a sixth). */
 export const TASK_LABELS_MAX = 5;
-/** How many labels a card shows before the rest fold into `+N`. */
 const CARD_LABELS = 2;
 
-/**
- * A card's labels: the first two, then `+N` for the rest, whose names are its tooltip. Nothing
- * when the Task has none.
- */
 export function TaskCardLabels({ labels }: { labels: readonly TaskLabel[] | undefined }) {
   if (!labels?.length) return null;
   const shown = labels.slice(0, CARD_LABELS);
   const rest = labels.slice(CARD_LABELS);
   return (
-    // One line: where two and +N do not fit, the names are cut before the row wraps; +N stays
-    // whole (task #455).
     <span className="flex min-w-0 items-center gap-1">
       {shown.map((label) => (
         <TaskLabelChip key={label.id} label={label} className="min-w-0 shrink" />
@@ -67,11 +61,6 @@ export function TaskCardLabels({ labels }: { labels: readonly TaskLabel[] | unde
   );
 }
 
-/**
- * The popup's labels: the Task's chips, then a control that opens the Workspace's labels to tick
- * on and off. A Task holds five at most; at five the rest cannot be picked. A name no label has is
- * created on the spot, with a color of its own (task #455, the simple version Frank asked for).
- */
 export function TaskLabelsField({
   task,
   disabled,
@@ -81,16 +70,12 @@ export function TaskLabelsField({
   task: Pick<TaskView, "labels">;
   disabled: boolean;
   placement?: Placement;
-  /** Labels to add and to take off, by name. */
   onChange: (change: { add?: string[]; remove?: string[] }) => void;
 }) {
   const [open, setOpen] = useState(false);
-  // The picker lines up with the whole row, so it never covers the labels it edits.
   const row = useRef<HTMLDivElement>(null);
   const desktop = useBreakpoint("md");
   useCloseOnBack(open && !desktop, () => setOpen(false));
-  // The Workspace's labels are read while the picker is open and whenever the Task has a label: a
-  // chip's menu needs to know whether the viewer manages labels, and follows a recolor.
   const taskLabels = task.labels ?? [];
   const {
     labels: workspaceLabels,
@@ -98,7 +83,6 @@ export function TaskLabelsField({
     canManage,
     loaded: labelsLoaded,
   } = useWorkspaceLabels(open || taskLabels.length > 0);
-  // A label deleted (archived) since the Task was read is off it already.
   const archivedIds = new Set(
     workspaceLabels.filter((label) => label.archivedAt).map((label) => label.id),
   );
@@ -108,13 +92,10 @@ export function TaskLabelsField({
   const create = useServerFn(createTaskLabel);
   const { contains } = useFilter({ sensitivity: "base" });
   const [search, setSearch] = useState("");
-  const [createFailed, setCreateFailed] = useState(false);
-  // The color picked for the label being made, kept with the name it was picked for: a new name
-  // starts from its default again.
+  const [createError, setCreateError] = useState<string | null>(null);
   const [picked, setPicked] = useState<{ name: string; color: string } | null>(null);
   const on = new Set(labels.map((label) => label.id));
   const full = labels.length >= TASK_LABELS_MAX;
-  // Archived labels stay on the Tasks that have them but are not offered again.
   const offered = workspaceLabels.filter((label) => !label.archivedAt);
   const offeredIds = new Set(offered.map((label) => label.id));
   const disabledKeys = full ? offered.filter((label) => !on.has(label.id)).map((l) => l.id) : [];
@@ -124,14 +105,22 @@ export function TaskLabelsField({
   const newColor = picked?.name === wanted ? picked.color : newLabelColor(wanted);
 
   async function createAndAdd(name: string, color: string) {
-    setCreateFailed(false);
+    setCreateError(null);
     try {
       const created = await create({ data: { name, color: color as never } });
       await queryClient.invalidateQueries({ queryKey: workspaceLabelsKey(workspaceId) });
       setSearch("");
       onChange({ add: [created.name] });
-    } catch {
-      setCreateFailed(true);
+    } catch (cause) {
+      if (isAppError(cause) && cause.errorId === "task-label-name-taken") {
+        setCreateError(m.labels_settings_name_taken({ name }));
+        return;
+      }
+      if (isAppErrorCode(cause, "ACCESS_DENIED")) {
+        setCreateError(m.labels_settings_denied());
+        return;
+      }
+      setCreateError(m.tasks_labels_create_failed());
     }
   }
 
@@ -151,6 +140,7 @@ export function TaskLabelsField({
           setOpen(next);
           if (!next) {
             setSearch("");
+            setCreateError(null);
             setPicked(null);
           }
         }}
@@ -174,19 +164,21 @@ export function TaskLabelsField({
               value={search}
               onChange={(value) => {
                 setSearch(value);
-                setCreateFailed(false);
+                setCreateError(null);
               }}
               onSubmit={() => {
                 if (wanted && !exists && !full) void createAndAdd(wanted, newColor);
               }}
               onKeyDown={(event) => {
-                // Esc with nothing typed closes the picker (with text, it clears the text first).
-                // The search box hands Esc to the list, which keeps it, so the picker stayed open.
                 if (event.key === "Escape" && !search) setOpen(false);
               }}
               autoFocus={!phone}
             >
-              <AriaInput placeholder={m.tasks_labels_search()} className={PICKER_SEARCH_INPUT} />
+              <AriaInput
+                placeholder={m.tasks_labels_search()}
+                maxLength={LABEL_NAME_MAX_LENGTH}
+                className={PICKER_SEARCH_INPUT}
+              />
             </AriaSearchField>
             <AriaMenu
               aria-label={m.tasks_labels()}
@@ -242,9 +234,9 @@ export function TaskLabelsField({
                     onSubmit={() => void createAndAdd(wanted, newColor)}
                   />
                 </div>
-                {createFailed && (
+                {createError && (
                   <p role="alert" className="px-2.5 pb-1 text-xs text-error-primary">
-                    {m.tasks_labels_create_failed()}
+                    {createError}
                   </p>
                 )}
               </div>
@@ -258,8 +250,6 @@ export function TaskLabelsField({
                       max: String(TASK_LABELS_MAX),
                     })}
               </span>
-              {/* Settings → Labels (task #508): "manage" only for whoever may change them, so it
-                  waits until that is known rather than flipping from "view all". */}
               {labelsLoaded && (
                 <Link
                   to="/w/$workspaceSlug/settings"

@@ -110,6 +110,39 @@ export function formatMonthDay(
   }).format(new Date(value));
 }
 
+export function formatMonthDayOrYear(
+  value: Date | string,
+  timeZone: string | null | undefined,
+  locale = typeof navigator === "undefined" ? "en-US" : navigator.language,
+  options?: { now?: Date; dueHasTime?: boolean },
+) {
+  const zone = resolveTimeZone(timeZone, browserTimeZone());
+  const rawInstant = Temporal.Instant.fromEpochMilliseconds(new Date(value).getTime());
+  const targetInstant =
+    options?.dueHasTime === false ? rawInstant.subtract({ milliseconds: 1 }) : rawInstant;
+  const targetZoned = targetInstant.toZonedDateTimeISO(zone);
+  const nowZoned = (
+    options?.now
+      ? Temporal.Instant.fromEpochMilliseconds(options.now.getTime())
+      : Temporal.Now.instant()
+  ).toZonedDateTimeISO(zone);
+  const targetDate = new Date(targetInstant.epochMilliseconds);
+  return targetZoned.year === nowZoned.year
+    ? formatMonthDay(targetDate, zone, locale)
+    : formatCalendarDate(targetDate, zone, locale);
+}
+
+export function formatIsoWeekday(
+  isoDay: number,
+  locale = typeof navigator === "undefined" ? "en-US" : navigator.language,
+  style: "short" | "long" = "short",
+) {
+  const normalized = ((((isoDay - 1) % 7) + 7) % 7) + 1;
+  return dateTimeFormat(locale, { weekday: style, timeZone: "UTC" }).format(
+    new Date(Date.UTC(2024, 0, normalized, 12)),
+  );
+}
+
 /** Month, day and time of day, as Raft writes a forwarded original's moment: "Oct 29, 6:06 PM" in
  * English, "10月29日 18:06" in Chinese, in the viewer's hour cycle. A moment from another year
  * than `now`'s writes its year too ("Oct 29, 2025, 6:06 PM", "2025.10.29 18:06"). `hour:
