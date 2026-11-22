@@ -58,8 +58,8 @@ import { ActivityTaskPopup } from "./activity-task-popup";
 import { useActivityItemActions } from "./use-activity-item-actions";
 import { ActivityInboxRow } from "./activity-inbox-row";
 import { ActivityArtifactRow } from "./activity-artifact-row";
-import { activityItemTime } from "./activity-item-time";
-import { daySectionKey, useActivityDays } from "./activity-inbox-days";
+import { useActivityInboxGroups } from "./use-activity-inbox-groups";
+import { daySectionKey } from "./activity-inbox-days";
 import { ActivityInboxTabs } from "./activity-inbox-tabs";
 import { ActivityInboxMoreMenu } from "./activity-inbox-more-menu";
 import {
@@ -196,19 +196,7 @@ export function ActivityInboxView({
     run();
   }, [markAllRead, loadedAt, refresh]);
 
-  const unread = useMemo(
-    () => (filter === "all" ? items.filter((item) => item.unreadCount > 0) : []),
-    [filter, items],
-  );
-  const dated = useMemo(
-    () => (filter === "all" ? items.filter((item) => !item.unreadCount) : items),
-    [filter, items],
-  );
-  const days = useActivityDays(dated, activityItemTime);
-  const rows = useMemo(
-    () => [...unread, ...pinned, ...days.flatMap((day) => day.items)],
-    [unread, pinned, days],
-  );
+  const { unread, days, rows } = useActivityInboxGroups(filter, items, pinned);
   const { doneAll } = useActivityBulkActions({
     workspaceId,
     onChanged: refresh,
