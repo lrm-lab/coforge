@@ -1,4 +1,5 @@
 import { asRecord } from "#src/json-record";
+import { buildPromptCacheUsage, type PromptCacheUsage } from "#src/prompt-cache-usage";
 
 function count(value: unknown, min: number): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value >= min ? value : undefined;
@@ -20,4 +21,18 @@ export function codexContextUsage(
   const windowTokens = count(usage?.modelContextWindow, 1);
   if (usedTokens === undefined || windowTokens === undefined) return;
   return { usedTokens, windowTokens };
+}
+
+export function codexPromptCacheUsage(
+  params: Readonly<Record<string, unknown>> | undefined,
+): PromptCacheUsage | undefined {
+  const last = asRecord(asRecord(params?.tokenUsage)?.last);
+  if (!last) return undefined;
+  return buildPromptCacheUsage({
+    inputTokens: last.inputTokens,
+    cachedInputTokens: last.cachedInputTokens,
+    cacheWriteInputTokens: last.cacheWriteInputTokens,
+    outputTokens: last.outputTokens,
+    reasoningOutputTokens: last.reasoningOutputTokens,
+  });
 }

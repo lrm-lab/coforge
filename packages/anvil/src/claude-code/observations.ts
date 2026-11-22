@@ -1,9 +1,32 @@
+import { getLogger } from "@logtape/logtape";
 import {
   AGENT_SERVICE_TIER_OBSERVED,
+  RUNTIME_PROVIDER,
   type AgentServiceTierObserved,
 } from "@lrm/coforge-sdk/internal";
 import { AGENT_RUNTIME_EVENT_TYPE, type AgentRuntimeEvent } from "#src/contract";
 import { asRecord, eventTime, nonEmptyString } from "#src/json-record";
+import {
+  buildPromptCacheUsage,
+  promptCacheLogFields,
+  type PromptCacheUsage,
+} from "#src/prompt-cache-usage";
+
+const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.CLAUDE_CODE]);
+
+function lastClaudeMessageIteration(
+  record: Readonly<Record<string, unknown>>,
+): Record<string, unknown> | undefined {
+  const usage = asRecord(record.usage);
+  const iterations = Array.isArray(usage?.iterations) ? usage.iterations : undefined;
+  if (!iterations?.length) return undefined;
+  let lastMessage: Record<string, unknown> | undefined;
+  for (const entry of iterations) {
+    const parsed = asRecord(entry);
+    if (parsed?.type === "message") lastMessage = parsed;
+  }
+  return lastMessage;
+}
 
 /**
  * The service tier a top-level `result` record reports for this launch, normalized to the SDK's
@@ -44,14 +67,7 @@ export function claudeContextUsage(
       occurredAt: string;
     }
   | undefined {
-  const usage = asRecord(record.usage);
-  const iterations = Array.isArray(usage?.iterations) ? usage.iterations : undefined;
-  if (!iterations?.length) return undefined;
-  let lastMessage: Record<string, unknown> | undefined;
-  for (const entry of iterations) {
-    const parsed = asRecord(entry);
-    if (parsed?.type === "message") lastMessage = parsed;
-  }
+  const lastMessage = lastClaudeMessageIteration(record);
   if (!lastMessage) return undefined;
   const usedTokens = claudeUsageContextTokens(lastMessage);
   const modelUsage = asRecord(record.modelUsage);
@@ -77,6 +93,23 @@ export function claudeContextUsage(
   if (!modelWindow) return undefined;
   const windowTokens = Math.min(modelWindow, autoCompactWindow ?? Infinity);
   return { usedTokens, windowTokens, occurredAt: eventTime(record) };
+}
+
+export function claudePromptCacheUsage(
+  record: Readonly<Record<string, unknown>>,
+): PromptCacheUsage | undefined {
+  const sample = lastClaudeMessageIteration(record) ?? asRecord(record.usage);
+  if (!sample) return undefined;
+  const cachedInputTokens = nonNegativeNumber(sample.cache_read_input_tokens);
+  const cacheWriteInputTokens = nonNegativeNumber(sample.cache_creation_input_tokens);
+  const inputTokens =
+    nonNegativeNumber(sample.input_tokens) + cachedInputTokens + cacheWriteInputTokens;
+  return buildPromptCacheUsage({
+    inputTokens,
+    cachedInputTokens,
+    cacheWriteInputTokens,
+    outputTokens: sample.output_tokens,
+  });
 }
 
 /** Input + cache read + cache creation tokens of a usage-shaped record: the context one request carried. */
@@ -113,7 +146,10 @@ export class ClaudeSessionObservations {
     private readonly autoCompactWindow?: number,
   ) {}
 
-  *read(record: Readonly<Record<string, unknown>>): Generator<AgentRuntimeEvent> {
+  *read(
+    record: Readonly<Record<string, unknown>>,
+    sessionId?: string,
+  ): Generator<AgentRuntimeEvent> {
     // A service-tier reading is a session fact observed at every top-level result, independent
     // of the turn's own running/interrupting/idle state below. Emitted only when it changes, so
     // a steady tier does not repeat every turn.
@@ -139,5 +175,13 @@ export class ClaudeSessionObservations {
         windowTokens: contextUsage.windowTokens,
         occurredAt: contextUsage.occurredAt,
       };
+    const cacheUsage = claudePromptCacheUsage(record);
+    if (cacheUsage) {
+      logger.info("Claude Code observed prompt cache usage", {
+        event: "claude_code.prompt_cache.usage",
+        ...(sessionId ? { session_id: sessionId } : {}),
+        ...promptCacheLogFields(cacheUsage),
+      });
+    }
   }
 }

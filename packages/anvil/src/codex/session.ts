@@ -6,7 +6,8 @@ import type {
   AgentTurnProcessWindow,
 } from "@coforge/agent";
 import { AGENT_RUNTIME_EVENT_TYPE, asRecord, eventTime, nonEmptyString } from "@lrm/coforge-anvil";
-import { codexContextUsage } from "./context-usage";
+import { codexContextUsage, codexPromptCacheUsage } from "./context-usage";
+import { promptCacheLogFields } from "#src/prompt-cache-usage";
 import { JsonlProcess } from "@lrm/coforge-anvil/execution";
 import { CodexItemEvents } from "./item-events";
 import { CodexSubagentThreads, codexMessageThreadId } from "./subagent-threads";
@@ -213,6 +214,17 @@ export class CodexAgentSession implements AgentSession {
       if (!this.#acceptsTurnItem(params)) return;
       if (record.method === "thread/tokenUsage/updated") {
         const usage = codexContextUsage(params);
+        const cacheUsage = codexPromptCacheUsage(params);
+        if (cacheUsage) {
+          logger.info("Codex observed prompt cache usage", {
+            event: "codex.prompt_cache.usage",
+            agent_id: this.#agentId,
+            runtime_id: this.#runtimeId,
+            thread_id: this.#threadId,
+            ...promptCacheLogFields(cacheUsage),
+            ...(usage ? { used_tokens: usage.usedTokens, window_tokens: usage.windowTokens } : {}),
+          });
+        }
         if (usage) this.#emitAll([{ type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE, ...usage }]);
         return;
       }

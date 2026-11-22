@@ -418,7 +418,7 @@ export class ClaudeCodeAgentSession implements AgentSession {
         return;
       }
       this.#reportIdentity();
-      for (const event of this.#observations.read(record)) this.#emit(event);
+      for (const event of this.#observations.read(record, this.#sessionId)) this.#emit(event);
       this.#sessionReadyForNotices = true;
       this.#resultObserved = true;
       this.#setIdentity("resumable");
