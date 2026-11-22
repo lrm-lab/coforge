@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 
+import { useImageFallback } from "#src/hooks/use-image-fallback";
 import { avatarInitial } from "#src/lib/avatar-tone";
 import { cx } from "#src/utils/cx";
 
-/** A Project's uploaded icon, or `fallback` (its first letter by default) when it has none. */
 export function ProjectImage({
   name,
   url,
@@ -15,6 +15,8 @@ export function ProjectImage({
   fallback?: ReactNode;
   className?: string;
 }) {
+  const image = useImageFallback(url);
+
   return (
     <span
       aria-hidden="true"
@@ -23,8 +25,14 @@ export function ProjectImage({
         className,
       )}
     >
-      {url ? (
-        <img src={url} alt="" className="size-full object-cover" />
+      {image.src ? (
+        <img
+          ref={image.ref}
+          src={image.src}
+          alt=""
+          onError={image.onError}
+          className="size-full object-cover"
+        />
       ) : (
         (fallback ?? avatarInitial(name))
       )}

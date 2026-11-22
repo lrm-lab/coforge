@@ -237,7 +237,7 @@ export function ArtifactReviewBar({
       role="toolbar"
       aria-label={m.av_dr_tools()}
       className={cn(
-        "pointer-events-auto flex items-center gap-1.5 px-2 py-1.5",
+        "pointer-events-auto flex max-w-[calc(100vw-2rem)] min-w-0 items-center gap-1.5 px-2 py-1.5 max-[26rem]:gap-1 max-[26rem]:px-1.5",
         FLOATING_SURFACE_CLASS,
       )}
     >
@@ -258,25 +258,41 @@ export function ArtifactReviewBar({
           aria-label={annotating ? m.av_cm_annotating() : m.av_cm_annotate()}
           data-annotate-toggle=""
           data-picking={String(annotating)}
+          className="min-w-0 shrink *:data-text:min-w-0 *:data-text:truncate"
           onPress={onToggleAnnotate}
         >
-          {annotating ? m.av_cm_annotating() : m.av_cm_pick_element()}
+          {count > 0 ? (
+            <>
+              <span className="max-[26rem]:hidden">
+                {annotating ? m.av_cm_annotating() : m.av_cm_pick_element()}
+              </span>
+              <span className="min-[26rem]:hidden">
+                {annotating ? m.av_cm_annotating() : m.av_cm_annotate()}
+              </span>
+            </>
+          ) : annotating ? (
+            m.av_cm_annotating()
+          ) : (
+            m.av_cm_pick_element()
+          )}
         </Button>
       </Tooltip>
       {count > 0 && (
         <>
-          <span aria-hidden="true" className="h-4 w-px bg-border-secondary" />
+          <span aria-hidden="true" className="h-4 w-px shrink-0 bg-border-secondary" />
           <Button
             size="sm"
             color={cardOpen ? "secondary" : "tertiary"}
             iconLeading={MessageSquare01}
             aria-expanded={cardOpen}
+            aria-label={`${m.av_dr_group()} (${count})`}
+            className="shrink-0"
             onPress={onToggleCard}
           >
-            <span>{m.av_dr_group()}</span>
+            <span className="max-[26rem]:sr-only">{m.av_dr_group()}</span>
             <span
               data-visible="true"
-              className="artifact-review-fab-badge ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-md bg-brand-secondary px-1 text-xs leading-none font-medium text-brand-secondary tabular-nums"
+              className="artifact-review-fab-badge ms-1 inline-flex h-5 min-w-5 items-center justify-center rounded-md bg-brand-secondary px-1 text-xs leading-none font-medium text-brand-secondary tabular-nums max-[26rem]:ms-0"
             >
               {count}
             </span>
@@ -288,6 +304,7 @@ export function ArtifactReviewBar({
               isDisabled={locked}
               data-draft-send=""
               aria-label={m.av_dr_send_all_tip()}
+              className="shrink-0"
               onPress={onSubmit}
             >
               {m.av_dr_send_n({ count })}

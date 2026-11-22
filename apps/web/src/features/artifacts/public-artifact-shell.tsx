@@ -149,7 +149,7 @@ export function PublicArtifactShell({
       )}
 
       <header className="flex min-h-12 shrink-0 items-center justify-between gap-2.5 border-b border-secondary bg-primary px-3 py-1.5 sm:h-12 sm:px-4 sm:py-0">
-        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5 overflow-hidden">
           <Link
             to="/"
             aria-label="CoForge"
@@ -158,18 +158,18 @@ export function PublicArtifactShell({
             <CoForgeMark className="h-4.5" />
           </Link>
 
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2.5">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5 overflow-hidden sm:flex-row sm:items-center sm:gap-2.5">
             <div className="flex min-w-0 items-center gap-2">
-              <h1 className="truncate text-sm font-semibold text-primary">{title}</h1>
+              <h1 className="min-w-0 truncate text-sm font-semibold text-primary">{title}</h1>
               <span className="shrink-0 rounded-md bg-secondary px-1.5 py-0.5 text-xs font-medium text-tertiary ring-1 ring-secondary ring-inset">
                 v{artifact.version}
               </span>
             </div>
 
             <div className="flex min-w-0 items-center gap-2 text-xs text-tertiary">
-              <span className="shrink-0">{m.ap_unverified()}</span>
+              <span className="min-w-0 truncate">{m.ap_unverified()}</span>
               {artifact.updatedAt && (
-                <span className="truncate">
+                <span className="shrink-0 whitespace-nowrap">
                   {m.ap_updated_prefix()} <RelativeTime value={artifact.updatedAt} plain />
                 </span>
               )}
@@ -179,8 +179,14 @@ export function PublicArtifactShell({
 
         <div className="flex shrink-0 items-center gap-1.5">
           {signedIn ? (
-            <Button size="sm" color="secondary" onPress={() => void navigate({ to: "/" })}>
-              {m.ap_open_in_coforge()}
+            <Button
+              size="sm"
+              color="secondary"
+              aria-label={m.ap_open_in_coforge()}
+              onPress={() => void navigate({ to: "/" })}
+            >
+              <span className="max-[24rem]:hidden">{m.ap_open_in_coforge()}</span>
+              <span className="min-[24rem]:hidden">{m.action_open()}</span>
             </Button>
           ) : (
             <Button size="sm" color="secondary" onPress={openSignIn}>

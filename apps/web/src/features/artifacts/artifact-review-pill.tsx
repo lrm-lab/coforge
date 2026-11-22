@@ -378,7 +378,7 @@ export function ArtifactReviewPill({
   return (
     <div
       data-artifact-review-pill=""
-      className="pointer-events-none absolute inset-x-4 bottom-4 z-20 flex flex-col items-center gap-2"
+      className="pointer-events-none absolute inset-x-4 bottom-4 z-20 mx-auto flex max-w-[calc(100vw-2rem)] flex-col items-center gap-2"
     >
       {showCard && (
         <div

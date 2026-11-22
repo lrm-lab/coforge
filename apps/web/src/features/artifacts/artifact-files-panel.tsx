@@ -54,7 +54,7 @@ export function ArtifactFilesPanel({
       />
       <ul className="min-h-0 flex-1 overflow-y-auto p-2">
         {files.map((file) => {
-          const displayPath = middleTruncatePath(file.path);
+          const displayPath = middleTruncatePath(file.path, 28);
           return (
             <li key={file.path}>
               <div

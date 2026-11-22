@@ -43,4 +43,22 @@ describe("middleTruncatePath", () => {
     expect(truncated.endsWith("最终版v2.md")).toBe(true);
     expect(Array.from(truncated).length).toBeLessThanOrEqual(24);
   });
+
+  test("distinguishes deep paths with ultra-long basenames differing in mid-name version tokens", () => {
+    const paths = Array.from({ length: 26 }, (_, index) => {
+      const version = String(index + 1).padStart(2, "0");
+      return `packages/platform-security/compliance/2026/q4/contracts/legal_and_compliance_enterprise_master_agreement_v${version}_approved_by_legal.md`;
+    });
+
+    for (const limit of [42, 28]) {
+      const outputs = paths.map((item) => middleTruncatePath(item, limit));
+      expect(new Set(outputs).size).toBe(26);
+      outputs.forEach((output, index) => {
+        const version = `v${String(index + 1).padStart(2, "0")}`;
+        expect(output.includes(version)).toBe(true);
+        expect(output.endsWith(".md")).toBe(true);
+        expect(Array.from(output).length).toBeLessThanOrEqual(limit);
+      });
+    }
+  });
 });

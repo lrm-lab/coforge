@@ -210,7 +210,7 @@ function CommentRow({
     >
       <CommentAuthorAvatar comment={comment} size="sm" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <header className="flex min-h-6 min-w-0 flex-wrap items-center gap-x-2 pointer-coarse:pe-24">
+        <header className="flex min-h-6 min-w-0 flex-wrap items-center gap-x-2 group-focus-within/comment:pe-24 group-hover/comment:pe-24 focus-within:pe-24 pointer-coarse:pe-24">
           <span className={cn(COMMENT_AUTHOR_CLASS, "min-w-0")}>{author.name}</span>
           {author.kind === "agent" && (
             <Badge size="sm" color="gray" type="modern">

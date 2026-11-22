@@ -26,7 +26,7 @@ export function MePage() {
               presence={false}
               size="2xl"
               name={user.name}
-              alt={user.name}
+              alt=""
               src={user.avatarUrl}
               rounded
             />
@@ -61,7 +61,6 @@ export function MePage() {
             />
           </ul>
         </div>
-        {/* The dialog stays mounted, so it closes in place once the row goes with the last entry. */}
         {whatsNew.dialog}
       </div>
     </ShellLinks>

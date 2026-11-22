@@ -150,7 +150,7 @@ export function ProjectSettingsPage({
         <form
           onSubmit={submit}
           onChange={() => setSaved(false)}
-          className="mx-auto grid w-full max-w-xl gap-6"
+          className="mx-auto grid w-full max-w-xl grid-cols-[minmax(0,1fr)] gap-6"
         >
           {deleting ? (
             <>
