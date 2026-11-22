@@ -31,6 +31,7 @@ export function createCommand(input: {
   /** Local registrations — `detach` drops a Workspace's after the server's definite answer. */
   config?: Pick<ComputerConfig, "loadRegistration" | "discardRegistration"> &
     Partial<Pick<ComputerConfig, "loadCurrentProfile">>;
+  hostingWorkspaceId?: string;
   logger?: Logger;
   resolveWorkspace?: (selector: string) => Promise<LocalWorkspace>;
   /** Progress lines for the user's terminal, mirroring what `upgrade` already prints. Omit to
@@ -190,10 +191,7 @@ export function createCommand(input: {
       // The outcome is the caller's to print — a detached registration, an unconfirmed
       // server answer, a Workspace the supervisor never bound, or no local registration at
       // all (task #417). Only the daemon-side event is logged here.
-      const outcome = await detachWorkspace(
-        { daemon: input.daemon, config: input.config },
-        workspace,
-      );
+      const outcome = await detachWorkspace(input, workspace);
       if (outcome.kind === "detached")
         input.logger?.info("Computer detached", { event: "computer:detached" });
       else if (outcome.kind === "unconfirmed")

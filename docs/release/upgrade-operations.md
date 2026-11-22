@@ -193,7 +193,7 @@ the same hold first, unless the supervisor cannot be reached at all, in which ca
 it restarts anyway. It refuses that same `foreground` Computer with
 `RESTART_OUTSIDE_SERVICE_MANAGER`.
 
-`coforge-computer detach --json` writes one object and no prose: `ok`, `detached`, `kind`
-and, except for `not_attached`, `workspaceSlug`. `ok` means the command finished;
-`detached` is true only for `kind: "detached"` — a revoked key, an unconfirmed detach and
-an unbound Workspace all leave something behind.
+`coforge-computer detach` refuses the binding that hosts the calling Agent. Use the Computer's regular terminal to detach it.
+With `--json`, completion writes one object with `ok`, `detached`, `kind` and, except for `not_attached`, `workspaceSlug`.
+`ok` means the command finished. `detached` is true only for `kind: "detached"`.
+A refusal writes one object with `ok: false` and `error`.

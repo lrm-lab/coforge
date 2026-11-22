@@ -57,6 +57,9 @@ export function createCommand(
     daemon: launcher,
     config,
     logger,
+    hostingWorkspaceId: seams?.callerIsAgentHosted
+      ? Bun.env.COFORGE_CURRENT_WORKSPACE_ID?.trim()
+      : undefined,
     resolveWorkspace,
     write: (line) => {
       if (!suppressClientWrite) io.stdout(line);

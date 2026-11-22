@@ -1,5 +1,6 @@
 import { DaemonCommandRejectedError, type DaemonCommandRunner } from "@lrm/coforge-daemon";
 
+import { CliError } from "#src/errors";
 import type { ComputerConfig } from "#src/local-config";
 
 /**
@@ -25,6 +26,7 @@ export async function detachWorkspace(
     daemon: Pick<DaemonCommandRunner, "command">;
     config?: Pick<ComputerConfig, "loadRegistration" | "discardRegistration"> &
       Partial<Pick<ComputerConfig, "loadCurrentProfile">>;
+    hostingWorkspaceId?: string;
   },
   workspace?: string,
 ): Promise<DetachOutcome> {
@@ -32,6 +34,12 @@ export async function detachWorkspace(
     return { kind: "not_attached" };
   const registration = await deps.config.loadRegistration(workspace);
   if (!registration) return { kind: "not_attached" };
+  if (deps.hostingWorkspaceId === registration.id)
+    throw new CliError(
+      "DETACH_HOSTING_AGENT_SESSION",
+      "This Workspace binding hosts the current Agent session.",
+      "Run this command from a regular terminal on the Computer.",
+    );
   // The Computer's own id and server ride the request: a Workspace the supervisor has no
   // binding for can still be told to unlink its key (task #417).
   const profile = deps.config.loadCurrentProfile ? await deps.config.loadCurrentProfile() : null;
