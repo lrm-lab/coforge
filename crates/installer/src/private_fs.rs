@@ -137,30 +137,39 @@ pub(crate) fn replace_file_durably(
     contents: &[u8],
     mode: FileMode,
 ) -> Result<(), DurableReplaceError> {
-    use DurableReplaceError::{NotCommitted, Uncertain};
+    use DurableReplaceError::NotCommitted;
     let mut pending =
         PendingFile::create(temporary_sibling(destination), mode).map_err(NotCommitted)?;
     pending.file().write_all(contents).map_err(NotCommitted)?;
+    #[cfg(test)]
+    durable_replace_checkpoint(DurableReplaceStep::FileSync).map_err(NotCommitted)?;
     pending.flush_for_rename().map_err(NotCommitted)?;
+    #[cfg(test)]
+    durable_replace_checkpoint(DurableReplaceStep::Rename).map_err(NotCommitted)?;
     let result = rename_durably(&pending.path, destination);
     if result.is_ok() {
         pending.path = PathBuf::new();
     }
-    result.map_err(Uncertain)
+    result
 }
 
 #[cfg(unix)]
-fn rename_durably(source: &Path, destination: &Path) -> io::Result<()> {
-    fs::rename(source, destination)?;
+fn rename_durably(source: &Path, destination: &Path) -> Result<(), DurableReplaceError> {
+    use DurableReplaceError::{NotCommitted, Uncertain};
+    fs::rename(source, destination).map_err(NotCommitted)?;
+    #[cfg(test)]
+    durable_replace_checkpoint(DurableReplaceStep::DirectorySync).map_err(Uncertain)?;
     let parent = destination
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
-    File::open(parent)?.sync_all()
+    File::open(parent)
+        .and_then(|directory| directory.sync_all())
+        .map_err(Uncertain)
 }
 
 #[cfg(windows)]
-fn rename_durably(source: &Path, destination: &Path) -> io::Result<()> {
+fn rename_durably(source: &Path, destination: &Path) -> Result<(), DurableReplaceError> {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Storage::FileSystem::{
         MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
@@ -175,10 +184,35 @@ fn rename_durably(source: &Path, destination: &Path) -> io::Result<()> {
         )
     };
     if moved == 0 {
-        Err(io::Error::last_os_error())
+        Err(DurableReplaceError::Uncertain(io::Error::last_os_error()))
     } else {
         Ok(())
     }
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DurableReplaceStep {
+    FileSync,
+    Rename,
+    #[cfg(unix)]
+    DirectorySync,
+}
+
+#[cfg(test)]
+thread_local! {
+    pub(crate) static FAIL_DURABLE_REPLACE: std::cell::Cell<Option<DurableReplaceStep>> = const {
+        std::cell::Cell::new(None)
+    };
+}
+
+#[cfg(test)]
+fn durable_replace_checkpoint(step: DurableReplaceStep) -> io::Result<()> {
+    if FAIL_DURABLE_REPLACE.get() == Some(step) {
+        FAIL_DURABLE_REPLACE.set(None);
+        return Err(io::Error::other("injected durable replace failure"));
+    }
+    Ok(())
 }
 
 /// A file being written under a temporary name, to replace a destination once it is complete.

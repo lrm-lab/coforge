@@ -1,7 +1,4 @@
-import {
-  beginLocalUpgradeProgress,
-  claimUpgradeActivation,
-} from "#src/platform/computer-upgrade-progress";
+import { beginLocalUpgradeProgress } from "#src/platform/computer-upgrade-progress";
 import { resolveComputerInstallDirectory } from "#src/platform/computer-install-directory";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -139,8 +136,6 @@ async function runWithSupervisorLock(
   await writeFile(join(lockMarker, "owner"), String(process.pid), { mode: 0o600 });
   const workspaceDirectory = (id: string) => workspaceStateDirectory(stateDirectory, id);
   const installRoot = resolveComputerInstallDirectory();
-  const activation = await claimUpgradeActivation(installRoot, COFORGE_DAEMON_VERSION);
-  const activatedBindings = new Set<string>();
   const workspaceHealth = (id: string) =>
     new WorkspaceHealthJournal(workspaceHealthJournalPath(workspaceDirectory(id)));
   const startPorts: WorkspaceStartPorts = {
@@ -255,12 +250,7 @@ async function runWithSupervisorLock(
           });
           throw new Error(message);
         }
-        const firstActivation = activation && !activatedBindings.has(binding.workspaceId);
-        if (firstActivation) activatedBindings.add(binding.workspaceId);
-        await new DaemonConfigStore(directory).save({
-          ...workspaceDaemonConfig(binding),
-          ...(firstActivation ? activation : {}),
-        });
+        await new DaemonConfigStore(directory).save(workspaceDaemonConfig(binding));
         const instance = workspaceInstance(binding.workspaceId);
         const processId = await instance.ensureStarted();
         const observed = await instance.identity();

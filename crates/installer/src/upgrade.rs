@@ -112,13 +112,10 @@ pub fn upgrade(
         journal: &journal,
         request_id: request.request_id,
         allow_downgrade: request.allow_downgrade,
+        progress: progress.as_ref(),
         switch: ActiveSwitch::new(ports, stage, request.caller),
     };
-    let outcome = run.execute(request.selection, progress.as_ref());
-    if let (Some(progress), Outcome::Receipt(receipt)) = (&progress, &outcome) {
-        progress.terminal(receipt);
-    }
-    outcome
+    run.execute(request.selection)
 }
 
 fn lock_refusal(error: &LockError) -> Outcome {
@@ -237,11 +234,13 @@ struct Run<'r, 'p> {
     journal: &'r Journal,
     request_id: &'r str,
     allow_downgrade: bool,
+    progress: Option<&'r UpgradeProgress>,
     switch: ActiveSwitch<'r, 'p>,
 }
 
 impl Run<'_, '_> {
-    fn execute(&mut self, selection: &str, progress: Option<&UpgradeProgress>) -> Outcome {
+    fn execute(&mut self, selection: &str) -> Outcome {
+        let progress = self.progress;
         let prepared = match self.prepare(selection, progress) {
             Ok(prepared) => prepared,
             Err(refusal) => return self.refused(refusal),
@@ -352,6 +351,9 @@ impl Run<'_, '_> {
                 rollback_failed: false,
             });
         };
+        if let Some(progress) = self.progress {
+            progress.deactivate();
+        }
         self.switch.say(&format!(
             "Upgrade failed: {candidate}; restoring {}",
             from.version
@@ -441,6 +443,9 @@ impl Run<'_, '_> {
         self.receipts
             .commit(self.lock, &receipt)
             .map_err(|error| error.to_string())?;
+        if let Some(progress) = self.progress {
+            progress.terminal(&receipt);
+        }
         Ok(receipt)
     }
 

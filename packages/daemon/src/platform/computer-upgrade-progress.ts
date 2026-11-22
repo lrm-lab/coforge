@@ -18,6 +18,7 @@ export const UPGRADE_PHASE_FILES = [
   "uncertain",
   "healthy",
   "receipt",
+  "recovery",
 ] as const;
 
 type UpgradeContext = {
@@ -148,37 +149,53 @@ export async function snapshotUpgradeBindings(
   );
 }
 
-export async function claimUpgradeActivation(
+export async function readUpgradeActivation(
   installRoot: string,
   currentVersion: string,
+  startedAt: number,
 ): Promise<UpgradeActivation | undefined> {
   const journal = await readUpgradeProgressFile<{ request_id: string; to: string }>(
     installerJournalPath(installRoot),
   );
-  if (!journal || journal.to !== currentVersion) return;
-  const attempt = await readLocalUpgradeContext(installRoot, journal.request_id);
+  const latest = journal
+    ? { requestId: journal.request_id }
+    : await readUpgradeProgressFile<{ requestId: string }>(
+        join(computerUpgradeProgressRoot(installRoot), "latest.json"),
+      );
+  if (!latest || (journal && journal.to !== currentVersion)) return;
+  const attempt = await readLocalUpgradeContext(installRoot, latest.requestId);
   if (!attempt || attempt.context.version !== currentVersion) return;
-  const activated = await readUpgradeProgressFile<{
-    kind: string;
-    generation: string;
-    version: string;
-  }>(join(attempt.directory, "activated.json"));
-  if (
-    activated?.kind !== "activated" ||
-    activated.generation !== attempt.context.generation ||
-    activated.version !== currentVersion
-  )
-    return;
-  const activation = {
-    observedUpgradeRequestId: journal.request_id,
+  type Marker = { kind: string; generation: string; version: string; at: number; outcome?: string };
+  const marker = (name: string) =>
+    readUpgradeProgressFile<Marker>(join(attempt.directory, `${name}.json`));
+  const [activated, receipt, recovery] = await Promise.all([
+    marker("activated"),
+    marker("receipt"),
+    marker("recovery"),
+  ]);
+  const matches = (value: Marker | undefined): value is Marker =>
+    value?.generation === attempt.context.generation &&
+    value.version === currentVersion &&
+    Number.isFinite(value.at);
+  if (!matches(activated) || activated.kind !== "activated" || activated.at >= startedAt) return;
+  const closed = [receipt, recovery]
+    .filter(matches)
+    .reduce(
+      (at, value) =>
+        value.kind === "receipt" &&
+        (value.outcome === "promoted" ||
+          value.outcome === "rolled_back" ||
+          value.outcome === "failed") &&
+        value.at >= activated.at
+          ? Math.min(at, value.at)
+          : at,
+      Infinity,
+    );
+  if ((!journal && closed === Infinity) || startedAt >= closed) return;
+  return {
+    observedUpgradeRequestId: latest.requestId,
     upgradeActivationGeneration: attempt.context.generation,
   };
-  try {
-    await writeUpgradeProgressFile(attempt.directory, "activation.json", activation, false);
-    return activation;
-  } catch {
-    return;
-  }
 }
 
 export async function recordInstallerBootstrapProgress(

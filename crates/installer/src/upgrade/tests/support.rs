@@ -81,3 +81,6 @@ pub(crate) fn script_running_upgrade(fixture: &Fixture, lifecycle: &FakeLifecycl
         vec![Some(stopped(NEW)), Some(running(NEW, "new-id"))],
     );
 }
+
+#[path = "progress.rs"]
+mod progress;

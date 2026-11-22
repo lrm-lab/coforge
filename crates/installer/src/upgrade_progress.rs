@@ -41,6 +41,22 @@ impl UpgradeProgress {
         self.write("activated", json!({ "kind": "activated" }));
     }
 
+    pub(crate) fn deactivate(&self) {
+        self.write("activated", json!({ "kind": "inactive" }));
+    }
+
+    pub(crate) fn recovered(&self, restored_version: Option<&str>, supervisor_running: bool) {
+        self.write(
+            "recovery",
+            json!({
+                "kind": "receipt",
+                "outcome": if restored_version.is_some() { "rolled_back" } else { "promoted" },
+                "oldProcesses": if supervisor_running { "verified" } else { "none" },
+                "restoredVersion": restored_version,
+            }),
+        );
+    }
+
     pub(crate) fn healthy(&self) {
         self.write("healthy", json!({ "kind": "healthy" }));
     }

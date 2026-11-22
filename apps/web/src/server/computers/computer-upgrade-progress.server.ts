@@ -108,22 +108,32 @@ function workspaceState(
   return { workspaceId, state: now < reconnectDeadline(record) ? "waiting" : "unconfirmed" };
 }
 
-function rolledBackVersion(record: Record) {
-  return record.receipts.find((receipt) => receipt.outcome === "rolled_back")?.restoredVersion;
+function rolledBackVersions(record: Record) {
+  return new Set(
+    record.receipts
+      .filter((receipt) => receipt.outcome === "rolled_back")
+      .map((receipt) => receipt.restoredVersion)
+      .filter((version) => version !== undefined),
+  );
 }
 
 function switchState(
   record: Record,
   targetOnline: boolean,
 ): ComputerUpgradeProgress["switchState"] {
-  const promoted = record.receipts.some((receipt) => receipt.outcome === "promoted");
-  const failed = record.receipts.find((receipt) => receipt.outcome !== "promoted");
-  if (failed && (promoted || targetOnline)) return "conflict";
-  if (failed?.outcome === "rolled_back") return "rolled_back";
-  if (failed?.outcome === "failed") return "failed";
-  if (failed?.outcome === "unresolved" || record.phase?.phase === "uncertain") return "uncertain";
+  const outcomes = new Set(
+    record.receipts.map((receipt) => receipt.outcome).filter((outcome) => outcome !== "unresolved"),
+  );
+  if (outcomes.size > 1) return "conflict";
+  if (outcomes.has("rolled_back"))
+    return targetOnline || rolledBackVersions(record).size > 1 ? "conflict" : "rolled_back";
+  if (outcomes.has("failed")) return targetOnline ? "conflict" : "failed";
+  if (!outcomes.size && (record.receipts.length || record.phase?.phase === "uncertain"))
+    return "uncertain";
   if (!targetOnline) return "pending";
-  return record.receipts.some((receipt) => receipt.oldProcesses !== "unknown")
+  return record.receipts.some(
+    (receipt) => receipt.outcome === "promoted" && receipt.oldProcesses !== "unknown",
+  )
     ? "confirmed"
     : "target_online";
 }
@@ -195,11 +205,17 @@ export class ComputerUpgradeProgressStore {
             result: "stored",
           };
         case "receipt":
+          if (evidence.outcome === "rolled_back" && evidence.restoredVersion) {
+            const versions = rolledBackVersions(record);
+            if (versions.size > 1 && !versions.has(evidence.restoredVersion))
+              return { record, result: "stored" };
+          }
           if (
             record.receipts.some(
               (receipt) =>
                 receipt.outcome === evidence.outcome &&
-                receipt.oldProcesses === evidence.oldProcesses,
+                receipt.oldProcesses === evidence.oldProcesses &&
+                receipt.restoredVersion === evidence.restoredVersion,
             )
           )
             return { record, result: "stored" };
@@ -211,9 +227,15 @@ export class ComputerUpgradeProgressStore {
     });
   }
 
-  async identifyReady(reporter: UpgradeReporter) {
+  async identifyReady(reporter: UpgradeReporter, generation: string) {
     const { record } = await this.load(reporter);
-    if (!record || this.now() >= reconnectDeadline(record)) return;
+    if (
+      !record ||
+      this.now() >= reconnectDeadline(record) ||
+      (record.snapshot && record.snapshot.generation !== generation) ||
+      record.ready.some((row) => sameBinding(row, reporter) && row.generation === generation)
+    )
+      return;
     const binding = record.bindings.find((row) => sameBinding(row, reporter));
     return binding?.previousWorkerId
       ? {
@@ -242,10 +264,7 @@ export class ComputerUpgradeProgressStore {
       if (now >= reconnectDeadline(record)) return { record, result: "expired" };
       if (
         record.ready.some(
-          (entry) =>
-            sameBinding(entry, evidence) &&
-            entry.generation === evidence.generation &&
-            entry.workerId === evidence.workerId,
+          (entry) => sameBinding(entry, evidence) && entry.generation === evidence.generation,
         )
       )
         return { record, result: "stored" };
@@ -263,7 +282,8 @@ export class ComputerUpgradeProgressStore {
     const { record } = await this.load(attempt);
     if (!record) return;
     const now = this.now();
-    const restoredVersion = rolledBackVersion(record);
+    const restoredVersions = rolledBackVersions(record);
+    const restoredVersion = restoredVersions.size === 1 ? [...restoredVersions][0] : undefined;
     const visible = new Set(visibleBindingIds);
     const workspaces = record.snapshot
       ? record.bindings

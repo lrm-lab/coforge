@@ -22,6 +22,7 @@ use crate::processes::VerifiedCaller;
 use crate::prune::prune_best_effort;
 use crate::receipts::ReceiptStore;
 use crate::switch::{ActiveSwitch, Plan, Ports, Target, refusal_inside_service};
+use crate::upgrade_progress::UpgradeProgress;
 
 /// How recovery ended, for the CLI to print and exit with.
 #[derive(Debug, PartialEq, Eq)]
@@ -89,6 +90,11 @@ pub fn recover(
             ));
         }
     };
+    let progress =
+        UpgradeProgress::open(ports.install_root, &transaction.request_id, &transaction.to);
+    if progress.is_some() && journal.record_switch(&lock, &transaction).is_err() {
+        return unresolved("the recovery journal commit could not be confirmed".to_owned());
+    }
     let succeeded = receipt
         .as_ref()
         .is_some_and(|receipt| receipt.status() == ReceiptStatus::Succeeded);
@@ -115,7 +121,14 @@ pub fn recover(
         switch.say(&format!(
             "Recovering the interrupted upgrade: settling on {to}"
         ));
-        match attempt(&mut switch, ports, &transaction, &to, &executables) {
+        match attempt(
+            &mut switch,
+            ports,
+            &transaction,
+            &to,
+            &executables,
+            progress.as_ref(),
+        ) {
             Ok(()) => {
                 if receipt.is_none()
                     && let Err(error) = commit(
@@ -131,6 +144,9 @@ pub fn recover(
                     return unresolved(format!(
                         "{to} is active, but its receipt could not be written: {error}"
                     ));
+                }
+                if let Some(progress) = &progress {
+                    progress.recovered(None, transaction.supervisor_running);
                 }
                 let outcome = finish(&journal, &lock, to.clone());
                 if matches!(outcome, RecoverOutcome::Recovered { .. }) {
@@ -153,7 +169,10 @@ pub fn recover(
             transaction.to
         ));
     };
-    if let Err(error) = attempt(&mut switch, ports, &transaction, &from, &executables) {
+    if let Some(progress) = &progress {
+        progress.deactivate();
+    }
+    if let Err(error) = attempt(&mut switch, ports, &transaction, &from, &executables, None) {
         return unresolved(format!("recovery to {from} failed: {error}"));
     }
     if receipt.is_none()
@@ -172,6 +191,9 @@ pub fn recover(
             "{from} was restored, but its receipt could not be written: {error}"
         ));
     }
+    if let Some(progress) = &progress {
+        progress.recovered(Some(&from), transaction.supervisor_running);
+    }
     finish(&journal, &lock, from)
 }
 
@@ -184,6 +206,7 @@ fn attempt(
     transaction: &Transaction,
     target: &str,
     executables: &[PathBuf],
+    progress: Option<&UpgradeProgress>,
 ) -> Result<(), String> {
     ports
         .store
@@ -203,13 +226,15 @@ fn attempt(
         replaces: None,
         drain_id: None,
     };
-    switch.switch(
+    switch.switch_with_progress(
         &Target {
             version: target,
             previous: previous.as_deref(),
             definition: definition.as_ref(),
         },
         &plan,
+        progress,
+        None,
     )
 }
 

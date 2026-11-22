@@ -220,6 +220,8 @@ export class RuntimeStartup {
       ports.stateDirectory,
       token,
       signal,
+      COFORGE_DAEMON_VERSION,
+      performance.timeOrigin,
     );
     const publications = new RuntimePublicationSubscriptions({
       ...ports.publications,
@@ -371,6 +373,7 @@ export class RuntimeStartup {
       await ports.agentControl.replay();
       await ports.agentSessions.replay();
       await ports.operatingSystem.read();
+      const upgradeActivation = await upgradeProgress?.activation;
       await transport.ready(
         () => {
           this.#readyWait?.attempt();
@@ -395,7 +398,7 @@ export class RuntimeStartup {
             ...ports.operatingSystem.current,
             recoveredRestartRequestIds: ports.lifecycle.recoveredRestartRequestIds ?? [],
             recoveredUpgradeRequestIds: ports.lifecycle.recoveredUpgradeRequestIds ?? [],
-            ...upgradeProgress?.activation,
+            ...upgradeActivation,
             capabilities: readyCapabilities(!!ports.publications.migration, !!this.#authControl),
           };
         },

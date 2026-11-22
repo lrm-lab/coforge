@@ -182,3 +182,74 @@ test("an installer commit with uncertain durability does not claim a switch or a
     workspaces: [],
   });
 });
+
+test("signed ready deduplicates a binding and generation across replacement processes", async () => {
+  const { store, snapshot } = await fixture();
+  await store.recordMachine(origin, snapshot);
+  expect(await store.identifyReady(other, generation)).toBeDefined();
+  await store.recordReady(other, confirmed);
+  expect(await store.identifyReady(other, generation)).toBeUndefined();
+  expect(await store.identifyReady(origin, generation)).toBeDefined();
+  await store.recordReady(other, {
+    ...confirmed,
+    workerId: "replacement",
+    readyRequestId: "another-request",
+    confirmedAt: confirmed.confirmedAt - 1,
+  });
+  expect((await store.read(origin, ["binding-b"]))?.workspaces).toEqual([
+    { workspaceId: "b", state: "restored", confirmedAt: confirmed.confirmedAt },
+  ]);
+});
+
+const receipt = {
+  kind: "receipt" as const,
+  generation,
+  version: "2.0.0",
+  oldProcesses: "unknown" as const,
+  at: 2_000,
+};
+
+for (const order of ["original-first", "recovery-first"] as const) {
+  test(`verified recovery supersedes unresolved evidence in ${order} order`, async () => {
+    const { store } = await fixture();
+    const original = { ...receipt, outcome: "unresolved" as const };
+    const recovery = {
+      ...receipt,
+      outcome: "rolled_back" as const,
+      oldProcesses: "verified" as const,
+      restoredVersion: "1.0.0",
+      at: 3_000,
+    };
+    if (order === "original-first") {
+      await store.recordMachine(origin, original);
+      expect((await store.read(origin, []))?.switchState).toBe("uncertain");
+      await store.recordMachine(origin, recovery);
+    } else {
+      await store.recordMachine(origin, recovery);
+      await store.recordMachine(origin, original);
+    }
+    expect(await store.read(origin, [])).toMatchObject({
+      switchState: "rolled_back",
+      restoredVersion: "1.0.0",
+    });
+    expect((await store.read(origin, [], true))?.switchState).toBe("conflict");
+    await store.recordMachine(origin, { ...recovery, restoredVersion: "1.1.0" });
+    const conflict = await store.read(origin, []);
+    expect(conflict?.switchState).toBe("conflict");
+    expect(conflict?.restoredVersion).toBeUndefined();
+  });
+}
+
+test("a recovered promotion can settle journal uncertainty with target online", async () => {
+  const { store } = await fixture();
+  await store.recordMachine(origin, { ...receipt, kind: "phase", phase: "uncertain" });
+  await store.recordMachine(origin, { ...receipt, outcome: "unresolved" });
+  await store.recordMachine(origin, {
+    ...receipt,
+    outcome: "promoted",
+    oldProcesses: "verified",
+    at: 3_000,
+  });
+  expect((await store.read(origin, []))?.switchState).toBe("pending");
+  expect((await store.read(origin, [], true))?.switchState).toBe("confirmed");
+});

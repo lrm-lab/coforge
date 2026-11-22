@@ -187,7 +187,10 @@ export async function issueComputerUpgradeReadyReceipt(
     bindingId: binding.id,
     requestId: observedUpgradeRequestId,
   };
-  const target = await getComputerUpgradeProgressStore().identifyReady(reporter);
+  const target = await getComputerUpgradeProgressStore().identifyReady(
+    reporter,
+    upgradeActivationGeneration,
+  );
   if (
     !target ||
     target.expectedVersion !== computerVersion ||

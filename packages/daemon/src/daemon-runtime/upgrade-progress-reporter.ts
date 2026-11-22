@@ -5,6 +5,7 @@ import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
   computerUpgradeProgressRoot,
+  readUpgradeActivation,
   readLocalUpgradeContext,
   readUpgradeProgressFile,
   UPGRADE_EVIDENCE_WINDOW_MS,
@@ -123,7 +124,6 @@ export class UpgradeProgressReporter {
           }))
         ) {
           for (const { name } of events) attempt.reported.add(name);
-          if (attempt.reported.has("receipt")) this.#attempts.delete(requestId);
         }
       }
     } finally {
@@ -166,11 +166,14 @@ export function startUpgradeProgressReporter(
   stateDirectory: string,
   apiKey: string,
   signal: AbortSignal,
+  version: string,
+  startedAt: number,
 ) {
   const { requestUpgrade } = lifecycle;
   if (!connection.serverHttpUrl || !requestUpgrade) return;
+  const installRoot = resolveComputerInstallDirectory();
   const reporter = new UpgradeProgressReporter({
-    installRoot: resolveComputerInstallDirectory(),
+    installRoot,
     stateDirectory,
     workspaceId: connection.workspaceId,
     endpoint: new URL("/api/daemon/computer-upgrade-progress", connection.serverHttpUrl),
@@ -178,12 +181,8 @@ export function startUpgradeProgressReporter(
     signal,
   });
   void reporter.resume(lifecycle.recoveredUpgradeRequestIds ?? []).catch(() => {});
-  const { observedUpgradeRequestId, upgradeActivationGeneration } = connection;
   return {
-    activation:
-      observedUpgradeRequestId && upgradeActivationGeneration
-        ? { observedUpgradeRequestId, upgradeActivationGeneration }
-        : undefined,
+    activation: readUpgradeActivation(installRoot, version, startedAt),
     acceptReceipt: (receipt: string) => {
       void reporter.acceptReceipt(receipt).catch(() => {});
     },

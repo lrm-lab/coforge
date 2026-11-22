@@ -3,6 +3,4 @@ export type DaemonConfig = {
   computerId: string;
   workspaceRoot: string;
   serverHttpUrl?: string;
-  observedUpgradeRequestId?: string;
-  upgradeActivationGeneration?: string;
 };
