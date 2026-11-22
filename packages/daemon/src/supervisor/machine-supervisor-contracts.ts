@@ -69,7 +69,7 @@ export interface WorkspaceProcesses {
     binding: ManagedBinding,
     options?: { signal?: AbortSignal; reconciling?: boolean },
   ): Promise<string>;
-  stop(binding: ManagedBinding): Promise<void>;
+  stop(binding: ManagedBinding, preserveRecovery?: true): Promise<void>;
   instance(binding: ManagedBinding): Promise<string | null>;
   /**
    * Asks one Workspace daemon to stop admitting new turns and reports which of its Agents are

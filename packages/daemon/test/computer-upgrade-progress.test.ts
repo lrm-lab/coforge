@@ -11,7 +11,7 @@ import {
 } from "../src/platform/computer-upgrade-progress";
 import { LocalDaemonLauncher } from "../src/daemon-host/launcher";
 import { DaemonConfigStore } from "../src/persistence/daemon-config";
-import { MachineSupervisor } from "../src/supervisor/machine-supervisor";
+import { MachineSupervisor, type ManagedBinding } from "../src/supervisor/machine-supervisor";
 import { workspaceUpgradeRecovery } from "../src/supervisor/workspace-upgrade-recovery";
 import { UpgradeProgressReporter } from "../src/daemon-runtime/upgrade-progress-reporter";
 
@@ -137,91 +137,145 @@ test("workspace processes can recover the same activation after a process exits 
   expect(await readUpgradeActivation(installRoot, version, completedAt - 1)).toBeUndefined();
 });
 
-test("only the failed binding can attest the supervised retry after Installer settlement", async () => {
-  const { installRoot, directory, context, requestId, version, stateDirectory } = await fixture();
-  const alpha = {
-    workspaceId: "alpha",
-    computerId: "computer",
-    workspaceRoot: stateDirectory,
-    enabled: true,
-  };
-  const beta = { ...alpha, workspaceId: "beta" };
-  const pathFor = (id: string) => join(stateDirectory, id);
-  const activation = {
-    observedUpgradeRequestId: requestId,
-    upgradeActivationGeneration: context.generation,
-  };
-  await mkdir(stateDirectory);
-  await writeFile(pathFor(beta.workspaceId), "blocked");
-  const evidence = { generation: context.generation, version, at: Date.now() - 10_000 };
-  await writeUpgradeProgressFile(installRoot, journalName, { request_id: requestId, to: version });
-  await writeUpgradeProgressFile(directory, "activated.json", { ...evidence, kind: "activated" });
-  await snapshotUpgradeBindings(installRoot, requestId, async () =>
-    [alpha, beta].map((binding) => ({
-      ...binding,
-      processId: 1,
-      instanceId: "previous",
-      version,
-    })),
-  );
-  const recovery = await workspaceUpgradeRecovery(installRoot, version, Date.now() - 1000);
-  const children = new Map<string, ReturnType<typeof spawnWorkspaceActivation>>();
-  const live = new Map<string, string>();
-  const supervisor = new MachineSupervisor(
-    { load: async () => [alpha, beta], save: async () => {} },
-    {
-      start(binding, options) {
-        const path = pathFor(binding.workspaceId);
-        return recovery.start(binding, options?.reconciling === true, path, async (arm) => {
-          await new DaemonConfigStore(path).save(binding);
-          await arm();
-          const child = spawnWorkspaceActivation(installRoot, version, path);
-          children.set(binding.workspaceId, child);
-          const launcher = new LocalDaemonLauncher({
-            executablePath: process.execPath,
-            socketPath: join(path, "daemon.sock"),
-            spawn: () => {},
-          });
-          const until = Date.now() + 3_000;
-          let identity;
-          while (!identity && Date.now() < until) {
-            identity = await launcher.identity(100).catch(() => undefined);
-            if (!identity) await Bun.sleep(25);
-          }
-          if (!identity || identity.processId !== child.pid) {
-            child.kill();
-            throw new Error("fixture Workspace handshake missing");
-          }
-          const { daemonId } = identity;
-          const invocationId = crypto.randomUUID();
-          live.set(binding.workspaceId, invocationId);
-          return { invocationId, daemonId, processId: child.pid };
-        });
-      },
-      stop: async () => {},
-      instance: async (binding) => live.get(binding.workspaceId) ?? null,
-    },
-  );
-  await expect(supervisor.recover()).rejects.toThrow("Workspace recovery incomplete");
-  expect(await workspaceActivationResult(children.get(alpha.workspaceId)!)).toEqual(activation);
-  expect(children.has(beta.workspaceId)).toBeFalse();
-  expect(recovery.pendingWorkspaceIds()).toEqual([beta.workspaceId]);
+for (const mode of [
+  "same Coordinator",
+  "restarted Coordinator",
+  "explicit stop",
+  "detach and rebind",
+] as const) {
+  test(`failed workspace recovery after Installer settlement with ${mode}`, async () => {
+    const { installRoot, directory, context, requestId, version, stateDirectory } = await fixture();
+    const alpha = {
+      workspaceId: "alpha",
+      computerId: "computer",
+      workspaceRoot: stateDirectory,
+      enabled: true,
+      serverHttpUrl: "https://fixture.example",
+    };
+    const beta = { ...alpha, workspaceId: "beta" };
+    const pathFor = (id: string) => join(stateDirectory, id);
+    const activation = {
+      observedUpgradeRequestId: requestId,
+      upgradeActivationGeneration: context.generation,
+    };
+    await mkdir(stateDirectory);
+    await writeFile(pathFor(beta.workspaceId), "blocked");
+    const evidence = { generation: context.generation, version, at: Date.now() - 10_000 };
+    await writeUpgradeProgressFile(installRoot, journalName, {
+      request_id: requestId,
+      to: version,
+    });
+    await writeUpgradeProgressFile(directory, "activated.json", { ...evidence, kind: "activated" });
+    await snapshotUpgradeBindings(installRoot, requestId, async () =>
+      [alpha, beta].map((binding) => ({
+        ...binding,
+        processId: 1,
+        instanceId: "previous",
+        version,
+      })),
+    );
+    const children = new Map<string, ReturnType<typeof spawnWorkspaceActivation>>();
+    let bindings: ManagedBinding[] = [alpha, beta];
+    async function createCoordinator(startedAt: number) {
+      const recovery = await workspaceUpgradeRecovery(installRoot, version, startedAt);
+      const live = new Map<string, string>();
+      const supervisor = new MachineSupervisor(
+        {
+          load: async () => bindings,
+          save: async (next) => {
+            bindings = next;
+          },
+        },
+        {
+          start(binding, options) {
+            const path = pathFor(binding.workspaceId);
+            return recovery.start(binding, options?.reconciling === true, async (arm) => {
+              await new DaemonConfigStore(path).save(binding);
+              await arm();
+              const child = spawnWorkspaceActivation(installRoot, version, path);
+              children.set(binding.workspaceId, child);
+              const launcher = new LocalDaemonLauncher({
+                executablePath: process.execPath,
+                socketPath: join(path, "daemon.sock"),
+                spawn: () => {},
+              });
+              const until = Date.now() + 3_000;
+              let identity;
+              while (!identity && Date.now() < until) {
+                identity = await launcher.identity(100).catch(() => undefined);
+                if (!identity) await Bun.sleep(25);
+              }
+              if (!identity || identity.processId !== child.pid) {
+                child.kill();
+                throw new Error("fixture Workspace handshake missing");
+              }
+              const { daemonId } = identity;
+              const invocationId = crypto.randomUUID();
+              live.set(binding.workspaceId, invocationId);
+              return { invocationId, daemonId, processId: child.pid };
+            });
+          },
+          async stop(binding, preserve) {
+            await recovery.discard(binding.workspaceId, preserve);
+            live.delete(binding.workspaceId);
+          },
+          instance: async (binding) => live.get(binding.workspaceId) ?? null,
+        },
+      );
+      return { supervisor, recovery };
+    }
+    const { supervisor, recovery } = await createCoordinator(Date.now() - 1000);
+    await expect(supervisor.recover()).rejects.toThrow("Workspace recovery incomplete");
+    expect(await workspaceActivationResult(children.get(alpha.workspaceId)!)).toEqual(activation);
+    expect(children.has(beta.workspaceId)).toBeFalse();
+    expect(recovery.pendingWorkspaceIds()).toEqual([beta.workspaceId]);
 
-  const settled = { ...evidence, at: Date.now() };
-  await writeUpgradeProgressFile(directory, "healthy.json", { ...settled, kind: "healthy" });
-  await writeUpgradeProgressFile(directory, "receipt.json", {
-    ...settled,
-    kind: "receipt",
-    outcome: "promoted",
+    const settled = { ...evidence, at: Date.now() };
+    await writeUpgradeProgressFile(directory, "healthy.json", { ...settled, kind: "healthy" });
+    await writeUpgradeProgressFile(directory, "receipt.json", {
+      ...settled,
+      kind: "receipt",
+      outcome: "promoted",
+    });
+    await rm(join(installRoot, journalName));
+    await rm(pathFor(beta.workspaceId));
+    if (mode === "same Coordinator") {
+      await supervisor.reconcile(recovery.pendingWorkspaceIds());
+      expect(await workspaceActivationResult(children.get(beta.workspaceId)!)).toEqual(activation);
+      expect(recovery.pendingWorkspaceIds()).toEqual([]);
+    } else {
+      if (mode === "explicit stop") await supervisor.command("stop", beta.workspaceId);
+      if (mode === "detach and rebind") {
+        const detached = await supervisor.detach(beta.workspaceId, {
+          credentials: { load: async () => "fixture", delete: async () => {} },
+          makeSelfClient: () => ({ detach: async () => ({ ok: true, value: "key_revoked" }) }),
+        });
+        expect(detached.detached).toBeTrue();
+      }
+      await supervisor.shutdown();
+      const restarted = await createCoordinator(Date.now());
+      await restarted.supervisor.recover();
+      expect(await workspaceActivationResult(children.get(alpha.workspaceId)!)).toBeNull();
+      if (mode === "explicit stop") {
+        expect(children.has(beta.workspaceId)).toBeFalse();
+        await restarted.supervisor.command("start", beta.workspaceId);
+      }
+      if (mode === "detach and rebind") {
+        expect(children.has(beta.workspaceId)).toBeFalse();
+        await restarted.supervisor.configure(beta);
+      }
+      const betaActivation = await workspaceActivationResult(children.get(beta.workspaceId)!);
+      expect(betaActivation).toEqual(mode === "restarted Coordinator" ? activation : null);
+      expect(restarted.recovery.pendingWorkspaceIds()).toEqual([]);
+    }
+    expect(
+      await runWorkspaceActivation(installRoot, version, pathFor(alpha.workspaceId)),
+    ).toBeNull();
+    expect(
+      await runWorkspaceActivation(installRoot, version, pathFor(beta.workspaceId)),
+    ).toBeNull();
   });
-  await rm(join(installRoot, journalName));
-  await rm(pathFor(beta.workspaceId));
-  await supervisor.reconcile(recovery.pendingWorkspaceIds());
-  expect(await workspaceActivationResult(children.get(beta.workspaceId)!)).toEqual(activation);
-  expect(recovery.pendingWorkspaceIds()).toEqual([]);
-  expect(await runWorkspaceActivation(installRoot, version, pathFor(alpha.workspaceId))).toBeNull();
-  expect(await runWorkspaceActivation(installRoot, version, pathFor(beta.workspaceId))).toBeNull();
-});
+}
 
 test("the drain snapshot preserves running, stopped and unconfirmed workspaces", async () => {
   const { installRoot, directory, requestId, workspaceId, version } = await fixture();

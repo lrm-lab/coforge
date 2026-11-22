@@ -236,8 +236,8 @@ async function runWithSupervisorLock(
         startPorts,
         upgradeRecovery,
       }),
-      async stop(binding) {
-        upgradeRecovery.discard(binding.workspaceId);
+      async stop(binding, preserve) {
+        await upgradeRecovery.discard(binding.workspaceId, preserve);
         const child = adoptions.get(binding.workspaceId);
         // Includes recovery after enabled=false was persisted but OS stop was interrupted.
         // systemd sends SIGTERM to the Workspace main, then kills residual cgroup members.

@@ -293,7 +293,7 @@ export class MachineSupervisor {
   }
 
   shutdown() {
-    return stopEveryBinding(this.#commandOps);
+    return stopEveryBinding({ ...this.#commandOps, stop: (binding) => this.#stop(binding, true) });
   }
 
   async #reconcileBindings(workspaceIds?: readonly string[]): Promise<void> {
@@ -368,8 +368,8 @@ export class MachineSupervisor {
     this.#instances.set(binding.workspaceId, instanceId);
     return instanceId;
   }
-  async #stop(binding: ManagedBinding) {
-    await this.processes.stop(binding);
+  async #stop(binding: ManagedBinding, preserveRecovery?: true) {
+    await this.processes.stop(binding, preserveRecovery);
     this.#instances.delete(binding.workspaceId);
   }
 
