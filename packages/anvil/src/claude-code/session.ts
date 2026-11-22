@@ -11,7 +11,7 @@ import { AGENT_RUNTIME_EVENT_TYPE } from "#src/contract";
 import { InterruptTracker } from "#src/interrupt-tracker";
 import { asRecord, eventTime } from "#src/json-record";
 import type { JsonlProcess } from "#src/jsonl-process";
-import type { SessionState, SessionInitialization, PendingNotice } from "./session-state";
+import { ClaudeNoticeQueue, type SessionState, type SessionInitialization } from "./session-state";
 import { initializeClaudeSession } from "./initialize";
 import { compactBoundaryTokens } from "./compact-boundary";
 import { ClaudeStreamEvents } from "./stream-events";
@@ -19,7 +19,7 @@ import { claudeAssistantEvents, claudeRefusalEvent, claudeToolResults } from "./
 import { ClaudeSubagentLineage } from "./subagent-lineage";
 import { ClaudeRateLimitState } from "./rate-limit";
 import { ClaudeSessionObservations } from "./observations";
-import { isClaudeMissingSessionLine, isClaudeMissingSessionResult } from "./resume-diagnostics";
+import { observeClaudeProcess } from "./process-observation";
 import { relayTaskLifecycle, taskProgressEvent, type TrackedTask } from "./task-lifecycle";
 import { SessionExit } from "#src/session-exit";
 
@@ -53,10 +53,9 @@ export class ClaudeCodeAgentSession implements AgentSession {
   readonly #subagentLineage = new ClaudeSubagentLineage();
   #nextSubagentStop = 0;
   readonly #streamEvents: ClaudeStreamEvents;
-  #inputFailure: Error | undefined;
   #recoveryFailed = false;
   readonly #outstandingTools = new Set<string>();
-  readonly #waitingNotices: PendingNotice[] = [];
+  readonly #notices = new ClaudeNoticeQueue();
   readonly #rateLimits = new ClaudeRateLimitState();
   readonly #observations: ClaudeSessionObservations;
   #interrupt = new InterruptTracker();
@@ -87,75 +86,49 @@ export class ClaudeCodeAgentSession implements AgentSession {
   }
 
   #bindProcess(process: JsonlProcess): void {
-    let missing = false;
-    let otherDiagnostic = false;
-    let failure: Error | undefined;
-    process.onStderr((line) => {
-      if (this.expectedSessionId && isClaudeMissingSessionLine(line, this.expectedSessionId))
-        missing = true;
-      else if (line.trim()) otherDiagnostic = true;
-    });
-    process.onRecord((record) => {
-      if (this.#process !== process) return;
-      if (
-        this.expectedSessionId &&
-        !this.#progressObserved &&
-        !this.#recoveryFailed &&
-        isClaudeMissingSessionResult(record, this.expectedSessionId)
-      ) {
-        missing = true;
-        return;
-      }
-      this.#accept(record);
-    });
-    process.onFailure((error) => {
-      failure = error;
-      if (error.message !== "code agent process exited unexpectedly") {
+    observeClaudeProcess(process, this.expectedSessionId, {
+      isCurrent: () => this.#process === process,
+      beforeProgress: () => !this.#progressObserved && !this.#recoveryFailed,
+      accept: (record) => this.#accept(record),
+      onFailure: (error) => {
         this.#interrupt.fail(error);
-        this.#rejectWaitingNotices(error);
+        this.#notices.reject(error);
         this.#emit({ type: "error", message: error.message });
-      }
+      },
+      recoverMissingSession: () => this.#recoverMissingSession(),
+      onClose: (exit, failure) => this.#handleProcessClose(exit, failure),
     });
-    process.onClose((exit) => {
-      if (this.#process !== process) return;
-      if (
-        missing &&
-        !otherDiagnostic &&
-        failure?.message === "code agent process exited unexpectedly" &&
-        this.expectedSessionId &&
-        !this.#replacedSessionId &&
-        !this.#progressObserved &&
-        !this.#recoveryFailed &&
-        this.#state !== "disposed" &&
-        this.spawnFresh
-      ) {
-        this.#replacedSessionId = this.expectedSessionId;
-        this.expectedSessionId = undefined;
-        this.#initialized = false;
-        this.#nativeIdentityObserved = false;
-        void this.#startFresh().catch((error: unknown) => {
-          this.#rejectWaitingNotices(error instanceof Error ? error : new Error(String(error)));
-          this.#emit({ type: "error", message: "Claude fresh session launch failed" });
-          void this.dispose().catch(() => undefined);
-        });
-        return;
-      }
-      if (failure && this.#state !== "disposed") {
-        // Every close reaches here through the same sentinel message,
-        // whether the process was disposed intentionally or not; only the
-        // "not disposed" branch above already excludes a requested stop.
-        // Whether this reads as a crash (vs. an ordinary error) is the
-        // daemon core's call, made from this fact at the moment the process
-        // actually exits (agent-runtime/runtime-error-activity.ts).
-        this.#emit({ type: "error", message: failure.message });
-      }
-      this.#interrupt.fail(failure ?? new Error("code agent process closed during interrupt"));
-      this.#rejectWaitingNotices(new Error("code agent process closed before writing input"));
-      // Fire and forget: the close path has nothing to do with a cleanup failure, and `dispose`
-      // awaits the same removal and reports it.
-      void this.#removePrompt().catch(() => {});
-      this.#finishClose(exit);
+  }
+
+  #recoverMissingSession(): boolean {
+    if (
+      !this.expectedSessionId ||
+      this.#replacedSessionId ||
+      this.#progressObserved ||
+      this.#recoveryFailed ||
+      this.#state === "disposed" ||
+      !this.spawnFresh
+    )
+      return false;
+    this.#replacedSessionId = this.expectedSessionId;
+    this.expectedSessionId = undefined;
+    this.#initialized = false;
+    this.#nativeIdentityObserved = false;
+    void this.#startFresh().catch((error: unknown) => {
+      this.#notices.reject(error instanceof Error ? error : new Error(String(error)));
+      this.#emit({ type: "error", message: "Claude fresh session launch failed" });
+      void this.dispose().catch(() => undefined);
     });
+    return true;
+  }
+
+  #handleProcessClose(exit: AgentSessionExit | undefined, failure: Error | undefined): void {
+    if (failure && this.#state !== "disposed")
+      this.#emit({ type: "error", message: failure.message });
+    this.#interrupt.fail(failure ?? new Error("code agent process closed during interrupt"));
+    this.#notices.reject(new Error("code agent process closed before writing input"));
+    void this.#removePrompt().catch(() => {});
+    this.#finishClose(exit);
   }
 
   async #startFresh(): Promise<void> {
@@ -217,7 +190,7 @@ export class ClaudeCodeAgentSession implements AgentSession {
   }
 
   async #sendInput(text: string): Promise<void> {
-    if (this.#inputFailure) throw this.#inputFailure;
+    this.#notices.throwIfFailed();
     this.#firstInput ??= text;
     // Reserve the turn before writing; a native result can arrive during flush.
     if (this.#state === "idle") this.#beginNativeTurn();
@@ -232,7 +205,7 @@ export class ClaudeCodeAgentSession implements AgentSession {
   }
 
   async notify(notice: string): Promise<void> {
-    if (this.#inputFailure) throw this.#inputFailure;
+    this.#notices.throwIfFailed();
     if (this.#state === "disposed" || this.#state === "interrupting") {
       throw new Error("code agent cannot accept a notification");
     }
@@ -242,9 +215,7 @@ export class ClaudeCodeAgentSession implements AgentSession {
     }
     // Do not inject into an arbitrary thinking/tool execution instant. Only a
     // native tool-batch, compact, or result boundary drains these pending calls.
-    await new Promise<void>((resolve, reject) => {
-      this.#waitingNotices.push({ text: notice, resolve, reject });
-    });
+    await this.#notices.enqueue(notice);
   }
 
   subscribe(listener: (event: AgentRuntimeEvent) => void): () => void {
@@ -292,7 +263,7 @@ export class ClaudeCodeAgentSession implements AgentSession {
   async dispose(options?: Readonly<{ cutoffAtMs?: number }>): Promise<void> {
     if (this.#state === "disposed") return;
     this.#state = "disposed";
-    this.#rejectWaitingNotices(new Error("code agent process closed before writing input"));
+    this.#notices.reject(new Error("code agent process closed before writing input"));
     this.#interrupt.fail(new Error("code agent process closed"));
     try {
       await this.#process.dispose(options);
@@ -458,13 +429,12 @@ export class ClaudeCodeAgentSession implements AgentSession {
   }
 
   #flushNotices(): void {
-    if (this.#inputFailure || this.#state === "disposed" || this.#state === "interrupting") return;
+    if (this.#notices.failed || this.#state === "disposed" || this.#state === "interrupting")
+      return;
     if (!this.#sessionReadyForNotices || this.#compacting || this.#outstandingTools.size > 0)
       return;
     // Written acceptance, not confirmation of model processing.
-    for (const notice of this.#waitingNotices.splice(0)) {
-      void this.#sendInput(notice.text).then(notice.resolve, notice.reject);
-    }
+    this.#notices.flush((text) => this.#sendInput(text));
   }
 
   #emit(event: AgentRuntimeEvent): void {
@@ -502,14 +472,9 @@ export class ClaudeCodeAgentSession implements AgentSession {
         : "Claude did not establish a valid session identity",
     );
     this.#recoveryFailed = true;
-    this.#rejectWaitingNotices(error);
+    this.#notices.reject(error);
     this.#emit({ type: "error", message: error.message });
     // Never block the event reader on process-tree cleanup.
     void this.dispose().catch(() => undefined);
-  }
-
-  #rejectWaitingNotices(error: Error): void {
-    this.#inputFailure ??= error;
-    for (const notice of this.#waitingNotices.splice(0)) notice.reject(error);
   }
 }
