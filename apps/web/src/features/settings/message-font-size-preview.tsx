@@ -16,11 +16,6 @@ const SAMPLE_MENTIONS = new Map<string, ChipMention>([
 ]);
 const noop = () => {};
 
-/**
- * One message as the stream draws it, sent by the viewer, so Settings → Message font size shows
- * the body, a mention, a channel chip and inline code at the chosen size. It is a picture, not a
- * message: inert, and drawn only after hydration because its time is the viewer's clock.
- */
 export function MessageFontSizePreview({
   senderName,
   senderAvatarUrl,
@@ -44,7 +39,11 @@ export function MessageFontSizePreview({
   );
   if (!hydrated) return null;
   return (
-    <ul inert aria-label={m.preferences_message_font_size_preview()} className="-mx-4 md:-mx-6">
+    <ul
+      inert
+      aria-label={m.preferences_message_font_size_preview()}
+      className="-mx-4 md:-mx-6 [&_.message-markdown-channel-reference]:[direction:ltr] [&_.message-markdown-channel-reference]:[unicode-bidi:isolate] [&_.message-markdown-mention]:[direction:ltr] [&_.message-markdown-mention]:[unicode-bidi:isolate]"
+    >
       <MessageRow
         message={message}
         own={false}

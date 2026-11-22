@@ -25,7 +25,10 @@ import {
 import { m } from "#src/paraglide/messages";
 import type { SettingsContentProps } from "./settings-content";
 
-/** Settings → Preferences: how this device shows the app. */
+const BUTTON_GROUP_RESPONSIVE_CLASS = "max-w-full flex-wrap";
+const BUTTON_GROUP_ITEM_RTL_CLASS =
+  "rtl:first:rounded-l-none rtl:first:rounded-s-lg rtl:last:rounded-r-none rtl:last:rounded-e-lg";
+
 export function PreferencesSettings({
   profile,
   theme,
@@ -65,6 +68,7 @@ export function PreferencesSettings({
             <ButtonGroup
               aria-label={m.preferences_appearance()}
               size="sm"
+              className={BUTTON_GROUP_RESPONSIVE_CLASS}
               selectedKeys={[theme]}
               disallowEmptySelection
               onSelectionChange={(keys) => {
@@ -72,13 +76,17 @@ export function PreferencesSettings({
                 if (next !== undefined) onThemeChange(String(next) as typeof theme);
               }}
             >
-              <ButtonGroupItem id="system" iconLeading={SunMoon}>
+              <ButtonGroupItem
+                id="system"
+                iconLeading={SunMoon}
+                className={BUTTON_GROUP_ITEM_RTL_CLASS}
+              >
                 {m.preferences_system()}
               </ButtonGroupItem>
-              <ButtonGroupItem id="light" iconLeading={Sun}>
+              <ButtonGroupItem id="light" iconLeading={Sun} className={BUTTON_GROUP_ITEM_RTL_CLASS}>
                 {m.preferences_light()}
               </ButtonGroupItem>
-              <ButtonGroupItem id="dark" iconLeading={Moon}>
+              <ButtonGroupItem id="dark" iconLeading={Moon} className={BUTTON_GROUP_ITEM_RTL_CLASS}>
                 {m.preferences_dark()}
               </ButtonGroupItem>
             </ButtonGroup>
@@ -92,6 +100,7 @@ export function PreferencesSettings({
             <ButtonGroup
               aria-label={m.preferences_message_font_size()}
               size="sm"
+              className={BUTTON_GROUP_RESPONSIVE_CLASS}
               selectedKeys={[messageFontSize]}
               disallowEmptySelection
               onSelectionChange={(keys) => {
@@ -100,7 +109,7 @@ export function PreferencesSettings({
               }}
             >
               {MESSAGE_FONT_SIZES.map((size) => (
-                <ButtonGroupItem key={size} id={size}>
+                <ButtonGroupItem key={size} id={size} className={BUTTON_GROUP_ITEM_RTL_CLASS}>
                   {messageFontSizeLabels[size]}
                 </ButtonGroupItem>
               ))}
@@ -117,36 +126,42 @@ export function PreferencesSettings({
             label={m.preferences_show_agent_model()}
             description={m.preferences_show_agent_model_description()}
           >
-            <Toggle
-              size="md"
-              aria-label={m.preferences_show_agent_model()}
-              isSelected={showAgentModel}
-              onChange={setShowAgentModel}
-            />
+            <span dir="ltr" className="inline-flex">
+              <Toggle
+                size="md"
+                aria-label={m.preferences_show_agent_model()}
+                isSelected={showAgentModel}
+                onChange={setShowAgentModel}
+              />
+            </span>
           </SettingsField>
           <SettingsField
             inline
             label={m.preferences_live_agent_activity()}
             description={m.preferences_live_agent_activity_description()}
           >
-            <Toggle
-              size="md"
-              aria-label={m.preferences_live_agent_activity()}
-              isSelected={liveAgentActivity}
-              onChange={setLiveAgentActivity}
-            />
+            <span dir="ltr" className="inline-flex">
+              <Toggle
+                size="md"
+                aria-label={m.preferences_live_agent_activity()}
+                isSelected={liveAgentActivity}
+                onChange={setLiveAgentActivity}
+              />
+            </span>
           </SettingsField>
           <SettingsField
             inline
             label={m.preferences_hide_empty_sidebar_sections()}
             description={m.preferences_hide_empty_sidebar_sections_description()}
           >
-            <Toggle
-              size="md"
-              aria-label={m.preferences_hide_empty_sidebar_sections()}
-              isSelected={hideEmptySidebarSections}
-              onChange={onHideEmptySidebarSectionsChange}
-            />
+            <span dir="ltr" className="inline-flex">
+              <Toggle
+                size="md"
+                aria-label={m.preferences_hide_empty_sidebar_sections()}
+                isSelected={hideEmptySidebarSections}
+                onChange={onHideEmptySidebarSectionsChange}
+              />
+            </span>
           </SettingsField>
         </SettingsCard>
       </SettingsGroup>
@@ -158,12 +173,14 @@ export function PreferencesSettings({
             label={m.preferences_message_full_width()}
             description={m.preferences_message_full_width_description()}
           >
-            <Toggle
-              size="md"
-              aria-label={m.preferences_message_full_width()}
-              isSelected={messageFullWidth}
-              onChange={onMessageFullWidthChange}
-            />
+            <span dir="ltr" className="inline-flex">
+              <Toggle
+                size="md"
+                aria-label={m.preferences_message_full_width()}
+                isSelected={messageFullWidth}
+                onChange={onMessageFullWidthChange}
+              />
+            </span>
           </SettingsField>
         </SettingsCard>
       </SettingsGroup>

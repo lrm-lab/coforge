@@ -164,7 +164,6 @@ export function NotificationSettingsPanel({
   async function save(changes: Changes) {
     if (saving || !loaded) return;
     setSaving(true);
-    // Shown at once; the server's answer (or a re-read) settles it.
     queryClient.setQueryData<Loaded>(SETTINGS_KEY, (current) =>
       current ? { ...current, settings: { ...current.settings, ...changes } } : current,
     );
@@ -188,8 +187,6 @@ export function NotificationSettingsPanel({
   const paused = settings.pausedUntil && new Date(settings.pausedUntil) > new Date();
   const quiet = settings.quietHours;
   const here = devices.find((device) => device.current);
-  // Said once, under this device's row: also before an iPhone or iPad has a subscription, whose
-  // pushes would come from Apple whatever the browser (its usual hint would lead nowhere).
   const unreachable = here
     ? here.unreachablePushService &&
       (here.unreachablePushService === "apple" && here.deviceKind === "mobile"
@@ -221,8 +218,6 @@ export function NotificationSettingsPanel({
               here ? deliveryLine(here) : unreachable ? undefined : m.notif_this_device_none_hint()
             }
           >
-            {/* Only where a test can reach: a greyed button beside "this browser can't get
-                notifications yet" read as one that did nothing when pressed (task #688). */}
             {enabled && here && (
               <Button
                 size="sm"
@@ -330,15 +325,16 @@ export function NotificationSettingsPanel({
             label={m.notif_quiet_title()}
             description={m.notif_quiet_description()}
           >
-            <Toggle
-              size="md"
-              aria-label={m.notif_quiet_title()}
-              isSelected={quiet.enabled}
-              isDisabled={saving}
-              onChange={(enabled) => void save({ quietHours: { ...quiet, enabled } })}
-            />
+            <span dir="ltr" className="inline-flex">
+              <Toggle
+                size="md"
+                aria-label={m.notif_quiet_title()}
+                isSelected={quiet.enabled}
+                isDisabled={saving}
+                onChange={(enabled) => void save({ quietHours: { ...quiet, enabled } })}
+              />
+            </span>
           </SettingsField>
-          {/* The zone quiet hours read is the one "Language and region" sets; it opens there. */}
           <p className="-mt-3 text-sm text-tertiary">
             {m.notif_time_zone_label()}
             <Link
@@ -365,7 +361,6 @@ export function NotificationSettingsPanel({
                     onChange={(key) => {
                       const minute = Number(key);
                       const other = end === "startMinute" ? quiet.endMinute : quiet.startMinute;
-                      // The window needs two ends; picking the other one's time leaves it as is.
                       if (Number.isInteger(minute) && minute !== other)
                         void save({ quietHours: { ...quiet, [end]: minute } });
                     }}
@@ -389,6 +384,7 @@ export function NotificationSettingsPanel({
             <ButtonGroup
               aria-label={m.notif_preview_title()}
               size="sm"
+              className="max-w-full flex-wrap"
               selectedKeys={[settings.previewMode]}
               disallowEmptySelection
               isDisabled={saving}
@@ -398,7 +394,11 @@ export function NotificationSettingsPanel({
               }}
             >
               {NOTIFICATION_PREVIEW_MODES.map((mode) => (
-                <ButtonGroupItem key={mode} id={mode}>
+                <ButtonGroupItem
+                  key={mode}
+                  id={mode}
+                  className="rtl:first:rounded-l-none rtl:first:rounded-s-lg rtl:last:rounded-r-none rtl:last:rounded-e-lg"
+                >
                   {PREVIEW_LABELS[mode]()}
                 </ButtonGroupItem>
               ))}
@@ -409,13 +409,15 @@ export function NotificationSettingsPanel({
             label={m.notif_sound_title()}
             description={m.notif_sound_description()}
           >
-            <Toggle
-              size="md"
-              aria-label={m.notif_sound_title()}
-              isSelected={settings.sound}
-              isDisabled={saving}
-              onChange={(sound) => void save({ sound })}
-            />
+            <span dir="ltr" className="inline-flex">
+              <Toggle
+                size="md"
+                aria-label={m.notif_sound_title()}
+                isSelected={settings.sound}
+                isDisabled={saving}
+                onChange={(sound) => void save({ sound })}
+              />
+            </span>
           </SettingsField>
           <SettingsField label={m.notif_mobile_title()} description={m.notif_mobile_description()}>
             <Select
