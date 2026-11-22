@@ -37,7 +37,10 @@ export class OpenCodeAcpProvider implements CodeAgentProvider {
         "OpenCode cannot start because OPENCODE_CONFIG_CONTENT is already set. CoForge will not overwrite it.",
       );
     }
-    const instructions = await createOpenCodeInstructions(options.instructions);
+    const instructions = await createOpenCodeInstructions(
+      options.instructions,
+      options.agentWorkspaceDirectory,
+    );
     try {
       return await createOpenCodeAcpSession(
         options,

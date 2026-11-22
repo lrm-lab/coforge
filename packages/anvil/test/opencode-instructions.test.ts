@@ -100,6 +100,53 @@ test("a resumed session carries instructions on the process that loads it", asyn
   }
 });
 
+test("reusing the same workspace and instructions keeps a stable path across resumes and concurrent sessions", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "opencode-instructions-stable-"));
+  const log1 = join(directory, "rpc1.jsonl");
+  const log2 = join(directory, "rpc2.jsonl");
+  const log3 = join(directory, "rpc3.jsonl");
+  const first = await provider(log1).createAgentSession({
+    agentWorkspaceDirectory: directory,
+    instructions: INSTRUCTIONS,
+  } as never);
+  const second = await provider(log2).createAgentSession({
+    agentWorkspaceDirectory: directory,
+    instructions: INSTRUCTIONS,
+    sessionId: "session-existing",
+  } as never);
+  const changed = await provider(log3).createAgentSession({
+    agentWorkspaceDirectory: directory,
+    instructions: `${INSTRUCTIONS}\nUpdated.\n`,
+    sessionId: "session-existing",
+  } as never);
+  let path1 = "";
+  let path2 = "";
+  let path3 = "";
+  try {
+    path1 =
+      (JSON.parse(await readConfigContent(log1)) as { instructions?: string[] })
+        .instructions?.[0] ?? "";
+    path2 =
+      (JSON.parse(await readConfigContent(log2)) as { instructions?: string[] })
+        .instructions?.[0] ?? "";
+    path3 =
+      (JSON.parse(await readConfigContent(log3)) as { instructions?: string[] })
+        .instructions?.[0] ?? "";
+    expect(path2).toBe(path1);
+    expect(path3).not.toBe(path1);
+    await first.dispose();
+    expect(await Bun.file(path1).exists()).toBe(true);
+    await second.dispose();
+    expect(await Bun.file(path1).exists()).toBe(false);
+  } finally {
+    await first.dispose();
+    await second.dispose();
+    await changed.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+  expect(await Bun.file(path3).exists()).toBe(false);
+});
+
 test("an Agent environment that already sets OPENCODE_CONFIG_CONTENT is refused", async () => {
   const directory = await mkdtemp(join(tmpdir(), "opencode-instructions-declared-"));
   try {

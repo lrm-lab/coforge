@@ -90,3 +90,27 @@ test("a symlinked rules directory is refused", async () => {
     await rm(elsewhere, { recursive: true, force: true });
   }
 });
+
+test("identical instructions reuse a stable rule path and reference-count concurrent sessions", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "anvil-devin-rules-stable-"));
+  try {
+    const first = await createDevinRuleFile(cwd, "Stay brief.\n");
+    const second = await createDevinRuleFile(cwd, "Stay brief.\n");
+    const changed = await createDevinRuleFile(cwd, "Stay detailed.\n");
+    try {
+      expect(second.path).toBe(first.path);
+      expect(changed.path).not.toBe(first.path);
+      await first.remove();
+      expect(await Bun.file(first.path).exists()).toBe(true);
+      await second.remove();
+      expect(await Bun.file(first.path).exists()).toBe(false);
+    } finally {
+      await first.remove();
+      await second.remove();
+      await changed.remove();
+    }
+    expect(await Bun.file(changed.path).exists()).toBe(false);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});

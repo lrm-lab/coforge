@@ -17,12 +17,13 @@
   config. This matches the full-access policy every other CoForge runtime runs under (Codex uses
   `danger-full-access` with `approvalPolicy: "never"`); `ask`/`plan` are not offered.
 - Devin has no system-prompt field on ACP. Standing instructions go into a private
-  `.devin/rules/coforge-runtime-<uuid>.md` in the Agent workspace with `trigger: always_on`
-  (Devin CLI docs, "Rules & AGENTS.md"). A project `AGENTS.md` is never edited, and a symlinked
-  `.devin/rules` is refused. The file is removed on dispose and on process-exit cleanup. Each open
-  sweeps CoForge rule files a crashed daemon left behind: older than 60 seconds and not held by a
-  session of this process. Devin loads every always-on rule in the directory, so two concurrent
-  sessions of one Agent each also see the other's (identical-source) instructions.
+  `.devin/rules/coforge-runtime-<hash>.md` in the Agent workspace with `trigger: always_on`
+  (Devin CLI docs, "Rules & AGENTS.md"), hashed from the instruction content so resumed sessions
+  keep a stable path and concurrent sessions with identical instructions share one ref-counted file.
+  A project `AGENTS.md` is never edited, and a symlinked `.devin/rules` or rule file is refused. The
+  file is removed when its last open session disposes and on process-exit cleanup. Each open sweeps
+  CoForge rule files a crashed daemon left behind: older than 60 seconds and not held by a session
+  of this process.
 - No usage scan. Devin documents ACU billing and an enterprise Cost dashboard
   (`enterprise/devin-auth.mdx`); the CLI and ACP expose per-turn token usage only, no account quota.
   `RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN[devin]` stays false rather than inventing a reading.

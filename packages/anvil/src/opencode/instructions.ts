@@ -1,28 +1,81 @@
 import type { AgentSessionOptions } from "@coforge/agent";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { chmod, lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-/** Inline OpenCode config. It is not the CLI's own `OPENCODE_CLI_CONFIG_CONTENT`. */
 export const OPENCODE_CONFIG_CONTENT_ENV = "OPENCODE_CONFIG_CONTENT";
 
 export interface OpenCodeInstructions {
   readonly directory: string;
   readonly path: string;
-  /** `{instructions:[absolute path]}` for `OPENCODE_CONFIG_CONTENT`. */
   readonly configContent: string;
   remove(): Promise<void>;
 }
 
-/**
- * Private instructions file for one session. The directory is 0700 and the file is 0600.
- * `remove` deletes the directory. Nothing is written into the Agent workspace or the user's
- * OpenCode config.
- */
+const liveInstructionRefs = new Map<string, number>();
+
+async function isOwnedPrivateDirectory(directory: string): Promise<boolean> {
+  try {
+    const info = await lstat(directory);
+    if (!info.isDirectory() || info.isSymbolicLink()) return false;
+    const uid = process.getuid?.();
+    return uid === undefined || info.uid === uid;
+  } catch {
+    return false;
+  }
+}
+
+async function isSafeRegularOrMissing(path: string): Promise<boolean> {
+  try {
+    const info = await lstat(path);
+    return info.isFile() && !info.isSymbolicLink();
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ENOENT";
+  }
+}
+
+async function acquireInstructionsDirectory(
+  instructions: string,
+  scopeKey?: string,
+): Promise<string> {
+  const digest = createHash("sha256")
+    .update(scopeKey ?? "")
+    .update("\0")
+    .update(instructions)
+    .digest("hex")
+    .slice(0, 16);
+  const candidate = join(tmpdir(), `coforge-opencode-${digest}`);
+  try {
+    await mkdir(candidate, { mode: 0o700 });
+    return candidate;
+  } catch (error) {
+    if (
+      (error as NodeJS.ErrnoException).code === "EEXIST" &&
+      (await isOwnedPrivateDirectory(candidate)) &&
+      (await isSafeRegularOrMissing(join(candidate, "instructions.md")))
+    ) {
+      return candidate;
+    }
+    return mkdtemp(join(tmpdir(), "coforge-opencode-"));
+  }
+}
+
 export async function createOpenCodeInstructions(
   instructions: string,
+  scopeKey?: string,
 ): Promise<OpenCodeInstructions> {
-  const directory = await mkdtemp(join(tmpdir(), "coforge-opencode-"));
+  const directory = await acquireInstructionsDirectory(instructions, scopeKey);
+  liveInstructionRefs.set(directory, (liveInstructionRefs.get(directory) ?? 0) + 1);
+  const release = async (): Promise<void> => {
+    const remaining = (liveInstructionRefs.get(directory) ?? 1) - 1;
+    if (remaining > 0) {
+      liveInstructionRefs.set(directory, remaining);
+      return;
+    }
+    liveInstructionRefs.delete(directory);
+    await rm(directory, { recursive: true, force: true });
+  };
   try {
     await chmod(directory, 0o700);
     const path = join(directory, "instructions.md");
@@ -33,10 +86,10 @@ export async function createOpenCodeInstructions(
       directory,
       path,
       configContent: JSON.stringify({ instructions: [path] }),
-      remove: () => (removal ??= rm(directory, { recursive: true, force: true })),
+      remove: () => (removal ??= release()),
     };
   } catch (error) {
-    await rm(directory, { recursive: true, force: true });
+    await release();
     throw error;
   }
 }
