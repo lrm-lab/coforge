@@ -179,10 +179,6 @@ export type SharedRealtimeClient = Pick<Centrifuge, "newSubscription" | "removeS
 type SharedSubscriptionEntry = {
   subscription: Subscription;
   refCount: number;
-  /** Where the stream stands for this subscription (`SubscribedRecovery.position`); undefined on a
-   * namespace without history, whose subscribe reports none. The protobuf client hands offsets
-   * over as `Long`s despite their `number` type, which compare as strings ("100" < "99"): each
-   * is made a number as it comes in (task #358). */
   position?: StreamPosition;
   publicationHandlers: Set<(publication: RealtimePublication) => void>;
   subscribedHandlers: Set<(recovery: SubscribedRecovery) => void>;
@@ -196,13 +192,6 @@ const sharedSubscriptions = new WeakMap<
   Map<string, SharedSubscriptionEntry>
 >();
 
-/**
- * Runs one of a channel's handlers without letting it throw into the Centrifuge client. The client
- * handles every incoming frame on one promise chain, and a handler that throws leaves that chain
- * unsettled for the client's lifetime: no publication, ping or connect reply is handled again, so
- * the page looks connected while it hears nothing, then cannot reconnect, until it reloads (task
- * #326). A failing handler is logged and skipped.
- */
 function runHandler<T>(channel: string, handler: (value: T) => void, value: T) {
   try {
     handler(value);

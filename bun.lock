@@ -89,7 +89,7 @@
         "@untitledui/file-icons": "^0.0.9",
         "@untitledui/icons": "^0.0.22",
         "ali-oss": "6.23.0",
-        "centrifuge": "5.7.4",
+        "centrifuge": "5.8.0",
         "clsx": "2.1.1",
         "emoji-picker-react": "^5.0.0",
         "fflate": "^0.8.3",
@@ -275,7 +275,7 @@
         "@logtape/redaction": "2.3.2",
         "@lrm/coforge-anvil": "workspace:*",
         "@lrm/coforge-sdk": "workspace:*",
-        "centrifuge": "5.7.4",
+        "centrifuge": "5.8.0",
         "streamx": "2.28.1",
         "tar-stream": "3.2.1",
       },
@@ -1567,7 +1567,7 @@
 
     "ccount": ["ccount@2.0.1", "", {}, "sha512-eyrF0jiFpY+3drT6383f1qhkbGsLSifNAjA61IUjZjmLCWjItY6LB9ft9YhoDgwfmclB2zhu51Lc7+95b8NRAg=="],
 
-    "centrifuge": ["centrifuge@5.7.4", "", { "dependencies": { "events": "^3.3.0", "protobufjs": "^7.6.0" } }, "sha512-PnkJSS5uDPcdIDK4kkrgVCiT7RT+4xUTVjO9FfUjrUpOdPNKXgjfY+6gdG+RQKGSRP7AxP4NxCuFk0Eb4sjrWw=="],
+    "centrifuge": ["centrifuge@5.8.0", "", { "dependencies": { "events": "^3.3.0", "protobufjs": "^7.6.0" } }, "sha512-ENH1jz6VeRuGb3yHNhgB0V0SqRKX+iYdtM9Du/E59m484epjNPfsgJw4UbmOmjgSXGEita1UoOXlZ6Ba1ooT1g=="],
 
     "chalk": ["chalk@6.0.0", "", {}, "sha512-2uNTXIuTTxk7ciZgAU1BQcgnchcG0xXnrs6jzkQfj9SsRa9M2s5zE8WT96hS6KmG4MzWHSrvH43DF1m4XRkrFg=="],
 

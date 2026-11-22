@@ -91,7 +91,7 @@
     "@untitledui/file-icons": "^0.0.9",
     "@untitledui/icons": "^0.0.22",
     "ali-oss": "6.23.0",
-    "centrifuge": "5.7.4",
+    "centrifuge": "5.8.0",
     "clsx": "2.1.1",
     "emoji-picker-react": "^5.0.0",
     "fflate": "^0.8.3",
