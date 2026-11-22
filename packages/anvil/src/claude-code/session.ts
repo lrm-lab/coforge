@@ -14,12 +14,22 @@ import type { JsonlProcess } from "#src/jsonl-process";
 import { ClaudeNoticeQueue, type SessionState, type SessionInitialization } from "./session-state";
 import { initializeClaudeSession } from "./initialize";
 import { compactBoundaryTokens } from "./compact-boundary";
+import {
+  claudeCompactionFailure,
+  isClaudeCompactionOverflow,
+  type ClaudeFailureEvent,
+} from "./compaction-error";
 import { ClaudeStreamEvents } from "./stream-events";
-import { claudeAssistantEvents, claudeRefusalEvent, claudeToolResults } from "./message-events";
+import {
+  claudeAssistantEvents,
+  claudeRefusalEvent,
+  claudeToolResults,
+  isClaudeMainSessionRecord,
+} from "./message-events";
 import { ClaudeSubagentLineage } from "./subagent-lineage";
 import { ClaudeRateLimitState } from "./rate-limit";
 import { ClaudeSessionObservations } from "./observations";
-import { observeClaudeProcess } from "./process-observation";
+import { CLAUDE_PROCESS_EXITED, observeClaudeProcess } from "./process-observation";
 import { relayTaskLifecycle, taskProgressEvent, type TrackedTask } from "./task-lifecycle";
 import { SessionExit } from "#src/session-exit";
 
@@ -36,6 +46,7 @@ export class ClaudeCodeAgentSession implements AgentSession {
   #state: SessionState = "idle";
   #nativeTurnQueued = false;
   #turnRefused = false;
+  #turnErrorReported = false;
   /** Whether a top-level `result` has been seen. Set once and never reset: the fresh relau
    * (`#startFresh`) runs only before any progress, and a result is progress. */
   #resultObserved = false;
@@ -48,6 +59,7 @@ export class ClaudeCodeAgentSession implements AgentSession {
   // A fresh Claude session becomes ready at its first result.
   #sessionReadyForNotices = false;
   #compacting = false;
+  #deferredCompactionError: ClaudeFailureEvent | undefined;
   /** Live non-ambient tasks by id: tool call and lifecycle kind; types in `#subagentLineage`. */
   readonly #tasks = new Map<string, TrackedTask>();
   readonly #subagentLineage = new ClaudeSubagentLineage();
@@ -124,7 +136,12 @@ export class ClaudeCodeAgentSession implements AgentSession {
 
   #handleProcessClose(exit: AgentSessionExit | undefined, failure: Error | undefined): void {
     if (failure && this.#state !== "disposed")
-      this.#emit({ type: "error", message: failure.message });
+      this.#emit(
+        this.#state === "running" && failure.message === CLAUDE_PROCESS_EXITED
+          ? (this.#deferredCompactionError ?? { type: "error", message: failure.message })
+          : { type: "error", message: failure.message },
+      );
+    this.#deferredCompactionError = undefined;
     this.#interrupt.fail(failure ?? new Error("code agent process closed during interrupt"));
     this.#notices.reject(new Error("code agent process closed before writing input"));
     void this.#removePrompt().catch(() => {});
@@ -293,13 +310,15 @@ export class ClaudeCodeAgentSession implements AgentSession {
       this.#progressObserved = true;
       this.#firstInput = undefined;
     }
+    const currentMainSession = isClaudeMainSessionRecord(record, this.#sessionId);
     if (record.type === "system" && record.parent_tool_use_id == null) {
-      if (record.subtype === "status" && record.status === "compacting") {
+      if (currentMainSession && record.subtype === "status" && record.status === "compacting") {
         this.#compacting = true;
         this.#emit({ type: "compaction-started", occurredAt: eventTime(record) });
       }
-      if (record.subtype === "compact_boundary") {
+      if (currentMainSession && record.subtype === "compact_boundary") {
         this.#compacting = false;
+        this.#deferredCompactionError = undefined;
         this.#emit({
           type: "compaction-finished",
           occurredAt: eventTime(record),
@@ -344,12 +363,14 @@ export class ClaudeCodeAgentSession implements AgentSession {
       return;
     }
     const refusal =
+      currentMainSession &&
       this.#state === "running" &&
       this.#nativeIdentityObserved &&
       !this.#turnRefused &&
       claudeRefusalEvent(record);
     if (refusal) {
       this.#turnRefused = true;
+      this.#deferredCompactionError = undefined;
       this.#emit(refusal);
     }
     if (record.type === "stream_event") {
@@ -363,9 +384,8 @@ export class ClaudeCodeAgentSession implements AgentSession {
       }
       for (const event of events) {
         if (event.type === "tool-start") this.#subagentLineage.rememberCall(event);
-        this.#emit(
-          event.type === "error" ? this.#rateLimits.annotate(event, this.#sessionId) : event,
-        );
+        if (event.type !== "error") this.#emit(event);
+        else this.#acceptAssistantError(event, currentMainSession);
       }
       return;
     }
@@ -379,7 +399,7 @@ export class ClaudeCodeAgentSession implements AgentSession {
       return;
     }
     if (record.type === "result") {
-      if (record.parent_tool_use_id != null) return;
+      if (!currentMainSession) return;
       if (
         !this.#nativeIdentityObserved ||
         !this.#sessionId ||
@@ -394,21 +414,39 @@ export class ClaudeCodeAgentSession implements AgentSession {
       this.#resultObserved = true;
       this.#setIdentity("resumable");
       this.#compacting = false;
+      const deferred = this.#deferredCompactionError;
+      this.#deferredCompactionError = undefined;
       this.#outstandingTools.clear();
       this.#interrupt.settle();
       if (this.#state !== "running" && this.#state !== "interrupting") return;
-      const interrupted = this.#state === "interrupting";
-      this.#state = "idle";
-      this.#emit({
-        type: "completed",
-        status: interrupted
+      const status =
+        this.#state === "interrupting"
           ? "interrupted"
           : record.subtype === "success" && record.is_error !== true && !this.#turnRefused
             ? "completed"
-            : "failed",
-      });
+            : "failed";
+      this.#state = "idle";
+      if (status === "failed" && deferred)
+        this.#emit(
+          this.#rateLimits.annotate(claudeCompactionFailure(record, deferred), this.#sessionId),
+        );
+      this.#emit({ type: "completed", status });
       this.#flushNotices();
     }
+  }
+
+  #acceptAssistantError(event: ClaudeFailureEvent, currentMainSession: boolean): void {
+    const failure = this.#rateLimits.annotate(event, this.#sessionId);
+    if (currentMainSession) {
+      if (this.#state === "running" && this.#compacting && isClaudeCompactionOverflow(failure)) {
+        if (!this.#turnErrorReported && !this.#turnRefused)
+          this.#deferredCompactionError ??= failure;
+        return;
+      }
+      this.#turnErrorReported = true;
+      this.#deferredCompactionError = undefined;
+    }
+    this.#emit(failure);
   }
 
   #reportIdentity(): void {
@@ -458,6 +496,9 @@ export class ClaudeCodeAgentSession implements AgentSession {
   #beginNativeTurn(): void {
     this.#nativeTurnQueued = false;
     this.#turnRefused = false;
+    this.#turnErrorReported = false;
+    this.#compacting = false;
+    this.#deferredCompactionError = undefined;
     this.#state = "running";
   }
 

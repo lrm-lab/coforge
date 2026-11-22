@@ -1,9 +1,22 @@
 import type { ActivitySubagent } from "@lrm/coforge-sdk/internal";
 import { isHttpErrorStatus, type AgentRuntimeEvent } from "#src/contract";
 import { asRecord, eventTime, nonEmptyString, textContent } from "#src/json-record";
+import { describesContextOverflow } from "./compaction-error";
+
+export function isClaudeMainSessionRecord(
+  record: Readonly<Record<string, unknown>>,
+  sessionId?: string,
+): boolean {
+  const reported = nonEmptyString(record.session_id);
+  return (
+    record.parent_tool_use_id == null &&
+    !nonEmptyString(record.subagent_type) &&
+    (!reported || !sessionId || reported === sessionId)
+  );
+}
 
 function isClaudeRefusal(record: Readonly<Record<string, unknown>>): boolean {
-  if (record.parent_tool_use_id != null || nonEmptyString(record.subagent_type)) return false;
+  if (!isClaudeMainSessionRecord(record)) return false;
   if (record.type === "result")
     return record.subtype === "success" && record.stop_reason === "refusal";
   const stream = record.type === "stream_event" ? asRecord(record.event) : undefined;
@@ -69,7 +82,13 @@ export function claudeAssistantEvents(
       continue;
     }
     if (block?.type === "text" && typeof block.text === "string" && block.text) {
-      const apiFailure = apiError || (!callsTools && readsAsApiFailure(block.text));
+      const apiFailure =
+        apiError ||
+        (!callsTools &&
+          (readsAsApiFailure(block.text) ||
+            (mainSession &&
+              record.is_api_error_message === true &&
+              describesContextOverflow(block.text))));
       if ((apiFailure || record.is_api_error_message === true) && isClaudeRefusal(record)) continue;
       if (apiFailure) {
         events.push({
