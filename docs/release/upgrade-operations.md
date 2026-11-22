@@ -158,9 +158,9 @@ deployment that accepts it.
 
 ## Agents during an upgrade
 
-An upgrade has no launch hold and no pause. The service stop stops busy Agents
-with it. Unread messages come back from the cloud read boundary after the restart;
-ACK rules are in the root [`AGENTS.md`](../../AGENTS.md) invariants.
+Before stopping, the installer requests a runner hold. It proceeds when idle or after 120 s.
+It also proceeds after 3 s without an acknowledgement or 15 s without a fresh report.
+Busy turns can be interrupted. Unread messages resume under the [ACK rules](../agents/architecture-invariants.md).
 
 ## The restart runner hold
 
