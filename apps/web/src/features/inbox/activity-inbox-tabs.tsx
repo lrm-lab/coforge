@@ -53,7 +53,7 @@ export function ActivityInboxTabs({
           type="button-gray"
           size="sm"
           aria-label={m.activity_inbox_filter_label()}
-          className="@max-[22rem]/tabbed-header:gap-1 @max-[22rem]/tabbed-header:*:px-1.5 @max-[22rem]/tabbed-header:*:text-sm"
+          className="@max-[22rem]/tabbed-header:gap-0 @max-[22rem]/tabbed-header:*:gap-1 @max-[22rem]/tabbed-header:*:px-1 @max-[22rem]/tabbed-header:*:text-sm"
         >
           {FILTER_TABS.map((tab) => (
             <Tab

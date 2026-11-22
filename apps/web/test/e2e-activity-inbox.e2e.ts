@@ -64,10 +64,10 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     expect(rows[1]).toContain("1 new");
     expect(rows[1]).toContain("e2e-activity-inbox · Activity Peer: ");
     expect(rows[1]).not.toContain("#e2e-activity-inbox");
-    const todayTimes = `[...document.querySelectorAll('[data-activity-list] ol[aria-label="Today"] > li')].filter((row) => row.textContent.includes("e2e-activity-inbox")).map((row) => row.querySelector("time")?.textContent.trim() ?? "")`;
-    await browser("wait", "--fn", `${todayTimes}.length === 2`);
+    const todayTimes = `[...document.querySelectorAll('ol[aria-label="Today"] > li')].filter((row) => row.textContent.includes("E2E quiet root")).map((row) => row.querySelector("time")?.textContent.trim() ?? "")`;
+    await browser("wait", "--fn", `${todayTimes}.length === 1`);
     const times = await evaluate<string[]>(todayTimes);
-    expect(times.every((text) => /^\d{1,2}:\d{2}(\s?[AP]M)?$/i.test(text))).toBe(true);
+    expect(times[0]).toMatch(/^\d{1,2}:\d{2}(\s?[AP]M)?$/i);
     expect(await evaluate<boolean>(`${pane} === null`)).toBe(true);
     const fullWidth = await evaluate<number>(listColumnWidth);
     expect(fullWidth / (await evaluate<number>("innerWidth"))).toBeGreaterThan(0.6);
@@ -84,7 +84,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     expect(preview).toEqual({ strong: "reply", code: "code" });
     const tabCounts = `Object.fromEntries([...document.querySelectorAll('[role="tablist"][aria-label="Filter activity"] [role="tab"]')].map((tab) => [tab.textContent.replace(/[\\d+]/g, "").trim(), Number(tab.textContent.replace(/\\D/g, "")) || 0]))`;
     const counts = await evaluate<Record<string, number>>(tabCounts);
-    expect(Object.keys(counts)).toEqual(["All", "Unread", "Mentions"]);
+    expect(Object.keys(counts)).toEqual(["All", "Unread", "Mentions", "Artifacts"]);
     expect(counts.All).toBe(0);
     expect(counts.Unread).toBeGreaterThanOrEqual(2);
     expect(counts.Mentions).toBeGreaterThanOrEqual(1);
@@ -124,7 +124,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
             .find((item) => item.textContent.trim() === ${JSON.stringify(label)})
             .click() ?? true`),
         );
-    const channelRow = `[...document.querySelectorAll(${rowItems})].find((item) => item.textContent.includes("E2E activity unread"))?.querySelector('[aria-label$=" new"]')?.getAttribute("aria-label") ?? ""`;
+    const channelRow = `([...document.querySelectorAll(${rowItems})].find((item) => item.textContent.includes("E2E activity unread"))?.textContent ?? "")`;
     await channelMenu("Mark as read");
     await browser("wait", "--fn", `!${channelRow}.includes("1 new")`);
     await browser("wait", "--fn", `${tabCounts}.Unread === ${counts.Unread - 1}`);

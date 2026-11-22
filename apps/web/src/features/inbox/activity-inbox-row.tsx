@@ -7,7 +7,7 @@ import {
   ActivityRowTime,
   ActivityRowTitle,
   ActivityUnreadCount,
-  ActivityUnreadDot,
+  UNREAD_ROW_CLASS,
   NARROW_HIDDEN,
 } from "./activity-row-parts";
 import { memo, useRef, type Ref } from "react";
@@ -23,7 +23,6 @@ import { GroupAvatar } from "#src/features/conversations/group-avatar";
 import { MessagePreview } from "#src/features/conversations/message-preview";
 import { actionCardPreviewText } from "#src/features/conversations/action-card-preview";
 import { systemNoticeText } from "#src/features/conversations/system-notice-text";
-import { taskStatusColor } from "#src/features/tasks/task-workflow";
 import { cn } from "#src/lib/utils";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
@@ -107,6 +106,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
       m.activity_inbox_system_sender()
     ) : (
       <ActorName
+        inline
         actor={{
           kind: latest.senderKind,
           id: latest.senderKind === "agent" ? latest.senderAgentId : latest.senderUserId,
@@ -161,6 +161,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
           }
           className={cn(
             ACTIVITY_ROW_LINK_CLASS,
+            unread && UNREAD_ROW_CLASS,
             current
               ? "bg-chat-selected-bg"
               : "group-hover:bg-primary_hover focus-visible:bg-primary_hover",
@@ -171,7 +172,6 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
           </span>
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="flex min-w-0 items-center gap-2">
-              {unread && <ActivityUnreadDot />}
               <span ref={titleRef} className="flex min-w-0">
                 <ActivityRowTitle unread={unread}>
                   {task ? (
@@ -185,13 +185,22 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
                   )}
                 </ActivityRowTitle>
               </span>
-              <ActivityItemBadges item={item} filter={filter} />
-              {time}
             </span>
-            <span className={cn("truncate text-sm", unread ? "text-secondary" : "text-quaternary")}>
+            <span
+              className={cn(
+                "truncate text-sm",
+                unread
+                  ? "text-secondary"
+                  : "text-quaternary [&_[data-mention-label]]:bg-transparent",
+              )}
+            >
               {placeLabel && <span className="me-1.5 text-tertiary">{placeLabel}</span>}
               {sender}: <Preview message={item.latest} />
             </span>
+          </span>
+          <span className="flex shrink-0 flex-col items-end gap-1">
+            {time}
+            <ActivityItemBadges item={item} filter={filter} />
           </span>
         </AriaLink>
         <Dropdown.Popover placement="bottom start">
@@ -287,7 +296,7 @@ function ActivityItemBadges({
         </Badge>
       )}
       {task && (
-        <Badge type="color" size="sm" color={taskStatusColor(task.status).badge}>
+        <Badge type="color" size="sm" color="gray">
           #{task.number}
           {task.ownerName ? (
             <span className={cn(NARROW_HIDDEN, "ml-1")}>

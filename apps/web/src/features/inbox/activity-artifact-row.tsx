@@ -20,7 +20,7 @@ import {
   ActivityRowTime,
   ActivityRowTitle,
   ActivityUnreadCount,
-  ActivityUnreadDot,
+  UNREAD_ROW_CLASS,
 } from "./activity-row-parts";
 import type { ActivityItemActions } from "./use-activity-item-actions";
 
@@ -68,22 +68,24 @@ export const ActivityArtifactRow = memo(function ActivityArtifactRow({
           }
           className={cn(
             ACTIVITY_ROW_LINK_CLASS,
+            unread && UNREAD_ROW_CLASS,
             "group-hover:bg-primary_hover focus-visible:bg-primary_hover",
           )}
         >
           <ArtifactIcon entryPath={item.artifact.entryPath} />
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="flex min-w-0 items-center gap-2">
-              {unread && <ActivityUnreadDot />}
               <ActivityRowTitle unread={unread}>{item.artifact.title}</ActivityRowTitle>
-              <span className="flex shrink-0 items-center gap-1.5">
-                {filter !== "mentions" && item.unreadMention && <ActivityMentionBadge />}
-                {unread && <ActivityUnreadCount count={item.unreadCount} />}
-              </span>
-              <ActivityRowTime value={item.at} clock={clock} current={false} />
             </span>
             <span className="truncate text-sm text-secondary">
-              <ActorName actor={event.actor} /> {artifactEventLine(item)}
+              <ActorName inline actor={event.actor} /> {artifactEventLine(item)}
+            </span>
+          </span>
+          <span className="flex shrink-0 flex-col items-end gap-1">
+            <ActivityRowTime value={item.at} clock={clock} current={false} />
+            <span className="flex shrink-0 items-center gap-1.5">
+              {filter !== "mentions" && item.unreadMention && <ActivityMentionBadge />}
+              {unread && <ActivityUnreadCount count={item.unreadCount} />}
             </span>
           </span>
         </AriaLink>

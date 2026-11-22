@@ -22,7 +22,7 @@ export function ActivityInboxSections({ sections }: { sections: ActivitySection[
     <>
       {sections.map((section, index) => (
         <Fragment key={section.key}>
-          {(section.icon || index > 0 || section.dated) && (
+          {(section.icon || section.count !== undefined || index > 0 || section.dated) && (
             <ActivityInboxSectionHeading
               icon={section.icon}
               label={section.heading ?? section.label}

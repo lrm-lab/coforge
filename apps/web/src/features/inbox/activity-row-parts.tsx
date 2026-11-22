@@ -3,15 +3,15 @@ import { Check } from "@untitledui/icons";
 import { Badge } from "#src/components/base/badges/badges";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { ClockTime, RelativeTime } from "#src/components/ui/relative-time";
+import { UnreadBadge } from "#src/components/ui/unread-marker";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 
 export const NARROW_SR_ONLY = "@max-[22rem]/activity-list:sr-only";
 export const NARROW_HIDDEN = "@max-[22rem]/activity-list:hidden";
 
-export function ActivityUnreadDot() {
-  return <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-brand-solid" />;
-}
+export const UNREAD_ROW_CLASS =
+  "bg-brand-solid/5 after:pointer-events-none after:absolute after:inset-y-1 after:start-0 after:w-0.75 after:rounded-full after:bg-brand-solid";
 
 export function ActivityRowTitle({
   unread,
@@ -22,7 +22,10 @@ export function ActivityRowTitle({
 }) {
   return (
     <span
-      className={cn("block min-w-10 truncate text-md", unread ? "text-primary" : "text-tertiary")}
+      className={cn(
+        "min-w-10 truncate text-md",
+        unread ? "font-semibold text-primary" : "text-tertiary",
+      )}
     >
       {children}
     </span>
@@ -39,12 +42,9 @@ export function ActivityMentionBadge() {
 
 export function ActivityUnreadCount({ count }: { count: number }) {
   return (
-    <span
-      dir="ltr"
-      className="text-xs whitespace-nowrap text-tertiary tabular-nums"
-      aria-label={m.activity_inbox_new({ count })}
-    >
-      {count > 99 ? "99+" : count}
+    <span dir="ltr" className="inline-flex">
+      <span className="sr-only">{m.activity_inbox_new({ count })}</span>
+      <UnreadBadge count={count} />
     </span>
   );
 }

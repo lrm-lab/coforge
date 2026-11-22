@@ -30,13 +30,45 @@ export function useActivityInboxRefresh({
   onRealtimeActivity?: (refresh: () => void) => void;
 }) {
   const queryClient = useQueryClient();
+  const restartAll = useCallback(async () => {
+    const options = activityInboxQuery(workspaceId, "all");
+    const cached = queryClient.getQueryCache().find({ queryKey: options.queryKey, exact: true });
+    if (!cached?.isActive()) {
+      await queryClient.invalidateQueries({
+        queryKey: options.queryKey,
+        exact: true,
+        refetchType: "none",
+      });
+      return;
+    }
+    await queryClient.cancelQueries({ queryKey: options.queryKey, exact: true });
+    await queryClient
+      .fetchInfiniteQuery({ ...options, pages: 1, staleTime: 0 })
+      .catch(() => undefined);
+  }, [queryClient, workspaceId]);
+  const refreshMatching = useCallback(
+    (queryKey: readonly unknown[]) =>
+      Promise.all([
+        restartAll(),
+        queryClient.invalidateQueries({
+          queryKey,
+          predicate: (query) =>
+            !(
+              query.queryKey[1] === "list" &&
+              query.queryKey[2] === workspaceId &&
+              query.queryKey[3] === "all"
+            ),
+        }),
+      ]).then(() => undefined),
+    [queryClient, restartAll, workspaceId],
+  );
   const refreshList = useCallback(
-    () => queryClient.invalidateQueries({ queryKey: ACTIVITY_INBOX_QUERY_PREFIX }),
-    [queryClient],
+    () => refreshMatching(ACTIVITY_INBOX_QUERY_PREFIX),
+    [refreshMatching],
   );
   const refreshListsOnly = useCallback(
-    () => queryClient.invalidateQueries({ queryKey: ACTIVITY_INBOX_LISTS_KEY }),
-    [queryClient],
+    () => refreshMatching(ACTIVITY_INBOX_LISTS_KEY),
+    [refreshMatching],
   );
   const refreshSidebar = useRefreshSidebarLists();
   const refresh = useCallback(
@@ -49,8 +81,12 @@ export function useActivityInboxRefresh({
   );
   const loadFirstPage = useServerFn(loadActivityInbox);
   const refreshFirstPage = useCallback(() => {
-    const queryKey = activityInboxQuery(workspaceId, filter).queryKey;
     void invalidateActivityInboxLists(queryClient, workspaceId);
+    if (filter === "all") {
+      void restartAll();
+      return;
+    }
+    const queryKey = activityInboxQuery(workspaceId, filter).queryKey;
     void loadFirstPage({ data: { filter } })
       .then((page) =>
         queryClient.setQueryData<{ pages: ActivityInboxPage[]; pageParams: unknown[] }>(
@@ -60,7 +96,7 @@ export function useActivityInboxRefresh({
         ),
       )
       .catch(() => undefined);
-  }, [filter, loadFirstPage, queryClient, workspaceId]);
+  }, [filter, loadFirstPage, queryClient, workspaceId, restartAll]);
   const refreshLists = useCallback(() => void refreshListsOnly(), [refreshListsOnly]);
   const onSubscribed = useCallback(
     (recovery: SubscribedRecovery) =>

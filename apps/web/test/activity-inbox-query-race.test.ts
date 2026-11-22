@@ -46,7 +46,7 @@ function activityData(items: ReturnType<typeof item>[]) {
 
 test("an older Activity refetch cannot put an item back after Done", async () => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const queryKey = [...ACTIVITY_INBOX_LISTS_KEY, "workspace-1", "all"];
+  const queryKey: readonly unknown[] = activityInboxQuery("workspace-1", "all").queryKey;
   const completed = item("thread:1");
   const replacement = item("thread:stale-response");
   const initial = activityData([completed]);
@@ -76,7 +76,7 @@ test("an older Activity refetch cannot put an item back after Done", async () =>
 
 test("a later refetch cannot restore another completion that is still pending", async () => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const queryKey = [...ACTIVITY_INBOX_LISTS_KEY, "workspace-1", "all"];
+  const queryKey: readonly unknown[] = activityInboxQuery("workspace-1", "all").queryKey;
   const first = item("thread:a");
   const second = item("thread:b");
   const stale = activityData([first, second]);
@@ -105,7 +105,7 @@ test("a later refetch cannot restore another completion that is still pending", 
 
 test("a message makes preloaded Activity filters stale until their own page is refreshed", async () => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const allKey = [...ACTIVITY_INBOX_LISTS_KEY, "workspace-1", "all"];
+  const allKey: readonly unknown[] = activityInboxQuery("workspace-1", "all").queryKey;
   const unreadKey = [...ACTIVITY_INBOX_LISTS_KEY, "workspace-1", "unread"];
   queryClient.setQueryData(allKey, activityData([item("conversation:all")]));
   queryClient.setQueryData(unreadKey, activityData([]));
@@ -179,7 +179,7 @@ const firstPage = (name: string, offset: number, next?: string) => ({
 });
 type TestPage = ReturnType<typeof firstPage>;
 
-const listKey = [...ACTIVITY_INBOX_LISTS_KEY, "workspace-1", "all"];
+const listKey: readonly unknown[] = activityInboxQuery("workspace-1", "all").queryKey;
 
 function activityList(queryClient: QueryClient, read: () => Promise<TestPage>) {
   const options = activityInboxQuery("workspace-1", "all");
@@ -219,7 +219,10 @@ test("a first page read for a new message survives a next page that was loading"
   release.resolve();
   await loadingNext;
 
-  expect(names(queryClient)).toEqual(["first, after the message", "second"]);
+  expect(names(queryClient)).toEqual(["first, after the message"]);
+  expect(queryClient.getQueryData<InfiniteData<TestPage>>(queryKey)?.pageParams).toEqual([
+    undefined,
+  ]);
   unsubscribe();
 });
 

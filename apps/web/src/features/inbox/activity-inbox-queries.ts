@@ -37,12 +37,21 @@ export const ACTIVITY_INBOX_LISTS_KEY = [...ACTIVITY_INBOX_QUERY_PREFIX, "list"]
 
 export const activityInboxQuery = (workspaceId: string, filter: ActivityInboxFilter) =>
   infiniteQueryOptions({
-    queryKey: [...ACTIVITY_INBOX_LISTS_KEY, workspaceId, filter],
-    queryFn: ({ pageParam }) => loadActivityInbox({ data: { filter, cursor: pageParam } }),
+    queryKey: [
+      ...ACTIVITY_INBOX_LISTS_KEY,
+      workspaceId,
+      filter,
+      ...(filter === "all" ? ["unread-first-v1"] : []),
+    ],
+    queryFn: ({ pageParam, signal }) =>
+      loadActivityInbox({ data: { filter, cursor: pageParam }, signal }),
     initialPageParam: undefined as ActivityInboxCursor | undefined,
     getNextPageParam: (page) => page.nextCursor ?? undefined,
     structuralSharing: (held: unknown, next: unknown) =>
-      replaceEqualDeep(held, keepLaterFirstPage(held as ReadPages, next as ReadPages)),
+      replaceEqualDeep(
+        held,
+        keepLaterFirstPage(held as ReadPages, next as ReadPages, filter === "all"),
+      ),
   });
 
 export function invalidateActivityInboxLists(
@@ -58,11 +67,15 @@ export function invalidateActivityInboxLists(
 type StreamRead = { streamPositions: StreamPositions };
 type ReadPages = InfiniteData<StreamRead> | undefined;
 
-export function keepLaterFirstPage<Data extends ReadPages>(held: Data, next: Data): Data {
+export function keepLaterFirstPage<Data extends ReadPages>(
+  held: Data,
+  next: Data,
+  keepChain = false,
+): Data {
   const kept = held?.pages[0];
   const incoming = next?.pages[0];
   if (!next || !kept || !incoming || !readEarlier(incoming, kept)) return next;
-  return { ...next, pages: [kept, ...next.pages.slice(1)] };
+  return keepChain ? held : { ...next, pages: [kept, ...next.pages.slice(1)] };
 }
 
 export type ActivityInboxPage = Awaited<ReturnType<typeof loadActivityInbox>>;
@@ -88,7 +101,12 @@ export function projectPendingActivityCompletions<
   Page extends ActivityCompletionPage<Item>,
 >(data: InfiniteData<Page>, items: Iterable<ActivityCompletionItem>): InfiniteData<Page> {
   let projected = data;
-  for (const item of items) projected = withoutItem(projected, item);
+  for (const item of items) {
+    const matches = (entry: ActivityCompletionItem) => entry.key === item.key;
+    if (projected.pages.some((page) => page.items.some(matches) || page.pinned?.some(matches))) {
+      projected = withoutItem(projected, item);
+    }
+  }
   return projected;
 }
 
@@ -124,7 +142,7 @@ export function optimisticallyCompleteActivityItems(
   if (items.length === 0) return;
   queryClient.setQueriesData<InfiniteData<ActivityInboxPage>>(
     { queryKey: [...ACTIVITY_INBOX_LISTS_KEY, workspaceId] },
-    (current) => (current ? projectPendingActivityCompletions(current, items) : current),
+    (current) => current && items.reduce((data, item) => withoutItem(data, item), current),
   );
   const completedKeys = new Set(items.map((item) => item.key));
   const unreadCompleted = items.filter((item) => item.unreadCount > 0).length;

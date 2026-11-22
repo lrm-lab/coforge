@@ -16,15 +16,18 @@ import {
   inPane,
   openParam,
   pinnedItems,
+  rightClickRow,
   seedChannel,
 } from "./helpers/activity-inbox-e2e";
 
+const unreadRows = JSON.stringify('ol[aria-label="Unread"] > li');
+const allRows = JSON.stringify("[data-activity-row]");
 const todayRows = JSON.stringify('ol[aria-label="Today"] > li');
 
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/activity-inbox");
 
-test("a pinned channel lists under Pinned, before the day's rows; Done takes it out; new activity lists it again", async () => {
+test("an unread pin lists once under Unread, moves to Pinned on read and returns to Unread on new activity", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = `activity-inbox-pinned-${process.pid}`;
   const { browser, evaluate } = browserSession(browserPath, session);
@@ -53,37 +56,21 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
 
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}${workspacePath}/activity`);
-    await browser(
-      "wait",
-      "--fn",
-      `${rowsIn(pinnedItems)}.length === 1 && ${rowsIn(todayRows)}.length === 1 && ${pageHydrated}`,
-    );
-    const [pinnedRow] = await evaluate<string[]>(rowsIn(pinnedItems));
+    await browser("wait", "--fn", `${rowsIn(unreadRows)}.length === 2 && ${pageHydrated}`);
+    expect(await evaluate<string[]>(rowsIn(pinnedItems))).toEqual([]);
+    const unread = await evaluate<string[]>(rowsIn(unreadRows));
+    const pinnedRow = unread.find((row) => row.includes("E2E pinned hello"));
     expect(pinnedRow).toContain("e2e-activity-pinned");
     expect(pinnedRow).not.toContain("#e2e-activity-pinned");
     expect(pinnedRow).toContain("@you");
     expect(pinnedRow).toContain("Activity Peer: ");
     expect(pinnedRow).toContain("E2E pinned hello");
     expect(pinnedRow).toContain("1 new");
-    const [threadRow] = await evaluate<string[]>(rowsIn(todayRows));
+    const threadRow = unread.find((row) => row.includes("E2E pinned root"));
     expect(threadRow).toContain("E2E pinned root");
     expect(threadRow).toContain("e2e-activity-pinned · ");
     expect(threadRow).not.toContain("#e2e-activity-pinned");
     expect(threadRow).not.toContain("E2E pinned hello");
-    expect(
-      await evaluate<boolean>(`(() => {
-        const pinned = document.querySelector('ol[aria-label="Pinned"]');
-        const pinnedHeading = [...pinned.parentElement.querySelectorAll(":scope > h2")]
-          .find((heading) => heading.textContent.trim() === "Pinned");
-        if (!pinnedHeading) return false;
-        const today = document.querySelector('ol[aria-label="Today"]');
-        if (!today) return false;
-        const dayHeading = today.previousElementSibling;
-        if (dayHeading?.tagName !== "H2" || dayHeading.textContent.trim() !== "Today") return false;
-        const follows = (a, b) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-        return follows(pinnedHeading, pinned) && follows(pinned, dayHeading) && follows(dayHeading, today);
-      })()`),
-    ).toBe(true);
     await browser("screenshot", join(artifacts, "pinned.png"));
 
     await browser("find", "role", "tab", "click", "--name", "Mentions");
@@ -97,7 +84,18 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
       await evaluate<boolean>(`document.querySelector('ol[aria-label="Pinned"]') === null`),
     ).toBe(true);
     await browser("find", "role", "tab", "click", "--name", "All");
+    await browser("wait", "--fn", `${rowsIn(unreadRows)}.length === 2`);
+    await evaluate(rightClickRow("E2E pinned hello"));
+    await browser("find", "role", "menuitem", "click", "--name", "Mark as read");
     await browser("wait", "--fn", `${rowsIn(pinnedItems)}.length === 1`);
+    expect(await evaluate<string[]>(rowsIn(unreadRows))).toEqual([
+      expect.stringContaining("E2E pinned root"),
+    ]);
+    expect(
+      await evaluate<boolean>(
+        `Boolean(document.querySelector('ol[aria-label="Unread"]').compareDocumentPosition(document.querySelector('ol[aria-label="Pinned"]')) & Node.DOCUMENT_POSITION_FOLLOWING)`,
+      ),
+    ).toBe(true);
     const active = await evaluate<number>(activeCount);
     expect(active).toBeGreaterThanOrEqual(2);
 
@@ -133,18 +131,16 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
       },
     });
     await browser("reload");
-    await browser(
-      "wait",
-      "--fn",
-      `${rowsIn(pinnedItems)}.length === 1 && ${rowsIn(todayRows)}.length > 0 && ${pageHydrated}`,
+    await browser("wait", "--fn", `${rowsIn(unreadRows)}.length === 2 && ${pageHydrated}`);
+    expect(await evaluate<string[]>(rowsIn(pinnedItems))).toEqual([]);
+    expect(await evaluate<string[]>(rowsIn(unreadRows))).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("E2E pinned again"),
+        expect.stringContaining("E2E pinned root"),
+      ]),
     );
-    expect((await evaluate<string[]>(rowsIn(pinnedItems)))[0]).toContain("E2E pinned again");
     expect(await evaluate<number>(activeCount)).toBe(active);
-    expect(await evaluate<string[]>(rowsIn(todayRows))).toEqual([
-      expect.stringContaining("E2E pinned root"),
-    ]);
-
-    await evaluate(`[...document.querySelectorAll(${pinnedItems})]
+    await evaluate(`[...document.querySelectorAll(${unreadRows})]
       .find((item) => item.textContent.includes("E2E pinned again"))
       .querySelector("a")
       .click() ?? true`);
@@ -169,8 +165,8 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
       titles: number[];
       tabsPastEdge: number;
     }>(`(() => {
-      const list = document.querySelector(${todayRows})?.closest("ol")?.parentElement;
-      const titles = [...document.querySelectorAll(${todayRows})]
+      const list = document.querySelector(${allRows})?.closest("ol")?.parentElement;
+      const titles = [...document.querySelectorAll(${allRows})]
         .filter((item) => /E2E pinned|e2e-activity-pinned/.test(item.textContent))
         .map((item) => Math.round(item.querySelector("a .truncate")?.getBoundingClientRect().width ?? 0));
       const tabs = document.querySelector('[role="tablist"][aria-label="Filter activity"]');

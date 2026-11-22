@@ -196,8 +196,19 @@ export function ActivityInboxView({
     run();
   }, [markAllRead, loadedAt, refresh]);
 
-  const days = useActivityDays(items, activityItemTime);
-  const rows = useMemo(() => [...pinned, ...days.flatMap((day) => day.items)], [pinned, days]);
+  const unread = useMemo(
+    () => (filter === "all" ? items.filter((item) => item.unreadCount > 0) : []),
+    [filter, items],
+  );
+  const dated = useMemo(
+    () => (filter === "all" ? items.filter((item) => !item.unreadCount) : items),
+    [filter, items],
+  );
+  const days = useActivityDays(dated, activityItemTime);
+  const rows = useMemo(
+    () => [...unread, ...pinned, ...days.flatMap((day) => day.items)],
+    [unread, pinned, days],
+  );
   const { doneAll } = useActivityBulkActions({
     workspaceId,
     onChanged: refresh,
@@ -294,6 +305,12 @@ export function ActivityInboxView({
           </Button>
         </div>
       ),
+    },
+    {
+      key: "unread",
+      label: m.activity_inbox_filter_unread(),
+      count: firstPage?.unreadItemCount,
+      rows: unread.map((item) => row(item)),
     },
     {
       key: "pinned",
@@ -444,7 +461,7 @@ export function ActivityInboxView({
           hasNextPage={query.hasNextPage}
           isFetchingNextPage={query.isFetchingNextPage}
           failed={query.isFetchNextPageError}
-          fetchNextPage={query.fetchNextPage}
+          fetchNextPage={() => query.fetchNextPage({ cancelRefetch: false })}
         />
       </div>
       {pane && (
