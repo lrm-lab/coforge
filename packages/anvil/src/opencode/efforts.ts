@@ -1,6 +1,6 @@
 import { RUNTIME_PROVIDER, diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
-import { RequestError, type SessionConfigOption } from "@agentclientprotocol/sdk";
+import { RequestError, type SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { OPENCODE_ACP_CATALOG_TIMEOUT_MS } from "./acp-catalog";
 import { acpBounded, type AcpConnection } from "#src/acp/connection";
 import { openOpenCodeProbe } from "./acp-probe";

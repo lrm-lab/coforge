@@ -1,5 +1,5 @@
-import type { SessionConfigOption } from "@agentclientprotocol/sdk";
-import { RequestError } from "@agentclientprotocol/sdk";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
+import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import type {
   AgentNoticeOptions,
   AgentRuntimeEvent,

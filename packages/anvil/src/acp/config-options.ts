@@ -2,7 +2,7 @@ import {
   RequestError,
   type SessionConfigOption,
   type SessionConfigSelectOption,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import { RuntimeModelNotFoundError } from "#src/contract";
 import { asRecord, nonEmptyString } from "#src/json-record";
 import { acpBounded, type AcpConnection } from "./connection";

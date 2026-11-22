@@ -2,7 +2,7 @@ import type {
   RequestPermissionRequest,
   RequestPermissionResponse,
   SessionConfigOption,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import { asRecord } from "#src/json-record";
 import { acpBounded, acpProcess, type AcpConnection } from "#src/acp/connection";
 import type { AcpRuntimeProfile } from "#src/acp/profile";

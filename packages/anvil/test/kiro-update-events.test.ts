@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { SessionNotification } from "@agentclientprotocol/sdk";
+import type { SessionNotification } from "@agentclientprotocol/sdk/unstable";
 import { kiroUpdateEvents } from "#src/kiro/update-events";
 
 type Update = SessionNotification["update"];

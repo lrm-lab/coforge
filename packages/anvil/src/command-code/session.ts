@@ -1,5 +1,5 @@
 import { dirname, join } from "node:path";
-import type { SessionConfigOption } from "@agentclientprotocol/sdk";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import type {
   AgentNoticeOptions,
   AgentRuntimeEvent,

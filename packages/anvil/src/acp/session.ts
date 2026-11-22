@@ -1,4 +1,4 @@
-import type { RequestPermissionRequest } from "@agentclientprotocol/sdk";
+import type { RequestPermissionRequest } from "@agentclientprotocol/sdk/unstable";
 import type {
   AgentNoticeOptions,
   AgentRuntimeEvent,
@@ -8,7 +8,7 @@ import type {
   AgentSessionOptions,
   AgentTurnProcessWindow,
 } from "@coforge/agent";
-import { RequestError } from "@agentclientprotocol/sdk";
+import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import { asRecord } from "#src/json-record";
 import { attachStderrExcerpt } from "#src/stderr-excerpt";
 import type { AcpConnection } from "./connection";

@@ -1,5 +1,5 @@
 import type { AgentNoticeOptions, AgentRuntimeEvent } from "@coforge/agent";
-import type { SessionNotification } from "@agentclientprotocol/sdk";
+import type { SessionNotification } from "@agentclientprotocol/sdk/unstable";
 
 /** How long a turn end waits for the steering outcome Kiro wrote before its prompt response. The
  * frames are already on the wire, so this only bounds a pathological dispatch delay. */

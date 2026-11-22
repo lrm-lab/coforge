@@ -2,7 +2,7 @@ import type {
   InitializeResponse,
   RequestPermissionRequest,
   SessionConfigOption,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import type { AgentRuntimeEvent } from "@coforge/agent";
 import type { AcpConnection } from "./connection";
 

@@ -1,4 +1,4 @@
-import { RequestError, type SessionConfigOption } from "@agentclientprotocol/sdk";
+import { RequestError, type SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { RuntimeModelNotFoundError } from "#src/contract";
 import { within } from "#src/catalog-discovery";
 import { JsonlRequestError } from "#src/jsonl-error";

@@ -1,7 +1,7 @@
 import { realpath } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
-import type { InitializeResponse } from "@agentclientprotocol/sdk";
-import { RequestError } from "@agentclientprotocol/sdk";
+import type { InitializeResponse } from "@agentclientprotocol/sdk/unstable";
+import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import { getLogger } from "@logtape/logtape";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { RuntimeLoginRequiredError } from "#src/contract";

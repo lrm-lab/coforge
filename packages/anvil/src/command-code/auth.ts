@@ -1,4 +1,4 @@
-import { RequestError } from "@agentclientprotocol/sdk";
+import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import {
   RuntimeLoginRequiredError,

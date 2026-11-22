@@ -65,6 +65,10 @@ test("a launch applies model and effort through the config selects", async () =>
   try {
     const session = await f.provider.createAgentSession(options(f.cwd) as never);
     const requests = await f.requests();
+    expect(requests.find((request) => request.method === "initialize")?.params).toMatchObject({
+      protocolVersion: 1,
+      clientCapabilities: { session: { compaction: {} } },
+    });
     expect(requests.some((r) => r.method === "session/new")).toBe(true);
     const configCalls = requests.filter((r) => r.method === "session/set_config_option");
     expect(configCalls).toContainEqual(

@@ -1,4 +1,4 @@
-import type { InitializeResponse } from "@agentclientprotocol/sdk";
+import type { InitializeResponse } from "@agentclientprotocol/sdk/unstable";
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
 import { acpBounded, type AcpConnection } from "#src/acp/connection";
 import type { AcpSessionProfile } from "#src/acp/profile";

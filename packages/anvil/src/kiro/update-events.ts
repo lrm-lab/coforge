@@ -1,6 +1,6 @@
 import { acpToolUpdateEnded } from "#src/acp-tool-output";
 import type { AgentRuntimeEvent } from "@coforge/agent";
-import type { SessionNotification, ToolKind } from "@agentclientprotocol/sdk";
+import type { SessionNotification, ToolKind } from "@agentclientprotocol/sdk/unstable";
 
 // Kiro's tool_call frames never carry a programmatic name (only a
 // human-readable title, e.g. "Run Command", "Read File"), so the ACP `kind`

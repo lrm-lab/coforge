@@ -1,4 +1,4 @@
-import { RequestError } from "@agentclientprotocol/sdk";
+import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import {
   RUNTIME_AUTH_INFO_ANTIGRAVITY_BROWSER_LOGIN,
   RUNTIME_PROVIDER,

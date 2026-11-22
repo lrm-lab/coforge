@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { SessionConfigOption } from "@agentclientprotocol/sdk";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { acpModelEfforts } from "#src/acp/config-options";
 import { discoverAntigravityAcpCatalog } from "#src/antigravity/acp-catalog";
 import { fixtureAntigravityHost } from "./fixtures/antigravity-host";

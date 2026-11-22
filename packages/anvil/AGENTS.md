@@ -42,6 +42,8 @@ Runtime directories: `pi`, `antigravity`, `dsh`, `grok`, `command-code`, `kiro`,
 
 Rules shared by every ACP adapter; each runtime file keeps only its own codes and paths.
 
+- Import ACP apps and protocol types from `@agentclientprotocol/sdk/unstable` for existing ACP v1 capabilities such as compaction.
+
 - A `tool_call_update` ends a call only through `acpToolUpdateEnded`; a status the set misses leaves the call open forever and suppresses stalled recovery.
 - Resume is `session/load`. Only the runtime's own stored-session-gone answer (its code is in the provider file) is replaced with a fresh session reported as `replaced` (`onSessionId(newId, oldId)`); any other load failure surfaces. DSH has `session/resume` instead and never replaces a failed resume.
 - A runtime without `session/cancel` (Cursor and Droid answer `-32601`, OpenCode is not relied on) interrupts by process disposal, and the daemon relaunches on the same session id.

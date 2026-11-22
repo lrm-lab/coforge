@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { SessionConfigOption } from "@agentclientprotocol/sdk";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { devinEffortValues } from "#src/devin/efforts";
 
 const select = (currentValue: string, values: string[]): SessionConfigOption => ({

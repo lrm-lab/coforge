@@ -1,4 +1,7 @@
-import type { RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk";
+import type {
+  RequestPermissionRequest,
+  RequestPermissionResponse,
+} from "@agentclientprotocol/sdk/unstable";
 import { asRecord, nonEmptyString } from "#src/json-record";
 import { acpProcess, type AcpConnection } from "#src/acp/connection";
 import type { AcpRuntimeProfile } from "#src/acp/profile";

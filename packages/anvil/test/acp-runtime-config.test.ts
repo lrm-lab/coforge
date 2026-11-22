@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { SessionConfigOption } from "@agentclientprotocol/sdk";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { acpApplyRuntimeConfig } from "#src/acp/config-options";
 import type { AcpConnection } from "#src/acp/connection";
 import { RuntimeModelNotFoundError } from "#src/contract";

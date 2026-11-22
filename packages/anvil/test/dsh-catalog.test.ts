@@ -1,6 +1,6 @@
 import { VERSION_PROBE_TIMEOUT_MS, PROCESS_TREE_EXIT_GRACE_MS } from "@lrm/coforge-anvil";
 import { expect, test } from "bun:test";
-import type { SessionConfigOption } from "@agentclientprotocol/sdk";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { dshCatalogFromConfig } from "#src/dsh/catalog";
 

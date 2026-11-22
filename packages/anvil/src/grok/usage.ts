@@ -4,7 +4,7 @@ import {
   client,
   RequestError,
   type AnyMessage,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import {
   type UsageOfficialBucket,
   type UsageSnapshot,

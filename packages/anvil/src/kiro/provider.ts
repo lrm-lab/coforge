@@ -14,7 +14,7 @@ import type {
   SessionNotification,
   SessionConfigOption,
   NewSessionRequest,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { bounded, configOffers, KIRO_ACP_ARGS, KiroConnection, record } from "./connection";
 import { readKiroUsage } from "./usage";

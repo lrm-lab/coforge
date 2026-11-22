@@ -1,5 +1,5 @@
-import type { InitializeResponse, SessionConfigOption } from "@agentclientprotocol/sdk";
-import { RequestError } from "@agentclientprotocol/sdk";
+import type { InitializeResponse, SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
+import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
 import { acpConfigOptions, acpSelectValues } from "#src/acp/config-options";
 import { acpBounded, acpProcess, type AcpConnection } from "#src/acp/connection";

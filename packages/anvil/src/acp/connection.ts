@@ -6,7 +6,7 @@ import {
   type RequestPermissionRequest,
   type RequestPermissionResponse,
   type SessionConfigOption,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import { JsonlProcess } from "#src/jsonl-process";
 import { asRecord } from "#src/json-record";
 import { withDeadline } from "#src/deadline";

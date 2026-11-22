@@ -1,4 +1,4 @@
-import { RequestError } from "@agentclientprotocol/sdk";
+import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import type { AgentNoticeOptions, AgentRuntimeEvent } from "@coforge/agent";
 import type { AcpSteerProfile } from "./profile";
 

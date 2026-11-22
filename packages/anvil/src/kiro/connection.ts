@@ -9,7 +9,7 @@ import type {
   RequestPermissionResponse,
   SessionConfigOption,
   SessionNotification,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 
 export const KIRO_ACP_ARGS = ["acp", "--agent-engine", "v3", "--auth-method", "cli"] as const;
 

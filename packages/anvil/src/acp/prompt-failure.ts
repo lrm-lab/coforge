@@ -1,4 +1,4 @@
-import { RequestError } from "@agentclientprotocol/sdk";
+import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import type { AgentRuntimeEvent } from "@coforge/agent";
 import { asRecord, nonEmptyString } from "#src/json-record";
 import { scrubRuntimeErrorText } from "#src/runtime-error-text";
