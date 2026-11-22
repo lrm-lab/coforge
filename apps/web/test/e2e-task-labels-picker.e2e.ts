@@ -269,7 +269,7 @@ test("labels go on and off a Task, are made from a name, show on cards and filte
     const inPopup = (text: string) => `${dialog}.textContent.includes(${JSON.stringify(text)})`;
     await browser("wait", "--fn", `${inPopup("Changed labels")} && ${inPopup("Changed priority")}`);
     expect(await evaluate<boolean>(inPopup(`Added: ${name("Motion")}`))).toBe(true);
-    expect(await evaluate<boolean>(inPopup("Priority: None → High"))).toBe(true);
+    expect(await evaluate<boolean>(inPopup("Priority: Medium → High"))).toBe(true);
     await shoot("desktop-2b-history");
     await browser("press", "Escape");
     await browser("wait", "--fn", `${dialog} != null && !${inPopup("Changed labels")}`);
@@ -300,7 +300,8 @@ test("labels go on and off a Task, are made from a name, show on cards and filte
     const filterItem = (text: string) =>
       `[...document.querySelectorAll('[role^="menuitem"]')].find((el) => el.textContent.trim().startsWith(${JSON.stringify(text)}))`;
     await browser("wait", "--fn", `${filterItem("Labels")} != null`);
-    await evaluate(`(${filterItem("Labels")}.click(), true)`);
+    await evaluate(`(${filterItem("Labels")}.focus(), true)`);
+    await browser("press", "ArrowRight");
     await browser("wait", "--fn", `${filterItem(name("Bug"))} != null`);
     expect(await evaluate<boolean>(`${filterItem(name("Design"))} == null`)).toBe(true);
 
