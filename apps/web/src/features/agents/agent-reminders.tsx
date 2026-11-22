@@ -70,7 +70,7 @@ export function AgentReminders({
   if (!result)
     return (
       <div
-        className="mt-3 animate-pulse divide-y divide-secondary"
+        className="mt-3 animate-pulse divide-y divide-secondary motion-reduce:animate-none"
         aria-label={m.agent_reminders_loading()}
       >
         {["w-52", "w-64", "w-44"].map((width) => (

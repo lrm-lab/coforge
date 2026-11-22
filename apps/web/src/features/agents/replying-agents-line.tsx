@@ -41,7 +41,7 @@ const GROUP_SEPARATOR = "|";
 const idsOf = (joined: string) => (joined ? joined.split(ID_SEPARATOR) : []);
 
 const PILL_CLASS =
-  "h-8 max-w-full rounded-full bg-primary pr-3 pl-1.5 text-xs text-tertiary shadow-xs ring-1 ring-secondary ring-inset";
+  "h-8 max-w-full rounded-full bg-primary ps-1.5 pe-3 text-xs text-tertiary ring-1 ring-secondary ring-inset";
 
 /**
  * The line at the foot of a conversation pane: which Agents are about to post in this place (the
@@ -149,21 +149,16 @@ function namingClause(kind: keyof typeof SENTENCES, agents: readonly ReplyingAge
       : messages.one({ names: names.text });
 }
 
-/**
- * Up to three 16px moving mascots overlapping by 5px, each sliding and fading in over 200ms as it
- * joins, as on Raft (task #210). Decorative: the sentence beside them says who.
- */
 function AgentFaces({ agents }: { agents: readonly ReplyingAgent[] }) {
   return (
     <span aria-hidden="true" className="flex shrink-0 items-center">
       {agents.map((agent, index) => (
-        // Keyed by Agent, so one joining mounts and slides in while the others stay put.
         <AvatarSticker
           key={agent.id}
           size="xs"
           className={cx(
             "size-4 transition-[translate,opacity] duration-(--duration-sm) ease-out-strong starting:opacity-0 motion-safe:starting:-translate-x-1",
-            index > 0 && "-ml-[5px]",
+            index > 0 && "-ms-1.25",
           )}
         >
           <AgentMascotView mascot={agent.mascot} activity="working" />

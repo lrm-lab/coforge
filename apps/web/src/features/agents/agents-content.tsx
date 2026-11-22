@@ -207,7 +207,7 @@ export function AgentsContent({
             size="sm"
             icon={Search}
             aria-label={searchLabel}
-            placeholder={`${searchLabel}...`}
+            placeholder={searchLabel}
             value={search}
             onChange={setSearch}
             className="w-full sm:w-80"
@@ -460,7 +460,7 @@ export function AgentsContent({
                         ? { type: "spring", stiffness: 380, damping: 32 }
                         : { duration: DURATION_S.lg, ease: EASE_OUT }
                 }
-                className="absolute inset-0 z-20 flex min-h-0 min-w-0 touch-pan-y flex-col bg-primary shadow-2xl will-change-transform"
+                className="absolute inset-0 z-20 flex min-h-0 min-w-0 touch-pan-y flex-col bg-primary will-change-transform"
               >
                 {profile}
               </motion.div>

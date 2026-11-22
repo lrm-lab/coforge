@@ -111,28 +111,30 @@ export function RuntimeUsagePopoverContent({
         ? m.runtime_reset_credit_left({ count: resetCredits })
         : m.runtime_reset_credit_none()
       : undefined;
-  const factsLine = [resetsFact, credits].filter(Boolean).join(" · ");
+  const facts = [resetsFact, credits].filter((fact): fact is NonNullable<typeof fact> =>
+    Boolean(fact),
+  );
   const accountNote = plan && accountLabel ? accountLabel : undefined;
   const title = plan || accountLabel;
   const refreshLabel = scanning ? m.computer_usage_refreshing() : m.computer_usage_refresh();
 
   return (
     <div className="flex min-h-0 flex-col divide-y divide-secondary">
-      {/* Everything but the caller's actions scrolls, so those stay in view on a short screen. */}
       <div className="min-h-0 divide-y divide-secondary overflow-y-auto">
         <div className="flex items-start gap-3 px-4 py-3">
           <div className="min-w-0 flex-1 space-y-1">
             <h2 className="truncate font-semibold text-primary">{runtime.displayName}</h2>
-            {/* The version and when usage was read (task #109); RelativeTime is blank until
-              hydration, and the separator waits with it. */}
             {(runtime.version || (showUsage && data?.result)) && (
-              <p className="truncate text-xs text-tertiary">
-                {runtime.version}
+              <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs text-tertiary">
+                {runtime.version && (
+                  <span dir="ltr" className="truncate">
+                    {runtime.version}
+                  </span>
+                )}
                 {hydrated && showUsage && data?.result && (
-                  <>
-                    {runtime.version ? " · " : ""}
+                  <span>
                     <RelativeTime value={data.result.collectedAt} timeZone={timeZone} plain />
-                  </>
+                  </span>
                 )}
               </p>
             )}
@@ -228,27 +230,31 @@ export function RuntimeUsagePopoverContent({
                   snapshot={snapshot}
                   timeZone={timeZone}
                 />
-                {factsLine && (
+                {facts.length > 0 && (
                   <p
                     className={cn(
-                      "mt-3 text-xs tabular-nums text-tertiary",
-                      balance ? "wrap-anywhere" : "truncate",
+                      "mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs tabular-nums text-tertiary",
+                      balance && "wrap-anywhere",
                     )}
                   >
-                    {factsLine}
+                    {facts.map((fact) => (
+                      <span key={fact} className={balance ? undefined : "truncate"}>
+                        {fact}
+                      </span>
+                    ))}
                   </p>
-                )}
-                {resetPrompt && onResetCredit && (
-                  <RuntimeResetCreditAction
-                    prompt={resetPrompt}
-                    runtimeName={runtime.displayName}
-                    computerOnline={computerOnline}
-                    onPress={onResetCredit}
-                  />
                 )}
               </>
             )}
           </section>
+        )}
+        {!signedOut && showUsage && !reading && resetPrompt && onResetCredit && (
+          <RuntimeResetCreditAction
+            prompt={resetPrompt}
+            runtimeName={runtime.displayName}
+            computerOnline={computerOnline}
+            onPress={onResetCredit}
+          />
         )}
         {footer && <div className="px-4 py-3">{footer}</div>}
       </div>

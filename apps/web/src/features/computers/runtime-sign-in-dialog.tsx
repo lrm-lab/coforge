@@ -360,7 +360,13 @@ function SignInBody({
           <p className="text-primary">
             {m.runtime_auth_signed_in({ runtime: runtimeName, computer: computerName })}
           </p>
-          {account.length > 0 && <p className="text-tertiary">{account.join(" · ")}</p>}
+          {account.length > 0 && (
+            <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-tertiary">
+              {account.map((item) => (
+                <span key={item}>{item}</span>
+              ))}
+            </p>
+          )}
         </div>
       );
     }

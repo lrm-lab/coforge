@@ -156,8 +156,8 @@ function WorkspaceTree({
           <TreeItemContent>
             {({ level }) => (
               <div
-                className="flex min-w-0 items-center gap-1.5 py-1.5 pr-2 text-xs text-tertiary"
-                style={{ paddingLeft: 4 + (level - 1) * 16 }}
+                className="flex min-w-0 items-center gap-1.5 py-1.5 pe-2 text-xs text-tertiary"
+                style={{ paddingInlineStart: `${0.25 + (level - 1)}rem` }}
               >
                 <span aria-hidden="true" className="size-6 shrink-0" />
                 {row.loading ? (
@@ -191,8 +191,8 @@ function WorkspaceTree({
         <TreeItemContent>
           {({ level, isExpanded }) => (
             <div
-              className="flex min-w-0 items-center gap-1.5 pr-2"
-              style={{ paddingLeft: 4 + (level - 1) * 16 }}
+              className="flex min-w-0 items-center gap-1.5 pe-2"
+              style={{ paddingInlineStart: `${0.25 + (level - 1)}rem` }}
             >
               {isDir ? (
                 <AriaButton

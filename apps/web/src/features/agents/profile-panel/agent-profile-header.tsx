@@ -111,7 +111,7 @@ export function AgentProfileHeader({
               tooltip={
                 controls.isOnline
                   ? m.agent_control_stop_agent()
-                  : [m.agent_control_start(), controls.startNote].filter(Boolean).join(" · ")
+                  : [m.agent_control_start(), controls.startNote].filter(Boolean).join(" — ")
               }
               onClick={
                 controls.isOnline

@@ -256,7 +256,7 @@ test("signing a runtime in shows the device code, takes a pasted code again, and
   try {
     await clickSelector('li button[aria-label^="Claude Code"]');
     await waitText("Not signed in");
-    await browser("find", "role", "button", "click", "--name", "Sign In");
+    await browser("find", "role", "button", "click", "--name", "Sign in");
     await waitText("Sign in to Claude Code");
     await shot("starting");
     const loginId = await currentLogin("claude-code");
@@ -324,7 +324,7 @@ test("Kiro enterprise form starts the shared device-code flow and explains an ex
   try {
     await open(pageUrl);
     await clickSelector('li button[aria-label^="Kiro"]');
-    await browser("find", "role", "button", "click", "--name", "Sign In");
+    await browser("find", "role", "button", "click", "--name", "Sign in");
     await waitText("Sign in to Kiro with IAM Identity Center");
     await shot("kiro-enterprise-form-en");
     await browser(
@@ -337,7 +337,7 @@ test("Kiro enterprise form starts the shared device-code flow and explains an ex
       "https://example.awsapps.com/start",
     );
     await browser("find", "role", "textbox", "fill", "--name", "AWS region", "us-east-1");
-    await browser("find", "role", "button", "click", "--name", "Sign In");
+    await browser("find", "role", "button", "click", "--name", "Sign in");
     const id = await currentLogin("kiro");
     await report(id, 1, {
       event: {
@@ -409,7 +409,7 @@ test("a Computer that can sign Kiro in free asks which account first; free start
     };
     await open(pageUrl);
     await clickSelector('li button[aria-label^="Kiro"]');
-    await browser("find", "role", "button", "click", "--name", "Sign In");
+    await browser("find", "role", "button", "click", "--name", "Sign in");
     await waitSelector("input[type=radio][value=free]", 15_000);
     const freeChosen = await evaluate(
       `document.querySelector('input[type=radio][value="free"]')?.checked`,

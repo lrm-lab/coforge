@@ -13,7 +13,7 @@ import { browserSession, localBrowserE2e, pageDevtools } from "./helpers/browser
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 
 /** The members page's Agent search: a 14px Untitled UI `sm` Input, the field the iPhone zoomed. */
-const SEARCH = `document.querySelector('input[placeholder="Search agents..."]')`;
+const SEARCH = `document.querySelector('input[placeholder="Search agents"]')`;
 
 /**
  * One of each kind of field the rule covers, under a 14px parent, built from the app's own

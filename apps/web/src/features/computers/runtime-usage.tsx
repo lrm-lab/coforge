@@ -200,8 +200,6 @@ export function RuntimeUsage({
       ? resetCreditDialog
       : undefined;
 
-  // The dot is named here too: the trigger's aria-label replaces the dot's own name, a login
-  // state first, as the chip draws it.
   const label = [
     runtime.displayName,
     supportsUsage && m.computer_usage_title(),
@@ -209,7 +207,7 @@ export function RuntimeUsage({
     footerLabel,
   ]
     .filter(Boolean)
-    .join(" · ");
+    .join(", ");
 
   return (
     <>
@@ -221,7 +219,7 @@ export function RuntimeUsage({
           placement="bottom start"
           offset={8}
           containerPadding={12}
-          className="z-50 flex max-h-[calc(100dvh-4rem)] w-80 max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-xl border border-secondary bg-primary text-sm text-primary shadow-lg outline-none"
+          className="z-50 flex max-h-[calc(100dvh-4rem)] w-80 max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-xl border border-secondary bg-primary text-sm text-primary shadow-lg outline-none"
         >
           <Dialog aria-label={label} className="flex min-h-0 flex-col outline-none">
             {({ close }) => (

@@ -174,18 +174,21 @@ export function ExternalAgentAccessSection({
                   <p className="truncate text-sm font-medium text-primary">
                     {credentialLabel(credential)}
                   </p>
-                  <p className="mt-0.5 truncate text-xs text-tertiary">
-                    {m.external_agent_credential_created()}{" "}
-                    <RelativeTime value={credential.createdAt} timeZone={timeZone} />
-                    {" · "}
-                    {credential.lastUsedAt ? (
-                      <>
-                        {m.external_agent_credential_last_used()}{" "}
-                        <RelativeTime value={credential.lastUsedAt} timeZone={timeZone} />
-                      </>
-                    ) : (
-                      m.external_agent_credential_not_used()
-                    )}
+                  <p className="mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs text-tertiary">
+                    <span className="truncate">
+                      {m.external_agent_credential_created()}{" "}
+                      <RelativeTime value={credential.createdAt} timeZone={timeZone} />
+                    </span>
+                    <span className="truncate">
+                      {credential.lastUsedAt ? (
+                        <>
+                          {m.external_agent_credential_last_used()}{" "}
+                          <RelativeTime value={credential.lastUsedAt} timeZone={timeZone} />
+                        </>
+                      ) : (
+                        m.external_agent_credential_not_used()
+                      )}
+                    </span>
                   </p>
                 </div>
                 <CredentialMenu

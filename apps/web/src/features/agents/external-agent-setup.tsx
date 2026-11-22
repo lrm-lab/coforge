@@ -184,9 +184,12 @@ export function ExternalConnectionState({
     );
   } else if (setup.state === "offline") {
     title = seen ? (
-      <>
-        {m.external_agent_state_offline()} · {m.external_agent_state_last_seen()} {seen}
-      </>
+      <span className="inline-flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span>{m.external_agent_state_offline()}</span>
+        <span className="font-normal text-tertiary">
+          {m.external_agent_state_last_seen()} {seen}
+        </span>
+      </span>
     ) : (
       m.external_agent_state_offline()
     );

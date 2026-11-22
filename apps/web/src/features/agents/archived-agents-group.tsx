@@ -84,7 +84,7 @@ function ArchivedAgentRow({
         >
           {agent.displayName}
         </Link>
-        <p className="text-sm text-tertiary">
+        <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm text-tertiary">
           {hydrated && (
             <time dateTime={agent.archivedAt.toISOString()}>
               {m.settings_archived_channels_archived_at({
@@ -92,9 +92,9 @@ function ArchivedAgentRow({
               })}
             </time>
           )}
-          {hydrated && agent.computerName && " · "}
-          {agent.computerName &&
-            m.settings_archived_agents_ran_on({ computer: agent.computerName })}
+          {agent.computerName && (
+            <span>{m.settings_archived_agents_ran_on({ computer: agent.computerName })}</span>
+          )}
         </p>
       </div>
     </li>

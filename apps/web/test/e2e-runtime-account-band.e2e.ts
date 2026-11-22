@@ -119,7 +119,7 @@ for (const [width, height] of [
   test(`${width}x${height}: every runtime's account action is the popover's last band, fully on screen`, async () => {
     browserPassed = false;
     for (const state of ["in", "out"] as const) {
-      const action = state === "in" ? "Sign out" : "Sign In";
+      const action = state === "in" ? "Sign out" : "Sign in";
       for (const [provider, displayName] of runtimes) {
         const name = `${width}x${height}-${provider}-${state}`;
         const out = await runBrowser(`

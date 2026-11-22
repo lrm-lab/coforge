@@ -113,24 +113,21 @@ export function UsageWindow({
     <div>
       <div className="flex items-baseline justify-between gap-3 text-xs">
         <p className="min-w-0 truncate font-medium text-secondary">{label}</p>
-        <p className="shrink-0 text-tertiary tabular-nums">
+        <p className="flex shrink-0 items-baseline gap-1.5 text-tertiary tabular-nums">
           <span className={cn("font-medium", level?.value ?? "text-primary")}>{value}</span>
           {hydrated && window.resetsAt !== undefined && (
-            <>
-              {" · "}
+            <span>
               <TimeMessage
                 message={(time) => m.computer_usage_resets({ time })}
                 value={window.resetsAt}
                 timeZone={timeZone}
               />
-            </>
+            </span>
           )}
-          {resetUnknown && ` · ${m.computer_usage_reset_unavailable()}`}
+          {resetUnknown && <span>{m.computer_usage_reset_unavailable()}</span>}
         </p>
       </div>
       {used !== undefined && (
-        // Untitled's own ProgressBarBase draws the bar (task #109); it takes no accessible name,
-        // so the group around it carries the window's label for screen readers.
         <div role="group" aria-label={label} className="mt-1.5">
           <ProgressBarBase
             value={showLeft ? 100 - used : used}
@@ -140,11 +137,13 @@ export function UsageWindow({
         </div>
       )}
       {creditUsage && (window.usedPercent !== undefined || creditUsage.overage > 0) && (
-        <p className="mt-1 text-xs tabular-nums text-tertiary">
-          {window.usedPercent !== undefined && creditAmounts(creditUsage)}
-          {window.usedPercent !== undefined && creditUsage.overage > 0 && " · "}
-          {creditUsage.overage > 0 &&
-            m.computer_usage_credit_overage({ overage: formatCredits(creditUsage.overage) })}
+        <p className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs tabular-nums text-tertiary">
+          {window.usedPercent !== undefined && <span>{creditAmounts(creditUsage)}</span>}
+          {creditUsage.overage > 0 && (
+            <span>
+              {m.computer_usage_credit_overage({ overage: formatCredits(creditUsage.overage) })}
+            </span>
+          )}
         </p>
       )}
       {note && <p className="mt-1 text-xs break-words tabular-nums text-tertiary">{note}</p>}

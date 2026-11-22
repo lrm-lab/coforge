@@ -3,10 +3,6 @@ import type { ComponentType, ReactNode, SVGProps } from "react";
 
 import { Button } from "#src/components/base/buttons/button";
 
-/**
- * One of the kinds of Computer a Workspace can add. Both kinds read the same,
- * so the choice is one component rather than one component per kind.
- */
 export function ComputerTypeOption({
   icon: Icon,
   label,
@@ -19,7 +15,6 @@ export function ComputerTypeOption({
   icon: ComponentType<SVGProps<SVGSVGElement> & { color?: string; size?: number }>;
   label: string;
   description: string;
-  /** A live line under the description (the cloud computer's state). */
   status?: ReactNode;
   isDisabled?: boolean;
   selected: boolean;
@@ -31,15 +26,15 @@ export function ComputerTypeOption({
       color="secondary"
       aria-pressed={selected}
       isDisabled={isDisabled}
-      className={`relative h-auto flex-col items-stretch justify-start whitespace-normal rounded-xl p-4 text-left ${selected ? "border-brand bg-primary ring-1 ring-brand" : "hover:bg-primary_hover"}`}
+      className={`relative h-auto flex-col items-stretch justify-start rounded-xl p-4 text-start whitespace-normal ${selected ? "border-brand bg-primary ring-1 ring-brand" : "hover:bg-primary_hover"}`}
       onPress={onSelect}
     >
-      <span className="mb-3 flex size-10 items-center justify-center rounded-lg border border-secondary bg-primary text-tertiary shadow-xs">
+      <span className="mb-3 flex size-10 items-center justify-center rounded-lg border border-secondary bg-primary text-tertiary">
         <Icon aria-hidden="true" className="size-5" />
       </span>
       <span
         aria-hidden="true"
-        className={`absolute top-4 right-4 flex size-5 items-center justify-center rounded-full border border-secondary ${selected ? "border-brand bg-brand-solid text-white" : "bg-primary"}`}
+        className={`absolute inset-e-4 top-4 flex size-5 items-center justify-center rounded-full border border-secondary ${selected ? "border-brand bg-brand-solid text-fg-white" : "bg-primary"}`}
       >
         {selected && <Check className="size-3.5" />}
       </span>

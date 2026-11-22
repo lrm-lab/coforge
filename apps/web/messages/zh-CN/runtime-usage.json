@@ -4,7 +4,7 @@
   "computer_usage_used_up": "已用完",
   "computer_runtime_account_visibility": "只有这台电脑的主人和工作区的所有者、管理员能看到账号。",
   "runtime_reset_credit_use": "使用重置，剩余 {count} 次",
-  "runtime_reset_credit_action": "使用重置 · {count}",
+  "runtime_reset_credit_action": "使用重置 ({count})",
   "runtime_reset_credit_left": "剩余 {count} 次重置",
   "runtime_reset_credit_none": "无剩余重置次数",
   "runtime_reset_credit_callout": "{runtime} 已达到用量上限，可使用一次重置恢复额度。",

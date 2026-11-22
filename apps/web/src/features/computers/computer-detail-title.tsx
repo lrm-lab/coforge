@@ -125,8 +125,6 @@ function statusLabel(computer: ComputerDetailView): string {
   return computer.online ? m.computer_status_online() : m.computer_status_offline();
 }
 
-/** Where the Computer runs: its hostname, when its name is another, and its system. On a phone
- * (`phone`) it also says whether the Computer is online, which the header band shows as a dot. */
 export function ComputerDetailWhere({
   computer,
   label,
@@ -142,7 +140,15 @@ export function ComputerDetailWhere({
     computer.name && computer.name !== label ? computer.name : null,
     operatingSystemLabel(computer),
     phone ? statusLabel(computer) : null,
-  ].filter(Boolean);
+  ].filter((part): part is string => Boolean(part));
   if (!parts.length) return null;
-  return <p className={cn("min-w-0 text-sm text-tertiary", className)}>{parts.join(" · ")}</p>;
+  return (
+    <p className={cn("flex min-w-0 items-baseline gap-2 text-sm text-tertiary", className)}>
+      {parts.map((part, index) => (
+        <span key={index} className={index === parts.length - 1 ? "shrink-0" : "min-w-0 truncate"}>
+          {part}
+        </span>
+      ))}
+    </p>
+  );
 }

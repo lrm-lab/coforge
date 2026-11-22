@@ -9,6 +9,7 @@ import {
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useMediaQuery } from "#src/hooks/use-media-query";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { OVERLAY_LAYER } from "#src/lib/overlay-layer";
@@ -52,7 +53,7 @@ export function DesktopStreamSurface({
   onSleep: () => void;
 }) {
   const maximized = phase === "maximized";
-  const phone = useMediaQuery("(max-width: 639px)", false);
+  const phone = !useBreakpoint("sm");
   const portrait = useMediaQuery("(orientation: portrait)", false);
   const reduced = usePrefersReducedMotion();
   const [landscape, setLandscape] = useState(false);
@@ -98,7 +99,7 @@ export function DesktopStreamSurface({
               top: miniBox.top,
               width: miniBox.width,
               height: miniBox.height,
-              radius: "6px",
+              radius: "0.375rem",
             }
           : null);
       if (!from) {
@@ -124,7 +125,7 @@ export function DesktopStreamSurface({
         top: 0,
         width: window.innerWidth,
         height: window.innerHeight,
-        radius: "0px",
+        radius: "0rem",
       };
       const anim = animateFlipFromRect(surface, fromViewport, {
         duration: phone ? 380 : 280,
@@ -252,7 +253,7 @@ export function DesktopStreamSurface({
       {maximized && (
         <div
           aria-hidden="true"
-          className={`fixed inset-0 ${OVERLAY_LAYER} bg-black/30 transition-opacity duration-300`}
+          className={`fixed inset-0 ${OVERLAY_LAYER} bg-modal-scrim/30 transition-opacity duration-300`}
         />
       )}
       <div
@@ -295,7 +296,7 @@ export function DesktopStreamSurface({
             ref={iframeRef}
             aria-label={title}
             src={streamUrl}
-            className="absolute inset-0 h-full w-full border-0 bg-black"
+            className="absolute inset-0 h-full w-full border-0 bg-terminal"
             allow="clipboard-read; clipboard-write"
           />
           {!maximized ? (

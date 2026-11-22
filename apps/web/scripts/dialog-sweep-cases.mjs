@@ -161,8 +161,8 @@ export const DIALOGS = [
   },
   {
     id: "runtime-sign-in",
-    steps: [goto("/computers"), click("button", "^Claude Code"), click("button", "^Sign In$")],
-    expect: "Sign In",
+    steps: [goto("/computers"), click("button", "^Claude Code"), click("button", "^Sign in$")],
+    expect: "Sign in",
     unreachable:
       "the seeded runtimes report their account as unavailable (the popover says Update Computer to sign in or out here), so there is no Sign In control",
   },

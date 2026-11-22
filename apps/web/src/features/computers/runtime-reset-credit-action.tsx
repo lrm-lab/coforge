@@ -43,10 +43,7 @@ export function RuntimeResetCreditAction({
 
   if (prompt.variant === "primary") {
     return (
-      <div
-        role="alert"
-        className="mt-3 space-y-2.5 rounded-xl border border-secondary bg-warning-primary p-3"
-      >
+      <div role="alert" className="space-y-2.5 bg-warning-primary px-4 py-3">
         <div className="flex items-start gap-2 text-xs text-warning-primary">
           <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           <p>{m.runtime_reset_credit_callout({ runtime: runtimeName })}</p>
@@ -56,7 +53,7 @@ export function RuntimeResetCreditAction({
     );
   }
 
-  return <div className="mt-3">{button}</div>;
+  return <div className="px-4 py-3">{button}</div>;
 }
 
 class ResetCreditNotice extends Error {

@@ -37,10 +37,6 @@ export function RuntimeUsageWindows({
   );
 
   return snapshot?.officialGroups && snapshot.officialGroups.length > 0 ? (
-    // Rows read "group · window", as on Raft, then the used share and reset. The
-    // provider's notes stay on the snapshot and open from this button: a tooltip
-    // inside the peek would close it (task #258). Per-bucket sentences are not
-    // painted; they repeat the reset already on the row.
     <div className="mt-3 space-y-4">
       {snapshot.officialGroups.map((group, index) => (
         <div key={`${group.name ?? "group"}-${index}`} className="space-y-3">
@@ -51,7 +47,7 @@ export function RuntimeUsageWindows({
               <UsageWindow
                 key={bucket.id ?? `${bucket.window ?? "bucket"}-${bucketIndex}`}
                 label={
-                  group.name && group.name !== rowLabel ? `${group.name} · ${rowLabel}` : rowLabel
+                  group.name && group.name !== rowLabel ? `${group.name}: ${rowLabel}` : rowLabel
                 }
                 window={{
                   ...(bucket.usedPercent !== undefined ? { usedPercent: bucket.usedPercent } : {}),

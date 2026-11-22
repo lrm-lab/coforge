@@ -302,11 +302,9 @@ function AgentRosterIdentity({
   const modelLabel = useAgentModelName(agent.id, agent.runtimeConfig?.model ?? "");
   const runtime = agent.provider ? (
     <>
-      <RuntimeProviderMark provider={agent.provider} className="size-3.5" />
-      <span className="truncate">
-        {runtimeProviderLabel(agent.provider)}
-        {modelLabel ? ` · ${modelLabel}` : ""}
-      </span>
+      <RuntimeProviderMark provider={agent.provider} className="size-3.5 shrink-0" />
+      <span className="shrink-0">{runtimeProviderLabel(agent.provider)}</span>
+      {modelLabel && <span className="min-w-0 truncate text-tertiary">{modelLabel}</span>}
     </>
   ) : agent.runtimeConfigInvalid ? (
     <span className="truncate text-destructive-primary">{m.agent_profile_runtime_invalid()}</span>

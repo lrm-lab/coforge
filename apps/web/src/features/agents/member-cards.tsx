@@ -230,7 +230,7 @@ export function AgentCard({
               <span className="min-w-0 truncate">
                 {member.computerName || m.agent_computer_unnamed()}
               </span>
-              <span className="shrink-0">· {m.member_computer_access_revoked()}</span>
+              <span className="shrink-0 text-quaternary">{m.member_computer_access_revoked()}</span>
             </>
           ) : (
             <span className="truncate">

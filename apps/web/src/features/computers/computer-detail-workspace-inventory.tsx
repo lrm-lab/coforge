@@ -112,17 +112,19 @@ export function ComputerDetailWorkspaceInventory({
                           <p className="mt-1 truncate font-mono text-xs text-tertiary">
                             {workspace.rootPath}
                           </p>
-                          <p className="mt-1 truncate text-xs text-tertiary">
-                            {workspaceStatistics(workspace)}
-                            {hydrated &&
-                              workspace.modifiedAtMs > 0 &&
-                              ` · ${m.computer_agent_workspace_modified({
-                                date: formatCalendarDate(
-                                  new Date(workspace.modifiedAtMs),
-                                  timeZone,
-                                  getLocale(),
-                                ),
-                              })}`}
+                          <p className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs text-tertiary">
+                            <span>{workspaceStatistics(workspace)}</span>
+                            {hydrated && workspace.modifiedAtMs > 0 && (
+                              <span>
+                                {m.computer_agent_workspace_modified({
+                                  date: formatCalendarDate(
+                                    new Date(workspace.modifiedAtMs),
+                                    timeZone,
+                                    getLocale(),
+                                  ),
+                                })}
+                              </span>
+                            )}
                           </p>
                         </>
                       )}

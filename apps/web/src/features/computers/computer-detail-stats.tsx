@@ -88,8 +88,11 @@ export function ComputerDetailStats({
                   name={creatorName}
                   src={computer.creator.avatarUrl}
                 />
-                <span className="truncate">
-                  {creatorName} · <ComputerDate value={computer.connectedAt} timeZone={timeZone} />
+                <span className="flex min-w-0 items-baseline gap-2">
+                  <span className="truncate">{creatorName}</span>
+                  <span className="shrink-0 text-tertiary">
+                    <ComputerDate value={computer.connectedAt} timeZone={timeZone} />
+                  </span>
                 </span>
               </span>
             </Stat>

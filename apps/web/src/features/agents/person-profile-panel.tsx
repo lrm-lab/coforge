@@ -128,7 +128,7 @@ export function PersonProfilePanel({
           name={profile.displayName}
           src={profile.avatarUrl}
         />
-        <Name className="min-w-0 flex-1 truncate text-md font-medium tracking-tight text-secondary">
+        <Name className="min-w-0 flex-1 truncate text-sm font-medium tracking-tight text-secondary">
           {profile.displayName}
         </Name>
         <ButtonUtility
@@ -206,7 +206,7 @@ function PersonProfileBody({
           <h2 className="truncate text-lg font-semibold text-primary">
             {profile.displayName}
             {profile.isViewer && (
-              <span className="ml-1.5 text-md font-normal text-tertiary">
+              <span className="ms-1.5 text-sm font-normal text-tertiary">
                 ({m.workspace_members_you()})
               </span>
             )}

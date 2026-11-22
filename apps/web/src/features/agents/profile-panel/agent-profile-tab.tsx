@@ -265,7 +265,9 @@ function AgentProfileTabBody({
                         ? m.agent_profile_computer_connected()
                         : m.agent_profile_computer_offline()}
                       {profile.computer.computerVersion && (
-                        <span>· {profile.computer.computerVersion}</span>
+                        <span dir="ltr" className="text-quaternary">
+                          {profile.computer.computerVersion}
+                        </span>
                       )}
                     </p>
                   )}
