@@ -147,6 +147,27 @@ test("reusing the same workspace and instructions keeps a stable path across res
   expect(await Bun.file(path3).exists()).toBe(false);
 });
 
+test("overlapping remove and recreate for identical OpenCode instructions keeps the new file intact", async () => {
+  const { createOpenCodeInstructions } = await import("#src/opencode/instructions");
+  const scope = await mkdtemp(join(tmpdir(), "opencode-instructions-race-"));
+  try {
+    let current = await createOpenCodeInstructions(INSTRUCTIONS, scope);
+    for (let i = 0; i < 20; i += 1) {
+      const previous = current;
+      const [, next] = await Promise.all([
+        previous.remove(),
+        createOpenCodeInstructions(INSTRUCTIONS, scope),
+      ]);
+      expect(await Bun.file(next.path).text()).toBe(INSTRUCTIONS);
+      current = next;
+    }
+    await current.remove();
+    expect(await Bun.file(current.path).exists()).toBe(false);
+  } finally {
+    await rm(scope, { recursive: true, force: true });
+  }
+});
+
 test("an Agent environment that already sets OPENCODE_CONFIG_CONTENT is refused", async () => {
   const directory = await mkdtemp(join(tmpdir(), "opencode-instructions-declared-"));
   try {

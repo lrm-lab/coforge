@@ -114,3 +114,23 @@ test("identical instructions reuse a stable rule path and reference-count concur
     await rm(cwd, { recursive: true, force: true });
   }
 });
+
+test("overlapping remove and recreate for identical Devin instructions keeps the new rule intact", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "anvil-devin-rules-race-"));
+  try {
+    let current = await createDevinRuleFile(cwd, "Stay brief.\n");
+    for (let i = 0; i < 20; i += 1) {
+      const previous = current;
+      const [, next] = await Promise.all([
+        previous.remove(),
+        createDevinRuleFile(cwd, "Stay brief.\n"),
+      ]);
+      expect(await Bun.file(next.path).exists()).toBe(true);
+      current = next;
+    }
+    await current.remove();
+    expect(await Bun.file(current.path).exists()).toBe(false);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});

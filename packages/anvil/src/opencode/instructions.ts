@@ -1,6 +1,6 @@
 import type { AgentSessionOptions } from "@coforge/agent";
-import { createHash } from "node:crypto";
-import { chmod, lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { chmod, lstat, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -14,6 +14,24 @@ export interface OpenCodeInstructions {
 }
 
 const liveInstructionRefs = new Map<string, number>();
+const directoryLocks = new Map<string, Promise<void>>();
+
+async function withDirectoryLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const previous = directoryLocks.get(key) ?? Promise.resolve();
+  let unlock!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    unlock = resolve;
+  });
+  const tail = previous.then(() => gate);
+  directoryLocks.set(key, tail);
+  await previous;
+  try {
+    return await fn();
+  } finally {
+    unlock();
+    if (directoryLocks.get(key) === tail) directoryLocks.delete(key);
+  }
+}
 
 async function isOwnedPrivateDirectory(directory: string): Promise<boolean> {
   try {
@@ -21,6 +39,15 @@ async function isOwnedPrivateDirectory(directory: string): Promise<boolean> {
     if (!info.isDirectory() || info.isSymbolicLink()) return false;
     const uid = process.getuid?.();
     return uid === undefined || info.uid === uid;
+  } catch {
+    return false;
+  }
+}
+
+async function isSafeRegularFile(path: string): Promise<boolean> {
+  try {
+    const info = await lstat(path);
+    return info.isFile() && !info.isSymbolicLink();
   } catch {
     return false;
   }
@@ -35,17 +62,23 @@ async function isSafeRegularOrMissing(path: string): Promise<boolean> {
   }
 }
 
-async function acquireInstructionsDirectory(
+async function writeInstructionsAtomically(
+  directory: string,
+  path: string,
   instructions: string,
-  scopeKey?: string,
-): Promise<string> {
-  const digest = createHash("sha256")
-    .update(scopeKey ?? "")
-    .update("\0")
-    .update(instructions)
-    .digest("hex")
-    .slice(0, 16);
-  const candidate = join(tmpdir(), `coforge-opencode-${digest}`);
+): Promise<void> {
+  const temp = join(directory, `.instructions.${randomUUID()}.tmp`);
+  try {
+    await writeFile(temp, instructions, { mode: 0o600, flag: "wx" });
+    await chmod(temp, 0o600);
+    await rename(temp, path);
+  } catch (error) {
+    await rm(temp, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function acquireInstructionsDirectory(candidate: string): Promise<string> {
   try {
     await mkdir(candidate, { mode: 0o700 });
     return candidate;
@@ -65,33 +98,54 @@ export async function createOpenCodeInstructions(
   instructions: string,
   scopeKey?: string,
 ): Promise<OpenCodeInstructions> {
-  const directory = await acquireInstructionsDirectory(instructions, scopeKey);
-  liveInstructionRefs.set(directory, (liveInstructionRefs.get(directory) ?? 0) + 1);
-  const release = async (): Promise<void> => {
-    const remaining = (liveInstructionRefs.get(directory) ?? 1) - 1;
-    if (remaining > 0) {
-      liveInstructionRefs.set(directory, remaining);
-      return;
+  const digest = createHash("sha256")
+    .update(scopeKey ?? "")
+    .update("\0")
+    .update(instructions)
+    .digest("hex")
+    .slice(0, 16);
+  const candidate = join(tmpdir(), `coforge-opencode-${digest}`);
+
+  const { directory, path } = await withDirectoryLock(candidate, async () => {
+    const acquired = await acquireInstructionsDirectory(candidate);
+    const filePath = join(acquired, "instructions.md");
+    const existingRefs = liveInstructionRefs.get(acquired) ?? 0;
+    liveInstructionRefs.set(acquired, existingRefs + 1);
+    try {
+      await chmod(acquired, 0o700);
+      if (existingRefs === 0 || !(await isSafeRegularFile(filePath))) {
+        await writeInstructionsAtomically(acquired, filePath, instructions);
+      }
+      return { directory: acquired, path: filePath };
+    } catch (error) {
+      const remaining = (liveInstructionRefs.get(acquired) ?? 1) - 1;
+      if (remaining > 0) liveInstructionRefs.set(acquired, remaining);
+      else {
+        liveInstructionRefs.delete(acquired);
+        await rm(acquired, { recursive: true, force: true });
+      }
+      throw error;
     }
-    liveInstructionRefs.delete(directory);
-    await rm(directory, { recursive: true, force: true });
+  });
+
+  const release = () =>
+    withDirectoryLock(directory, async () => {
+      const remaining = (liveInstructionRefs.get(directory) ?? 1) - 1;
+      if (remaining > 0) {
+        liveInstructionRefs.set(directory, remaining);
+        return;
+      }
+      liveInstructionRefs.delete(directory);
+      await rm(directory, { recursive: true, force: true });
+    });
+
+  let removal: Promise<void> | undefined;
+  return {
+    directory,
+    path,
+    configContent: JSON.stringify({ instructions: [path] }),
+    remove: () => (removal ??= release()),
   };
-  try {
-    await chmod(directory, 0o700);
-    const path = join(directory, "instructions.md");
-    await writeFile(path, instructions, { mode: 0o600 });
-    await chmod(path, 0o600);
-    let removal: Promise<void> | undefined;
-    return {
-      directory,
-      path,
-      configContent: JSON.stringify({ instructions: [path] }),
-      remove: () => (removal ??= release()),
-    };
-  } catch (error) {
-    await release();
-    throw error;
-  }
 }
 
 /**
