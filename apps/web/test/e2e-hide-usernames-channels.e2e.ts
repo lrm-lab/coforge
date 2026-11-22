@@ -53,7 +53,7 @@ test(
         await waitFor(
           `document.querySelector('[aria-label="Channel details and settings"]') !== null`,
         );
-        const panel = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]')`;
+        const panel = `document.querySelector('section[aria-label="Channel details and settings"]')`;
         const panelText = () => evaluate<string>(`${panel}?.innerText ?? ""`);
         const roster = `${panel}?.querySelector('input[placeholder="Search members…"]') != null`;
         // A click that lands before the page hydrates opens nothing; try again until the panel opens.

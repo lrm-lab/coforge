@@ -8,7 +8,8 @@ import { m } from "#src/paraglide/messages";
 import { ConversationFocusButton } from "./conversation-focus-button";
 import { conversationHeaderTabs, type HeaderTabs } from "./conversation-header-tabs";
 import { ConversationListButton } from "./conversation-list-button";
-import { DirectSettingsButton } from "./direct-settings-panel";
+import { DirectSettingsPanel, DirectSettingsToggleButton } from "./direct-settings-panel";
+import { useConversationDetailsState } from "./use-conversation-details-state";
 import type { ThreadedConversationProps } from "./conversation-types";
 import { DirectThreadedConversation } from "./direct-threaded-conversation";
 import { plainMentionsByHandle } from "./message-markdown";
@@ -33,12 +34,13 @@ function useIsSelfConversation(conversation: PeopleDirectConversationView) {
  */
 export function PeopleDirectConversationHeader({
   conversation,
-  onChanged,
+  settingsOpen = false,
+  onToggleSettings,
   ...tabs
 }: HeaderTabs & {
   conversation: PeopleDirectConversationView;
-  /** Re-reads the page after the settings panel changed a preference. */
-  onChanged: () => Promise<void>;
+  settingsOpen?: boolean;
+  onToggleSettings?: () => void;
 }) {
   const { peer } = conversation;
   const online = useMemberOnline(peer.id);
@@ -67,16 +69,11 @@ export function PeopleDirectConversationHeader({
         </>
       }
       actions={
-        // The -mr-1.5 cancels the button's p-1.5 so its glyph lands on the pane gutter, as in the
-        // channel header.
         <div className="-mr-1.5 flex shrink-0 items-center gap-3">
           <ConversationFocusButton />
-          <DirectSettingsButton
-            conversationId={conversation.conversationId}
-            name={peer.displayName}
-            collapseLongMessages={conversation.collapseLongMessages}
-            onChanged={onChanged}
-          />
+          {onToggleSettings && (
+            <DirectSettingsToggleButton open={settingsOpen} onToggle={onToggleSettings} />
+          )}
         </div>
       }
       tabs={conversationHeaderTabs(tabs)}
@@ -92,15 +89,30 @@ export function PeopleDirectConversationHeader({
 export function PeopleDirectConversation({
   conversation,
   onChanged,
+  settingsOpen: controlledSettingsOpen,
+  onSettingsOpenChange: onControlledSettingsOpenChange,
   ...props
 }: Omit<
   ThreadedConversationProps,
   "conversation" | "header" | "emptyState" | "conversationName" | "threadContext"
-> & { conversation: PeopleDirectConversationView; onChanged: () => Promise<void> }) {
+> & {
+  conversation: PeopleDirectConversationView;
+  onChanged: () => Promise<void>;
+  settingsOpen?: boolean;
+  onSettingsOpenChange?: (open: boolean) => void;
+}) {
   const { peer } = conversation;
   const self = useIsSelfConversation(conversation);
   const { mentionables } = conversation;
   const plainMentions = useMemo(() => plainMentionsByHandle(mentionables), [mentionables]);
+  const details = useConversationDetailsState({
+    controlledOpen: controlledSettingsOpen,
+    onControlledOpenChange: onControlledSettingsOpenChange,
+  });
+  const toggleDetails = () => {
+    if (details.open) details.requestClose();
+    else details.openDetails();
+  };
   // Nobody else is in a conversation with yourself, so its messages carry no read ticks.
   const shown = useMemo(
     () => (self ? { ...conversation, readTicks: undefined } : conversation),
@@ -113,13 +125,35 @@ export function PeopleDirectConversation({
       mentionCompletion={false}
       name={peer.displayName}
       plainMentions={plainMentions}
+      detailsOpen={details.open}
+      onRequestCloseDetails={details.requestClose}
+      detailsPane={
+        <DirectSettingsPanel
+          conversationId={conversation.conversationId}
+          name={peer.displayName}
+          avatar={
+            <ActorAvatar
+              presence
+              size="sm"
+              userId={peer.id}
+              name={peer.displayName}
+              src={peer.avatarUrl}
+            />
+          }
+          open={details.open}
+          onClose={() => details.setOpen(false)}
+          collapseLongMessages={conversation.collapseLongMessages}
+          onChanged={onChanged}
+        />
+      }
       header={
         <PeopleDirectConversationHeader
           conversation={conversation}
           active="chat"
           onShowTasks={props.onShowTasks}
           onShowFiles={props.onShowFiles}
-          onChanged={onChanged}
+          settingsOpen={details.open}
+          onToggleSettings={toggleDetails}
         />
       }
       emptyState={{

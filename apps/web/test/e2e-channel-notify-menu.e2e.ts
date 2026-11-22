@@ -101,7 +101,8 @@ test("a channel's notification level is chosen from its row menu and its setting
     // The settings panel: the same four, the current one shown, its line saying what it does.
     await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}`);
     await browser("wait", "--fn", pageHydrated);
-    const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]') !== null`;
+    const panelSelector = 'section[aria-label="Channel details and settings"]';
+    const panelOpen = `document.querySelector('${panelSelector}') !== null`;
     // A click that lands before the page hydrates opens nothing; try again until the panel opens.
     for (let attempt = 0; !(await evaluate<boolean>(panelOpen)); attempt += 1) {
       if (attempt === 5) throw new Error("the channel settings panel never opened");
@@ -110,7 +111,7 @@ test("a channel's notification level is chosen from its row menu and its setting
       );
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
-    const select = `document.querySelector('[role="dialog"] button[aria-label^="Notifications"], [role="dialog"] [aria-label="Notifications"] button')`;
+    const select = `document.querySelector('${panelSelector} button[aria-label^="Notifications"], ${panelSelector} [aria-label="Notifications"] button')`;
     await browser("wait", "--fn", `${select} != null`);
     await evaluate(`(${select}.scrollIntoView({ block: "center" }), true)`);
     expect(await evaluate<string>(`${select}.textContent`)).toContain("Nothing");

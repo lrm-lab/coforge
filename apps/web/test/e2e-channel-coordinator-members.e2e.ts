@@ -41,12 +41,12 @@ const agents = {
   added: { id: "", displayName: "" },
 };
 
-const panel = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]')`;
+const panelSelector = 'section[aria-label="Channel details and settings"]';
+const panel = `document.querySelector('${panelSelector}')`;
 const picker = `button[aria-label^="Coordinator Agent:"]`;
 const pickerOptions = `[...document.querySelectorAll('[role^="menuitem"]')].map((item) => item.textContent ?? "")`;
 const panelHas = (text: string) => `${panel}?.textContent.includes(${JSON.stringify(text)})`;
-/** The settings' Members row whatever the counts currently are. */
-const membersRow = `[...document.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent.includes("human") && button.textContent.includes("agent"))`;
+const membersRow = `[...document.querySelectorAll('${panelSelector} button')].find((button) => button.textContent.includes("human") && button.textContent.includes("agent"))`;
 
 const pickerTrigger = `document.querySelector('${picker}')`;
 
@@ -192,14 +192,14 @@ test("the coordinator picker follows member changes without a page reload", asyn
   // Members → Add Member → pick the second Agent → confirm.
   await waitFor(`${membersRow} !== undefined`, 15_000);
   await browser("eval", `${membersRow}.click()`);
-  await clickText('[role="dialog"] button', "Add member");
+  await clickText(`${panelSelector} button`, "Add member");
   await waitFor(panelHas("Add selected (0)"), 15_000);
   await browser("fill", 'input[placeholder="Name"]', agents.added.displayName);
-  const candidate = `[...document.querySelectorAll('[role="dialog"] label')].find((label) => label.textContent.includes(${JSON.stringify(agents.added.displayName)}))`;
+  const candidate = `[...document.querySelectorAll('${panelSelector} label')].find((label) => label.textContent.includes(${JSON.stringify(agents.added.displayName)}))`;
   await waitFor(`${candidate} !== undefined`, 15_000);
   await browser("eval", `${candidate}.querySelector("input").click()`);
   await waitFor(panelHas("Add selected (1)"), 15_000);
-  await clickText('[role="dialog"] button', "Add selected (1)");
+  await clickText(`${panelSelector} button`, "Add selected (1)");
   await waitFor(panelHas(agents.added.displayName), 15_000);
 
   // Back to the settings: the picker now offers the added Agent, still without a reload.

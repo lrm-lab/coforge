@@ -1,4 +1,13 @@
-import { useEffect, useEffectEvent, useMemo, useRef, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+  type ReactNode,
+} from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
@@ -14,6 +23,7 @@ import { useReportViewingItem } from "#src/features/inbox/viewing-items";
 import { usePageTitleLabel } from "#src/lib/browser-tab";
 import { m } from "#src/paraglide/messages";
 import { markPublicChannelRead } from "./channels.functions";
+import type { ChannelMembersView } from "./channel-members-page";
 import { ChannelConversation, ChannelConversationHeader } from "./channel-conversation";
 import type { HeaderTabs } from "./conversation-header-tabs";
 import { channelLabel } from "./channel-visibility";
@@ -37,6 +47,7 @@ import { useChannelMentionables } from "./use-channel-mentionables";
 import { useConversationView, useShownConversationTab } from "./use-conversation-view";
 import { useConversationOpened } from "./use-conversation-open";
 import { usePageAttended } from "./use-page-attended";
+import { useConversationDetailsState } from "./use-conversation-details-state";
 
 type ConversationPageProps = {
   search: ConversationPageSearch;
@@ -73,8 +84,7 @@ function ChannelConversationPage({
   channelId,
   ...props
 }: ConversationPageProps & { channelId: string }) {
-  const { page, taskView, refreshChannelAndSidebar, conversationProps } =
-    useChannelConversation(channelId);
+  const { page, taskView, conversationProps } = useChannelConversation(channelId);
   const { conversation } = page;
   // The page payload's member directory is a mount-time copy: it only changes on a full reload.
   // Every surface below the composer — the settings panel's coordinator picker, the header, the
@@ -93,14 +103,14 @@ function ChannelConversationPage({
     [page, freshConversation],
   );
   const advanceReadCursor = useServerFn(markPublicChannelRead);
+  const [requestedMembersView, setRequestedMembersView] = useState<ChannelMembersView | null>(null);
+  const consumeMembersView = useCallback(() => setRequestedMembersView(null), []);
   return (
     <ConversationPageBody
       {...props}
       unreadKey={channelId}
       page={freshPage}
       taskView={taskView}
-      // Only a member advances the read cursor, creates Tasks and moves them; anyone else sees the
-      // join prompt. The viewer is always a member of their own direct conversation.
       isMember={Boolean(conversation.senderMemberId)}
       name={channelLabel(conversation)}
       tabLabel={conversation.name}
@@ -108,11 +118,16 @@ function ChannelConversationPage({
         key: `channel:${channelId}`,
         advance: (throughSequence) => advanceReadCursor({ data: { channelId, throughSequence } }),
       }}
-      header={(tabs) => (
+      header={(tabs, _openAgentProfile, details) => (
         <ChannelConversationHeader
           conversation={freshConversation}
           {...tabs}
-          onChanged={refreshChannelAndSidebar}
+          settingsOpen={details.settingsOpen}
+          onOpenSettings={(view) => {
+            if (view) setRequestedMembersView(view);
+            details.openDetails();
+          }}
+          onCloseSettings={details.closeDetails}
         />
       )}
       conversation={(chat) => (
@@ -121,6 +136,8 @@ function ChannelConversationPage({
           {...conversationProps}
           conversation={freshConversation}
           {...chat}
+          requestedMembersView={requestedMembersView}
+          onRequestedMembersViewConsumed={consumeMembersView}
         />
       )}
     />
@@ -156,12 +173,13 @@ function AgentDirectConversationPage({
       {...props}
       data={data}
       name={conversation.agent.displayName}
-      header={(tabs, openAgentProfile) => (
+      header={(tabs, openAgentProfile, details) => (
         <DirectConversationHeader
           conversation={conversation}
           {...tabs}
           onOpenAgentProfile={openAgentProfile}
-          onChanged={data.page.invalidate}
+          settingsOpen={details.settingsOpen}
+          onToggleSettings={details.toggleDetails}
         />
       )}
       conversation={(chat) => (
@@ -191,15 +209,14 @@ function PeopleDirectConversationPage({
       {...props}
       data={data}
       name={conversation.peer.displayName}
-      header={(tabs) => (
+      header={(tabs, _openAgentProfile, details) => (
         <PeopleDirectConversationHeader
           conversation={conversation}
           {...tabs}
-          onChanged={data.page.invalidate}
+          settingsOpen={details.settingsOpen}
+          onToggleSettings={details.toggleDetails}
         />
       )}
-      // A member DM has no Agent of its own, but the chat list header opens any visible Agent's
-      // profile beside whatever conversation is open: the panel needs its tab handler.
       conversation={({
         jumpMessage,
         onJumpMessageConsumed,
@@ -211,6 +228,8 @@ function PeopleDirectConversationPage({
         onAgentProfileTabChange,
         onOpenPersonProfile,
         onCloseAgentProfile,
+        settingsOpen,
+        onSettingsOpenChange,
       }) => (
         <PeopleDirectConversation
           key={conversation.conversationId}
@@ -226,6 +245,8 @@ function PeopleDirectConversationPage({
           onAgentProfileTabChange={onAgentProfileTabChange}
           onOpenPersonProfile={onOpenPersonProfile}
           onCloseAgentProfile={onCloseAgentProfile}
+          settingsOpen={settingsOpen}
+          onSettingsOpenChange={onSettingsOpenChange}
         />
       )}
     />
@@ -286,7 +307,16 @@ type ConversationPageBodyProps = {
    * avatar, never a `#`), or `@Name` for a direct message. */
   tabLabel: string;
   readCursor: { key: string; advance: (throughSequence: number) => Promise<unknown> };
-  header: (tabs: HeaderTabs, openAgentProfile: (agentId: string) => void) => ReactNode;
+  header: (
+    tabs: HeaderTabs,
+    openAgentProfile: (agentId: string) => void,
+    details: {
+      settingsOpen: boolean;
+      openDetails: () => void;
+      closeDetails: () => void;
+      toggleDetails: () => void;
+    },
+  ) => ReactNode;
   conversation: (
     chat: {
       jumpMessage?: string;
@@ -295,6 +325,9 @@ type ConversationPageBodyProps = {
       onShowTasks: () => void;
       onShowFiles: () => void;
       onReadLatest: (throughSequence: number) => void;
+      settingsOpen: boolean;
+      onSettingsOpenChange: (open: boolean) => void;
+      detailsRequestCloseRef: MutableRefObject<((then?: () => void) => void) | null>;
     } & ReturnType<typeof useConversationAgentProfile>,
   ) => ReactNode;
 };
@@ -338,6 +371,16 @@ function ConversationPageMain({
   } = pageSearch;
   const view = useShownConversationTab(requestedView);
   const agentProfile = useConversationAgentProfile({ profile, agentTab });
+  const details = useConversationDetailsState();
+  const detailsControls = {
+    settingsOpen: details.open,
+    openDetails: details.openDetails,
+    closeDetails: () => details.requestClose(),
+    toggleDetails: () => {
+      if (details.open) details.requestClose();
+      else details.openDetails();
+    },
+  };
   const { conversation } = page;
   const { showChat, showTasks, showFiles, openTask, openTaskThread, openMessage } =
     useConversationView(page.ensureLoaded);
@@ -410,28 +453,26 @@ function ConversationPageMain({
   };
   const { onOpenAgentProfile } = agentProfile;
 
-  if (view === "files")
-    return (
+  const tasksPane =
+    view === "files" ? (
       <div className="flex min-h-0 flex-1 flex-col">
         {header(
           { active: "files", onShowChat: showChat, onShowTasks: showTasks },
           onOpenAgentProfile,
+          detailsControls,
         )}
         <ConversationFilesWithDocuments
           conversationId={conversation.conversationId}
           onOpenMessage={openMessage}
         />
       </div>
-    );
-  // The Tasks tab sits in the conversation's main pane, so a Task opened from it shows the
-  // conversation's Task popup over the board.
-  const tasksPane =
-    view === "tasks" ? (
+    ) : view === "tasks" ? (
       <ConversationTaskBoard
         conversationId={conversation.conversationId}
         header={header(
           { active: "tasks", onShowChat: showChat, onShowFiles: showFiles },
           onOpenAgentProfile,
+          detailsControls,
         )}
         search={search}
         taskView={taskView}
@@ -463,6 +504,9 @@ function ConversationPageMain({
     onShowTasks: showTasks,
     onShowFiles: showFiles,
     onReadLatest: readLatest,
+    settingsOpen: details.open,
+    onSettingsOpenChange: details.setOpen,
+    detailsRequestCloseRef: details.requestCloseRef,
     ...agentProfile,
   });
 }

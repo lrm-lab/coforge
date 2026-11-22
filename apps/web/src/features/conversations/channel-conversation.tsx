@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type MutableRefObject, type ReactNode } from "react";
+import { Button as AriaButton } from "react-aria-components";
 import { useOpenSearch } from "#src/features/search/search-dialog-context";
 import { useQuery } from "@tanstack/react-query";
 import { SearchLg, Settings01 as Settings } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { cn } from "#src/lib/utils";
 import { ChannelFace, ChannelTitle, channelGlyph } from "./channel-name";
 import { ChannelSettingsPanel } from "./channel-settings-panel";
 import { channelLabel, isPrivateChannel, type ChannelVisibility } from "./channel-visibility";
@@ -36,6 +38,7 @@ import type { AgentProfileTab } from "#src/features/agents/profile-panel/profile
 import type { ConversationProps } from "./conversation-types";
 import type { ChannelNotificationLevel } from "./notification-levels";
 import type { OpenAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
+import { useConversationDetailsState } from "./use-conversation-details-state";
 
 export type ChannelConversationView = Omit<DirectConversationView, "agent" | "messages"> & {
   name: string;
@@ -58,108 +61,101 @@ export type ChannelConversationView = Omit<DirectConversationView, "agent" | "me
 
 export function ChannelConversationHeader({
   conversation,
-  onChanged,
-  settingsOpen: controlledSettingsOpen,
-  onSettingsOpenChange,
+  settingsOpen = false,
+  onOpenSettings,
+  onCloseSettings,
   ...tabs
 }: HeaderTabs & {
   conversation: ChannelConversationView;
-  onChanged: () => Promise<void>;
   settingsOpen?: boolean;
-  onSettingsOpenChange?: (open: boolean) => void;
+  onOpenSettings?: (view?: ChannelMembersView | null) => void;
+  onCloseSettings?: () => void;
 }) {
-  const [ownSettingsOpen, setOwnSettingsOpen] = useState(false);
-  const [membersStart, setMembersStart] = useState<ChannelMembersView | null>(null);
   const openSearch = useOpenSearch();
-  const settingsOpen = controlledSettingsOpen ?? ownSettingsOpen;
-  const setSettingsOpen = onSettingsOpenChange ?? setOwnSettingsOpen;
-  const [settingsMounted, setSettingsMounted] = useState(settingsOpen);
-  useEffect(() => {
-    if (settingsOpen) {
-      setSettingsMounted(true);
-      return;
-    }
-    if (!settingsMounted) return;
-    const timer = window.setTimeout(() => setSettingsMounted(false), 260);
-    return () => window.clearTimeout(timer);
-  }, [settingsMounted, settingsOpen]);
   const canInvite = Boolean(conversation.senderMemberId) && !conversation.archived;
-  function openPanel(view: ChannelMembersView | null) {
-    setMembersStart(view);
-    setSettingsOpen(true);
-  }
+  const toggleSettings = () => {
+    if (settingsOpen) onCloseSettings?.();
+    else onOpenSettings?.(null);
+  };
   return (
-    <>
-      <TabbedHeader
-        identity={
-          <>
-            <ConversationListButton />
-            <h1
-              data-channel-title
-              className="flex min-w-0 flex-1 items-center gap-2 text-md font-semibold"
-            >
-              <ChannelFace
-                channelId={conversation.conversationId}
-                className="avatar-group-header"
-                fallback={null}
-              />
-              <span data-channel-name className="min-w-0 truncate">
-                <ChannelTitle
-                  name={conversation.name}
-                  visibility={conversation.visibility}
-                  hash={false}
+    <TabbedHeader
+      identity={
+        <>
+          <ConversationListButton />
+          <h1 data-channel-title className="flex min-w-0 flex-1 items-center text-md font-semibold">
+            {onOpenSettings ? (
+              <AriaButton
+                onPress={toggleSettings}
+                aria-expanded={settingsOpen}
+                className="flex min-w-0 max-w-full cursor-pointer items-center gap-2 rounded-sm text-left outline-focus-ring hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2"
+              >
+                <ChannelFace
+                  channelId={conversation.conversationId}
+                  className="avatar-group-header"
+                  fallback={null}
                 />
+                <span data-channel-name className="min-w-0 truncate">
+                  <ChannelTitle
+                    name={conversation.name}
+                    visibility={conversation.visibility}
+                    hash={false}
+                  />
+                </span>
+              </AriaButton>
+            ) : (
+              <span className="flex min-w-0 items-center gap-2">
+                <ChannelFace
+                  channelId={conversation.conversationId}
+                  className="avatar-group-header"
+                  fallback={null}
+                />
+                <span data-channel-name className="min-w-0 truncate">
+                  <ChannelTitle
+                    name={conversation.name}
+                    visibility={conversation.visibility}
+                    hash={false}
+                  />
+                </span>
               </span>
-            </h1>
-          </>
-        }
-        actions={
-          <div className="-mr-1.5 flex shrink-0 items-center gap-3">
-            <ButtonUtility
-              icon={SearchLg}
-              size="sm"
-              color="tertiary"
-              className={HEADER_ICON_CLASS}
-              tooltip={m.search_this_channel()}
-              onClick={() =>
-                openSearch({
-                  filters: { channelId: conversation.conversationId },
-                  deferred: true,
-                })
-              }
-            />
-            <ChannelHeaderMemberCluster
-              channelId={conversation.conversationId}
-              canAdd={canInvite}
-              onOpenMembers={() => openPanel("members")}
-              onAddMembers={() => openPanel("add")}
-            />
-            <ConversationFocusButton />
-            <ButtonUtility
-              icon={Settings}
-              size="sm"
-              color="tertiary"
-              className={HEADER_ICON_CLASS}
-              tooltip={m.channel_settings_open()}
-              onClick={() => openPanel(null)}
-            />
-          </div>
-        }
-        tabs={conversationHeaderTabs(tabs)}
-      />
-      {settingsMounted && (
-        <ChannelSettingsPanel
-          conversation={conversation}
-          open={settingsOpen}
-          initialMembersView={membersStart}
-          onOpenChange={(open) => {
-            setSettingsOpen(open);
-            if (!open) setMembersStart(null);
-          }}
-          onChanged={onChanged}
-        />
-      )}
-    </>
+            )}
+          </h1>
+        </>
+      }
+      actions={
+        <div className="-mr-1.5 flex shrink-0 items-center gap-3">
+          <ButtonUtility
+            icon={SearchLg}
+            size="sm"
+            color="tertiary"
+            className={HEADER_ICON_CLASS}
+            tooltip={m.search_this_channel()}
+            onClick={() =>
+              openSearch({
+                filters: { channelId: conversation.conversationId },
+                deferred: true,
+              })
+            }
+          />
+          <ChannelHeaderMemberCluster
+            channelId={conversation.conversationId}
+            canAdd={canInvite}
+            onOpenMembers={() => onOpenSettings?.("members")}
+            onAddMembers={() => onOpenSettings?.("add")}
+          />
+          <ConversationFocusButton />
+          <ButtonUtility
+            icon={Settings}
+            size="sm"
+            color="tertiary"
+            aria-expanded={settingsOpen}
+            className={cn(HEADER_ICON_CLASS, settingsOpen && "bg-primary_hover")}
+            tooltip={m.channel_settings_open()}
+            onClick={toggleSettings}
+          />
+        </div>
+      }
+      tabs={conversationHeaderTabs(tabs)}
+    />
   );
 }
 
@@ -189,6 +185,11 @@ export function ChannelConversation({
   taskPopup,
   jumpMessage,
   onJumpMessageConsumed,
+  settingsOpen: controlledSettingsOpen,
+  onSettingsOpenChange: onControlledSettingsOpenChange,
+  requestedMembersView: controlledMembersView,
+  onRequestedMembersViewConsumed: onControlledMembersViewConsumed,
+  detailsRequestCloseRef,
 }: {
   conversation: ChannelConversationView;
   onSend: (
@@ -220,10 +221,30 @@ export function ChannelConversation({
   taskPopup?: TaskPopupControls;
   jumpMessage?: string;
   onJumpMessageConsumed?: () => void;
+  settingsOpen?: boolean;
+  onSettingsOpenChange?: (open: boolean) => void;
+  requestedMembersView?: ChannelMembersView | null;
+  onRequestedMembersViewConsumed?: () => void;
+  detailsRequestCloseRef?: MutableRefObject<((then?: () => void) => void) | null>;
 }) {
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [ownMembersView, setOwnMembersView] = useState<ChannelMembersView | null>(null);
+  const details = useConversationDetailsState({
+    controlledOpen: controlledSettingsOpen,
+    onControlledOpenChange: onControlledSettingsOpenChange,
+    requestCloseRef: detailsRequestCloseRef,
+  });
+  const activeRequestCloseRef = details.requestCloseRef;
+  const requestedMembersView = controlledMembersView ?? ownMembersView;
+  const consumeMembersView = useCallback(() => {
+    setOwnMembersView(null);
+    onControlledMembersViewConsumed?.();
+  }, [onControlledMembersViewConsumed]);
+  const openSettings = (view: ChannelMembersView | null = null) => {
+    if (view) setOwnMembersView(view);
+    details.openDetails();
+  };
   const freshMentionables = useChannelMentionables(
     conversation.conversationId,
     conversation.mentionables,
@@ -286,6 +307,19 @@ export function ChannelConversation({
       onAgentProfileTabChange={onAgentProfileTabChange}
       onCloseAgentProfile={onCloseAgentProfile}
       tasksPane={tasksPane}
+      detailsOpen={details.open}
+      onRequestCloseDetails={details.requestClose}
+      detailsPane={
+        <ChannelSettingsPanel
+          conversation={conversationWithFreshDirectory}
+          open={details.open}
+          requestedMembersView={requestedMembersView}
+          onRequestedMembersViewConsumed={consumeMembersView}
+          requestCloseRef={activeRequestCloseRef}
+          onOpenChange={details.setOpen}
+          onChanged={onChanged}
+        />
+      }
       channels={channels}
       taskPopup={taskPopup}
       jumpMessage={jumpMessage}
@@ -330,16 +364,16 @@ export function ChannelConversation({
           active="chat"
           onShowTasks={onShowTasks}
           onShowFiles={onShowFiles}
-          onChanged={onChanged}
-          settingsOpen={settingsOpen}
-          onSettingsOpenChange={setSettingsOpen}
+          settingsOpen={details.open}
+          onOpenSettings={openSettings}
+          onCloseSettings={() => details.requestClose()}
         />
       }
       readOnlyNotice={
         conversation.archived ? (
           <ArchivedChannelNotice
             canUnarchive={conversation.channelCapabilities.unarchive && !taskPopup}
-            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenSettings={() => openSettings(null)}
           />
         ) : !conversation.senderMemberId ? (
           <div className="mx-4 mb-4 flex flex-col items-start gap-3 rounded-lg border border-secondary bg-secondary p-4 md:mx-6 md:mb-6">

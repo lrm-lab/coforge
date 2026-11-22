@@ -7,8 +7,8 @@ import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
 import { useChannelMembers } from "./channel-members-query";
+import { SettingsCard } from "./settings-panel-parts";
 
-/** How many member avatars the strip shows before the "+N" tile. */
 const MEMBER_STRIP_LIMIT = 14;
 
 export function MembersStrip({
@@ -32,11 +32,10 @@ export function MembersStrip({
   const shown = entries.slice(0, MEMBER_STRIP_LIMIT);
   const more = entries.length - shown.length;
   return (
-    <section className="py-5">
-      {/* One full-width row opens the roster: the section's name, then its counts. */}
+    <SettingsCard className="p-3.5">
       <h3>
         <AriaButton
-          className="-mx-2 flex w-[calc(100%+1rem)] cursor-pointer items-center justify-between gap-3 rounded-lg bg-secondary px-2 py-1.5 text-sm outline-focus-ring hover:bg-secondary_hover focus-visible:outline-2"
+          className="-m-1.5 flex w-[calc(100%+0.75rem)] cursor-pointer items-center justify-between gap-3 rounded-lg p-1.5 text-sm outline-focus-ring hover:bg-primary_hover focus-visible:outline-2"
           onPress={onOpenMembers}
         >
           <span className="font-semibold text-primary">{m.channel_settings_members()}</span>
@@ -63,7 +62,6 @@ export function MembersStrip({
         {shown.map((entry) => (
           <Tooltip key={entry.key} title={entry.displayName}>
             <TooltipTrigger className="shrink-0 rounded-full" onPress={onOpenMembers}>
-              {/* The channel's people at a glance: each with its status dot (task #510). */}
               <ActorAvatar
                 presence
                 userId={entry.key.startsWith("user:") ? entry.id : undefined}
@@ -94,13 +92,12 @@ export function MembersStrip({
         {canAdd && members.data && (
           <AvatarAddButton
             size="sm"
-            // The member avatars' 38 × 38 circle (styles.css).
             className="size-[2.375rem] rounded-full border-secondary text-avatar-add-fg"
             title={m.channel_settings_add_members()}
             onPress={onAddMembers}
           />
         )}
       </div>
-    </section>
+    </SettingsCard>
   );
 }

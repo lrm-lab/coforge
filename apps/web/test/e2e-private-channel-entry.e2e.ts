@@ -130,29 +130,25 @@ test("a channel started private shows its lock, and its settings switch it publi
     expect(created).toBe("private");
     await browser("screenshot", join(artifacts, "2-private-channel.png"));
 
-    // 2. Its settings make it public, once confirmed; the lock goes.
-    await openSettingsAt("Change to public channel");
+    await openSettingsAt("Make public");
     await browser("screenshot", join(artifacts, "3-settings-private.png"));
     await confirmSwitch(
-      "Change to public channel",
+      "Make public",
       `Change #${name} to a public channel?`,
       "Change to public",
       "4-confirm-public.png",
     );
-    // Public now: the lock is gone from the title, which reads the bare name (no `#`, task #74).
     await waitFor(
       `${titles}.some((title) => title.querySelector("[data-channel-name]")?.textContent.trim() === "${name}" && !title.querySelector('svg[aria-label="Private"]'))`,
     );
     expect((await stored()).visibility).toBe("public");
 
-    // 3. And private again: at once, with Undo in its toast (task #7).
     await browser("click", settingsButton);
-    await click(named("button", "Change to private channel"));
+    await click(named("button", "Make private"));
     await waitFor(lockedTitle);
     await browser("screenshot", join(artifacts, "5-private-toast.png"));
     expect((await stored()).visibility).toBe("private");
 
-    // 4. On a phone: the list, the channel and its settings, each with the lock.
     await browser("set", "viewport", "390", "844");
     await browser("open", `${origin}${workspacePath}`);
     await waitFor(`${pageHydrated} && document.body.textContent.includes("${name}")`);
@@ -160,7 +156,7 @@ test("a channel started private shows its lock, and its settings switch it publi
     await browser("open", `${origin}${workspacePath}/channel/${vaultId}`);
     await waitFor(`${pageHydrated} && ${lockedTitle}`);
     await browser("screenshot", join(artifacts, "7-phone-private-channel.png"));
-    await openSettingsAt("Change to public channel");
+    await openSettingsAt("Make public");
     await browser("screenshot", join(artifacts, "8-phone-settings.png"));
     await browser("press", "Escape");
 

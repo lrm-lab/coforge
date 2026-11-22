@@ -42,7 +42,8 @@ test("an Agent created from a channel's Add members view shows on an already-rea
   const channel = await db.conversation.create({
     data: { workspaceId, channelName: `e2e-refresh-members-${process.pid}`, description: "" },
   });
-  const panel = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]')`;
+  const panelSelector = 'section[aria-label="Channel details and settings"]';
+  const panel = `document.querySelector('${panelSelector}')`;
   const agentForm = `[...document.querySelectorAll('[role="dialog"]')].find((dialog) => dialog.querySelector('input[name="name"]'))`;
   const membersCard = `[...document.querySelectorAll('[aria-label="Agents"][role="grid"] [role="row"]')].some((row) => row.textContent.includes(${JSON.stringify(agentName)}))`;
   try {
@@ -84,7 +85,7 @@ test("an Agent created from a channel's Add members view shows on an already-rea
     await waitFor(`${panel}?.querySelector('[aria-label="Add members"]') != null`);
     await browser("eval", `${panel}.querySelector('[aria-label="Add members"]').click()`);
     await browser("fill", 'input[placeholder="Name"]', agentName);
-    const createEntry = `[...document.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent.trim().startsWith(${JSON.stringify(`Create Agent “${agentName}”`)}))`;
+    const createEntry = `[...document.querySelectorAll('${panelSelector} button')].find((button) => button.textContent.trim().startsWith(${JSON.stringify(`Create Agent “${agentName}”`)}))`;
     await waitFor(`${createEntry} !== undefined`);
     await browser("eval", `${createEntry}.click()`);
     await waitFor(

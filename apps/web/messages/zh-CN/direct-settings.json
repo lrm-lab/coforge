@@ -2,7 +2,7 @@
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "direct_settings_open": "会话设置",
   "direct_settings_label": "私信",
-  "direct_settings_preferences": "偏好",
+  "direct_settings_preferences": "个人偏好",
   "direct_settings_pin": "置顶会话",
   "direct_settings_pin_description": "将此会话固定在你的侧栏顶部。",
   "direct_settings_collapse_long_messages": "折叠长消息",

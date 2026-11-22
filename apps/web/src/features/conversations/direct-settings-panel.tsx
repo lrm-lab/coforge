@@ -1,90 +1,106 @@
-import { useEffect, useState } from "react";
-import { OVERLAY_LAYER } from "#src/lib/overlay-layer";
+import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Heading } from "react-aria-components";
-import { Settings01 as Settings } from "@untitledui/icons";
+import { Settings01 as Settings, User01 } from "@untitledui/icons";
 
-import {
-  Dialog as SlideoutDialog,
-  Modal as SlideoutModal,
-  ModalOverlay as SlideoutOverlay,
-  SlideoutMenu,
-} from "#src/components/application/slideout-menus/slideout-menu";
 import { Badge } from "#src/components/base/badges/badges";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Toggle } from "#src/components/base/toggle/toggle";
+import { OPEN_OVERLAY_SELECTOR } from "#src/lib/open-overlay";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { SettingsPanelHeader } from "./channel-settings-header";
 import { HEADER_ICON_CLASS } from "./conversation-header-tabs";
 import { setDirectConversationCollapseLongMessages } from "./conversations.functions";
-import { PanelSection, PreferenceRow } from "./settings-panel-parts";
+import {
+  DetailsPaneHeader,
+  PreferenceRow,
+  SectionEyebrow,
+  SettingsCard,
+} from "./settings-panel-parts";
 import { useSidebarActions, useSidebarLists } from "./sidebar-lists";
+import { SidebarSectionSelect } from "./sidebar-section-select";
 
-type DirectSettings = {
-  conversationId: string;
-  name: string;
-  collapseLongMessages?: boolean;
-  onChanged: () => Promise<void>;
-};
-
-export function DirectSettingsButton(props: DirectSettings) {
-  const [open, setOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    if (open) {
-      setMounted(true);
-      return;
-    }
-    if (!mounted) return;
-    const timer = window.setTimeout(() => setMounted(false), 260);
-    return () => window.clearTimeout(timer);
-  }, [mounted, open]);
+export function DirectSettingsToggleButton({
+  open,
+  onToggle,
+}: {
+  open: boolean;
+  onToggle: () => void;
+}) {
   return (
-    <>
-      <ButtonUtility
-        icon={Settings}
-        size="sm"
-        color="tertiary"
-        className={HEADER_ICON_CLASS}
-        tooltip={m.direct_settings_open()}
-        onClick={() => setOpen(true)}
-      />
-      {mounted && <DirectSettingsPanel {...props} open={open} onOpenChange={setOpen} />}
-    </>
+    <ButtonUtility
+      icon={Settings}
+      size="sm"
+      color="tertiary"
+      aria-expanded={open}
+      className={cn(HEADER_ICON_CLASS, open && "bg-primary_hover")}
+      tooltip={m.direct_settings_open()}
+      onClick={onToggle}
+    />
   );
 }
 
-function DirectSettingsPanel({
+export function DirectSettingsPanel({
+  conversationId,
   name,
+  avatar,
   open,
-  onOpenChange,
-  ...settings
-}: DirectSettings & { open: boolean; onOpenChange: (open: boolean) => void }) {
+  onClose,
+  collapseLongMessages,
+  onChanged,
+}: {
+  conversationId: string;
+  name: string;
+  avatar?: ReactNode;
+  open: boolean;
+  onClose: () => void;
+  collapseLongMessages?: boolean;
+  onChanged: () => Promise<void>;
+}) {
+  const sectionRef = useRef<HTMLElement>(null);
+  const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    if (
+      event.key !== "Escape" ||
+      event.defaultPrevented ||
+      event.isComposing ||
+      event.keyCode === 229
+    )
+      return;
+    if (sectionRef.current?.offsetParent === null) return;
+    if (document.querySelector(OPEN_OVERLAY_SELECTOR) !== null) return;
+    event.preventDefault();
+    onClose();
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open]);
+
+  if (!open) return null;
+
   return (
-    <SlideoutOverlay
-      className={OVERLAY_LAYER}
-      isOpen={open}
-      isDismissable
-      onOpenChange={onOpenChange}
+    <section
+      ref={sectionRef}
+      aria-label={m.direct_settings_open()}
+      className="flex min-h-0 min-w-0 flex-1 flex-col bg-primary"
     >
-      <SlideoutModal className="max-w-136">
-        <SlideoutDialog aria-label={m.direct_settings_open()} className="gap-0">
-          <SettingsPanelHeader>
-            <div className="flex min-w-0 items-center gap-2">
-              <Heading slot="title" className="truncate text-lg font-semibold text-primary">
-                {name}
-              </Heading>
-              <Badge size="sm" color="gray" className="shrink-0">
-                {m.direct_settings_label()}
-              </Badge>
-            </div>
-          </SettingsPanelHeader>
-          <SlideoutMenu.Content className="gap-0 pb-6">
-            <DirectPreferences {...settings} />
-          </SlideoutMenu.Content>
-        </SlideoutDialog>
-      </SlideoutModal>
-    </SlideoutOverlay>
+      <DetailsPaneHeader title={m.conversation_details_title()} onClose={onClose} />
+      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 py-4 pb-6 md:px-6">
+        <div className="flex min-w-0 items-center gap-2.5">
+          {avatar}
+          <h3 className="min-w-0 truncate text-md font-semibold text-primary">{name}</h3>
+          <Badge size="sm" color="gray" className="shrink-0">
+            {m.direct_settings_label()}
+          </Badge>
+        </div>
+        <DirectPreferences
+          conversationId={conversationId}
+          collapseLongMessages={collapseLongMessages}
+          onChanged={onChanged}
+        />
+      </div>
+    </section>
   );
 }
 
@@ -92,21 +108,21 @@ function DirectPreferences({
   conversationId,
   collapseLongMessages,
   onChanged,
-}: Omit<DirectSettings, "name">) {
+}: {
+  conversationId: string;
+  collapseLongMessages?: boolean;
+  onChanged: () => Promise<void>;
+}) {
   const setCollapse = useServerFn(setDirectConversationCollapseLongMessages);
   const actions = useSidebarActions();
-  // The sidebar owns pins and mutes: its row is the truth, and its optimistic action is the write,
-  // so the list moves as the toggle does and the row menu's items agree with it. A DM the sidebar
-  // does not list yet reads as unpinned and audible.
   const row = useSidebarLists().directs.rows.find(
     (entry) => entry.conversationId === conversationId,
   );
-  const pinned = row?.pinned === true;
   const muted = row?.muted === true;
-  const [pending, setPending] = useState<"pin" | "mute" | "collapse" | null>(null);
+  const [pending, setPending] = useState<"mute" | "collapse" | null>(null);
   const [error, setError] = useState("");
 
-  async function change(which: "pin" | "mute" | "collapse", write: () => Promise<unknown>) {
+  async function change(which: "mute" | "collapse", write: () => Promise<unknown>) {
     setPending(which);
     setError("");
     try {
@@ -119,20 +135,14 @@ function DirectPreferences({
   }
 
   return (
-    <PanelSection title={m.direct_settings_preferences()}>
-      <div className="divide-y divide-secondary">
-        <PreferenceRow
-          title={m.direct_settings_pin()}
-          description={m.direct_settings_pin_description()}
-        >
-          <Toggle
-            size="md"
-            aria-label={m.direct_settings_pin()}
-            isSelected={pinned}
+    <section>
+      <SectionEyebrow icon={User01} title={m.direct_settings_preferences()} />
+      <SettingsCard divided>
+        <PreferenceRow title={m.conversation_sidebar_section()}>
+          <SidebarSectionSelect
+            target={{ kind: "direct", conversationId }}
             isDisabled={pending !== null}
-            onChange={(next) =>
-              void change("pin", () => actions.setPinned({ kind: "direct", conversationId }, next))
-            }
+            onError={() => setError(m.direct_settings_preference_error())}
           />
         </PreferenceRow>
         <PreferenceRow
@@ -149,10 +159,7 @@ function DirectPreferences({
             }
           />
         </PreferenceRow>
-        <PreferenceRow
-          title={m.direct_settings_collapse_long_messages()}
-          description={m.direct_settings_collapse_long_messages_description()}
-        >
+        <PreferenceRow title={m.direct_settings_collapse_long_messages()}>
           <Toggle
             size="md"
             aria-label={m.direct_settings_collapse_long_messages()}
@@ -166,12 +173,12 @@ function DirectPreferences({
             }
           />
         </PreferenceRow>
-      </div>
+      </SettingsCard>
       {error && (
         <p role="alert" className="mt-2 text-sm text-error-primary">
           {error}
         </p>
       )}
-    </PanelSection>
+    </section>
   );
 }

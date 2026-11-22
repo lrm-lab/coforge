@@ -83,7 +83,7 @@ test("a confirmation is a bottom sheet on a phone", async () => {
       `document.querySelector('[aria-label="Channel details and settings"]') !== null`,
       60_000,
     );
-    const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]') !== null`;
+    const panelOpen = `document.querySelector('section[aria-label="Channel details and settings"]') !== null`;
     for (let attempt = 0; ; attempt += 1) {
       await browser("click", '[aria-label="Channel details and settings"]');
       const opened = await waitFor(panelOpen, 5_000).then(

@@ -132,19 +132,8 @@ These rules apply to `src/features/conversations/`. Forwarding a message (the Fo
   view (`channel-add-members-view.tsx`) ends with a row that creates a public Agent (for a Workspace owner or admin, per
   the server's `canCreateAgents`) and then adds it. A join that fails offers
   a retry and disables the entry, so the Agent is not created twice.
-- The header gear opens `channel-settings-panel.tsx`, the one place for a
-  channel's info (name, description), the viewer's preferences (pin, mute,
-  collapse long messages: `ConversationMember.collapseLongMessages`, off by
-  default, read by every pane of the conversation, thread panes included)
-  and its actions (archive, leave, stopping every Agent in it and resuming
-  them with new guidance for any member of a live channel; hiding `#general`
-  or deleting the channel for a Workspace owner or admin); each action
-  confirms in a dialog, whose confirm button is red only for a permanent
-  action (delete). Hiding `#general` and the way back (the System channels
-  section of Settings → Members) are for a Workspace owner or admin only; the
-  server decides who that is, the client never re-derives it from a role.
-  A DM header's gear (both kinds) opens `direct-settings-panel.tsx`: only pin (through
-  `useSidebarActions`, so the sidebar follows) and collapse; both panels share `settings-panel-parts.tsx`.
+- The header gear (and clicking a channel's title) toggles the in-flow `Details` side pane (`channel-settings-panel.tsx`, shared across Chat, Tasks and Files in `ConversationSplit`), the one place for a channel's identity (read-first with inline Edit for name and description), the `Channel settings` card (Coordinator Agent and visibility / hiding `#general` for a Workspace owner or admin), the viewer's `Your preferences` card (`Notifications`, `Sidebar section` moving between Pinned, custom sections and Channels, and `Collapse long messages`: `ConversationMember.collapseLongMessages`, off by default, read by every pane of the conversation, thread panes included) and its lifecycle actions (archive, leave, stopping every Agent in it and resuming them with new guidance for any member of a live channel, or deleting the channel); each irreversible or private action confirms in a dialog, whose confirm button is red only for a permanent action (delete). Hiding `#general` and the way back (the System channels section of Settings → Members) are for a Workspace owner or admin only; the server decides who that is, the client never re-derives it from a role.
+  A DM header's gear (both kinds) toggles `direct-settings-panel.tsx` in the same `Details` slot: `Sidebar section`, mute and collapse; both panels share `settings-panel-parts.tsx` and `sidebar-section-select.tsx`.
 - Leaving a channel uses the never-joined read-only state and `joined: false`, without a separate "left" state. A conversation that answers `NOT_FOUND` (such as a channel just hidden from the Workspace or deleted) leaves for Chat
   through `ConversationLoadError`; do not show it as a load failure.
 - An action card's primary button commits the draft as shown; only `agent:create` opens `AgentCreateDialog`,

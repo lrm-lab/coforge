@@ -47,7 +47,8 @@ test("the add view creates an Agent named by the search, and it joins the channe
     await waitFor(`${byText(selector, text)} !== undefined`);
     await browser("eval", `${byText(selector, text)}.click()`);
   }
-  const panel = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]')`;
+  const panelSelector = 'section[aria-label="Channel details and settings"]';
+  const panel = `document.querySelector('${panelSelector}')`;
   const panelHas = (text: string) => `${panel}?.textContent.includes(${JSON.stringify(text)})`;
   const agentForm = `[...document.querySelectorAll('[role="dialog"]')].find((dialog) => dialog.querySelector('input[name="name"]'))`;
 
@@ -143,7 +144,7 @@ test("the add view creates an Agent named by the search, and it joins the channe
     await waitFor(panelHas(`Create Agent “${agentName}”`));
     await browser("screenshot", join(artifacts, "entry.png"));
 
-    await clickText(`[role="dialog"] button`, `Create Agent “${agentName}”`);
+    await clickText(`${panelSelector} button`, `Create Agent “${agentName}”`);
     await waitFor(`${agentForm} !== undefined`);
     await waitFor(
       `${agentForm}.textContent.includes(${JSON.stringify(`Joins #${channel.channelName} automatically after it is created.`)})`,
@@ -179,7 +180,7 @@ test("the add view creates an Agent named by the search, and it joins the channe
     await browser("fill", 'input[placeholder="Name"]', agentName);
     await waitFor(panelHas(`No members match “${agentName}”`));
     await waitFor(`!${panelHas(`Create Agent “`)}`);
-    await clickText(`[role="dialog"] button`, "Create Agent");
+    await clickText(`${panelSelector} button`, "Create Agent");
     await waitFor(`${agentForm} !== undefined`);
     await browser("fill", '[role="dialog"]:has(input[name="name"]) input[name="name"]', agentName);
     await chooseClaudeCode();

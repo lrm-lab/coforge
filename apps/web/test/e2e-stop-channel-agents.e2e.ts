@@ -117,7 +117,7 @@ test("a member stops every Agent in a channel, then resumes them with new guidan
       60_000,
     );
     // A click that lands before the page hydrates opens nothing; try again until the panel opens.
-    const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]') !== null`;
+    const panelOpen = `document.querySelector('section[aria-label="Channel details and settings"]') !== null`;
     for (let attempt = 0; ; attempt += 1) {
       await browser("click", '[aria-label="Channel details and settings"]');
       const opened = await waitFor(panelOpen, 5_000).then(
@@ -127,7 +127,7 @@ test("a member stops every Agent in a channel, then resumes them with new guidan
       if (opened) break;
       if (attempt === 5) throw new Error("the channel settings panel never opened");
     }
-    await clickText("button", "Stop Agents");
+    await clickText("button", "Stop all agents");
     await waitFor(`document.body.textContent.includes("will stop immediately")`);
     await browser("screenshot", join(artifacts, "confirm.png"));
     await clickText('[role="dialog"] button', "Stop");

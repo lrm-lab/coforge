@@ -25,4 +25,16 @@ describe("resolveVisibleConversationSlot", () => {
       resolveVisibleConversationSlot({ threadOpen: false, profileOpen: false }),
     ).toBeUndefined();
   });
+
+  test("shows details when detailsOpen is true, taking precedence over thread or profile", () => {
+    expect(
+      resolveVisibleConversationSlot({ threadOpen: false, profileOpen: false, detailsOpen: true }),
+    ).toBe("details");
+    expect(
+      resolveVisibleConversationSlot({ threadOpen: true, profileOpen: false, detailsOpen: true }),
+    ).toBe("details");
+    expect(
+      resolveVisibleConversationSlot({ threadOpen: false, profileOpen: true, detailsOpen: true }),
+    ).toBe("details");
+  });
 });

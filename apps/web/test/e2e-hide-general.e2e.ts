@@ -86,7 +86,7 @@ test("an owner hides #general from its panel and restores it from Settings → M
       60_000,
     );
     // A click that lands before the page hydrates opens nothing; try again until the panel opens.
-    const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]') !== null`;
+    const panelOpen = `document.querySelector('section[aria-label="Channel details and settings"]') !== null`;
     for (let attempt = 0; ; attempt += 1) {
       await browser("click", '[aria-label="Channel details and settings"]');
       const opened = await waitFor(panelOpen, 5_000).then(

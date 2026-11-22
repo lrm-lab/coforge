@@ -1,27 +1,57 @@
-import { useState } from "react";
+import { useState, type ComponentType } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { Button as AriaButton } from "react-aria-components";
 import {
   Archive,
-  EyeOff,
-  Lock01,
-  LockUnlocked01,
   LogOut01 as LogOut,
   RefreshCcw01 as Unarchive,
   StopCircle,
   Trash01,
 } from "@untitledui/icons";
 
-import { Button } from "#src/components/base/buttons/button";
-import { useDialogControlSize } from "#src/components/ui/dialog-actions";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import type { ChannelConversationView } from "./channel-conversation";
 import type { ConfirmedAction } from "./channel-action-confirm-dialog";
+import type { ChannelConversationView } from "./channel-conversation";
 import type { DirectChannelAction } from "./channel-direct-actions";
-import { isPrivateChannel } from "./channel-visibility";
 import { setPublicChannelArchived } from "./channel-lifecycle.functions";
-import { PanelSection } from "./settings-panel-parts";
+import { SettingsCard } from "./settings-panel-parts";
 
-/* The channel settings slideout's Actions section (`channel-settings-panel`). */
+const ROW_CLASS =
+  "flex min-h-11 w-full cursor-pointer items-center gap-2.5 px-3.5 py-2.5 text-left text-sm font-medium outline-focus-ring transition-colors hover:bg-primary_hover focus-visible:outline-2 focus-visible:-outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
+
+function ActionRow({
+  icon: Icon,
+  label,
+  destructive = false,
+  disabled = false,
+  onPress,
+}: {
+  icon: ComponentType<{ className?: string; "aria-hidden"?: boolean | "true" | "false" }>;
+  label: string;
+  destructive?: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <AriaButton
+      isDisabled={disabled}
+      onPress={onPress}
+      className={cn(
+        ROW_CLASS,
+        destructive
+          ? "text-error-primary hover:bg-error-primary hover:text-error-primary_hover"
+          : "text-primary",
+      )}
+    >
+      <Icon
+        aria-hidden="true"
+        className={cn("size-4 shrink-0", destructive ? "text-current" : "text-fg-quaternary")}
+      />
+      <span>{label}</span>
+    </AriaButton>
+  );
+}
 
 export function ActionsSection({
   conversation,
@@ -30,7 +60,6 @@ export function ActionsSection({
   onChanged,
 }: {
   conversation: ChannelConversationView;
-  /** A settings action: it runs at once with Undo, or asks first (`channel-settings-panel`). */
   onConfirm: (kind: ConfirmedAction | DirectChannelAction) => void;
   onStopAgents: () => void;
   onChanged: () => Promise<void>;
@@ -39,8 +68,13 @@ export function ActionsSection({
   const [unarchiving, setUnarchiving] = useState(false);
   const [error, setError] = useState("");
   const capabilities = conversation.channelCapabilities;
-  const priv = isPrivateChannel(conversation);
-  const controlSize = useDialogControlSize();
+
+  const showArchive = conversation.archived ? capabilities.unarchive : capabilities.archive;
+  const showLeave = capabilities.leave && !conversation.archived;
+  const showStop = conversation.canStopAgents;
+  const showDelete = conversation.canDelete && !conversation.archived;
+
+  if (!showArchive && !showLeave && !showStop && !showDelete) return null;
 
   async function unarchive() {
     setUnarchiving(true);
@@ -56,99 +90,50 @@ export function ActionsSection({
   }
 
   return (
-    <PanelSection title={m.channel_settings_actions()}>
-      <div className="flex flex-col gap-2">
-        {/* A Workspace owner or admin in the channel makes it private or public, as in Slack's
-            channel settings. */}
-        {conversation.canChangeVisibility && (
-          <Button
-            size={controlSize}
-            color="secondary"
-            iconLeading={priv ? LockUnlocked01 : Lock01}
-            className="w-full"
-            onPress={() => onConfirm(priv ? "make-public" : "make-private")}
-          >
-            {priv ? m.channel_settings_make_public() : m.channel_settings_make_private()}
-          </Button>
-        )}
+    <section>
+      <SettingsCard divided className="overflow-hidden">
         {conversation.archived
           ? capabilities.unarchive && (
-              <Button
-                size={controlSize}
-                color="secondary"
-                iconLeading={Unarchive}
-                className="w-full"
-                isDisabled={unarchiving}
-                isLoading={unarchiving}
-                showTextWhileLoading
+              <ActionRow
+                icon={Unarchive}
+                label={
+                  unarchiving ? m.channel_settings_unarchiving() : m.channel_settings_unarchive()
+                }
+                disabled={unarchiving}
                 onPress={() => void unarchive()}
-              >
-                {unarchiving ? m.channel_settings_unarchiving() : m.channel_settings_unarchive()}
-              </Button>
+              />
             )
           : capabilities.archive && (
-              <Button
-                size={controlSize}
-                color="secondary"
-                iconLeading={Archive}
-                className="w-full"
+              <ActionRow
+                icon={Archive}
+                label={m.channel_settings_archive()}
                 onPress={() => onConfirm("archive")}
-              >
-                {m.channel_settings_archive()}
-              </Button>
+              />
             )}
-        {/* A Workspace owner or admin may hide #general from the whole Workspace (restored from
-            Settings → Members → System channels). */}
-        {conversation.canHideGeneral && (
-          <Button
-            size={controlSize}
-            color="secondary"
-            iconLeading={EyeOff}
-            className="w-full"
-            onPress={() => onConfirm("hide-general")}
-          >
-            {m.channel_settings_hide_general()}
-          </Button>
-        )}
-        {capabilities.leave && !conversation.archived && (
-          <Button
-            size={controlSize}
-            color="secondary"
-            iconLeading={LogOut}
-            className="w-full"
+        {showLeave && (
+          <ActionRow
+            icon={LogOut}
+            label={m.channel_settings_leave()}
             onPress={() => onConfirm("leave")}
-          >
-            {m.channel_settings_leave()}
-          </Button>
+          />
         )}
-        {conversation.canStopAgents && (
-          <Button
-            size={controlSize}
-            color="secondary"
-            iconLeading={StopCircle}
-            className="w-full"
-            onPress={onStopAgents}
-          >
-            {m.channel_stop_agents()}
-          </Button>
+        {showStop && (
+          <ActionRow icon={StopCircle} label={m.channel_stop_agents()} onPress={onStopAgents} />
         )}
-        {conversation.canDelete && !conversation.archived && (
-          <Button
-            size={controlSize}
-            color="secondary-destructive"
-            iconLeading={Trash01}
-            className="w-full"
+        {showDelete && (
+          <ActionRow
+            icon={Trash01}
+            label={m.channel_settings_delete()}
+            destructive
             onPress={() => onConfirm("delete")}
-          >
-            {m.channel_settings_delete()}
-          </Button>
+          />
         )}
-      </div>
+      </SettingsCard>
       {error && (
         <p role="alert" className="mt-2 text-sm text-error-primary">
           {error}
         </p>
       )}
-    </PanelSection>
+    </section>
   );
 }

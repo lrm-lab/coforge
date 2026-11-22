@@ -1,14 +1,11 @@
-/**
- * The conversation's right-hand slot is shared by the Thread panel and the Agent profile panel:
- * The two panels are mutually exclusive. The navigation hooks clear the other panel when one is
- * opened; this function remains defensive for legacy URLs that contain both search params.
- */
-export type ConversationSlot = "thread" | "profile";
+export type ConversationSlot = "thread" | "profile" | "details";
 
 export function resolveVisibleConversationSlot(input: {
   threadOpen: boolean;
   profileOpen: boolean;
+  detailsOpen?: boolean;
 }): ConversationSlot | undefined {
+  if (input.detailsOpen) return "details";
   if (input.threadOpen && input.profileOpen) {
     return "thread";
   }

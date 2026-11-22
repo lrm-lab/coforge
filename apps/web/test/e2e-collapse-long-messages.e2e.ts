@@ -38,7 +38,7 @@ test("a member turns off collapsing long messages for one channel and back on", 
         setTimeout(() => reject(new Error(`timed out waiting for ${condition}`)), ms),
       ),
     ]);
-  const panel = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]')`;
+  const panel = `document.querySelector('section[aria-label="Channel details and settings"]')`;
   async function openSettings() {
     for (let attempt = 0; ; attempt += 1) {
       await browser("click", '[aria-label="Channel details and settings"]');

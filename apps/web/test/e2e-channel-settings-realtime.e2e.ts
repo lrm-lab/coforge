@@ -74,7 +74,8 @@ function tab(session: string) {
 const channelHeader = `document.querySelector("header h1[data-channel-title]")?.closest("header")`;
 const sidebarHas = (name: string) =>
   `[...document.querySelectorAll("a")].some((link) => link.textContent.trim() === ${JSON.stringify(name)})`;
-const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]') !== null`;
+const panelSelector = 'section[aria-label="Channel details and settings"]';
+const panelOpen = `document.querySelector('${panelSelector}') !== null`;
 
 test("another open tab follows a channel's rename, description and archive live", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
@@ -125,8 +126,18 @@ test("another open tab follows a channel's rename, description and archive live"
     await editor.run("click", '[aria-label="Channel details and settings"]');
     await editor.waitFor(panelOpen);
     const saveName = async (name: string) => {
-      await editor.run("fill", '[role="dialog"] input[type="text"]', name);
-      await editor.clickText("button", "Save");
+      if (
+        await editor
+          .run("eval", `document.querySelector('${panelSelector} input[type="text"]') === null`)
+          .then((v) => v.includes("true"))
+      ) {
+        await editor.clickText(`${panelSelector} button`, "Edit");
+        await editor.waitFor(
+          `document.querySelector('${panelSelector} input[type="text"]') !== null`,
+        );
+      }
+      await editor.run("fill", `${panelSelector} input[type="text"]`, name);
+      await editor.clickText(`${panelSelector} button`, "Save");
       await editor.waitFor(
         `${channelHeader}?.querySelector("h1 [data-channel-name]").textContent === "${name}"`,
       );
@@ -138,31 +149,35 @@ test("another open tab follows a channel's rename, description and archive live"
           `${channelHeader}?.querySelector("h1 [data-channel-name]").textContent === "${warm}"`,
         );
         break;
-      } catch {
-        // Its subscription was not up yet; the next save publishes the new name afresh.
-      }
+      } catch {}
     }
-    await editor.run("fill", '[role="dialog"] input[type="text"]', renamed);
-    await editor.run("fill", '[role="dialog"] textarea', "Followed live");
-    await editor.clickText("button", "Save");
+    if (
+      await editor
+        .run("eval", `document.querySelector('${panelSelector} input[type="text"]') === null`)
+        .then((v) => v.includes("true"))
+    ) {
+      await editor.clickText(`${panelSelector} button`, "Edit");
+      await editor.waitFor(
+        `document.querySelector('${panelSelector} input[type="text"]') !== null`,
+      );
+    }
+    await editor.run("fill", `${panelSelector} input[type="text"]`, renamed);
+    await editor.run("fill", `${panelSelector} textarea`, "Followed live");
+    await editor.clickText(`${panelSelector} button`, "Save");
     await editor.waitFor(
       `${channelHeader}?.querySelector("h1 [data-channel-name]").textContent === "${renamed}"`,
     );
 
-    // The watcher never reloads: its header and sidebar row follow. A description left the
-    // header for the settings title, so the panel is where it is checked.
     await watcher.waitFor(
       `${channelHeader}?.querySelector("h1 [data-channel-name]").textContent === "${renamed}"`,
     );
     await watcher.run("click", '[aria-label="Channel details and settings"]');
     await watcher.waitFor(panelOpen);
     await watcher.waitFor(
-      `[...document.querySelectorAll('[role="dialog"]')].some((dialog) => dialog.textContent.includes("Followed live"))`,
+      `document.querySelector('${panelSelector}')?.textContent.includes("Followed live")`,
     );
     await watcher.run("press", "Escape");
-    await watcher.waitFor(
-      `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]') === null`,
-    );
+    await watcher.waitFor(`document.querySelector('${panelSelector}') === null`);
     await watcher.waitFor(sidebarHas(renamed));
     expect(await watcher.run("eval", sidebarHas(channelName))).toContain("false");
     await watcher.run("screenshot", join(artifacts, "renamed.png"));

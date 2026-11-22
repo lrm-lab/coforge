@@ -52,7 +52,7 @@ test("an owner deletes a channel from its settings panel", async () => {
       ),
     ]);
   // The confirm's button says "Delete channel" like the panel's; take it from the confirm dialog.
-  const confirmButton = '[role="dialog"]:not([aria-label="Channel details and settings"]) button';
+  const confirmButton = '[role="dialog"] button';
   const byText = (selector: string, text: string) =>
     `[...document.querySelectorAll(${JSON.stringify(selector)})].filter((element) => element.textContent.trim() === ${JSON.stringify(text)}).at(-1)`;
   async function clickText(selector: string, text: string) {
@@ -105,7 +105,7 @@ test("an owner deletes a channel from its settings panel", async () => {
     );
     await waitFor(sidebarHasChannel);
     // A click that lands before the page hydrates opens nothing; try again until the panel opens.
-    const panelOpen = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]') !== null`;
+    const panelOpen = `document.querySelector('section[aria-label="Channel details and settings"]') !== null`;
     for (let attempt = 0; ; attempt += 1) {
       await browser("click", '[aria-label="Channel details and settings"]');
       const opened = await waitFor(panelOpen, 5_000).then(

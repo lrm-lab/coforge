@@ -85,7 +85,7 @@ export function ConversationSplit({
           <div
             inert={Boolean(visibleSlot && focused !== "chat") || undefined}
             aria-hidden={Boolean(visibleSlot && focused !== "chat") || undefined}
-            className="flex min-h-0 min-w-0 flex-1 flex-col"
+            className="isolate flex min-h-0 min-w-0 flex-1 flex-col"
           >
             {main}
           </div>
@@ -106,7 +106,7 @@ export function ConversationSplit({
                   ? { duration: DURATION_S.reduced }
                   : { duration: DURATION_S.lg, ease: EASE_OUT }
               }
-              className="absolute inset-0 z-10 flex min-h-0 min-w-0 flex-col bg-primary shadow-xl will-change-transform"
+              className="absolute inset-0 z-20 flex min-h-0 min-w-0 flex-col bg-primary shadow-xl will-change-transform"
             >
               {side}
             </motion.div>
@@ -137,7 +137,11 @@ export function ConversationSplit({
             {!focused && (
               <Separator
                 aria-label={
-                  visibleSlot === "thread" ? m.conversation_thread() : m.agent_profile_resize()
+                  visibleSlot === "thread"
+                    ? m.conversation_thread()
+                    : visibleSlot === "details"
+                      ? m.channel_settings_resize()
+                      : m.agent_profile_resize()
                 }
                 className="hidden w-px shrink-0 bg-border-secondary transition-colors hover:bg-brand-solid data-[separator=active]:bg-brand-solid md:block"
               />

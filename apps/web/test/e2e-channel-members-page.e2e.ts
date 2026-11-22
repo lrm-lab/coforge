@@ -37,11 +37,12 @@ test("the settings panel shows a channel's members as a page, adds and removes o
   );
   /** The settings' Members row: its name, then the counts this channel's two members give. */
   async function openMembers() {
-    const row = `[...document.querySelectorAll('[role="dialog"] button')].find((button) => button.textContent.includes("1 human · 1 agent"))`;
+    const row = `[...document.querySelectorAll('section[aria-label="Channel details and settings"] button')].find((button) => button.textContent.includes("1 human · 1 agent"))`;
     await waitFor(`${row} !== undefined`);
     await browser("eval", `${row}.click()`);
   }
-  const panel = `document.querySelector('[role="dialog"][aria-label="Channel details and settings"]')`;
+  const panelSelector = 'section[aria-label="Channel details and settings"]';
+  const panel = `document.querySelector('${panelSelector}')`;
   const panelHas = (text: string) => `${panel}?.textContent.includes(${JSON.stringify(text)})`;
   const onRoster = `${panel}?.querySelector('input[placeholder="Search members…"]') != null`;
   /** The page as it is, light and dark. */
@@ -192,7 +193,7 @@ test("the settings panel shows a channel's members as a page, adds and removes o
 
     // The Members summary opens the page in place of the settings.
     await openMembers();
-    await waitFor(`${onRoster} && !${panelHas("Preferences")}`);
+    await waitFor(`${onRoster} && !${panelHas("Your preferences")}`);
     await waitFor(panelHas(inside.displayName));
     // A person shows an online dot as an Agent shows its status (Frank, 11-04): the viewer has
     // this page open, so their own row reads online.
@@ -210,18 +211,16 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     await waitFor(panelHas(inside.displayName));
 
     // Add member opens the add view in the same page.
-    await clickText(`[role="dialog"] button`, "Add member");
+    await clickText(`${panelSelector} button`, "Add member");
     await waitFor(panelHas("Add selected (0)"));
     await browser("fill", 'input[placeholder="Name"]', outside.displayName);
-    // The candidate's label also holds its avatar initial and description.
-    const candidate = `[...document.querySelectorAll('[role="dialog"] label')].find((label) => label.textContent.includes(${JSON.stringify(outside.displayName)}))`;
+    const candidate = `[...document.querySelectorAll('${panelSelector} label')].find((label) => label.textContent.includes(${JSON.stringify(outside.displayName)}))`;
     await waitFor(`${candidate} !== undefined`);
-    // Each candidate row is valid markup: its avatar is not inside a paragraph.
     expect(await browser("eval", `${panel}.querySelectorAll("p div").length`)).toContain("0");
     await browser("eval", `${candidate}.querySelector("input").click()`);
     await waitFor(panelHas("Add selected (1)"));
     await browser("screenshot", join(artifacts, "add.png"));
-    await clickText(`[role="dialog"] button`, "Add selected (1)");
+    await clickText(`${panelSelector} button`, "Add selected (1)");
     await waitFor(`${onRoster} && ${panelHas(outside.displayName)}`);
     expect(
       await db.conversationMember.findFirst({
@@ -302,7 +301,7 @@ test("the settings panel shows a channel's members as a page, adds and removes o
 
     // Back returns to the settings.
     await browser("eval", `document.querySelector('[aria-label="Back"]').click()`);
-    await waitFor(panelHas("Preferences"));
+    await waitFor(panelHas("Your preferences"));
 
     // Close from the profile closes the whole panel; the next opening starts on the settings.
     await openMembers();
@@ -312,7 +311,7 @@ test("the settings panel shows a channel's members as a page, adds and removes o
     await browser("eval", `${panel}.querySelector('[aria-label="Close"]').click()`);
     await waitFor(`${panel} === null`);
     await browser("click", '[aria-label="Channel details and settings"]');
-    await waitFor(`${panelHas("Preferences")} && !${onRoster}`);
+    await waitFor(`${panelHas("Your preferences")} && !${onRoster}`);
 
     // A phone has no hover to reveal the actions: each row keeps them behind one menu button, so
     // the name keeps its width, and the menu makes the member a channel admin.

@@ -149,6 +149,9 @@ export type ConversationProps = {
    * the Task popup and the thread/profile slot stay the conversation's, so a Task opened from
    * the board shows over it without leaving the tab. */
   tasksPane?: ReactNode;
+  detailsOpen?: boolean;
+  detailsPane?: ReactNode;
+  onRequestCloseDetails?: (then?: () => void) => void;
 };
 
 export type ThreadedConversationProps = Omit<ConversationProps, "conversation" | "agentStatus"> & {

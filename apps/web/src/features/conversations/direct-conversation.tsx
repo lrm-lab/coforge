@@ -12,7 +12,8 @@ import { useWatchAgentDisplay } from "#src/features/agents/watched-agent-display
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { TabbedHeader } from "#src/components/layout/tabbed-header";
-import { DirectSettingsButton } from "./direct-settings-panel";
+import { DirectSettingsPanel, DirectSettingsToggleButton } from "./direct-settings-panel";
+import { useConversationDetailsState } from "./use-conversation-details-state";
 import { ConversationFocusButton } from "./conversation-focus-button";
 import { conversationHeaderTabs, type HeaderTabs } from "./conversation-header-tabs";
 import { ConversationListButton } from "./conversation-list-button";
@@ -24,18 +25,17 @@ import type {
   ThreadedConversationProps,
 } from "./conversation-types";
 
-/** The direct-message header: identity, live Agent presence, and the conversation tabs. */
 export function DirectConversationHeader({
   conversation,
   onOpenAgentProfile,
-  onChanged,
+  settingsOpen = false,
+  onToggleSettings,
   ...tabs
 }: HeaderTabs & {
   conversation: DirectConversationView;
-  /** Re-reads the page after the settings panel changed a preference. */
-  onChanged: () => Promise<void>;
-  /** Opens the Agent profile panel from this DM's own Agent identity. */
   onOpenAgentProfile?: (agentId: string) => void;
+  settingsOpen?: boolean;
+  onToggleSettings?: () => void;
 }) {
   // Another member's Agent is an extra, whose idle display the shell reads only when asked.
   useWatchAgentDisplay(conversation.agent.id);
@@ -142,12 +142,9 @@ export function DirectConversationHeader({
         // channel header.
         <div className="-mr-1.5 flex shrink-0 items-center gap-3">
           <ConversationFocusButton />
-          <DirectSettingsButton
-            conversationId={conversation.conversationId}
-            name={conversation.agent.displayName}
-            collapseLongMessages={conversation.collapseLongMessages}
-            onChanged={onChanged}
-          />
+          {onToggleSettings && (
+            <DirectSettingsToggleButton open={settingsOpen} onToggle={onToggleSettings} />
+          )}
         </div>
       }
       tabs={conversationHeaderTabs(tabs)}
@@ -157,6 +154,8 @@ export function DirectConversationHeader({
 
 export function DirectConversation({
   onChanged,
+  settingsOpen: controlledSettingsOpen,
+  onSettingsOpenChange: onControlledSettingsOpenChange,
   ...props
 }: ConversationProps &
   Pick<
@@ -164,8 +163,18 @@ export function DirectConversation({
     "channels" | "taskPopup" | "jumpMessage" | "onJumpMessageConsumed"
   > & {
     onChanged: () => Promise<void>;
+    settingsOpen?: boolean;
+    onSettingsOpenChange?: (open: boolean) => void;
   }) {
   const { conversation } = props;
+  const details = useConversationDetailsState({
+    controlledOpen: controlledSettingsOpen,
+    onControlledOpenChange: onControlledSettingsOpenChange,
+  });
+  const toggleDetails = () => {
+    if (details.open) details.requestClose();
+    else details.openDetails();
+  };
   // A deleted Agent's DM stays readable, but nothing new can be sent to it.
   const deleted = Boolean(conversation.agent.deletedAt);
   // A private Agent's DM stays scoped to its own creator; this viewer's existing DM
@@ -194,6 +203,26 @@ export function DirectConversation({
       {...props}
       name={agentName}
       plainMentions={plainMentions}
+      detailsOpen={details.open}
+      onRequestCloseDetails={details.requestClose}
+      detailsPane={
+        <DirectSettingsPanel
+          conversationId={conversation.conversationId}
+          name={conversation.agent.displayName}
+          avatar={
+            <AgentDisplayAvatar
+              agentId={conversation.agent.id}
+              name={conversation.agent.displayName}
+              src={conversation.agent.avatarUrl}
+              cornerDot={false}
+            />
+          }
+          open={details.open}
+          onClose={() => details.setOpen(false)}
+          collapseLongMessages={conversation.collapseLongMessages}
+          onChanged={onChanged}
+        />
+      }
       header={
         <DirectConversationHeader
           conversation={conversation}
@@ -201,7 +230,8 @@ export function DirectConversation({
           onShowTasks={props.onShowTasks}
           onShowFiles={props.onShowFiles}
           onOpenAgentProfile={props.onOpenAgentProfile}
-          onChanged={onChanged}
+          settingsOpen={details.open}
+          onToggleSettings={toggleDetails}
         />
       }
       readOnlyNotice={

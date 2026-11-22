@@ -35,7 +35,7 @@ const productSettings = [
   follow("^#product"),
   click("button", "^Channel Details and Settings$"),
 ];
-const channelMembers = [...productSettings, clickIn("button", "^Members")];
+const channelMembers = [...productSettings, click("button", "^Members")];
 const cloudComputer = [goto("/computers"), follow("^Cloud Sandbox")];
 
 /**
@@ -173,17 +173,17 @@ export const DIALOGS = [
   },
   {
     id: "channel-action-confirm",
-    steps: [...productSettings, clickIn("button", "^Archive Channel$")],
+    steps: [...productSettings, click("button", "^Archive Channel$")],
     expect: "Members keep read access",
   },
   {
     id: "channel-action-confirm-leave",
-    steps: [...productSettings, clickIn("button", "^Leave Channel$")],
+    steps: [...productSettings, click("button", "^Leave Channel$")],
     expect: "^Leave Channel\\s*You will stop receiving",
   },
   {
     id: "channel-action-confirm-delete",
-    steps: [...productSettings, clickIn("button", "^Delete Channel$")],
+    steps: [...productSettings, click("button", "^Delete Channel$")],
     expect: "and all of its messages",
   },
   {
@@ -194,17 +194,22 @@ export const DIALOGS = [
   },
   {
     id: "channel-member-1",
-    steps: [...channelMembers, clickIn("button", "^Remove channel admin from Jordan Lee$")],
+    steps: [...channelMembers, click("button", "^Remove channel admin from Jordan Lee$")],
     expect: "Can't demote Workspace admins",
   },
   {
     id: "channel-member-2",
-    steps: [...channelMembers, clickIn("button", "^Remove Nova$")],
+    steps: [...channelMembers, click("button", "^Remove Nova$")],
     expect: "^Remove Member",
   },
   {
     id: "channel-settings-dialog",
-    steps: [...productSettings, fill("textbox", "^Name", "renamed"), press("Escape")],
+    steps: [
+      ...productSettings,
+      click("button", "^Edit$"),
+      fill("textbox", "^Name", "renamed"),
+      press("Escape"),
+    ],
     expect: "Unsaved Changes",
   },
   {
@@ -226,7 +231,7 @@ export const DIALOGS = [
   },
   {
     id: "stop-channel-agents",
-    steps: [...productSettings, clickIn("button", "^Stop Agents$")],
+    steps: [...productSettings, click("button", "^Stop all agents$")],
     expect: "Stop All Agents",
   },
   {
