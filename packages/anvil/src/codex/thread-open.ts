@@ -179,6 +179,9 @@ function threadRequest(
           ? { model_reasoning_effort: options.runtime.reasoning }
           : {}),
         ...(reasoningSummary ? { model_reasoning_summary: reasoningSummary } : {}),
+        "features.memories": false,
+        "memories.use_memories": false,
+        "memories.generate_memories": false,
         // Retain the existing global-config override surface; the approved
         // danger-full-access policy does not use workspace-write restrictions.
         "sandbox_workspace_write.network_access": true,

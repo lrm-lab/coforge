@@ -22,4 +22,9 @@ Read [Codex app-server behavior](../../../../docs/agents/codex-app-server.md) wh
 - Reasoning summaries (`reasoning-summary.ts`): a launch asks for `model_reasoning_summary: "auto"`
   unless the user's `$CODEX_HOME/config.toml` assigns the key, top level or in a profile. Several
   models default to `none`, and their thinking then arrives with no readable text.
+- Built-in memories (`thread-open.ts`): every `thread/start` and `thread/resume` sets
+  `"features.memories": false`, `"memories.use_memories": false`, and
+  `"memories.generate_memories": false` in `params.config`, keeping CoForge's `MEMORY.md` as the
+  only memory store and preventing Codex's background memory pipeline from extracting or injecting
+  a duplicate store when the user's `$CODEX_HOME/config.toml` enables memories.
 - A failed turn whose message or `additionalDetails` holds `invalid_encrypted_content`, or both `encrypted content` and `could not be decrypted or parsed` (any case), or whose `code` is `invalid_encrypted_content`, sets `sessionRecovery: "provider_replay_rejected"` on its `error` event (`turn-outcome.ts`, openai/codex#17541). Codex's `TurnError` has no `code` of its own (app-server schema 0.167.0); the API text is in `message`/`additionalDetails`. Match nothing wider (the bare phrase also names a gateway's header): the daemon invalidates the stored thread on it.
