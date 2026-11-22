@@ -14,7 +14,12 @@ import { chatStreamPositions } from "./chat-stream-positions.server";
 import type { CentrifugoStreams } from "#src/server/centrifugo/server-api.server";
 import { DirectConversations } from "./direct-conversations.server";
 import { PublicChannels } from "./public-channels.server";
-import { listUserSavedMessages } from "./saved-messages.server";
+import {
+  SAVED_MESSAGES_DEFAULT_LIMIT,
+  listUserSavedMessages,
+  type SavedMessagesCursor,
+  type SavedMessageView,
+} from "./saved-messages.server";
 
 type SignalChannel = "workspace" | "user";
 
@@ -28,10 +33,20 @@ const LIVE_ON: Record<ChatListRead, readonly SignalChannel[]> = {
   sectionOrder: ["user"],
 };
 
-function listReaders(
-  { db, workspaceId, user }: WorkspaceUserContext,
-  onboarded: Promise<unknown> | undefined,
-) {
+async function readSavedEntries({ db, workspaceId, user }: WorkspaceUserContext) {
+  const entries: SavedMessageView[] = [];
+  let cursor: SavedMessagesCursor | undefined;
+  while (true) {
+    const page = await listUserSavedMessages(db, { workspaceId, userId: user.id, cursor });
+    entries.push(...page);
+    if (page.length < SAVED_MESSAGES_DEFAULT_LIMIT) return entries;
+    const last = page[page.length - 1]!;
+    cursor = { savedAt: last.savedAt, messageId: last.message.id };
+  }
+}
+
+function listReaders(context: WorkspaceUserContext, onboarded: Promise<unknown> | undefined) {
+  const { db, workspaceId, user } = context;
   const channels = () => new PublicChannels(db);
   const directs = () => new DirectConversations(db);
   const sections = () => new ChatSections(db, workspaceId, user.id);
@@ -39,7 +54,7 @@ function listReaders(
     channels: async () => ({ channels: await channels().list(workspaceId, user.id) }),
     channelNames: async () => ({ names: await channels().names(workspaceId, user.id) }),
     saved: async () => ({
-      entries: await listUserSavedMessages(db, { workspaceId, userId: user.id }),
+      entries: await readSavedEntries(context),
     }),
     directPreferences: async () => {
       await onboarded;

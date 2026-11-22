@@ -126,3 +126,43 @@ test("a list that fails answers with its own error, and the others still answer"
     expect(failure && "error" in failure && typeof failure.error.errorId).toBe("string");
     expect(broken.sectionOrder).toEqual({ value: { streamPositions: {}, order: [] } });
   }));
+
+test("saved chat list includes each equally timed bookmark across the page boundary", () =>
+  withMember(async (context) => {
+    const { db, workspaceId, user } = context;
+    const { id: conversationId } = await db.conversation.create({
+      data: { workspaceId, channelName: "bookmarks" },
+    });
+    const { id: memberId } = await db.conversationMember.create({
+      data: { workspaceId, conversationId, userId: user.id },
+    });
+    const messages = await db.message.createManyAndReturn({
+      data: Array.from({ length: 201 }, (_, index) => ({
+        workspaceId,
+        conversationId,
+        senderMemberId: memberId,
+        body: String(index),
+        sequence: index + 1,
+      })),
+      select: { id: true },
+    });
+    const createdAt = new Date();
+    await db.savedMessage.createMany({
+      data: messages.map(({ id: messageId }) => ({
+        workspaceId,
+        conversationId,
+        memberId,
+        messageId,
+        createdAt,
+      })),
+    });
+    const { saved } = await readChatLists(context, ["saved"], { streams: null });
+    expect(
+      saved && "value" in saved && saved.value.entries.map((entry) => entry.message.id),
+    ).toEqual(
+      messages
+        .map(({ id }) => id)
+        .sort()
+        .reverse(),
+    );
+  }));
