@@ -27,6 +27,7 @@ export async function runWorkspaceCommand({
   completeUpgrade,
   watchPendingUpgrade,
   launchComputerUpgrade,
+  beginUpgradeProgress,
   makeSelfClient,
   view,
   startForOperator,
@@ -50,6 +51,7 @@ export async function runWorkspaceCommand({
     expectedVersion: string,
     input: { stateDirectory: string; releaseChannel?: string },
   ) => Promise<void>;
+  beginUpgradeProgress?: (workspaceId: string, requestId: string, version: string) => Promise<void>;
   makeSelfClient: (serverHttpUrl: string) => Pick<ComputerSelfClient, "detach">;
   view: () => Promise<ManagedRuntimeIdentity[]>;
   startForOperator: (
@@ -83,6 +85,7 @@ export async function runWorkspaceCommand({
     completeUpgrade,
     watchPendingUpgrade,
     launchComputerUpgrade,
+    beginUpgradeProgress,
     makeSelfClient,
     view,
   });

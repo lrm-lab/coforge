@@ -27,6 +27,7 @@ use crate::processes::{
 };
 use crate::service::{ServiceState, SupervisorService};
 use crate::store::VersionStore;
+use crate::upgrade_progress::UpgradeProgress;
 
 /// How long a restarted supervisor has to report the version it was switched to.
 const PROBE_BOUND: Duration = Duration::from_secs(60);
@@ -107,23 +108,45 @@ impl<'r, 'p> ActiveSwitch<'r, 'p> {
     /// Stops the supervisor when it runs, makes `target` active, restarts the supervisor, and
     /// probes the result. Any error leaves the caller to roll back or to keep the journal.
     pub(crate) fn switch(&mut self, target: &Target<'_>, plan: &Plan<'_>) -> Result<(), String> {
+        self.switch_with_progress(target, plan, None, None)
+    }
+
+    pub(crate) fn wait_for_agents(
+        &mut self,
+        request_id: &str,
+        progress: Option<&UpgradeProgress>,
+    ) -> Option<drain::DrainGuard> {
+        self.ports.state_directory.and_then(|state_directory| {
+            drain::drain_before_stop_with_progress(
+                state_directory,
+                request_id,
+                self.ports.clock,
+                self.stage,
+                progress,
+            )
+        })
+    }
+
+    pub(crate) fn switch_with_progress(
+        &mut self,
+        target: &Target<'_>,
+        plan: &Plan<'_>,
+        progress: Option<&UpgradeProgress>,
+        guard: Option<drain::DrainGuard>,
+    ) -> Result<(), String> {
         let version = target.version;
         if plan.supervisor_running {
-            let drain_guard = match (plan.drain_id, self.ports.state_directory) {
-                (Some(drain_id), Some(state_directory)) => drain::drain_before_stop(
-                    state_directory,
-                    drain_id,
-                    self.ports.clock,
-                    self.stage,
-                ),
-                _ => None,
-            };
+            let drain_guard =
+                guard.or_else(|| plan.drain_id.and_then(|id| self.wait_for_agents(id, None)));
             match plan.running_runtimes {
                 Some(count) => self.say(&format!(
                     "Stopping ({count} Workspace runtime{})",
                     plural(count)
                 )),
                 None => self.say("Stopping"),
+            }
+            if let Some(progress) = progress {
+                progress.phase("switching");
             }
             self.stop_supervisor(plan.stop)?;
             if let Some(guard) = drain_guard {
@@ -133,6 +156,9 @@ impl<'r, 'p> ActiveSwitch<'r, 'p> {
             }
         } else {
             self.say("Computer supervisor is not running; no processes to restart");
+            if let Some(progress) = progress {
+                progress.phase("switching");
+            }
         }
         self.say(&format!("Switching to {version}"));
         self.activate(target)?;
@@ -147,6 +173,9 @@ impl<'r, 'p> ActiveSwitch<'r, 'p> {
                 "Waiting for the Computer supervisor to report {version}"
             ));
             self.await_supervisor(version, plan.replaces)?;
+            if let Some(progress) = progress {
+                progress.healthy();
+            }
             self.say(&format!("Computer supervisor {version} healthy"));
         } else {
             self.say(&format!(

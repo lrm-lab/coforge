@@ -1,3 +1,4 @@
+import { recordInstallerBootstrapProgress } from "@lrm/coforge-daemon/src/platform/computer-upgrade-progress";
 import { readUpgradeReceipt, resolveComputerInstallDirectory } from "@lrm/coforge-daemon";
 import type { UpgradeResult } from "@lrm/coforge-sdk/internal/upgrade-receipt";
 
@@ -102,11 +103,19 @@ export async function runUpgradeOperation(
     installRoot: options.installRoot,
   };
 
+  if (origin === "remote")
+    await recordInstallerBootstrapProgress(options.installRoot, requestId, "downloading").catch(
+      () => {},
+    );
   let installer: VerifiedInstaller;
   try {
     installer = await options.obtainInstaller(launch);
   } catch (error) {
     if (!(error instanceof UpdateError)) throw error;
+    if (origin === "remote")
+      await recordInstallerBootstrapProgress(options.installRoot, requestId, "failed").catch(
+        () => {},
+      );
     return conclude(
       await settle(options, requestId, { error: error.message, errorCode: error.code }),
     );

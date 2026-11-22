@@ -1,3 +1,8 @@
+import {
+  beginLocalUpgradeProgress,
+  claimUpgradeActivation,
+} from "#src/platform/computer-upgrade-progress";
+import { resolveComputerInstallDirectory } from "#src/platform/computer-install-directory";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -57,7 +62,7 @@ import {
   watchComputerUpgradeReceipt,
   type ComputerUpgradeReceipt,
 } from "#src/platform/computer-upgrade-receipts";
-import { UpgradeDrainWatcher } from "./upgrade-drain-watcher";
+import { supervisorUpgradeDrainWatcher } from "./upgrade-drain-watcher";
 
 const UPGRADE_RECEIPT_POLL_MS = 2_000;
 const WORKSPACE_READINESS_MS = 30_000;
@@ -133,6 +138,9 @@ async function runWithSupervisorLock(
   await mkdir(lockMarker, { recursive: true, mode: 0o700 });
   await writeFile(join(lockMarker, "owner"), String(process.pid), { mode: 0o600 });
   const workspaceDirectory = (id: string) => workspaceStateDirectory(stateDirectory, id);
+  const installRoot = resolveComputerInstallDirectory();
+  const activation = await claimUpgradeActivation(installRoot, COFORGE_DAEMON_VERSION);
+  const activatedBindings = new Set<string>();
   const workspaceHealth = (id: string) =>
     new WorkspaceHealthJournal(workspaceHealthJournalPath(workspaceDirectory(id)));
   const startPorts: WorkspaceStartPorts = {
@@ -247,7 +255,12 @@ async function runWithSupervisorLock(
           });
           throw new Error(message);
         }
-        await new DaemonConfigStore(directory).save(workspaceDaemonConfig(binding));
+        const firstActivation = activation && !activatedBindings.has(binding.workspaceId);
+        if (firstActivation) activatedBindings.add(binding.workspaceId);
+        await new DaemonConfigStore(directory).save({
+          ...workspaceDaemonConfig(binding),
+          ...(firstActivation ? activation : {}),
+        });
         const instance = workspaceInstance(binding.workspaceId);
         const processId = await instance.ensureStarted();
         const observed = await instance.identity();
@@ -491,40 +504,11 @@ async function runWithSupervisorLock(
         });
       },
     });
-    let cachedDrainWorkspaceIds: readonly string[] | undefined;
-    let cachedDrainWorkspaceIdsAtMs = 0;
-    const drainWorkspaceIds = async () => {
-      const now = Date.now();
-      if (cachedDrainWorkspaceIds && now - cachedDrainWorkspaceIdsAtMs < 2_000)
-        return cachedDrainWorkspaceIds;
-      const ids = (await runtimes(await supervisor.view()))
-        .filter((runtime) => runtime.processId > 0)
-        .map((runtime) => runtime.workspaceId);
-      cachedDrainWorkspaceIds = ids;
-      cachedDrainWorkspaceIdsAtMs = now;
-      return ids;
-    };
-    const upgradeDrainWatcher = new UpgradeDrainWatcher({
+    const upgradeDrainWatcher = supervisorUpgradeDrainWatcher({
       stateDirectory,
-      hold: async (reason) => ({
-        busyCount: (
-          await fanOutRunnerHold("hold", reason, {
-            eventPrefix: "upgrade",
-            timeoutMs: 2_000,
-            workspaceIds: await drainWorkspaceIds(),
-          })
-        ).busyAgents.length,
-      }),
-      release: async () => {
-        const workspaceIds = cachedDrainWorkspaceIds;
-        cachedDrainWorkspaceIds = undefined;
-        cachedDrainWorkspaceIdsAtMs = 0;
-        await fanOutRunnerHold("release", undefined, {
-          eventPrefix: "upgrade",
-          timeoutMs: 2_000,
-          workspaceIds,
-        });
-      },
+      installRoot,
+      runtimes: () => runtimes(supervisor.view()),
+      fanOut: fanOutRunnerHold,
     });
     upgradeDrainWatcher.start();
     try {
@@ -573,6 +557,8 @@ async function runWithSupervisorLock(
               completeUpgrade,
               watchPendingUpgrade,
               launchComputerUpgrade,
+              beginUpgradeProgress: (workspaceId, requestId, version) =>
+                beginLocalUpgradeProgress(installRoot, workspaceId, requestId, version),
               makeSelfClient: createComputerSelfClient,
               view: () => runtimes(supervisor.view()),
               startForOperator,

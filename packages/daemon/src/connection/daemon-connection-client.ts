@@ -129,7 +129,11 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   sendAgentControlResult?(result: AgentControlResult): Promise<void>;
   sendAgentTurnInterruptResult?(result: AgentTurnInterruptResult): Promise<void>;
   start(token: string, config: DaemonConnectionConfig): Promise<void>;
-  ready(createRequest: () => DaemonRuntimeReadyRequest, signal?: AbortSignal): Promise<void>;
+  ready(
+    createRequest: () => DaemonRuntimeReadyRequest,
+    signal?: AbortSignal,
+    onUpgradeReadyReceipt?: (receipt: string) => void,
+  ): Promise<void>;
   updateCodeAgents?(request: DaemonRuntimeCodeAgentsUpdateRequest): Promise<void>;
   reportRuntimeAuthStatus?(report: RuntimeAuthStatusReport): Promise<void>;
   sendMachineDiskStatus?(report: MachineStatusReport): Promise<void>;

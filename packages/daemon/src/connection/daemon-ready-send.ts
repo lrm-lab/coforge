@@ -30,6 +30,7 @@ export async function sendDaemonReady(
   request: DaemonRuntimeReadyRequest,
   onLatestComputerVersion?: (version: string) => void,
   onAgentControlAccepted?: (accepted: boolean) => void,
+  onUpgradeReadyReceipt?: (receipt: string) => void,
 ): Promise<void> {
   const reply = await client.rpc(
     DAEMON_RUNTIME_READY_METHOD,
@@ -46,6 +47,7 @@ export async function sendDaemonReady(
   }
   if (response.latestComputerVersion) onLatestComputerVersion?.(response.latestComputerVersion);
   onAgentControlAccepted?.(response.agentControlAccepted === true);
+  if (response.upgradeReadyReceipt) onUpgradeReadyReceipt?.(response.upgradeReadyReceipt);
 }
 
 export async function sendCodeAgentsUpdate(

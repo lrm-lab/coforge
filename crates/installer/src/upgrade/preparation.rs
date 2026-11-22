@@ -16,7 +16,11 @@ use crate::switch::refusal_inside_service;
 impl Run<'_, '_> {
     /// Everything before the first change: the active version is intact and healthy, its
     /// supervisor is service-managed, and the candidate verifies.
-    pub(super) fn prepare(&mut self, selection: &str) -> Result<Prepared, Refusal> {
+    pub(super) fn prepare(
+        &mut self,
+        selection: &str,
+        progress: Option<&crate::upgrade_progress::UpgradeProgress>,
+    ) -> Result<Prepared, Refusal> {
         if let Some(message) = refusal_inside_service(
             self.ports.service,
             "The upgrade",
@@ -53,6 +57,9 @@ impl Run<'_, '_> {
             &mut |line| self.switch.say(line),
         )?
         .version;
+        if let Some(progress) = progress {
+            progress.phase("verifying");
+        }
         self.switch.say("Checking new version");
         let probe = self
             .ports

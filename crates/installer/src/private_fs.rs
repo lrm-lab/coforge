@@ -126,6 +126,61 @@ pub(crate) fn replace_file(destination: &Path, contents: &[u8], mode: FileMode) 
     pending.commit(destination)
 }
 
+#[derive(Debug)]
+pub(crate) enum DurableReplaceError {
+    NotCommitted(io::Error),
+    Uncertain(io::Error),
+}
+
+pub(crate) fn replace_file_durably(
+    destination: &Path,
+    contents: &[u8],
+    mode: FileMode,
+) -> Result<(), DurableReplaceError> {
+    use DurableReplaceError::{NotCommitted, Uncertain};
+    let mut pending =
+        PendingFile::create(temporary_sibling(destination), mode).map_err(NotCommitted)?;
+    pending.file().write_all(contents).map_err(NotCommitted)?;
+    pending.flush_for_rename().map_err(NotCommitted)?;
+    let result = rename_durably(&pending.path, destination);
+    if result.is_ok() {
+        pending.path = PathBuf::new();
+    }
+    result.map_err(Uncertain)
+}
+
+#[cfg(unix)]
+fn rename_durably(source: &Path, destination: &Path) -> io::Result<()> {
+    fs::rename(source, destination)?;
+    let parent = destination
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    File::open(parent)?.sync_all()
+}
+
+#[cfg(windows)]
+fn rename_durably(source: &Path, destination: &Path) -> io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    };
+    let from: Vec<_> = source.as_os_str().encode_wide().chain([0]).collect();
+    let to: Vec<_> = destination.as_os_str().encode_wide().chain([0]).collect();
+    let moved = unsafe {
+        MoveFileExW(
+            from.as_ptr(),
+            to.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if moved == 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
 /// A file being written under a temporary name, to replace a destination once it is complete.
 /// [`PendingFile::commit`] flushes it, closes it, renames it over the destination, and persists
 /// the rename. Dropped uncommitted, or after a commit that failed before the rename, it removes
@@ -160,14 +215,18 @@ impl PendingFile {
             .expect("the temporary file is open until commit or drop")
     }
 
-    pub(crate) fn commit(mut self, destination: &Path) -> io::Result<()> {
+    fn flush_for_rename(&mut self) -> io::Result<()> {
         let file = self.file.take().expect("commit runs once");
         if let Some(mode) = self.exact_mode {
             set_file_mode(&file, mode)?;
         }
         // Without this a crash after the rename can leave an empty file under the final name.
         file.sync_all()?;
-        drop(file);
+        Ok(())
+    }
+
+    pub(crate) fn commit(mut self, destination: &Path) -> io::Result<()> {
+        self.flush_for_rename()?;
         fs::rename(&self.path, destination)?;
         self.path = PathBuf::new();
         // Persist the rename itself.

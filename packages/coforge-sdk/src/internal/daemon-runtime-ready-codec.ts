@@ -43,6 +43,12 @@ export function decodeDaemonRuntimeReadyRequest(bytes: Uint8Array): DaemonRuntim
     recoveredUpgradeRequestIds: [...value.recoveredUpgradeRequestIds],
     ...(value.capabilities.length ? { capabilities: [...value.capabilities] } : {}),
     ...(value.releaseChannel ? { releaseChannel: value.releaseChannel } : {}),
+    ...(value.observedUpgradeRequestId
+      ? { observedUpgradeRequestId: value.observedUpgradeRequestId }
+      : {}),
+    ...(value.upgradeActivationGeneration
+      ? { upgradeActivationGeneration: value.upgradeActivationGeneration }
+      : {}),
     ...(value.appliedAgentConfigs.length
       ? {
           appliedAgentConfigs: value.appliedAgentConfigs.map((entry) => ({

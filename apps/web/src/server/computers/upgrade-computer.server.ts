@@ -40,6 +40,13 @@ export class UpgradeComputer {
       computerId: string;
     }) => Promise<boolean>,
     private readonly cloud?: CloudImageUpgrade,
+    private readonly beginProgress?: (attempt: {
+      workspaceId: string;
+      computerId: string;
+      requestId: string;
+      expectedVersion: string;
+      expiresAt: number;
+    }) => Promise<void>,
   ) {}
 
   async execute(
@@ -109,6 +116,13 @@ export class UpgradeComputer {
     const expectedVersion = await this.latestVersion();
     const registered = await this.upgrades.begin(scope, input.requestId, expectedVersion);
     if (!registered.created) return registered.status;
+    if (registered.status.status === "accepted")
+      await this.beginProgress?.({
+        ...scope,
+        requestId: input.requestId,
+        expectedVersion,
+        expiresAt: Date.parse(registered.status.expiresAt),
+      }).catch(() => {});
     try {
       await this.publisher.publish(
         daemonControlChannel(scope.workspaceId, scope.computerId),

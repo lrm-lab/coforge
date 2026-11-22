@@ -100,6 +100,15 @@ impl Clock for DrainClock {
 
 #[test]
 fn upgrade_drains_before_stop_keeps_request_across_stop_and_clears_before_start() {
+    check_upgrade_drain_ordering(false);
+}
+
+#[test]
+fn a_remote_upgrade_records_wait_switch_health_and_receipt() {
+    check_upgrade_drain_ordering(true);
+}
+
+fn check_upgrade_drain_ordering(report_progress: bool) {
     let fixture = Fixture::new("upgrade-drain-ordering");
     fixture.install_old();
     let state_scratch = Scratch::new("upgrade-drain-state");
@@ -119,6 +128,15 @@ fn upgrade_drains_before_stop_keeps_request_across_stop_and_clears_before_start(
         state_directory: Some(state_scratch.path()),
         ..fixture.ports(&lifecycle, &service, &table, &clock)
     };
+    let progress = ports.install_root.join("upgrade-progress").join(REQUEST);
+    if report_progress {
+        fs::create_dir_all(&progress).unwrap();
+        fs::write(
+            progress.join("context.json"),
+            serde_json::json!({ "version": NEW, "generation": "activation" }).to_string(),
+        )
+        .unwrap();
+    }
     let mut stages = Vec::new();
     let request = UpgradeRequest {
         request_id: REQUEST,
@@ -147,4 +165,13 @@ fn upgrade_drains_before_stop_keeps_request_across_stop_and_clears_before_start(
         .position(|line| line.starts_with("Stopping"))
         .expect("stopping stage line emitted");
     assert!(drain_idx < stop_idx);
+    if report_progress {
+        for name in ["verifying", "waiting", "switching", "healthy", "receipt"] {
+            let bytes = fs::read(progress.join(format!("{name}.json"))).unwrap();
+            let fact: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(fact["version"], NEW);
+            assert_eq!(fact["generation"], "activation");
+        }
+        assert!(!progress.join("uncertain.json").exists());
+    }
 }

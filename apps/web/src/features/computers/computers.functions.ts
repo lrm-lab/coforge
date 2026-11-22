@@ -1,3 +1,7 @@
+import {
+  latestComputerUpgradeProgressIds,
+  readVisibleComputerUpgradeProgress,
+} from "#src/server/computers/computer-upgrade-progress-wire.server";
 import { createServerFn } from "@tanstack/react-start";
 import { requireRuntimeProvider, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import { modelMetadata } from "#src/features/computers/computer-model-metadata";
@@ -78,6 +82,7 @@ export const listComputers = createServerFn({ method: "GET" })
       db.workspaceComputer.findMany({
         where: { workspaceId, computer: listedWorkspaceComputerWhere(user.id) },
         select: {
+          id: true,
           createdAt: true,
           computer: {
             select: {
@@ -135,33 +140,46 @@ export const listComputers = createServerFn({ method: "GET" })
       .map(({ computer }) => computer.id);
     const runtimeDetection = getComputerRuntimeDetection();
     // Each read needs only the connections, so they run side by side.
-    const [statuses, agentDisplays, detecting, upgrades, images, refusals, releaseChannels] =
-      await Promise.all([
-        // One round trip for every Computer's online lease, not one per Computer.
-        computerStatus.getMany(computerScopes),
-        getAgentDisplay().snapshotMany(agentScopes),
-        Promise.all(
-          computerScopes.map((scope) => runtimeDetection.detecting(scope).catch(() => false)),
-        ),
-        // Each Computer's latest upgrade, so a reload resumes one still running, and keeps the
-        // reason one failed, instead of offering Upgrade again.
-        getComputerUpgradeStore()
-          .latestMany(computerScopes)
-          .catch(() => []),
-        readCloudComputerImages(cloudIds),
-        // Why the connect proxy last refused this binding for good, cleared by the next connect.
-        getComputerConnectRefusals()
-          .getMany(computerScopes)
-          .catch(() => computerScopes.map(() => null)),
-        getComputerReleaseState()
-          .getMany(computerScopes)
-          .catch(() => computerScopes.map(() => undefined)),
-      ]);
+    const [
+      statuses,
+      agentDisplays,
+      detecting,
+      upgrades,
+      images,
+      refusals,
+      releaseChannels,
+      progressIds,
+    ] = await Promise.all([
+      // One round trip for every Computer's online lease, not one per Computer.
+      computerStatus.getMany(computerScopes),
+      getAgentDisplay().snapshotMany(agentScopes),
+      Promise.all(
+        computerScopes.map((scope) => runtimeDetection.detecting(scope).catch(() => false)),
+      ),
+      // Each Computer's latest upgrade, so a reload resumes one still running, and keeps the
+      // reason one failed, instead of offering Upgrade again.
+      getComputerUpgradeStore()
+        .latestMany(computerScopes)
+        .catch(() => []),
+      readCloudComputerImages(cloudIds),
+      // Why the connect proxy last refused this binding for good, cleared by the next connect.
+      getComputerConnectRefusals()
+        .getMany(computerScopes)
+        .catch(() => computerScopes.map(() => null)),
+      getComputerReleaseState()
+        .getMany(computerScopes)
+        .catch(() => computerScopes.map(() => undefined)),
+      latestComputerUpgradeProgressIds(
+        connections
+          .filter(({ computer }) => computer.kind === "local" && computer.ownerId === user.id)
+          .map(({ id }) => id),
+      ).catch(() => new Map<string, string>()),
+    ]);
     const agentDisplayById = new Map(
       agentScopes.map((scope, index) => [scope.agentId, agentDisplays[index]] as const),
     );
     return Promise.all(
-      connections.map(async ({ computer, createdAt }, index) => {
+      connections.map(async ({ id: bindingId, computer, createdAt }, index) => {
         const computerRuntimes = runtimes.filter((runtime) => runtime.computerId === computer.id);
         return {
           id: computer.id,
@@ -172,6 +190,7 @@ export const listComputers = createServerFn({ method: "GET" })
           imageVersion: images.get(computer.id)?.version ?? null,
           imageUpdate: images.get(computer.id)?.update ?? null,
           upgrade: upgrades[index] ?? null,
+          upgradeProgressRequestId: progressIds.get(bindingId),
           computerVersion: computer.computerVersion,
           platform: computer.platform,
           osVersion: computer.osVersion,
@@ -249,8 +268,17 @@ export const readComputerUpgradeStatus = createServerFn({ method: "GET" })
     if (!(await isWorkspaceMemberComputer(db, { userId: user.id, ...scope })))
       throw new Error("Computer is not available");
     const status = await getComputerUpgradeStore().status(scope, data.requestId);
-    if (!status) throw new Error("Upgrade request is not available");
-    return status;
+    const progress = await readVisibleComputerUpgradeProgress(
+      db,
+      { ...scope, userId: user.id },
+      data.requestId,
+      status?.status === "completed",
+    ).catch(() => undefined);
+    if (!status && !progress) throw new Error("Upgrade request is not available");
+    return {
+      ...(status ?? ({ requestId: data.requestId, status: "unknown", reason: "corrupt" } as const)),
+      ...(progress ? { progress } : {}),
+    };
   });
 
 export const upgradeComputer = createServerFn({ method: "POST" })

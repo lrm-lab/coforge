@@ -1,3 +1,4 @@
+import { startUpgradeProgressReporter } from "./upgrade-progress-reporter";
 import type { CredentialInvalidHolds } from "./credential-invalid-holds";
 import { getLogger } from "@logtape/logtape";
 import { mkdirSync } from "node:fs";
@@ -213,6 +214,13 @@ export class RuntimeStartup {
       apiKey: stored,
       signal,
     });
+    const upgradeProgress = startUpgradeProgressReporter(
+      connection,
+      ports.lifecycle,
+      ports.stateDirectory,
+      token,
+      signal,
+    );
     const publications = new RuntimePublicationSubscriptions({
       ...ports.publications,
       purgeProcJobs: ports.procJobs ? () => ports.procJobs!.purgeWorkspace() : undefined,
@@ -357,38 +365,43 @@ export class RuntimeStartup {
         startedAt: ports.startedAtMs,
         serverHttpUrl: connection.serverHttpUrl,
         requestRestart: ports.lifecycle.requestRestart,
-        requestUpgrade: ports.lifecycle.requestUpgrade,
+        requestUpgrade: upgradeProgress?.requestUpgrade ?? ports.lifecycle.requestUpgrade,
         signal,
       });
       await ports.agentControl.replay();
       await ports.agentSessions.replay();
       await ports.operatingSystem.read();
-      await transport.ready(() => {
-        this.#readyWait?.attempt();
-        const runningAgentIds = ports.readyRunningAgentIds();
-        const revisions = ports.configApply.appliedRevisions();
-        const appliedAgentConfigs = runningAgentIds.flatMap((agentId) => {
-          const revision = revisions.get(agentId);
-          return revision === undefined ? [] : [{ agentId, revision }];
-        });
-        return {
-          protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-          requestId: crypto.randomUUID(),
-          workspaceId: connection.workspaceId,
-          computerId: connection.computerId,
-          workerInstanceId: ports.runtimeInstanceId,
-          startedAt: ports.startedAtMs,
-          runningAgentIds,
-          ...(appliedAgentConfigs.length ? { appliedAgentConfigs } : {}),
-          daemonVersion: COFORGE_DAEMON_VERSION,
-          computerVersion: ports.computerVersion,
-          releaseChannel: ports.releaseChannel,
-          ...ports.operatingSystem.current,
-          recoveredRestartRequestIds: ports.lifecycle.recoveredRestartRequestIds ?? [],
-          recoveredUpgradeRequestIds: ports.lifecycle.recoveredUpgradeRequestIds ?? [],
-          capabilities: readyCapabilities(!!ports.publications.migration, !!this.#authControl),
-        };
-      }, signal);
+      await transport.ready(
+        () => {
+          this.#readyWait?.attempt();
+          const runningAgentIds = ports.readyRunningAgentIds();
+          const revisions = ports.configApply.appliedRevisions();
+          const appliedAgentConfigs = runningAgentIds.flatMap((agentId) => {
+            const revision = revisions.get(agentId);
+            return revision === undefined ? [] : [{ agentId, revision }];
+          });
+          return {
+            protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
+            requestId: crypto.randomUUID(),
+            workspaceId: connection.workspaceId,
+            computerId: connection.computerId,
+            workerInstanceId: ports.runtimeInstanceId,
+            startedAt: ports.startedAtMs,
+            runningAgentIds,
+            ...(appliedAgentConfigs.length ? { appliedAgentConfigs } : {}),
+            daemonVersion: COFORGE_DAEMON_VERSION,
+            computerVersion: ports.computerVersion,
+            releaseChannel: ports.releaseChannel,
+            ...ports.operatingSystem.current,
+            recoveredRestartRequestIds: ports.lifecycle.recoveredRestartRequestIds ?? [],
+            recoveredUpgradeRequestIds: ports.lifecycle.recoveredUpgradeRequestIds ?? [],
+            ...upgradeProgress?.activation,
+            capabilities: readyCapabilities(!!ports.publications.migration, !!this.#authControl),
+          };
+        },
+        signal,
+        upgradeProgress?.acceptReceipt,
+      );
       await ports.upgradeResults.report();
       this.#restoreReminderDues();
       ports.resyncAppConfigs();

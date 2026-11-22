@@ -117,6 +117,7 @@ export async function runWorkspaceLifecycleCommand({
   completeUpgrade,
   watchPendingUpgrade,
   launchComputerUpgrade,
+  beginUpgradeProgress,
   makeSelfClient,
   view,
   ownServerUrl,
@@ -138,6 +139,7 @@ export async function runWorkspaceLifecycleCommand({
     expectedVersion: string,
     input: { stateDirectory: string; releaseChannel?: string },
   ) => Promise<void>;
+  beginUpgradeProgress?: (workspaceId: string, requestId: string, version: string) => Promise<void>;
   makeSelfClient: (serverHttpUrl: string) => Pick<ComputerSelfClient, "detach">;
   view: () => Promise<ManagedRuntimeIdentity[]>;
   /** This Coordinator's own server — the only origin a request's `serverHttpUrl` may name
@@ -199,6 +201,11 @@ export async function runWorkspaceLifecycleCommand({
       request.expectedVersion,
     );
     if (created) {
+      await beginUpgradeProgress?.(
+        request.workspaceId,
+        request.requestId,
+        request.expectedVersion,
+      ).catch(() => {});
       // Pushes down any settlement `recordUpgrade` just applied to the pending operations it
       // replaced, in addition to the new one, without restarting this Workspace. The record is
       // machine-wide, so every binding's child learns it, not only the requesting one.

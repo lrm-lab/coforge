@@ -82,11 +82,22 @@ pub(crate) fn clear_drain_files(state_directory: &Path) {
 /// boundary, bounded by [`DRAIN_ACK_GRACE`] (unacknowledged), [`DRAIN_STALE_STATE_GRACE`]
 /// (heartbeat stops updating), and [`DRAIN_WAIT_BOUND`] (acknowledged). Best effort: filesystem
 /// refusal or an uncooperative supervisor never blocks an upgrade.
+#[cfg(test)]
 pub(crate) fn drain_before_stop(
     state_directory: &Path,
     drain_id: &str,
     clock: &dyn Clock,
     say: &mut dyn FnMut(&str),
+) -> Option<DrainGuard> {
+    drain_before_stop_with_progress(state_directory, drain_id, clock, say, None)
+}
+
+pub(crate) fn drain_before_stop_with_progress(
+    state_directory: &Path,
+    drain_id: &str,
+    clock: &dyn Clock,
+    say: &mut dyn FnMut(&str),
+    progress: Option<&crate::upgrade_progress::UpgradeProgress>,
 ) -> Option<DrainGuard> {
     if drain_id.is_empty() || !is_real_directory(state_directory) {
         return None;
@@ -139,6 +150,11 @@ pub(crate) fn drain_before_stop(
                 return Some(guard);
             }
             if last_busy != Some(state.busy_count) {
+                if last_busy.is_none() {
+                    if let Some(progress) = progress {
+                        progress.phase("waiting");
+                    }
+                }
                 say(&format!(
                     "Draining ({} busy Agent{})",
                     state.busy_count,

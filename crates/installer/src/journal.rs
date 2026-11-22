@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::lock::MachineMutationLock;
-use crate::private_fs::{self, FileMode};
+use crate::private_fs::{self, DurableReplaceError, FileMode};
 
 const FILE: &str = "installer-transaction.json";
 const SCHEMA_VERSION: u32 = 1;
@@ -87,6 +87,26 @@ impl Journal {
     }
 
     pub fn record(&self, lock: &MachineMutationLock, transaction: &Transaction) -> io::Result<()> {
+        let bytes = self.record_bytes(lock, transaction)?;
+        private_fs::replace_file(&self.path, &bytes, FileMode::Exact(0o600))
+    }
+
+    pub(crate) fn record_switch(
+        &self,
+        lock: &MachineMutationLock,
+        transaction: &Transaction,
+    ) -> Result<(), DurableReplaceError> {
+        let bytes = self
+            .record_bytes(lock, transaction)
+            .map_err(DurableReplaceError::NotCommitted)?;
+        private_fs::replace_file_durably(&self.path, &bytes, FileMode::Exact(0o600))
+    }
+
+    fn record_bytes(
+        &self,
+        lock: &MachineMutationLock,
+        transaction: &Transaction,
+    ) -> io::Result<Vec<u8>> {
         self.require_lock(lock)?;
         let record = Record {
             schema_version: SCHEMA_VERSION,
@@ -99,7 +119,7 @@ impl Journal {
         let mut bytes = serde_json::to_vec(&record).map_err(io::Error::other)?;
         bytes.push(b'\n');
         private_fs::create_private_directories(&self.install_root)?;
-        private_fs::replace_file(&self.path, &bytes, FileMode::Exact(0o600))
+        Ok(bytes)
     }
 
     /// Removes the journal; one that is already gone is not an error.

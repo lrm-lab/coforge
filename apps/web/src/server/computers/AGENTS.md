@@ -2,6 +2,7 @@
 
 These rules apply to `src/server/computers/`.
 
+- `computer-upgrade-progress*.server.ts` stores short-lived local upgrade evidence, verifies ready receipts, and projects visible binding rows.
 - `computer-list-visibility.server.ts` is the list/search filter for Workspace members:
   another person's account default cloud Computer is omitted; extras and local Computers
   stay. Host jobs, daemons, and Agent placement that read links directly are unchanged.

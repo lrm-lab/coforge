@@ -4,6 +4,7 @@ import { WorkspaceAgentRecovery } from "#src/server/agents/agent-runtime-control
 import { createAgentConfigPush } from "#src/server/agents/agent-config-apply.server";
 import { createDaemonRuntimeReadyMethod } from "#src/server/centrifugo/daemon-runtime-ready-method.server";
 import { getComputerRestartStore } from "#src/server/computers/computer-restart-store.server";
+import { issueComputerUpgradeReadyReceipt } from "#src/server/computers/computer-upgrade-progress-wire.server";
 import { getComputerUpgradeStore } from "#src/server/computers/computer-upgrade-store.server";
 import { recordComputerObservation } from "#src/server/computers/computer-metadata.server";
 import { readLatestComputerVersion } from "#src/server/computers/latest-computer-version.server";
@@ -114,6 +115,8 @@ export function daemonRuntimeReadyPorts(input: {
     },
     observe: (scope, observation) => recordComputerObservation(db, scope, observation),
     upgrades: getComputerUpgradeStore(),
+    issueUpgradeReadyReceipt: (request, workerId) =>
+      issueComputerUpgradeReadyReceipt(db, request, workerId),
     lifecycle: input.computerLifecycle,
     releaseState: getComputerReleaseState(),
   };

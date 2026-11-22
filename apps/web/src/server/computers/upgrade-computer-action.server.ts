@@ -10,6 +10,7 @@ import { upgradeComputerInputSchema } from "#src/features/computers/computer.sch
 import type { z } from "zod";
 import { getComputerUpgradeStore } from "./computer-upgrade-store.server";
 import { UpgradeComputer } from "./upgrade-computer.server";
+import { registerComputerUpgradeProgress } from "./computer-upgrade-progress-wire.server";
 import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
 import { getComputerReleaseState } from "./computer-release-state-composition.server";
 import { parseServerReleaseChannel, releaseFeedForChannel } from "./release-channel.server";
@@ -71,6 +72,24 @@ export async function runUpgradeComputerAction(
           now: new Date(),
         });
       },
+    },
+    async ({ requestId, expectedVersion, expiresAt }) => {
+      const bindings = await db.workspaceComputer.findMany({
+        where: { computerId: scope.computerId },
+        select: { id: true, workspaceId: true, readyWorkerInstanceId: true },
+      });
+      await registerComputerUpgradeProgress(
+        { ...scope, requestId, bindingId: connection.id },
+        expectedVersion,
+        expiresAt,
+        bindings.map((binding) => ({
+          workspaceId: binding.workspaceId,
+          bindingId: binding.id,
+          ...(binding.readyWorkerInstanceId
+            ? { previousWorkerId: binding.readyWorkerInstanceId }
+            : {}),
+        })),
+      );
     },
   ).execute({ workspaceId, userId: user.id }, { ...data, placement, releaseChannel });
 }

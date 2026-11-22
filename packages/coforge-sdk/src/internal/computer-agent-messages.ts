@@ -95,6 +95,8 @@ export type DaemonRuntimeReadyRequest = {
   runningAgentIds: string[];
   recoveredRestartRequestIds?: string[];
   recoveredUpgradeRequestIds?: string[];
+  observedUpgradeRequestId?: string;
+  upgradeActivationGeneration?: string;
   capabilities?: string[];
   releaseChannel?: string;
   appliedAgentConfigs?: Array<{
@@ -105,6 +107,7 @@ export type DaemonRuntimeReadyRequest = {
 export type DaemonRuntimeReadyResponse = {
   latestComputerVersion?: string;
   agentControlAccepted?: boolean;
+  upgradeReadyReceipt?: string;
 };
 export type ComputerRestartIntent = {
   protocolMajor: number;

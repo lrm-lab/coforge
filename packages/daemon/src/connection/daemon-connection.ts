@@ -272,6 +272,7 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
   #readyFailure: string | undefined;
   #resumeTimer: unknown;
   #readyPublications = new ReadyPublicationHold();
+  #upgradeReadyReceipt?: (receipt: string) => void;
   #readyRequestFactory: (() => DaemonRuntimeReadyRequest) | undefined;
   #readyRecoveryClient: CentrifugeWorkspaceClient | undefined;
   #readyRetryTimer: unknown;
@@ -323,9 +324,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     this.#token = _token;
     this.#serverHttpUrl = config.serverHttpUrl ?? "";
     this.#startConfig = config;
-    // Only a connection that is genuinely up can skip this, and being up means it owns a client.
-    // A connection that lost its client has to build one here — returning early on a stale flag
-    // is what left this daemon with no client and no way back for three days (2026-11-16).
     if (this.#connected) return;
     const client = this.clientFactory(
       this.endpoint,
@@ -414,10 +412,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
         this.#failPendingStart = undefined;
         this.#cancelReadyRecovery();
         this.#cancelResume();
-        // Drop the whole record, and only when it still holds the client this attempt owns: a late
-        // rejection must not discard a newer live client. The connection's up-ness lives in that
-        // record, so this cannot leave it "connected" with no client behind — the state only the
-        // RPC paths noticed, while message sends kept working (2026-11-16).
         if (this.#link?.client === client) this.#link = undefined;
         client.disconnect();
         throw error;
@@ -884,11 +878,16 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
       .sendCommandCodeEffortReadResult(response)
       .then(() => undefined);
   }
-  async ready(createRequest: () => DaemonRuntimeReadyRequest, signal?: AbortSignal): Promise<void> {
+  async ready(
+    createRequest: () => DaemonRuntimeReadyRequest,
+    signal?: AbortSignal,
+    onUpgradeReadyReceipt?: (receipt: string) => void,
+  ): Promise<void> {
     const client = this.#requireClient();
     signal?.throwIfAborted();
     this.#readyPublications.hold();
     this.#readyRequestFactory = createRequest;
+    this.#upgradeReadyReceipt = onUpgradeReadyReceipt;
     const firstReady = Promise.withResolvers<void>();
     this.#firstReady = firstReady;
     const onAbort = () => this.#failFirstReady(signal?.reason);
@@ -965,6 +964,9 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
         (version) => this.#latestComputerVersion.current?.(version),
         (accepted) => {
           this.#agentControlAccepted = accepted;
+        },
+        (receipt) => {
+          if (recovering()) this.#upgradeReadyReceipt?.(receipt);
         },
       );
     } catch (error) {
@@ -1070,6 +1072,7 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
       slot.clear();
     this.#readyPublications.clear();
     this.#readyRequestFactory = undefined;
+    this.#upgradeReadyReceipt = undefined;
     for (const collection of [
       this.#pendingActivity,
       this.#supersededActivityLaunches,

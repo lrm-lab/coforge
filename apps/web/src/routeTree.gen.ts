@@ -54,6 +54,7 @@ import { Route as ApiComputerSelfRouteImport } from './routes/api/computer/self'
 import { Route as ApiComputerSwapKeyRouteImport } from './routes/api/computer/swap-key'
 import { Route as ApiComputerWorkspaceRouteImport } from './routes/api/computer/workspace'
 import { Route as ApiDaemonAgentMigrationsRouteImport } from './routes/api/daemon/agent-migrations'
+import { Route as ApiDaemonComputerUpgradeProgressRouteImport } from './routes/api/daemon/computer-upgrade-progress'
 import { Route as ApiHostsHeartbeatRouteImport } from './routes/api/hosts/heartbeat'
 import { Route as ApiHostsRegisterRouteImport } from './routes/api/hosts/register'
 import { Route as ApiInternalCentrifugoRouteImport } from './routes/api/internal/centrifugo'
@@ -444,6 +445,12 @@ const ApiDaemonAgentMigrationsRoute =
   ApiDaemonAgentMigrationsRouteImport.update({
     id: '/api/daemon/agent-migrations',
     path: '/api/daemon/agent-migrations',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiDaemonComputerUpgradeProgressRoute =
+  ApiDaemonComputerUpgradeProgressRouteImport.update({
+    id: '/api/daemon/computer-upgrade-progress',
+    path: '/api/daemon/computer-upgrade-progress',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiHostsHeartbeatRoute = ApiHostsHeartbeatRouteImport.update({
@@ -1397,6 +1404,7 @@ export interface FileRoutesByFullPath {
   '/api/computer/swap-key': typeof ApiComputerSwapKeyRoute
   '/api/computer/workspace': typeof ApiComputerWorkspaceRoute
   '/api/daemon/agent-migrations': typeof ApiDaemonAgentMigrationsRoute
+  '/api/daemon/computer-upgrade-progress': typeof ApiDaemonComputerUpgradeProgressRoute
   '/api/hosts/heartbeat': typeof ApiHostsHeartbeatRoute
   '/api/hosts/register': typeof ApiHostsRegisterRoute
   '/api/internal/centrifugo': typeof ApiInternalCentrifugoRoute
@@ -1601,6 +1609,7 @@ export interface FileRoutesByTo {
   '/api/computer/swap-key': typeof ApiComputerSwapKeyRoute
   '/api/computer/workspace': typeof ApiComputerWorkspaceRoute
   '/api/daemon/agent-migrations': typeof ApiDaemonAgentMigrationsRoute
+  '/api/daemon/computer-upgrade-progress': typeof ApiDaemonComputerUpgradeProgressRoute
   '/api/hosts/heartbeat': typeof ApiHostsHeartbeatRoute
   '/api/hosts/register': typeof ApiHostsRegisterRoute
   '/api/internal/centrifugo': typeof ApiInternalCentrifugoRoute
@@ -1804,6 +1813,7 @@ export interface FileRoutesById {
   '/api/computer/swap-key': typeof ApiComputerSwapKeyRoute
   '/api/computer/workspace': typeof ApiComputerWorkspaceRoute
   '/api/daemon/agent-migrations': typeof ApiDaemonAgentMigrationsRoute
+  '/api/daemon/computer-upgrade-progress': typeof ApiDaemonComputerUpgradeProgressRoute
   '/api/hosts/heartbeat': typeof ApiHostsHeartbeatRoute
   '/api/hosts/register': typeof ApiHostsRegisterRoute
   '/api/internal/centrifugo': typeof ApiInternalCentrifugoRoute
@@ -2012,6 +2022,7 @@ export interface FileRouteTypes {
     | '/api/computer/swap-key'
     | '/api/computer/workspace'
     | '/api/daemon/agent-migrations'
+    | '/api/daemon/computer-upgrade-progress'
     | '/api/hosts/heartbeat'
     | '/api/hosts/register'
     | '/api/internal/centrifugo'
@@ -2216,6 +2227,7 @@ export interface FileRouteTypes {
     | '/api/computer/swap-key'
     | '/api/computer/workspace'
     | '/api/daemon/agent-migrations'
+    | '/api/daemon/computer-upgrade-progress'
     | '/api/hosts/heartbeat'
     | '/api/hosts/register'
     | '/api/internal/centrifugo'
@@ -2418,6 +2430,7 @@ export interface FileRouteTypes {
     | '/api/computer/swap-key'
     | '/api/computer/workspace'
     | '/api/daemon/agent-migrations'
+    | '/api/daemon/computer-upgrade-progress'
     | '/api/hosts/heartbeat'
     | '/api/hosts/register'
     | '/api/internal/centrifugo'
@@ -2623,6 +2636,7 @@ export interface RootRouteChildren {
   ApiComputerSwapKeyRoute: typeof ApiComputerSwapKeyRoute
   ApiComputerWorkspaceRoute: typeof ApiComputerWorkspaceRoute
   ApiDaemonAgentMigrationsRoute: typeof ApiDaemonAgentMigrationsRoute
+  ApiDaemonComputerUpgradeProgressRoute: typeof ApiDaemonComputerUpgradeProgressRoute
   ApiHostsHeartbeatRoute: typeof ApiHostsHeartbeatRoute
   ApiHostsRegisterRoute: typeof ApiHostsRegisterRoute
   ApiInternalCentrifugoRoute: typeof ApiInternalCentrifugoRoute
@@ -3047,6 +3061,13 @@ declare module '@tanstack/react-router' {
       path: '/api/daemon/agent-migrations'
       fullPath: '/api/daemon/agent-migrations'
       preLoaderRoute: typeof ApiDaemonAgentMigrationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/daemon/computer-upgrade-progress': {
+      id: '/api/daemon/computer-upgrade-progress'
+      path: '/api/daemon/computer-upgrade-progress'
+      fullPath: '/api/daemon/computer-upgrade-progress'
+      preLoaderRoute: typeof ApiDaemonComputerUpgradeProgressRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/hosts/heartbeat': {
@@ -4482,6 +4503,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiComputerSwapKeyRoute: ApiComputerSwapKeyRoute,
   ApiComputerWorkspaceRoute: ApiComputerWorkspaceRoute,
   ApiDaemonAgentMigrationsRoute: ApiDaemonAgentMigrationsRoute,
+  ApiDaemonComputerUpgradeProgressRoute: ApiDaemonComputerUpgradeProgressRoute,
   ApiHostsHeartbeatRoute: ApiHostsHeartbeatRoute,
   ApiHostsRegisterRoute: ApiHostsRegisterRoute,
   ApiInternalCentrifugoRoute: ApiInternalCentrifugoRoute,

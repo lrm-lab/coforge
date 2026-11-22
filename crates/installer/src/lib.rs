@@ -41,6 +41,7 @@ pub mod store;
 mod switch;
 pub mod update_error;
 pub mod upgrade;
+mod upgrade_progress;
 pub mod version;
 
 #[cfg(test)]

@@ -2,6 +2,7 @@ import {
   AGENT_CONTROL_ACCEPTED_CAPABILITY,
   AGENT_MIGRATION_CAPABILITY,
   decodeDaemonRuntimeReadyRequest,
+  type DaemonRuntimeReadyRequest,
   encodeDaemonRuntimeReadyResponse,
 } from "@lrm/coforge-sdk/internal";
 import type { ComputerLifecycleActivity } from "#src/server/agents/computer-lifecycle-activity.server";
@@ -55,6 +56,10 @@ export type DaemonRuntimeReadyPorts = {
     metadata: ComputerObservation,
   ) => Promise<void>;
   upgrades?: RedisComputerUpgradeStore;
+  issueUpgradeReadyReceipt?(
+    request: DaemonRuntimeReadyRequest,
+    workerId?: string,
+  ): Promise<string | undefined>;
   /** Started after the ready succeeds, never awaited: Activity rows must not hold the reply. */
   lifecycle?: Pick<ComputerLifecycleActivity, "ready">;
   /** The release feed's newest Computer version, attached to the reply so a stale Computer
@@ -82,6 +87,7 @@ export const createDaemonRuntimeReadyMethod =
     migrationRecovery,
     observe,
     upgrades,
+    issueUpgradeReadyReceipt,
     lifecycle,
     latestComputerVersion,
     releaseState,
@@ -221,13 +227,23 @@ export const createDaemonRuntimeReadyMethod =
             }),
           ),
         );
-      const version = await latestComputerVersion?.().catch(() => null);
+      const [version, upgradeReadyReceipt] = await Promise.all([
+        latestComputerVersion?.().catch(() => null),
+        !metadata.principal.agentId &&
+        request.observedUpgradeRequestId &&
+        request.upgradeActivationGeneration
+          ? boundedUpgradeReceipt(
+              issueUpgradeReadyReceipt?.(request, metadata.principal.workerInstanceId),
+            )
+          : undefined,
+      ]);
       // This server takes the `accepted` Agent control phase; only a daemon that advertised
       // `agent-control-accepted:v1` is told so — an older one ignores the field anyway, and a
       // daemon that never claimed the phase is never asked for it.
       return encodeDaemonRuntimeReadyResponse({
         agentControlAccepted: request.capabilities?.includes(AGENT_CONTROL_ACCEPTED_CAPABILITY),
         ...(version ? { latestComputerVersion: version } : {}),
+        ...(upgradeReadyReceipt ? { upgradeReadyReceipt } : {}),
       });
     } catch (error) {
       console.error(
@@ -243,3 +259,8 @@ export const createDaemonRuntimeReadyMethod =
       return { code: 503, message: `daemon ready failed at ${stage}` };
     }
   };
+
+async function boundedUpgradeReceipt(issue: Promise<string | undefined> | undefined) {
+  if (!issue) return;
+  return Promise.race([issue.catch(() => undefined), Bun.sleep(100).then(() => undefined)]);
+}

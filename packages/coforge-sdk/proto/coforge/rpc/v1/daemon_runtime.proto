@@ -58,6 +58,8 @@ message DaemonRuntimeReadyRequest {
   // Additive release selector advertised by Computers that persist channel state locally.
   optional string release_channel = 15;
   repeated AgentConfigRevision applied_agent_configs = 16;
+  optional string observed_upgrade_request_id = 17;
+  optional string upgrade_activation_generation = 18;
 }
 
 // The server's answer to a ready. An older server answers empty bytes, which decode to an
@@ -69,6 +71,7 @@ message DaemonRuntimeReadyResponse {
   // advertised `agent-control-accepted:v1` may send it. Absent from an older server's reply,
   // which a daemon reads as "never send accepted". Additive.
   optional bool agent_control_accepted = 2;
+  optional string upgrade_ready_receipt = 3;
 }
 
 // The Workspace daemon's last word before it closes its connection on purpose: why it is going

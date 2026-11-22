@@ -20,11 +20,13 @@ use crate::contract::{
 };
 use crate::journal::{Journal, Transaction};
 use crate::lock::{LockError, MachineMutationLock};
+use crate::private_fs::DurableReplaceError;
 use crate::processes::VerifiedCaller;
 use crate::prune::prune_best_effort;
 use crate::receipts::{Begin, ReceiptStore};
 use crate::switch::{ActiveSwitch, Plan, Ports, Target};
 use crate::update_error::UpdateError;
+use crate::upgrade_progress::UpgradeProgress;
 use crate::version::precedence;
 
 /// The SDK's code for a candidate whose bytes do not describe the version it claims
@@ -102,6 +104,7 @@ pub fn upgrade(
             };
         }
     }
+    let progress = UpgradeProgress::open(ports.install_root, request.request_id, request.selection);
     let mut run = Run {
         ports,
         lock: &lock,
@@ -111,7 +114,11 @@ pub fn upgrade(
         allow_downgrade: request.allow_downgrade,
         switch: ActiveSwitch::new(ports, stage, request.caller),
     };
-    run.execute(request.selection)
+    let outcome = run.execute(request.selection, progress.as_ref());
+    if let (Some(progress), Outcome::Receipt(receipt)) = (&progress, &outcome) {
+        progress.terminal(receipt);
+    }
+    outcome
 }
 
 fn lock_refusal(error: &LockError) -> Outcome {
@@ -234,24 +241,51 @@ struct Run<'r, 'p> {
 }
 
 impl Run<'_, '_> {
-    fn execute(&mut self, selection: &str) -> Outcome {
-        let prepared = match self.prepare(selection) {
+    fn execute(&mut self, selection: &str, progress: Option<&UpgradeProgress>) -> Outcome {
+        let prepared = match self.prepare(selection, progress) {
             Ok(prepared) => prepared,
             Err(refusal) => return self.refused(refusal),
         };
         let transaction = journal_entry(self.request_id, &prepared);
-        if let Err(error) = self.journal.record(self.lock, &transaction) {
-            return self.refused(refuse(format!(
-                "the recovery journal could not be written: {error}"
-            )));
+        let guard = progress
+            .filter(|_| transaction.supervisor_running)
+            .and_then(|progress| self.switch.wait_for_agents(self.request_id, Some(progress)));
+        let commit = if progress.is_some() {
+            self.journal.record_switch(self.lock, &transaction)
+        } else {
+            self.journal
+                .record(self.lock, &transaction)
+                .map_err(DurableReplaceError::NotCommitted)
+        };
+        match commit {
+            Ok(()) => {}
+            Err(DurableReplaceError::NotCommitted(error)) => {
+                return self.refused(refuse(format!(
+                    "the recovery journal could not be written: {error}"
+                )));
+            }
+            Err(DurableReplaceError::Uncertain(error)) => {
+                if let Some(progress) = progress {
+                    progress.phase("uncertain");
+                }
+                return NoReceipt {
+                    exit: EXIT_UNRESOLVED,
+                    message: format!("the recovery journal commit could not be confirmed: {error}"),
+                };
+            }
         }
-        match self.switch_to(&prepared) {
+        match self.switch_to(&prepared, progress, guard) {
             Ok(()) => self.succeeded(prepared),
             Err(candidate) => self.roll_back(prepared, candidate),
         }
     }
 
-    fn switch_to(&mut self, prepared: &Prepared) -> Result<(), String> {
+    fn switch_to(
+        &mut self,
+        prepared: &Prepared,
+        progress: Option<&UpgradeProgress>,
+        guard: Option<crate::drain::DrainGuard>,
+    ) -> Result<(), String> {
         let from = prepared.from.as_ref();
         let store = self.ports.store;
         let stop = from.map_or_else(Vec::new, |old| {
@@ -264,16 +298,18 @@ impl Run<'_, '_> {
             replaces: from
                 .filter(|installed| installed.supervisor_running)
                 .map(|installed| &installed.supervisor_id),
-            drain_id: Some(self.request_id),
+            drain_id: progress.is_none().then_some(self.request_id),
         };
         let previous = previous_after(from, &prepared.to);
-        self.switch.switch(
+        self.switch.switch_with_progress(
             &Target {
                 version: &prepared.to,
                 previous: previous.as_deref(),
                 definition: prepared.to_definition.as_ref(),
             },
             &plan,
+            progress,
+            guard,
         )
     }
 

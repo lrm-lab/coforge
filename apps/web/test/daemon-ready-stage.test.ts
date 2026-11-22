@@ -317,3 +317,35 @@ test("a ready whose version lookup fails still succeeds with no version", async 
     undefined,
   );
 });
+
+test("upgrade evidence issuance happens after recovery and its failure leaves standard ready successful", async () => {
+  const calls: string[] = [];
+  const method = createDaemonRuntimeReadyMethod({
+    recovery: {
+      recoverWorkspace: async () => {
+        calls.push("workspace");
+      },
+    },
+    reminderRecovery: {
+      snapshotAssigned: async () => {
+        calls.push("reminders");
+      },
+    },
+    issueUpgradeReadyReceipt: async () => {
+      calls.push("receipt");
+      throw new Error("receipt path unavailable");
+    },
+  });
+  const request = decodeDaemonRuntimeReadyRequest(readyPayload());
+  const reply = await method(
+    encodeDaemonRuntimeReadyRequest({
+      ...request,
+      observedUpgradeRequestId: "upgrade-request",
+      upgradeActivationGeneration: "activation",
+    }),
+    { principal: principal() },
+  );
+  expect(reply).toBeInstanceOf(Uint8Array);
+  expect(decodeDaemonRuntimeReadyResponse(reply as Uint8Array).upgradeReadyReceipt).toBeUndefined();
+  expect(calls).toEqual(["workspace", "reminders", "receipt"]);
+});
