@@ -23,9 +23,6 @@ test("the Activity list moves, reads, marks Done and opens from the keyboard", a
   const focused = `${rows}.findIndex((row) => row.contains(document.activeElement))`;
   const focusSeeded = (index: number) =>
     evaluate(`(${seeded}[${index}].querySelector("a").focus(), true)`);
-  const unreadExpression = (index: number) =>
-    `[...${seeded}[${index}].querySelectorAll("[aria-label]")].some((el) => /\\d+ new/.test(el.getAttribute("aria-label")))`;
-  const isUnread = (index: number) => evaluate<boolean>(unreadExpression(index));
   try {
     const { workspaceId, workspace } = await devBrowserWorkspace(db);
     const { unread, read } = await seedActivityKeys(db, workspaceId);
@@ -56,29 +53,25 @@ test("the Activity list moves, reads, marks Done and opens from the keyboard", a
       ),
     ).toBe(1);
 
-    const unreadAt = await evaluate<number>(
-      `${seeded}.findIndex((row) => row.textContent.includes("e2e-keys-design") && !row.textContent.includes("launch"))`,
-    );
-    expect(unreadAt).toBeGreaterThanOrEqual(0);
-    await focusSeeded(unreadAt);
-    expect(await isUnread(unreadAt)).toBe(true);
+    const unreadRow = `document.querySelector('[data-activity-row="conversation:${unread.channelId}"]')`;
+    const isUnread = `/\\d+ new/.test(${unreadRow}.textContent)`;
+    await evaluate(`(${unreadRow}.querySelector("a").focus(), true)`);
+    expect(await evaluate<boolean>(isUnread)).toBe(true);
     await browser("press", "r");
-    await waitFor(`!${unreadExpression(unreadAt)}`);
+    await waitFor(`!${isUnread}`);
     expect(
       (await db.conversationMember.findUniqueOrThrow({ where: { id: unread.viewer.id } }))
         .readThroughSequence,
     ).toBeGreaterThanOrEqual(5);
     await browser("press", "r");
-    await waitFor(unreadExpression(unreadAt));
-    expect(await evaluate<boolean>(`${seeded}[${unreadAt}].contains(document.activeElement)`)).toBe(
-      true,
-    );
+    await waitFor(isUnread);
+    expect(await evaluate<boolean>(`${unreadRow}.contains(document.activeElement)`)).toBe(true);
 
     const before = await evaluate<string[]>(`${seeded}.map((row) => row.textContent)`);
     await evaluate(`(() => {
       const input = document.createElement("input");
       input.id = "keys-probe";
-      ${seeded}[${unreadAt}].append(input);
+      ${unreadRow}.append(input);
       input.focus();
       return true;
     })()`);

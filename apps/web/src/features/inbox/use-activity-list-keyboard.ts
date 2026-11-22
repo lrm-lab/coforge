@@ -3,8 +3,8 @@ import {
   type KeyboardEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
-  useState,
 } from "react";
 
 import {
@@ -44,16 +44,17 @@ export function useActivityListKeyboard(
   keys: readonly string[],
   items: readonly ActivityInboxItem[],
   actions: ActivityItemActions,
+  selected: string | undefined,
+  setSelected: (key: string) => void,
   flow?: ActivityListFlow,
 ) {
-  const [selected, setSelected] = useState<string>();
   const tabStopKey = selected !== undefined && keys.includes(selected) ? selected : keys[0];
   const tabStop = useRef(tabStopKey);
   tabStop.current = tabStopKey;
   const current = flow?.current;
   useEffect(() => {
     if (current !== undefined) setSelected(current);
-  }, [current]);
+  }, [current, setSelected]);
 
   const onType = flow?.onType;
   const startMessage = useCallback(
@@ -63,10 +64,22 @@ export function useActivityListKeyboard(
     [onType],
   );
 
-  const onFocus = useCallback((event: FocusEvent<HTMLElement>) => {
-    const key = rowOf(event.target)?.getAttribute(ACTIVITY_ROW_ATTRIBUTE);
-    if (key) setSelected(key);
-  }, []);
+  const focusedRow = useRef<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    const previous = focusedRow.current;
+    if (!previous || previous.isConnected) return;
+    focusedRow.current = null;
+    if (document.activeElement === document.body && previous.dataset.activityRow === tabStopKey)
+      selectedRow(document, tabStopKey)?.querySelector<HTMLElement>("a")?.focus();
+  });
+  const onFocus = useCallback(
+    (event: FocusEvent<HTMLElement>) => {
+      focusedRow.current = rowOf(event.target);
+      const key = focusedRow.current?.getAttribute(ACTIVITY_ROW_ATTRIBUTE);
+      if (key) setSelected(key);
+    },
+    [setSelected],
+  );
 
   const itemsRef = useRef(items);
   itemsRef.current = items;

@@ -128,7 +128,14 @@ export function ActivityInboxView({
       .flatMap((page) => page.items)
       .filter((item) => !seen.has(item.key) && seen.add(item.key));
   }, [projectedData, pinned]);
-  const { items, release } = useKeptOpenRow(filter, listed, opened);
+  const { items, release, selected, setSelected } = useKeptOpenRow(
+    filter,
+    listed,
+    opened,
+    workspaceId,
+    projectedData?.pages.at(-1)?.nextCursor,
+    pinned,
+  );
   const onDoneStarted = useCallback(
     (item: ActivityCompletionItem) => {
       release(item.key);
@@ -220,7 +227,12 @@ export function ActivityInboxView({
     composerRef,
   });
   const { tabStopKey, listProps, headerProps, paneProps, actOnSelected, focusSelected } =
-    useActivityListKeyboard(rowKeys, rows, actions, listFlow);
+    useActivityListKeyboard(rowKeys, rows, actions, selected, setSelected, listFlow);
+  const hadPane = useRef(false);
+  useLayoutEffect(() => {
+    if (hadPane.current && !pane) focusSelected();
+    hadPane.current = Boolean(pane);
+  }, [pane, focusSelected]);
   const selectedDone = rows.some((item) => item.key === tabStopKey);
   const flowing = listFlow !== undefined;
   const paneFlow = useMemo<ActivityPaneFlow | undefined>(
