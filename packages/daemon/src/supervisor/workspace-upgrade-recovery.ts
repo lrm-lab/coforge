@@ -12,8 +12,15 @@ import {
   type UpgradeActivation,
 } from "#src/platform/computer-upgrade-progress";
 import type { ManagedBinding } from "./machine-supervisor";
+import type { NativeProcessIdentity } from "./workspace-instance";
 
 type Binding = Pick<ManagedBinding, "workspaceId" | "computerId" | "serverHttpUrl">;
+type LaunchIdentity = Pick<NativeProcessIdentity, "mainPid" | "invocationId">;
+export type WorkspaceRecoveryLaunch = {
+  beforeLaunch: () => Promise<void>;
+  observeLaunch: (identity: LaunchIdentity) => Promise<void>;
+};
+
 type RecoveryLaunch = {
   binding: Binding;
   version: string;
@@ -21,6 +28,7 @@ type RecoveryLaunch = {
 } & (
   | { state: "failed" }
   | { state: "armed"; authorizedAt: number }
+  | { state: "launched"; authorizedAt: number; launch: LaunchIdentity }
   | { state: "confirmed"; authorizedAt: number; daemon: { processId: number; daemonId: string } }
 );
 
@@ -160,7 +168,7 @@ export class WorkspaceUpgradeRecovery {
     binding: ManagedBinding,
     reconciling: boolean,
     stateDirectory: string,
-    run: (beforeLaunch?: () => Promise<void>) => Promise<{
+    run: (recovery?: WorkspaceRecoveryLaunch) => Promise<{
       invocationId: string;
       processId: number;
       daemonId: string;
@@ -212,20 +220,34 @@ export class WorkspaceUpgradeRecovery {
       );
     if (matches || (await save({ ...evidence, state: "failed" })))
       this.#pending.set(workspaceId, receipt);
-    let authorizedAt: number | undefined;
-    const { invocationId, processId, daemonId } = await run(async () => {
-      if (attempt.expiresAt <= Date.now() || (await hasReadyReceipt(receipt))) return;
-      const at = performance.timeOrigin + performance.now();
-      if (await save({ ...evidence, state: "armed", authorizedAt: at })) {
-        authorizedAt = at;
-        this.#pending.set(workspaceId, receipt);
-      }
+    let authorization: { authorizedAt: number; launch?: LaunchIdentity } | undefined;
+    const { invocationId, processId, daemonId } = await run({
+      beforeLaunch: async () => {
+        if (attempt.expiresAt <= Date.now() || (await hasReadyReceipt(receipt))) return;
+        const at = performance.timeOrigin + performance.now();
+        if (await save({ ...evidence, state: "armed", authorizedAt: at })) {
+          authorization = { authorizedAt: at };
+          this.#pending.set(workspaceId, receipt);
+        }
+      },
+      observeLaunch: async ({ mainPid, invocationId }) => {
+        if (!authorization) return;
+        const launch = { mainPid, invocationId };
+        authorization.launch = launch;
+        await save({
+          ...evidence,
+          state: "launched",
+          authorizedAt: authorization.authorizedAt,
+          launch,
+        });
+      },
     });
-    if (authorizedAt !== undefined) {
+    const proof = authorization ?? (matches && record.state === "launched" ? record : undefined);
+    if (proof?.launch?.mainPid === processId && proof.launch.invocationId === invocationId) {
       await save({
         ...evidence,
         state: "confirmed",
-        authorizedAt,
+        authorizedAt: proof.authorizedAt,
         daemon: { processId, daemonId },
       });
     }
@@ -276,6 +298,7 @@ async function readWorkspaceUpgradeRecovery(
     )
       return;
     if (grant.state === "failed" || !(grant.authorizedAt < startedAt)) return;
+    if (grant.state === "launched" && grant.launch?.mainPid !== process.pid) return;
     if (grant.state === "confirmed") {
       if (grant.daemon?.processId !== process.pid) return;
       const own = await new LocalDaemonLauncher({

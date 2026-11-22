@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   readUpgradeActivation,
   snapshotUpgradeBindings,
+  readUpgradeProgressFile,
   writeUpgradeProgressFile,
   upgradeReadyReceiptDirectory,
   upgradeReadyReceiptName,
@@ -163,7 +164,10 @@ for (const mode of [
   "first workspace exit before cloud ready",
   "workspace exit with the same Coordinator",
   "adopted independent workspace",
+  "adopted independent workspace after interrupted authorization",
   "adopted authorized workspace",
+  "adopted workspace before confirmation",
+  "adopted workspace with different invocation",
   "explicit stop",
   "detach and rebind",
 ] as const) {
@@ -201,8 +205,17 @@ for (const mode of [
     );
     const children = new Map<string, ReturnType<typeof spawnWorkspaceActivation>>();
     const adopted = new Map<string, ReturnType<typeof spawnWorkspaceActivation>>();
+    const invocations = new WeakMap<ReturnType<typeof spawnWorkspaceActivation>, string>();
+    const interruptedBeforeLaunch =
+      mode === "adopted independent workspace after interrupted authorization";
+    const interrupted =
+      mode === "adopted workspace before confirmation" ||
+      mode === "adopted workspace with different invocation";
     let bindings: ManagedBinding[] = [alpha, beta];
-    async function createCoordinator(startedAt: number) {
+    async function createCoordinator(
+      startedAt: number,
+      interrupt?: "before launch" | "after handshake",
+    ) {
       const recovery = await workspaceUpgradeRecovery(installRoot, version, startedAt);
       const live = new Map<string, string>();
       const supervisor = new MachineSupervisor(
@@ -215,28 +228,29 @@ for (const mode of [
         {
           start(binding, options) {
             const path = pathFor(binding.workspaceId);
-            return recovery.start(
-              binding,
-              options?.reconciling === true,
-              path,
-              async (beforeLaunch?: () => Promise<void>) => {
-                await new DaemonConfigStore(path).save(binding);
-                let child = adopted.get(binding.workspaceId);
-                if (!child) {
-                  await beforeLaunch?.();
-                  child = spawnWorkspaceActivation(installRoot, version, path);
-                }
-                children.set(binding.workspaceId, child);
-                const identity = await workspaceIdentity(path, child.pid).catch((error) => {
-                  child.kill();
-                  throw error;
-                });
-                const { daemonId } = identity;
-                const invocationId = crypto.randomUUID();
-                live.set(binding.workspaceId, invocationId);
-                return { invocationId, daemonId, processId: child.pid };
-              },
-            );
+            return recovery.start(binding, options?.reconciling === true, path, async (launch) => {
+              await new DaemonConfigStore(path).save(binding);
+              let child = adopted.get(binding.workspaceId);
+              if (!child) {
+                await launch?.beforeLaunch();
+                if (interrupt === "before launch" && binding.workspaceId === beta.workspaceId)
+                  throw new Error("fixture Coordinator exited before launch");
+                child = spawnWorkspaceActivation(installRoot, version, path);
+              }
+              children.set(binding.workspaceId, child);
+              const invocationId = invocations.get(child) ?? crypto.randomUUID();
+              invocations.set(child, invocationId);
+              await launch?.observeLaunch({ mainPid: child.pid, invocationId });
+              const identity = await workspaceIdentity(path, child.pid).catch((error) => {
+                child.kill();
+                throw error;
+              });
+              const { daemonId } = identity;
+              if (interrupt === "after handshake" && binding.workspaceId === beta.workspaceId)
+                throw new Error("fixture Coordinator exited after handshake");
+              live.set(binding.workspaceId, invocationId);
+              return { invocationId, daemonId, processId: child.pid };
+            });
           },
           async stop(binding, preserve) {
             await recovery.discard(binding.workspaceId, preserve);
@@ -318,18 +332,44 @@ for (const mode of [
         expect(await recovery.pendingWorkspaceIds()).toEqual([beta.workspaceId]);
       }
       await supervisor.shutdown();
-      if (mode === "adopted independent workspace") {
+      const grantPath = join(
+        directory,
+        `workspace-recovery-${Buffer.from(beta.workspaceId).toString("base64url")}.json`,
+      );
+      if (interruptedBeforeLaunch) {
+        const authorizing = await createCoordinator(Date.now(), "before launch");
+        await expect(authorizing.supervisor.recover()).rejects.toThrow(
+          "Workspace recovery incomplete",
+        );
+        expect(await readUpgradeProgressFile(grantPath)).toMatchObject({ state: "armed" });
+        expect(children.has(beta.workspaceId)).toBeFalse();
+        await workspaceActivationResult(children.get(alpha.workspaceId)!);
+      }
+      if (mode === "adopted independent workspace" || interruptedBeforeLaunch) {
         const betaPath = pathFor(beta.workspaceId);
         await new DaemonConfigStore(betaPath).save(beta);
         const child = spawnWorkspaceActivation(installRoot, version, betaPath);
         await workspaceIdentity(betaPath, child.pid);
         adopted.set(beta.workspaceId, child);
       }
-      if (mode === "adopted authorized workspace") {
-        const authorizing = await createCoordinator(Date.now());
-        await authorizing.supervisor.recover();
+      if (mode === "adopted authorized workspace" || interrupted) {
+        const authorizing = await createCoordinator(
+          Date.now(),
+          interrupted ? "after handshake" : undefined,
+        );
+        const launch = authorizing.supervisor.recover();
+        if (interrupted) await expect(launch).rejects.toThrow("Workspace recovery incomplete");
+        else await launch;
         const child = children.get(beta.workspaceId)!;
         await workspaceIdentity(pathFor(beta.workspaceId), child.pid);
+        if (interrupted) {
+          expect(await readUpgradeProgressFile(grantPath)).toMatchObject({
+            state: "launched",
+            launch: { mainPid: child.pid, invocationId: invocations.get(child) },
+          });
+        }
+        if (mode === "adopted workspace with different invocation")
+          invocations.set(child, crypto.randomUUID());
         adopted.set(beta.workspaceId, child);
         await workspaceActivationResult(children.get(alpha.workspaceId)!);
       }
@@ -349,8 +389,14 @@ for (const mode of [
         mode === "restarted Coordinator" ||
         mode === "workspace exit before cloud ready" ||
         mode === "adopted authorized workspace" ||
+        mode === "adopted workspace before confirmation" ||
         initialExit;
       expect(betaActivation).toEqual(restored ? activation : null);
+      if (interrupted || interruptedBeforeLaunch) {
+        expect(await readUpgradeProgressFile(grantPath)).toMatchObject({
+          state: interruptedBeforeLaunch ? "armed" : restored ? "confirmed" : "launched",
+        });
+      }
       if (restored)
         await persistFixtureReady(
           installRoot,
@@ -359,7 +405,11 @@ for (const mode of [
           activation,
         );
       expect(await restarted.recovery.pendingWorkspaceIds()).toEqual(
-        mode === "adopted independent workspace" ? [beta.workspaceId] : [],
+        mode === "adopted independent workspace" ||
+          interruptedBeforeLaunch ||
+          mode === "adopted workspace with different invocation"
+          ? [beta.workspaceId]
+          : [],
       );
     }
     if (mode === "workspace exit before cloud ready") {
@@ -372,9 +422,11 @@ for (const mode of [
     expect(
       await runWorkspaceActivation(installRoot, version, pathFor(alpha.workspaceId)),
     ).toBeNull();
-    expect(
-      await runWorkspaceActivation(installRoot, version, pathFor(beta.workspaceId)),
-    ).toBeNull();
+    if (!interruptedBeforeLaunch) {
+      expect(
+        await runWorkspaceActivation(installRoot, version, pathFor(beta.workspaceId)),
+      ).toBeNull();
+    }
   });
 }
 

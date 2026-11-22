@@ -6,7 +6,10 @@ import type { WorkspaceAdoptions } from "./workspace-adoption";
 import type { WorkspaceInstance } from "./workspace-instance";
 import { WorkspaceHealthJournal, workspaceDegradedMessage } from "./workspace-health-journal";
 import { throwIfParked, type WorkspaceStartPorts } from "./workspace-start-outcome";
-import type { WorkspaceUpgradeRecovery } from "./workspace-upgrade-recovery";
+import type {
+  WorkspaceRecoveryLaunch,
+  WorkspaceUpgradeRecovery,
+} from "./workspace-upgrade-recovery";
 
 const WORKSPACE_READINESS_MS = 30_000;
 
@@ -29,7 +32,7 @@ export function startSupervisorWorkspace({
 }): WorkspaceProcesses["start"] {
   return (binding, options = {}) => {
     const directory = workspaceDirectory(binding.workspaceId);
-    async function run(beforeLaunch?: () => Promise<void>) {
+    async function run(recovery?: WorkspaceRecoveryLaunch) {
       // A degraded Workspace must fail fast, not spend up to 30s waiting for local RPC the OS
       // unit will never open: the replacement child would observe the same latch and exit 0
       // (see `guardWorkspaceRunnerStart`). Waiting out that readiness budget delayed every
@@ -51,10 +54,11 @@ export function startSupervisorWorkspace({
       }
       await new DaemonConfigStore(directory).save(workspaceDaemonConfig(binding));
       const instance = workspaceInstance(binding.workspaceId);
-      const processId = await instance.ensureStarted(beforeLaunch);
+      const processId = await instance.ensureStarted(recovery?.beforeLaunch);
       const observed = await instance.identity();
       if (!observed?.active || observed.mainPid !== processId)
         throw new Error("Workspace OS identity changed during startup");
+      await recovery?.observeLaunch(observed);
       const identity = adoptions.track(binding, instance, observed);
       // Readiness keeps its own bound whoever asked: an operator command answers by its own
       // deadline while this start finishes behind it, so the instance is still adopted.
