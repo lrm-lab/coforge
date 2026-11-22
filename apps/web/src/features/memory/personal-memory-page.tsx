@@ -1,4 +1,4 @@
-import { PersonalMemoryRecord, PersonalMemoryVersionTime } from "./personal-memory-record";
+import { PersonalMemoryRecord } from "./personal-memory-record";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { ArrowLeft, Plus } from "@untitledui/icons";
@@ -13,6 +13,7 @@ import {
   personalMemoryDraft as initial,
   type PersonalMemoryDraft as Draft,
 } from "./personal-memory-editor";
+import { PersonalMemoryHistoryPanel } from "./personal-memory-history-panel";
 import { personalResponseError as responseError } from "./personal-memory-response";
 import { MemoryScopeLinks } from "./memory-scope-links";
 import { listMyMemoryAgents, personalMemoryCommand } from "./personal-memory.functions";
@@ -388,99 +389,48 @@ export function PersonalMemoryPage({
                     {m.memory_archive()}
                   </Button>
                 </div>
-                {history && (
-                  <section className="flex flex-col gap-3 border-t border-secondary pt-4">
-                    <h3 className="text-sm font-semibold text-primary">{m.memory_history()}</h3>
-                    {history.map((version) => (
-                      <div
-                        key={version.revision}
-                        className="flex flex-col gap-2 border-b border-secondary py-3"
-                      >
-                        <PersonalMemoryVersionTime updatedAt={version.updatedAt} />
-                        <p className="line-clamp-2 text-sm text-secondary">{version.content}</p>
-                        <Button
-                          color="link-gray"
-                          size="sm"
-                          isDisabled={busy}
-                          onPress={async () => {
-                            if (!search.agent) return;
-                            const requestId = ++historicalRequest.current;
-                            setBusy(true);
-                            try {
-                              const result = await personalMemoryCommand({
-                                data: {
-                                  agentId: search.agent,
-                                  command: {
-                                    operation: "get",
-                                    key: entry.key,
-                                    revision: version.revision,
-                                  },
-                                },
-                              });
-                              if (
-                                active.current !== stamp ||
-                                historicalRequest.current !== requestId
-                              )
-                                return;
-                              const failure = responseError(result);
-                              if (failure) setError(failure);
-                              else if (result.status === "ready" && result.result.status === "ok")
-                                setHistorical(result.result.result.entries[0]);
-                            } catch {
-                              if (
-                                active.current === stamp &&
-                                historicalRequest.current === requestId
-                              )
-                                setError(m.memory_failed());
-                            } finally {
-                              if (historicalRequest.current === requestId) setBusy(false);
-                            }
-                          }}
-                        >
-                          {m.memory_full_version()}
-                        </Button>
-                      </div>
-                    ))}
-                    {historyOffset !== undefined && (
-                      <Button
-                        color="secondary"
-                        size="sm"
-                        onPress={() => loadHistory(historyOffset)}
-                      >
-                        {m.memory_next()}
-                      </Button>
-                    )}
-                  </section>
-                )}
-                {historical && (
-                  <section className="flex flex-col gap-3 border-t border-secondary pt-4">
-                    <h3 className="text-sm font-semibold text-primary">{m.memory_historical()}</h3>
-                    <p className="whitespace-pre-wrap break-words text-sm text-primary">
-                      {historical.content}
-                    </p>
-                    <p className="whitespace-pre-wrap break-words text-sm text-secondary">
-                      {historical.source}
-                    </p>
-                    <Button
-                      color="secondary"
-                      size="sm"
-                      isDisabled={busy}
-                      onPress={() => {
-                        setDrafts((previous) => ({
-                          ...previous,
-                          [cacheKey]: {
-                            ...initial(historical),
-                            revision: entry.revision,
-                            restoring: true,
-                          },
-                        }));
-                        setEditing(true);
-                      }}
-                    >
-                      {m.memory_restore_version()}
-                    </Button>
-                  </section>
-                )}
+                <PersonalMemoryHistoryPanel
+                  history={history}
+                  historyOffset={historyOffset}
+                  historical={historical}
+                  busy={busy}
+                  onLoadMore={(offset) => void loadHistory(offset)}
+                  onSelectVersion={async (revision) => {
+                    if (!search.agent) return;
+                    const requestId = ++historicalRequest.current;
+                    setBusy(true);
+                    try {
+                      const result = await personalMemoryCommand({
+                        data: {
+                          agentId: search.agent,
+                          command: { operation: "get", key: entry.key, revision },
+                        },
+                      });
+                      if (active.current !== stamp || historicalRequest.current !== requestId)
+                        return;
+                      const failure = responseError(result);
+                      if (failure) setError(failure);
+                      else if (result.status === "ready" && result.result.status === "ok")
+                        setHistorical(result.result.result.entries[0]);
+                    } catch {
+                      if (active.current === stamp && historicalRequest.current === requestId)
+                        setError(m.memory_failed());
+                    } finally {
+                      if (historicalRequest.current === requestId) setBusy(false);
+                    }
+                  }}
+                  onRestoreVersion={(selectedVersion) => {
+                    setDrafts((previous) => ({
+                      ...previous,
+                      [cacheKey]: {
+                        ...initial(selectedVersion),
+                        revision: entry.revision,
+                        restoring: true,
+                      },
+                    }));
+                    setEditing(true);
+                  }}
+                />
               </>
             )
           )}
