@@ -78,7 +78,6 @@ export function activityPageSql(
       WHERE items."pastDone" AND ${viewSql(options.filter)} AND ${afterSql(options.cursor)}
       ORDER BY ${unreadFirst ? Prisma.sql`items."hasUnread" DESC,` : Prisma.empty}
         items."latestAt" DESC, items."latestSequence" DESC, items."key" COLLATE "C" DESC
-      -- One past the page says whether there is a next one.
       LIMIT ${options.limit + 1}
     ), listed AS (
       SELECT FALSE AS "isPin", page.* FROM page
@@ -110,27 +109,22 @@ export function activityPageSql(
     LEFT JOIN "conversation_members" cm ON cm."id" = listed."memberId"
     LEFT JOIN "thread_reads" tr
       ON tr."memberId" = listed."memberId" AND tr."rootMessageId" = listed."rootMessageId"
-    -- A conversation or task item's unread top-level messages.
     LEFT JOIN LATERAL (
       SELECT COUNT(*)::int AS "count", (ARRAY_AGG(m."id" ORDER BY m."sequence"))[1] AS "firstId"
       FROM "messages" m
       WHERE listed."rootMessageId" IS NULL
         AND ${conversationUnreadMessageSql}
-        -- A muted channel counts only the viewer's mentions; its row is listed for those alone.
         AND (cm."notificationLevel" <> 'muted' OR listed."channelName" IS NULL
           OR listed."taskBoardId" IS NOT NULL OR EXISTS (
             SELECT 1 FROM "message_mentions" mm
             WHERE mm."messageId" = m."id" AND mm."memberId" = cm."id"
           ))
     ) unread ON TRUE
-    -- A thread item's unread replies.
     LEFT JOIN LATERAL (
       SELECT COUNT(*)::int AS "count", (ARRAY_AGG(m."id" ORDER BY m."sequence"))[1] AS "firstId"
       FROM "messages" m
       WHERE ${threadUnreadReplySql("listed")}
     ) replies ON TRUE
-    -- Pins first, in pin order; then the page in list order, where a pinned conversation an Unread or
-    -- Mentions page lists keeps its place in time.
     ORDER BY listed."isPin" DESC,
       CASE WHEN listed."isPin" THEN listed."pinOrder" END,
       CASE WHEN listed."isPin" THEN listed."pinnedAt" END,
