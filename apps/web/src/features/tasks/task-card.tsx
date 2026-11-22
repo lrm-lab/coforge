@@ -202,9 +202,9 @@ export function TaskCard({
             {channel ? (
               <TaskLocator task={{ number: task.number, channel }} shrink />
             ) : (
-              <span className="truncate">
-                #{task.number}
-                {source && ` · ${source}`}
+              <span className="inline-flex min-w-0 items-center gap-1.5 truncate">
+                <span className="shrink-0">#{task.number}</span>
+                {source && <span className="truncate">{source}</span>}
               </span>
             )}
             {task.dueAt && (
@@ -252,7 +252,7 @@ export function TaskCard({
       ref={cardRef}
       onClickCapture={rememberCard}
       onPointerEnter={onPointerEnter}
-      className="group relative flex flex-col gap-2.5 rounded-xl border border-secondary bg-primary p-3 transition-colors hover:border-primary"
+      className="group relative flex flex-col gap-2.5 rounded-lg border border-secondary bg-primary p-3 transition-colors hover:border-primary"
     >
       <div className="flex h-5 items-center gap-1.5 text-xs tabular-nums">
         {source && (

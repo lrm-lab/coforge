@@ -112,9 +112,9 @@ test("a Task's popup and the new Task form set its priority", async () => {
     await browser(
       "wait",
       "--fn",
-      `${pageHydrated} && [...document.querySelectorAll("button")].some((el) => el.textContent.trim() === "Create task")`,
+      `${pageHydrated} && [...document.querySelectorAll("button")].some((el) => el.textContent.trim() === "New task")`,
     );
-    await browser("find", "role", "button", "click", "--name", "Create task");
+    await browser("find", "role", "button", "click", "--name", "New task");
     await browser("wait", "--fn", `document.querySelector('${trigger("No priority")}') != null`);
     await browser("fill", '[role="dialog"] [aria-label="Task title"]', `Book the room ${tail}`);
     // A new Task names its priority (task #12): Create waits disabled until one is picked.

@@ -96,7 +96,8 @@ export function TaskBoard<T extends BoardTask>({
     statuses.length > 0 ||
     filter.owners.length > 0 ||
     filter.projects.length > 0 ||
-    filter.labels.length > 0;
+    filter.labels.length > 0 ||
+    (filter.channels?.length ?? 0) > 0;
   const { done, closed } = finished.columns;
   const unfinished = useMemo(() => tasks.filter((task) => !isFinishedStatus(task.status)), [tasks]);
   const visible = useMemo(
@@ -131,6 +132,10 @@ export function TaskBoard<T extends BoardTask>({
     : false;
   const onCreateTask = onCommand ? conversation?.onCreateTask : undefined;
   const canSetAnyStatus = useCanSetAnyTaskStatus();
+  const clearFilters = () => {
+    view.changeFilter({ owners: [], projects: [], labels: [], channels: [] });
+    view.changeStatuses([]);
+  };
   return (
     <section
       aria-label={m.tasks_board()}
@@ -154,8 +159,14 @@ export function TaskBoard<T extends BoardTask>({
         tree={showTree}
         action={
           onCreateTask ? (
-            <Button type="button" size="sm" color="secondary" onPress={() => setCreateOpen(true)}>
-              {m.tasks_create()}
+            <Button
+              type="button"
+              size="sm"
+              color="secondary"
+              iconLeading={Plus}
+              onPress={() => setCreateOpen(true)}
+            >
+              {m.task_board_create_new_task()}
             </Button>
           ) : (
             newTaskChoice &&
@@ -163,6 +174,7 @@ export function TaskBoard<T extends BoardTask>({
               <Button
                 type="button"
                 size="sm"
+                color="secondary"
                 iconLeading={Plus}
                 isDisabled={!onCommand || !canFile}
                 onPress={() => setCreating("todo")}
@@ -174,11 +186,11 @@ export function TaskBoard<T extends BoardTask>({
         }
       />
       {conversation?.error && (
-        <p role="alert" className="mx-4 mt-4 text-sm text-error-primary md:mx-6">
+        <p role="alert" className="mx-page mt-4 text-sm text-error-primary">
           {conversation.error}
         </p>
       )}
-      <div className="flex min-h-0 flex-1 flex-col overflow-auto p-4 md:p-6">
+      <div className="flex min-h-0 flex-1 flex-col overflow-auto px-page py-4 md:py-6">
         {tree?.node}
         {!showTree && loading && (
           <div role="status" aria-label={m.tasks_loading()} className="grid gap-3">
@@ -216,14 +228,7 @@ export function TaskBoard<T extends BoardTask>({
             }
             primaryAction={
               filtered ? (
-                <Button
-                  size="sm"
-                  color="secondary"
-                  onPress={() => {
-                    view.changeStatuses([]);
-                    view.changeFilter({ owners: [], projects: [], labels: [] });
-                  }}
-                >
+                <Button size="sm" color="secondary" onPress={clearFilters}>
                   {m.empty_clear_filters()}
                 </Button>
               ) : onCreateTask ? (
@@ -325,7 +330,7 @@ function FinishedFooter<T extends BoardTask>({
     return (
       <div className="flex flex-wrap items-center gap-2 px-2 py-3 text-sm text-tertiary">
         {m.tasks_finished_load_failed()}
-        <Button size="xs" color="secondary" onPress={column.retry}>
+        <Button size="sm" color="secondary" onPress={column.retry}>
           {m.tasks_finished_retry()}
         </Button>
       </div>

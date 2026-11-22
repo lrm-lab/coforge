@@ -158,7 +158,7 @@ export function TaskDetailDialog({
   const canDelete = useCanDeleteTask(task, currentMemberId);
   const relations = useTaskRelationAccess(task, currentMemberId);
   const follow = useTaskFollow(task, open && Boolean(thread) && ownsDiscussion(task));
-  const sidebar = useMediaQuery("(min-width: 1024px)", true);
+  const sidebar = useMediaQuery("(min-width: 64rem)", true);
   const router = useRouter();
   const step = useRouterState({ select: (state) => isTaskStep(state.location) });
   const stepBack = step ? () => router.history.back() : undefined;
@@ -285,7 +285,7 @@ export function TaskDetailDialog({
                     size="sm"
                     iconLeading={ArrowUp}
                     onPress={scrollToTop}
-                    className="shrink-0 gap-1 px-1.5 text-xs font-medium whitespace-nowrap max-sm:h-11 max-sm:w-24 max-[360px]:w-18 max-[360px]:flex-col max-[360px]:gap-0 *:data-icon:size-4"
+                    className="shrink-0 gap-1 px-1.5 text-xs font-medium whitespace-nowrap max-sm:h-11 max-sm:w-24 max-xs:w-18 max-xs:flex-col max-xs:gap-0 *:data-icon:size-4"
                   >
                     {m.tasks_scroll_to_top()}
                   </Button>
@@ -335,7 +335,7 @@ export function TaskDetailDialog({
                   className={cn(
                     PHONE_BAR_BUTTON,
                     "max-sm:order-first",
-                    showBackToTop && "max-sm:me-24 max-[360px]:me-18",
+                    showBackToTop && "max-sm:me-24 max-xs:me-18",
                   )}
                 />
               </div>
@@ -383,7 +383,7 @@ function TaskPopupOverlay({
       {...props}
       isKeyboardDismissDisabled={!keyboardDismiss}
       isDismissable
-      className="max-sm:items-stretch max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px]"
+      className="max-sm:items-stretch max-sm:px-0 max-sm:[--modal-pb:0rem] max-sm:[--modal-pt:0rem]"
     />
   );
 }

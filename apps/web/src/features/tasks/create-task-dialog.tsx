@@ -180,7 +180,7 @@ export function CreateTaskDialog({
       isDismissable
       page
     >
-      <Modal className="flex w-full flex-col overflow-hidden sm:w-[min(44rem,calc(100vw-2rem))] dark:bg-secondary">
+      <Modal className="flex w-full flex-col overflow-hidden sm:w-[min(44rem,calc(100vw-2rem))]">
         <Dialog aria-label={heading} className="flex min-h-0 flex-1 flex-col">
           {({ close }) => (
             <form
@@ -203,7 +203,7 @@ export function CreateTaskDialog({
               />
               <div
                 className={cn(
-                  "flex shrink-0 items-center gap-1 pt-3 pr-3 pl-4 max-sm:pt-1 sm:pl-6",
+                  "flex shrink-0 items-center gap-1 pt-3 pe-3 ps-4 max-sm:pt-1 sm:ps-6",
                   !(board || where) && "max-sm:hidden",
                 )}
               >
@@ -212,7 +212,7 @@ export function CreateTaskDialog({
                     <>
                       <span
                         data-layout="create"
-                        className="inline-flex h-8 min-w-0 items-center rounded-lg bg-secondary text-secondary ring-1 ring-secondary ring-inset dark:bg-tertiary"
+                        className="inline-flex h-8 min-w-0 items-center rounded-lg bg-secondary text-secondary ring-1 ring-secondary ring-inset"
                       >
                         {board?.place ?? (
                           <TaskDialogWhere
@@ -223,7 +223,7 @@ export function CreateTaskDialog({
                       </span>
                       <ChevronRight
                         aria-hidden="true"
-                        className="size-3.5 shrink-0 text-fg-quaternary max-sm:hidden"
+                        className="size-3.5 shrink-0 text-fg-quaternary max-sm:hidden rtl:rotate-180"
                       />
                     </>
                   )}
@@ -304,7 +304,7 @@ export function CreateTaskDialog({
                   {m.tasks_new_submit()}
                   <kbd
                     aria-hidden="true"
-                    className="ml-1 font-body text-xs font-medium opacity-70 any-pointer-coarse:hidden"
+                    className="ms-1.5 inline-flex items-center rounded-xs px-1 py-0.5 font-body text-xs leading-none font-medium ring-1 ring-current/35 ring-inset any-pointer-coarse:hidden"
                   >
                     {isApplePlatform() ? "⌘↵" : "Ctrl ↵"}
                   </kbd>

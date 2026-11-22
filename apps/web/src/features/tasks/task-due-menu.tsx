@@ -23,6 +23,7 @@ import {
 } from "#src/lib/dates";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { TaskFieldTrigger } from "./task-field-trigger";
@@ -91,10 +92,17 @@ export function TaskDueMenu({
         {dueAt ? (
           <span className="inline-flex min-w-0 items-center gap-1.5 text-sm text-primary">
             <Calendar aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
-            <span className="truncate">
-              {shown}
-              {state ? ` · ${state}` : ""}
-            </span>
+            <span className="truncate">{shown}</span>
+            {state && (
+              <span
+                className={cn(
+                  "shrink-0 text-xs",
+                  dueState === "overdue" ? "text-error-primary" : "text-warning-primary",
+                )}
+              >
+                {state}
+              </span>
+            )}
           </span>
         ) : (
           <UnsetValue icon={Calendar} text={m.tasks_due_none()} field={m.tasks_due()} />
@@ -130,7 +138,7 @@ export function TaskDueMenu({
                     {(segment) => (
                       <DateSegment
                         segment={segment}
-                        className="rounded px-px tabular-nums outline-hidden focus:bg-brand-solid focus:text-white"
+                        className="rounded px-px tabular-nums outline-hidden focus:bg-brand-solid focus:text-fg-white"
                       />
                     )}
                   </DateInput>

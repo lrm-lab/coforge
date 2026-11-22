@@ -179,10 +179,9 @@ export function useTaskDialogTransition({
     !desktop && (dragging || dragY > 0)
       ? {
           transform: `translate3d(0, ${dragY}px, 0) scale(${dragScale})`,
-          borderRadius: `${Math.round(dragProgress * 20)}px`,
           transition: dragging
             ? undefined
-            : "transform calc(var(--duration-md) * 1.5) var(--ease-spring), border-radius calc(var(--duration-md) * 1.5) var(--ease-spring)",
+            : "transform calc(var(--duration-md) * 1.5) var(--ease-spring)",
         }
       : undefined;
 

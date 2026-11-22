@@ -13,18 +13,11 @@ import { refreshTaskOverview } from "./task-overview-collection";
 import { executeTask } from "./tasks.functions";
 import { useConversationTaskWrites } from "./use-conversation-tasks";
 
-/** Whether the viewer may delete the Task, as the server allows: its creator, or a Workspace owner
- * or admin. Only an affordance; the server rechecks. */
 export function useCanDeleteTask(task: TaskView, currentMemberId: string | null): boolean {
   const manager = useCanSetAnyTaskStatus();
   return manager || (currentMemberId !== null && task.creator.memberId === currentMemberId);
 }
 
-/** Deletes the Task by its conversation and number (never a host message, which a Task need not
- * have), through the caller's task command where there is one (the Tasks page's drops the row), and
- * drops it from the conversation's Tasks. It does not ask (Frank, 11-06): a toast offers Undo for a
- * short while (task #507), as the server keeps a deleted Task restorable for a minute
- * (`DELETED_TASK_UNDO_MS`, task #512), and Undo brings it back whole. */
 export function useDeleteTask({
   task,
   onCommand,
@@ -39,8 +32,6 @@ export function useDeleteTask({
   const toast = useAppToast();
   const queryClient = useQueryClient();
   const workspaceId = useCurrentWorkspaceId() ?? "";
-  // Undo goes the way the delete went: through the caller's command (the Tasks page's puts the row
-  // back), or straight to the server and into the conversation's Tasks.
   const restore = async () => {
     const command = { operation: "restore", number: task.number } as const;
     if (onCommand) return onCommand(command);
@@ -84,17 +75,13 @@ export function useDeleteTask({
   };
 }
 
-/** How long the Undo stays: about ten seconds, as Frank asked (11-04), well inside the server's
- * minute. */
 const UNDO_WINDOW_MS = 10_000;
 
-/** The menu's "Delete Task" item: red text, as every destructive menu item
- * (docs/design/color-status-typography.md). */
 export function taskDeleteMenuItem() {
   return (
     <Dropdown.Item id="delete" textValue={m.tasks_delete()}>
       <span className="flex items-center text-error-primary">
-        <Trash01 aria-hidden="true" className="mr-2 size-4 shrink-0 stroke-[2.25px]" />
+        <Trash01 aria-hidden="true" className="me-2 size-4 shrink-0" />
         {m.tasks_delete()}
       </span>
     </Dropdown.Item>

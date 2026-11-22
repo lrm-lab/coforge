@@ -10,7 +10,6 @@ import { TaskStatusIcon, statusLabel } from "./task-status-icon";
 import type { TaskLayout } from "./task-workflow";
 import { cn } from "#src/lib/utils";
 
-/** A card's shape while its Task loads: the number line, a title of two lines, the owner. */
 export function TaskCardSkeleton({ list }: { list: boolean }) {
   if (list)
     return (
@@ -18,7 +17,7 @@ export function TaskCardSkeleton({ list }: { list: boolean }) {
         <Skeleton className="h-3 w-7" />
         <Skeleton className="size-4 rounded-full" />
         <Skeleton className="h-3.5 w-2/5" />
-        <Skeleton className="ml-auto hidden h-6 w-20 rounded-full sm:block" />
+        <Skeleton className="ms-auto hidden h-6 w-20 rounded-full sm:block" />
         <Skeleton className="size-6 rounded-full" />
       </div>
     );
@@ -34,7 +33,6 @@ export function TaskCardSkeleton({ list }: { list: boolean }) {
   );
 }
 
-// Fewer placeholders further right, as a real board usually has.
 const PLACEHOLDERS: Record<TaskStatus, number> = {
   backlog: 3,
   todo: 3,
@@ -44,20 +42,15 @@ const PLACEHOLDERS: Record<TaskStatus, number> = {
   closed: 1,
 };
 
-/**
- * All tasks while it loads: its header, toolbar and every status group in place, with
- * placeholder cards, so the page keeps its shape when the Tasks arrive.
- */
 export function TasksPending({ layout }: { layout?: TaskLayout }) {
   return (
     <main className="flex h-full max-h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-primary">
-      {/* As All tasks' header reads (`ProjectsHeader`), without its controls yet. */}
       <PageHeader
         heading={m.projects_title()}
         meta={<span className="text-lg text-tertiary">/ {m.projects_all_tasks()}</span>}
       />
-      <div className="flex min-h-11 shrink-0 items-center justify-between gap-3 px-4 py-1.5 md:px-6">
-        <Button size="sm" color="tertiary" iconLeading={FilterLines} className="-ml-3" isDisabled>
+      <div className="flex min-h-11 shrink-0 items-center justify-between gap-3 px-page py-1.5">
+        <Button size="sm" color="tertiary" iconLeading={FilterLines} className="-ms-3" isDisabled>
           {m.tasks_filter()}
         </Button>
       </div>
@@ -67,8 +60,6 @@ export function TasksPending({ layout }: { layout?: TaskLayout }) {
       {layout ? (
         <PendingGroups board={layout === "board"} />
       ) : (
-        // No layout asked for: the page picks the board on a wide screen and the list on a narrow
-        // one, so the placeholder does too.
         <>
           <PendingGroups board className="hidden md:block" />
           <PendingGroups board={false} className="md:hidden" />
@@ -80,7 +71,10 @@ export function TasksPending({ layout }: { layout?: TaskLayout }) {
 
 function PendingGroups({ board, className }: { board: boolean; className?: string }) {
   return (
-    <div aria-busy="true" className={cn("min-h-0 flex-1 overflow-hidden p-4 md:p-6", className)}>
+    <div
+      aria-busy="true"
+      className={cn("min-h-0 flex-1 overflow-hidden px-page py-4 md:py-6", className)}
+    >
       <div
         className={
           board
@@ -94,8 +88,7 @@ function PendingGroups({ board, className }: { board: boolean; className?: strin
             aria-label={statusLabel(status)}
             className={
               board
-                ? // The columns the viewer hid stay hidden while loading too.
-                  cn(
+                ? cn(
                     "flex min-w-0 flex-col rounded-xl bg-secondary md:max-w-80 md:min-w-60 md:flex-1",
                     HIDDEN_COLUMN_CLASS[status],
                   )

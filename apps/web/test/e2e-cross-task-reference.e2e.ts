@@ -166,14 +166,14 @@ test("another conversation's Task reads as its live label, or as a Task the read
 
     // The channel's Task: its title on the label; status, number and current channel in its name.
     expect(await evaluate<string>(`${chip(launchTitle)}.getAttribute("aria-label")`)).toBe(
-      `${launchTitle}, To do, #${launchTask} · #${renamed}`,
+      `${launchTitle}, To do, #${launchTask} #${renamed}`,
     );
     // The direct message's: the other side from the viewer's seat.
     expect(
       await evaluate<string>(
         `${chip(`Draft the release notes ${tail}`)}.getAttribute("aria-label")`,
       ),
-    ).toEndWith(`#${directTask} · DM with @${agent.name}`);
+    ).toEndWith(`#${directTask} DM with @${agent.name}`);
     // The private channel's: said so, with nothing to open and nothing of the Task.
     const body = await evaluate<string>(
       `document.querySelector('[data-message-id="${seeded.id}"] .message-markdown').textContent`,
@@ -208,7 +208,7 @@ test("another conversation's Task reads as its live label, or as a Task the read
     // The peek from the keyboard (task #472): focus on the label opens it, the whole title and
     // where the Task lives.
     // Where it lives reads the channel's group avatar and name, no `#` before it (task #74).
-    const peekShown = `[...document.querySelectorAll("[data-task-locator]")].some((el) => el.textContent === "#${launchTask}·${renamed}" && el.querySelector(".avatar-group") !== null)`;
+    const peekShown = `[...document.querySelectorAll("[data-task-locator]")].some((el) => el.textContent === "#${launchTask}${renamed}" && el.querySelector(".avatar-group") !== null)`;
     await evaluate(`${chip(launchTitle)}.focus() ?? true`);
     await browser("press", "Shift+Tab");
     await browser("press", "Tab");

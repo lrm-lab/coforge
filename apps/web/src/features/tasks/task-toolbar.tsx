@@ -159,7 +159,7 @@ export function TaskToolbar({
   const chips = candidates.filter((chip) => chip !== false && chip !== undefined);
 
   return (
-    <div className="flex min-h-11 shrink-0 items-center justify-between gap-3 px-4 py-1.5 max-sm:flex-wrap md:px-6">
+    <div className="flex min-h-11 shrink-0 items-center justify-between gap-3 px-page py-1.5 max-sm:flex-wrap">
       <div className="flex min-w-0 flex-wrap items-center gap-1">
         <Dropdown.Root>
           <Button size="sm" color="tertiary" iconLeading={FilterLines} className="-ms-3">

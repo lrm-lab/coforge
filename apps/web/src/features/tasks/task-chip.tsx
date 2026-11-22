@@ -11,17 +11,16 @@ import { rememberSharedRect } from "#src/lib/shared-element-rect";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import { priorityLabel } from "./task-history-more";
-import { TaskPriorityIcon } from "./task-priority-icon";
 import { TaskLabelChip } from "./task-label-chip";
+import { taskMetaLabel } from "./task-meta-label";
 import { TaskPerson } from "./task-owner";
+import { TaskPriorityIcon } from "./task-priority-icon";
 import { TaskStatusIcon, statusLabel } from "./task-status-icon";
+
+export { taskMetaLabel };
 
 type ChipTask = Pick<TaskView, "number" | "title" | "status" | "owner"> &
   Partial<Pick<TaskView, "priority" | "labels">>;
-
-export function taskMetaLabel(task: { number: number; channel?: string | null }) {
-  return task.channel ? `#${task.number} · #${task.channel}` : `#${task.number}`;
-}
 
 export function TaskLocator({
   task,
@@ -34,17 +33,12 @@ export function TaskLocator({
     <span
       data-task-locator
       className={cx(
-        "flex items-center gap-1 text-xs text-tertiary tabular-nums",
+        "flex items-center gap-1.5 text-xs text-tertiary tabular-nums",
         shrink ? "min-w-0" : "shrink-0",
       )}
     >
-      #{task.number}
-      {task.channel && (
-        <>
-          <span aria-hidden="true">·</span>
-          <ChannelPlace name={task.channel} />
-        </>
-      )}
+      <span className="shrink-0">#{task.number}</span>
+      {task.channel && <ChannelPlace name={task.channel} />}
     </span>
   );
 }
@@ -74,7 +68,7 @@ export function TaskChip({
   const meta = channel
     ? taskMetaLabel({ number: task.number, channel })
     : place
-      ? `#${task.number} · ${place}`
+      ? `#${task.number} ${place}`
       : `#${task.number}`;
   const handlePress = onPress
     ? () => {
@@ -111,19 +105,12 @@ export function TaskChip({
   );
 }
 
-/**
- * The peek, read top down: where the Task is (its number and place) over its whole title, then on
- * one line its status, priority and who holds it, each led by its icon rather than a label, then
- * its labels (task #449, Frank 11-04).
- */
 function TaskPeek({ task, meta }: { task: ChipTask; meta: ReactNode }) {
   return (
     <div className="flex flex-col">
       <p className="text-xs font-medium text-tertiary tabular-nums">{meta}</p>
       <p className="mt-1 text-sm font-semibold text-primary">{task.title}</p>
       <div className="mt-3 flex flex-col gap-2 border-t border-secondary pt-3 text-sm text-secondary">
-        {/* One line, in the order the facts are asked: where it stands, how urgent it is, who
-            holds it (Linear's docs list a Task's state, then its urgency). */}
         <div className="flex min-w-0 items-center gap-3">
           <span className="flex shrink-0 items-center gap-1.5">
             <TaskStatusIcon status={task.status} />
@@ -153,7 +140,6 @@ function TaskPeek({ task, meta }: { task: ChipTask; meta: ReactNode }) {
   );
 }
 
-/** A Task the reader cannot see: said so, and nothing more — not its number, status or place. */
 export function HiddenTaskChip() {
   return (
     <Tooltip title={m.tasks_ref_hidden_hint()}>

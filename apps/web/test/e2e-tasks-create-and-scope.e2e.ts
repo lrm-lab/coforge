@@ -135,7 +135,7 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
     expect(
       await browser(
         "eval",
-        `document.querySelectorAll('[aria-label^="New task in"]').length === 0 && ${byText("button", "Create task")} === undefined`,
+        `document.querySelectorAll('[aria-label^="New task in"]').length === 0 && ${byText("button", "New task")} === undefined`,
       ),
     ).toContain("true");
     await browser("screenshot", join(artifacts, "tasks-page.png"));
@@ -144,7 +144,7 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
     await browser("open", `${origin}${workspacePath}/channel/${channel.id}?view=tasks`);
     await waitFor(bodyHas(channelTitle), 60_000);
     for (let attempt = 0; ; attempt += 1) {
-      await browser("eval", `${byText("button", "Create task")}?.click()`);
+      await browser("eval", `${byText("button", "New task")}?.click()`);
       if (
         await waitFor(dialogOpen, 5_000).then(
           () => true,
@@ -226,7 +226,7 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
     await waitFor(bodyHas(created[0]!), 60_000);
     for (let attempt = 0; !(await browser("eval", dialogOpen)).includes("true"); attempt += 1) {
       if (attempt === 10) throw new Error("the create dialog never opened on a phone");
-      await browser("eval", `${byText("button", "Create task")}?.click()`);
+      await browser("eval", `${byText("button", "New task")}?.click()`);
       await Bun.sleep(500);
     }
     await browser("fill", titleField, `Phone ${suffix}`);
@@ -241,7 +241,7 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
         `JSON.stringify((() => {
           const form = document.querySelector('[role="dialog"] form');
           const shown = (el) => el.getClientRects().length > 0;
-          const submits = [...form.querySelectorAll("button")].filter((b) => shown(b) && ["Create", "Create task"].includes(b.textContent.trim()));
+          const submits = [...form.querySelectorAll("button")].filter((b) => shown(b) && ["Create", "Create task", "New task"].includes(b.textContent.trim()));
           const chips = [...form.querySelector(':scope > [data-layout="create"]').children];
           return {
             submits: submits.map((b) => b.textContent.trim()),
@@ -258,7 +258,7 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
     await waitFor(`document.querySelector('[role="dialog"]') === null`);
     for (let attempt = 0; !(await browser("eval", dialogOpen)).includes("true"); attempt += 1) {
       if (attempt === 10) throw new Error("the create page never opened again");
-      await browser("eval", `${byText("button", "Create task")}?.click()`);
+      await browser("eval", `${byText("button", "New task")}?.click()`);
       await Bun.sleep(500);
     }
     expect(

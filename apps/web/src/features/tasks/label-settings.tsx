@@ -30,13 +30,6 @@ import { workspaceLabelsKey } from "./workspace-labels";
 
 const labelSettingsKey = (workspaceId: string) => ["label-settings", workspaceId];
 
-/**
- * Settings → Labels (task #508, after Linear's Settings → Labels): every label of the Workspace,
- * searchable, by group, with how many Tasks carry each and when it was last used, and the archived
- * ones folded at the end. Any member reads the page and makes a label; an owner or admin renames,
- * recolors, describes, archives, restores and deletes them (the server checks every change). A
- * change made anywhere arrives as `label.changed.v1` and the list is read again.
- */
 export function LabelSettings() {
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const load = useServerFn(loadLabelSettings);
@@ -50,7 +43,6 @@ export function LabelSettings() {
   const refresh = useCallback(async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: labelSettingsKey(workspaceId) }),
-      // The pickers' list follows a change made here.
       queryClient.invalidateQueries({ queryKey: workspaceLabelsKey(workspaceId) }),
     ]);
   }, [queryClient, workspaceId]);
@@ -79,7 +71,6 @@ export function LabelSettings() {
 
   async function add() {
     if (!wanted) return;
-    // The server answers an existing name with that label; say so instead of seeming to make one.
     if (nameTaken(labels, wanted))
       return setCreateError(m.labels_settings_name_taken({ name: wanted }));
     setCreateError(null);
@@ -104,7 +95,6 @@ export function LabelSettings() {
     />
   );
 
-  // A new label is one more row at the top of the list: its color, its name, Create.
   const addRow = adding && (
     <li className="flex flex-col gap-1 px-3 py-2 sm:px-4">
       <div className="flex min-h-8 items-center gap-2">
@@ -156,12 +146,11 @@ export function LabelSettings() {
             wrapperClassName="sm:max-w-xs"
             className="flex-1"
           />
-          {/* Gone while the new row is open: its Create is then the one primary button. */}
           {!adding && (
             <Button
               size="sm"
               iconLeading={Plus}
-              className="sm:ml-auto"
+              className="sm:ms-auto"
               onPress={() => {
                 setAdding(true);
                 setCreateError(null);

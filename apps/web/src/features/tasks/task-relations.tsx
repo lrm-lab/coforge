@@ -16,18 +16,6 @@ import { TaskOwnerAvatar } from "./task-owner";
 import { openBlockers, type TaskRelations, type VisibleTaskName } from "./task-relation-edits";
 import { TaskStatusIcon } from "./task-status-icon";
 
-/**
- * Task dependencies and sub-tasks as a Task view carries them, named as Linear names them: the
- * Tasks a Task is blocked by, its parent task and its sub-tasks (the SDK's `TaskLink` and
- * `TaskTreeNode`). A related Task the reader cannot see (neither in this channel nor in a public
- * one) comes as `hidden`, with only its status: it still counts towards being blocked.
- */
-
-/**
- * "Waiting on #388", or "Waiting on 3 tasks", while anything still blocks a Task, and nothing at
- * all otherwise. Grey like the rest of the card: being blocked is not an error. The whole list is
- * in a tooltip, reachable by keyboard.
- */
 export function TaskBlockedMark({ blockedBy }: { blockedBy: readonly (TaskName | TaskLink)[] }) {
   const open = openBlockers(blockedBy);
   const first = open[0];
@@ -50,7 +38,6 @@ export function TaskBlockedMark({ blockedBy }: { blockedBy: readonly (TaskName |
         </span>
       }
     >
-      {/* Never cut short: the source or title beside it gives way first. */}
       <TooltipTrigger className="inline-flex shrink-0 items-center gap-1 rounded-sm text-xs whitespace-nowrap text-tertiary tabular-nums focus-visible:ring-2 focus-visible:ring-focus-ring">
         {open.length > 1
           ? m.tasks_blocked_by_count({ count: open.length })
@@ -60,7 +47,6 @@ export function TaskBlockedMark({ blockedBy }: { blockedBy: readonly (TaskName |
   );
 }
 
-/** A grey note beside a card's number, like the number itself, named in full in its tooltip. */
 function CardMark({ children, label }: { children: ReactNode; label: string }) {
   return (
     <Tooltip title={label}>
@@ -71,20 +57,18 @@ function CardMark({ children, label }: { children: ReactNode; label: string }) {
   );
 }
 
-/** "↳ Parent task #185" on a sub-task. */
 export function TaskParentMark({ parent }: { parent: TaskLink }) {
   const text = parent.hidden
     ? m.tasks_parent()
     : m.tasks_parent_mark({ name: taskNameLabel(parent) });
   return (
-    <CardMark label={parent.hidden ? `${text} · ${m.tasks_hidden()}` : `${text} ${parent.title}`}>
+    <CardMark label={parent.hidden ? `${text} (${m.tasks_hidden()})` : `${text} ${parent.title}`}>
       <CornerLeftUp aria-hidden="true" className="size-3 shrink-0 text-fg-quaternary" />
       {text}
     </CardMark>
   );
 }
 
-/** "Sub-tasks 3/5" on a Task with sub-tasks: how many of them are done or closed. */
 export function TaskSubtaskMark({
   subtasks,
 }: {
@@ -98,8 +82,6 @@ export function TaskSubtaskMark({
   );
 }
 
-/** The text of a related Task: its name and title, or that it is in a channel the reader cannot
- * see. A finished Task reads quieter. */
 function TaskLinkText({ task }: { task: TaskLink }) {
   if (task.hidden)
     return <span className="min-w-0 truncate text-tertiary">{m.tasks_ref_hidden()}</span>;
@@ -118,8 +100,6 @@ function TaskLinkText({ task }: { task: TaskLink }) {
   );
 }
 
-/** A related Task's text, as the button that opens it. One the reader cannot see, or where the
- * popup has no way to open a Task, is a plain line. */
 function TaskLinkTarget({
   task,
   onOpen,
@@ -136,14 +116,13 @@ function TaskLinkTarget({
   return (
     <AriaButton
       onPress={() => onOpen(task)}
-      className="flex min-w-0 flex-1 items-center gap-2 rounded-sm text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+      className="flex min-w-0 flex-1 items-center gap-2 rounded-sm text-start text-sm outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
     >
       <TaskLinkText task={task} />
     </AriaButton>
   );
 }
 
-/** One related Task as a row: its status, name and title, opening that Task. */
 export function TaskLinkRow({
   task,
   onOpen,
@@ -162,7 +141,6 @@ export function TaskLinkRow({
   );
 }
 
-/** A sub-task and, unless folded, its own sub-tasks, indented a step per level. */
 export function TreeRow({
   node,
   depth,
@@ -176,12 +154,11 @@ export function TreeRow({
   onToggle: (key: string) => void;
   onOpen?: (task: VisibleTaskName) => void;
 }) {
-  const indent = { paddingLeft: `${depth * 1.25}rem` };
-  // A sub-task the reader cannot see: its status, and nothing under it to unfold.
+  const indent = { paddingInlineStart: `${Math.min(depth, 5) * 1.25}rem` };
   if (node.hidden)
     return (
       <li
-        className="flex min-h-8 min-w-0 items-center gap-2 rounded-md pr-1.5 text-sm"
+        className="flex min-h-8 min-w-0 items-center gap-2 rounded-md pe-1.5 text-sm"
         style={indent}
       >
         <span aria-hidden="true" className="size-6 shrink-0" />
@@ -195,7 +172,7 @@ export function TreeRow({
   return (
     <>
       <li
-        className="flex min-h-8 min-w-0 items-center gap-2 rounded-md pr-1.5 hover:bg-primary_hover"
+        className="flex min-h-8 min-w-0 items-center gap-2 rounded-md pe-1.5 hover:bg-primary_hover"
         style={indent}
       >
         {hasChildren ? (
@@ -206,6 +183,7 @@ export function TreeRow({
             aria-expanded={open}
             aria-label={m.tasks_subtasks_toggle({ name: key })}
             onClick={() => onToggle(key)}
+            className="rtl:[&:not([aria-expanded=true])_svg]:rotate-180"
           />
         ) : (
           <span aria-hidden="true" className="size-6 shrink-0" />
@@ -213,7 +191,6 @@ export function TreeRow({
         <TaskStatusIcon status={node.status} />
         <TaskLinkTarget task={node} onOpen={onOpen} />
         {node.blocked && <TaskBlockedMark blockedBy={node.blockedBy} />}
-        {/* No one on it: nothing, rather than a column of empty circles. */}
         {node.owner && <TaskOwnerAvatar owner={node.owner} />}
       </li>
       {open &&

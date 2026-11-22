@@ -117,7 +117,7 @@ export function buildSurfaces(ids, { baseUrl: BASE_URL, locale: LOCALE }) {
         if (!(await page.clickText("^Tasks", { within: '[aria-label="Chat / Tasks"]' })))
           return "could not find the channel Tasks tab";
         await sleepScript(500);
-        const ok = await page.clickText("Create Task");
+        const ok = await page.clickText("New task");
         if (!ok) return "could not find the Create task trigger";
       },
       postEscape: true,
