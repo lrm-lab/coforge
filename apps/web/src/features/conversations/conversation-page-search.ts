@@ -11,6 +11,7 @@ import { attachmentReviewSearchShape } from "./attachment-review-address";
 import { openTaskParamSchema } from "./conversation-thread-search";
 import { messageLinkIdSchema } from "./conversation.schemas";
 import { artifactSearchShape } from "#src/features/artifacts/artifact-search";
+import { detailsParamSchema } from "./conversation-details-search";
 
 /** Chat's `message` param, the message a link opens the conversation on (`messageLinkIdSchema`). */
 export const chatMessageParamSchema = messageLinkIdSchema.optional().catch(undefined);
@@ -30,6 +31,7 @@ export const conversationPageSearchShape = {
   ...attachmentReviewSearchShape,
   profile: profileParamSchema,
   agentTab: agentProfileTabParamSchema,
+  details: detailsParamSchema,
   ...artifactSearchShape,
 };
 
@@ -50,6 +52,7 @@ export function pickConversationPageSearch({
   comment,
   profile,
   agentTab,
+  details,
   doc,
   docFull,
 }: ConversationPageSearch): ConversationPageSearch {
@@ -68,6 +71,7 @@ export function pickConversationPageSearch({
     comment,
     profile,
     agentTab,
+    details,
     doc,
     docFull,
   } satisfies Record<keyof ConversationPageSearch, unknown>;

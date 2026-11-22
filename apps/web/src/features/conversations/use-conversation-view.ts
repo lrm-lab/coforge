@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useRouter } from "@tanstack/react-router";
 
 import { usePanelTabOrder } from "#src/features/panel-tabs/panel-tab-order-context";
+import { conversationSearchWithoutDetails } from "./conversation-details-search";
 import { conversationSearchWithoutThread } from "./conversation-thread-search";
 import { useOpenConversationTask } from "./open-conversation-thread";
 import { CONVERSATION_TABS, type ConversationTab } from "./conversation-tabs";
@@ -54,7 +55,18 @@ export function useConversationView(ensureLoaded: (messageId: string) => Promise
   const showFiles = () => void update({ view: "files" });
   const openTaskThread = async (messageId: string) => {
     await ensureLoaded(messageId);
-    await update({ view: "chat", threadRootId: messageId }, `message-${messageId}`);
+    await router.navigate({
+      to: ".",
+      search: (previous: ConversationSearch) => {
+        const next: ConversationSearch = {
+          ...conversationSearchWithoutDetails(previous),
+          view: "chat",
+          threadRootId: messageId,
+        };
+        return next;
+      },
+      hash: `message-${messageId}`,
+    });
   };
   /** Files-tab "locate": land on the chat view scrolled to the message. Unlike `openTaskThread` it
    * clears any open thread — if the target is itself a thread reply, the hash promotion in

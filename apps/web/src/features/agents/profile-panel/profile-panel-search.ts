@@ -49,10 +49,10 @@ export function personIdFromProfileParam(profile: string | undefined): string | 
   return idFromProfileParam(profile, PERSON_PROFILE_PREFIX);
 }
 
-export function agentProfileSearchWithoutThread<T extends { threadRootId?: string }>(
-  previous: T,
-): Omit<T, "threadRootId"> {
-  const { threadRootId: _threadRootId, ...rest } = previous;
+export function agentProfileSearchWithoutThread<
+  T extends { threadRootId?: string; details?: unknown },
+>(previous: T): Omit<T, "threadRootId" | "details"> {
+  const { threadRootId: _threadRootId, details: _details, ...rest } = previous;
   return rest;
 }
 

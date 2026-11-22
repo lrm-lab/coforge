@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type MutableRefObject, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Button as AriaButton } from "react-aria-components";
 import { useOpenSearch } from "#src/features/search/search-dialog-context";
 import { useQuery } from "@tanstack/react-query";
@@ -185,11 +185,6 @@ export function ChannelConversation({
   taskPopup,
   jumpMessage,
   onJumpMessageConsumed,
-  settingsOpen: controlledSettingsOpen,
-  onSettingsOpenChange: onControlledSettingsOpenChange,
-  requestedMembersView: controlledMembersView,
-  onRequestedMembersViewConsumed: onControlledMembersViewConsumed,
-  detailsRequestCloseRef,
 }: {
   conversation: ChannelConversationView;
   onSend: (
@@ -221,30 +216,12 @@ export function ChannelConversation({
   taskPopup?: TaskPopupControls;
   jumpMessage?: string;
   onJumpMessageConsumed?: () => void;
-  settingsOpen?: boolean;
-  onSettingsOpenChange?: (open: boolean) => void;
-  requestedMembersView?: ChannelMembersView | null;
-  onRequestedMembersViewConsumed?: () => void;
-  detailsRequestCloseRef?: MutableRefObject<((then?: () => void) => void) | null>;
 }) {
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState(false);
-  const [ownMembersView, setOwnMembersView] = useState<ChannelMembersView | null>(null);
-  const details = useConversationDetailsState({
-    controlledOpen: controlledSettingsOpen,
-    onControlledOpenChange: onControlledSettingsOpenChange,
-    requestCloseRef: detailsRequestCloseRef,
-  });
-  const activeRequestCloseRef = details.requestCloseRef;
-  const requestedMembersView = controlledMembersView ?? ownMembersView;
-  const consumeMembersView = useCallback(() => {
-    setOwnMembersView(null);
-    onControlledMembersViewConsumed?.();
-  }, [onControlledMembersViewConsumed]);
-  const openSettings = (view: ChannelMembersView | null = null) => {
-    if (view) setOwnMembersView(view);
-    details.openDetails();
-  };
+  const details = useConversationDetailsState({ enabled: !taskPopup });
+  const openSettings = (view: ChannelMembersView | null = null) =>
+    details.openDetails(view ?? "panel");
   const freshMentionables = useChannelMentionables(
     conversation.conversationId,
     conversation.mentionables,
@@ -308,15 +285,13 @@ export function ChannelConversation({
       onCloseAgentProfile={onCloseAgentProfile}
       tasksPane={tasksPane}
       detailsOpen={details.open}
-      onRequestCloseDetails={details.requestClose}
       detailsPane={
         <ChannelSettingsPanel
           conversation={conversationWithFreshDirectory}
           open={details.open}
-          requestedMembersView={requestedMembersView}
-          onRequestedMembersViewConsumed={consumeMembersView}
-          requestCloseRef={activeRequestCloseRef}
-          onOpenChange={details.setOpen}
+          membersView={details.membersView}
+          onMembersViewChange={details.setMembersView}
+          onClose={details.closeDetails}
           onChanged={onChanged}
         />
       }
@@ -366,7 +341,7 @@ export function ChannelConversation({
           onShowFiles={onShowFiles}
           settingsOpen={details.open}
           onOpenSettings={openSettings}
-          onCloseSettings={() => details.requestClose()}
+          onCloseSettings={details.closeDetails}
         />
       }
       readOnlyNotice={

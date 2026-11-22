@@ -1,69 +1,82 @@
-import { useCallback, useRef, useState, type MutableRefObject } from "react";
-import { useRouter } from "@tanstack/react-router";
+import { useCallback } from "react";
+import { useRouter, useSearch } from "@tanstack/react-router";
+
+import type { AgentProfileTab } from "#src/features/agents/profile-panel/profile-panel-search";
 
 import { useConversationFocus } from "./conversation-focus";
+import {
+  conversationSearchWithDetails,
+  conversationSearchWithoutDetails,
+  detailsMembersView,
+  detailsParamSchema,
+  type ConversationDetailsParam,
+} from "./conversation-details-search";
 
-type SideSlotSearch = {
+type DetailsSearch = {
+  details?: ConversationDetailsParam;
   threadRootId?: string;
   profile?: string;
-  agentTab?: unknown;
+  agentTab?: AgentProfileTab;
 };
 
-export function useConversationDetailsState({
-  controlledOpen,
-  onControlledOpenChange,
-  requestCloseRef: controlledRequestCloseRef,
-}: {
-  controlledOpen?: boolean;
-  onControlledOpenChange?: (open: boolean) => void;
-  requestCloseRef?: MutableRefObject<((then?: () => void) => void) | null>;
-} = {}) {
+export function useConversationDetailsState({ enabled = true }: { enabled?: boolean } = {}) {
   const router = useRouter();
   const focus = useConversationFocus();
-  const [ownOpen, setOwnOpen] = useState(false);
-  const open = controlledOpen ?? ownOpen;
-  const setOpen = onControlledOpenChange ?? setOwnOpen;
-  const ownRequestCloseRef = useRef<((then?: () => void) => void) | null>(null);
-  const requestCloseRef = controlledRequestCloseRef ?? ownRequestCloseRef;
+  const rawDetails = useSearch({
+    strict: false,
+    select: (search) => detailsParamSchema.parse((search as { details?: unknown }).details),
+  });
+  const details = enabled ? rawDetails : undefined;
+  const open = details !== undefined;
+  const membersView = detailsMembersView(details);
 
-  const openDetails = useCallback(() => {
-    if (focus?.focused === "chat") focus.toggle("chat");
-    setOpen(true);
+  const openDetails = useCallback(
+    (view: ConversationDetailsParam = "panel") => {
+      if (focus?.focused === "chat") focus.toggle("chat");
+      void router.navigate({
+        to: ".",
+        replace: details !== undefined,
+        resetScroll: false,
+        search: (previous: DetailsSearch) => conversationSearchWithDetails(previous, view),
+      });
+    },
+    [details, focus, router],
+  );
+
+  const setMembersView = useCallback(
+    (view: "members" | "add" | null) => {
+      void router.navigate({
+        to: ".",
+        replace: true,
+        resetScroll: false,
+        search: (previous: DetailsSearch) =>
+          conversationSearchWithDetails(previous, view ?? "panel"),
+      });
+    },
+    [router],
+  );
+
+  const closeDetails = useCallback(() => {
     void router.navigate({
       to: ".",
       replace: true,
       resetScroll: false,
-      search: (previous: SideSlotSearch) => {
-        if (
-          previous.threadRootId === undefined &&
-          previous.profile === undefined &&
-          previous.agentTab === undefined
-        ) {
-          return previous;
-        }
-        const { threadRootId: _t, profile: _p, agentTab: _a, ...rest } = previous;
-        return rest;
-      },
+      search: (previous: DetailsSearch) => conversationSearchWithoutDetails(previous),
     });
-  }, [focus, router, setOpen]);
+  }, [router]);
 
-  const requestClose = useCallback(
-    (then?: () => void) => {
-      if (requestCloseRef.current) {
-        requestCloseRef.current(then);
-        return;
-      }
-      setOpen(false);
-      then?.();
-    },
-    [setOpen],
-  );
+  const toggleDetails = useCallback(() => {
+    if (open) closeDetails();
+    else openDetails("panel");
+  }, [closeDetails, open, openDetails]);
 
   return {
+    details,
     open,
-    setOpen,
+    membersView,
     openDetails,
-    requestClose,
-    requestCloseRef,
+    setMembersView,
+    closeDetails,
+    toggleDetails,
   };
 }

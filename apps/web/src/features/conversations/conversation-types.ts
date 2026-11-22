@@ -151,7 +151,6 @@ export type ConversationProps = {
   tasksPane?: ReactNode;
   detailsOpen?: boolean;
   detailsPane?: ReactNode;
-  onRequestCloseDetails?: (then?: () => void) => void;
 };
 
 export type ThreadedConversationProps = Omit<ConversationProps, "conversation" | "agentStatus"> & {

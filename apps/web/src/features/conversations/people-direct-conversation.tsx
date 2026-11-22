@@ -89,8 +89,6 @@ export function PeopleDirectConversationHeader({
 export function PeopleDirectConversation({
   conversation,
   onChanged,
-  settingsOpen: controlledSettingsOpen,
-  onSettingsOpenChange: onControlledSettingsOpenChange,
   ...props
 }: Omit<
   ThreadedConversationProps,
@@ -98,21 +96,12 @@ export function PeopleDirectConversation({
 > & {
   conversation: PeopleDirectConversationView;
   onChanged: () => Promise<void>;
-  settingsOpen?: boolean;
-  onSettingsOpenChange?: (open: boolean) => void;
 }) {
   const { peer } = conversation;
   const self = useIsSelfConversation(conversation);
   const { mentionables } = conversation;
   const plainMentions = useMemo(() => plainMentionsByHandle(mentionables), [mentionables]);
-  const details = useConversationDetailsState({
-    controlledOpen: controlledSettingsOpen,
-    onControlledOpenChange: onControlledSettingsOpenChange,
-  });
-  const toggleDetails = () => {
-    if (details.open) details.requestClose();
-    else details.openDetails();
-  };
+  const details = useConversationDetailsState({ enabled: !props.taskPopup });
   // Nobody else is in a conversation with yourself, so its messages carry no read ticks.
   const shown = useMemo(
     () => (self ? { ...conversation, readTicks: undefined } : conversation),
@@ -126,7 +115,6 @@ export function PeopleDirectConversation({
       name={peer.displayName}
       plainMentions={plainMentions}
       detailsOpen={details.open}
-      onRequestCloseDetails={details.requestClose}
       detailsPane={
         <DirectSettingsPanel
           conversationId={conversation.conversationId}
@@ -141,7 +129,7 @@ export function PeopleDirectConversation({
             />
           }
           open={details.open}
-          onClose={() => details.setOpen(false)}
+          onClose={details.closeDetails}
           collapseLongMessages={conversation.collapseLongMessages}
           onChanged={onChanged}
         />
@@ -153,7 +141,7 @@ export function PeopleDirectConversation({
           onShowTasks={props.onShowTasks}
           onShowFiles={props.onShowFiles}
           settingsOpen={details.open}
-          onToggleSettings={toggleDetails}
+          onToggleSettings={details.toggleDetails}
         />
       }
       emptyState={{

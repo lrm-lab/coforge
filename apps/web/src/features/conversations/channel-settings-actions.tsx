@@ -1,6 +1,5 @@
-import { useState, type ComponentType } from "react";
+import { useState, type FC } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Button as AriaButton } from "react-aria-components";
 import {
   Archive,
   LogOut01 as LogOut,
@@ -9,6 +8,7 @@ import {
   Trash01,
 } from "@untitledui/icons";
 
+import { Button } from "#src/components/base/buttons/button";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { ConfirmedAction } from "./channel-action-confirm-dialog";
@@ -17,39 +17,37 @@ import type { DirectChannelAction } from "./channel-direct-actions";
 import { setPublicChannelArchived } from "./channel-lifecycle.functions";
 import { SettingsCard } from "./settings-panel-parts";
 
-const ROW_CLASS =
-  "flex min-h-11 w-full cursor-pointer items-center gap-2.5 px-3.5 py-2.5 text-left text-sm font-medium outline-focus-ring transition-colors hover:bg-primary_hover focus-visible:outline-2 focus-visible:-outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
-
 function ActionRow({
   icon: Icon,
   label,
   destructive = false,
   disabled = false,
+  loading = false,
   onPress,
 }: {
-  icon: ComponentType<{ className?: string; "aria-hidden"?: boolean | "true" | "false" }>;
+  icon: FC<{ className?: string }>;
   label: string;
   destructive?: boolean;
   disabled?: boolean;
+  loading?: boolean;
   onPress: () => void;
 }) {
   return (
-    <AriaButton
+    <Button
+      size="md"
+      color={destructive ? "tertiary-destructive" : "tertiary"}
+      iconLeading={Icon}
       isDisabled={disabled}
+      isLoading={loading}
+      showTextWhileLoading
       onPress={onPress}
       className={cn(
-        ROW_CLASS,
-        destructive
-          ? "text-error-primary hover:bg-error-primary hover:text-error-primary_hover"
-          : "text-primary",
+        "min-h-11 w-full justify-start gap-2.5 rounded-none font-medium *:data-icon:size-4 focus-visible:-outline-offset-2",
+        !destructive && "text-primary hover:text-primary",
       )}
     >
-      <Icon
-        aria-hidden="true"
-        className={cn("size-4 shrink-0", destructive ? "text-current" : "text-fg-quaternary")}
-      />
-      <span>{label}</span>
-    </AriaButton>
+      {label}
+    </Button>
   );
 }
 
@@ -100,6 +98,7 @@ export function ActionsSection({
                   unarchiving ? m.channel_settings_unarchiving() : m.channel_settings_unarchive()
                 }
                 disabled={unarchiving}
+                loading={unarchiving}
                 onPress={() => void unarchive()}
               />
             )

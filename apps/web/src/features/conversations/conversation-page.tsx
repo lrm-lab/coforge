@@ -1,13 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useEffectEvent,
-  useMemo,
-  useRef,
-  useState,
-  type MutableRefObject,
-  type ReactNode,
-} from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
@@ -23,7 +14,6 @@ import { useReportViewingItem } from "#src/features/inbox/viewing-items";
 import { usePageTitleLabel } from "#src/lib/browser-tab";
 import { m } from "#src/paraglide/messages";
 import { markPublicChannelRead } from "./channels.functions";
-import type { ChannelMembersView } from "./channel-members-page";
 import { ChannelConversation, ChannelConversationHeader } from "./channel-conversation";
 import type { HeaderTabs } from "./conversation-header-tabs";
 import { channelLabel } from "./channel-visibility";
@@ -103,8 +93,6 @@ function ChannelConversationPage({
     [page, freshConversation],
   );
   const advanceReadCursor = useServerFn(markPublicChannelRead);
-  const [requestedMembersView, setRequestedMembersView] = useState<ChannelMembersView | null>(null);
-  const consumeMembersView = useCallback(() => setRequestedMembersView(null), []);
   return (
     <ConversationPageBody
       {...props}
@@ -123,10 +111,7 @@ function ChannelConversationPage({
           conversation={freshConversation}
           {...tabs}
           settingsOpen={details.settingsOpen}
-          onOpenSettings={(view) => {
-            if (view) setRequestedMembersView(view);
-            details.openDetails();
-          }}
+          onOpenSettings={details.openDetails}
           onCloseSettings={details.closeDetails}
         />
       )}
@@ -136,8 +121,6 @@ function ChannelConversationPage({
           {...conversationProps}
           conversation={freshConversation}
           {...chat}
-          requestedMembersView={requestedMembersView}
-          onRequestedMembersViewConsumed={consumeMembersView}
         />
       )}
     />
@@ -228,8 +211,6 @@ function PeopleDirectConversationPage({
         onAgentProfileTabChange,
         onOpenPersonProfile,
         onCloseAgentProfile,
-        settingsOpen,
-        onSettingsOpenChange,
       }) => (
         <PeopleDirectConversation
           key={conversation.conversationId}
@@ -245,8 +226,6 @@ function PeopleDirectConversationPage({
           onAgentProfileTabChange={onAgentProfileTabChange}
           onOpenPersonProfile={onOpenPersonProfile}
           onCloseAgentProfile={onCloseAgentProfile}
-          settingsOpen={settingsOpen}
-          onSettingsOpenChange={onSettingsOpenChange}
         />
       )}
     />
@@ -312,7 +291,7 @@ type ConversationPageBodyProps = {
     openAgentProfile: (agentId: string) => void,
     details: {
       settingsOpen: boolean;
-      openDetails: () => void;
+      openDetails: (view?: "members" | "add" | null) => void;
       closeDetails: () => void;
       toggleDetails: () => void;
     },
@@ -325,9 +304,6 @@ type ConversationPageBodyProps = {
       onShowTasks: () => void;
       onShowFiles: () => void;
       onReadLatest: (throughSequence: number) => void;
-      settingsOpen: boolean;
-      onSettingsOpenChange: (open: boolean) => void;
-      detailsRequestCloseRef: MutableRefObject<((then?: () => void) => void) | null>;
     } & ReturnType<typeof useConversationAgentProfile>,
   ) => ReactNode;
 };
@@ -365,6 +341,7 @@ function ConversationPageMain({
     view: requestedView,
     profile,
     agentTab,
+    details: _details,
     doc: _doc,
     docFull: _docFull,
     ...search
@@ -374,12 +351,9 @@ function ConversationPageMain({
   const details = useConversationDetailsState();
   const detailsControls = {
     settingsOpen: details.open,
-    openDetails: details.openDetails,
-    closeDetails: () => details.requestClose(),
-    toggleDetails: () => {
-      if (details.open) details.requestClose();
-      else details.openDetails();
-    },
+    openDetails: (view?: "members" | "add" | null) => details.openDetails(view ?? "panel"),
+    closeDetails: details.closeDetails,
+    toggleDetails: details.toggleDetails,
   };
   const { conversation } = page;
   const { showChat, showTasks, showFiles, openTask, openTaskThread, openMessage } =
@@ -504,9 +478,6 @@ function ConversationPageMain({
     onShowTasks: showTasks,
     onShowFiles: showFiles,
     onReadLatest: readLatest,
-    settingsOpen: details.open,
-    onSettingsOpenChange: details.setOpen,
-    detailsRequestCloseRef: details.requestCloseRef,
     ...agentProfile,
   });
 }

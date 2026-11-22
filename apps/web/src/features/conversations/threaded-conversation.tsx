@@ -74,7 +74,6 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     tasksPane,
     detailsOpen,
     detailsPane,
-    onRequestCloseDetails,
     channels,
     taskPopup,
     jumpMessage,
@@ -245,53 +244,6 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
   });
   const threadPaneVisible = (rootId: string) => visibleSlot === "thread" && selected === rootId;
   const focus = useConversationFocus();
-  const prevSelectionRef = useRef<{ selected: string | undefined; profile: string | undefined }>({
-    selected,
-    profile: profileAgentId ?? profilePersonId,
-  });
-  useEffect(() => {
-    const profileKey = profileAgentId ?? profilePersonId;
-    const prev = prevSelectionRef.current;
-    prevSelectionRef.current = { selected, profile: profileKey };
-    if (!detailsOpen) return;
-    if ((selected && selected !== prev.selected) || (profileKey && profileKey !== prev.profile)) {
-      onRequestCloseDetails?.();
-    }
-  }, [detailsOpen, selected, profileAgentId, profilePersonId, onRequestCloseDetails]);
-
-  const handleOpenThread = (threadRootId: string, options?: { replace?: boolean }) => {
-    if (detailsOpen && onRequestCloseDetails) {
-      onRequestCloseDetails(() => openThread(threadRootId, options));
-      return;
-    }
-    openThread(threadRootId, options);
-  };
-  const guardedConversationProps = {
-    ...conversationProps,
-    onOpenAgentProfile: conversationProps.onOpenAgentProfile
-      ? (
-          agentId: string,
-          tab?: Parameters<NonNullable<typeof conversationProps.onOpenAgentProfile>>[1],
-        ) => {
-          const open = conversationProps.onOpenAgentProfile!;
-          if (detailsOpen && onRequestCloseDetails) {
-            onRequestCloseDetails(() => open(agentId, tab));
-            return;
-          }
-          open(agentId, tab);
-        }
-      : undefined,
-    onOpenPersonProfile: conversationProps.onOpenPersonProfile
-      ? (userId: string) => {
-          const open = conversationProps.onOpenPersonProfile!;
-          if (detailsOpen && onRequestCloseDetails) {
-            onRequestCloseDetails(() => open(userId));
-            return;
-          }
-          open(userId);
-        }
-      : undefined,
-  };
   const threadInView =
     openTaskRoot?.id ??
     (detailVisible && focus?.focused !== "chat" && visibleSlot === "thread" ? selected : undefined);
@@ -363,7 +315,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
   const conversationMainPane = (
     <ThreadStoreProvider store={threads}>
       <ConversationPane
-        {...guardedConversationProps}
+        {...conversationProps}
         streamRead={windowRead}
         onOpenTask={openTaskReference}
         channelNames={channelNames}
@@ -375,7 +327,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
         header={header}
         conversation={conversation}
         composerTarget={threadContext}
-        onOpenThread={handleOpenThread}
+        onOpenThread={openThread}
       />
     </ThreadStoreProvider>
   );

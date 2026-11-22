@@ -1,4 +1,5 @@
-import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
+import { useHotkey } from "@tanstack/react-hotkeys";
 import { useServerFn } from "@tanstack/react-start";
 import { Settings01 as Settings, User01 } from "@untitledui/icons";
 
@@ -57,25 +58,17 @@ export function DirectSettingsPanel({
   onChanged: () => Promise<void>;
 }) {
   const sectionRef = useRef<HTMLElement>(null);
-  const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
-    if (
-      event.key !== "Escape" ||
-      event.defaultPrevented ||
-      event.isComposing ||
-      event.keyCode === 229
-    )
-      return;
-    if (sectionRef.current?.offsetParent === null) return;
-    if (document.querySelector(OPEN_OVERLAY_SELECTOR) !== null) return;
-    event.preventDefault();
-    onClose();
-  });
-
-  useEffect(() => {
-    if (!open) return;
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [open]);
+  useHotkey(
+    "Escape",
+    (event) => {
+      if (sectionRef.current?.offsetParent === null) return;
+      if (document.querySelector(OPEN_OVERLAY_SELECTOR) !== null) return;
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
+    },
+    { enabled: open, capture: true, preventDefault: false, stopPropagation: false },
+  );
 
   if (!open) return null;
 

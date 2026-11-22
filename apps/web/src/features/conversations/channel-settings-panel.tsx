@@ -1,12 +1,6 @@
-import {
-  useCallback,
-  useEffect,
-  useEffectEvent,
-  useMemo,
-  useRef,
-  useState,
-  type MutableRefObject,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useHotkey } from "@tanstack/react-hotkeys";
+import { useBlocker, type ShouldBlockFn } from "@tanstack/react-router";
 import { User01 } from "@untitledui/icons";
 
 import { Select } from "#src/components/base/select/select";
@@ -53,38 +47,41 @@ import { StopChannelAgentsDialog } from "./stop-channel-agents-dialog";
 export function ChannelSettingsPanel({
   conversation,
   open,
-  requestedMembersView = null,
-  onRequestedMembersViewConsumed,
-  requestCloseRef,
-  onOpenChange,
+  membersView,
+  onMembersViewChange,
+  onClose,
   onChanged,
 }: {
   conversation: ChannelConversationView;
   open: boolean;
-  requestedMembersView?: ChannelMembersView | null;
-  onRequestedMembersViewConsumed?: () => void;
-  requestCloseRef?: MutableRefObject<((then?: () => void) => void) | null>;
-  onOpenChange: (open: boolean) => void;
+  membersView: ChannelMembersView | null;
+  onMembersViewChange: (view: ChannelMembersView | null) => void;
+  onClose: () => void;
   onChanged: () => Promise<void>;
 }) {
   const channelId = conversation.conversationId;
   const capabilities = conversation.channelCapabilities;
   const isMember = Boolean(conversation.senderMemberId);
-  const [membersView, setMembersView] = useState<ChannelMembersView | null>(null);
+  const activeMembersView =
+    conversation.archived && membersView === "add" ? "members" : membersView;
   const [profile, setProfile] = useState<RosterProfile | null>(null);
   const [profileTab, setProfileTab] = useState<AgentProfileTabId | undefined>(undefined);
   const [rosterSearch, setRosterSearch] = useState("");
   const [returnFocus, setReturnFocus] = useState<RosterProfile | undefined>(undefined);
   const [editingInfo, setEditingInfo] = useState(false);
-  const [unsavedPromptOpen, setUnsavedPromptOpen] = useState(false);
   const [confirming, setConfirming] = useState<ConfirmedAction | null>(null);
   const [stoppingAgents, setStoppingAgents] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
   const info = useInfoForm(conversation, onChanged);
+  const dirtyRef = useRef(info.dirty);
+  dirtyRef.current = info.dirty;
 
   const finishAction = async () => {
+    dirtyRef.current = false;
+    info.reset();
+    setEditingInfo(false);
     setConfirming(null);
-    onOpenChange(false);
+    onClose();
     await onChanged();
   };
 
@@ -100,62 +97,41 @@ export function ChannelSettingsPanel({
     void runDirect(kind);
   };
 
-  const afterClose = useRef<(() => void) | undefined>(undefined);
-
-  const close = useCallback(() => {
-    setEditingInfo(false);
-    setMembersView(null);
-    setProfile(null);
-    onOpenChange(false);
-    afterClose.current?.();
-    afterClose.current = undefined;
-  }, [onOpenChange]);
-
-  const requestClose = useCallback(
-    (then?: () => void) => {
-      afterClose.current = then;
-      if (info.dirty) setUnsavedPromptOpen(true);
-      else close();
+  useHotkey(
+    "Escape",
+    (event) => {
+      if (sectionRef.current?.offsetParent === null) return;
+      if (document.querySelector(OPEN_OVERLAY_SELECTOR) !== null) return;
+      const active = document.activeElement;
+      if (active instanceof HTMLInputElement && active.type === "search" && active.value !== "")
+        return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (editingInfo && !info.dirty) {
+        setEditingInfo(false);
+        return;
+      }
+      onClose();
     },
-    [info.dirty, close],
+    { enabled: open, capture: true, preventDefault: false, stopPropagation: false },
   );
 
-  useEffect(() => {
-    if (!requestCloseRef) return;
-    requestCloseRef.current = requestClose;
-    return () => {
-      requestCloseRef.current = null;
-    };
-  }, [requestCloseRef, requestClose]);
-
-  const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
-    if (
-      event.key !== "Escape" ||
-      event.defaultPrevented ||
-      event.isComposing ||
-      event.keyCode === 229
-    )
-      return;
-    if (sectionRef.current?.offsetParent === null) return;
-    if (document.querySelector(OPEN_OVERLAY_SELECTOR) !== null) return;
-    event.preventDefault();
-    if (editingInfo && !info.dirty) {
-      setEditingInfo(false);
-      return;
-    }
-    requestClose();
+  const shouldBlock = useCallback<ShouldBlockFn>(({ current, next }) => {
+    if (!dirtyRef.current) return false;
+    const nextDetails = (next.search as { details?: unknown }).details;
+    return next.pathname !== current.pathname || nextDetails !== "panel";
+  }, []);
+  const shouldBeforeUnload = useCallback(() => dirtyRef.current, []);
+  const blocker = useBlocker({
+    shouldBlockFn: shouldBlock,
+    enableBeforeUnload: shouldBeforeUnload,
+    disabled: !open,
+    withResolver: true,
   });
-
-  useEffect(() => {
-    if (!open) return;
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [open]);
 
   useEffect(() => {
     if (!open) {
       setEditingInfo(false);
-      setMembersView(null);
       setProfile(null);
       setRosterSearch("");
       setReturnFocus(undefined);
@@ -163,13 +139,10 @@ export function ChannelSettingsPanel({
   }, [open, channelId]);
 
   useEffect(() => {
-    if (!open || !requestedMembersView) return;
     setProfile(null);
     setReturnFocus(undefined);
     setRosterSearch("");
-    setMembersView(requestedMembersView);
-    onRequestedMembersViewConsumed?.();
-  }, [open, requestedMembersView, onRequestedMembersViewConsumed]);
+  }, [activeMembersView]);
 
   useEffect(() => {
     if (conversation.archived) setEditingInfo(false);
@@ -191,11 +164,14 @@ export function ChannelSettingsPanel({
     [profile],
   );
 
-  const changeMembersView = useCallback((view: ChannelMembersView | null) => {
-    setReturnFocus(undefined);
-    setRosterSearch("");
-    setMembersView(view);
-  }, []);
+  const changeMembersView = useCallback(
+    (view: ChannelMembersView | null) => {
+      setReturnFocus(undefined);
+      setRosterSearch("");
+      onMembersViewChange(view);
+    },
+    [onMembersViewChange],
+  );
 
   return (
     <>
@@ -214,14 +190,14 @@ export function ChannelSettingsPanel({
                   visible={open}
                   requestedTab={profileTab}
                   onTabChange={setProfileTab}
-                  onClose={() => requestClose()}
+                  onClose={onClose}
                   back={profileBack}
                 />
               ) : (
                 <PersonProfilePanel
                   key={profile.id}
                   userId={profile.id}
-                  onClose={() => requestClose()}
+                  onClose={onClose}
                   back={profileBack}
                   onOpenAgent={(agentId) => openProfile({ kind: "agent", id: agentId })}
                 />
@@ -229,18 +205,15 @@ export function ChannelSettingsPanel({
             </div>
           ) : (
             <>
-              <DetailsPaneHeader
-                title={m.conversation_details_title()}
-                onClose={() => requestClose()}
-              />
-              {membersView ? (
+              <DetailsPaneHeader title={m.conversation_details_title()} onClose={onClose} />
+              {activeMembersView ? (
                 <>
                   <MembersPageHeading
-                    key={membersView}
+                    key={activeMembersView}
                     channelId={channelId}
-                    view={membersView}
+                    view={activeMembersView}
                     takesFocus={!returnFocus}
-                    onBack={() => changeMembersView(membersView === "add" ? "members" : null)}
+                    onBack={() => changeMembersView(activeMembersView === "add" ? "members" : null)}
                   />
                   <div className="flex min-h-0 w-full flex-1 flex-col">
                     <ChannelMembersPage
@@ -248,7 +221,7 @@ export function ChannelSettingsPanel({
                       channelName={conversation.name}
                       viewerId={conversation.viewerId}
                       canCreateAgents={conversation.canCreateAgents}
-                      view={membersView}
+                      view={activeMembersView}
                       onViewChange={changeMembersView}
                       roster={{
                         search: rosterSearch,
@@ -297,24 +270,25 @@ export function ChannelSettingsPanel({
         </section>
       )}
       <UnsavedChangesDialog
-        open={unsavedPromptOpen}
+        open={blocker.status === "blocked"}
         saving={info.saving}
         description={m.channel_settings_unsaved_message()}
-        onKeepEditing={() => {
-          afterClose.current = undefined;
-          setUnsavedPromptOpen(false);
-        }}
+        onKeepEditing={() => blocker.reset?.()}
         onDiscard={() => {
+          dirtyRef.current = false;
           info.reset();
           setEditingInfo(false);
-          setUnsavedPromptOpen(false);
-          close();
+          blocker.proceed?.();
         }}
         onSave={async () => {
           const saved = await info.save();
-          setUnsavedPromptOpen(false);
-          if (saved) close();
-          else afterClose.current = undefined;
+          if (saved) {
+            dirtyRef.current = false;
+            setEditingInfo(false);
+            blocker.proceed?.();
+          } else {
+            blocker.reset?.();
+          }
         }}
       />
       {stoppingAgents && (

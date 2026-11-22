@@ -73,11 +73,12 @@ describe("resolveConversationThreadRoot", () => {
 });
 
 describe("conversation thread search updates", () => {
-  test("opening writes threadRootId after removing the Agent panel state", () => {
+  test("opening writes threadRootId after removing the Agent panel and details state", () => {
     const withoutProfile = conversationSearchWithoutAgentProfile({
       view: "chat",
       profile: "agent:1",
       agentTab: "profile",
+      details: "panel",
     });
     expect(conversationSearchWithThread(withoutProfile, "root-1")).toEqual({
       view: "chat",

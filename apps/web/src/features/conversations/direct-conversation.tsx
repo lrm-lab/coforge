@@ -154,8 +154,6 @@ export function DirectConversationHeader({
 
 export function DirectConversation({
   onChanged,
-  settingsOpen: controlledSettingsOpen,
-  onSettingsOpenChange: onControlledSettingsOpenChange,
   ...props
 }: ConversationProps &
   Pick<
@@ -163,18 +161,9 @@ export function DirectConversation({
     "channels" | "taskPopup" | "jumpMessage" | "onJumpMessageConsumed"
   > & {
     onChanged: () => Promise<void>;
-    settingsOpen?: boolean;
-    onSettingsOpenChange?: (open: boolean) => void;
   }) {
   const { conversation } = props;
-  const details = useConversationDetailsState({
-    controlledOpen: controlledSettingsOpen,
-    onControlledOpenChange: onControlledSettingsOpenChange,
-  });
-  const toggleDetails = () => {
-    if (details.open) details.requestClose();
-    else details.openDetails();
-  };
+  const details = useConversationDetailsState({ enabled: !props.taskPopup });
   // A deleted Agent's DM stays readable, but nothing new can be sent to it.
   const deleted = Boolean(conversation.agent.deletedAt);
   // A private Agent's DM stays scoped to its own creator; this viewer's existing DM
@@ -204,7 +193,6 @@ export function DirectConversation({
       name={agentName}
       plainMentions={plainMentions}
       detailsOpen={details.open}
-      onRequestCloseDetails={details.requestClose}
       detailsPane={
         <DirectSettingsPanel
           conversationId={conversation.conversationId}
@@ -218,7 +206,7 @@ export function DirectConversation({
             />
           }
           open={details.open}
-          onClose={() => details.setOpen(false)}
+          onClose={details.closeDetails}
           collapseLongMessages={conversation.collapseLongMessages}
           onChanged={onChanged}
         />
@@ -231,7 +219,7 @@ export function DirectConversation({
           onShowFiles={props.onShowFiles}
           onOpenAgentProfile={props.onOpenAgentProfile}
           settingsOpen={details.open}
-          onToggleSettings={toggleDetails}
+          onToggleSettings={details.toggleDetails}
         />
       }
       readOnlyNotice={
