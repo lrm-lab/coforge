@@ -6,23 +6,62 @@
   "agent_reminders_error": "无法加载提醒。",
   "agent_reminders_retry": "重试",
   "agent_reminders_empty": "还没有提醒",
-  "agent_reminders_repeat_minute": "每分钟",
-  "agent_reminders_repeat_minutes": "每 {count} 分钟",
-  "agent_reminders_repeat_hour": "每小时",
-  "agent_reminders_repeat_hours": "每 {count} 小时",
-  "agent_reminders_repeat_day": "每天",
-  "agent_reminders_repeat_days": "每 {count} 天",
+  "agent_reminders_repeat_minutes": [
+    {
+      "declarations": ["input count", "local countNumber = count: number"],
+      "selectors": ["count"],
+      "match": {
+        "count=1": "每分钟",
+        "*": "每 {countNumber} 分钟"
+      }
+    }
+  ],
+  "agent_reminders_repeat_hours": [
+    {
+      "declarations": ["input count", "local countNumber = count: number"],
+      "selectors": ["count"],
+      "match": {
+        "count=1": "每小时",
+        "*": "每 {countNumber} 小时"
+      }
+    }
+  ],
+  "agent_reminders_repeat_days": [
+    {
+      "declarations": ["input count", "local countNumber = count: number"],
+      "selectors": ["count"],
+      "match": {
+        "count=1": "每天",
+        "*": "每 {countNumber} 天"
+      }
+    }
+  ],
+  "agent_reminders_repeat_hourly_at": "每小时 :{minute}",
+  "agent_reminders_repeat_hours_at": [
+    {
+      "declarations": ["input count", "input minute", "local countNumber = count: number"],
+      "selectors": ["count"],
+      "match": {
+        "count=1": "每小时 :{minute}",
+        "*": "每 {countNumber} 小时 :{minute}"
+      }
+    }
+  ],
+  "agent_reminders_repeat_days_at": [
+    {
+      "declarations": ["input count", "input time", "local countNumber = count: number"],
+      "selectors": ["count"],
+      "match": {
+        "count=1": "每天 {time}",
+        "*": "每 {countNumber} 天 {time}"
+      }
+    }
+  ],
+  "agent_reminders_repeat_monthly": "每月 {day} 日 {time}",
   "agent_reminders_weekday_separator": "、",
   "agent_reminders_repeat_daily": "每天 {time}",
   "agent_reminders_repeat_weekly": "每{days} {time}",
   "agent_reminders_repeat_unknown": "重复：{value}",
-  "agent_reminders_weekday_mon": "周一",
-  "agent_reminders_weekday_tue": "周二",
-  "agent_reminders_weekday_wed": "周三",
-  "agent_reminders_weekday_thu": "周四",
-  "agent_reminders_weekday_fri": "周五",
-  "agent_reminders_weekday_sat": "周六",
-  "agent_reminders_weekday_sun": "周日",
   "agent_reminders_load_more": "加载更多",
   "agent_reminders_empty_description": "这个 Agent 还没有安排提醒。要设一个，直接告诉它：「明天提醒我跟进。」"
 }

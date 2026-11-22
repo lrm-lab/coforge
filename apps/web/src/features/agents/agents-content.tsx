@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { GridList, GridListLoadMoreItem, ProgressBar } from "react-aria-components";
 import { Group, Panel, Separator, useDefaultLayout } from "react-resizable-panels";
-import { getRouteApi } from "@tanstack/react-router";
+import { getRouteApi, useHydrated } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useEdgeSwipeBack } from "#src/hooks/use-edge-swipe-back";
@@ -21,6 +21,7 @@ import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/t
 import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
 import { PageBackButton } from "#src/components/layout/page-back-button";
 import { formatCalendarDate } from "#src/lib/dates";
+import { formatNumber } from "#src/lib/format-number";
 import { getLocale } from "#src/paraglide/runtime";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
@@ -108,8 +109,7 @@ export function AgentsContent({
     if (pages.hasNextPage && !pages.isFetchingNextPage) void pages.fetchNextPage();
   };
   const profileOpen = Boolean(profileAgentId || profilePersonId);
-  const [hydrated, setHydrated] = useState(false);
-  useEffect(() => setHydrated(true), []);
+  const hydrated = useHydrated();
   const desktop = useBreakpoint("md");
   const splitOpen = hydrated && desktop && profileOpen;
   const profile = profileAgentId ? (
@@ -156,8 +156,12 @@ export function AgentsContent({
             type="underline"
             className="gap-6 before:hidden"
           >
-            <Tab id="agent">{m.member_tab_agents_count({ count: summary.agentCount })}</Tab>
-            <Tab id="human">{m.member_tab_humans_count({ count: summary.peopleCount })}</Tab>
+            <Tab id="agent" className="tabular-nums">
+              {m.member_tab_agents_count({ count: formatNumber(summary.agentCount, locale) })}
+            </Tab>
+            <Tab id="human" className="tabular-nums">
+              {m.member_tab_humans_count({ count: formatNumber(summary.peopleCount, locale) })}
+            </Tab>
           </TabList>
         </div>
         <div className="ms-auto flex shrink-0 items-center gap-2 @2xl/members:justify-self-end">

@@ -212,7 +212,13 @@ export function RuntimeUsage({
   return (
     <>
       <DialogTrigger onOpenChange={(open) => open && rereadLogin()}>
-        <AriaButton aria-label={label} className={triggerClassName ?? DEFAULT_TRIGGER_CLASS_NAME}>
+        <AriaButton
+          aria-label={label}
+          className={cn(
+            "relative cursor-pointer any-pointer-coarse:min-h-11 any-pointer-coarse:inline-flex any-pointer-coarse:items-center any-pointer-coarse:after:absolute any-pointer-coarse:after:-inset-x-1 any-pointer-coarse:after:-inset-y-2",
+            triggerClassName ?? DEFAULT_TRIGGER_CLASS_NAME,
+          )}
+        >
           {resolvedTrigger}
         </AriaButton>
         <Popover

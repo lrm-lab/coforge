@@ -6,23 +6,84 @@
   "agent_reminders_error": "Reminders could not be loaded.",
   "agent_reminders_retry": "Retry",
   "agent_reminders_empty": "No reminders yet",
-  "agent_reminders_repeat_minute": "Every minute",
-  "agent_reminders_repeat_minutes": "Every {count} minutes",
-  "agent_reminders_repeat_hour": "Every hour",
-  "agent_reminders_repeat_hours": "Every {count} hours",
-  "agent_reminders_repeat_day": "Every day",
-  "agent_reminders_repeat_days": "Every {count} days",
+  "agent_reminders_repeat_minutes": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural",
+        "local countNumber = count: number"
+      ],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Every minute",
+        "countPlural=other": "Every {countNumber} minutes"
+      }
+    }
+  ],
+  "agent_reminders_repeat_hours": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural",
+        "local countNumber = count: number"
+      ],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Every hour",
+        "countPlural=other": "Every {countNumber} hours"
+      }
+    }
+  ],
+  "agent_reminders_repeat_days": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural",
+        "local countNumber = count: number"
+      ],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Every day",
+        "countPlural=other": "Every {countNumber} days"
+      }
+    }
+  ],
+  "agent_reminders_repeat_hourly_at": "Hourly at :{minute}",
+  "agent_reminders_repeat_hours_at": [
+    {
+      "declarations": [
+        "input count",
+        "input minute",
+        "local countPlural = count: plural",
+        "local countNumber = count: number"
+      ],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Hourly at :{minute}",
+        "countPlural=other": "Every {countNumber} hours at :{minute}"
+      }
+    }
+  ],
+  "agent_reminders_repeat_days_at": [
+    {
+      "declarations": [
+        "input count",
+        "input time",
+        "local countPlural = count: plural",
+        "local countNumber = count: number"
+      ],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Daily at {time}",
+        "countPlural=other": "Every {countNumber} days at {time}"
+      }
+    }
+  ],
+  "agent_reminders_repeat_monthly": "Monthly on day {day} at {time}",
   "agent_reminders_weekday_separator": ", ",
   "agent_reminders_repeat_daily": "Daily at {time}",
   "agent_reminders_repeat_weekly": "Weekly on {days} at {time}",
   "agent_reminders_repeat_unknown": "Repeats: {value}",
-  "agent_reminders_weekday_mon": "Mon",
-  "agent_reminders_weekday_tue": "Tue",
-  "agent_reminders_weekday_wed": "Wed",
-  "agent_reminders_weekday_thu": "Thu",
-  "agent_reminders_weekday_fri": "Fri",
-  "agent_reminders_weekday_sat": "Sat",
-  "agent_reminders_weekday_sun": "Sun",
   "agent_reminders_load_more": "Load more",
   "agent_reminders_empty_description": "This Agent hasn't scheduled any reminders. To set one, just tell it: “Remind me to follow up tomorrow.”"
 }

@@ -5,8 +5,11 @@ import type { AgentSkillsListResult, AgentSkillsScope } from "@lrm/coforge-sdk/i
 
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
+import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
+import { formatNumber } from "#src/lib/format-number";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { formatDisplayPath } from "./display-path";
 
 export type AgentSkillsLoadResult =
   | { status: "ready"; result: AgentSkillsListResult }
@@ -18,13 +21,6 @@ type LoadState =
   | { status: "offline" | "timeout" | "unavailable" }
   | { status: "ready"; result: AgentSkillsListResult };
 
-/**
- * The Profile tab's Skills section: a `Skills (N)` heading, a
- * single loading line, a reason line plus Retry on any non-ready state, and two source-grouped
- * lists (Global/Workspace) of one-line, expandable skill rows with no directory list, no
- * per-entry source column, and no "loaded" claim. Owner-only, same gate as before
- * (`agent-profile-tab.tsx`).
- */
 export function AgentSkills({
   resetKey,
   onLoad,
@@ -60,7 +56,9 @@ export function AgentSkills({
 
   return (
     <section className="min-w-0 py-6">
-      <h2 className="font-semibold">{m.agent_skills_title({ count })}</h2>
+      <h2 className="font-semibold tabular-nums">
+        {m.agent_skills_title({ count: formatNumber(count) })}
+      </h2>
       {state.status === "loading" ? (
         <p role="status" className="mt-4 text-sm text-tertiary">
           {m.agent_skills_loading()}
@@ -119,44 +117,54 @@ function SkillGroup({
         <h3 id={`skills-${heading}`} className="text-sm font-semibold">
           {heading}
         </h3>
-        <span className="text-sm text-tertiary">({scope.entries.length})</span>
+        <span className="text-sm tabular-nums text-tertiary">
+          ({formatNumber(scope.entries.length)})
+        </span>
       </div>
       {scope.entries.length === 0 ? (
         <p className="mt-2 text-sm text-tertiary">{emptyCopy}</p>
       ) : (
         <div className="mt-3 grid gap-4">
-          {groups.map(([sourcePath, entries]) => (
-            <div key={sourcePath} className="min-w-0">
-              <p className="flex items-baseline gap-1.5 text-xs text-tertiary">
-                <code className="truncate">{sourcePath}</code>
-                <span>({entries.length})</span>
-              </p>
-              <div className="mt-2 grid gap-2">
-                {entries.map((entry) => (
-                  <SkillRow key={`${sourcePath}:${entry.name}`} entry={entry} />
-                ))}
+          {groups.map(([sourcePath, entries]) => {
+            const shownPath = formatDisplayPath(sourcePath);
+            return (
+              <div key={sourcePath} className="min-w-0">
+                <p className="flex min-w-0 items-baseline gap-1.5 text-xs text-tertiary">
+                  {shownPath !== sourcePath ? (
+                    <Tooltip title={sourcePath}>
+                      <TooltipTrigger className="min-w-0 rounded-xs text-start outline-focus-ring focus-visible:outline-2">
+                        <code dir="ltr" className="wrap-anywhere">
+                          {shownPath}
+                        </code>
+                      </TooltipTrigger>
+                    </Tooltip>
+                  ) : (
+                    <code dir="ltr" className="min-w-0 wrap-anywhere">
+                      {sourcePath}
+                    </code>
+                  )}
+                  <span className="shrink-0 tabular-nums">({formatNumber(entries.length)})</span>
+                </p>
+                <div className="mt-2 grid gap-2">
+                  {entries.map((entry) => (
+                    <SkillRow key={`${sourcePath}:${entry.name}`} entry={entry} />
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>
   );
 }
 
-/**
- * One skill: a single line (name, `/name` badge, then the description cut off with an ellipsis).
- * A skill with a description is a disclosure, collapsed by default and never persisted; pressing
- * the row shows the whole description wrapped below it.
- */
 function SkillRow({ entry }: { entry: AgentSkillsScope["entries"][number] }) {
   const name = (
     <>
-      <span className="max-w-3/5 shrink-0 truncate font-medium text-primary">
-        {entry.displayName}
-      </span>
+      <span className="min-w-0 shrink truncate font-medium text-primary">{entry.displayName}</span>
       {entry.userInvocable && (
-        <Badge color="gray" size="sm" className="shrink-0 font-mono">
+        <Badge color="gray" size="sm" className="max-w-44 shrink-0 truncate font-mono">
           /{entry.name}
         </Badge>
       )}
@@ -176,7 +184,7 @@ function SkillRow({ entry }: { entry: AgentSkillsScope["entries"][number] }) {
         <>
           <AriaButton
             slot="trigger"
-            className="flex w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-start text-sm outline-focus-ring focus-visible:outline-2 focus-visible:-outline-offset-2"
+            className="flex w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-start text-sm outline-focus-ring focus-visible:outline-2 focus-visible:-outline-offset-2 any-pointer-coarse:min-h-11"
           >
             <ChevronRight
               aria-hidden="true"

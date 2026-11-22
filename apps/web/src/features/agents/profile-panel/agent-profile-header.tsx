@@ -57,7 +57,7 @@ export function AgentProfileHeader({
           icon={ArrowLeft}
           size="sm"
           color="tertiary"
-          className="-ms-1.5 [&_svg]:rtl:rotate-180"
+          className="-ms-1.5 any-pointer-coarse:min-h-11 any-pointer-coarse:min-w-11 [&_svg]:rtl:rotate-180"
           tooltip={back.label}
           aria-label={back.label}
           onClick={back.onPress}
@@ -96,17 +96,21 @@ export function AgentProfileHeader({
           <ButtonUtility
             icon={MessageSquare}
             size="sm"
+            className="any-pointer-coarse:min-h-11 any-pointer-coarse:min-w-11"
             tooltip={m.agent_profile_panel_message()}
             onClick={message}
           />
         )}
         {!deleted && (
           <>
-            <AgentProfileActionsMenu className="flex @lg/agent-header:hidden" controls={controls} />
+            <AgentProfileActionsMenu
+              className="flex any-pointer-coarse:min-h-11 any-pointer-coarse:min-w-11 @lg/agent-header:hidden"
+              controls={controls}
+            />
             <ButtonUtility
               icon={controls.isOnline ? Stop : Play}
               size="sm"
-              className="hidden @lg/agent-header:inline-flex"
+              className="hidden any-pointer-coarse:min-h-11 any-pointer-coarse:min-w-11 @lg/agent-header:inline-flex"
               isDisabled={controls.startStopBusy}
               tooltip={
                 controls.isOnline
@@ -122,7 +126,7 @@ export function AgentProfileHeader({
             <ButtonUtility
               icon={RotateCcw}
               size="sm"
-              className="hidden @lg/agent-header:inline-flex"
+              className="hidden any-pointer-coarse:min-h-11 any-pointer-coarse:min-w-11 @lg/agent-header:inline-flex"
               isDisabled={controls.controlInFlight}
               tooltip={m.agent_control_restart_reset_tooltip()}
               onClick={() => controls.openRestart("restart")}
@@ -134,7 +138,7 @@ export function AgentProfileHeader({
         icon={X}
         size="sm"
         color="tertiary"
-        className="-me-1.5"
+        className="-me-1.5 any-pointer-coarse:min-h-11 any-pointer-coarse:min-w-11"
         tooltip={m.controls_close()}
         onClick={onClose}
       />

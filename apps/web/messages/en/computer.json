@@ -106,12 +106,53 @@
   "computer_agent_workspaces_scanned_at": "Scanned {date}",
   "computer_agent_workspace_active": "Active",
   "computer_agent_workspace_deleted": "Archived",
-  "computer_agent_workspace_stats": "{size}, {files} files",
+  "computer_agent_workspace_stats": [
+    {
+      "declarations": [
+        "input size",
+        "input files",
+        "local filesPlural = files: plural",
+        "local filesNumber = files: number"
+      ],
+      "selectors": ["filesPlural"],
+      "match": {
+        "filesPlural=one": "{size}, {filesNumber} file",
+        "filesPlural=other": "{size}, {filesNumber} files"
+      }
+    }
+  ],
   "computer_agent_workspace_stats_pending": "Counting…",
-  "computer_agent_workspace_stats_truncated": "≥ {size}, ≥ {files} files",
+  "computer_agent_workspace_stats_truncated": [
+    {
+      "declarations": [
+        "input size",
+        "input files",
+        "local filesPlural = files: plural",
+        "local filesNumber = files: number"
+      ],
+      "selectors": ["filesPlural"],
+      "match": {
+        "filesPlural=one": "≥ {size}, ≥ {filesNumber} file",
+        "filesPlural=other": "≥ {size}, ≥ {filesNumber} files"
+      }
+    }
+  ],
   "computer_agent_workspace_partial": "Workspace found; scan was incomplete",
   "computer_agent_workspace_unavailable": "The Computer did not return its workspaces",
-  "computer_agent_workspaces_deleted_summary": "{count} archived Agent workspaces found — the Agent is archived but its files remain on disk.",
+  "computer_agent_workspaces_deleted_summary": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural",
+        "local countNumber = count: number"
+      ],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{countNumber} archived Agent workspace found — the Agent is archived but its files remain on disk.",
+        "countPlural=other": "{countNumber} archived Agent workspaces found — the Agent is archived but its files remain on disk."
+      }
+    }
+  ],
   "computer_agent_workspace_modified": "Modified {date}",
   "computer_agent_workspace_delete": "Delete Workspace",
   "computer_agent_workspace_delete_offline": "This computer is offline. Try again when it's back.",

@@ -198,9 +198,15 @@ export function RuntimeUsagePopoverContent({
                 {(title || accountNote) && (
                   <div className="min-w-0">
                     {title && (
-                      <h3 className="truncate text-sm font-medium text-primary">{title}</h3>
+                      <h3 className="line-clamp-2 text-sm font-medium wrap-anywhere text-primary">
+                        {title}
+                      </h3>
                     )}
-                    {accountNote && <p className="truncate text-xs text-tertiary">{accountNote}</p>}
+                    {accountNote && (
+                      <p className="line-clamp-2 text-xs wrap-anywhere text-tertiary">
+                        {accountNote}
+                      </p>
+                    )}
                   </div>
                 )}
                 {/* The sign-out button takes the badge's place: the usage below already shows a

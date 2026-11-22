@@ -26,6 +26,7 @@ import { Skeleton } from "#src/components/ui/skeleton";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { formatCalendarDate } from "#src/lib/dates";
+import { formatNumber } from "#src/lib/format-number";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
@@ -134,6 +135,7 @@ export function PersonProfilePanel({
         <ButtonUtility
           icon={MessageSquare}
           size="sm"
+          className="any-pointer-coarse:min-h-11 any-pointer-coarse:min-w-11"
           tooltip={m.agent_profile_panel_message()}
           onClick={() => void openDirectConversation({ userId: profile.id })}
         />
@@ -152,7 +154,7 @@ function BackButton({ back }: { back: PanelBack }) {
       icon={ArrowLeft}
       size="sm"
       color="tertiary"
-      className="-ms-1.5 [&_svg]:rtl:rotate-180"
+      className="-ms-1.5 any-pointer-coarse:min-h-11 any-pointer-coarse:min-w-11 [&_svg]:rtl:rotate-180"
       tooltip={back.label}
       aria-label={back.label}
       onClick={back.onPress}
@@ -166,7 +168,7 @@ function CloseButton({ onClose }: { onClose: () => void }) {
       icon={X}
       size="sm"
       color="tertiary"
-      className="-me-1.5"
+      className="-me-1.5 any-pointer-coarse:min-h-11 any-pointer-coarse:min-w-11"
       tooltip={m.controls_close()}
       onClick={onClose}
     />
@@ -203,7 +205,7 @@ function PersonProfileBody({
           src={profile.avatarUrl}
         />
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-lg font-semibold text-primary">
+          <h2 className="text-lg font-semibold wrap-anywhere text-primary">
             {profile.displayName}
             {profile.isViewer && (
               <span className="ms-1.5 text-sm font-normal text-tertiary">
@@ -282,7 +284,9 @@ function PersonProfileBody({
       <section className="px-6 py-5">
         <p className={SECTION_CAPTION_CLASS}>
           {m.member_created_agents()}
-          <span className="ml-1.5 tabular-nums">{profile.createdAgents.length}</span>
+          <span className="ms-1.5 tabular-nums">
+            {formatNumber(profile.createdAgents.length, locale)}
+          </span>
         </p>
         {profile.createdAgents.length ? (
           <ul aria-label={m.member_created_agents()} className="mt-3 flex flex-col gap-2">

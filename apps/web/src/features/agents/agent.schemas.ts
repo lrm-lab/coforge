@@ -1,5 +1,7 @@
 import { z } from "zod";
 import {
+  AGENT_ENVIRONMENT_MAX_NAME_LENGTH,
+  AGENT_ENVIRONMENT_MAX_VARIABLES,
   AGENT_NAME_MAX_LENGTH,
   AGENT_NAME_PATTERN,
   RUNTIME_PROVIDER,
@@ -200,9 +202,18 @@ export const saveAgentRuntimeCredentialInputSchema = z.object({
   apiKey: z.string().trim().min(8).max(4096),
 });
 
+export const AGENT_ENVIRONMENT_MAX_INPUT_VALUE_LENGTH = 8192;
+
 export const saveAgentEnvironmentInputSchema = z.object({
   agentId: agentIdSchema,
-  envVars: z.record(z.string(), z.string()),
+  envVars: z
+    .record(
+      z.string().max(AGENT_ENVIRONMENT_MAX_NAME_LENGTH),
+      z.string().max(AGENT_ENVIRONMENT_MAX_INPUT_VALUE_LENGTH),
+    )
+    .refine((vars) => Object.keys(vars).length <= AGENT_ENVIRONMENT_MAX_VARIABLES, {
+      message: `At most ${AGENT_ENVIRONMENT_MAX_VARIABLES} environment variables`,
+    }),
 });
 
 // A thin gate ahead of the codec's own strict validation (`agent-workspace-files.ts` rejects

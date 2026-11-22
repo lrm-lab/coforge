@@ -4,6 +4,7 @@ import { Checkbox as AriaCheckbox } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
+import { formatNumber } from "#src/lib/format-number";
 import { m } from "#src/paraglide/messages";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
@@ -74,7 +75,7 @@ export function ComputerDetailAgentRoster({
   return (
     <>
       <DetailGroup
-        heading={`${m.computer_agents_on_computer()} (${agents.length})`}
+        heading={`${m.computer_agents_on_computer()} (${formatNumber(agents.length)})`}
         headingId="computer-agents-on-computer"
         action={
           <div className="flex flex-wrap justify-end gap-2">
@@ -128,8 +129,8 @@ export function ComputerDetailAgentRoster({
       >
         {selecting && selectedAgents.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 py-3">
-            <span className="me-auto text-sm text-tertiary">
-              {m.computer_agents_selected({ count: String(selectedAgents.length) })}
+            <span className="me-auto text-sm tabular-nums text-tertiary">
+              {m.computer_agents_selected({ count: formatNumber(selectedAgents.length) })}
             </span>
             <Button
               size="sm"

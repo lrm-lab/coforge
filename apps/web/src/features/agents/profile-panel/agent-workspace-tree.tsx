@@ -21,6 +21,13 @@ export type DirState =
   | { status: "ready"; entries: AgentWorkspaceFileEntry[]; rootPath?: string }
   | { status: "offline" | "timeout" | "unavailable" | "missing" | "unreadable" | "error" };
 
+const MAX_VISUAL_TREE_DEPTH = 8;
+
+export function treeRowIndent(level: number): string {
+  const clamped = Math.min(Math.max(level, 1), MAX_VISUAL_TREE_DEPTH);
+  return `${0.25 + (clamped - 1)}rem`;
+}
+
 function joinPath(dirPath: string, name: string): string {
   return dirPath === "" ? name : `${dirPath}/${name}`;
 }
@@ -157,7 +164,7 @@ function WorkspaceTree({
             {({ level }) => (
               <div
                 className="flex min-w-0 items-center gap-1.5 py-1.5 pe-2 text-xs text-tertiary"
-                style={{ paddingInlineStart: `${0.25 + (level - 1)}rem` }}
+                style={{ paddingInlineStart: treeRowIndent(level) }}
               >
                 <span aria-hidden="true" className="size-6 shrink-0" />
                 {row.loading ? (
@@ -192,7 +199,7 @@ function WorkspaceTree({
           {({ level, isExpanded }) => (
             <div
               className="flex min-w-0 items-center gap-1.5 pe-2"
-              style={{ paddingInlineStart: `${0.25 + (level - 1)}rem` }}
+              style={{ paddingInlineStart: treeRowIndent(level) }}
             >
               {isDir ? (
                 <AriaButton

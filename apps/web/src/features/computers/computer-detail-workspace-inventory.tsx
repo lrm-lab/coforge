@@ -4,7 +4,9 @@ import { FolderSearch, Trash01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { Popconfirm } from "#src/components/ui/popconfirm";
+import { formatDisplayPath } from "#src/features/agents/display-path";
 import { m } from "#src/paraglide/messages";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { formatCalendarDate } from "#src/lib/dates";
@@ -85,73 +87,88 @@ export function ComputerDetailWorkspaceInventory({
                 </p>
               ) : (
                 deletedCount > 0 && (
-                  <p className="py-3 text-sm text-tertiary">
-                    {m.computer_agent_workspaces_deleted_summary({ count: String(deletedCount) })}
+                  <p className="py-3 text-sm tabular-nums text-tertiary">
+                    {m.computer_agent_workspaces_deleted_summary({
+                      count: deletedCount,
+                    })}
                   </p>
                 )
               )}
               <ul className="divide-y divide-secondary">
-                {snapshot.workspaces.map((workspace) => (
-                  <li
-                    key={workspace.agentId}
-                    className="flex min-w-0 items-center justify-between gap-4 py-3 text-sm"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate font-medium text-primary">
-                          {workspace.displayName}
-                        </span>
-                        <span className="rounded-md bg-secondary px-1.5 py-0.5 text-xs font-medium text-tertiary">
-                          {workspace.state === "deleted"
-                            ? m.computer_agent_workspace_deleted()
-                            : m.computer_agent_workspace_active()}
-                        </span>
+                {snapshot.workspaces.map((workspace) => {
+                  const shownRootPath = formatDisplayPath(workspace.rootPath);
+                  return (
+                    <li
+                      key={workspace.agentId}
+                      className="flex min-w-0 items-center justify-between gap-4 py-3 text-sm"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate font-medium text-primary">
+                            {workspace.displayName}
+                          </span>
+                          <span className="shrink-0 rounded-md bg-secondary px-1.5 py-0.5 text-xs font-medium text-tertiary">
+                            {workspace.state === "deleted"
+                              ? m.computer_agent_workspace_deleted()
+                              : m.computer_agent_workspace_active()}
+                          </span>
+                        </div>
+                        {workspace.status === "present" && (
+                          <>
+                            <p className="mt-1 min-w-0 font-mono text-xs text-tertiary">
+                              {shownRootPath !== workspace.rootPath ? (
+                                <Tooltip title={workspace.rootPath}>
+                                  <TooltipTrigger className="max-w-full min-w-0 rounded-xs text-start outline-focus-ring focus-visible:outline-2">
+                                    <span dir="ltr" className="wrap-anywhere">
+                                      {shownRootPath}
+                                    </span>
+                                  </TooltipTrigger>
+                                </Tooltip>
+                              ) : (
+                                <span dir="ltr" className="wrap-anywhere">
+                                  {workspace.rootPath}
+                                </span>
+                              )}
+                            </p>
+                            <p className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs tabular-nums text-tertiary">
+                              <span>{workspaceStatistics(workspace)}</span>
+                              {hydrated && workspace.modifiedAtMs > 0 && (
+                                <span>
+                                  {m.computer_agent_workspace_modified({
+                                    date: formatCalendarDate(
+                                      new Date(workspace.modifiedAtMs),
+                                      timeZone,
+                                      getLocale(),
+                                    ),
+                                  })}
+                                </span>
+                              )}
+                            </p>
+                          </>
+                        )}
                       </div>
-                      {workspace.status === "present" && (
-                        <>
-                          <p className="mt-1 truncate font-mono text-xs text-tertiary">
-                            {workspace.rootPath}
-                          </p>
-                          <p className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs text-tertiary">
-                            <span>{workspaceStatistics(workspace)}</span>
-                            {hydrated && workspace.modifiedAtMs > 0 && (
-                              <span>
-                                {m.computer_agent_workspace_modified({
-                                  date: formatCalendarDate(
-                                    new Date(workspace.modifiedAtMs),
-                                    timeZone,
-                                    getLocale(),
-                                  ),
-                                })}
-                              </span>
-                            )}
-                          </p>
-                        </>
+                      {canDelete && (
+                        <Popconfirm
+                          title={m.computer_agent_workspace_delete_title({
+                            name: workspace.displayName,
+                          })}
+                          description={m.computer_agent_workspace_delete_description()}
+                          confirmLabel={m.computer_agent_workspace_delete()}
+                          errorMessage={deleteErrorMessage}
+                          placement="bottom end"
+                          fallbackFocus={() => listRef.current}
+                          onConfirm={() => onDelete(workspace.agentId)}
+                        >
+                          <ButtonUtility
+                            color="secondary"
+                            icon={Trash01}
+                            tooltip={m.computer_agent_workspace_delete()}
+                          />
+                        </Popconfirm>
                       )}
-                    </div>
-                    {canDelete && (
-                      // Deleting does not depend on the scan answering, as on an archived Agent's
-                      // profile.
-                      <Popconfirm
-                        title={m.computer_agent_workspace_delete_title({
-                          name: workspace.displayName,
-                        })}
-                        description={m.computer_agent_workspace_delete_description()}
-                        confirmLabel={m.computer_agent_workspace_delete()}
-                        errorMessage={deleteErrorMessage}
-                        placement="bottom end"
-                        fallbackFocus={() => listRef.current}
-                        onConfirm={() => onDelete(workspace.agentId)}
-                      >
-                        <ButtonUtility
-                          color="secondary"
-                          icon={Trash01}
-                          tooltip={m.computer_agent_workspace_delete()}
-                        />
-                      </Popconfirm>
-                    )}
-                  </li>
-                ))}
+                    </li>
+                  );
+                })}
               </ul>
             </>
           ) : (
@@ -165,7 +182,7 @@ export function ComputerDetailWorkspaceInventory({
 /** A present workspace's size and file count as far as the Computer measured them. */
 function workspaceStatistics(workspace: ComputerAgentWorkspaceScan): string {
   const counts = {
-    files: new Intl.NumberFormat(getLocale()).format(workspace.fileCount),
+    files: workspace.fileCount,
     size: formatWorkspaceSize(workspace.totalSizeBytes),
   };
   switch (workspace.statisticsStatus) {

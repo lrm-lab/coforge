@@ -1,7 +1,7 @@
 import { useHydrated } from "@tanstack/react-router";
 
 import { TimeMessage, UsageWindow } from "#src/features/computers/usage-window";
-import { getLocale } from "#src/paraglide/runtime";
+import { formatNumber } from "#src/lib/format-number";
 import { m } from "#src/paraglide/messages";
 
 function contextUsedPercent(usedTokens: number, windowTokens: number): number {
@@ -17,7 +17,6 @@ export function AgentContextSection({
   timeZone?: string | null;
 }) {
   const hydrated = useHydrated();
-  const numberFormat = new Intl.NumberFormat(getLocale());
 
   return (
     <div>
@@ -30,8 +29,8 @@ export function AgentContextSection({
       <p className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs break-words tabular-nums text-tertiary">
         <span>
           {m.agent_context_tokens_of({
-            tokens: numberFormat.format(usage.usedTokens),
-            window: numberFormat.format(usage.windowTokens),
+            tokens: formatNumber(usage.usedTokens),
+            window: formatNumber(usage.windowTokens),
           })}
         </span>
         {hydrated && (

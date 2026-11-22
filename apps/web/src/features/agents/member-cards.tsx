@@ -82,9 +82,11 @@ export function PersonCard({ person, selected }: { person: DirectoryPerson; sele
           {m.member_private_chat()}
         </Button>
       </div>
-      <p className="line-clamp-2 text-sm break-words text-secondary sm:min-h-10">
-        {person.description}
-      </p>
+      {person.description.trim() !== "" && (
+        <p className="line-clamp-2 text-sm break-words whitespace-pre-line text-secondary">
+          {person.description}
+        </p>
+      )}
       {total > 0 && (
         <div className="mt-auto flex justify-end pt-1">
           <Tooltip title={m.member_created_agents_tooltip()} arrow>
@@ -188,8 +190,8 @@ export function AgentCard({
               icon={DotsVertical}
               size="sm"
               color="tertiary"
+              className="any-pointer-coarse:min-h-11 any-pointer-coarse:min-w-11"
               tooltip={m.member_agent_actions({ name: member.displayName })}
-              // Greyed out, per design, if the viewer may neither edit nor delete.
               isDisabled={!canEdit && !onDelete}
             />
             <Dropdown.Popover placement="bottom end" className="w-44">
@@ -201,8 +203,6 @@ export function AgentCard({
               >
                 {canEdit ? <Dropdown.Item id="edit" icon={Edit01} label={m.agent_edit()} /> : null}
                 {onDelete ? (
-                  // A destructive menu item is red text (docs/design/color-status-typography.md);
-                  // the official item colours its label and icon grey, so both go in as children.
                   <Dropdown.Item id="delete" textValue={m.member_agent_delete()}>
                     <span className="flex items-center text-error-primary">
                       <Archive
@@ -218,10 +218,11 @@ export function AgentCard({
           </Dropdown.Root>
         </div>
       </div>
-      {/* Fixed two-line slot so every card in a row lines its footer up; one column needs none. */}
-      <p className="line-clamp-2 text-sm break-words text-secondary sm:min-h-10">
-        {member.description}
-      </p>
+      {member.description.trim() !== "" && (
+        <p className="line-clamp-2 text-sm break-words whitespace-pre-line text-secondary">
+          {member.description}
+        </p>
+      )}
       <div className="mt-auto flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 pt-1 text-sm text-tertiary">
         <span className="flex max-w-full min-w-0 items-center gap-1.5 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-tertiary ring-1 ring-secondary ring-inset">
           <Monitor aria-hidden="true" className="size-3.5 shrink-0" />
