@@ -158,10 +158,16 @@ export async function claimUpgradeActivation(
   if (!journal || journal.to !== currentVersion) return;
   const attempt = await readLocalUpgradeContext(installRoot, journal.request_id);
   if (!attempt || attempt.context.version !== currentVersion) return;
-  const switching = await readUpgradeProgressFile<{ phase: string; generation: string }>(
-    join(attempt.directory, "switching.json"),
-  );
-  if (switching?.phase !== "switching" || switching.generation !== attempt.context.generation)
+  const activated = await readUpgradeProgressFile<{
+    kind: string;
+    generation: string;
+    version: string;
+  }>(join(attempt.directory, "activated.json"));
+  if (
+    activated?.kind !== "activated" ||
+    activated.generation !== attempt.context.generation ||
+    activated.version !== currentVersion
+  )
     return;
   const activation = {
     observedUpgradeRequestId: journal.request_id,

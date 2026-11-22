@@ -37,6 +37,10 @@ impl UpgradeProgress {
         self.write(phase, json!({ "kind": "phase", "phase": phase }));
     }
 
+    pub(crate) fn activated(&self) {
+        self.write("activated", json!({ "kind": "activated" }));
+    }
+
     pub(crate) fn healthy(&self) {
         self.write("healthy", json!({ "kind": "healthy" }));
     }

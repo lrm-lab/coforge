@@ -162,6 +162,9 @@ impl<'r, 'p> ActiveSwitch<'r, 'p> {
         }
         self.say(&format!("Switching to {version}"));
         self.activate(target)?;
+        if let Some(progress) = progress {
+            progress.activated();
+        }
         if plan.supervisor_running {
             self.install_service_definition(target)?;
             self.say(&format!("Starting {version}"));

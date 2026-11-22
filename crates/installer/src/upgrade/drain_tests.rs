@@ -166,7 +166,14 @@ fn check_upgrade_drain_ordering(report_progress: bool) {
         .expect("stopping stage line emitted");
     assert!(drain_idx < stop_idx);
     if report_progress {
-        for name in ["verifying", "waiting", "switching", "healthy", "receipt"] {
+        for name in [
+            "verifying",
+            "waiting",
+            "switching",
+            "activated",
+            "healthy",
+            "receipt",
+        ] {
             let bytes = fs::read(progress.join(format!("{name}.json"))).unwrap();
             let fact: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
             assert_eq!(fact["version"], NEW);

@@ -43,6 +43,12 @@ test("only the first target supervisor can claim the committed activation", asyn
     phase: "switching",
     generation: context.generation,
   });
+  expect(await claimUpgradeActivation(installRoot, version)).toBeUndefined();
+  await writeUpgradeProgressFile(directory, "activated.json", {
+    kind: "activated",
+    generation: context.generation,
+    version,
+  });
   expect(await claimUpgradeActivation(installRoot, "1.0.0")).toBeUndefined();
   const claims = await Promise.all([
     claimUpgradeActivation(installRoot, version),
