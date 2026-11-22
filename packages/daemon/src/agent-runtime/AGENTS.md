@@ -152,17 +152,12 @@ Rules for Agent lifecycle, control, Session state, and Activity in
 
 ## Idle recycle of a cold, large session
 
-- On by default. A native session exceeding 128k tokens recycles once idle past its prompt-cache
-  lifetime (`idleRecycleMinColdGapMs`: Claude Code 60m, Codex 30m, default 60m; Claude 5m cache
+- On by default. A native session exceeding 128k tokens recycles once idle past its
+  cold gap (`idleRecycleMinColdGapMs`: Claude Code 60m, Codex 60m, default 60m; Claude 5m cache
   tier uses 12m, and known-tier sessions past the full gap lower the bar to 64k); warm bloated
   sessions recycle past 250k after 2m quiet or immediately past 500k. `wake-session-recycle.ts`
   owns the decision and env knobs (`docs/observability/agent-status-and-activity/runtime-lifecycle.md`).
   Agent runtime vars override daemon env and provider declarations; only sweep period is daemon-wide.
-- Codex's 30 minutes is shorter on purpose. On this Mac, over three to four days of Codex use,
-  cache hits were nearly complete inside 35 minutes and about half gone after one to three hours.
-  The models were gpt-6.1-sol and gpt-6.1-terra; OpenAI's default prompt cache is at least 30
-  minutes. Raft 1.0.53 names codex in the same recycle, but it only reads Claude's session record,
-  so a Codex session was not actually replaced. Reading the Codex rollout is the extra step.
 - A provider recycles only when it declares `readSessionResumeFacts` or
   `supportsSessionSummaryRecycle` on the provider contract (Claude Code, Codex, Pi, CoForge, Grok,
   OpenCode, and Antigravity); a provider with neither never does. Native transcript facts win when

@@ -1,4 +1,4 @@
-import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import { RUNTIME_PROVIDER, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import type { PromptCacheTier, SessionResumeFacts } from "@lrm/coforge-anvil";
 
 /**
@@ -249,6 +249,7 @@ export type ColdIdleStop = Readonly<{
   sessionId: string;
   idleMs: number;
   priorContextTokens: number;
+  reason?: "idle_process";
 }>;
 
 type ColdIdleSelectionOptions = Readonly<{
@@ -266,6 +267,7 @@ export async function selectColdIdleStops(
   const stops: ColdIdleStop[] = [];
   for (const view of views) {
     const skip = (reason: string) => options.onSkip?.(view.agentId, reason);
+    const isCodex = view.provider === RUNTIME_PROVIDER.CODEX;
     const config = resolveWakeRecycleConfig(
       view.envVars,
       options.processEnv,
@@ -280,7 +282,7 @@ export async function selectColdIdleStops(
         ? typeof options.warmConfig === "object"
           ? options.warmConfig
           : resolveWarmRecycleConfig(view.envVars, options.processEnv)
-        : view.lastContextTokens !== undefined
+        : isCodex || view.lastContextTokens !== undefined
           ? resolveWarmRecycleConfig(view.envVars, options.processEnv)
           : undefined;
     const eventIdleMs =
@@ -311,8 +313,9 @@ export async function selectColdIdleStops(
         facts?.lastActivityAtMs === undefined
           ? undefined
           : Math.max(facts.lastActivityAtMs, view.lastEventAtMs);
-      const contextTokens =
-        facts === undefined ? undefined : (view.lastContextTokens ?? facts.lastContextTokens);
+      const contextTokens = isCodex
+        ? facts?.lastContextTokens
+        : facts && (view.lastContextTokens ?? facts.lastContextTokens);
       if (warm && lastActiveAtMs !== undefined && contextTokens !== undefined) {
         const idleMs = options.nowMs - lastActiveAtMs;
         if (
@@ -335,15 +338,29 @@ export async function selectColdIdleStops(
         contextTokens,
         facts?.cacheTier ?? view.lastCacheTier,
       );
-      if (typeof verdict === "string")
-        skip(verdict === "cache_possibly_warm" ? "recent_activity" : verdict);
-      else
+      if (typeof verdict !== "string") {
         stops.push({
           agentId: view.agentId,
           sessionId: view.sessionId,
           idleMs: verdict.idleMs,
           priorContextTokens: verdict.contextTokens,
         });
+      } else if (
+        verdict === "context_below_threshold" &&
+        isCodex &&
+        lastActiveAtMs !== undefined &&
+        contextTokens !== undefined
+      ) {
+        stops.push({
+          agentId: view.agentId,
+          sessionId: view.sessionId,
+          idleMs: options.nowMs - lastActiveAtMs,
+          priorContextTokens: contextTokens,
+          reason: "idle_process",
+        });
+      } else {
+        skip(verdict === "cache_possibly_warm" ? "recent_activity" : verdict);
+      }
     }
   }
   return stops;

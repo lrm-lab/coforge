@@ -54,6 +54,45 @@ test("the sweep stops a cold, idle, large Agent, which then wakes on its next me
   expect(events).toContain("agent.runtime.cold_idle_stop");
   expect(events).toContain("agent.runtime.wake_recycle");
 });
+test.each([
+  { sessionTokens: 80_000, liveTokens: 150_000, resumes: true },
+  { sessionTokens: 128_003, liveTokens: 80_000, resumes: false },
+])(
+  "the idle Codex stop and wake agree with $sessionTokens recorded tokens",
+  async ({ sessionTokens, liveTokens, resumes }) => {
+    Bun.env[SWEEP_MS] = "5";
+    const facts = { ...COLD, lastContextTokens: sessionTokens };
+    const { result: h } = await run({ provider: "codex", facts }, async (h, records) => {
+      await h.runtime.handleAgentStart(h.intent({ controlEpoch: 1, launchId: "launch-1" }));
+      h.sessions[0]!.emit({ type: "context-usage", usedTokens: liveTokens, windowTokens: 475_000 });
+      setSystemTime(minutes(45));
+      const warmSweep = await logged(records, sweepAfterLaunch);
+      expect(warmSweep.properties).toMatchObject({ agents: 1, stops: 0, skipped_recent_event: 1 });
+      expect(h.sessions[0]!.disposed).toBe(false);
+      expect(h.factReads).toEqual([]);
+
+      setSystemTime(minutes(70));
+      await logged(records, sweepWith(1));
+      expect(h.sessions[0]!.disposed).toBe(true);
+      const stop = records.find(
+        (record) => record.properties.event === "agent.runtime.cold_idle_stop",
+      );
+      expect(stop?.properties).toMatchObject({
+        prior_context_tokens: sessionTokens,
+        session_id: "native-1",
+      });
+      expect(stop?.properties.reason).toBe(resumes ? "idle_process" : undefined);
+      await h.deliver(1);
+      return h;
+    });
+    expect(h.sessions).toHaveLength(2);
+    expect(h.sessions[1]?.options.sessionId).toBe(resumes ? "native-1" : undefined);
+    expect(h.reports.at(-1)?.sessionId).toBe(resumes ? "native-1" : "native-2");
+    expect(h.reports.at(-1)?.replacedSessionId).toBe(resumes ? undefined : "native-1");
+    expect(h.acks).toContain("delivery-1");
+  },
+);
+
 test("a session with no event for an hour is left running when its own record is recent", async () => {
   Bun.env[SWEEP_MS] = "5";
   const facts = { ...COLD, lastActivityAtMs: minutes(80).getTime() };

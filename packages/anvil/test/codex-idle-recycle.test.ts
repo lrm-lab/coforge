@@ -81,7 +81,7 @@ function rolloutPath(home: string, stamp: string, thread = THREAD, extra = ""): 
 
 function usageCount(
   timestamp: string,
-  last: { input_tokens: number; total_tokens: number },
+  last: { input_tokens: number; total_tokens?: number },
   total: { input_tokens: number; total_tokens: number },
 ): string {
   return JSON.stringify({
@@ -186,20 +186,24 @@ function shell(
   return lines;
 }
 
-test("Codex declares a 30 minute cold gap and Claude keeps 60", () => {
-  expect(CODEX_IDLE_RECYCLE_MIN_COLD_GAP_MS).toBe(30 * 60_000);
+test("Codex and Claude declare a 60 minute cold gap", () => {
+  expect(CODEX_IDLE_RECYCLE_MIN_COLD_GAP_MS).toBe(60 * 60_000);
   const codex = new CodexProvider({ host: fixtureCodexHost });
-  expect(codex.idleRecycleMinColdGapMs).toBe(30 * 60_000);
+  expect(codex.idleRecycleMinColdGapMs).toBe(60 * 60_000);
   expect(codex.readSessionResumeFacts).toBeFunction();
   expect(codex.readRecycleBriefing).toBeFunction();
   const claude = new ClaudeCodeProvider({ host: {} as ClaudeRuntimeHost });
   expect(claude.idleRecycleMinColdGapMs).toBe(60 * 60_000);
 });
 
-test("facts come from the last record and the last token_count that has input tokens", async () => {
+test("facts use the last record time and the last request total", async () => {
   const path = rolloutPath("/codex-home", "2026-10-28T01-00-00");
   const text = [
-    tokenCount("2026-10-28T01:00:00.000Z", 10_000),
+    usageCount(
+      "2026-10-28T01:00:00.000Z",
+      { input_tokens: 127_999, total_tokens: 128_003 },
+      { input_tokens: 500_000, total_tokens: 600_000 },
+    ),
     message("2026-10-28T01:40:00.000Z", "user", "still here"),
     tokenCount("2026-10-28T01:41:00.000Z", undefined),
     "{not json",
@@ -215,7 +219,7 @@ test("facts come from the last record and the last token_count that has input to
     }),
   ).toEqual({
     lastActivityAtMs: Date.parse("2026-10-28T01:41:00.000Z"),
-    lastContextTokens: 10_000,
+    lastContextTokens: 128_003,
   });
 });
 
@@ -239,11 +243,11 @@ test("an Agent CODEX_HOME wins, and the newest rollout of the thread is the one 
     }),
   ).toEqual({
     lastActivityAtMs: Date.parse("2026-10-28T03:00:00.000Z"),
-    lastContextTokens: 180_000,
+    lastContextTokens: 180_001,
   });
   expect(await provider.readSessionResumeFacts?.({ sessionId: THREAD })).toEqual({
     lastActivityAtMs: Date.parse("2026-10-28T04:00:00.000Z"),
-    lastContextTokens: 9,
+    lastContextTokens: 10,
   });
 });
 
@@ -276,7 +280,7 @@ test("a missing rollout, a relative CODEX_HOME, a symlink and a bad session id r
     }),
   ).toEqual({
     lastActivityAtMs: Date.parse("2026-10-28T01:00:00.000Z"),
-    lastContextTokens: 180_000,
+    lastContextTokens: 180_001,
   });
 
   const home = "/home/fixture";
@@ -292,7 +296,7 @@ test("a missing rollout, a relative CODEX_HOME, a symlink and a bad session id r
   });
   expect(await fallbackProvider.readSessionResumeFacts?.({ sessionId: THREAD })).toEqual({
     lastActivityAtMs: Date.parse("2026-10-28T01:10:00.000Z"),
-    lastContextTokens: 42_000,
+    lastContextTokens: 42_001,
   });
 });
 
@@ -311,7 +315,7 @@ test("a tail cut on the first line is ignored, and a directory is not a rollout"
     }),
   ).toEqual({
     lastActivityAtMs: Date.parse("2026-10-28T02:00:00.000Z"),
-    lastContextTokens: 180_000,
+    lastContextTokens: 180_001,
   });
 
   const directory = rolloutPath("/only-dir", "2026-10-28T01-00-00");
@@ -389,6 +393,15 @@ test("a synthetic zero token count keeps the real context", async () => {
   const measured = tokenCount("2026-10-28T01:00:00.000Z", 200_000);
   expect(
     await read([
+      usageCount(
+        "2026-10-28T01:00:00.000Z",
+        { input_tokens: 42_000 },
+        { input_tokens: 50_000, total_tokens: 60_000 },
+      ),
+    ]),
+  ).toMatchObject({ lastContextTokens: 42_000 });
+  expect(
+    await read([
       measured,
       usageCount(
         "2026-10-28T01:05:00.000Z",
@@ -416,7 +429,7 @@ test("a synthetic zero token count keeps the real context", async () => {
         { input_tokens: 0, total_tokens: 0 },
       ),
     ]),
-  ).toMatchObject({ lastContextTokens: 200_000 });
+  ).toMatchObject({ lastContextTokens: 200_001 });
 });
 
 test("a shell withholds a secret that is not the final argument, or that is only the working directory", async () => {

@@ -18,8 +18,7 @@ import { readTailLines } from "#src/transcript-tail";
  * usable record means the caller resumes.
  */
 
-/** Prompt-cache lifetime Codex is counted on. OpenAI's default cache is at least 30 minutes. */
-export const CODEX_IDLE_RECYCLE_MIN_COLD_GAP_MS = 30 * 60_000;
+export const CODEX_IDLE_RECYCLE_MIN_COLD_GAP_MS = 60 * 60_000;
 
 /** The tail read for resume facts: the last record and the latest token count sit at the end. */
 const FACTS_TAIL_BYTES = 512 * 1024;
@@ -157,9 +156,9 @@ function contextSample(
   const last = asRecord(info.last_token_usage);
   const lastInput = nonNegative(last?.input_tokens);
   if (lastInput === undefined) return;
-  if (lastInput > 0) return { tokens: lastInput };
-  const total = asRecord(info.total_token_usage);
   const lastTotal = nonNegative(last?.total_tokens) ?? 0;
+  if (lastInput > 0) return { tokens: Math.max(lastInput, lastTotal) };
+  const total = asRecord(info.total_token_usage);
   const totalInput = nonNegative(total?.input_tokens) ?? 0;
   if (lastTotal > 0 && totalInput > 0) return { tokens: lastTotal };
   const window = nonNegative(total?.total_tokens) ?? 0;

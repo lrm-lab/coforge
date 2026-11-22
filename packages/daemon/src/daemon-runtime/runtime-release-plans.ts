@@ -113,6 +113,7 @@ export function coldIdleRuntimePlan(
         session_id: stop.sessionId,
         idle_ms: stop.idleMs,
         prior_context_tokens: stop.priorContextTokens,
+        ...(stop.reason ? { reason: stop.reason } : {}),
       }),
     failure: {
       text: `Stopping the idle ${runtimeName} runtime failed`,

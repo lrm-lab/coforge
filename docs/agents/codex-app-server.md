@@ -31,9 +31,10 @@ Part of [the documentation index](../../README.md). The Codex adapter talks to t
   event itself still reports every time).
 - Idle recycle reads `$CODEX_HOME/sessions/**/rollout-*-<threadId>.jsonl` through the history host.
   An absolute `CODEX_HOME` on the Agent wins; a relative one is ignored. Facts are the last
-  record's timestamp and the last `event_msg` `token_count`'s `info.last_token_usage.input_tokens`.
+  record's timestamp and the last request's `info.last_token_usage.total_tokens`. When a
+  record only has input tokens, use that count.
   The briefing is recent `response_item` messages and tool calls, inside the caller's token budget.
-  Anything unreadable resumes the old session. The cold gap is 30 minutes
+  Anything unreadable resumes the old session. The default cold gap is 60 minutes
   (`CODEX_IDLE_RECYCLE_MIN_COLD_GAP_MS`). The JSONL shape is Codex's internal rollout
   (`RolloutLine` / `RolloutItemWire`, openai/codex main on 2026-10-28), not a stable API.
 - Context usage (`context-usage.ts`): `thread/tokenUsage/updated`'s `tokenUsage.last.totalTokens`

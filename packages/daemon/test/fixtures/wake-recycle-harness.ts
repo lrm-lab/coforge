@@ -66,6 +66,7 @@ export function useWakeRecycleEnvironment() {
 }
 
 export type HarnessOptions = {
+  provider?: AgentRuntimeConfig["provider"];
   seam?: boolean;
   facts?: SessionResumeFacts | undefined;
   briefing?: "fails" | "none";
@@ -125,7 +126,7 @@ export async function harness(options: HarnessOptions = {}) {
   const activityWaiters: Array<{ matches(a: AgentActivity): boolean; done(): void }> = [];
   const factsOf = "facts" in options ? options.facts : COLD;
   const provider: CodeAgentProvider = {
-    provider: "claude-code",
+    provider: options.provider ?? config.provider,
     async createAgentSession(sessionOptions: AgentSessionOptions) {
       if (sessions.length === 0 && options.createGate) {
         createEntered.resolve();
@@ -254,6 +255,7 @@ export async function harness(options: HarnessOptions = {}) {
     computerId: connection.computerId,
     agentId: "agent-a",
     ...config,
+    provider: provider.provider,
     ...overrides,
   });
   return {

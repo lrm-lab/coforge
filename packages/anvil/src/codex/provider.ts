@@ -22,7 +22,6 @@ export class CodexProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.CODEX;
   readonly compactionFailure = "does_not_stick";
   readonly reportsCompaction = true;
-  /** OpenAI's default prompt cache is at least 30 minutes, shorter than Claude's hour. */
   readonly idleRecycleMinColdGapMs = CODEX_IDLE_RECYCLE_MIN_COLD_GAP_MS;
   readonly supportsSessionSummaryRecycle = true;
   readonly #command: readonly string[];
