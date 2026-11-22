@@ -23,7 +23,7 @@
    done
    # Ed25519 private JWK (single-line JSON) for daemon-runtime tokens, plus a
    # stable key id. Bun can generate it on the host through the pinned image:
-   docker run --rm -v "$PWD/secrets:/secrets" oven/bun:1.4.4-alpine bun -e \
+   docker run --rm -v "$PWD/secrets:/secrets" oven/bun:1.4.5-alpine@sha256:da816670775f4c2b4e990b6b1847cf5540dcdc721a42033dd331ce7a88ba6a3b bun -e \
      'const k = await crypto.subtle.generateKey("Ed25519", true, ["sign","verify"]); \
       await Bun.write("/secrets/worker_jwt_private_jwk", JSON.stringify(await crypto.subtle.exportKey("jwk", k)));'
    printf 'coforge-staging\n' > secrets/worker_jwt_key_id

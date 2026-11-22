@@ -1,4 +1,4 @@
-FROM oven/bun:1.4.4-alpine@sha256:4cf82f5686b196504fe119db3fcd9185b191f82ece82c40680e597228ec6070a AS build
+FROM oven/bun:1.4.5-alpine@sha256:da816670775f4c2b4e990b6b1847cf5540dcdc721a42033dd331ce7a88ba6a3b AS build
 
 WORKDIR /app
 ARG COFORGE_BUILD_ID=development
@@ -48,12 +48,12 @@ RUN bun build apps/web/scripts/backfill-artifact-entry-facts.ts --external proxy
   --target bun --outfile apps/web/.ops/backfill-artifact-entry-facts.js
 
 # The migration toolchain only: the schema and migrations it applies join it in the final stage.
-FROM oven/bun:1.4.4-alpine@sha256:4cf82f5686b196504fe119db3fcd9185b191f82ece82c40680e597228ec6070a AS migrate
+FROM oven/bun:1.4.5-alpine@sha256:da816670775f4c2b4e990b6b1847cf5540dcdc721a42033dd331ce7a88ba6a3b AS migrate
 WORKDIR /migrate
 COPY scripts/deploy/prisma-migrate/package.json scripts/deploy/prisma-migrate/bun.lock ./
 RUN bun install --frozen-lockfile --production
 
-FROM oven/bun:1.4.4-alpine@sha256:4cf82f5686b196504fe119db3fcd9185b191f82ece82c40680e597228ec6070a
+FROM oven/bun:1.4.5-alpine@sha256:da816670775f4c2b4e990b6b1847cf5540dcdc721a42033dd331ce7a88ba6a3b
 
 WORKDIR /app
 ARG COFORGE_BUILD_ID=development

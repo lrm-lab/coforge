@@ -181,14 +181,14 @@ jobs:
       - name: Restore the bun binary
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.local/share/mise/installs/bun/1.4.4/bin/bun
-          key: bun-bin-1.4.4-${{ runner.os }}-${{ runner.arch }}-10702245766b225e70bbf6235fd6b47214fd94b4760d00ffaed8ab0df57ac235
+          path: ~/.local/share/mise/installs/bun/1.4.5/bin/bun
+          key: bun-bin-1.4.5-${{ runner.os }}-${{ runner.arch }}-f05d28a3862f4b84395c7fa32480b835dd47482e80b7e7a49a115227f0c06083
 
       # Verified before mise-action runs `mise install` (task #714).
       - name: Verify the restored bun binary
         shell: bash
         run: |
-          bindir="$HOME/.local/share/mise/installs/bun/1.4.4/bin"
+          bindir="$HOME/.local/share/mise/installs/bun/1.4.5/bin"
           for entry in "$bindir"/*; do
             [ -e "$entry" ] || continue
             case "$(basename "$entry")" in
@@ -199,7 +199,7 @@ jobs:
           for f in "$bindir"/*; do
             [ -f "$f" ] || continue
             got="$(sha256sum "$f" 2>/dev/null || shasum -a 256 "$f")"
-            [ "${got%% *}" = "10702245766b225e70bbf6235fd6b47214fd94b4760d00ffaed8ab0df57ac235" ] || { echo "restored $(basename "$f") sha256 mismatch" >&2; exit 1; }
+            [ "${got%% *}" = "f05d28a3862f4b84395c7fa32480b835dd47482e80b7e7a49a115227f0c06083" ] || { echo "restored $(basename "$f") sha256 mismatch" >&2; exit 1; }
           done
           if [ -f "$bindir/bun" ] && [ ! -e "$bindir/bunx" ]; then ln -s bun "$bindir/bunx"; fi
 
@@ -300,14 +300,14 @@ jobs:
       - name: Restore the bun binary
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ~/.local/share/mise/installs/bun/1.4.4/bin/bun
-          key: bun-bin-1.4.4-${{ runner.os }}-${{ runner.arch }}-10702245766b225e70bbf6235fd6b47214fd94b4760d00ffaed8ab0df57ac235
+          path: ~/.local/share/mise/installs/bun/1.4.5/bin/bun
+          key: bun-bin-1.4.5-${{ runner.os }}-${{ runner.arch }}-f05d28a3862f4b84395c7fa32480b835dd47482e80b7e7a49a115227f0c06083
 
       # Verified before mise-action runs `mise install` (task #714).
       - name: Verify the restored bun binary
         shell: bash
         run: |
-          bindir="$HOME/.local/share/mise/installs/bun/1.4.4/bin"
+          bindir="$HOME/.local/share/mise/installs/bun/1.4.5/bin"
           for entry in "$bindir"/*; do
             [ -e "$entry" ] || continue
             case "$(basename "$entry")" in
@@ -318,7 +318,7 @@ jobs:
           for f in "$bindir"/*; do
             [ -f "$f" ] || continue
             got="$(sha256sum "$f" 2>/dev/null || shasum -a 256 "$f")"
-            [ "${got%% *}" = "10702245766b225e70bbf6235fd6b47214fd94b4760d00ffaed8ab0df57ac235" ] || { echo "restored $(basename "$f") sha256 mismatch" >&2; exit 1; }
+            [ "${got%% *}" = "f05d28a3862f4b84395c7fa32480b835dd47482e80b7e7a49a115227f0c06083" ] || { echo "restored $(basename "$f") sha256 mismatch" >&2; exit 1; }
           done
           if [ -f "$bindir/bun" ] && [ ! -e "$bindir/bunx" ]; then ln -s bun "$bindir/bunx"; fi
 
