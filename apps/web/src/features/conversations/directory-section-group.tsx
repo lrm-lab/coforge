@@ -2,10 +2,23 @@ import { ChevronRight } from "@untitledui/icons";
 import { useId, useState, type ReactNode, type TransitionEvent } from "react";
 import { Button } from "#src/components/base/buttons/button";
 import { Fold } from "#src/components/ui/fold";
+import { getLocale } from "#src/paraglide/runtime";
 import { cx } from "#src/utils/cx";
 import type { DirectoryDragActivation } from "./directory-drag";
 
 export const DIRECTORY_INSET = "px-3";
+
+const countFormatters = new Map<string, Intl.NumberFormat>();
+
+function formatSectionCount(count: number): string {
+  const locale = getLocale();
+  let formatter = countFormatters.get(locale);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(locale);
+    countFormatters.set(locale, formatter);
+  }
+  return formatter.format(count);
+}
 
 export function DirectoryEmptyNote({ children }: { children: ReactNode }) {
   return (
@@ -17,6 +30,7 @@ export function DirectoryEmptyNote({ children }: { children: ReactNode }) {
 
 export function DirectorySection({
   label,
+  leading,
   count,
   empty,
   expanded,
@@ -27,6 +41,7 @@ export function DirectorySection({
   children,
 }: {
   label: string;
+  leading?: ReactNode;
   count: number;
   empty?: boolean;
   expanded?: boolean;
@@ -52,19 +67,23 @@ export function DirectorySection({
         aria-hidden="true"
         className={cx(
           "size-3.5 shrink-0 text-fg-quaternary transition-transform duration-(--duration-sm) ease-in-out group-hover/section:text-fg-quaternary_hover motion-reduce:transition-none",
-          expanded && "rotate-90",
+          expanded ? "rotate-90" : "rtl:rotate-180",
         )}
       />
     </span>
   ) : null;
+  const formattedCount = formatSectionCount(count);
   const caption = (
     <span className="flex w-full min-w-0 items-center gap-2">
       <span className="flex min-w-0 items-center gap-1.5">
         {mark}
+        {leading}
         <span className="min-w-0 truncate text-sm font-medium text-primary">{label}</span>
       </span>
       <span className="sr-only">, </span>
-      <span className="shrink-0 text-sm font-normal text-quaternary tabular-nums">{count}</span>
+      <span className="shrink-0 text-sm font-normal text-quaternary tabular-nums">
+        {formattedCount}
+      </span>
     </span>
   );
   const toggle = () => {
@@ -76,8 +95,8 @@ export function DirectorySection({
       <div className={cx(DIRECTORY_INSET, "group/section")}>
         <div
           className={cx(
-            "flex h-9 items-center gap-1 rounded-md pl-2 transition-colors duration-100 ease-out",
-            trailing ? "pr-1" : "pr-2",
+            "flex h-9 items-center gap-1 rounded-md ps-2 transition-colors duration-100 ease-out",
+            trailing ? "pe-1" : "pe-2",
             onToggle ? "group-hover/section:bg-primary_hover" : "cursor-pointer",
           )}
         >
@@ -91,13 +110,13 @@ export function DirectorySection({
                 aria-expanded={expanded}
                 aria-controls={listId}
                 onPress={toggle}
-                className="min-w-0 flex-1 justify-start pr-2 pl-0 hover:bg-transparent! [&_[data-text]]:min-w-0 [&_[data-text]]:flex-1 [&_[data-text]]:text-left"
+                className="min-w-0 flex-1 justify-start ps-0 pe-2 hover:bg-transparent! [&_[data-text]]:min-w-0 [&_[data-text]]:flex-1 [&_[data-text]]:text-start"
               >
                 {caption}
               </Button>,
             )
           ) : (
-            <span {...headingProps} className="flex h-full min-w-0 flex-1 items-center pr-2">
+            <span {...headingProps} className="flex h-full min-w-0 flex-1 items-center pe-2">
               {caption}
             </span>
           )}

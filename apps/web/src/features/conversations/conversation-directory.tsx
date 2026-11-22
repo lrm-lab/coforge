@@ -282,8 +282,10 @@ export function ConversationDirectory({
       />
       <div className="pb-3" />
       <ChatSectionCreateMenu
+        onCreateChannel={onCreateChannel}
         onCreate={newSection}
-        disabled={groups.status !== "ready" || drag.dragging}
+        disabled={drag.dragging || (!onCreateChannel && !sectionsReady)}
+        createDisabled={!sectionsReady}
       />
       {editingSection && (
         <ChatSectionDialog

@@ -1,30 +1,21 @@
-:root {
-  --cascade-menu-surface: rgba(255, 255, 255, 0.96);
-  --cascade-menu-border: rgba(0, 0, 0, 0.14);
-  --cascade-menu-ink: #263140;
-  --cascade-menu-row-hover: rgba(15, 23, 42, 0.07);
-  --cascade-menu-quiet: #7a8491;
-  --cascade-menu-chevron: #94a3b8;
-  --cascade-menu-shadow:
-    0 18px 34px rgba(15, 23, 42, 0.12), 0 2px 4px rgba(15, 23, 42, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.74);
-  --cascade-menu-opacity-duration: 170ms;
-  --cascade-menu-transform-duration: 360ms;
-  --cascade-menu-transform-ease: cubic-bezier(0.2, 1.45, 0.35, 1);
-  --cascade-menu-folder-duration: 460ms;
-  --cascade-menu-theme-duration: 500ms;
+:root,
+.dark-mode {
+  --cascade-menu-surface: var(--color-bg-primary_alt);
+  --cascade-menu-border: var(--color-border-secondary);
+  --cascade-menu-ink: var(--color-text-primary);
+  --cascade-menu-row-hover: var(--color-bg-active);
+  --cascade-menu-quiet: var(--color-text-tertiary);
+  --cascade-menu-chevron: var(--color-fg-quaternary);
+  --cascade-menu-shadow: 0 12px 24px -4px rgb(15 23 42 / 0.12), 0 4px 8px -2px rgb(15 23 42 / 0.06);
+  --cascade-menu-opacity-duration: 150ms;
+  --cascade-menu-transform-duration: 180ms;
+  --cascade-menu-transform-ease: var(--ease-out);
+  --cascade-menu-folder-duration: 240ms;
+  --cascade-menu-theme-duration: 200ms;
 }
 
 .dark-mode {
-  --cascade-menu-surface: rgba(34, 34, 34, 0.96);
-  --cascade-menu-border: rgba(255, 255, 255, 0.12);
-  --cascade-menu-ink: #e4e4e4;
-  --cascade-menu-row-hover: rgba(255, 255, 255, 0.08);
-  --cascade-menu-quiet: #9a9a9a;
-  --cascade-menu-chevron: #8a8a8a;
-  --cascade-menu-shadow:
-    0 18px 34px rgba(0, 0, 0, 0.42), 0 2px 4px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --cascade-menu-shadow: 0 14px 28px -4px rgb(0 0 0 / 0.45), 0 4px 10px -2px rgb(0 0 0 / 0.28);
 }
 
 @position-try --cascade-submenu-below-start {
@@ -61,19 +52,19 @@
 
 @keyframes cascade-root-pop-in {
   from {
-    transform: translateY(-6px) scale(0.96, 0.86);
+    transform: translateY(-0.25rem) scale(0.96);
   }
   to {
-    transform: translateY(0) scale(1, 1);
+    transform: translateY(0) scale(1);
   }
 }
 
 @keyframes cascade-root-pop-out {
   from {
-    transform: translateY(0) scale(1, 1);
+    transform: translateY(0) scale(1);
   }
   to {
-    transform: translateY(-6px) scale(0.96, 0.86);
+    transform: translateY(-0.25rem) scale(0.96);
   }
 }
 
@@ -82,19 +73,18 @@
 }
 
 .cascade-menu-level {
-  min-width: 210px;
-  max-width: 260px;
+  min-width: 13rem;
+  max-width: min(18rem, calc(100vw - 1rem));
   width: max-content;
-  max-height: min(420px, calc(100vh - 24px));
+  max-height: min(26rem, calc(100dvh - 1.5rem));
+  overflow-x: hidden;
   overflow-y: auto;
-  padding: 6px;
-  border-radius: 12px;
+  padding: 0.375rem;
+  border-radius: 0.75rem;
   border: 1px solid var(--cascade-menu-border);
   background-color: var(--cascade-menu-surface);
   color: var(--cascade-menu-ink);
   box-shadow: var(--cascade-menu-shadow);
-  backdrop-filter: blur(18px) saturate(135%);
-  -webkit-backdrop-filter: blur(18px) saturate(135%);
   will-change: transform, opacity;
   transition:
     background-color var(--cascade-menu-theme-duration) var(--ease-out),
@@ -113,8 +103,8 @@
 
 .cascade-menu-level[data-cascade-level="root"][data-exiting] {
   animation:
-    cascade-level-fade-out var(--duration-sm-out) var(--ease-in) both,
-    cascade-root-pop-out var(--duration-sm-out) var(--ease-in) both;
+    cascade-level-fade-out 130ms var(--ease-out) both,
+    cascade-root-pop-out 130ms var(--ease-out) both;
 }
 
 .cascade-menu-level[popover] {
@@ -174,18 +164,18 @@
 }
 
 .cascade-menu-title {
-  font-size: 11px;
+  font-size: 0.75rem;
   font-weight: 600;
   line-height: 1.3;
   color: var(--cascade-menu-quiet);
-  padding: 4px 8px 2px;
+  padding: 0.25rem 0.5rem 0.125rem;
   transition: color var(--cascade-menu-theme-duration) var(--ease-out);
 }
 
 .cascade-menu-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0.125rem;
   outline: none;
   user-select: none;
 }
@@ -194,12 +184,12 @@
   position: relative;
   display: flex;
   align-items: center;
-  min-height: 32px;
+  min-height: 2rem;
   height: auto;
-  border-radius: 8px;
-  padding: 4px 8px;
-  gap: 8px;
-  font-size: 14px;
+  border-radius: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  gap: 0.5rem;
+  font-size: 0.875rem;
   font-weight: 500;
   color: var(--cascade-menu-ink);
   background-color: transparent;
@@ -218,8 +208,8 @@
 }
 
 .cascade-menu-icon {
-  width: 18px;
-  height: 18px;
+  width: 1.125rem;
+  height: 1.125rem;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
@@ -229,9 +219,9 @@
 }
 
 .cascade-menu-chevron {
-  margin-left: auto;
-  width: 16px;
-  height: 16px;
+  margin-inline-start: auto;
+  width: 1rem;
+  height: 1rem;
   flex-shrink: 0;
   color: var(--cascade-menu-chevron);
   transition: color 120ms var(--ease-out);

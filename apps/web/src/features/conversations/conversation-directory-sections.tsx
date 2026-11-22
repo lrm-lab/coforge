@@ -4,7 +4,12 @@ import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { EMPTY_SECTION_HIDDEN_CLASS } from "#src/features/settings/hide-empty-sidebar-sections";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
-import { ChatSectionMenu, SectionSortMenu } from "./chat-section-menu";
+import {
+  ChatSectionMenu,
+  ChatSectionTouchMenu,
+  SectionSortMenu,
+  type ChatSectionMenuProps,
+} from "./chat-section-menu";
 import {
   chatSectionSortModes,
   type ChatSection,
@@ -29,16 +34,23 @@ import type { DirectoryLayout } from "./pinned-conversations";
 
 type DirectoryDrag = ReturnType<typeof useDirectoryDrag>;
 
-function sortControl<Mode extends ChatSectionSortMode>(
+function sectionTrailing<Mode extends ChatSectionSortMode>(
   count: number,
-  name: string,
-  mode: Mode,
-  modes: readonly Mode[],
-  onSort: (next: Mode) => void,
+  menuProps: ChatSectionMenuProps<Mode>,
 ) {
-  return count > 0 ? (
-    <SectionSortMenu name={name} mode={mode} modes={modes} onSort={onSort} />
-  ) : undefined;
+  return (
+    <span className="flex shrink-0 items-center gap-0.5 pointer-coarse:gap-1.5">
+      {count > 0 && (
+        <SectionSortMenu
+          name={menuProps.name}
+          mode={menuProps.sortMode}
+          modes={menuProps.sortModes}
+          onSort={menuProps.onSort}
+        />
+      )}
+      <ChatSectionTouchMenu {...menuProps} />
+    </span>
+  );
 }
 
 export function ConversationDirectorySections({
@@ -105,7 +117,17 @@ export function ConversationDirectorySections({
     >
       <DirectorySectionList ripple={drag.ripple}>
         {sectionOrder.map((key) => {
-          if (key === "pinned")
+          if (key === "pinned") {
+            const pinnedMenu: ChatSectionMenuProps<ChatSectionSortMode> = {
+              name: m.conversation_pinned_section(),
+              sortMode: builtInSortModes.pinned,
+              sortModes: chatSectionSortModes,
+              hideEmpty,
+              createDisabled: !sectionsReady,
+              onSort: (mode) => onChangeBuiltInSortMode("pinned", mode),
+              onHideEmptyChange,
+              onCreate: onCreateSection,
+            };
             return (
               <DirectorySortableSection
                 ripple={drag.ripple}
@@ -130,26 +152,9 @@ export function ConversationDirectorySections({
                     headingProps={headingProps}
                     expanded={!drag.sortingSections && !collapsed.includes("pinned")}
                     onToggle={() => onToggleBuiltIn("pinned")}
-                    trailing={sortControl(
-                      base.pinned.length,
-                      m.conversation_pinned_section(),
-                      builtInSortModes.pinned,
-                      chatSectionSortModes,
-                      (mode) => onChangeBuiltInSortMode("pinned", mode),
-                    )}
+                    trailing={sectionTrailing(base.pinned.length, pinnedMenu)}
                     wrapTitle={(toggleButton) => (
-                      <ChatSectionMenu
-                        name={m.conversation_pinned_section()}
-                        sortMode={builtInSortModes.pinned}
-                        sortModes={chatSectionSortModes}
-                        hideEmpty={hideEmpty}
-                        createDisabled={!sectionsReady}
-                        onSort={(mode) => onChangeBuiltInSortMode("pinned", mode)}
-                        onHideEmptyChange={onHideEmptyChange}
-                        onCreate={onCreateSection}
-                      >
-                        {toggleButton}
-                      </ChatSectionMenu>
+                      <ChatSectionMenu {...pinnedMenu}>{toggleButton}</ChatSectionMenu>
                     )}
                   >
                     <div className={DIRECTORY_INSET}>
@@ -172,7 +177,22 @@ export function ConversationDirectorySections({
                 )}
               </DirectorySortableSection>
             );
-          if (key === "channels")
+          }
+          if (key === "channels") {
+            const channelsMenu = {
+              name: m.channels_title(),
+              sortMode: builtInSortModes.channels,
+              sortModes: naturalSectionSortModes,
+              hideEmpty,
+              showJoinedOnly,
+              createDisabled: !sectionsReady,
+              onCreateChannel,
+              onSort: (mode: BuiltInSectionSortModes["channels"]) =>
+                onChangeBuiltInSortMode("channels", mode),
+              onShowJoinedOnlyChange,
+              onHideEmptyChange,
+              onCreate: onCreateSection,
+            };
             return (
               <DirectorySortableSection
                 ripple={drag.ripple}
@@ -189,29 +209,9 @@ export function ConversationDirectorySections({
                     headingProps={headingProps}
                     expanded={!drag.sortingSections && !collapsed.includes("channels")}
                     onToggle={() => onToggleBuiltIn("channels")}
-                    trailing={sortControl(
-                      base.channels.length,
-                      m.channels_title(),
-                      builtInSortModes.channels,
-                      naturalSectionSortModes,
-                      (mode) => onChangeBuiltInSortMode("channels", mode),
-                    )}
+                    trailing={sectionTrailing(base.channels.length, channelsMenu)}
                     wrapTitle={(toggleButton) => (
-                      <ChatSectionMenu
-                        name={m.channels_title()}
-                        sortMode={builtInSortModes.channels}
-                        sortModes={naturalSectionSortModes}
-                        hideEmpty={hideEmpty}
-                        showJoinedOnly={showJoinedOnly}
-                        createDisabled={!sectionsReady}
-                        onCreateChannel={onCreateChannel}
-                        onSort={(mode) => onChangeBuiltInSortMode("channels", mode)}
-                        onShowJoinedOnlyChange={onShowJoinedOnlyChange}
-                        onHideEmptyChange={onHideEmptyChange}
-                        onCreate={onCreateSection}
-                      >
-                        {toggleButton}
-                      </ChatSectionMenu>
+                      <ChatSectionMenu {...channelsMenu}>{toggleButton}</ChatSectionMenu>
                     )}
                   >
                     <div className={DIRECTORY_INSET}>
@@ -232,7 +232,19 @@ export function ConversationDirectorySections({
                 )}
               </DirectorySortableSection>
             );
-          if (key === "agents")
+          }
+          if (key === "agents") {
+            const agentsMenu = {
+              name: m.messages_agents_action(),
+              sortMode: builtInSortModes.agents,
+              sortModes: naturalSectionSortModes,
+              hideEmpty,
+              createDisabled: !sectionsReady,
+              onSort: (mode: BuiltInSectionSortModes["agents"]) =>
+                onChangeBuiltInSortMode("agents", mode),
+              onHideEmptyChange,
+              onCreate: onCreateSection,
+            };
             return (
               <DirectorySortableSection
                 ripple={drag.ripple}
@@ -249,26 +261,9 @@ export function ConversationDirectorySections({
                     headingProps={headingProps}
                     expanded={!drag.sortingSections && !collapsed.includes("agents")}
                     onToggle={() => onToggleBuiltIn("agents")}
-                    trailing={sortControl(
-                      base.agents.length,
-                      m.messages_agents_action(),
-                      builtInSortModes.agents,
-                      naturalSectionSortModes,
-                      (mode) => onChangeBuiltInSortMode("agents", mode),
-                    )}
+                    trailing={sectionTrailing(base.agents.length, agentsMenu)}
                     wrapTitle={(toggleButton) => (
-                      <ChatSectionMenu
-                        name={m.messages_agents_action()}
-                        sortMode={builtInSortModes.agents}
-                        sortModes={naturalSectionSortModes}
-                        hideEmpty={hideEmpty}
-                        createDisabled={!sectionsReady}
-                        onSort={(mode) => onChangeBuiltInSortMode("agents", mode)}
-                        onHideEmptyChange={onHideEmptyChange}
-                        onCreate={onCreateSection}
-                      >
-                        {toggleButton}
-                      </ChatSectionMenu>
+                      <ChatSectionMenu {...agentsMenu}>{toggleButton}</ChatSectionMenu>
                     )}
                   >
                     <div className={DIRECTORY_INSET}>
@@ -289,19 +284,32 @@ export function ConversationDirectorySections({
                 )}
               </DirectorySortableSection>
             );
+          }
           const section = sections.find((entry) => `custom:${entry.id}` === key);
           if (!section) return null;
           const keys = base[key] ?? [];
-          const label = `${section.emoji ? `${section.emoji} ` : ""}${section.name}`;
+          const accessibleLabel = `${section.emoji ? `${section.emoji} ` : ""}${section.name}`;
           const saving = savingSections.has(section.id);
           const sortSection = (sortMode: ChatSectionSortMode) =>
             onSortCustomSection(section, sortMode);
+          const customMenu: ChatSectionMenuProps<ChatSectionSortMode> = {
+            name: section.name,
+            sortMode: section.sortMode,
+            sortModes: chatSectionSortModes,
+            hideEmpty,
+            createDisabled: !sectionsReady,
+            onSort: sortSection,
+            onHideEmptyChange,
+            onEdit: () => onEditSection(section),
+            onCreate: onCreateSection,
+            onDelete: () => onDeleteSection(section),
+          };
           return (
             <DirectorySortableSection
               ripple={drag.ripple}
               key={key}
               id={key}
-              label={label}
+              label={accessibleLabel}
               disabled={saving || reordering}
               className={
                 directorySectionHideable({
@@ -315,7 +323,14 @@ export function ConversationDirectorySections({
             >
               {(headingProps) => (
                 <DirectorySection
-                  label={label}
+                  label={section.name}
+                  leading={
+                    section.emoji ? (
+                      <span aria-hidden="true" className="shrink-0">
+                        {section.emoji}
+                      </span>
+                    ) : undefined
+                  }
                   count={keys.length}
                   empty={keys.length === 0}
                   headingProps={headingProps}
@@ -323,28 +338,9 @@ export function ConversationDirectorySections({
                     !drag.sortingSections && (!section.collapsed || drag.hoveredSection === key)
                   }
                   onToggle={() => onToggleCustomSection(section)}
-                  trailing={sortControl(
-                    keys.length,
-                    section.name,
-                    section.sortMode,
-                    chatSectionSortModes,
-                    sortSection,
-                  )}
+                  trailing={sectionTrailing(keys.length, customMenu)}
                   wrapTitle={(toggleButton) => (
-                    <ChatSectionMenu
-                      name={section.name}
-                      sortMode={section.sortMode}
-                      sortModes={chatSectionSortModes}
-                      hideEmpty={hideEmpty}
-                      createDisabled={!sectionsReady}
-                      onSort={sortSection}
-                      onHideEmptyChange={onHideEmptyChange}
-                      onEdit={() => onEditSection(section)}
-                      onCreate={onCreateSection}
-                      onDelete={() => onDeleteSection(section)}
-                    >
-                      {toggleButton}
-                    </ChatSectionMenu>
+                    <ChatSectionMenu {...customMenu}>{toggleButton}</ChatSectionMenu>
                   )}
                 >
                   <div className={DIRECTORY_INSET}>

@@ -310,6 +310,7 @@
   "chat_section_menu": "{name} section options",
   "chat_section_move": "Move to section",
   "chat_section_name": "Name",
+  "chat_section_name_required": "Enter a section name",
   "chat_section_emoji": "Emoji",
   "chat_section_emoji_none": "No emoji",
   "chat_section_save_error": "The section could not be saved. Please try again.",

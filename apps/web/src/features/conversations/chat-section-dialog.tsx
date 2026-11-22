@@ -37,6 +37,7 @@ export function ChatSectionDialog({
   const busy = useRef(false);
   const actions = useSidebarActions();
   const parsed = chatSectionFields.safeParse({ name, emoji });
+  const blankName = !deleting && name.length > 0 && name.trim().length === 0;
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (busy.current || (!deleting && !parsed.success)) return;
@@ -103,6 +104,8 @@ export function ChatSectionDialog({
                   onChange={setName}
                   maxLength={18}
                   isRequired
+                  isInvalid={blankName}
+                  hint={blankName ? m.chat_section_name_required() : undefined}
                   autoFocus
                   isDisabled={saving}
                   className="min-w-0 flex-1"

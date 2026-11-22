@@ -372,7 +372,7 @@ const DropdownItem = ({
                 </span>
               )}
 
-              <span className="grow truncate">
+              <span className="min-w-0 grow truncate">
                 {label || (typeof children === "function" ? children(state) : children)}
               </span>
 
