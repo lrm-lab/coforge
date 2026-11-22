@@ -19,21 +19,8 @@ import {
   seedChannel,
 } from "./helpers/activity-inbox-e2e";
 
-/**
- * The rows below Pinned: since the Activity redesign (task #30) they group by day, so this test's
- * rows (all seeded today) sit under the "Today" heading's section, not an ol named "Activity".
- */
 const todayRows = JSON.stringify('ol[aria-label="Today"] > li');
 
-/**
- * The Activity page's Pinned section in a real browser: a pinned channel lists under Pinned,
- * before the day's rows, Done takes it out like every row, and something new lists it again; it
- * opens beside the list. Split from `e2e-activity-inbox.e2e.ts`, whose setup it shares
- * (`helpers/activity-inbox-e2e.ts`).
- *
- * Opt-in like the other browser E2Es: real local Web + `agent-browser`. Screenshots are written
- * under `.artifacts/e2e/activity-inbox/` (`pinned.png`).
- */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/activity-inbox");
 
@@ -41,16 +28,12 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = `activity-inbox-pinned-${process.pid}`;
   const { browser, evaluate } = browserSession(browserPath, session);
-  /** The text of every row under `selector` that previews this test's messages. */
   const rowsIn = (selector: string) =>
     `[...document.querySelectorAll(${selector})].map((row) => row.textContent + " " + [...row.querySelectorAll("[aria-label]")].map((el) => el.getAttribute("aria-label")).join(" ")).filter((text) => text.includes("E2E pinned"))`;
-  /** The seeded channel, once seeded: the cleanup unpins it. */
   let channelId = "";
   try {
     const { workspaceId, workspace } = await devBrowserWorkspace(db);
     const workspacePath = `/en/w/${workspace.slug}`;
-    // A followed thread in the channel, and a newer top-level message that mentions the viewer.
-    // The channel's id is the helper's: it keys the channel by the workspace it is seeded in.
     const seeded = await seedChannel(db, {
       workspaceId,
       key: "e2e-activity-inbox:pinned-",
@@ -62,7 +45,6 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
     });
     channelId = seeded.channelId;
     const { viewer, newestId: helloId } = seeded;
-    // Every run starts unpinned, then pins the channel.
     await db.conversationPin.deleteMany({ where: { conversationId: channelId } });
     await db.conversationPin.create({
       data: { conversationId: channelId, memberId: viewer.id, workspaceId, sortOrder: 0 },
@@ -76,9 +58,7 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
       "--fn",
       `${rowsIn(pinnedItems)}.length === 1 && ${rowsIn(todayRows)}.length === 1 && ${pageHydrated}`,
     );
-    // The channel's own row is under Pinned, and only there; its followed thread is below.
     const [pinnedRow] = await evaluate<string[]>(rowsIn(pinnedItems));
-    // The bare channel name, with the mention and new-message badges.
     expect(pinnedRow).toContain("e2e-activity-pinned");
     expect(pinnedRow).not.toContain("#e2e-activity-pinned");
     expect(pinnedRow).toContain("@you");
@@ -87,12 +67,9 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
     expect(pinnedRow).toContain("1 new");
     const [threadRow] = await evaluate<string[]>(rowsIn(todayRows));
     expect(threadRow).toContain("E2E pinned root");
-    // Its channel by group avatar and name, no `#` (task #55).
     expect(threadRow).toContain("e2e-activity-pinned · ");
     expect(threadRow).not.toContain("#e2e-activity-pinned");
     expect(threadRow).not.toContain("E2E pinned hello");
-    // Pinned, its rows, then the day's heading and its rows: since the Activity redesign (task
-    // #30) the rest of the list groups by day, and every seeded message falls on "Today".
     expect(
       await evaluate<boolean>(`(() => {
         const pinned = document.querySelector('ol[aria-label="Pinned"]');
@@ -109,7 +86,6 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
     ).toBe(true);
     await browser("screenshot", join(artifacts, "pinned.png"));
 
-    // Mentions has no Pinned section: the pinned channel lists among its rows.
     await browser("find", "role", "tab", "click", "--name", "Mentions");
     await browser("wait", "--fn", `location.search.includes("filter=mentions")`);
     await browser(
@@ -122,13 +98,9 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
     ).toBe(true);
     await browser("find", "role", "tab", "click", "--name", "All");
     await browser("wait", "--fn", `${rowsIn(pinnedItems)}.length === 1`);
-    // The header counts the whole workspace, which other tests share: each step is checked against
-    // this reading, the pinned channel and its thread both active.
     const active = await evaluate<number>(activeCount);
     expect(active).toBeGreaterThanOrEqual(2);
 
-    // Done takes the pinned row out like every row (Raft's Activity rule): the projection hides
-    // it at once, and the refetch's page no longer lists it, so the Pinned section goes away.
     await evaluate(`(() => {
       const row = [...document.querySelectorAll(${pinnedItems})].find((item) =>
         item.textContent.includes("E2E pinned hello"));
@@ -147,7 +119,6 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
     expect(await evaluate<string[]>(rowsIn(pinnedItems))).toEqual([]);
     expect(await evaluate<number>(activeCount)).toBe(active - 1);
 
-    // Something new in the conversation lists it again under Pinned; the header's count follows.
     const peerMember = await db.conversationMember.findFirstOrThrow({
       where: { conversationId: channelId, userId: seededUuid("e2e-activity-inbox:peer") },
     });
@@ -162,8 +133,6 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
       },
     });
     await browser("reload");
-    // Today's list too: right after hydration the rows are one undated list until the days are
-    // named (task #64), so reading "Today" before then finds nothing.
     await browser(
       "wait",
       "--fn",
@@ -175,8 +144,6 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
       expect.stringContaining("E2E pinned root"),
     ]);
 
-    // A pinned row opens beside the list and is marked as the open one. The row now previews the
-    // new message, and its link is clicked rather than an element with that text.
     await evaluate(`[...document.querySelectorAll(${pinnedItems})]
       .find((item) => item.textContent.includes("E2E pinned again"))
       .querySelector("a")
@@ -188,8 +155,6 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
       "--fn",
       `[...document.querySelectorAll(${pinnedItems})].some((item) => item.querySelector("a")?.getAttribute("aria-current") === "true" && item.textContent.includes("E2E pinned again"))`,
     );
-    // Dragged to its narrowest, the list keeps each row's title (its marks shorten to "@" and
-    // the count) and never scrolls sideways (task #399).
     await evaluate(
       `(document.querySelector('[data-activity-list] > [role="separator"]').focus(), true)`,
     );
@@ -223,7 +188,6 @@ test("a pinned channel lists under Pinned, before the day's rows; Done takes it 
     await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
   } finally {
     await browser("close").catch(() => undefined);
-    // Leave the dev user's sidebar without this test's pin.
     if (channelId)
       await db.conversationPin
         .deleteMany({ where: { conversationId: channelId } })

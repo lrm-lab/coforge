@@ -137,8 +137,6 @@ test("a pinned conversation Done hides from the Pinned section while the write i
   };
   const pending = startActivityDone(new Map(), pinnedDone);
 
-  // The row is shown once, in the Pinned section; hiding it hides it there, and the header's
-  // "N active" counts it out with the row.
   expect(
     projectPendingActivityCompletions(data as never, pendingActivityDoneItems(pending)).pages[0],
   ).toMatchObject({ pinned: [], unreadItemCount: 0, activeItemCount: 0 });
@@ -181,10 +179,8 @@ const firstPage = (name: string, offset: number, next?: string) => ({
 });
 type TestPage = ReturnType<typeof firstPage>;
 
-/** The Activity list's key, without the page type its options tag it with. */
 const listKey = [...ACTIVITY_INBOX_LISTS_KEY, "workspace-1", "all"];
 
-/** The Activity list's Query, its reads stood in for by `read`. */
 function activityList(queryClient: QueryClient, read: () => Promise<TestPage>) {
   const options = activityInboxQuery("workspace-1", "all");
   return new InfiniteQueryObserver<TestPage, Error, InfiniteData<TestPage>>(queryClient, {
@@ -215,7 +211,6 @@ test("a first page read for a new message survives a next page that was loading"
   const unsubscribe = observer.subscribe(() => {});
   const loadingNext = observer.fetchNextPage();
 
-  // The new message's first page lands while the next page is still loading.
   queryClient.setQueryData<InfiniteData<TestPage>>(queryKey, (current) =>
     current
       ? { ...current, pages: [firstPage("first, after the message", 5, "cursor-2")] }
