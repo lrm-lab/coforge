@@ -10,10 +10,13 @@ import {
   readUpgradeProgressFile,
   UPGRADE_EVIDENCE_WINDOW_MS,
   UPGRADE_PHASE_FILES,
+  upgradeReadyReceiptDirectory,
+  upgradeReadyReceiptName,
+  type UpgradeActivation,
   writeUpgradeProgressFile,
 } from "#src/platform/computer-upgrade-progress";
 
-type Receipt = { receipt: string; expiresAt: number };
+type Receipt = { receipt: string; expiresAt: number; delivered?: true };
 
 type Attempt = { reported: Set<string>; expiresAt: number };
 
@@ -34,7 +37,7 @@ export class UpgradeProgressReporter {
       signal: AbortSignal;
     },
   ) {
-    this.#receiptDirectory = join(options.stateDirectory, "upgrade-ready-receipts");
+    this.#receiptDirectory = upgradeReadyReceiptDirectory(options.stateDirectory);
     options.signal.addEventListener("abort", () => clearTimeout(this.#timer), { once: true });
   }
 
@@ -55,14 +58,13 @@ export class UpgradeProgressReporter {
     this.#schedule(0);
   }
 
-  async acceptReceipt(receipt: string) {
+  async acceptReceipt(receipt: string, activation?: UpgradeActivation) {
     if (!receipt || receipt.length > 2048 || this.options.signal.aborted) return;
     const data: Receipt = { receipt, expiresAt: Date.now() + UPGRADE_EVIDENCE_WINDOW_MS };
-    await writeUpgradeProgressFile(
-      this.#receiptDirectory,
-      `${Bun.hash(receipt).toString(16)}.json`,
-      data,
-    );
+    const name = activation
+      ? upgradeReadyReceiptName(activation)
+      : `${Bun.hash(receipt).toString(16)}.json`;
+    await writeUpgradeProgressFile(this.#receiptDirectory, name, data, !activation);
     this.#schedule(0);
   }
 
@@ -86,16 +88,26 @@ export class UpgradeProgressReporter {
     try {
       const receipts = await readdir(this.#receiptDirectory).catch(() => []);
       for (const name of receipts) {
-        if (!/^[a-f0-9]+\.json$/.test(name) || this.options.signal.aborted) continue;
+        if (!/^(?:[a-f0-9]+|ready-[a-f0-9-]+)\.json$/.test(name) || this.options.signal.aborted)
+          continue;
         const path = join(this.#receiptDirectory, name);
         const receipt = await readUpgradeProgressFile<Receipt>(path, 4096);
-        if (
-          !receipt ||
-          receipt.expiresAt <= Date.now() ||
-          (await this.#post({ kind: "ready", receipt: receipt.receipt }))
-        ) {
+        if (!receipt || receipt.expiresAt <= Date.now()) {
           await rm(path, { force: true }).catch(() => {});
-        } else pendingReceipts = true;
+        } else if (!receipt.delivered) {
+          if (!(await this.#post({ kind: "ready", receipt: receipt.receipt }))) {
+            pendingReceipts = true;
+          } else if (name.startsWith("ready-")) {
+            await writeUpgradeProgressFile(this.#receiptDirectory, name, {
+              ...receipt,
+              delivered: true,
+            } satisfies Receipt).catch(() => {
+              pendingReceipts = true;
+            });
+          } else {
+            await rm(path, { force: true }).catch(() => {});
+          }
+        }
       }
       for (const [requestId, attempt] of this.#attempts) {
         if (this.options.signal.aborted) break;
@@ -181,17 +193,18 @@ export function startUpgradeProgressReporter(
     signal,
   });
   void reporter.resume(lifecycle.recoveredUpgradeRequestIds ?? []).catch(() => {});
+  const activation = readWorkspaceUpgradeActivation(
+    installRoot,
+    stateDirectory,
+    connection,
+    version,
+    startedAt,
+    signal,
+  );
   return {
-    activation: readWorkspaceUpgradeActivation(
-      installRoot,
-      stateDirectory,
-      connection,
-      version,
-      startedAt,
-      signal,
-    ),
+    activation,
     acceptReceipt: (receipt: string) => {
-      void reporter.acceptReceipt(receipt).catch(() => {});
+      void activation.then((scope) => reporter.acceptReceipt(receipt, scope)).catch(() => {});
     },
     requestUpgrade: async (...args: Parameters<typeof requestUpgrade>) => {
       try {

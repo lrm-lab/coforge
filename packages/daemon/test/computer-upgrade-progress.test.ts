@@ -8,6 +8,9 @@ import {
   readLocalUpgradeContext,
   snapshotUpgradeBindings,
   writeUpgradeProgressFile,
+  upgradeReadyReceiptDirectory,
+  upgradeReadyReceiptName,
+  type UpgradeActivation,
 } from "../src/platform/computer-upgrade-progress";
 import { LocalDaemonLauncher } from "../src/daemon-host/launcher";
 import { DaemonConfigStore } from "../src/persistence/daemon-config";
@@ -137,9 +140,33 @@ test("workspace processes can recover the same activation after a process exits 
   expect(await readUpgradeActivation(installRoot, version, completedAt - 1)).toBeUndefined();
 });
 
+async function persistFixtureReady(
+  installRoot: string,
+  stateDirectory: string,
+  workspaceId: string,
+  activation: UpgradeActivation,
+) {
+  const abort = new AbortController();
+  try {
+    await new UpgradeProgressReporter({
+      installRoot,
+      stateDirectory,
+      workspaceId,
+      endpoint: new URL("http://127.0.0.1"),
+      apiKey: "fixture",
+      signal: abort.signal,
+    }).acceptReceipt("fixture-signed-ready", activation);
+  } finally {
+    abort.abort();
+  }
+}
+
 for (const mode of [
   "same Coordinator",
   "restarted Coordinator",
+  "workspace exit before cloud ready",
+  "first workspace exit before cloud ready",
+  "workspace exit with the same Coordinator",
   "explicit stop",
   "detach and rebind",
 ] as const) {
@@ -159,7 +186,8 @@ for (const mode of [
       upgradeActivationGeneration: context.generation,
     };
     await mkdir(stateDirectory);
-    await writeFile(pathFor(beta.workspaceId), "blocked");
+    const initialExit = mode === "first workspace exit before cloud ready";
+    if (!initialExit) await writeFile(pathFor(beta.workspaceId), "blocked");
     const evidence = { generation: context.generation, version, at: Date.now() - 10_000 };
     await writeUpgradeProgressFile(installRoot, journalName, {
       request_id: requestId,
@@ -189,9 +217,8 @@ for (const mode of [
         {
           start(binding, options) {
             const path = pathFor(binding.workspaceId);
-            return recovery.start(binding, options?.reconciling === true, async (arm) => {
+            return recovery.start(binding, options?.reconciling === true, path, async () => {
               await new DaemonConfigStore(path).save(binding);
-              await arm();
               const child = spawnWorkspaceActivation(installRoot, version, path);
               children.set(binding.workspaceId, child);
               const launcher = new LocalDaemonLauncher({
@@ -219,15 +246,32 @@ for (const mode of [
             await recovery.discard(binding.workspaceId, preserve);
             live.delete(binding.workspaceId);
           },
-          instance: async (binding) => live.get(binding.workspaceId) ?? null,
+          instance: async (binding) => {
+            const child = children.get(binding.workspaceId);
+            return child?.exitCode === null && child.signalCode === null
+              ? (live.get(binding.workspaceId) ?? null)
+              : null;
+          },
         },
       );
       return { supervisor, recovery };
     }
     const { supervisor, recovery } = await createCoordinator(Date.now() - 1000);
-    await expect(supervisor.recover()).rejects.toThrow("Workspace recovery incomplete");
+    const initial = supervisor.recover();
+    if (initialExit) await initial;
+    else await expect(initial).rejects.toThrow("Workspace recovery incomplete");
     expect(await workspaceActivationResult(children.get(alpha.workspaceId)!)).toEqual(activation);
-    expect(children.has(beta.workspaceId)).toBeFalse();
+    if (initialExit) {
+      const first = children.get(beta.workspaceId)!;
+      first.kill();
+      await first.exited;
+    } else expect(children.has(beta.workspaceId)).toBeFalse();
+    await persistFixtureReady(
+      installRoot,
+      pathFor(alpha.workspaceId),
+      alpha.workspaceId,
+      activation,
+    );
     expect(recovery.pendingWorkspaceIds()).toEqual([beta.workspaceId]);
 
     const settled = { ...evidence, at: Date.now() };
@@ -238,10 +282,23 @@ for (const mode of [
       outcome: "promoted",
     });
     await rm(join(installRoot, journalName));
-    await rm(pathFor(beta.workspaceId));
-    if (mode === "same Coordinator") {
+    if (!initialExit) await rm(pathFor(beta.workspaceId));
+    if (mode === "same Coordinator" || mode === "workspace exit with the same Coordinator") {
+      if (mode === "workspace exit with the same Coordinator") {
+        await supervisor.reconcile(recovery.pendingWorkspaceIds());
+        const failed = children.get(beta.workspaceId)!;
+        failed.kill();
+        await failed.exited;
+      }
       await supervisor.reconcile(recovery.pendingWorkspaceIds());
       expect(await workspaceActivationResult(children.get(beta.workspaceId)!)).toEqual(activation);
+      expect(recovery.pendingWorkspaceIds()).toEqual([beta.workspaceId]);
+      await persistFixtureReady(
+        installRoot,
+        pathFor(beta.workspaceId),
+        beta.workspaceId,
+        activation,
+      );
       expect(recovery.pendingWorkspaceIds()).toEqual([]);
     } else {
       if (mode === "explicit stop") await supervisor.command("stop", beta.workspaceId);
@@ -251,6 +308,18 @@ for (const mode of [
           makeSelfClient: () => ({ detach: async () => ({ ok: true, value: "key_revoked" }) }),
         });
         expect(detached.detached).toBeTrue();
+      }
+      if (mode === "workspace exit before cloud ready") {
+        await supervisor.reconcile(recovery.pendingWorkspaceIds());
+        const failed = children.get(beta.workspaceId)!;
+        const receipt = join(
+          upgradeReadyReceiptDirectory(pathFor(beta.workspaceId)),
+          upgradeReadyReceiptName(activation),
+        );
+        expect(await Bun.file(receipt).exists()).toBeFalse();
+        failed.kill();
+        await failed.exited;
+        expect(recovery.pendingWorkspaceIds()).toEqual([beta.workspaceId]);
       }
       await supervisor.shutdown();
       const restarted = await createCoordinator(Date.now());
@@ -265,8 +334,26 @@ for (const mode of [
         await restarted.supervisor.configure(beta);
       }
       const betaActivation = await workspaceActivationResult(children.get(beta.workspaceId)!);
-      expect(betaActivation).toEqual(mode === "restarted Coordinator" ? activation : null);
+      const restored =
+        mode === "restarted Coordinator" ||
+        mode === "workspace exit before cloud ready" ||
+        initialExit;
+      expect(betaActivation).toEqual(restored ? activation : null);
+      if (restored)
+        await persistFixtureReady(
+          installRoot,
+          pathFor(beta.workspaceId),
+          beta.workspaceId,
+          activation,
+        );
       expect(restarted.recovery.pendingWorkspaceIds()).toEqual([]);
+    }
+    if (mode === "workspace exit before cloud ready") {
+      const afterReady = await createCoordinator(Date.now());
+      await afterReady.supervisor.recover();
+      expect(await workspaceActivationResult(children.get(alpha.workspaceId)!)).toBeNull();
+      expect(await workspaceActivationResult(children.get(beta.workspaceId)!)).toBeNull();
+      expect(afterReady.recovery.pendingWorkspaceIds()).toEqual([]);
     }
     expect(
       await runWorkspaceActivation(installRoot, version, pathFor(alpha.workspaceId)),
@@ -301,7 +388,11 @@ test("the drain snapshot preserves running, stopped and unconfirmed workspaces",
 });
 
 test("a rejected detail write leaves the signed ready receipt available to the next process", async () => {
-  const { installRoot, stateDirectory, workspaceId } = await fixture();
+  const { installRoot, stateDirectory, workspaceId, requestId, context } = await fixture();
+  const activation = {
+    observedUpgradeRequestId: requestId,
+    upgradeActivationGeneration: context.generation,
+  };
   const unavailable = Promise.withResolvers<void>();
   const delivered = Promise.withResolvers<unknown>();
   let first = true;
@@ -330,7 +421,7 @@ test("a rejected detail write leaves the signed ready receipt available to the n
   };
   try {
     const before = new UpgradeProgressReporter({ ...options, signal: stopped.signal });
-    await before.acceptReceipt("fixture-ready-authorization");
+    await before.acceptReceipt("fixture-ready-authorization", activation);
     await unavailable.promise;
     stopped.abort();
     const after = new UpgradeProgressReporter({ ...options, signal: resumed.signal });
@@ -339,6 +430,17 @@ test("a rejected detail write leaves the signed ready receipt available to the n
       kind: "ready",
       receipt: "fixture-ready-authorization",
     });
+    const path = join(
+      upgradeReadyReceiptDirectory(stateDirectory),
+      upgradeReadyReceiptName(activation),
+    );
+    const until = Date.now() + 1000;
+    let receipt;
+    do {
+      receipt = (await Bun.file(path).json()) as { delivered?: boolean };
+      if (!receipt.delivered) await Bun.sleep(10);
+    } while (!receipt.delivered && Date.now() < until);
+    expect(receipt.delivered).toBeTrue();
   } finally {
     stopped.abort();
     resumed.abort();

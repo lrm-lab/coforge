@@ -8,6 +8,14 @@ export type UpgradeActivation = {
   upgradeActivationGeneration: string;
 };
 
+export function upgradeReadyReceiptDirectory(stateDirectory: string) {
+  return join(stateDirectory, "upgrade-ready-receipts");
+}
+
+export function upgradeReadyReceiptName(activation: UpgradeActivation) {
+  return `ready-${activation.observedUpgradeRequestId.toLowerCase()}-${activation.upgradeActivationGeneration.toLowerCase()}.json`;
+}
+
 export const UPGRADE_EVIDENCE_WINDOW_MS = 600_000;
 export const UPGRADE_PHASE_FILES = [
   "downloading",

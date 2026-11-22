@@ -29,7 +29,7 @@ export function startSupervisorWorkspace({
 }): WorkspaceProcesses["start"] {
   return (binding, options = {}) => {
     const directory = workspaceDirectory(binding.workspaceId);
-    return upgradeRecovery.start(binding, options.reconciling === true, async (arm) => {
+    return upgradeRecovery.start(binding, options.reconciling === true, directory, async () => {
       // A degraded Workspace must fail fast, not spend up to 30s waiting for local RPC the OS
       // unit will never open: the replacement child would observe the same latch and exit 0
       // (see `guardWorkspaceRunnerStart`). Waiting out that readiness budget delayed every
@@ -51,7 +51,6 @@ export function startSupervisorWorkspace({
       }
       await new DaemonConfigStore(directory).save(workspaceDaemonConfig(binding));
       const instance = workspaceInstance(binding.workspaceId);
-      await arm();
       const processId = await instance.ensureStarted();
       const observed = await instance.identity();
       if (!observed?.active || observed.mainPid !== processId)
