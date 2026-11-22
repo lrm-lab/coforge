@@ -42,7 +42,6 @@ async function withMember(run: (context: WorkspaceUserContext) => Promise<void>)
   }
 }
 
-/** Centrifugo's positions as a fake that notes each read, in `steps` beside the onboarding's. */
 function recordedStreams(steps: string[]) {
   const reads: string[][] = [];
   return {
@@ -118,7 +117,6 @@ test("a list that fails answers with its own error, and the others still answer"
     expect(refused.directPreferences).toEqual({ error: { code: "TEMPORARILY_UNAVAILABLE" } });
     expect(refused.saved).toEqual({ value: { streamPositions: {}, entries: [] } });
 
-    // An unexpected failure is answered as a failed call is: an id to find it in the logs by.
     const broken = await readChatLists(context, ["directPreferences", "sectionOrder"], {
       streams: null,
       onboard: () => Promise.reject(new Error("boom")),

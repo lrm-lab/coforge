@@ -18,8 +18,6 @@ import { listUserSavedMessages } from "./saved-messages.server";
 
 type SignalChannel = "workspace" | "user";
 
-/** The signal channels that keep each list live, whose positions its read carries: the
- * Workspace's carries public channels' facts, the viewer's own everything personal. */
 const LIVE_ON: Record<ChatListRead, readonly SignalChannel[]> = {
   channels: ["workspace", "user"],
   channelNames: ["workspace", "user"],
@@ -30,8 +28,6 @@ const LIVE_ON: Record<ChatListRead, readonly SignalChannel[]> = {
   sectionOrder: ["user"],
 };
 
-/** Each list's read, in the shape its own server function answered with before (less the
- * positions, which `readChatLists` adds). The DM list waits for `onboarded`, as its own read did. */
 function listReaders(
   { db, workspaceId, user }: WorkspaceUserContext,
   onboarded: Promise<unknown> | undefined,
@@ -66,7 +62,6 @@ function listReaders(
 
 type Readers = ReturnType<typeof listReaders>;
 
-/** One list's answer: what it read, or the error its own call would have failed with. */
 type ChatListResult<Value> = { value: Value } | { error: { code: AppErrorCode; errorId?: string } };
 
 type ChatListResults = {
@@ -79,7 +74,6 @@ async function settle<Value>(read: () => Promise<Value>): Promise<ChatListResult
   try {
     return { value: await read() };
   } catch (cause) {
-    // Answered and logged as a failed call would be (`publicServerFunctionErrors`).
     const error = toPublicServerError(cause);
     if (!isAppError(error)) throw error;
     if (error !== cause) recordServerFnError(cause);
@@ -87,12 +81,6 @@ async function settle<Value>(read: () => Promise<Value>): Promise<ChatListResult
   }
 }
 
-/**
- * The lists named, read together: the Workspace membership was checked once (the caller's
- * middleware), the signal channels' positions are read once before any list (`chatStreamPositions`),
- * and each list carries those of the channels that keep it live (`LIVE_ON`), as its own read did
- * (`readAfterStreamPositions`). A list's failure is its own; the others still answer.
- */
 export async function readChatLists(
   context: WorkspaceUserContext,
   lists: readonly ChatListRead[],
@@ -103,9 +91,6 @@ export async function readChatLists(
   }: { streams?: CentrifugoStreams | null; onboard?: () => Promise<unknown> } = {},
 ): Promise<ChatListResults> {
   const wanted = [...new Set(lists)];
-  // Before the positions, as the DM list's own read did: it may start the viewer's DM with the
-  // Workspace's assistant, whose announcement the positions then include. Its failure is the DM
-  // list's alone.
   const onboarded = wanted.includes("directPreferences") ? onboard() : undefined;
   await onboarded?.catch(() => undefined);
   const signalChannels: Record<SignalChannel, string> = {
