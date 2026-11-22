@@ -31,11 +31,14 @@ Part of [the documentation index](../../README.md). The Codex adapter talks to t
   event itself still reports every time).
 - Idle recycle reads `$CODEX_HOME/sessions/**/rollout-*-<threadId>.jsonl` through the history host.
   An absolute `CODEX_HOME` on the Agent wins; a relative one is ignored. Facts are the last
-  record's timestamp and the last request's `info.last_token_usage.total_tokens`. When a
-  record only has input tokens, use that count.
+  record's timestamp and the latest request's positive `info.last_token_usage.total_tokens`.
+  If the latest request has only input tokens, discard the earlier rollout count and use a
+  Daemon summary for the same session whose context reading was observed at or after that request.
+  Without either reading, the sweep skips the session and the next wake resumes its thread.
+  Rate-limit refreshes and empty compaction readings keep the previous reading. Positive compaction
+  estimates and full-window markers still supply a count.
   The briefing is recent `response_item` messages and tool calls, inside the caller's token budget.
-  Anything unreadable resumes the old session. The default cold gap is 60 minutes
-  (`CODEX_IDLE_RECYCLE_MIN_COLD_GAP_MS`). The JSONL shape is Codex's internal rollout
-  (`RolloutLine` / `RolloutItemWire`, openai/codex main on 2026-10-28), not a stable API.
+  The default cold gap is 60 minutes (`CODEX_IDLE_RECYCLE_MIN_COLD_GAP_MS`). Codex uses its
+  internal rollout format (`RolloutLine` / `RolloutItemWire`, openai/codex main on 2026-10-28).
 - Context usage (`context-usage.ts`): `thread/tokenUsage/updated`'s `tokenUsage.last.totalTokens`
   against `modelContextWindow`, as Raft 1.0.59 reads it. Never `total`, which is cumulative.

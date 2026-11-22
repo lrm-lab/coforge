@@ -9,17 +9,13 @@ import {
   type AgentStartIntent,
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
-import type {
-  AgentRuntimeEvent,
-  AgentSessionOptions,
-  CodeAgentProvider,
-  SessionResumeFacts,
-} from "@lrm/coforge-anvil";
+import type { AgentRuntimeEvent, AgentSessionOptions, CodeAgentProvider } from "@lrm/coforge-anvil";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import { createCodeAgentProvider } from "#src/code-agent/registry";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { supportsSessionResume } from "#src/daemon-runtime/cold-idle-sweep";
 import { DaemonRuntime, type DaemonConfig } from "#src/daemon-runtime/runtime";
+import { AgentStateDb, writeMeta } from "#src/persistence/agent-state-db";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 import { captureDaemonLogs } from "./log-capture";
 
@@ -89,7 +85,7 @@ test("shipped provider registry enables idle recycle for Raft-aligned runtimes p
 
 async function createRuntimeHarness(options: {
   provider: RuntimeProvider;
-  nativeFacts?: () => Promise<SessionResumeFacts | undefined>;
+  nativeFacts?: CodeAgentProvider["readSessionResumeFacts"];
 }) {
   setSystemTime(START);
   const connection: DaemonConfig = {
@@ -319,41 +315,161 @@ test("compaction clears stale session summary context tokens so a compacted sess
   });
 });
 
-test("Codex falls back to persisted session summary when native rollout facts are unavailable", async () => {
-  Bun.env[SWEEP_MS] = "5";
-  const { result: h } = await captureDaemonLogs(async (records) => {
-    const h = await createRuntimeHarness({
-      provider: RUNTIME_PROVIDER.CODEX,
-      nativeFacts: async () => undefined,
+async function codexInputOnlyRollout() {
+  const codexHome = join(tempDir, "codex");
+  const directory = join(codexHome, "sessions", "2026", "11", "19");
+  await mkdir(directory, { recursive: true });
+  const lines = [{ input_tokens: 200_000, total_tokens: 210_000 }, { input_tokens: 170_000 }].map(
+    (last_token_usage, index) =>
+      JSON.stringify({
+        timestamp: minutes(index).toISOString(),
+        type: "event_msg",
+        payload: { type: "token_count", info: { last_token_usage } },
+      }),
+  );
+  lines.push(
+    JSON.stringify({
+      timestamp: minutes(3).toISOString(),
+      type: "event_msg",
+      payload: { type: "token_count", rate_limits: { primary: { used_percent: 1 } } },
+    }),
+  );
+  await writeFile(
+    join(directory, "rollout-2026-11-19T00-00-00-native-1.jsonl"),
+    lines.join("\n") + "\n",
+  );
+  const codex = createCodeAgentProvider(RUNTIME_PROVIDER.CODEX);
+  return ({ sessionId }: { sessionId: string }) =>
+    codex.readSessionResumeFacts!({
+      sessionId,
+      envVars: { CODEX_HOME: codexHome },
     });
-    try {
-      await h.runtime.handleAgentStart(h.intent());
-      h.sessions[0]!.runTurn((emit) => {
-        emit({
-          type: "context-usage",
-          usedTokens: 190_000,
-          windowTokens: 400_000,
+}
+
+test.each([
+  ["no reading", false],
+  ["an earlier reading", true],
+] as const)(
+  "Codex sweep skips an input-only latest request with %s in its summary",
+  async (_summary, earlierReading) => {
+    Bun.env[SWEEP_MS] = "5";
+    const nativeFacts = await codexInputOnlyRollout();
+    await captureDaemonLogs(async (records) => {
+      const h = await createRuntimeHarness({ provider: RUNTIME_PROVIDER.CODEX, nativeFacts });
+      try {
+        await h.runtime.handleAgentStart(h.intent());
+        if (earlierReading) {
+          h.sessions[0]!.runTurn((emit) =>
+            emit({ type: "context-usage", usedTokens: 210_000, windowTokens: 400_000 }),
+          );
+          setSystemTime(minutes(2));
+          h.sessions[0]!.runTurn(() => {});
+        }
+        setSystemTime(minutes(90));
+        const sweep = await waitForLog(records, sweepAfterLaunch);
+        expect(sweep.properties).toMatchObject({
+          stops: 0,
+          skipped_session_facts_unavailable: 1,
         });
+        expect(h.sessions[0]!.disposed).toBe(false);
+      } finally {
+        await h.runtime.stop();
+      }
+    });
+  },
+);
+
+test.each([
+  ["no reading", false],
+  ["an untimed legacy reading", true],
+] as const)(
+  "Codex wake resumes the original thread with %s in its summary",
+  async (_summary, legacySummary) => {
+    const nativeFacts = await codexInputOnlyRollout();
+    await captureDaemonLogs(async (records) => {
+      const h = await createRuntimeHarness({ provider: RUNTIME_PROVIDER.CODEX, nativeFacts });
+      try {
+        if (legacySummary) {
+          const db = AgentStateDb.open(join(tempDir, "state"), "agent-a");
+          try {
+            writeMeta(
+              db.database,
+              "sessionSummary",
+              JSON.stringify({
+                sessionId: "native-1",
+                provider: RUNTIME_PROVIDER.CODEX,
+                lastActivityAtMs: minutes(2).getTime(),
+                lastContextTokens: 210_000,
+                updatedAtMs: minutes(2).getTime(),
+              }),
+            );
+          } finally {
+            db.close();
+          }
+        }
+        setSystemTime(minutes(90));
+        await h.runtime.handleAgentStart(
+          h.intent({ sessionId: "native-1", sessionMode: "resume" }),
+        );
+        expect(h.sessions[0]?.options.sessionId).toBe("native-1");
+        expect(h.sessions[0]?.options.sessionMode).toBe("resume");
+        expect(
+          records.find((r) => r.properties.event === "agent.runtime.wake_recycle")?.properties,
+        ).toMatchObject({ outcome: "resume", reason: "session_facts_unavailable" });
+      } finally {
+        await h.runtime.stop();
+      }
+    });
+  },
+);
+
+test.each(["missing rollout", "input-only latest request"] as const)(
+  "Codex uses its session summary with %s",
+  async (rollout) => {
+    const nativeFacts =
+      rollout === "missing rollout" ? async () => undefined : await codexInputOnlyRollout();
+    Bun.env[SWEEP_MS] = "5";
+    const { result: h } = await captureDaemonLogs(async (records) => {
+      const h = await createRuntimeHarness({
+        provider: RUNTIME_PROVIDER.CODEX,
+        nativeFacts,
       });
+      try {
+        await h.runtime.handleAgentStart(h.intent());
+        setSystemTime(minutes(1));
+        h.sessions[0]!.runTurn((emit) => {
+          emit({
+            type: "context-usage",
+            usedTokens: 190_000,
+            windowTokens: 400_000,
+          });
+        });
 
-      setSystemTime(minutes(90));
-      await waitForLog(records, sweepWith(1));
-      expect(h.sessions[0]!.disposed).toBe(true);
+        setSystemTime(minutes(90));
+        await waitForLog(records, sweepWith(1));
+        expect(h.sessions[0]!.disposed).toBe(true);
 
-      await h.deliver(1);
-      return h;
-    } finally {
-      await h.runtime.stop();
-    }
-  });
+        await h.deliver(1);
+        expect(
+          records.find((r) => r.properties.event === "agent.runtime.cold_idle_stop")?.properties,
+        ).toMatchObject({ prior_context_tokens: 190_000 });
+        expect(
+          records.find((r) => r.properties.event === "agent.runtime.wake_recycle")?.properties,
+        ).toMatchObject({ outcome: "recycle", prior_context_tokens: 190_000 });
+        return h;
+      } finally {
+        await h.runtime.stop();
+      }
+    });
 
-  expect(h.sessions).toHaveLength(2);
-  expect(h.sessions[1]!.options.sessionId).toBeUndefined();
-  expect(h.reports.at(-1)).toMatchObject({
-    sessionId: "native-2",
-    replacedSessionId: "native-1",
-  });
-});
+    expect(h.sessions).toHaveLength(2);
+    expect(h.sessions[1]!.options.sessionId).toBeUndefined();
+    expect(h.reports.at(-1)).toMatchObject({
+      sessionId: "native-2",
+      replacedSessionId: "native-1",
+    });
+  },
+);
 
 test("Antigravity recycles immediately on live warm bloat (>500k context) and respects explicit resumePrompt", async () => {
   Bun.env[SWEEP_MS] = "5";

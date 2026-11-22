@@ -9,6 +9,7 @@ export type SessionSummaryRecord = Readonly<{
   provider: string;
   lastActivityAtMs: number;
   lastContextTokens?: number;
+  lastContextObservedAtMs?: number;
   windowTokens?: number;
   updatedAtMs: number;
 }>;
@@ -60,12 +61,14 @@ function parseSessionSummaryRecord(raw: string | undefined): SessionSummaryRecor
     const updatedAtMs = nonNegativeSafeInt(parsed.updatedAtMs);
     if (lastActivityAtMs === undefined || updatedAtMs === undefined) return undefined;
     const lastContextTokens = positiveSafeInt(parsed.lastContextTokens);
+    const lastContextObservedAtMs = nonNegativeSafeInt(parsed.lastContextObservedAtMs);
     const windowTokens = positiveSafeInt(parsed.windowTokens);
     return {
       sessionId: parsed.sessionId,
       provider: parsed.provider,
       lastActivityAtMs,
       ...(lastContextTokens !== undefined ? { lastContextTokens } : {}),
+      ...(lastContextObservedAtMs !== undefined ? { lastContextObservedAtMs } : {}),
       ...(windowTokens !== undefined ? { windowTokens } : {}),
       updatedAtMs,
     };
@@ -93,6 +96,9 @@ export class AgentSessionSummaryLedger {
     return {
       lastActivityAtMs: record.lastActivityAtMs,
       lastContextTokens: record.lastContextTokens,
+      ...(record.lastContextObservedAtMs !== undefined
+        ? { lastContextObservedAtMs: record.lastContextObservedAtMs }
+        : {}),
     };
   }
 
@@ -104,6 +110,12 @@ export class AgentSessionSummaryLedger {
     const observedAtMs = nonNegativeSafeInt(input.observedAtMs) ?? nowMs;
     const previous = this.read();
     const sameSession = previous?.sessionId === input.sessionId;
+    if (
+      sameSession &&
+      previous.lastContextObservedAtMs !== undefined &&
+      observedAtMs < previous.lastContextObservedAtMs
+    )
+      return previous;
     const lastActivityAtMs = sameSession
       ? Math.max(previous.lastActivityAtMs, observedAtMs)
       : observedAtMs;
@@ -113,6 +125,7 @@ export class AgentSessionSummaryLedger {
       sameSession &&
       previous.provider === input.provider &&
       previous.lastContextTokens === usedTokens &&
+      previous.lastContextObservedAtMs === observedAtMs &&
       previous.windowTokens === windowTokens &&
       previous.lastActivityAtMs === lastActivityAtMs
     )
@@ -122,6 +135,7 @@ export class AgentSessionSummaryLedger {
       provider: input.provider,
       lastActivityAtMs,
       lastContextTokens: usedTokens,
+      lastContextObservedAtMs: observedAtMs,
       ...(windowTokens !== undefined ? { windowTokens } : {}),
       updatedAtMs: nowMs,
     };
@@ -136,12 +150,14 @@ export class AgentSessionSummaryLedger {
     const sameSession = previous?.sessionId === input.sessionId;
     const lastActivityAtMs = sameSession ? Math.max(previous.lastActivityAtMs, nowMs) : nowMs;
     const lastContextTokens = positiveSafeInt(input.tokensAfter);
+    const lastContextObservedAtMs = lastContextTokens === undefined ? undefined : nowMs;
     const windowTokens =
       positiveSafeInt(input.windowTokens) ?? (sameSession ? previous.windowTokens : undefined);
     if (
       sameSession &&
       previous.provider === input.provider &&
       previous.lastContextTokens === lastContextTokens &&
+      previous.lastContextObservedAtMs === lastContextObservedAtMs &&
       previous.windowTokens === windowTokens &&
       previous.lastActivityAtMs === lastActivityAtMs
     )
@@ -151,6 +167,7 @@ export class AgentSessionSummaryLedger {
       provider: input.provider,
       lastActivityAtMs,
       ...(lastContextTokens !== undefined ? { lastContextTokens } : {}),
+      ...(lastContextObservedAtMs !== undefined ? { lastContextObservedAtMs } : {}),
       ...(windowTokens !== undefined ? { windowTokens } : {}),
       updatedAtMs: nowMs,
     };
@@ -166,6 +183,7 @@ export class AgentSessionSummaryLedger {
     const sameSession = previous?.sessionId === input.sessionId;
     const lastActivityAtMs = sameSession ? Math.max(previous.lastActivityAtMs, atMs) : atMs;
     const lastContextTokens = sameSession ? previous.lastContextTokens : undefined;
+    const lastContextObservedAtMs = sameSession ? previous.lastContextObservedAtMs : undefined;
     const windowTokens = sameSession ? previous.windowTokens : undefined;
     if (
       sameSession &&
@@ -178,6 +196,7 @@ export class AgentSessionSummaryLedger {
       provider: input.provider,
       lastActivityAtMs,
       ...(lastContextTokens !== undefined ? { lastContextTokens } : {}),
+      ...(lastContextObservedAtMs !== undefined ? { lastContextObservedAtMs } : {}),
       ...(windowTokens !== undefined ? { windowTokens } : {}),
       updatedAtMs: nowMs,
     };

@@ -100,7 +100,13 @@ export async function resolveSessionResumeFacts(
     native.lastActivityAtMs !== undefined && summary.lastActivityAtMs !== undefined
       ? Math.max(native.lastActivityAtMs, summary.lastActivityAtMs)
       : (native.lastActivityAtMs ?? summary.lastActivityAtMs);
-  const lastContextTokens = native.lastContextTokens ?? summary.lastContextTokens;
+  const summaryCoversMissingContext =
+    native.lastContextMissingAtMs === undefined ||
+    (summary.lastContextObservedAtMs !== undefined &&
+      summary.lastContextObservedAtMs >= native.lastContextMissingAtMs);
+  const lastContextTokens =
+    native.lastContextTokens ??
+    (summaryCoversMissingContext ? summary.lastContextTokens : undefined);
   const cacheTier = native.cacheTier ?? summary.cacheTier;
   return {
     ...(lastActivityAtMs !== undefined ? { lastActivityAtMs } : {}),

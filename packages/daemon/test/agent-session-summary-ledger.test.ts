@@ -36,6 +36,7 @@ test("AgentSessionSummaryLedger persists context usage across reopen and matches
     provider: "antigravity",
     lastActivityAtMs: 1_700_000_000_000,
     lastContextTokens: 180_000,
+    lastContextObservedAtMs: 1_700_000_000_000,
     windowTokens: 1_000_000,
     updatedAtMs: 1_700_000_001_000,
   });
@@ -46,6 +47,7 @@ test("AgentSessionSummaryLedger persists context usage across reopen and matches
   expect(ledger2.resumeFacts("sess-1")).toEqual({
     lastActivityAtMs: 1_700_000_000_000,
     lastContextTokens: 180_000,
+    lastContextObservedAtMs: 1_700_000_000_000,
   });
   expect(ledger2.resumeFacts("sess-other")).toBeUndefined();
   db2.close();
@@ -67,7 +69,7 @@ test("AgentSessionSummaryLedger keeps lastActivityAtMs monotonic, resets on sess
   ledger.recordContextUsage({
     sessionId: "sess-a",
     provider: "grok",
-    usedTokens: 210_000,
+    usedTokens: 200_000,
     windowTokens: 256_000,
     observedAtMs: 1_500,
     nowMs: 2_500,
@@ -84,6 +86,7 @@ test("AgentSessionSummaryLedger keeps lastActivityAtMs monotonic, resets on sess
   expect(ledger.resumeFacts("sess-a")).toEqual({
     lastActivityAtMs: 5_000,
     lastContextTokens: 210_000,
+    lastContextObservedAtMs: 2_000,
   });
 
   ledger.recordCompaction({
@@ -96,6 +99,7 @@ test("AgentSessionSummaryLedger keeps lastActivityAtMs monotonic, resets on sess
   expect(ledger.resumeFacts("sess-a")).toEqual({
     lastActivityAtMs: 6_000,
     lastContextTokens: 48_000,
+    lastContextObservedAtMs: 6_000,
   });
 
   ledger.recordCompaction({
@@ -157,6 +161,7 @@ test("AgentSessionSummaryLedger ignores invalid inputs and recovers from corrupt
   expect(ledger.resumeFacts("sess-1")).toEqual({
     lastActivityAtMs: 10_000,
     lastContextTokens: 150_000,
+    lastContextObservedAtMs: 10_000,
   });
 
   ledger.clear();
@@ -179,6 +184,7 @@ test("AgentContexts reads and records session summary facts best-effort", () => 
   expect(contexts.sessionResumeFacts("agent-4", "pi-sess-1")).toEqual({
     lastActivityAtMs: 1_000,
     lastContextTokens: 240_000,
+    lastContextObservedAtMs: 1_000,
   });
 
   contexts.recordSessionActivity("agent-4", {
@@ -190,6 +196,7 @@ test("AgentContexts reads and records session summary facts best-effort", () => 
   expect(contexts.sessionResumeFacts("agent-4", "pi-sess-1")).toEqual({
     lastActivityAtMs: 2_000,
     lastContextTokens: 240_000,
+    lastContextObservedAtMs: 1_000,
   });
 
   contexts.recordSessionCompaction("agent-4", {

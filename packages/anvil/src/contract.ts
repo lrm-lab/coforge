@@ -86,6 +86,8 @@ export type PromptCacheTier = "5m" | "1h";
 export type SessionResumeFacts = {
   lastActivityAtMs?: number;
   lastContextTokens?: number;
+  lastContextObservedAtMs?: number;
+  lastContextMissingAtMs?: number;
   cacheTier?: PromptCacheTier;
 };
 

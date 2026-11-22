@@ -393,15 +393,6 @@ test("a synthetic zero token count keeps the real context", async () => {
   const measured = tokenCount("2026-10-28T01:00:00.000Z", 200_000);
   expect(
     await read([
-      usageCount(
-        "2026-10-28T01:00:00.000Z",
-        { input_tokens: 42_000 },
-        { input_tokens: 50_000, total_tokens: 60_000 },
-      ),
-    ]),
-  ).toMatchObject({ lastContextTokens: 42_000 });
-  expect(
-    await read([
       measured,
       usageCount(
         "2026-10-28T01:05:00.000Z",
