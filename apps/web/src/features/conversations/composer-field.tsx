@@ -22,10 +22,10 @@ import { ComposerSendButton } from "./composer-send-button";
 import { ReferenceSuggestionList } from "./reference-suggestions";
 import type { useReferenceCompletion } from "./use-reference-completion";
 
-const DRAFT_LINE_CLASS = "pr-3 text-md";
+const DRAFT_LINE_CLASS = "pe-3 text-md";
 
-const BESIDE_LEADING_CLASS = "pl-1";
-const INSET_CLASS = "pl-3";
+const BESIDE_LEADING_CLASS = "ps-1";
+const INSET_CLASS = "ps-3";
 
 export function focusDraftEnd(textarea: HTMLTextAreaElement | null) {
   if (!textarea) return;
@@ -170,7 +170,7 @@ export function ComposerField({
           }
           placeholder={placeholder}
           className={cx(
-            "row-start-1 max-h-40 min-h-8 w-full resize-none bg-transparent py-1 text-field-text outline-none [field-sizing:content] placeholder:text-field-placeholder disabled:opacity-50",
+            "row-start-1 max-h-[min(10rem,25dvh)] min-h-8 w-full resize-none bg-transparent py-1 text-field-text outline-none [field-sizing:content] placeholder:text-field-placeholder disabled:opacity-50",
             DRAFT_LINE_CLASS,
             stacked ? cx("col-span-full", INSET_CLASS) : cx("col-start-2", oneLineInset),
           )}

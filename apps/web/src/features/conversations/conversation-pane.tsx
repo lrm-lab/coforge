@@ -217,7 +217,11 @@ export function ConversationPane({
   return (
     <MessageExpansionContext.Provider value={expansion}>
       <QuestionCardsHost messages={cardMessages} paneRef={paneRef}>
-        <div ref={paneRef} data-conversation-pane className="flex min-h-0 flex-1 flex-col">
+        <div
+          ref={paneRef}
+          data-conversation-pane={narrow ? "" : "full"}
+          className="flex min-h-0 flex-1 flex-col"
+        >
           {inTaskPopup ? null : root ? (
             <ThreadPaneHeader
               context={threadContext}
@@ -231,7 +235,7 @@ export function ConversationPane({
             header
           )}
 
-          <div className="group/history relative min-h-0 flex-1">
+          <div className="group/history relative min-h-24 flex-1 overflow-hidden">
             <div
               ref={historyRef}
               data-scroll-restoration-id={`conversation-${conversation.conversationId}${root ? `-thread-${root.id}` : ""}`}

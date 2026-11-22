@@ -15,33 +15,31 @@ import {
   type ListColumn,
 } from "./conversation-list-width";
 
-/** The width the column shows, measured on the handle's parent (the column): less than the kept
- * one when the page caps it (Activity gives the conversation at least half the page), so
- * a drag or a key starts from what is seen. Its layout width, so a dialog still scaling in does
- * not skew it. */
-function shownWidth(column: ListColumn, handle: HTMLElement): number {
-  return handle.parentElement?.offsetWidth || getListWidth(column);
+function rootFontSizePx(): number {
+  const parsed = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 16;
 }
 
-/**
- * The drag handle on a list column's edge (its right one unless the column says left), from where
- * the list stands beside the pane. A drag shows its width live and keeps it on release. The drag
- * follows the pointer on the window as well as by capture, so it keeps going when the pointer leaves
- * the handle.
- */
+function isRtlElement(element: HTMLElement): boolean {
+  return getComputedStyle(element).direction === "rtl";
+}
+
+function shownWidth(column: ListColumn, handle: HTMLElement): number {
+  const px = handle.parentElement?.offsetWidth;
+  return px ? px / rootFontSizePx() : getListWidth(column);
+}
+
 export function ConversationListResizeHandle({
   column = CONVERSATION_LIST_COLUMN,
   visibleFrom = "lg",
 }: {
   column?: ListColumn;
-  /** Where the list stands beside the pane; narrower, it has no edge to drag. */
   visibleFrom?: ListBesideFrom;
 }) {
   const width = useListWidth(column);
   const [dragging, setDragging] = useState(false);
   const stopDrag = useRef<AbortController | undefined>(undefined);
 
-  // Unmounting mid-drag keeps what is showing, so the page and storage do not disagree.
   useEffect(
     () => () => {
       if (!stopDrag.current) return;
@@ -66,18 +64,21 @@ export function ConversationListResizeHandle({
     event.preventDefault();
     const handle = event.currentTarget;
     const { pointerId, clientX: startX } = event;
+    const remPx = rootFontSizePx();
+    const rtl = isRtlElement(handle);
     const startWidth = shownWidth(column, handle);
     try {
       handle.setPointerCapture(pointerId);
-    } catch {
-      // Pointer capture is best-effort; the window listeners still track the pointer.
-    }
+    } catch {}
     stopDrag.current?.abort();
     const abort = new AbortController();
     stopDrag.current = abort;
     const move = (moved: globalThis.PointerEvent) => {
       if (moved.pointerId !== pointerId) return;
-      applyListWidth(column, dragListWidth(column, startWidth, startX, moved.clientX));
+      applyListWidth(
+        column,
+        dragListWidth(column, startWidth, startX / remPx, moved.clientX / remPx, rtl),
+      );
     };
     const end = (ended: globalThis.PointerEvent) => {
       if (ended.pointerId !== pointerId) return;
@@ -85,9 +86,7 @@ export function ConversationListResizeHandle({
       stopDrag.current = undefined;
       try {
         handle.releasePointerCapture(pointerId);
-      } catch {
-        // Already released.
-      }
+      } catch {}
       setDragging(false);
       commitListWidth(column);
     };
@@ -99,10 +98,9 @@ export function ConversationListResizeHandle({
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const shown = shownWidth(column, event.currentTarget);
-    const next = keyListWidth(column, event, shown);
+    const next = keyListWidth(column, event, shown, isRtlElement(event.currentTarget));
     if (next === undefined) return;
     event.preventDefault();
-    // Widening a list the page holds narrower than kept would only lower what is kept.
     if (next > shown && next <= width) return;
     setListWidth(column, next);
   }
@@ -112,7 +110,7 @@ export function ConversationListResizeHandle({
       role="separator"
       aria-orientation="vertical"
       aria-label={column.label()}
-      aria-valuenow={Math.round(width)}
+      aria-valuenow={Math.round(width * 10) / 10}
       aria-valuemin={column.min}
       aria-valuemax={column.max}
       tabIndex={0}
@@ -123,9 +121,8 @@ export function ConversationListResizeHandle({
       className={cx(
         "absolute inset-y-0 z-10 w-3 cursor-col-resize touch-none outline-hidden pointer-coarse:w-6",
         LIST_BESIDE_CLASSES[visibleFrom].list,
-        // The line shows only while it is being used, on the column's own edge.
         "after:absolute after:inset-y-0 after:w-0.5 hover:after:bg-brand-solid focus-visible:after:bg-brand-solid data-dragging:after:bg-brand-solid",
-        column.edge === "left" ? "left-0 after:left-0" : "right-0 after:right-0",
+        column.edge === "left" ? "start-0 after:start-0" : "end-0 after:end-0",
       )}
     />
   );

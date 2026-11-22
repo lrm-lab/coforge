@@ -184,9 +184,10 @@ export function splitLayout({
 }
 
 function listColumnWidth(rem: number) {
-  const set = getComputedStyle(document.documentElement).getPropertyValue(
-    CONVERSATION_LIST_COLUMN.property,
-  );
+  const set = getComputedStyle(document.documentElement)
+    .getPropertyValue(CONVERSATION_LIST_COLUMN.property)
+    .trim();
   const width = Number.parseFloat(set);
-  return Number.isFinite(width) && width > 0 ? width : LIST_COLUMN_DEFAULT_REM * rem;
+  if (!Number.isFinite(width) || width <= 0) return LIST_COLUMN_DEFAULT_REM * rem;
+  return set.endsWith("rem") ? width * rem : width;
 }

@@ -8,11 +8,9 @@ import { cx } from "#src/utils/cx";
  * list's place, with a back arrow to it. */
 export type ListBesideFrom = "md" | "lg";
 
-/** Each width's classes, written out whole for Tailwind: the list, hidden while a conversation
- * takes its place; what shows only then (the back arrow); the pane, with no divider then. */
 export const LIST_BESIDE_CLASSES = {
-  md: { list: "max-md:hidden", narrowOnly: "md:hidden", pane: "max-md:border-l-0" },
-  lg: { list: "max-lg:hidden", narrowOnly: "lg:hidden", pane: "max-lg:border-l-0" },
+  md: { list: "max-md:hidden", narrowOnly: "md:hidden", pane: "max-md:border-s-0" },
+  lg: { list: "max-lg:hidden", narrowOnly: "lg:hidden", pane: "max-lg:border-s-0" },
 } satisfies Record<ListBesideFrom, { list: string; narrowOnly: string; pane: string }>;
 
 /** The conversation list's controls for the panes beside it. Its own module so a pending or empty
@@ -69,7 +67,10 @@ export function ConversationListButton() {
       color="tertiary"
       aria-label={navigation.backLabel ?? m.conversation_back_to_list()}
       onClick={navigation.showList}
-      className={cx("-ml-2 shrink-0", LIST_BESIDE_CLASSES[navigation.listBesideFrom].narrowOnly)}
+      className={cx(
+        "-ms-2 shrink-0 *:data-icon:rtl:rotate-180",
+        LIST_BESIDE_CLASSES[navigation.listBesideFrom].narrowOnly,
+      )}
     />
   );
 }

@@ -297,3 +297,13 @@
     }
   }
 }
+
+[data-conversation-pane="full"] {
+  container: chat-pane / size;
+}
+
+@container chat-pane (height < 28rem) {
+  [data-conversation-notification-banner] {
+    display: none;
+  }
+}

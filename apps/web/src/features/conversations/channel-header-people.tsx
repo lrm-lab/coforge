@@ -117,17 +117,22 @@ export function ChannelHeaderFaces({
                 className="inline-flex shrink-0 items-center justify-center rounded-full p-0 leading-none"
                 onPress={onOpenMembers}
               >
-                <ActorAvatar
-                  presence={false}
-                  size="xs"
-                  alt=""
-                  initials={`+${more}`}
-                  contentClassName={cn(
-                    "bg-avatar-more text-avatar-more-fg outline-none [&>span]:text-avatar-more-fg [&>span]:tabular-nums",
-                    more > 99 && "px-1.5",
-                  )}
-                  className={cn(more > 99 && "[&&]:w-auto [&&]:min-w-6", AVATAR_STACK_RING.outline)}
-                />
+                <span dir="ltr" className="inline-flex">
+                  <ActorAvatar
+                    presence={false}
+                    size="xs"
+                    alt=""
+                    initials={`+${more}`}
+                    contentClassName={cn(
+                      "bg-avatar-more text-avatar-more-fg outline-none [&>span]:text-avatar-more-fg [&>span]:tabular-nums",
+                      more > 99 && "px-1.5",
+                    )}
+                    className={cn(
+                      more > 99 && "[&&]:w-auto [&&]:min-w-6",
+                      AVATAR_STACK_RING.outline,
+                    )}
+                  />
+                </span>
                 <span className="sr-only">{m.channel_settings_members_more({ count: more })}</span>
               </TooltipTrigger>
             </Tooltip>
@@ -137,7 +142,7 @@ export function ChannelHeaderFaces({
       {canAdd && (
         <AvatarAddButton
           size="xs"
-          className={cn("border-secondary text-avatar-add-fg", shown.length > 0 && "md:ml-2")}
+          className={cn("border-secondary text-avatar-add-fg", shown.length > 0 && "md:ms-2")}
           title={m.channel_settings_add_members()}
           onPress={onAddMembers}
         />

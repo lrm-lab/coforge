@@ -47,11 +47,8 @@ interface SidebarExpandedProps {
 /** Global destinations only; the Chat page owns conversation selection. */
 function SidebarExpandedPanel({ activeUrl, items, header, search, footer }: SidebarExpandedProps) {
   return (
-    // [data-sidebar] retints official components' bg-primary/bg-secondary/etc
-    // via src/styles/coforge-theme.css. One grid for the whole column: every icon, the Workspace
-    // mark, the search glass and the avatar start 1.5rem in, every label 3.5rem in.
     <aside data-sidebar className="flex h-full w-full max-w-full flex-col bg-transparent">
-      <div className="mt-2 flex h-12 shrink-0 items-center gap-2 pr-3 pl-4.5">{header}</div>
+      <div className="mt-2 flex h-12 shrink-0 items-center gap-2 pe-3 ps-4.5">{header}</div>
       <div className="shrink-0 px-3 pt-1">{search}</div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <ul className="mt-3 flex flex-col gap-0.5 px-3">

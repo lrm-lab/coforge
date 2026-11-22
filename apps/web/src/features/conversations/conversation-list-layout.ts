@@ -34,23 +34,20 @@ export function getListWidth(column: ListColumn): number {
   return (store(column).current ??= readStoredWidth(column));
 }
 
-/** Shows `width` now, on the page and to its readers, without keeping it: a drag in progress. The
- * property on `<html>` is what the column's CSS follows, as it was at boot. */
 export function applyListWidth(column: ListColumn, width: number) {
   if (getListWidth(column) === width) return;
   const columnStore = store(column);
   columnStore.current = width;
-  document.documentElement.style.setProperty(column.property, `${width}px`);
+  document.documentElement.style.setProperty(column.property, `${width}rem`);
   for (const listener of columnStore.listeners) listener();
 }
 
-/** Keeps what is showing as this device's preference. A blocked storage is not an error: this page
- * still follows it. */
 export function commitListWidth(column: ListColumn) {
   try {
-    browserLocalStorage()?.setItem(column.key, String(Math.round(getListWidth(column))));
+    const rounded = Math.round(getListWidth(column) * 1000) / 1000;
+    browserLocalStorage()?.setItem(column.key, String(rounded));
   } catch {
-    // Private mode or blocked storage.
+    return;
   }
 }
 

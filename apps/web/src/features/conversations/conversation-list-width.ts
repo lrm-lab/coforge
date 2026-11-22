@@ -1,78 +1,63 @@
 import { m } from "#src/paraglide/messages";
 
-/** A list column whose width is a per-device preference kept in `localStorage`, set on `<html>` as
- * a CSS property the column's width follows (by the boot script before paint, then by its resize
- * handle). The two columns keep separate widths, as Raft keeps its sidebar and list widths. */
 export type ListColumn = {
   key: string;
   property: string;
   defaultWidth: number;
   min: number;
   max: number;
-  /** The resize handle's accessible name. */
   label: () => string;
-  /** The edge the handle sits on: a column on the page's right is dragged by its left edge, so it
-   * grows leftward. */
   edge?: "left" | "right";
 };
 
 export const SIDEBAR_COLUMN: ListColumn = {
   key: "coforge-sidebar-width",
   property: "--sidebar-width",
-  defaultWidth: 220,
-  min: 220,
-  max: 320,
+  defaultWidth: 13.75,
+  min: 13.75,
+  max: 20,
   label: m.navigation_resize_sidebar,
 };
 
-/** The Chat page's conversation list beside the open conversation, from `lg`. */
 export const CONVERSATION_LIST_COLUMN: ListColumn = {
   key: "coforge-conversation-list-width",
   property: "--conversation-list-width",
-  defaultWidth: 288,
-  min: 200,
-  max: 400,
+  defaultWidth: 18,
+  min: 12.5,
+  max: 25,
   label: m.conversation_list_resize,
 };
 
-/** The list beside a conversation pane on Activity (`w-list-column`), Raft's list column. */
 export const LIST_COLUMN: ListColumn = {
   key: "coforge-list-column-width",
   property: "--list-column-width",
-  defaultWidth: 380,
-  // Wide enough for the filter tabs with both counts at "99+" (task #63).
-  min: 288,
-  max: 640,
+  defaultWidth: 23.75,
+  min: 18,
+  max: 40,
   label: m.list_column_resize,
 };
 
-/** A file's Comments panel beside its preview, from `lg`. */
 export const ATTACHMENT_COMMENTS_COLUMN: ListColumn = {
   key: "coforge-attachment-comments-width",
   property: "--attachment-comments-width",
-  defaultWidth: 320,
-  min: 280,
-  max: 560,
+  defaultWidth: 20,
+  min: 17.5,
+  max: 35,
   label: m.attachment_comments_resize,
   edge: "left",
 };
 
-const KEY_STEP = 16;
-const KEY_STEP_LARGE = 64;
+const KEY_STEP = 1;
+const KEY_STEP_LARGE = 4;
+const LEGACY_PX_THRESHOLD = 80;
+const LEGACY_BASE_FONT_PX = 16;
 
-/** The Chat list's width class, written out whole for Tailwind: it follows the property the boot
- * script and the resize handle set on `<html>`, so the server markup never depends on the stored
- * width. Tailwind reads the string as written, so it repeats `CONVERSATION_LIST_COLUMN.property`.
- * `w-list-column` in `styles.css` does the same for `LIST_COLUMN`. */
-export const LIST_COLUMN_CLASS = "lg:w-(--conversation-list-width,18rem)";
+export const LIST_COLUMN_CLASS = "lg:w-[min(var(--conversation-list-width,18rem),40%)]";
 
 const PLAIN_NUMBER = /^\d+(\.\d+)?$/;
 
-/** The boot half of the rule above, run by `__root.tsx` before paint. Anything that is not a
- * plain number is ignored, a number outside the range is clamped, so the script and
- * `parseListWidth` agree on what a stored width means. */
 function bootScript({ key, property, min, max }: ListColumn): string {
-  return `var listWidth=localStorage.getItem("${key}");if(listWidth!==null&&${PLAIN_NUMBER}.test(listWidth)){document.documentElement.style.setProperty("${property}",Math.min(${max},Math.max(${min},+listWidth))+"px")}`;
+  return `var listWidth=localStorage.getItem("${key}");if(listWidth!==null&&${PLAIN_NUMBER}.test(listWidth)){var listRem=+listWidth>${LEGACY_PX_THRESHOLD}?+listWidth/${LEGACY_BASE_FONT_PX}:+listWidth;document.documentElement.style.setProperty("${property}",Math.min(${max},Math.max(${min},listRem))+"rem")}`;
 }
 
 export const CONVERSATION_LIST_BOOT =
@@ -85,21 +70,26 @@ export function clampListWidth(column: ListColumn, width: number): number {
   return Math.min(column.max, Math.max(column.min, width));
 }
 
-/** A stored width, clamped; `undefined` for anything that is not a plain number. */
 export function parseListWidth(column: ListColumn, raw: string | null): number | undefined {
   if (raw === null || !PLAIN_NUMBER.test(raw)) return undefined;
-  return clampListWidth(column, Number(raw));
+  const parsed = Number(raw);
+  const rem = parsed > LEGACY_PX_THRESHOLD ? parsed / LEGACY_BASE_FONT_PX : parsed;
+  return clampListWidth(column, rem);
 }
 
-/** What dragging the handle from `startX` to `x` makes of the list: continuous and never outside
- * the range. */
+function edgeDirection(column: ListColumn, rtl = false): 1 | -1 {
+  const ltrSign = column.edge === "left" ? -1 : 1;
+  return rtl ? (-ltrSign as 1 | -1) : ltrSign;
+}
+
 export function dragListWidth(
   column: ListColumn,
   startWidth: number,
   startX: number,
   x: number,
+  rtl = false,
 ): number {
-  const moved = column.edge === "left" ? startX - x : x - startX;
+  const moved = (x - startX) * edgeDirection(column, rtl);
   return clampListWidth(column, startWidth + moved);
 }
 
@@ -111,17 +101,15 @@ type KeyboardLike = {
   altKey: boolean;
 };
 
-/** The width a key press on the focused handle sets; `undefined` when the key is not one it uses.
- * Combinations with Cmd, Ctrl or Alt stay the browser's (Cmd+Left is Back). */
 export function keyListWidth(
   column: ListColumn,
   event: KeyboardLike,
   width: number,
+  rtl = false,
 ): number | undefined {
   if (event.metaKey || event.ctrlKey || event.altKey) return undefined;
   const step = event.shiftKey ? KEY_STEP_LARGE : KEY_STEP;
-  // An arrow moves the handle, so it widens the column toward the side the handle is on.
-  const toward = column.edge === "left" ? -1 : 1;
+  const toward = edgeDirection(column, rtl);
   switch (event.key) {
     case "ArrowRight":
       return clampListWidth(column, width + step * toward);

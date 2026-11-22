@@ -21,43 +21,44 @@ const key = (key: string, extra: Partial<Parameters<typeof keyListWidth>[1]> = {
 });
 
 describe("list column width", () => {
-  test("clamps to the column's range and ignores garbage", () => {
-    expect(clampListWidth(CHAT, 100)).toBe(200);
-    expect(clampListWidth(CHAT, 999)).toBe(400);
-    expect(clampListWidth(LIST, 100)).toBe(288);
-    expect(clampListWidth(LIST, 999)).toBe(640);
-    expect(parseListWidth(CHAT, "350")).toBe(350);
-    expect(parseListWidth(CHAT, "50")).toBe(200);
-    expect(parseListWidth(LIST, "500")).toBe(500);
+  test("clamps rem bounds, migrates legacy px values, and ignores garbage", () => {
+    expect(clampListWidth(CHAT, 8)).toBe(12.5);
+    expect(clampListWidth(CHAT, 50)).toBe(25);
+    expect(clampListWidth(LIST, 10)).toBe(18);
+    expect(clampListWidth(LIST, 60)).toBe(40);
+    expect(parseListWidth(CHAT, "21.875")).toBe(21.875);
+    expect(parseListWidth(CHAT, "8")).toBe(12.5);
+    expect(parseListWidth(LIST, "31.25")).toBe(31.25);
+    expect(parseListWidth(CHAT, "350")).toBe(21.875);
     expect(parseListWidth(CHAT, "abc")).toBeUndefined();
     expect(parseListWidth(CHAT, "")).toBeUndefined();
     expect(parseListWidth(CHAT, null)).toBeUndefined();
     expect(parseListWidth(CHAT, "-5")).toBeUndefined();
   });
 
-  test("drag is continuous and clamped", () => {
-    expect(dragListWidth(CHAT, 288, 300, 310.5)).toBe(298.5);
-    expect(dragListWidth(CHAT, 288, 300, 100)).toBe(200);
-    expect(dragListWidth(CHAT, 288, 300, 500)).toBe(400);
-    expect(dragListWidth(LIST, 380, 300, 500)).toBe(580);
-    expect(dragListWidth(LIST, 380, 300, 900)).toBe(640);
+  test("drag is continuous and clamped in rem", () => {
+    expect(dragListWidth(CHAT, 18, 18.75, 19.5)).toBe(18.75);
+    expect(dragListWidth(CHAT, 18, 18.75, 5)).toBe(12.5);
+    expect(dragListWidth(CHAT, 18, 18.75, 32)).toBe(25);
+    expect(dragListWidth(LIST, 23.75, 18.75, 31.25)).toBe(36.25);
+    expect(dragListWidth(LIST, 23.75, 18.75, 60)).toBe(40);
   });
 
-  test("keys step, jump, and stay clamped", () => {
-    expect(keyListWidth(CHAT, key("ArrowRight"), 288)).toBe(304);
-    expect(keyListWidth(CHAT, key("ArrowLeft"), 288)).toBe(272);
-    expect(keyListWidth(CHAT, key("ArrowRight", { shiftKey: true }), 288)).toBe(352);
-    expect(keyListWidth(CHAT, key("ArrowRight", { shiftKey: true }), 380)).toBe(400);
-    expect(keyListWidth(CHAT, key("ArrowLeft"), 205)).toBe(200);
-    expect(keyListWidth(CHAT, key("Home"), 288)).toBe(200);
-    expect(keyListWidth(CHAT, key("End"), 288)).toBe(400);
-    expect(keyListWidth(LIST, key("Home"), 380)).toBe(288);
-    expect(keyListWidth(LIST, key("End"), 380)).toBe(640);
-    expect(keyListWidth(CHAT, key("Enter"), 288)).toBeUndefined();
-    expect(keyListWidth(CHAT, key("ArrowLeft", { metaKey: true }), 288)).toBeUndefined();
+  test("keys step, jump, and stay clamped in rem", () => {
+    expect(keyListWidth(CHAT, key("ArrowRight"), 18)).toBe(19);
+    expect(keyListWidth(CHAT, key("ArrowLeft"), 18)).toBe(17);
+    expect(keyListWidth(CHAT, key("ArrowRight", { shiftKey: true }), 18)).toBe(22);
+    expect(keyListWidth(CHAT, key("ArrowRight", { shiftKey: true }), 23.75)).toBe(25);
+    expect(keyListWidth(CHAT, key("ArrowLeft"), 13)).toBe(12.5);
+    expect(keyListWidth(CHAT, key("Home"), 18)).toBe(12.5);
+    expect(keyListWidth(CHAT, key("End"), 18)).toBe(25);
+    expect(keyListWidth(LIST, key("Home"), 23.75)).toBe(18);
+    expect(keyListWidth(LIST, key("End"), 23.75)).toBe(40);
+    expect(keyListWidth(CHAT, key("Enter"), 18)).toBeUndefined();
+    expect(keyListWidth(CHAT, key("ArrowLeft", { metaKey: true }), 18)).toBeUndefined();
   });
 
-  test("boot script sets each column's stored width, clamped, and ignores garbage", () => {
+  test("boot script sets each column's stored width in rem, clamped, and ignores garbage", () => {
     const run = (stored: Record<string, string>) => {
       const props: Record<string, string> = {};
       const documentElement = {
@@ -69,27 +70,30 @@ describe("list column width", () => {
       );
       return props;
     };
+    expect(run({ "coforge-conversation-list-width": "21.875" })).toEqual({
+      "--conversation-list-width": "21.875rem",
+    });
     expect(run({ "coforge-conversation-list-width": "350" })).toEqual({
-      "--conversation-list-width": "350px",
+      "--conversation-list-width": "21.875rem",
     });
     expect(run({ "coforge-conversation-list-width": "9000" })).toEqual({
-      "--conversation-list-width": "400px",
+      "--conversation-list-width": "25rem",
     });
     expect(
-      run({ "coforge-list-column-width": "500", "coforge-conversation-list-width": "junk" }),
+      run({ "coforge-list-column-width": "31.25", "coforge-conversation-list-width": "junk" }),
     ).toEqual({
-      "--list-column-width": "500px",
+      "--list-column-width": "31.25rem",
     });
-    expect(run({ "coforge-list-column-width": "100" })).toEqual({ "--list-column-width": "288px" });
+    expect(run({ "coforge-list-column-width": "100" })).toEqual({ "--list-column-width": "18rem" });
     expect(run({})).toEqual({});
   });
 
   test("a column dragged by its left edge widens leftward, by pointer and by arrow key", () => {
-    expect(dragListWidth(COMMENTS, 320, 1000, 940)).toBe(380);
-    expect(dragListWidth(COMMENTS, 320, 1000, 1040)).toBe(280);
-    expect(keyListWidth(COMMENTS, key("ArrowLeft"), 320)).toBe(336);
-    expect(keyListWidth(COMMENTS, key("ArrowRight"), 320)).toBe(304);
-    expect(dragListWidth(CHAT, 288, 100, 140)).toBe(328);
+    expect(dragListWidth(COMMENTS, 20, 62.5, 58.75)).toBe(23.75);
+    expect(dragListWidth(COMMENTS, 20, 62.5, 65)).toBe(17.5);
+    expect(keyListWidth(COMMENTS, key("ArrowLeft"), 20)).toBe(21);
+    expect(keyListWidth(COMMENTS, key("ArrowRight"), 20)).toBe(19);
+    expect(dragListWidth(CHAT, 18, 6.25, 8.75)).toBe(20.5);
   });
 
   test("the boot script restores the comments panel's kept width", () => {
@@ -98,25 +102,35 @@ describe("list column width", () => {
   });
 
   test("each list starts at its default, which double-click resets to, inside its range", () => {
-    expect([CHAT.defaultWidth, LIST.defaultWidth]).toEqual([288, 380]);
+    expect([CHAT.defaultWidth, LIST.defaultWidth]).toEqual([18, 23.75]);
     for (const column of [CHAT, LIST, COMMENTS])
       expect(clampListWidth(column, column.defaultWidth)).toBe(column.defaultWidth);
-    // A drag past either end holds at the end; far under the minimum does not hide the list.
-    expect(dragListWidth(CHAT, 288, 300, 300 + 40 - 288)).toBe(200);
-    expect(dragListWidth(LIST, 380, 300, 300 + 40 - 380)).toBe(288);
-    expect(dragListWidth(CHAT, 288, 300, 300 + 330 - 288)).toBe(330);
+    expect(dragListWidth(CHAT, 18, 18.75, 18.75 + 2.5 - 18)).toBe(12.5);
+    expect(dragListWidth(LIST, 23.75, 18.75, 18.75 + 2.5 - 23.75)).toBe(18);
+    expect(dragListWidth(CHAT, 18, 18.75, 18.75 + 20.625 - 18)).toBe(20.625);
   });
 
-  test("the Activity list's keys step by 16 from its default and jump to its ends", () => {
-    expect(keyListWidth(LIST, key("ArrowRight"), 380)).toBe(396);
-    expect(keyListWidth(LIST, key("ArrowLeft"), 290)).toBe(288);
-    expect(keyListWidth(LIST, key("ArrowRight"), 640)).toBe(640);
+  test("the Activity list's keys step by 1 rem from its default and jump to its ends", () => {
+    expect(keyListWidth(LIST, key("ArrowRight"), 23.75)).toBe(24.75);
+    expect(keyListWidth(LIST, key("ArrowLeft"), 18.25)).toBe(18);
+    expect(keyListWidth(LIST, key("ArrowRight"), 40)).toBe(40);
   });
 
   test("the sidebar never goes narrower than its default and its kept width is restored at boot", () => {
     expect(SIDEBAR_COLUMN.min).toBe(SIDEBAR_COLUMN.defaultWidth);
-    expect(dragListWidth(SIDEBAR_COLUMN, 220, 220, 100)).toBe(220);
-    expect(dragListWidth(SIDEBAR_COLUMN, 220, 220, 600)).toBe(320);
+    expect(dragListWidth(SIDEBAR_COLUMN, 13.75, 13.75, 6)).toBe(13.75);
+    expect(dragListWidth(SIDEBAR_COLUMN, 13.75, 13.75, 35)).toBe(20);
     expect(CONVERSATION_LIST_BOOT).toContain(SIDEBAR_COLUMN.property);
+  });
+
+  test("mirrors pointer drag and arrow keys in RTL for both inline-end and inline-start handles", () => {
+    expect(dragListWidth(CHAT, 18, 20, 17, true)).toBe(21);
+    expect(dragListWidth(CHAT, 18, 20, 23, true)).toBe(15);
+    expect(keyListWidth(CHAT, key("ArrowLeft"), 18, true)).toBe(19);
+    expect(keyListWidth(CHAT, key("ArrowRight"), 18, true)).toBe(17);
+    expect(dragListWidth(COMMENTS, 20, 20, 23.75, true)).toBe(23.75);
+    expect(dragListWidth(COMMENTS, 20, 20, 18, true)).toBe(18);
+    expect(keyListWidth(COMMENTS, key("ArrowRight"), 20, true)).toBe(21);
+    expect(keyListWidth(COMMENTS, key("ArrowLeft"), 20, true)).toBe(19);
   });
 });

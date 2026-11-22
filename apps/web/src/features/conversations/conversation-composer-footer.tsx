@@ -12,12 +12,6 @@ import { useRecentConversationHandles } from "./use-recent-conversation-handles"
 
 type ComposerProps = ComponentProps<typeof MessageComposer>;
 
-/**
- * The foot of a conversation pane: its composer, or the read-only notice in its place, and in the
- * main stream the notification prompt above it, under a notice when the newest messages could not
- * be read. The composer's @-candidates and recent senders
- * come from the conversation it writes to.
- */
 export function ConversationComposerFooter({
   conversation,
   root,
@@ -34,11 +28,8 @@ export function ConversationComposerFooter({
   hostRef,
 }: {
   conversation: Omit<DirectConversationView, "agent">;
-  /** The thread root this pane replies to; absent for the main stream. */
   root?: { id: string };
-  /** A thread or the Task popup: no stream notices, a reply's placeholder. */
   narrow: boolean;
-  /** Lines up with the message column above, as the history does. */
   column: boolean;
   readOnlyNotice?: ReactNode;
   mentionCompletion: boolean;
@@ -55,17 +46,16 @@ export function ConversationComposerFooter({
     conversation.viewerId,
     mentionCompletion,
   );
-  // Handles that recently sent a message here, most-recent first: the mention completion popup
-  // ranks these candidates ahead of alphabetical order within a match tier. Deduplicated by
-  // handle so the same person's older messages don't push their own recent one down.
   const recentHandles = useRecentConversationHandles(conversation.messages);
-  // Select mode's bar takes the composer's place in the stream; the composer stays mounted, with
-  // its draft, under it.
   const selecting = useSelectionIn(conversation.conversationId) !== null && !root;
   return (
     <div className={column ? MESSAGE_COLUMN_CLASS : undefined}>
       {!narrow && <ConversationUpdateNotice conversation={conversation} />}
-      {!readOnlyNotice && !narrow && !selecting && <NotificationActivationBanner />}
+      {!readOnlyNotice && !narrow && !selecting && (
+        <div data-conversation-notification-banner="">
+          <NotificationActivationBanner />
+        </div>
+      )}
       {selecting && <MessageSelectionBar conversationId={conversation.conversationId} />}
       <div className={selecting ? "hidden" : "contents"}>
         {readOnlyNotice ?? (

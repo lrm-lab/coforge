@@ -76,7 +76,7 @@ export function ActivityInboxTabs({
                   <>
                     {tab.label()}
                     {count > 0 && (
-                      <span className="text-xs font-normal text-quaternary tabular-nums">
+                      <span dir="ltr" className="text-xs font-normal text-quaternary tabular-nums">
                         {count > 99 ? "99+" : count}
                       </span>
                     )}

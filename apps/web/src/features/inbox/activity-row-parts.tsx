@@ -40,6 +40,7 @@ export function ActivityMentionBadge() {
 export function ActivityUnreadCount({ count }: { count: number }) {
   return (
     <span
+      dir="ltr"
       className="text-xs whitespace-nowrap text-tertiary tabular-nums"
       aria-label={m.activity_inbox_new({ count })}
     >
@@ -58,7 +59,7 @@ export function ActivityRowTime({
   current: boolean;
 }) {
   const className = cn(
-    "ml-auto shrink-0 pl-2 text-xs text-quaternary tabular-nums transition-opacity group-hover:opacity-0 not-any-pointer-coarse:group-focus-within:opacity-0",
+    "ms-auto shrink-0 ps-2 text-xs text-quaternary tabular-nums transition-opacity group-hover:opacity-0 not-any-pointer-coarse:group-focus-within:opacity-0",
     current && "not-any-pointer-coarse:opacity-0",
   );
   return clock ? (
@@ -88,7 +89,7 @@ export function ActivityDoneCheck({
       tabIndex={tabStop ? 0 : -1}
       onClick={onDone}
       className={cn(
-        "absolute top-1/2 right-[calc(var(--page-gutter)-0.25rem)] -translate-y-1/2 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 any-pointer-coarse:hidden",
+        "absolute top-1/2 end-[calc(var(--page-gutter)-0.25rem)] -translate-y-1/2 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 any-pointer-coarse:hidden",
         current ? "opacity-100" : "opacity-0",
       )}
     />

@@ -6,7 +6,7 @@ import { cx } from "#src/utils/cx";
 
 function UnreadNumber({ count }: { count: number }) {
   return (
-    <span className="inline-flex items-center">
+    <span dir="ltr" className="inline-flex items-center">
       <RollingNumber value={Math.min(count, UNREAD_COUNT_SHOWN_MAX)} />
       {count > UNREAD_COUNT_SHOWN_MAX && "+"}
     </span>

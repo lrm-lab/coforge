@@ -54,7 +54,7 @@ export function ThreadSheetEntry({ rootId, onOpen }: ThreadPartProps) {
       iconTrailing={unread > 0 ? <UnreadDot /> : undefined}
       aria-label={withUnreadCount(m.conversation_thread_reply(), unread)}
       onPress={() => onOpen(rootId)}
-      className="w-full justify-start rounded-lg py-3 *:data-icon:size-5 [&>[data-text]]:flex-1 [&>[data-text]]:text-left"
+      className="w-full justify-start rounded-lg py-3 *:data-icon:size-5 [&>[data-text]]:flex-1 [&>[data-text]]:text-start"
     >
       {m.conversation_thread_reply()}
     </Button>
@@ -73,7 +73,7 @@ export function ThreadPreview({ rootId, onOpen }: ThreadPartProps) {
       size="sm"
       noTextPadding
       onPress={() => onOpen(rootId)}
-      className="mt-1.5 block h-auto w-full overflow-hidden rounded-lg bg-secondary px-4 pt-2 pb-4 text-left font-normal hover:bg-secondary_hover *:data-text:block *:data-text:min-w-0"
+      className="mt-1.5 block h-auto w-full overflow-hidden rounded-lg bg-secondary px-4 pt-2 pb-4 text-start font-normal hover:bg-secondary_hover *:data-text:block *:data-text:min-w-0"
       data-thread-preview=""
     >
       <span
@@ -87,7 +87,7 @@ export function ThreadPreview({ rootId, onOpen }: ThreadPartProps) {
           {unread > 0 && " · "}
         </span>
         {unread > 0 && m.conversation_thread_unread({ count: unread })}
-        <ChevronRight aria-hidden="true" className="size-4 shrink-0" />
+        <ChevronRight aria-hidden="true" className="size-4 shrink-0 rtl:rotate-180" />
       </span>
       <span className="mt-1 flex flex-col gap-1.5">
         {summary.latestReplies.map((reply) => (

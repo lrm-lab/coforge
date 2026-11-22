@@ -112,7 +112,7 @@ function useNavItems(
   const { hasUnread } = activity;
   const recordsHref = recordsNavHref(workspaceId);
   return useMemo(() => {
-    const recordsDot = recordsPreview ? <UnreadDot className="ml-auto" /> : undefined;
+    const recordsDot = recordsPreview ? <UnreadDot className="ms-auto" /> : undefined;
     const activityBadge =
       unreadCount !== undefined ? (
         <>
@@ -120,7 +120,7 @@ function useNavItems(
           <span className="sr-only">{m.conversation_thread_unread({ count: unreadCount })}</span>
         </>
       ) : hasUnread ? (
-        <UnreadDot className="ml-auto" />
+        <UnreadDot className="ms-auto" />
       ) : undefined;
     const item = (section: string) => ({
       bareHref: `${base}/${section}`,
@@ -363,7 +363,7 @@ function WorkspaceChrome({
             <div
               className={cx(
                 "flex min-h-0 min-w-0 flex-1 flex-col",
-                !standalone && "lg:p-2 lg:pl-0",
+                !standalone && "lg:p-2 lg:ps-0",
               )}
             >
               <div
@@ -456,7 +456,7 @@ function UserMenuCard({
       ) : (
         <AriaButton
           aria-label={m.controls_current_user()}
-          className="flex h-full min-w-0 flex-1 items-center gap-2.5 rounded-lg pl-2.5 text-left outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2"
+          className="flex h-full min-w-0 flex-1 items-center gap-2.5 rounded-lg ps-2.5 text-start outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           {avatar}
           <span className="min-w-0 truncate text-sm font-medium text-nav-fg transition-colors duration-100 ease-out group-hover/user:text-secondary">
