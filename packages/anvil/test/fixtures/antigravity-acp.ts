@@ -10,6 +10,10 @@ for (const name of ["SSH_CLIENT", "SSH_CONNECTION", "SSH_TTY"]) {
   }
 }
 const log = Bun.env.AGY_ACP_FIXTURE_LOG;
+const listPages = Bun.env.AGY_ACP_FIXTURE_LIST_PAGES
+  ? JSON.parse(Bun.env.AGY_ACP_FIXTURE_LIST_PAGES)
+  : undefined;
+let listPage = 0;
 const EFFORTS: Record<string, string[] | undefined> = {
   "gemini-4-carbon": ["low", "medium", "high"],
   "gemini-4-hydrogen": ["low", "medium", "high", "xhigh"],
@@ -152,7 +156,10 @@ for await (const line of console) {
         protocolVersion: 1,
         agentCapabilities: {
           loadSession: true,
-          ...(Bun.env.AGY_ACP_FIXTURE_RESUME_CAP ? { sessionCapabilities: { resume: {} } } : {}),
+          sessionCapabilities: {
+            ...(Bun.env.AGY_ACP_FIXTURE_RESUME_CAP ? { resume: {} } : {}),
+            ...(listPages ? { list: {} } : {}),
+          },
           _meta: { antigravity: { systemPrompt: { append: true } } },
         },
         authMethods: [{ id: "oauth-personal" }, { id: "oauth-business" }],
@@ -185,6 +192,25 @@ for await (const line of console) {
     case "session/close":
       reply({});
       break;
+    case "session/list": {
+      const page = listPages?.[listPage++];
+      if (page === "hang") break;
+      if (typeof page === "number") {
+        fail(page, "session/list failed");
+        break;
+      }
+      if (Array.isArray(page?.sessions)) {
+        reply({
+          ...page,
+          sessions: page.sessions.map((record: Record<string, unknown>) =>
+            record.cwd === "workspace" ? { ...record, cwd: process.cwd() } : record,
+          ),
+        });
+      } else {
+        reply(page);
+      }
+      break;
+    }
     case "session/resume":
       if (!signedIn) {
         write({
@@ -202,7 +228,7 @@ for await (const line of console) {
         fail(-32002, "Session not found");
         break;
       }
-      currentSessionId = request.params.sessionId ?? sessionId;
+      currentSessionId = Bun.env.AGY_ACP_FIXTURE_OPENED_ID ?? request.params.sessionId ?? sessionId;
       reply({
         sessionId: currentSessionId,
         configOptions,
@@ -230,7 +256,7 @@ for await (const line of console) {
         fail(-32002, "Session not found");
         break;
       }
-      currentSessionId = request.params.sessionId ?? sessionId;
+      currentSessionId = Bun.env.AGY_ACP_FIXTURE_OPENED_ID ?? request.params.sessionId ?? sessionId;
       reply({
         sessionId: currentSessionId,
         configOptions,

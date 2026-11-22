@@ -1,3 +1,5 @@
+import { realpath } from "node:fs/promises";
+import { isAbsolute, resolve } from "node:path";
 import type { InitializeResponse } from "@agentclientprotocol/sdk";
 import { RequestError } from "@agentclientprotocol/sdk";
 import { getLogger } from "@logtape/logtape";
@@ -5,7 +7,7 @@ import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { RuntimeLoginRequiredError } from "#src/contract";
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
 import { acpApplyRuntimeConfig, acpConfigOptions } from "#src/acp/config-options";
-import { acpBounded, acpProcess } from "#src/acp/connection";
+import { AcpTimeoutError, acpBounded, acpProcess, type AcpConnection } from "#src/acp/connection";
 import type { AcpRuntimeProfile, AcpSessionProfile } from "#src/acp/profile";
 import { AcpSession } from "#src/acp/session";
 import { asRecord, nonEmptyString } from "#src/json-record";
@@ -22,6 +24,8 @@ export const ANTIGRAVITY_MAX_INPUT_BYTES = 185_000;
 const STDERR_TAIL_LINES = 40;
 
 const ANTIGRAVITY_SESSION_MISSING_CODE = -32002;
+
+const MAX_SESSION_LIST_PAGES = 100;
 
 const AUTOMATIC_MODE_ID = "auto";
 
@@ -68,6 +72,65 @@ export function antigravitySessionResumeDeclared(response: InitializeResponse): 
     capabilities.resume !== null &&
     capabilities.resume !== false
   );
+}
+
+async function storedSessionExists(
+  agent: AcpConnection["connection"]["agent"],
+  sessionId: string,
+  cwd: string,
+  timeoutMs: number,
+): Promise<boolean> {
+  const timedOut = "agy acp session/list timed out";
+  const deadline = performance.now() + timeoutMs;
+  const cursors = new Set<string>();
+  let cursor: string | undefined;
+  do {
+    const remainingMs = Math.ceil(deadline - performance.now());
+    if (remainingMs <= 0) throw new AcpTimeoutError(timedOut);
+    const response = await acpBounded(
+      agent.request<unknown>("session/list", cursor ? { cursor } : {}),
+      remainingMs,
+      timedOut,
+    ).catch((error: unknown) => {
+      if (error instanceof RequestError && error.code === ANTIGRAVITY_AUTH_REQUIRED_CODE)
+        throw antigravitySignInRequired();
+      throw error;
+    });
+    const page = asRecord(response);
+    if (!Array.isArray(page?.sessions)) throw new Error("agy acp returned an invalid session list");
+
+    let listedCwd: string | undefined;
+    for (const session of page.sessions) {
+      const row = asRecord(session);
+      const id = nonEmptyString(row?.sessionId);
+      const directory = nonEmptyString(row?.cwd);
+      if (!id || !directory || !isAbsolute(directory))
+        throw new Error("agy acp returned an invalid session list");
+      if (id !== sessionId) continue;
+      if (listedCwd !== undefined && listedCwd !== directory)
+        throw new Error("agy acp returned an invalid session list");
+      listedCwd = directory;
+    }
+    const nextCursor = page.nextCursor;
+    if (nextCursor != null && (typeof nextCursor !== "string" || nextCursor.length === 0))
+      throw new Error("agy acp returned an invalid session list cursor");
+    if (listedCwd !== undefined) {
+      const listedDirectory = resolve(listedCwd);
+      if (
+        listedDirectory !== resolve(cwd) &&
+        listedDirectory !== (await realpath(cwd).catch(() => cwd))
+      )
+        throw new Error("agy acp session belongs to a different working directory");
+      return true;
+    }
+    cursor = nextCursor ?? undefined;
+    if (cursor) {
+      if (cursors.has(cursor) || cursors.size >= MAX_SESSION_LIST_PAGES - 1)
+        throw new Error("agy acp returned an incomplete session list");
+      cursors.add(cursor);
+    }
+  } while (cursor);
+  return false;
 }
 
 export class UnsupportedOptionError extends Error {
@@ -161,7 +224,11 @@ function antigravitySessionProfile(
       let opened: string | undefined;
       let replaced: string | undefined;
       let state: unknown;
-      if (resuming) {
+      const capabilities = asRecord(initialized.agentCapabilities?.sessionCapabilities);
+      if (resuming && asRecord(capabilities?.list)) {
+        if (!(await storedSessionExists(agent, sessionId, cwd, timeoutMs))) replaced = sessionId;
+      }
+      if (resuming && !replaced) {
         let tryLoad = true;
         if (antigravitySessionResumeDeclared(initialized)) {
           try {
@@ -214,6 +281,9 @@ function antigravitySessionProfile(
           }
         }
       }
+      const reportedId = asRecord(state)?.sessionId;
+      if (opened && reportedId !== undefined && reportedId !== opened)
+        throw new Error("agy acp opened a different session");
       if (!opened) {
         try {
           state = await acpBounded(
@@ -227,7 +297,7 @@ function antigravitySessionProfile(
           throw error;
         }
         opened = nonEmptyString(asRecord(state)?.sessionId);
-        if (!opened) throw new Error("agy acp did not create a session");
+        if (!opened || opened === replaced) throw new Error("agy acp did not create a session");
       }
       const modeIds = availableModeIds(state);
       if (modeIds.includes(AUTOMATIC_MODE_ID))
