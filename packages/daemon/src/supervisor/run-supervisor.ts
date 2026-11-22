@@ -30,20 +30,16 @@ import { COFORGE_DAEMON_VERSION } from "#src/version";
 import { platformWorkspaceInstance, workspaceInstanceConfig } from "./platform-workspace-instance";
 import { startWindowsWorkspaceReconcileLoop } from "./windows-workspace-reconcile";
 import { workspaceStateDirectory, type WorkspaceInstance } from "./workspace-instance";
-import {
-  WorkspaceHealthJournal,
-  workspaceDegradedMessage,
-  workspaceHealthJournalPath,
-} from "./workspace-health-journal";
+import { WorkspaceHealthJournal, workspaceHealthJournalPath } from "./workspace-health-journal";
 import { askWorkspaceRunnerHold } from "./runner-hold";
 import { workspaceDaemonConfig } from "./workspace-daemon-config";
+import { startSupervisorWorkspace } from "./start-supervisor-workspace";
 import { workspaceRuntimeView } from "./workspace-runtime-view";
 import { WorkspaceAdoptions } from "./workspace-adoption";
 import {
   awaitCloudConnections,
   OPERATOR_COMMAND_BUDGET_MS,
   readWorkspaceCloudConnection,
-  throwIfParked,
   workspaceSocketPath,
   type WorkspaceStartPorts,
 } from "./workspace-start-outcome";
@@ -62,7 +58,6 @@ import {
 import { supervisorUpgradeDrainWatcher } from "./upgrade-drain-watcher";
 
 const UPGRADE_RECEIPT_POLL_MS = 2_000;
-const WORKSPACE_READINESS_MS = 30_000;
 
 export async function runMachineSupervisor(
   args: string[],
@@ -229,62 +224,14 @@ async function runWithSupervisorLock(
   const supervisor = new MachineSupervisor(
     bindings,
     {
-      async start(binding, options = {}) {
-        const directory = workspaceDirectory(binding.workspaceId);
-        // A degraded Workspace must fail fast, not spend up to 30s waiting for local RPC the OS
-        // unit will never open: the replacement child would observe the same latch and exit 0
-        // (see `guardWorkspaceRunnerStart`). Waiting out that readiness budget delayed every
-        // other binding behind it in `#reconcileBindings` (measured ~37s) and, in turn, this
-        // Coordinator's own local RPC, until the client-side handshake gave up after 10s with a
-        // misleading "did not accept the local handshake" message that hid the real reason.
-        // A parked Workspace never gets here: `MachineSupervisor` checks `parkedReason` first.
-        const health = await workspaceHealth(binding.workspaceId).state();
-        if (health.status === "degraded") {
-          const message = workspaceDegradedMessage(health.reason, binding.workspaceId);
-          supervisorLogger.error(message, {
-            event: "workspace:degraded_start_refused",
-            workspace_id: binding.workspaceId,
-            reason: health.reason,
-            crash_count: health.crashCount,
-            degraded_since: health.since,
-          });
-          throw new Error(message);
-        }
-        await new DaemonConfigStore(directory).save(workspaceDaemonConfig(binding));
-        const instance = workspaceInstance(binding.workspaceId);
-        const processId = await instance.ensureStarted();
-        const observed = await instance.identity();
-        if (!observed?.active || observed.mainPid !== processId)
-          throw new Error("Workspace OS identity changed during startup");
-        const identity = adoptions.track(binding, instance, observed);
-        // Readiness keeps its own bound whoever asked: an operator command answers by its own
-        // deadline while this start finishes behind it, so the instance is still adopted.
-        const deadline = Date.now() + WORKSPACE_READINESS_MS;
-        try {
-          while (Date.now() < deadline) {
-            // A stop or configure took over: it stops this unit itself.
-            options.signal?.throwIfAborted();
-            let reported;
-            try {
-              reported = await adoptions.handshake(binding.workspaceId, instance, observed);
-            } catch (error) {
-              await throwIfParked(startPorts, binding.workspaceId);
-              throw error;
-            }
-            if (reported) {
-              Object.assign(identity, reported);
-              return observed.invocationId;
-            }
-            await throwIfParked(startPorts, binding.workspaceId);
-            await Bun.sleep(50);
-          }
-          throw new Error(`Workspace ${binding.workspaceId} failed process readiness`);
-        } catch (error) {
-          // A failed handshake is not permission to kill an adopted live unit.
-          adoptions.forget(binding.workspaceId);
-          throw error;
-        }
-      },
+      start: startSupervisorWorkspace({
+        workspaceDirectory,
+        workspaceHealth,
+        supervisorLogger,
+        workspaceInstance,
+        adoptions,
+        startPorts,
+      }),
       async stop(binding) {
         const child = adoptions.get(binding.workspaceId);
         // Includes recovery after enabled=false was persisted but OS stop was interrupted.
