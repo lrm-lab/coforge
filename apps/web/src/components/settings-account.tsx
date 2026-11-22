@@ -20,26 +20,17 @@ import { SaveErrorMessage, saveErrorFrom, type SaveError } from "#src/components
 import { m } from "#src/paraglide/messages";
 import type { SettingsContentProps } from "./settings-content";
 
-/** The signed-in person as Settings → Account shows them. */
 export type AccountProfile = {
   id: string;
-  /** The name teammates see: the display name. */
   name: string;
-  /** Null until the person has been asked for it. */
   displayName: string | null;
-  /** Null for an account made with a phone number alone. */
   email: string | null;
-  /** Whether the identity provider verified `email`; null until it has said. */
   emailVerified: boolean | null;
-  /** E.164; null when the provider reported none. */
   phone: string | null;
-  /** Whether the identity provider verified `phone`; null until it has said. */
   phoneVerified: boolean | null;
   description: string;
   avatarUrl: string | null;
-  /** False while `avatarUrl` is only the default cartoon. */
   hasAvatar: boolean;
-  /** When the account was created, as an ISO instant. */
   joinedAt: string;
 };
 
@@ -63,8 +54,6 @@ export function AccountSettings({
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [avatarDialogOpen, setAvatarDialogOpen] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
-  // The way back from GitHub opens the password dialog at its bind step (or the reason it failed),
-  // and is then taken out of the URL so a reload does not open it again.
   const [arrival, setArrival] = useState(bindArrival);
   useEffect(() => {
     if (!bindArrival) return;
@@ -110,18 +99,16 @@ export function AccountSettings({
   const profileTextChanged =
     displayName !== (profile.displayName ?? "") || description !== profile.description;
   const changed = profileTextChanged;
-  // A name the server would refuse is said so here, where it is typed, not as a failed save.
   const displayNameProblem = nameProblem(displayName);
   const canSave = changed && !saving && !displayNameProblem;
 
   return (
     <div className="w-full pb-8">
       <section>
-        <header className="flex min-w-0 items-center gap-4 px-4 pt-8 sm:gap-6 sm:px-8">
-          {/* The picture is the way to change it, as on an Agent's profile: a camera shows on
-              hover or focus. */}
+        <header className="flex min-w-0 items-center gap-4 px-page pt-8 sm:gap-6">
           <Button
             color="link-gray"
+            size="sm"
             noTextPadding
             aria-label={m.settings_avatar_dialog_title()}
             className="relative shrink-0 rounded-full!"
@@ -148,32 +135,36 @@ export function AccountSettings({
             onUpload={onAvatarUpload}
           />
           <div className="min-w-0 flex-1">
-            {/* Edit sits with the name it changes, not at the far edge of a wide window; while
-                editing, Cancel and Save close the form below instead. */}
             <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
-              <h2 className="min-w-0 break-words text-lg font-semibold text-primary">
+              <h2 className="min-w-0 text-lg font-semibold break-words text-primary">
                 {profile.name}
               </h2>
               {!editing && (
-                <Button type="button" color="secondary" className="shrink-0" onPress={startEditing}>
+                <Button
+                  type="button"
+                  size="sm"
+                  color="secondary"
+                  className="shrink-0"
+                  onPress={startEditing}
+                >
                   {m.settings_profile_edit()}
                 </Button>
               )}
             </div>
             {profile.email ? (
-              <p className="break-words text-md text-tertiary">{profile.email}</p>
+              <p className="text-md break-words text-tertiary">{profile.email}</p>
             ) : null}
           </div>
         </header>
 
         {saveSuccess && !editing && (
-          <p role="status" className="mt-6 px-4 text-sm text-tertiary sm:px-8">
+          <p role="status" className="mt-6 px-page text-sm text-tertiary">
             <Check aria-hidden="true" className="mr-2 inline size-4 text-primary" />
             {m.settings_profile_save_success()}
           </p>
         )}
 
-        <div className="mt-8 max-w-2xl px-4 sm:px-8">
+        <div className="mt-8 max-w-2xl px-page">
           {editing ? (
             <div className="flex min-w-0 flex-col gap-6">
               {saveError && <SaveErrorMessage error={saveError} />}
@@ -209,18 +200,22 @@ export function AccountSettings({
                 onChange={setDescription}
               />
               <div className="flex justify-end gap-3">
-                <Button type="button" color="secondary" isDisabled={saving} onPress={cancelEditing}>
+                <Button
+                  type="button"
+                  size="sm"
+                  color="secondary"
+                  isDisabled={saving}
+                  onPress={cancelEditing}
+                >
                   {m.settings_profile_cancel()}
                 </Button>
-                <Button type="button" isDisabled={!canSave} onPress={save}>
+                <Button type="button" size="sm" isDisabled={!canSave} onPress={save}>
                   {saving ? m.settings_profile_saving() : m.settings_profile_save()}
                 </Button>
               </div>
             </div>
           ) : (
             <dl className="flex min-w-0 flex-col gap-6">
-              {/* The name is the heading above, so it is not listed again; a field with nothing
-                  in it is left out rather than shown as a dash. */}
               <ContactValues profile={profile} />
               <div className="flex min-w-0 flex-col gap-1">
                 <dt className="text-sm font-semibold text-primary">{m.settings_password()}</dt>
@@ -269,7 +264,6 @@ export function AccountSettings({
   );
 }
 
-/** Each way a name is refused, worded as the first sign-in step words it. */
 const nameProblemText: Record<PersonNameProblem, () => string> = {
   empty: () => m.welcome_error_empty(),
   too_long: () => m.welcome_error_too_long({ max: PERSON_NAME_MAX_LENGTH }),
@@ -281,8 +275,6 @@ function nameProblem(name: string): PersonNameProblem | undefined {
   return checked.ok ? undefined : checked.problem;
 }
 
-/** The person's own email and phone number, each only when there is one, with whether the identity
- * provider verified it, as Raft's Account shows the email. */
 function ContactValues({ profile }: { profile: AccountProfile }) {
   return (
     <>
@@ -311,7 +303,6 @@ function ContactValue({
 }: {
   label: string;
   value: string;
-  /** Null while the provider has not said: the address alone, no tag. */
   verified: boolean | null;
 }) {
   return (

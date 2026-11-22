@@ -62,7 +62,7 @@ export function ServerConnectionSettings() {
   if (!page) {
     return (
       <form
-        className="max-w-sm space-y-4 px-4 py-6 sm:px-8"
+        className="max-w-sm space-y-4 px-page py-6"
         onSubmit={(event) => {
           event.preventDefault();
           continueWithPassword();
@@ -78,7 +78,7 @@ export function ServerConnectionSettings() {
           value={password}
           onChange={setPassword}
         />
-        <Button type="submit" isDisabled={pending || password.length === 0}>
+        <Button type="submit" size="sm" isDisabled={pending || password.length === 0}>
           {pending
             ? m.settings_cloud_service_password_checking()
             : m.settings_cloud_service_password_continue()}
@@ -93,7 +93,7 @@ export function ServerConnectionSettings() {
   }
 
   return (
-    <div className="space-y-8 px-4 py-6 text-sm sm:px-8">
+    <div className="space-y-8 px-page py-6 text-sm">
       <div className="flex max-w-2xl items-start justify-between gap-4">
         <p className="text-tertiary">{m.settings_cloud_service_intro()}</p>
         <Button
@@ -197,7 +197,11 @@ function InstallHost({
         value={image}
         onChange={setImage}
       />
-      <Button type="submit" isDisabled={pending || clusterName.length === 0 || image.length === 0}>
+      <Button
+        type="submit"
+        size="sm"
+        isDisabled={pending || clusterName.length === 0 || image.length === 0}
+      >
         {pending ? m.settings_cloud_service_downloading() : m.settings_cloud_service_download()}
       </Button>
       {error ? (

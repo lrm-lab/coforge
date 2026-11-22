@@ -1,12 +1,9 @@
 import { SaveErrorMessage, type SaveError } from "./save-error";
 
-/** The building blocks every Settings page lays itself out with: page, group, card, field, footer. */
-
 export function SettingsPage({ children }: { children: React.ReactNode }) {
-  return <div className="w-full max-w-5xl space-y-8 px-4 pt-6 pb-8 sm:px-8">{children}</div>;
+  return <div className="w-full max-w-5xl space-y-8 px-page pt-6 pb-8">{children}</div>;
 }
 
-/** A captioned group of settings; each card inside is one independent setting or save unit. */
 export function SettingsGroup({
   icon: Icon,
   label,
@@ -15,7 +12,6 @@ export function SettingsGroup({
 }: {
   icon: React.FC<{ className?: string }>;
   label: string;
-  /** Shown after the caption, such as how many items the group lists. */
   badge?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -47,7 +43,6 @@ export function SettingsField({
 }: {
   label: string;
   description?: string;
-  /** Put the control at the end of the row (switches) instead of under the text. */
   inline?: boolean;
   children: React.ReactNode;
 }) {

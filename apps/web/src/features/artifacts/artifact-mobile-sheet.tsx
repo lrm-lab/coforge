@@ -191,9 +191,7 @@ export function ArtifactMobileSheet({
         style={{ y }}
         className={cn(
           "fixed inset-x-0 bottom-0 z-50 flex h-[92dvh] flex-col overflow-hidden rounded-t-2xl border-t border-secondary bg-primary shadow-xl will-change-transform",
-          snap === "half"
-            ? "pb-[calc(27dvh+env(safe-area-inset-bottom))]"
-            : "pb-[env(safe-area-inset-bottom)]",
+          snap === "half" ? "pb-[calc(27dvh+var(--spacing-safe-bottom))]" : "pb-safe-bottom",
         )}
       >
         <div

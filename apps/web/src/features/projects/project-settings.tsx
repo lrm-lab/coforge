@@ -283,6 +283,7 @@ export function ProjectSettingsPage({
             )}
             {deleting && (
               <Button
+                size="sm"
                 color="secondary"
                 isDisabled={busy}
                 onPress={() => {
@@ -296,7 +297,8 @@ export function ProjectSettingsPage({
             )}
             <Button
               type="submit"
-              color={deleting ? "secondary-destructive" : "primary"}
+              size="sm"
+              color={deleting ? "primary-destructive" : "primary"}
               isLoading={busy}
               isDisabled={deleting ? confirmation !== project.name : !name.trim()}
               showTextWhileLoading
@@ -307,6 +309,7 @@ export function ProjectSettingsPage({
           {!deleting && (
             <div className="border-t border-secondary pt-4">
               <Button
+                size="sm"
                 color="secondary-destructive"
                 isDisabled={busy}
                 onPress={() => {

@@ -303,7 +303,7 @@ export function NotificationSettingsPanel({
                       hint={customEnd === null ? m.notif_pause_custom_invalid() : undefined}
                     />
                     <Button
-                      size="md"
+                      size="sm"
                       color="primary"
                       className="mt-6"
                       isDisabled={saving || customEnd === null}

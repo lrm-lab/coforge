@@ -43,18 +43,9 @@ import "./project-file-view.css";
 
 const MARKDOWN_EXTENSIONS = new Set(["md", "markdown"]);
 
-// Lines render every row into the DOM (no JS virtualization) so the
-// browser's native find-in-page, select-all and copy keep working over the
-// whole file; `content-visibility: auto` on each chunk is what keeps that
-// affordable by skipping layout/paint for off-screen chunks.
 const CHUNK_SIZE = 200;
-const LINE_HEIGHT_PX = 20;
-
-// Highlighting a huge file with lowlight is slow (it's a full tokenizer
-// pass); past this size, render escaped plain text instead of blocking the
-// main thread on a file nobody was going to read token-by-token anyway.
+const LINE_HEIGHT_REM = 1.25;
 const MAX_HIGHLIGHT_CHARS = 512_000;
-
 const WRAP_STORAGE_KEY = "coforge-file-wrap";
 
 export function ProjectFileView({
@@ -68,16 +59,10 @@ export function ProjectFileView({
 }: {
   path: string;
   name: string;
-  /** Omitted for entries with no meaningful size (symlinks, submodules). */
   byteSize?: number;
   text: string | null;
-  /** Omitted where there is no source-hosting link to offer (e.g. an Agent's workspace file). */
   githubUrl?: string;
-  /** Omitted for entries that can't be downloaded (symlinks, submodules). */
   downloadUrl?: string;
-  /** A control before the file name, such as a way back to the list it was opened from. The bar
-   * then leaves out the line count and size, so the name and the actions share one line in a
-   * narrow panel. */
   barLeading?: ReactNode;
 }) {
   const isMarkdown = MARKDOWN_EXTENSIONS.has(getFileExtension(name));
@@ -95,9 +80,6 @@ export function ProjectFileView({
   const lines = useMemo(() => computeLines(text, name), [text, name]);
   const showCode = text !== null && (!isMarkdown || tab === "source");
 
-  // Find-in-file state (query, matches, active index, the CSS Custom
-  // Highlight API registration) lives in this hook; tabs, copy, wrap and zen
-  // stay here since they're specific to this component's toolbar.
   const find = useFindInFile({ text, codeRootRef, enabled: showCode });
 
   useEffect(() => () => clearTimeout(copyTimeoutRef.current), []);
@@ -107,9 +89,10 @@ export function ProjectFileView({
       ? path.slice(0, path.length - name.length)
       : "";
   const sizeLabel = byteSize !== undefined ? formatFileSize(byteSize) : undefined;
-  const metaText = [text !== null ? m.project_file_lines({ count: lines.length }) : null, sizeLabel]
-    .filter((part): part is string => Boolean(part))
-    .join(" · ");
+  const metaParts = [
+    text !== null ? m.project_file_lines({ count: lines.length }) : null,
+    sizeLabel,
+  ].filter((part): part is string => Boolean(part));
 
   async function handleCopy() {
     if (text === null) return;
@@ -129,19 +112,12 @@ export function ProjectFileView({
     if (next === "preview" && find.findOpen) find.close();
   }
 
-  // Entering zen moves focus into the pane so it's immediately
-  // keyboard-scrollable; leaving it returns focus to the control that
-  // toggles it, regardless of whether zen was exited by clicking the
-  // toggle, pressing Escape with focus in the view, or pressing Escape with
-  // focus on `<body>` (see the document-level listener below).
   const setZenMode = useCallback((next: boolean) => {
     setZen(next);
     if (next) scrollerRef.current?.focus();
     else zenButtonRef.current?.focus();
   }, []);
 
-  // Escape and Cmd/Ctrl+F while focus is anywhere inside this view (the
-  // toolbar, the find bar, or the now-focusable code scroller).
   const { keyboardProps } = useKeyboard({
     onKeyDown(event) {
       const apple = isApplePlatform();
@@ -150,8 +126,6 @@ export function ProjectFileView({
       );
       if (isFindShortcut) {
         if (!find.findSupported) {
-          // The Highlight API this feature depends on isn't available:
-          // never intercept the shortcut, let the browser's native find run.
           event.continuePropagation();
           return;
         }
@@ -161,9 +135,6 @@ export function ProjectFileView({
             rootRef.current?.querySelector("[data-find-bar]")?.contains(document.activeElement),
           );
         if (findBarHasFocus) {
-          // A second Cmd/Ctrl+F while the find bar already has focus falls
-          // through to the browser's native find-in-page instead of being
-          // hijacked again.
           event.continuePropagation();
           return;
         }
@@ -172,7 +143,6 @@ export function ProjectFileView({
         return;
       }
       if (event.key === "Escape" && find.findOpen) {
-        // The find bar's Escape takes priority over exiting zen mode.
         find.close();
         return;
       }
@@ -184,12 +154,6 @@ export function ProjectFileView({
     },
   });
 
-  // While zen is on, the view is a full-screen layer and focus may land on
-  // `<body>` (e.g. after clicking non-focusable code text before the
-  // scroller existed, or a browser chrome interaction) where the keyboard
-  // handler above — attached to a descendant of the root — never sees the
-  // keydown, since it never bubbles into this subtree. This listens at the
-  // document level, only while zen is actually on, to catch that case too.
   const findRef = useRef(find);
   findRef.current = find;
   useEffect(() => {
@@ -232,8 +196,12 @@ export function ProjectFileView({
             <span className="min-w-0 truncate text-sm text-tertiary">{dir}</span>
             <span className="shrink-0 text-sm font-medium text-primary">{name}</span>
           </span>
-          {metaText !== "" && !barLeading && (
-            <span className="shrink-0 text-xs text-tertiary tabular-nums">{metaText}</span>
+          {metaParts.length > 0 && !barLeading && (
+            <span className="inline-flex shrink-0 items-center gap-2 text-xs text-tertiary tabular-nums">
+              {metaParts.map((part) => (
+                <span key={part}>{part}</span>
+              ))}
+            </span>
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -330,7 +298,6 @@ export function ProjectFileView({
           )}
         </div>
       </div>
-      {/* The find bar docks to this frame, not to the scroller, so it stays put while scrolling. */}
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div
           ref={scrollerRef}
@@ -429,10 +396,6 @@ function CodeView({
   return (
     <div
       ref={codeRootRef}
-      // `rich-text-editor` scopes the shared `.hljs-*` token color rules
-      // from report-editor's code.css. Deliberately no `<code>` element
-      // anywhere below — `.rich-text-editor code` carries inline-code
-      // border/background/padding that would otherwise bleed into every line.
       className="pfv-code-root rich-text-editor relative min-h-full min-w-full py-2 font-mono text-xs tab-4"
       data-wrap={wrap ? "on" : "off"}
       style={{ "--pfv-gutter-w": gutterWidth } as CSSProperties}
@@ -442,11 +405,8 @@ function CodeView({
           key={chunkIndex}
           style={{
             contentVisibility: "auto",
-            containIntrinsicSize: `auto ${chunkLines.length * LINE_HEIGHT_PX}px`,
+            containIntrinsicSize: `auto ${chunkLines.length * LINE_HEIGHT_REM}rem`,
           }}
-          // Built once per chunk and set as raw HTML: at file scale, building
-          // per-line React elements is the expensive part virtualization
-          // would normally avoid — this keeps that cost out of the DOM diff.
           dangerouslySetInnerHTML={{
             __html: renderChunkHtml(chunkLines, chunkIndex * CHUNK_SIZE),
           }}
@@ -462,8 +422,6 @@ function renderChunkHtml(chunkLines: string[], startIndex: number): string {
     const lineNumber = startIndex + i + 1;
     html +=
       `<div class="pfv-row flex w-max min-w-full gap-4">` +
-      // `data-line` + the CSS `::before` in project-file-view.css keep the
-      // number out of find-in-page and out of a copy/select-all of the code.
       `<span class="pfv-lineno sticky left-0 z-10 shrink-0 select-none border-r border-secondary bg-primary pr-3 text-right text-quaternary" data-line="${lineNumber}"></span>` +
       `<span class="pfv-code">${chunkLines[i]}</span>` +
       `</div>`;
@@ -486,7 +444,7 @@ function highlight(text: string, language: string | undefined): HastRoot {
     try {
       return sharedLowlight.highlight(language!, text);
     } catch {
-      // Fall through to the plain-text tree below.
+      return { type: "root", children: [{ type: "text", value: text }] };
     }
   }
   return { type: "root", children: [{ type: "text", value: text }] };
@@ -504,6 +462,6 @@ function writeWrapPreference(wrap: boolean) {
   try {
     localStorage.setItem(WRAP_STORAGE_KEY, wrap ? "on" : "off");
   } catch {
-    // Private mode or blocked storage: the choice still holds for this visit.
+    return;
   }
 }

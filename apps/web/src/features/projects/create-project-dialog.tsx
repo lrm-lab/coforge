@@ -233,7 +233,7 @@ export function CreateProjectDialog({
         if (!busy) onOpenChange(next);
       }}
     >
-      <Modal className="w-[min(480px,calc(100vw-2rem))]">
+      <Modal className="w-[min(30rem,calc(100vw-2rem))]">
         <Dialog>
           {() => (
             <>

@@ -260,7 +260,7 @@ export function ShortcutsSettings() {
                                 color="secondary"
                                 size="sm"
                                 onPress={() => setRecording(null)}
-                                className="h-8 gap-1.5 bg-secondary px-2.5 text-xs ring-2 ring-focus-ring ring-inset"
+                                className="gap-1.5 bg-secondary px-2.5 text-xs ring-2 ring-focus-ring ring-inset"
                               >
                                 <span className="font-medium text-primary">
                                   {m.shortcuts_recording_prompt()}
@@ -279,7 +279,7 @@ export function ShortcutsSettings() {
                                     onPress={() =>
                                       startRecording({ id, mode: "replace", index: 0 })
                                     }
-                                    className="h-8 px-2 text-xs font-normal text-quaternary"
+                                    className="px-2 text-xs font-normal text-quaternary"
                                   >
                                     {m.shortcuts_unassigned()}
                                   </Button>
@@ -298,7 +298,7 @@ export function ShortcutsSettings() {
                                         onPress={() =>
                                           startRecording({ id, mode: "replace", index })
                                         }
-                                        className="h-8 px-1.5"
+                                        className="px-1.5"
                                         aria-label={`${meta.label()}: ${m.shortcuts_edit_action()}`}
                                       >
                                         <ShortcutKeycapGroup hotkey={hotkey} apple={apple} />

@@ -1,6 +1,7 @@
 import { taskNameLabel } from "@lrm/coforge-sdk/internal";
 import type { TaskLink, TaskName } from "@lrm/coforge-sdk/internal";
 import { useMemo, useState } from "react";
+import { useRouter } from "@tanstack/react-router";
 import {
   Button as AriaButton,
   Dialog as AriaDialog,
@@ -11,15 +12,15 @@ import {
   type Key,
 } from "react-aria-components";
 import { ChevronRight } from "@untitledui/icons";
-
 import { CircleAlert } from "kubai-icons/duotone";
 
+import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { NoResultsWireframe, TaskBoardWireframe } from "#src/components/ui/empty-wireframes";
 import { Skeleton } from "#src/components/ui/skeleton";
-
+import { ChannelPlace } from "#src/features/conversations/channel-name";
 import { statusMatches, taskMatches } from "#src/features/tasks/task-filters";
 import type { TaskBoardView } from "#src/features/tasks/task-board-search";
 import { TaskOwnerAvatar } from "#src/features/tasks/task-owner";
@@ -41,9 +42,11 @@ export function ProjectTaskTreeView({
   onOpenTask,
 }: {
   query: ReturnType<typeof useProjectTasks>;
-  view: Pick<TaskBoardView, "statuses" | "filter">;
+  view: Pick<TaskBoardView, "statuses" | "filter"> &
+    Partial<Pick<TaskBoardView, "changeStatuses" | "changeFilter">>;
   onOpenTask: (task: ProjectTask) => void;
 }) {
+  const router = useRouter();
   const { statuses, filter } = view;
   const nodes = useMemo(
     () =>
@@ -68,6 +71,27 @@ export function ProjectTaskTreeView({
     [query.data],
   );
 
+  const clearFilters = () => {
+    if (view.changeStatuses && view.changeFilter) {
+      view.changeStatuses([]);
+      view.changeFilter({ owners: [], projects: [], labels: [], channels: [] });
+      return;
+    }
+    void router.navigate({
+      to: ".",
+      replace: true,
+      resetScroll: false,
+      search: (previous: Record<string, unknown>) => ({
+        ...previous,
+        status: undefined,
+        owners: undefined,
+        projects: undefined,
+        labels: undefined,
+        channels: undefined,
+      }),
+    });
+  };
+
   if (query.isError) {
     return (
       <EmptyState
@@ -89,6 +113,11 @@ export function ProjectTaskTreeView({
         picture={<NoResultsWireframe />}
         title={m.tasks_overview_filter_empty()}
         description={m.empty_tasks_no_match_description()}
+        primaryAction={
+          <Button size="sm" color="secondary" onPress={clearFilters}>
+            {m.empty_clear_filters()}
+          </Button>
+        }
       />
     ) : (
       <EmptyState
@@ -103,7 +132,6 @@ export function ProjectTaskTreeView({
       aria-label={m.project_task_tree()}
       selectionMode="none"
       expandedKeys={expandedKeys}
-      // Only the parents shown change: one a filter hides keeps its fold for when it is back.
       onExpandedChange={(open) =>
         setFolded((previous) => {
           const next = new Set(previous);
@@ -146,7 +174,6 @@ function TaskTreeItem({ node }: { node: FilteredNode<ProjectTask> }) {
         {({ hasChildItems, isExpanded, level }) => (
           <div
             className="flex min-h-12 min-w-0 items-center gap-2 py-2 pr-4"
-            // One step in per level; the chevron's room is kept on a leaf so titles line up.
             style={{ paddingLeft: `${0.5 + (level - 1) * 1.5}rem` }}
           >
             {hasChildItems ? (
@@ -171,8 +198,6 @@ function TaskTreeItem({ node }: { node: FilteredNode<ProjectTask> }) {
               <span className="flex min-w-0 items-baseline gap-2">
                 <span className="shrink-0 text-xs text-tertiary tabular-nums">#{task.number}</span>
                 <span
-                  // An ancestor kept only for what passes below it reads quieter, in a token that
-                  // keeps the text's contrast.
                   className={cn(
                     "truncate text-sm font-medium",
                     matched ? "text-primary" : "text-tertiary",
@@ -182,8 +207,11 @@ function TaskTreeItem({ node }: { node: FilteredNode<ProjectTask> }) {
                 </span>
               </span>
               <span className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-tertiary">
-                <span className="truncate">{task.source.label}</span>
-                {/* Its parent is not in the tree: named, since nothing above it shows. */}
+                {task.source.channelName ? (
+                  <ChannelPlace id={task.conversationId} name={task.source.channelName} />
+                ) : (
+                  <span className="truncate">{task.source.label}</span>
+                )}
                 {task.parent && level === 1 && <TaskParentMark parent={task.parent} />}
               </span>
             </span>
@@ -193,7 +221,6 @@ function TaskTreeItem({ node }: { node: FilteredNode<ProjectTask> }) {
                 <span className="hidden sm:inline-flex">
                   <TaskSubtaskMark subtasks={task.subtasks} />
                 </span>
-                {/* A phone has room for the ring alone; the row's label says the count. */}
                 <SubtaskProgressRing {...task.subtasks} className="size-4 sm:hidden" />
               </>
             )}
@@ -208,10 +235,6 @@ function TaskTreeItem({ node }: { node: FilteredNode<ProjectTask> }) {
   );
 }
 
-/**
- * "Waiting on #388" or "Waiting on 3 tasks", as a card says it, which opens the list of them on a
- * press: a hover tooltip never shows on a phone, and a row's own press opens the Task.
- */
 function TreeBlockerMark({ blockedBy }: { blockedBy: readonly (TaskName | TaskLink)[] }) {
   const open = openBlockers(blockedBy);
   const first = open[0];
@@ -254,7 +277,6 @@ function TreeBlockerMark({ blockedBy }: { blockedBy: readonly (TaskName | TaskLi
   );
 }
 
-/** The tree's shape before its Tasks arrive, or before the page knows it is the list. */
 export function ProjectTaskTreeSkeleton() {
   return (
     <div

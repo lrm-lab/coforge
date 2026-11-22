@@ -38,10 +38,6 @@ import {
 
 const HOVER_PREFETCH_DELAY_MS = 80;
 
-/**
- * The repository's side tree. Folders expand from the already-loaded index, so the only
- * request a row ever causes is the hover prefetch of a file's content.
- */
 export function ProjectFileTree({
   slug,
   projectId,
@@ -59,8 +55,6 @@ export function ProjectFileTree({
   const workspaceSlug = useWorkspaceSlug();
   const queryClient = useQueryClient();
   const toast = useAppToast();
-  // Hover intent, as the router's own preloading does it: a pointer sweeping across the tree
-  // must not turn every row it crosses into a GitHub request.
   const hoverPrefetch = useRef<ReturnType<typeof setTimeout>>(undefined);
   const hrefOf = (path: string) =>
     router.buildLocation({
@@ -68,7 +62,6 @@ export function ProjectFileTree({
       params: { workspaceSlug, projectSlug: slug, _splat: path },
     }).href;
 
-  // The folders holding the current file open by themselves; everything else is the User's.
   const [expandedKeys, setExpandedKeys] = useState<Set<Key>>(
     () => new Set(ancestorPaths(currentPath).concat(currentPath)),
   );
@@ -101,7 +94,7 @@ export function ProjectFileTree({
           {({ level, isExpanded, isCurrent }) => (
             <div
               className="flex min-w-0 items-center gap-1 pr-1"
-              style={{ paddingLeft: 4 + (level - 1) * 16 }}
+              style={{ paddingLeft: `${0.25 + (level - 1)}rem` }}
             >
               {isDirectory ? (
                 <AriaButton
@@ -133,10 +126,9 @@ export function ProjectFileTree({
                 <span className="truncate">{entry.name}</span>
               </AriaLink>
               <Dropdown.Root>
-                {/* Our own trigger: the official DotsButton fixes its label to "Open menu". */}
                 <AriaButton
                   aria-label={m.project_file_actions({ name: entry.name })}
-                  className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-fg-quaternary opacity-0 outline-focus-ring any-pointer-coarse:opacity-100 group-focus-within/row:opacity-100 group-hover/row:opacity-100 hover:text-fg-quaternary_hover focus-visible:outline-2 aria-expanded:opacity-100"
+                  className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-fg-quaternary opacity-0 outline-focus-ring group-focus-within/row:opacity-100 group-hover/row:opacity-100 hover:text-fg-quaternary_hover focus-visible:outline-2 aria-expanded:opacity-100 any-pointer-coarse:opacity-100"
                 >
                   <DotsVertical aria-hidden="true" className="size-4" />
                 </AriaButton>
@@ -173,7 +165,6 @@ export function ProjectFileTree({
             </div>
           )}
         </NavigationTreeItemContent>
-        {/* Collapsed folders contribute no rows, so a 100k-entry tree stays a few hundred nodes. */}
         <Collection
           items={expandedKeys.has(entry.path) ? childrenOf(index, entry.path) : []}
           dependencies={[expandedKeys, currentPath]}
@@ -185,7 +176,6 @@ export function ProjectFileTree({
   }
 
   return (
-    // Scoped to the tree: its rows are React Aria links, which would otherwise reload the page.
     <RouterProvider navigate={(href) => router.history.push(href)}>
       <NavigationTree
         aria-label={m.project_tree_files()}

@@ -44,11 +44,6 @@ import {
 
 type Profile = Parameters<typeof passwordContacts>[0];
 
-/**
- * Settings → Account's "Set a new password": a code goes to the person's own verified email or
- * phone and the new password is saved with it. Without such a contact the dialog sends them to
- * GitHub to confirm who they are, then has them add one and confirm it with a code, and goes on.
- */
 export function AccountPasswordDialog({
   open,
   onOpenChange,
@@ -58,7 +53,6 @@ export function AccountPasswordDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   profile: Profile;
-  /** Set when the page was opened by the way back from GitHub. */
   arrival?: BindArrival | undefined;
 }) {
   return (
@@ -72,7 +66,6 @@ export function AccountPasswordDialog({
   );
 }
 
-/** Mounted with the dialog, so each opening starts fresh. */
 function DialogBody({
   profile,
   arrival,
@@ -145,7 +138,6 @@ function ProblemLine({ problem }: { problem: AccountPasswordProblem }) {
   );
 }
 
-/** The code, where it goes, and the new password. */
 function PasswordForm({ contacts, close }: { contacts: PasswordContacts; close: () => void }) {
   const size = useDialogControlSize();
   const requestCode = useServerFn(requestAccountPasswordCode);
@@ -190,11 +182,19 @@ function PasswordForm({ contacts, close }: { contacts: PasswordContacts; close: 
           isDisabled={saving}
           className="gap-3"
         >
-          <RadioButton value="email" label={`${m.settings_email()} · ${contacts.email}`} />
-          <RadioButton value="phone" label={`${m.settings_phone()} · ${contacts.phone}`} />
+          <RadioButton
+            value="email"
+            label={m.settings_email()}
+            hint={<span className="wrap-anywhere">{contacts.email}</span>}
+          />
+          <RadioButton
+            value="phone"
+            label={m.settings_phone()}
+            hint={<span className="wrap-anywhere">{contacts.phone}</span>}
+          />
         </RadioGroup>
       ) : (
-        <p className="min-w-0 break-words text-md text-secondary">
+        <p className="min-w-0 text-md wrap-anywhere text-secondary">
           {m.settings_password_code_goes_to({ destination })}
         </p>
       )}
@@ -242,8 +242,6 @@ function PasswordForm({ contacts, close }: { contacts: PasswordContacts; close: 
   );
 }
 
-/** Adding the contact GitHub's confirmation allows: where to, then the code. The confirmation is
- * spent by any attempt, so a refusal sends the person back to GitHub. */
 function BindForm({
   close,
   onBound,

@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp, SearchLg, XClose } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Input } from "#src/components/base/input/input";
 import { Alert } from "#src/components/ui/alert";
 import { useAppToast } from "#src/components/ui/toast";
 import { copyText } from "#src/lib/clipboard";
@@ -104,27 +105,27 @@ export function PageFindBar({
         FLOATING_SURFACE_CLASS,
       )}
     >
-      <label className="flex h-8 w-52 items-center gap-2 pl-2">
-        <SearchLg aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
-        <input
-          aria-label={m.doc_page_find_placeholder()}
-          placeholder={m.doc_page_find_placeholder()}
-          autoFocus
-          value={query}
-          className="min-w-0 flex-1 bg-transparent text-sm text-primary outline-hidden placeholder:text-field-placeholder"
-          onChange={(event) => {
-            const next = event.target.value;
-            setQuery(next);
-            clearTimeout(timerRef.current);
-            if (next === "") onFind("", 0);
-            else timerRef.current = setTimeout(() => onFind(next, 0), FIND_DEBOUNCE_MS);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") runImmediate(query, event.shiftKey ? -1 : 1);
-            if (event.key === "Escape") onClose();
-          }}
-        />
-      </label>
+      <Input
+        size="sm"
+        icon={SearchLg}
+        aria-label={m.doc_page_find_placeholder()}
+        placeholder={m.doc_page_find_placeholder()}
+        autoFocus
+        value={query}
+        className="w-52"
+        wrapperClassName="bg-transparent shadow-none ring-0"
+        inputClassName="py-1.5"
+        onChange={(next) => {
+          setQuery(next);
+          clearTimeout(timerRef.current);
+          if (next === "") onFind("", 0);
+          else timerRef.current = setTimeout(() => onFind(next, 0), FIND_DEBOUNCE_MS);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") runImmediate(query, event.shiftKey ? -1 : 1);
+          if (event.key === "Escape") onClose();
+        }}
+      />
       <span className="min-w-10 text-center text-xs text-tertiary tabular-nums">
         {m.doc_page_find_count({ active: found.active, total: found.total })}
       </span>

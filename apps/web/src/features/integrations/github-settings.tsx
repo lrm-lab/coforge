@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import githubMark from "@lobehub/icons-static-svg/icons/github.svg";
 import { InfoCircle } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
+import { GitHubMark } from "#src/components/foundations/github-mark";
 import { HoverPopover } from "#src/components/ui/hover-popover";
 import { m } from "#src/paraglide/messages";
 import {
@@ -40,8 +40,6 @@ export function GitHubSettings({ callbackFailure }: { callbackFailure?: GitHubCa
       .then((value) => {
         if (cancelled) return;
         setConnection(value);
-        // Background refresh against live GitHub data. No spinner while it is in
-        // flight, and a failure here keeps the DB snapshot instead of showing an error.
         refresh()
           .then((next) => {
             if (!cancelled) setConnection(next);
@@ -117,18 +115,18 @@ export function GitHubSettings({ callbackFailure }: { callbackFailure?: GitHubCa
   }
 
   return (
-    <div className="space-y-4 px-4 py-6 text-sm sm:px-8">
+    <div className="space-y-4 px-page py-6 text-sm">
       <section
         aria-label="GitHub"
         className="flex flex-col gap-4 rounded-xl border border-secondary bg-primary p-4 sm:p-5 xl:flex-row xl:items-center xl:justify-between"
       >
         <div className="flex min-w-0 items-start gap-4">
           <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-secondary">
-            <img src={githubMark} alt="" className="size-7 dark:invert" />
+            <GitHubMark className="size-7 text-fg-primary" />
           </div>
           <div className="min-w-0 space-y-1">
             <div className="flex items-center gap-1.5">
-              <h2 className="break-words text-md font-semibold text-primary">
+              <h2 className="text-md font-semibold break-words text-primary">
                 {connection?.login ? `@${connection.login} on GitHub` : "GitHub"}
               </h2>
               {connection?.status === "connected" && (
@@ -142,12 +140,13 @@ export function GitHubSettings({ callbackFailure }: { callbackFailure?: GitHubCa
                     <p className="font-semibold text-primary">{m.github_repository_access()}</p>
                     <ul className="mt-3 space-y-2 text-sm text-tertiary">
                       {connection.installations.map((installation) => (
-                        <li key={installation.id}>
-                          @{installation.login}
-                          <span aria-hidden="true"> · </span>
-                          {installation.repositorySelection === "all"
-                            ? m.github_all_repositories()
-                            : m.github_selected_repositories()}
+                        <li key={installation.id} className="flex flex-wrap items-baseline gap-2">
+                          <span className="font-medium text-secondary">@{installation.login}</span>
+                          <span>
+                            {installation.repositorySelection === "all"
+                              ? m.github_all_repositories()
+                              : m.github_selected_repositories()}
+                          </span>
                         </li>
                       ))}
                     </ul>

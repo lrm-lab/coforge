@@ -33,8 +33,6 @@ export function WorkspaceSwitcher({
   current: WorkspaceOption | null;
   onSelect?: (slug: string) => Promise<void> | void;
   onCreate?: (input: CreateWorkspaceInput) => Promise<void>;
-  /** The button is the CoForge mark and the Workspace's name (the sidebar's top row), or the mark
-   * alone (the collapsed rail, a phone's tab home header). */
   markOnly?: boolean;
 }) {
   const [createOpen, setCreateOpen] = useState(false);
@@ -56,7 +54,6 @@ export function WorkspaceSwitcher({
           aria-label={m.workspace_switcher()}
           className={cx(
             "flex h-8 min-w-0 shrink-0 items-center rounded-lg outline-focus-ring transition-colors duration-100 ease-out hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-offset-2",
-            // gap-3: the name starts on the nav labels' line.
             markOnly ? "w-8 justify-center" : "max-w-full shrink gap-3 px-1.5 text-left",
           )}
         >
@@ -136,7 +133,6 @@ export function WorkspaceSwitcher({
   );
 }
 
-/** The Workspace's uploaded icon, or the building mark when it has none. */
 function WorkspaceMark({ workspace }: { workspace: WorkspaceOption | null }) {
   if (workspace?.iconUrl)
     return (
@@ -167,14 +163,13 @@ function CreateWorkspaceDialog({
   const close = () => onOpenChange(false);
   return (
     <ModalOverlay isOpen={open} onOpenChange={onOpenChange}>
-      <Modal className="w-[min(480px,calc(100vw-2rem))]">
+      <Modal className="w-[min(30rem,calc(100vw-2rem))]">
         <Dialog>
           <DialogHeader
             title={m.workspace_create_title()}
             description={m.workspace_create_description()}
             onClose={close}
           />
-          {/* The form lives inside the modal, so closing it starts the next one empty. */}
           <CreateWorkspaceForm
             onCreate={async (input) => {
               await onCreate(input);

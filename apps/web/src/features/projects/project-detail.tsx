@@ -32,13 +32,8 @@ type ProjectSearch = Parameters<typeof WorkspaceTaskBoard>[0]["search"] & { tab?
 
 export type ProjectTab = "overview" | "tasks" | "code";
 
-/** The tab a Project opens on, which its address leaves out. */
 export const DEFAULT_PROJECT_TAB: ProjectTab = "tasks";
 
-/**
- * A Project's page (task #504): Overview (what it is for, progress, people, its Tasks in three
- * groups), Tasks (its board; on a phone the groups) and, with a linked repository, Code.
- */
 export function ProjectDetail({
   project,
   repository,
@@ -53,7 +48,6 @@ export function ProjectDetail({
   const workspaceSlug = useWorkspaceSlug();
   const hasCode = Boolean(project.githubFullName);
   const tab: ProjectTab =
-    // A Project's page opens on its board (task #596): the Tasks are the Project.
     search.tab === "code" && !hasCode ? DEFAULT_PROJECT_TAB : (search.tab ?? DEFAULT_PROJECT_TAB);
   return (
     <main className="flex h-full min-w-0 flex-col bg-primary">
@@ -110,7 +104,6 @@ export function ProjectDetail({
           id="tasks"
           className="flex min-h-0 flex-1 flex-col outline-hidden max-md:overflow-y-auto"
         >
-          {/* A phone's list layout, its default, is the task tree (task #462). */}
           <WorkspaceTaskBoard search={search} project={project.id} projectSlug={project.slug} />
         </TabPanel>
         {hasCode && (
@@ -136,7 +129,6 @@ export function ProjectDetail({
           </TabPanel>
         )}
       </Tabs>
-      {/* Away from the board, a Task row still opens its popup over the page. */}
       {tab !== "tasks" && <WorkspaceTaskBoard search={search} project={project.id} board={false} />}
     </main>
   );
@@ -301,7 +293,6 @@ function RepositoryContents({ data, projectSlug }: { data: Repository; projectSl
                             params={{ workspaceSlug, projectSlug, _splat: file.path }}
                             className={nameLinkClassName}
                           >
-                            {/* Both types open in the file browser, but only one is a folder. */}
                             {file.type === "dir" ? (
                               <Folder
                                 aria-hidden="true"
@@ -315,7 +306,6 @@ function RepositoryContents({ data, projectSlug }: { data: Repository; projectSl
                             </span>
                           </Link>
                         ) : (
-                          // Reached only for "symlink"/"submodule" — neither is "dir", so this is always a blob URL.
                           <a
                             href={`${base}/blob/${encodeURIComponent(data.defaultBranch)}/${file.path.split("/").map(encodeURIComponent).join("/")}`}
                             target="_blank"
@@ -378,7 +368,15 @@ function CommitIdentity({
   avatarUrl: string | null;
 }) {
   return (
-    <Tooltip title={`${name} · ${role}`} description={email ?? undefined}>
+    <Tooltip
+      title={
+        <span className="inline-flex items-center gap-1.5">
+          <span>{name}</span>
+          <span className="text-tooltip-supporting-text">{role}</span>
+        </span>
+      }
+      description={email ?? undefined}
+    >
       <TooltipTrigger className="flex rounded-full">
         <ActorAvatar
           presence={false}

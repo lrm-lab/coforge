@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Heading } from "react-aria-components";
 
 import { Select } from "#src/components/base/select/select";
+import { TextArea } from "#src/components/base/textarea/textarea";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { useAppToast } from "#src/components/ui/toast";
@@ -75,18 +76,18 @@ export function PublicArtifactReportDialog({
                 {(item) => <Select.Item id={item.id} label={item.label} />}
               </Select>
             </div>
-            <label className="mt-3 block text-sm font-medium text-secondary">
-              {m.ap_report_details()}
-              <textarea
+            <div className="mt-3">
+              <TextArea
+                label={m.ap_report_details()}
                 rows={3}
                 maxLength={1000}
-                disabled={pending}
+                isDisabled={pending}
                 value={details}
-                onChange={(event) => setDetails(event.target.value)}
+                onChange={setDetails}
                 placeholder={m.ap_report_details_placeholder()}
-                className="mt-1.5 block w-full resize-none rounded-lg border border-primary bg-primary px-3 py-2 text-sm text-primary shadow-xs focus:ring-2 focus:ring-brand focus:outline-hidden"
+                textAreaClassName="resize-none"
               />
-            </label>
+            </div>
             {failed && (
               <p role="alert" className="mt-2 text-sm text-error-primary">
                 {m.ap_report_failed()}

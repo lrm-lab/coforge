@@ -29,10 +29,6 @@ type DialogProps = {
   onClose: () => void;
 };
 
-/**
- * Settings → Workspace profile → Danger zone: its owner deletes the Workspace, everyone else
- * leaves it.
- */
 export function WorkspaceDangerZone({
   workspaceName,
   workspaceSlug,
@@ -51,8 +47,7 @@ export function WorkspaceDangerZone({
         description: m.settings_delete_workspace_description(),
         icon: Trash01,
       }
-    : // Only a new invitation undoes leaving, so it is a destructive action too (docs/design).
-      {
+    : {
         title: m.settings_leave_workspace(),
         description: m.settings_leave_workspace_description(),
         icon: LogOut01,
@@ -90,6 +85,7 @@ function DangerAction({
         <p className="mt-1 text-sm text-tertiary">{description}</p>
       </div>
       <Button
+        size="sm"
         color="secondary-destructive"
         iconLeading={icon}
         className="shrink-0 self-start sm:self-auto"
@@ -101,11 +97,6 @@ function DangerAction({
   );
 }
 
-/**
- * The viewer's departure from the Workspace: runs the write that takes them out (leave, delete),
- * then opens the Workspace the server picked, or `/` when there is none. A refusal whose code says
- * they are out already goes to `/` too; any other failure stays inline as `error`.
- */
 function useWorkspaceDeparture({
   write,
   outAlready,
@@ -113,7 +104,6 @@ function useWorkspaceDeparture({
 }: {
   write: () => Promise<{ nextWorkspaceSlug: string | null }>;
   outAlready: readonly AppErrorCode[];
-  /** The inline copy for a failure; `refusal` is absent when the server gave no reason. */
   messageFor: (refusal: AppError | undefined) => string;
 }) {
   const navigate = useNavigate();
@@ -143,7 +133,6 @@ function useWorkspaceDeparture({
         });
       else await navigate({ to: "/" });
     } finally {
-      // Still here when the navigation failed: trying again finds them out already and goes to `/`.
       setBusy(false);
     }
   }
@@ -151,7 +140,6 @@ function useWorkspaceDeparture({
   return { busy, error, depart, clearError: () => setError(null) };
 }
 
-/** Confirms leaving; the write runs here so a failure stays inline. */
 function LeaveWorkspaceDialog({ open, workspaceName, onClose }: DialogProps) {
   const leave = useServerFn(leaveWorkspace);
   const preview = useServerFn(previewWorkspaceLeave);
@@ -159,7 +147,6 @@ function LeaveWorkspaceDialog({ open, workspaceName, onClose }: DialogProps) {
   const impact = useDepartureImpact({ open, subject: "leave", load });
   const { busy, error, depart, clearError } = useWorkspaceDeparture({
     write: () => leave(),
-    // No longer a member (removed meanwhile): they are out already.
     outAlready: ["NOT_FOUND", "ACCESS_DENIED"],
     messageFor: (refusal) =>
       refusal?.code === "CONFLICT"
@@ -188,7 +175,6 @@ function LeaveWorkspaceDialog({ open, workspaceName, onClose }: DialogProps) {
   );
 }
 
-/** What a refused delete says, by the refusal's `errorId`, else its code. */
 function deleteRefusalMessage(refusal: AppError | undefined, slug: string) {
   if (refusal?.errorId === "workspace-memory-removal-failed")
     return m.settings_delete_workspace_memory_error();
@@ -197,7 +183,6 @@ function deleteRefusalMessage(refusal: AppError | undefined, slug: string) {
   return m.settings_delete_workspace_error();
 }
 
-/** Confirms deleting with the Workspace's slug typed exactly; the server checks it again. */
 function DeleteWorkspaceDialog({
   open,
   workspaceName,
@@ -209,7 +194,6 @@ function DeleteWorkspaceDialog({
   const [typed, setTyped] = useState("");
   const { busy, error, depart, clearError } = useWorkspaceDeparture({
     write: () => remove({ data: { confirmSlug: typed } }),
-    // Deleted from another tab meanwhile.
     outAlready: ["NOT_FOUND"],
     messageFor: (refusal) => deleteRefusalMessage(refusal, workspaceSlug),
   });
@@ -248,8 +232,6 @@ function DeleteWorkspaceDialog({
   );
 }
 
-/** A destructive confirmation: its one solid red button confirms, and it cannot be dismissed while
- * the write runs. Enter in a field confirms too, when the confirm button is enabled. */
 function DangerDialog({
   open,
   busy,
@@ -267,7 +249,6 @@ function DangerDialog({
   busy: boolean;
   title: string;
   description: string;
-  /** Appended after the description. */
   detail?: ReactNode;
   error: SaveError | null;
   onClose: () => void;
@@ -317,7 +298,7 @@ function DangerDialog({
                 </DialogCancel>
                 <DialogAction
                   type="submit"
-                  color="secondary-destructive"
+                  color="primary-destructive"
                   isDisabled={busy || isConfirmDisabled}
                   isLoading={busy}
                   showTextWhileLoading

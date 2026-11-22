@@ -16,7 +16,6 @@ import { SettingsCard, SettingsGroup, SettingsPage } from "#src/components/setti
 import { SaveErrorMessage, saveErrorFrom, type SaveError } from "#src/components/save-error";
 import { m } from "#src/paraglide/messages";
 
-/** The sentence for a failed change, by the code the server answered with. */
 function messageForCode(
   cause: unknown,
   messages: Partial<Record<AppErrorCode, () => string>>,
@@ -47,9 +46,6 @@ const workspaceIconUploadError = (cause: unknown) =>
     m.settings_workspace_icon_error,
   );
 
-/** Settings → Workspace profile: the Workspace's icon, name and URL. Its owner or an admin changes
- * the name and icon, and only its owner changes the URL; everyone else sees the same card
- * read-only. */
 export function WorkspaceProfileSettings({
   workspace,
   canEdit,
@@ -66,9 +62,7 @@ export function WorkspaceProfileSettings({
   canChangeSlug: boolean;
   onSlugChange: (slug: string) => Promise<void>;
   onIconUpload: (file: File) => Promise<void>;
-  /** The archived channels and Agents groups under the profile, when the viewer has them. */
   archivedGroups: React.ReactNode;
-  /** The Danger zone last on the page, when the viewer has one. */
   dangerZone: React.ReactNode;
 }) {
   const [name, setName] = useState(workspace.name);
@@ -119,7 +113,6 @@ export function WorkspaceProfileSettings({
     });
   }
 
-  // On success the page moves to the new URL, which remounts this card, so nothing is reset here.
   function saveSlug() {
     void guardSlugSave(async () => {
       setSlugError(null);
@@ -176,7 +169,7 @@ export function WorkspaceProfileSettings({
                       {icon}
                       <span
                         aria-hidden="true"
-                        className="absolute inset-0 hidden items-center justify-center rounded-lg bg-overlay/70 text-white group-hover:flex group-focus-visible:flex group-pending:hidden"
+                        className="absolute inset-0 hidden items-center justify-center rounded-lg bg-overlay/70 text-fg-white group-hover:flex group-focus-visible:flex group-pending:hidden"
                       >
                         <Camera01 className="size-5" />
                       </span>
@@ -213,6 +206,7 @@ export function WorkspaceProfileSettings({
                 {saveError && <SaveErrorMessage error={saveError} />}
                 <Button
                   type="button"
+                  size="sm"
                   iconLeading={saved ? Check : undefined}
                   isDisabled={saving || !changed}
                   onPress={save}
@@ -244,6 +238,7 @@ export function WorkspaceProfileSettings({
                 {slugError && <SaveErrorMessage error={slugError} />}
                 <Button
                   type="button"
+                  size="sm"
                   isDisabled={savingSlug || !slugValid || !slugChanged}
                   onPress={saveSlug}
                 >
@@ -260,10 +255,8 @@ export function WorkspaceProfileSettings({
   );
 }
 
-/** FileTrigger takes a mutable list; built once rather than on every render. */
 const WORKSPACE_ICON_TYPES = [...IMAGE_UPLOAD_TYPES];
 
-/** The `/w/` a Workspace slug follows in every URL, in the URL field's leading icon slot. */
 function SlugPrefix({ className }: { className?: string }) {
   return (
     <span className={cn(className, "flex items-center justify-center font-mono text-md")}>/w/</span>

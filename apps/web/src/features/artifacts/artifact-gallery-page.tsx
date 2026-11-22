@@ -106,7 +106,7 @@ export function ArtifactGalleryPage({
         aria-hidden={overlayOpen || undefined}
         className="flex min-h-0 flex-1 flex-col"
       >
-        <header className="flex shrink-0 flex-col gap-3 border-b border-secondary px-4 py-3 sm:px-6">
+        <header className="flex shrink-0 flex-col gap-3 border-b border-secondary px-page py-3">
           <div className="flex items-baseline gap-2.5">
             <h1 className="text-lg font-semibold text-primary">{m.ag_title()}</h1>
             {countLabel && <span className="text-sm text-tertiary tabular-nums">{countLabel}</span>}
@@ -133,7 +133,7 @@ export function ArtifactGalleryPage({
             <ViewSwitch view={view} onChange={setView} />
           </div>
         </header>
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 sm:px-6">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-page py-4">
           {gallery.isPending ? (
             <Loading />
           ) : gallery.isError && cards.length === 0 ? (

@@ -49,11 +49,11 @@ export function ArtifactPendingReview({
         />
       </div>
       <footer className="flex shrink-0 justify-end gap-2 border-t border-secondary p-3">
-        <Button size="xs" color="secondary" onPress={onClose}>
+        <Button size="sm" color="secondary" onPress={onClose}>
           {m.av_dr_back()}
         </Button>
         <Button
-          size="xs"
+          size="sm"
           color="primary"
           isDisabled={count === 0 || drafts.busy}
           isLoading={drafts.submitting}

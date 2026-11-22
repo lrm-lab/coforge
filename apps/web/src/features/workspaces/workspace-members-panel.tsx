@@ -29,13 +29,11 @@ export function WorkspaceMembersPanel(props: {
   actorUserId: string;
   actorRole: string;
   members: MemberRow[];
-  /** Workspace-wide channel settings, for an owner or admin; placed after the members. */
   systemChannels?: ReactNode;
 }) {
   const canManage = canManageMembers(props.actorRole);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
-  // Kept after the dialog closes so its title does not empty while it fades out.
   const [removeTarget, setRemoveTarget] = useState<{
     userId: string;
     name: string;
@@ -92,17 +90,17 @@ export function WorkspaceMembersPanel(props: {
                       userId={member.userId}
                       size="sm"
                       name={displayName}
-                      alt={displayName}
+                      alt=""
                       src={member.avatarUrl}
                       className="shrink-0"
                     />
-                    <div className="flex min-w-0 items-baseline gap-1.5">
+                    <div className="flex min-w-0 items-baseline gap-2">
                       <span className="truncate text-sm font-medium text-primary">
                         {displayName}
                       </span>
                       {isSelf && (
-                        <span className="shrink-0 text-sm text-tertiary">
-                          · {m.workspace_members_you()}
+                        <span className="shrink-0 text-xs text-tertiary">
+                          {m.workspace_members_you()}
                         </span>
                       )}
                     </div>

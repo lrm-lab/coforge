@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useCallback } from "react";
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
+import { ChannelPlace } from "#src/features/conversations/channel-name";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
 import {
   userConversationChannel,
@@ -20,19 +21,12 @@ import { taskForest } from "./project-task-tree-model";
 export type ProjectTask = Awaited<ReturnType<typeof loadProjectTasks>>["tasks"][number];
 export type ProjectTaskNode = { task: ProjectTask; children: ProjectTaskNode[] };
 
-/** The Project's unfinished Tasks as a forest (`taskForest`), in the list's order (by
- * conversation, then number). */
 export function projectTaskForest(tasks: readonly ProjectTask[]): ProjectTaskNode[] {
   return taskForest(tasks);
 }
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
-/**
- * The Project's unfinished Tasks (task #460), live: a Task's Project change arrives as
- * `task.changed.v1` (task #484), and the prefix invalidates every Project's read whichever Project
- * it moved from or to. A private channel's Tasks show only to its members, as the read decides.
- */
 export function useProjectTasks(projectId: string | undefined) {
   const load = useServerFn(loadProjectTasks);
   const queryClient = useQueryClient();
@@ -41,7 +35,6 @@ export function useProjectTasks(projectId: string | undefined) {
   const query = useQuery({
     queryKey: ["project-tasks", projectId],
     queryFn: () => load({ data: { projectId: projectId! } }),
-    // The Tasks page shares the board this is read for, and has no Project.
     enabled: projectId !== undefined,
   });
   const onTaskChanged = useCallback(
@@ -79,7 +72,6 @@ export function ProjectTaskTree({ node, depth }: { node: ProjectTaskNode; depth:
   );
 }
 
-/** A Task's row; it opens the Task's popup over the Project page. */
 export function ProjectTaskRow({ task, depth }: { task: ProjectTask; depth: number }) {
   return (
     <Link
@@ -93,7 +85,6 @@ export function ProjectTaskRow({ task, depth }: { task: ProjectTask; depth: numb
         "flex min-w-0 items-center gap-3 py-3 pr-4 outline-focus-ring hover:bg-primary_hover focus-visible:outline-2 focus-visible:-outline-offset-2",
         depth > 0 && "border-t border-secondary",
       )}
-      // A sub-task sits under its main Task, one step in per level.
       style={{ paddingLeft: `${1 + depth * 1.5}rem` }}
     >
       {depth > 0 && (
@@ -105,8 +96,13 @@ export function ProjectTaskRow({ task, depth }: { task: ProjectTask; depth: numb
       <TaskStatusIcon status={task.status} />
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium text-primary">{task.title}</span>
-        <span className="mt-0.5 block truncate text-xs text-tertiary">
-          {task.source.label} · #{task.number}
+        <span className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-tertiary">
+          {task.source.channelName ? (
+            <ChannelPlace id={task.conversationId} name={task.source.channelName} />
+          ) : (
+            <span className="truncate">{task.source.label}</span>
+          )}
+          <span className="shrink-0 tabular-nums">#{task.number}</span>
         </span>
       </span>
       <TaskOwnerAvatar owner={task.owner} />

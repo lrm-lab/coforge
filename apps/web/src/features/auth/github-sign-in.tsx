@@ -1,7 +1,6 @@
-import githubMark from "@lobehub/icons-static-svg/icons/github.svg";
-
 import { Button } from "#src/components/base/buttons/button";
 import { HintText } from "#src/components/base/input/hint-text";
+import { GitHubMark } from "#src/components/foundations/github-mark";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import { githubSignInHref, type SignInError } from "./return-to";
@@ -10,21 +9,6 @@ const errorText: Record<SignInError, () => string> = {
   github_denied: () => m.login_github_denied(),
   github_failed: () => m.login_github_failed(),
 };
-
-/** The logo in the button's text colour, as the icon the button styles. */
-function GitHubMark({ className }: { className?: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cx(
-        "size-5 shrink-0 bg-current mask-contain mask-center mask-no-repeat",
-        className,
-      )}
-      // Vite inlines small SVGs as data URLs that contain quotes, so the url() must be quoted.
-      style={{ maskImage: `url("${githubMark}")`, WebkitMaskImage: `url("${githubMark}")` }}
-    />
-  );
-}
 
 /** The mark stays the text colour of the page while the label is muted. */
 const DarkMark = ({ className }: { className?: string }) => (
