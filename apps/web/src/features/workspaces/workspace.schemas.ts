@@ -3,11 +3,10 @@ import { isValidWorkspaceSlug } from "./workspace-slug";
 
 const workspaceSlug = z.string().refine(isValidWorkspaceSlug);
 
-/** The longest Workspace name the profile accepts, counted after trimming. */
 export const WORKSPACE_NAME_MAX_LENGTH = 100;
 
 export const createWorkspaceInputSchema = z.object({
-  name: z.string().trim().min(1),
+  name: z.string().trim().min(1).max(WORKSPACE_NAME_MAX_LENGTH),
   slug: workspaceSlug,
 });
 
@@ -15,12 +14,10 @@ export const renameWorkspaceInputSchema = z.object({
   name: z.string().trim().min(1).max(WORKSPACE_NAME_MAX_LENGTH),
 });
 
-/** The new URL (slug) the owner gives the Workspace; trimmed, then checked like any slug. */
 export const changeWorkspaceSlugInputSchema = z.object({
   slug: z.string().trim().pipe(workspaceSlug),
 });
 
-/** The slug the owner types to confirm deleting the Workspace; compared exactly, untrimmed. */
 export const deleteWorkspaceInputSchema = z.object({
   confirmSlug: z.string().max(200),
 });

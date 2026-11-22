@@ -155,6 +155,8 @@ export function ProjectTaskTreeView({
   );
 }
 
+const MAX_TASK_TREE_LEVEL = 4;
+
 function TaskTreeItem({ node }: { node: FilteredNode<ProjectTask> }) {
   const { task, matched } = node;
   const label = rowLabel(task, matched);
@@ -171,62 +173,69 @@ function TaskTreeItem({ node }: { node: FilteredNode<ProjectTask> }) {
       }
     >
       <TreeItemContent>
-        {({ hasChildItems, isExpanded, level }) => (
-          <div
-            className="flex min-h-12 min-w-0 items-center gap-2 py-2 pr-4"
-            style={{ paddingLeft: `${0.5 + (level - 1) * 1.5}rem` }}
-          >
-            {hasChildItems ? (
-              <AriaButton
-                slot="chevron"
-                aria-label={m.tasks_subtasks_toggle({ name: `#${task.number}` })}
-                className="flex size-6 shrink-0 items-center justify-center rounded-md text-fg-quaternary outline-hidden hover:bg-secondary_hover focus-visible:ring-2 focus-visible:ring-focus-ring"
-              >
-                <ChevronRight
-                  aria-hidden="true"
-                  className={cn(
-                    "size-4 transition-transform duration-(--duration-sm) ease-in-out motion-reduce:transition-none",
-                    isExpanded && "rotate-90",
-                  )}
-                />
-              </AriaButton>
-            ) : (
-              <span aria-hidden="true" className="size-6 shrink-0" />
-            )}
-            <TaskStatusIcon status={task.status} />
-            <span className="min-w-0 flex-1">
-              <span className="flex min-w-0 items-baseline gap-2">
-                <span className="shrink-0 text-xs text-tertiary tabular-nums">#{task.number}</span>
-                <span
-                  className={cn(
-                    "truncate text-sm font-medium",
-                    matched ? "text-primary" : "text-tertiary",
-                  )}
+        {({ hasChildItems, isExpanded, level }) => {
+          const visualLevel = Math.min(level, MAX_TASK_TREE_LEVEL);
+          return (
+            <div
+              className="flex min-h-12 min-w-0 items-center gap-2 py-2 pr-4"
+              style={{ paddingLeft: `${0.5 + (visualLevel - 1) * 1.5}rem` }}
+            >
+              {hasChildItems ? (
+                <AriaButton
+                  slot="chevron"
+                  aria-label={m.tasks_subtasks_toggle({ name: `#${task.number}` })}
+                  className="flex size-6 shrink-0 items-center justify-center rounded-md text-fg-quaternary outline-hidden hover:bg-secondary_hover focus-visible:ring-2 focus-visible:ring-focus-ring"
                 >
-                  {task.title}
+                  <ChevronRight
+                    aria-hidden="true"
+                    className={cn(
+                      "size-4 transition-transform duration-(--duration-sm) ease-in-out motion-reduce:transition-none",
+                      isExpanded && "rotate-90",
+                    )}
+                  />
+                </AriaButton>
+              ) : (
+                <span aria-hidden="true" className="size-6 shrink-0" />
+              )}
+              <TaskStatusIcon status={task.status} />
+              <span className="min-w-0 flex-1">
+                <span className="flex min-w-0 items-baseline gap-2">
+                  <span className="shrink-0 text-xs text-tertiary tabular-nums">
+                    #{task.number}
+                  </span>
+                  <span
+                    className={cn(
+                      "truncate text-sm font-medium",
+                      matched ? "text-primary" : "text-tertiary",
+                    )}
+                  >
+                    {task.title}
+                  </span>
+                </span>
+                <span className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-tertiary">
+                  {task.source.channelName ? (
+                    <ChannelPlace id={task.conversationId} name={task.source.channelName} />
+                  ) : (
+                    <span className="truncate">{task.source.label}</span>
+                  )}
+                  {task.parent && (level === 1 || level > MAX_TASK_TREE_LEVEL) && (
+                    <TaskParentMark parent={task.parent} />
+                  )}
                 </span>
               </span>
-              <span className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-tertiary">
-                {task.source.channelName ? (
-                  <ChannelPlace id={task.conversationId} name={task.source.channelName} />
-                ) : (
-                  <span className="truncate">{task.source.label}</span>
-                )}
-                {task.parent && level === 1 && <TaskParentMark parent={task.parent} />}
-              </span>
-            </span>
-            {task.blocked && <TreeBlockerMark blockedBy={task.blockedBy} />}
-            {task.subtasks && (
-              <>
-                <span className="hidden sm:inline-flex">
-                  <TaskSubtaskMark subtasks={task.subtasks} />
-                </span>
-                <SubtaskProgressRing {...task.subtasks} className="size-4 sm:hidden" />
-              </>
-            )}
-            <TaskOwnerAvatar owner={task.owner} />
-          </div>
-        )}
+              {task.blocked && <TreeBlockerMark blockedBy={task.blockedBy} />}
+              {task.subtasks && (
+                <>
+                  <span className="hidden sm:inline-flex">
+                    <TaskSubtaskMark subtasks={task.subtasks} />
+                  </span>
+                  <SubtaskProgressRing {...task.subtasks} className="size-4 sm:hidden" />
+                </>
+              )}
+              <TaskOwnerAvatar owner={task.owner} />
+            </div>
+          );
+        }}
       </TreeItemContent>
       {node.children.map((child) => (
         <TaskTreeItem key={child.task.id} node={child} />

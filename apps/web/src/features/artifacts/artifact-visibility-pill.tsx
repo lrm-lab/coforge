@@ -27,7 +27,10 @@ export function VisibilityPill({ visibility }: { visibility: ArtifactVisibility 
     <Dropdown.Root>
       <AriaButton
         aria-label={m.av_vis_aria({ scope })}
-        className={cn(PRESSABLE_CHIP_CLASS, "max-w-64")}
+        className={cn(
+          PRESSABLE_CHIP_CLASS,
+          "relative max-w-64 any-pointer-coarse:after:absolute any-pointer-coarse:after:-inset-x-1.5 any-pointer-coarse:after:-inset-y-2.5",
+        )}
       >
         {inner}
       </AriaButton>

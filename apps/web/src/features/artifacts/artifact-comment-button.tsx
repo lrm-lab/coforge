@@ -40,7 +40,7 @@ export function ArtifactCommentButton({
         aria-label={count ? `${label} (${count})` : label}
         aria-pressed={active}
         className={cn(
-          "flex h-8 min-w-8 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg px-2 text-fg-quaternary outline-focus-ring transition-colors duration-150 hover:bg-primary_hover hover:text-fg-quaternary_hover focus-visible:outline-2 focus-visible:outline-offset-2",
+          "relative flex h-8 min-w-8 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-lg px-2 text-fg-quaternary outline-focus-ring transition-colors duration-150 hover:bg-primary_hover hover:text-fg-quaternary_hover focus-visible:outline-2 focus-visible:outline-offset-2 any-pointer-coarse:after:absolute any-pointer-coarse:after:-inset-1.5",
           active && TOOLBAR_BUTTON_ON_CLASS,
         )}
         onPress={onToggle}

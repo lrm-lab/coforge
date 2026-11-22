@@ -37,6 +37,7 @@ import {
 } from "./tree-index";
 
 const HOVER_PREFETCH_DELAY_MS = 80;
+const MAX_FILE_TREE_LEVEL = 8;
 
 export function ProjectFileTree({
   slug,
@@ -94,7 +95,7 @@ export function ProjectFileTree({
           {({ level, isExpanded, isCurrent }) => (
             <div
               className="flex min-w-0 items-center gap-1 pr-1"
-              style={{ paddingLeft: `${0.25 + (level - 1)}rem` }}
+              style={{ paddingLeft: `${0.25 + (Math.min(level, MAX_FILE_TREE_LEVEL) - 1)}rem` }}
             >
               {isDirectory ? (
                 <AriaButton

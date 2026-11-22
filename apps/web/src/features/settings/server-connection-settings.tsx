@@ -17,6 +17,8 @@ type Page = Awaited<ReturnType<typeof loadCloudComputerService>>;
 type UnlockReason = "rejected" | "unconfigured" | "limited" | "unavailable";
 type DownloadReason = "no-feed" | "no-token" | "invalid" | "failed";
 
+const CLOUD_SERVICE_INPUT_MAX_LENGTH = 200;
+
 export function ServerConnectionSettings() {
   const [page, setPage] = useState<Page | null>(null);
   const [initialClusterName, setInitialClusterName] = useState<string | null>(null);
@@ -75,6 +77,7 @@ export function ServerConnectionSettings() {
           name="password"
           autoComplete="current-password"
           isRequired
+          maxLength={CLOUD_SERVICE_INPUT_MAX_LENGTH}
           value={password}
           onChange={setPassword}
         />
@@ -185,6 +188,7 @@ function InstallHost({
         label={m.settings_cloud_service_cluster_name()}
         name="clusterName"
         isRequired
+        maxLength={CLOUD_SERVICE_INPUT_MAX_LENGTH}
         value={clusterName}
         onChange={setClusterName}
       />
@@ -194,6 +198,7 @@ function InstallHost({
         name="image"
         placeholder="coforge-computer:staging"
         isRequired
+        maxLength={CLOUD_SERVICE_INPUT_MAX_LENGTH}
         value={image}
         onChange={setImage}
       />

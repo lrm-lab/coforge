@@ -136,7 +136,7 @@ export function AccountSettings({
           />
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
-              <h2 className="min-w-0 text-lg font-semibold break-words text-primary">
+              <h2 className="min-w-0 text-lg font-semibold wrap-anywhere text-primary">
                 {profile.name}
               </h2>
               {!editing && (
@@ -152,7 +152,7 @@ export function AccountSettings({
               )}
             </div>
             {profile.email ? (
-              <p className="text-md break-words text-tertiary">{profile.email}</p>
+              <p className="text-md wrap-anywhere text-tertiary">{profile.email}</p>
             ) : null}
           </div>
         </header>
@@ -308,8 +308,8 @@ function ContactValue({
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <dt className="text-sm font-semibold text-primary">{label}</dt>
-      <dd className="flex min-w-0 items-center gap-2">
-        <span className="min-w-0 truncate text-sm text-primary">{value}</span>
+      <dd className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="min-w-0 text-sm wrap-anywhere text-primary">{value}</span>
         {verified === true ? (
           <BadgeWithIcon type="pill-color" size="sm" color="success" iconLeading={Check}>
             {m.settings_contact_verified()}

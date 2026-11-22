@@ -146,9 +146,7 @@ export function ArtifactPageHeader({
             )}
           </div>
           {mobileMeta && (
-            <div className="flex min-w-0 items-center gap-1 overflow-hidden sm:hidden">
-              {mobileMeta}
-            </div>
+            <div className="flex min-w-0 items-center gap-1 sm:hidden">{mobileMeta}</div>
           )}
         </div>
       )}

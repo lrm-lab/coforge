@@ -12,6 +12,7 @@ import {
 } from "#src/features/conversations/conversation-realtime";
 import { decodeTaskChangedEvent } from "#src/features/tasks/task-realtime";
 import { TaskOwnerAvatar } from "#src/features/tasks/task-owner";
+import { TaskParentMark } from "#src/features/tasks/task-relations";
 import { TaskStatusIcon } from "#src/features/tasks/task-status-icon";
 import { loadProjectTasks } from "#src/features/tasks/tasks.functions";
 import { overviewTaskParam } from "#src/features/tasks/task-overview-search";
@@ -72,7 +73,10 @@ export function ProjectTaskTree({ node, depth }: { node: ProjectTaskNode; depth:
   );
 }
 
+const MAX_TASK_INDENT_DEPTH = 3;
+
 export function ProjectTaskRow({ task, depth }: { task: ProjectTask; depth: number }) {
+  const visualDepth = Math.min(depth, MAX_TASK_INDENT_DEPTH);
   return (
     <Link
       to="."
@@ -85,7 +89,7 @@ export function ProjectTaskRow({ task, depth }: { task: ProjectTask; depth: numb
         "flex min-w-0 items-center gap-3 py-3 pr-4 outline-focus-ring hover:bg-primary_hover focus-visible:outline-2 focus-visible:-outline-offset-2",
         depth > 0 && "border-t border-secondary",
       )}
-      style={{ paddingLeft: `${1 + depth * 1.5}rem` }}
+      style={{ paddingLeft: `${1 + visualDepth * 1.5}rem` }}
     >
       {depth > 0 && (
         <span
@@ -103,6 +107,7 @@ export function ProjectTaskRow({ task, depth }: { task: ProjectTask; depth: numb
             <span className="truncate">{task.source.label}</span>
           )}
           <span className="shrink-0 tabular-nums">#{task.number}</span>
+          {depth > MAX_TASK_INDENT_DEPTH && task.parent && <TaskParentMark parent={task.parent} />}
         </span>
       </span>
       <TaskOwnerAvatar owner={task.owner} />

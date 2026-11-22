@@ -285,6 +285,7 @@ export function CreateProjectDialog({
                       size={controlSize}
                       label={m.project_name()}
                       isRequired
+                      maxLength={100}
                       value={name}
                       onChange={changeName}
                     />

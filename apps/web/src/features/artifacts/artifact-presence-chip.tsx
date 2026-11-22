@@ -157,7 +157,7 @@ export function ArtifactPresenceChip({
     <DialogTrigger>
       <AriaButton
         aria-label={m.av_presence_label()}
-        className="flex h-8 shrink-0 items-center rounded-lg px-1.5 outline-focus-ring transition-colors duration-150 hover:bg-primary_hover focus-visible:outline-2"
+        className="relative flex h-8 min-w-8 shrink-0 items-center justify-center rounded-lg px-1.5 outline-focus-ring transition-colors duration-150 hover:bg-primary_hover focus-visible:outline-2 any-pointer-coarse:after:absolute any-pointer-coarse:after:-inset-1.5"
       >
         <ActorAvatarStack more={Math.max(0, othersCount - shown.length)}>
           {[...shown, ...(me ? [me] : [])].map((person) => (

@@ -25,7 +25,6 @@ import {
 } from "./project-tasks";
 
 const RECENTLY_DONE = 5;
-
 const ACTIVE = new Set<string>(["in_progress"]);
 
 function useProjectOverview(projectId: string) {
@@ -75,7 +74,7 @@ export function ProjectOverview({
     <div className="mx-auto w-full max-w-3xl px-page py-6 sm:py-8">
       <p
         className={cx(
-          "text-md whitespace-pre-wrap break-words",
+          "text-md break-words whitespace-pre-wrap",
           project.description ? "text-secondary" : "text-quaternary",
         )}
       >
@@ -83,7 +82,7 @@ export function ProjectOverview({
       </p>
       <dl className="mt-6 grid grid-cols-[6.5rem_1fr] items-center gap-x-4 gap-y-3 text-sm">
         <dt className="text-tertiary">{m.project_progress()}</dt>
-        <dd>
+        <dd className="min-w-0">
           <Progress done={data.done} total={data.total} />
         </dd>
         <dt className="text-tertiary">{m.project_people()}</dt>
@@ -186,14 +185,14 @@ function Group({ title, count, children }: { title: string; count: number; child
 function Progress({ done, total }: { done: number; total: number }) {
   const share = total === 0 ? 0 : done / total;
   return (
-    <span className="flex items-center gap-2.5">
-      <span className="h-1.5 w-40 overflow-hidden rounded-full bg-quaternary">
+    <span className="flex min-w-0 items-center gap-2.5">
+      <span className="h-1.5 w-40 min-w-12 shrink overflow-hidden rounded-full bg-quaternary">
         <span
           className="block h-full rounded-full bg-fg-success-secondary"
           style={{ width: `${share * 100}%` }}
         />
       </span>
-      <span className="text-sm text-secondary tabular-nums">
+      <span className="shrink-0 text-sm whitespace-nowrap text-secondary tabular-nums">
         {done} / {total}
       </span>
     </span>

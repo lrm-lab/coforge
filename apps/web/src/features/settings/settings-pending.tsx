@@ -31,33 +31,23 @@ export function SettingsPending() {
       </nav>
       <section className="@container/settings hidden min-w-0 flex-1 flex-col overflow-hidden bg-primary md:flex lg:rounded-xl">
         <PageHeader icon={UserCircle} heading={m.settings_account()} />
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-page pb-8">
-          <section>
-            <header className="flex min-h-12 items-center pb-4">
-              <h2 className="text-lg font-semibold">{m.settings_profile()}</h2>
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto pb-8">
+          <section aria-hidden="true" className="motion-safe:animate-pulse">
+            <header className="flex min-w-0 items-center gap-4 px-page pt-8 sm:gap-6">
+              <Skeleton className="size-24 shrink-0 rounded-2xl" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <Skeleton className="h-5 w-40 max-w-full" />
+                <Skeleton className="h-4 w-56 max-w-full" />
+              </div>
             </header>
-            <div
-              aria-hidden="true"
-              className="space-y-6 border-t border-secondary py-6 motion-safe:animate-pulse"
-            >
-              <Skeleton className="size-20 rounded-full" />
-              {["w-3/5", "w-4/5", "w-2/3"].map((width) => (
-                <div
-                  key={width}
-                  className="grid gap-2 border-t border-secondary pt-5 @2xl/settings:grid-cols-[240px_minmax(0,1fr)] @2xl/settings:gap-8"
-                >
-                  <Skeleton className="h-3 w-16" />
-                  <Skeleton className={`h-4 ${width}`} />
+            <dl className="mt-8 flex max-w-2xl min-w-0 flex-col gap-6 px-page">
+              {["w-3/5", "w-28", "w-4/5", "w-2/5"].map((width, index) => (
+                <div key={index} className="flex min-w-0 flex-col gap-1.5">
+                  <Skeleton className="h-3.5 w-20" />
+                  <Skeleton className={`h-4 max-w-full ${width}`} />
                 </div>
               ))}
-            </div>
-            <div
-              aria-hidden="true"
-              className="grid gap-2 border-t border-secondary py-5 motion-safe:animate-pulse @2xl/settings:grid-cols-[240px_minmax(0,1fr)] @2xl/settings:gap-8"
-            >
-              <Skeleton className="h-3 w-20" />
-              <Skeleton className="h-4 w-3/5" />
-            </div>
+            </dl>
           </section>
         </div>
       </section>

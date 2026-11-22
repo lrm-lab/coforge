@@ -6,6 +6,7 @@ import { Input } from "#src/components/base/input/input";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { m } from "#src/paraglide/messages";
+import { ARTIFACT_TITLE_MAX } from "./artifact-title-limit";
 
 export function ArtifactRenameDialog({
   title,
@@ -55,7 +56,7 @@ export function ArtifactRenameDialog({
               size={size}
               className="mt-4"
               value={value}
-              maxLength={200}
+              maxLength={ARTIFACT_TITLE_MAX}
               onChange={setValue}
               onFocus={(event) => event.currentTarget.select()}
             />

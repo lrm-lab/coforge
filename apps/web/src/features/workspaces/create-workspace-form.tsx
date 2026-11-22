@@ -5,6 +5,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { Input } from "#src/components/base/input/input";
 import { isAppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
+import { WORKSPACE_NAME_MAX_LENGTH } from "#src/features/workspaces/workspace.schemas";
 import { createWorkspace } from "#src/features/workspaces/workspaces.functions";
 import {
   isReservedWorkspaceSlug,
@@ -14,8 +15,6 @@ import {
 
 export type CreateWorkspaceInput = { name: string; slug: string };
 
-/** Creates the Workspace and opens its home. The Workspace is then the one `/` opens (the server
- * remembers it). */
 export function useCreateAndOpenWorkspace(): (input: CreateWorkspaceInput) => Promise<void> {
   const create = useServerFn(createWorkspace);
   const navigate = useNavigate();
@@ -28,7 +27,6 @@ export function useCreateAndOpenWorkspace(): (input: CreateWorkspaceInput) => Pr
   };
 }
 
-/** What the caller spreads onto its own submit `Button`, so each place sizes it as it needs. */
 export type CreateWorkspaceSubmit = {
   type: "submit";
   isDisabled: boolean;
@@ -55,22 +53,16 @@ function createProblem(cause: unknown): string {
   }
 }
 
-/**
- * The name and URL of a new Workspace. The URL follows the name until the person edits it; a
- * malformed, reserved, or taken URL is said next to the field. The caller places the actions.
- */
 export function CreateWorkspaceForm({
   onCreate,
   fieldsClassName,
   actions,
 }: {
-  /** Rejects with the server's AppError when the Workspace was not created. */
   onCreate: (input: CreateWorkspaceInput) => Promise<void>;
   fieldsClassName?: string;
   actions: (submit: CreateWorkspaceSubmit) => ReactNode;
 }) {
   const [name, setName] = useState("");
-  // `null` until the person edits the URL; until then it follows the name.
   const [editedSlug, setEditedSlug] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -99,6 +91,7 @@ export function CreateWorkspaceForm({
           label={m.workspace_name_label()}
           name="name"
           isRequired
+          maxLength={WORKSPACE_NAME_MAX_LENGTH}
           value={name}
           placeholder={m.workspace_name_placeholder()}
           onChange={setName}

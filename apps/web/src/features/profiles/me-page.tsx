@@ -30,12 +30,12 @@ export function MePage() {
               src={user.avatarUrl}
               rounded
             />
-            <div className="grid min-w-0 max-w-full justify-items-center">
-              <span className="max-w-full truncate text-lg font-semibold text-primary">
+            <div className="grid min-w-0 max-w-full justify-items-center gap-0.5 text-center">
+              <span className="max-w-full text-lg font-semibold wrap-anywhere text-primary">
                 {user.name}
               </span>
               {user.email ? (
-                <span className="max-w-full truncate text-sm text-tertiary">{user.email}</span>
+                <span className="max-w-full text-sm wrap-anywhere text-tertiary">{user.email}</span>
               ) : null}
             </div>
           </div>

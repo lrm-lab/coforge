@@ -80,7 +80,7 @@ export function ArtifactMoreMenu({
         size="xs"
         color="tertiary"
         tooltip={m.doc_more()}
-        className="size-8"
+        className="size-8 any-pointer-coarse:after:-inset-1.5"
       />
       <Dropdown.Popover placement="bottom end">
         <Dropdown.Menu
