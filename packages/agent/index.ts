@@ -43,11 +43,14 @@ export {
   prepareAgentSessionDirectory,
 } from "#src/paths";
 export {
+  CLOUD_COMPUTER_ONLY_SKILL_NAMES,
   COFORGE_CLOUD_COMPUTER_ENV,
   cloudComputerAdditionalSkillPaths,
   cloudComputerAgentSkillsDirectory,
   cloudComputerSharedSkillsDirectory,
   cloudComputerWorkspaceRoot,
+  isCloudComputerAppendSystemPrompt,
+  isCloudComputerOnlySkillName,
   isCloudComputerSkillsEnabled,
   prepareCloudComputerAgentSkills,
   prepareCloudComputerSessionSkillPaths,

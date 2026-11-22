@@ -18,7 +18,7 @@ Supported kinds include:
 - `agent:create` (`name`, `description?`, `suggestedComputer?`, `requiredComputer?` — at most one
   of the two, `draftHint?`)
 - `channel:add_member` (`channel`, `humans?`, `agents?` — at least one non-empty, `draftHint?`)
-- `page:fill`, `desktop:takeover`, and `choice` (below)
+- `choice` and `questions` (below)
 
 Identity references in an action card are handles, not UUIDs: `@alice`, `scout`, `#general`. The
 server resolves each handle at prepare time; an unresolvable handle fails the command before
@@ -46,7 +46,7 @@ To check whether a card has been committed, read the card message again, for exa
 `choice` card ends with `[action card: executed; choice=<id>]`. A settled card names who settled
 it, as ` by @<handle>` before the closing bracket — `[action card: cancelled by @alice]`,
 `[action card: executed; choice=password by @alice]` — unless that person's account is gone. Only
-`executed` means the channel, Agent, membership, fill, desktop step, or choice now stands;
+`executed` means the channel, Agent, membership, or choice now stands;
 `pending` means still waiting on a human, and `cancelled` means the person it asked chose not to
 answer (or its owner withdrew the card). When the person declines a `choice` or `questions`
 card you are woken with `@alice declined your choice "How should we sign in?" in #general.`, and
@@ -64,7 +64,7 @@ with the handle of the person you want to ask; there is no default owner. Exampl
 
 ```
 coforge action prepare --target "@alice" <<'COFORGEACTION'
-{"type":"choice","prompt":"How should we sign in?","to":"@alice","options":[{"id":"password","label":"Password"},{"id":"otp","label":"Verification code"},{"id":"github","label":"Continue with GitHub"},{"id":"takeover","label":"I will open the cloud desktop myself"}]}
+{"type":"choice","prompt":"How should we sign in?","to":"@alice","options":[{"id":"password","label":"Password"},{"id":"otp","label":"Verification code"},{"id":"github","label":"Continue with GitHub"}]}
 COFORGEACTION
 ```
 

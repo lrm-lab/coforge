@@ -1,8 +1,3 @@
-// Vite's `?raw` suffix imports the file's text content as the default export (see
-// node_modules/vite/client.d.ts's `declare module '*?raw'`). Verified to also work unmodified
-// under `bun test` (Bun's own bundler recognizes the same `?raw` suffix), so the same import
-// works identically in the Vite production build and in the test runner without a separate
-// loader or a generated TS module.
 import actionCardsBody from "#src/server/agents/manual/topics/action-cards.md?raw";
 import actionCardsCloudDesktopBody from "#src/server/agents/manual/topics/action-cards-cloud-desktop.md?raw";
 import appsBody from "#src/server/agents/manual/topics/apps.md?raw";
@@ -20,31 +15,36 @@ import remindersBody from "#src/server/agents/manual/topics/reminders.md?raw";
 import tasksBody from "#src/server/agents/manual/topics/tasks.md?raw";
 import workspaceCleanupBody from "#src/server/agents/manual/topics/workspace-cleanup.md?raw";
 
-/** The Workspace experiments a Manual read can be gated on; a topic or command line names the
- * one it needs, and `false` hides it for that Workspace (task #711). */
-export type AgentManualExperiments = { artifacts?: boolean };
+export type AgentManualExperiments = { artifacts?: boolean; cloudDesktop?: boolean };
 
-/** One Agent Manual topic. `slug`/`title`/`summary` are a small typed registry here
- * rather than markdown frontmatter, to avoid a frontmatter parser for two fields. `experiment`
- * names the Workspace experiment the topic documents; unset topics are always listed. */
 export type AgentManualTopic = {
   slug: string;
   title: string;
   summary: string;
   body: string;
-  experiment?: keyof AgentManualExperiments;
+  experiment?: "artifacts";
 };
+
+function buildCloudDesktopActionCardsBody(): string {
+  return actionCardsBody
+    .replace(
+      "- `choice` and `questions` (below)",
+      "- `page:fill`, `desktop:takeover`, `choice`, and `questions` (below)",
+    )
+    .replace(
+      "Only\n`executed` means the channel, Agent, membership, or choice now stands;",
+      "Only\n`executed` means the channel, Agent, membership, fill, desktop step, or choice now stands;",
+    )
+    .replace("\n## Choices\n", `\n${actionCardsCloudDesktopBody.trim()}\n\n## Choices\n`);
+}
 
 export const MANUAL_TOPICS: readonly AgentManualTopic[] = [
   {
     slug: "action-cards",
     title: "Action cards: proposing a channel, Agent, or membership",
     summary:
-      "How to post a typed action card with coforge action prepare, the three supported kinds, and how to tell pending from executed without claiming you created the resource.",
-    body: actionCardsBody.replace(
-      "\n## Choices\n",
-      `\n${actionCardsCloudDesktopBody.trim()}\n\n## Choices\n`,
-    ),
+      "How to post a typed action card with coforge action prepare, the supported kinds, and how to tell pending from executed without claiming you created the resource.",
+    body: actionCardsBody,
   },
   {
     slug: "apps",
@@ -154,12 +154,13 @@ export function manualDocVersion(content: string): string {
   return new Bun.CryptoHasher("sha256").update(content).digest("hex").slice(0, 16);
 }
 
-/** The topics this Workspace's Agents may read: an experiment that is off removes what
- * documents it, so `manual get`, `manual search` and the index never name it (task #711). An
- * experiment the caller does not state stays listed. */
 export function manualTopicsFor(experiments?: AgentManualExperiments): readonly AgentManualTopic[] {
   return MANUAL_TOPICS.filter(
     (topic) => topic.experiment === undefined || experiments?.[topic.experiment] !== false,
+  ).map((topic) =>
+    topic.slug === "action-cards" && experiments?.cloudDesktop === true
+      ? { ...topic, body: buildCloudDesktopActionCardsBody() }
+      : topic,
   );
 }
 

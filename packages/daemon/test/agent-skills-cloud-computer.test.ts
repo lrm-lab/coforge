@@ -65,3 +65,27 @@ test("cloud-computer gate adds persistent skill roots without changing the off p
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("listAgentSkills omits cloud-computer-only skills when cloud gate is off", async () => {
+  const root = await mkdtemp(join(tempRoot, "coforge-local-skills-"));
+  const cwd = join(root, "agent");
+  try {
+    await Bun.write(join(cwd, ".pi/skills/browser-login/SKILL.md"), rootSkill("browser-login"));
+    await Bun.write(
+      join(root, ".agents/skills/cloud-computer-overview/SKILL.md"),
+      rootSkill("cloud-computer-overview"),
+    );
+    await Bun.write(join(cwd, ".agents/skills/local-tool/SKILL.md"), rootSkill("local-tool"));
+
+    const off = await listAgentSkills({
+      provider: "coforge",
+      agentId: "agent-1",
+      agentWorkspaceDirectory: cwd,
+      environment: { ...NO_HOST_ROOTS, HOME: root, COFORGE_CLOUD_COMPUTER: "0" },
+    });
+    expect(found(off.workspace).map(([name]) => name)).toEqual(["local-tool"]);
+    expect(found(off.global).map(([name]) => name)).toEqual([]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

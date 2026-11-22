@@ -120,3 +120,40 @@ test("Manual get and search work without justification and still record scoped a
   expect(events).toHaveLength(2);
   expect(events[0]).toMatchObject({ ...principal, intent: "", reason: "", outcome: "hit" });
 });
+
+test("GET /manual and /manual/search omit cloud desktop action cards unless cloudDesktop is enabled", async () => {
+  const principal = { workspaceId: "workspace-1", agentId: "agent-1" };
+  const localGet = await handleAgentManualGet(
+    getRequest("?topic=action-cards"),
+    principal,
+    undefined,
+  );
+  const localBody = await localGet.json();
+  expect(localBody.content).not.toContain("desktop:takeover");
+  expect(localBody.content).not.toContain("page:fill");
+
+  const localSearch = await handleAgentManualSearchGet(
+    searchRequest("?query=takeover"),
+    principal,
+    undefined,
+  );
+  expect(localSearch.status).toBe(404);
+
+  const cloudGet = await handleAgentManualGet(
+    getRequest("?topic=action-cards"),
+    principal,
+    undefined,
+    { cloudDesktop: true },
+  );
+  const cloudBody = await cloudGet.json();
+  expect(cloudBody.content).toContain("desktop:takeover");
+  expect(cloudBody.content).toContain("page:fill");
+
+  const cloudSearch = await handleAgentManualSearchGet(
+    searchRequest("?query=takeover"),
+    principal,
+    undefined,
+    { cloudDesktop: true },
+  );
+  expect(cloudSearch.status).toBe(200);
+});

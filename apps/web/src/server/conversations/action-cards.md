@@ -33,15 +33,16 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines; the rules are 
   `desktop:takeover` wakes the same way with reason `choice` ("completed …"), so the Agent
   continues without polling the card.
 - Card state changes publish the existing `ConversationRealtime.messageAvailable`; do not add a card-specific realtime channel.
-- A `page:fill` card stores field labels, optional selectors, and the Agent's computer id only.
-  Commit types the submitted values into that Agent's browser through the desktop proxy (which
-  resolves by label / password type when no selector is stored), marks the card executed with the
-  field names, and wakes the preparing Agent with which fields were filled. The values are not
-  written to the card, the message, or the result. The card also offers Open desktop as a
-  client-side fallback.
-- A `desktop:takeover` card stores the Agent and computer ids so the browser can open that
-  Agent's cloud desktop. Commit marks that the person finished the step and wakes the preparing
-  Agent; opening the desktop does not go through the server.
+- A `page:fill` card requires `computer.kind === "cloud"` (`INVALID_ACTION` otherwise) and stores
+  field labels, optional selectors, and the Agent's computer id only. Commit types the submitted
+  values into that Agent's browser through the desktop proxy (which resolves by label / password
+  type when no selector is stored), marks the card executed with the field names, and wakes the
+  preparing Agent with which fields were filled. The values are not written to the card, the
+  message, or the result. The card also offers Open desktop as a client-side fallback.
+- A `desktop:takeover` card likewise requires `computer.kind === "cloud"` and stores the Agent and
+  computer ids so the browser can open that Agent's cloud desktop. Commit marks that the person
+  finished the step and wakes the preparing Agent; opening the desktop does not go through the
+  server.
 - A `choice` or `questions` card stores the prompt, options (1–8 on `choice`, 1–6 per option
   question on `questions`, or `kind: "text"` with no options and optional `placeholder` for a
   standalone free-text question), the user id of the person it asks (`to`, or `"anyone"` in a

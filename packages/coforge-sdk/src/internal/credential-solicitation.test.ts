@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { solicitsCredentialsInChat } from "./credential-solicitation";
+import {
+  credentialSolicitationMessage,
+  solicitsCredentialsInChat,
+} from "./credential-solicitation";
 
 describe("solicitsCredentialsInChat", () => {
   test("blocks clear English asks", () => {
@@ -34,5 +37,13 @@ describe("solicitsCredentialsInChat", () => {
     expect(solicitsCredentialsInChat("The password field is ready on the page")).toBe(false);
     expect(solicitsCredentialsInChat("Sign in with a password on the card")).toBe(false);
     expect(solicitsCredentialsInChat("hello")).toBe(false);
+  });
+
+  test("omits cloud desktop card suggestions unless cloudDesktop is enabled", () => {
+    expect(credentialSolicitationMessage()).not.toContain("page:fill");
+    expect(credentialSolicitationMessage()).not.toContain("desktop:takeover");
+    expect(credentialSolicitationMessage({ cloudDesktop: false })).not.toContain("page:fill");
+    expect(credentialSolicitationMessage({ cloudDesktop: true })).toContain("page:fill");
+    expect(credentialSolicitationMessage({ cloudDesktop: true })).toContain("desktop:takeover");
   });
 });

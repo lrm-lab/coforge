@@ -52,6 +52,28 @@ test("the standing prompt gives short local memory guidance with details in the 
 test("capability-gated rules appear only when the launch has the capability", () => {
   expect(instructions).not.toContain("page:fill");
   expect(instructions).not.toContain("desktop:takeover");
+  expect(instructions).not.toContain("Persistent skills on this cloud computer");
+  const localAssistant = buildCoforgeAgentInstructions({
+    agentWorkspaceDirectory: directory,
+    environment: { COFORGE_CLOUD_COMPUTER: "0" },
+    identity: { systemKind: "workspace-assistant", displayName: "Frank的助手" },
+  });
+  expect(localAssistant).not.toContain("page:fill");
+  expect(localAssistant).not.toContain("desktop:takeover");
+  expect(localAssistant).not.toContain("打开云电脑");
+  expect(localAssistant).toContain("禁止在聊天里索要或接收后键入密码");
+
+  const cloudAssistant = buildCoforgeAgentInstructions({
+    agentWorkspaceDirectory: directory,
+    agentId: "agent-a",
+    environment: { COFORGE_CLOUD_COMPUTER: "1", WORKSPACE: "/workspace" },
+    capabilities: { cloudDesktop: true },
+    identity: { systemKind: "workspace-assistant", displayName: "Frank的助手" },
+  });
+  expect(cloudAssistant).toContain("`page:fill`");
+  expect(cloudAssistant).toContain("`desktop:takeover`");
+  expect(cloudAssistant).toContain("Persistent skills on this cloud computer");
+
   const capable = buildCoforgeAgentInstructions({
     agentWorkspaceDirectory: directory,
     capabilities: { cloudDesktop: true },

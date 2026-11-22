@@ -40,9 +40,14 @@ export async function resolveDesktopTakeoverPayload(
 ): Promise<ResolvedDesktopTakeoverPayload> {
   const agent = await db.agent.findFirst({
     where: { id: agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
-    select: { computerId: true, name: true, displayName: true },
+    select: {
+      computerId: true,
+      name: true,
+      displayName: true,
+      computer: { select: { kind: true } },
+    },
   });
-  if (!agent?.computerId) {
+  if (!agent?.computerId || agent.computer?.kind !== "cloud") {
     throw new ActionCardError(422, "INVALID_ACTION", "this agent has no cloud computer");
   }
   return {

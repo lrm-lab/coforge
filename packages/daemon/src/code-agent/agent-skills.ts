@@ -4,6 +4,7 @@ import { basename, join, relative, resolve, sep } from "node:path";
 import {
   cloudComputerAgentSkillsDirectory,
   cloudComputerSharedSkillsDirectory,
+  isCloudComputerOnlySkillName,
   isCloudComputerSkillsEnabled,
 } from "@coforge/agent/cloud-computer-skills";
 import {
@@ -17,7 +18,14 @@ export type AgentSkillScanRoot = { path: string; label: string; legacy?: "comman
 type Root = AgentSkillScanRoot;
 const MAX_FILE_BYTES = 262_144;
 
-/** Directory observation only. Does not load/execute resources or alter a session. */
+function stripCloudOnlyEntries(scope: AgentSkillsScope, cloudSkills: boolean): AgentSkillsScope {
+  if (cloudSkills) return scope;
+  return {
+    ...scope,
+    entries: scope.entries.filter((entry) => !isCloudComputerOnlySkillName(entry.name)),
+  };
+}
+
 export async function listAgentSkills(options: {
   provider: RuntimeProvider;
   agentWorkspaceDirectory: string;
@@ -235,10 +243,14 @@ export async function listAgentSkills(options: {
   if (!home) {
     return {
       global: { status: "unsupported", entries: [], directories: [] },
-      workspace: await scan(locals, deadline),
+      workspace: stripCloudOnlyEntries(await scan(locals, deadline), cloudSkills),
     };
   }
-  return scanAgentSkillScopes(globals, locals, deadline);
+  const scanned = await scanAgentSkillScopes(globals, locals, deadline);
+  return {
+    global: stripCloudOnlyEntries(scanned.global, cloudSkills),
+    workspace: stripCloudOnlyEntries(scanned.workspace, cloudSkills),
+  };
 }
 
 export async function scanAgentSkillScopes(

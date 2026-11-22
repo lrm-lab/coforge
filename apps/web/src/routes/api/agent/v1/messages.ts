@@ -14,9 +14,10 @@ import {
   isValidMentionSelectorArray,
   isSeenExactSeqs,
   CREDENTIAL_SOLICITATION_CODE,
-  CREDENTIAL_SOLICITATION_MESSAGE,
+  credentialSolicitationMessage,
   solicitsCredentialsInChat,
 } from "@lrm/coforge-sdk/internal";
+import { isPrincipalOnCloudComputer } from "#src/server/agents/agent-cloud-computer.server";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import {
@@ -194,6 +195,7 @@ export async function handleAgentMessagesPost(
   dependencies: Parameters<typeof executeAgentSendMessageWithPolicy>[0] & {
     requestRecords: MessageRequestRecords;
     attachmentMessages?: ReturnType<typeof createAgentAttachmentMessages>;
+    cloudDesktop?: () => Promise<boolean>;
     onMessageSent?: (input: { messageId: string; target: string; body: string }) => Promise<void>;
   },
 ): Promise<Response> {
@@ -212,8 +214,15 @@ export async function handleAgentMessagesPost(
     !body.content
   )
     return Response.json({ error: "target and content are required" }, { status: 400 });
-  if (solicitsCredentialsInChat(body.content))
-    return errorResponse(CREDENTIAL_SOLICITATION_CODE, CREDENTIAL_SOLICITATION_MESSAGE, 400, false);
+  if (solicitsCredentialsInChat(body.content)) {
+    const cloudDesktop = (await dependencies.cloudDesktop?.()) ?? false;
+    return errorResponse(
+      CREDENTIAL_SOLICITATION_CODE,
+      credentialSolicitationMessage({ cloudDesktop }),
+      400,
+      false,
+    );
+  }
   const freshnessContextMode = body.freshnessContextMode;
   if (
     freshnessContextMode !== undefined &&
@@ -334,6 +343,7 @@ export const Route = createFileRoute("/api/agent/v1/messages")({
       POST: ({ request, context: { principal, db } }) =>
         handleAgentMessagesPost(request, principal, {
           ...agentMessagesPostDependencies(db),
+          cloudDesktop: () => isPrincipalOnCloudComputer(db, principal),
           onMessageSent: ({ messageId, target, body: messageBody }) =>
             applyIncomingWeeklyReportBodyEdit(db, {
               workspaceId: principal.workspaceId,

@@ -226,3 +226,55 @@ test("the manual always includes the artifacts topic, command line and search hi
   if (search.status !== 200) throw new Error("expected a hit");
   expect(search.body.results.map((result) => result.slug)).toContain("artifacts");
 });
+
+test("action-cards manual and search omit cloud-desktop cards unless cloudDesktop is enabled", () => {
+  const localTopic = resolveManualGet({
+    topic: "action-cards",
+    intent: VALID_INTENT,
+    reason: VALID_REASON,
+  });
+  expect(localTopic.status).toBe(200);
+  if (localTopic.status !== 200) throw new Error("expected a hit");
+  expect(localTopic.body.content).toContain("channel:create");
+  expect(localTopic.body.content).toContain('"type":"choice"');
+  expect(localTopic.body.content).toContain('"type":"questions"');
+  expect(localTopic.body.content).not.toContain("page:fill");
+  expect(localTopic.body.content).not.toContain("desktop:takeover");
+  expect(localTopic.body.content).not.toContain("page-fill.py");
+  expect(localTopic.body.content).not.toContain("cloud desktop");
+
+  expect(
+    resolveManualSearch({
+      query: "takeover",
+      intent: VALID_INTENT,
+      reason: VALID_REASON,
+    }).status,
+  ).toBe(404);
+  for (const query of ["desktop:takeover", "page:fill"]) {
+    const outcome = resolveManualSearch({ query, intent: VALID_INTENT, reason: VALID_REASON });
+    if (outcome.status === 200) expect(outcome.resultSlugs).not.toContain("action-cards");
+  }
+
+  const cloudTopic = resolveManualGet({
+    topic: "action-cards",
+    intent: VALID_INTENT,
+    reason: VALID_REASON,
+    experiments: { cloudDesktop: true },
+  });
+  expect(cloudTopic.status).toBe(200);
+  if (cloudTopic.status !== 200) throw new Error("expected a hit");
+  expect(cloudTopic.body.content).toContain("page:fill");
+  expect(cloudTopic.body.content).toContain("desktop:takeover");
+  expect(cloudTopic.body.content).toContain("## Filling a page");
+  expect(cloudTopic.body.content).toContain("## Opening the cloud desktop");
+
+  const cloudSearch = resolveManualSearch({
+    query: "takeover",
+    intent: VALID_INTENT,
+    reason: VALID_REASON,
+    experiments: { cloudDesktop: true },
+  });
+  expect(cloudSearch.status).toBe(200);
+  if (cloudSearch.status !== 200) throw new Error("expected a hit");
+  expect(cloudSearch.resultSlugs).toContain("action-cards");
+});

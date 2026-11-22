@@ -32,9 +32,32 @@ test("refuses a send that asks for a password in chat before calling the sender"
     },
   );
   expect(result.status).toBe(400);
-  expect(await result.json()).toMatchObject({
+  const body = await result.json();
+  expect(body).toMatchObject({
     code: "CREDENTIAL_SOLICITATION_REFUSED",
     retryable: false,
   });
+  expect(body.error).not.toContain("page:fill");
+  expect(body.error).not.toContain("desktop:takeover");
   expect(sent).toBe(false);
+
+  const cloudResult = await handleAgentMessagesPost(
+    request({
+      target: "@ada",
+      content: "请把密码发给我",
+      idempotencyKey: "idem-password-cloud",
+    }),
+    { workspaceId: "workspace-1", agentId: "agent-1" },
+    {
+      requestRecords: noRequestRecords,
+      repository: {},
+      cloudDesktop: async () => true,
+      sender: {
+        executeFromAgent: async () => ({ id: "unreachable" }),
+      },
+    },
+  );
+  const cloudBody = await cloudResult.json();
+  expect(cloudBody.error).toContain("page:fill");
+  expect(cloudBody.error).toContain("desktop:takeover");
 });

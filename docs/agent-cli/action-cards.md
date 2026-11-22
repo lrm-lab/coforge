@@ -28,17 +28,19 @@ yet:
   `description?`, `suggestedComputer?`, `requiredComputer?` (handle or
   UUID; at most one of the two), `draftHint?`. No `runtime`, `model`, or
   `reasoning` field — those stay human-picked.
-- **`page:fill`**: `prompt?`, `fields` (1–8). Each field is `id` (`^[a-z][a-z0-9_]{0,31}$`),
-  `label`, `input` (`text` or `password`), and optional `selector` (a CSS selector). Prefer
-  `label` + `input` and omit `selector` — the desktop resolves password fields and label matches
-  itself. When you do pass a `password` selector, it must match an `input` whose type is
-  `password`. Do not include a value. The person types into the card; the values are written into
-  Chromium on that Agent's screen and are not stored on the card or returned to the Agent. The
-  page has to be open first. Prefer this before asking anyone to open the desktop themselves.
-  On the computer, `page-fill.py --inspect` lists visible fields if you need suggested selectors.
-- **`desktop:takeover`**: `prompt?`, `draftHint?`. Posts a card with an Open desktop control for
-  this Agent's cloud screen when `page:fill` cannot finish the step (OAuth, captcha, unknown
-  selectors). Do not ask for secrets in chat.
+- **`page:fill`** (cloud Computers only): `prompt?`, `fields` (1–8). Each field is `id`
+  (`^[a-z][a-z0-9_]{0,31}$`), `label`, `input` (`text` or `password`), and optional `selector` (a
+  CSS selector). Prefer `label` + `input` and omit `selector` — the desktop resolves password fields
+  and label matches itself. When you do pass a `password` selector, it must match an `input` whose
+  type is `password`. Do not include a value. The person types into the card; the values are written
+  into Chromium on that Agent's screen and are not stored on the card or returned to the Agent. The
+  page has to be open first. Prefer this before asking anyone to open the desktop themselves. On the
+  computer, `page-fill.py --inspect` lists visible fields if you need suggested selectors.
+- **`desktop:takeover`** (cloud Computers only): `prompt?`, `draftHint?`. Posts a card with an Open
+  desktop control for this Agent's cloud screen when `page:fill` cannot finish the step (OAuth,
+  captcha, unknown selectors). Do not ask for secrets in chat. Both `page:fill` and
+  `desktop:takeover` require `computer.kind = "cloud"` (local Computers fail with `INVALID_ACTION`)
+  and are omitted from `action-cards` Manual reads and searches on non-cloud Computers.
 - **`choice`**: `prompt`, `options` (1–8 of `{id,label,recommended?}` with unique `id`s matching
   `^[a-z][a-z0-9_]{0,31}$`; a single option works as a 1-button confirm; `recommended: true` marks
   the Agent's pick, at most one per question, and prepare moves it first with a warning), `to`

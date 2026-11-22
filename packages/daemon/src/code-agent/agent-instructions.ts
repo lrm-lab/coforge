@@ -8,7 +8,7 @@ import {
   AGENT_LAUNCH_APPS_SECTION_MAX_BYTES,
   type AgentLaunchApp,
 } from "@lrm/coforge-sdk/internal/agent-launch-apps";
-import { WORKSPACE_ASSISTANT_INSTRUCTIONS } from "./workspace-assistant-instructions";
+import { buildWorkspaceAssistantInstructions } from "./workspace-assistant-instructions";
 import type { AgentLaunchFeatures } from "./agent-feature-types";
 import { buildCoforgeCliGuideSections } from "./cli-guide-sections";
 export type AgentLaunchIdentity = {
@@ -33,6 +33,7 @@ export type CoforgeAgentPromptContext = {
   agentWorkspaceDirectory: string;
   agentId?: string;
   identity?: AgentLaunchIdentity;
+  environment?: Readonly<Record<string, string | undefined>>;
   extraCriticalRules?: readonly string[];
   capabilities?: {
     cloudDesktop?: boolean;
@@ -106,6 +107,8 @@ export function buildCoforgeAgentInstructions(context: CoforgeAgentPromptContext
   const apps = buildAppsSection(context.identity?.apps ?? []);
   if (apps) sections.push(apps);
   if (context.identity?.systemKind === "workspace-assistant")
-    sections.push(WORKSPACE_ASSISTANT_INSTRUCTIONS);
+    sections.push(
+      buildWorkspaceAssistantInstructions({ cloudDesktop: context.capabilities?.cloudDesktop }),
+    );
   return sections.join("\n\n");
 }

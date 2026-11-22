@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { isPrincipalOnCloudComputer } from "#src/server/agents/agent-cloud-computer.server";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { PrismaAgentManualEventRepository } from "#src/server/db/repositories/agent-manual-event.repositories.server";
 import {
@@ -42,8 +43,17 @@ export const Route = createFileRoute("/api/agent/v1/manual")({
   server: {
     middleware: [agentAuthMiddleware],
     handlers: {
-      GET: ({ request, context: { principal, db } }) =>
-        handleAgentManualGet(request, principal, new PrismaAgentManualEventRepository(db)),
+      GET: async ({ request, context: { principal, db } }) => {
+        const needsCloudCheck = new URL(request.url).searchParams.get("topic") === "action-cards";
+        return handleAgentManualGet(
+          request,
+          principal,
+          new PrismaAgentManualEventRepository(db),
+          needsCloudCheck
+            ? { cloudDesktop: await isPrincipalOnCloudComputer(db, principal) }
+            : undefined,
+        );
+      },
     },
   },
 });

@@ -49,10 +49,11 @@ export const createRuntime: CreateAgentSessionRuntimeFactory = async ({
   const services = await createAgentSessionServices({
     cwd,
     agentDir,
-    resourceLoaderOptions: {
-      systemPromptOverride: () => instructions,
+    resourceLoaderOptions: resourceLoaderOptionsForSession({
+      instructions,
+      environment: Bun.env,
       extensionFactories: [createCompactionGuardExtension(() => undefined)],
-    },
+    }),
   });
   const skillDiagnostics = services.resourceLoader.getSkills().diagnostics;
   if (skillDiagnostics.length > 0) {
@@ -147,6 +148,7 @@ export async function createSession(options: CreateSessionOptions) {
       modelRuntime,
       resourceLoaderOptions: resourceLoaderOptionsForSession({
         instructions: options.instructions,
+        environment,
         disableHostPiInjection:
           evalDisablesHostPiInjection(options.environment) || evalDisablesHostPiInjection(),
         extensionFactories: [createCompactionGuardExtension(() => resolvedContextWindow)],

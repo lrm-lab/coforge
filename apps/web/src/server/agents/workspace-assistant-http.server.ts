@@ -3,13 +3,14 @@ import { CentrifugoConversationRealtime } from "#src/server/conversations/conver
 import type { AgentSendDecisionResponse } from "@lrm/coforge-sdk/agent";
 import {
   CREDENTIAL_SOLICITATION_CODE,
-  CREDENTIAL_SOLICITATION_MESSAGE,
+  credentialSolicitationMessage,
   isAttachmentMessageTarget,
   solicitsCredentialsInChat,
 } from "@lrm/coforge-sdk/internal";
 import { toggleUserMessageReaction } from "#src/server/conversations/user-message-reactions.server";
 import { z } from "zod";
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { isPrincipalOnCloudComputer } from "./agent-cloud-computer.server";
 import { workspaceAssistantUser } from "./workspace-assistant-authority.server";
 import {
   WorkspaceAssistantCommands,
@@ -123,13 +124,15 @@ export async function handleWorkspaceAssistantCommand(
       }
       if (body.content === undefined || (!body.content.trim() && !body.attachmentIds?.length))
         return Response.json({ error: "content is required" }, { status: 400 });
-      if (body.content && solicitsCredentialsInChat(body.content))
+      if (body.content && solicitsCredentialsInChat(body.content)) {
+        const cloudDesktop = await isPrincipalOnCloudComputer(db, principal);
         return errorResponse(
           CREDENTIAL_SOLICITATION_CODE,
-          CREDENTIAL_SOLICITATION_MESSAGE,
+          credentialSolicitationMessage({ cloudDesktop }),
           400,
           false,
         );
+      }
       const message = await commands.send(principal, { ...body, content: body.content });
       const response: AgentSendDecisionResponse = {
         idempotencyKey: body.idempotencyKey,

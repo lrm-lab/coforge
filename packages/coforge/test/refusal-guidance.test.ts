@@ -30,16 +30,52 @@ test("a send refused for too many messages between Agents says to stop, not to r
   }
 });
 
-test("a send that asked for a password in chat points at page:fill", () => {
-  const next = refusalNextAction(
+test("a send that asked for a password in chat points at page:fill only on a cloud desktop", async () => {
+  const { refuseCredentialSolicitationIfNeeded } = await import("../src/send-credential-gate");
+  const localNext = refusalNextAction(
     "send",
     { status: 400, code: "CREDENTIAL_SOLICITATION_REFUSED", retryable: false },
     "@ada",
+    { cloudDesktop: false },
+  );
+  expect(localNext).toStartWith("No message was sent");
+  expect(localNext).not.toContain("page:fill");
+  expect(localNext).not.toContain("desktop:takeover");
+
+  const cloudNext = refusalNextAction(
+    "send",
+    { status: 400, code: "CREDENTIAL_SOLICITATION_REFUSED", retryable: false },
+    "@ada",
+    { cloudDesktop: true },
+  );
+  expect(cloudNext).toStartWith("No message was sent");
+  expect(cloudNext).toContain("page:fill");
+  expect(cloudNext).toContain("desktop:takeover");
+
+  let localError: unknown;
+  try {
+    refuseCredentialSolicitationIfNeeded("send", "请把密码发给我", "@ada", {});
+  } catch (error) {
+    localError = error;
+  }
+  expect((localError as { message: string }).message).not.toContain("page:fill");
+  expect((localError as { suggestedNextAction?: string }).suggestedNextAction).not.toContain(
+    "desktop:takeover",
   );
 
-  expect(next).toStartWith("No message was sent");
-  expect(next).toContain("page:fill");
-  expect(next).toContain("desktop:takeover");
+  let cloudError: unknown;
+  try {
+    refuseCredentialSolicitationIfNeeded("send", "请把密码发给我", "@ada", {
+      COFORGE_CLOUD_COMPUTER: "1",
+      DISPLAY: ":20",
+    });
+  } catch (error) {
+    cloudError = error;
+  }
+  expect((cloudError as { message: string }).message).toContain("page:fill");
+  expect((cloudError as { suggestedNextAction?: string }).suggestedNextAction).toContain(
+    "desktop:takeover",
+  );
 });
 
 test("an attachment uploaded to another conversation says to upload it again to the send's target", () => {

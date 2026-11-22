@@ -1,26 +1,25 @@
 import { NO_MESSAGE_SENT_NEXT_ACTION, unknownDeliveryNextAction } from "./cli-error";
 
-/** A refusal the server explained: its HTTP status and, when it named them, code and retryability. */
 export type ExplainedRefusal = { status: number; code?: string; retryable?: boolean };
 
-/** What did not happen, for the operations whose refusals say so. */
 const NOTHING_DONE: Readonly<Record<string, string | undefined>> = {
   send: "No message was sent",
   upload: "Nothing was uploaded",
   prepare: "No action card was posted",
 };
 
-/**
- * The next step for a refusal the server explained. For a send it errs toward "delivery unknown":
- * "No message was sent" is said only for a code known to refuse before anything is committed, or
- * for a 400/403 without a code (the send route's validation, and `AgentSendRejectedError`, whose
- * transaction rolls back). Anything else (`MESSAGE_REQUEST_IN_PROGRESS` among them, whose next
- * step the daemon names with the draft's key) keeps delivery unknown.
- */
+export function hasCloudDesktopEnvironment(
+  environment: Readonly<Record<string, string | undefined>> = Bun.env,
+): boolean {
+  const cloud = environment.COFORGE_CLOUD_COMPUTER;
+  return (cloud === "1" || cloud === "true") && Boolean(environment.DISPLAY?.trim());
+}
+
 export function refusalNextAction(
   operation: string,
   { status, code, retryable }: ExplainedRefusal,
   target: string,
+  options?: { cloudDesktop?: boolean },
 ): string | undefined {
   const nothingDone = NOTHING_DONE[operation];
   const person = target.split(":")[0] ?? target;
@@ -77,13 +76,21 @@ export function refusalNextAction(
         "Retrying will not help: ask this Agent's owner to reconnect GitHub in Settings → " +
         "Integrations, then retry the push or `gh` command."
       );
-    case "CREDENTIAL_SOLICITATION_REFUSED":
+    case "CREDENTIAL_SOLICITATION_REFUSED": {
+      const cloudDesktop = options?.cloudDesktop ?? hasCloudDesktopEnvironment();
+      if (cloudDesktop) {
+        return (
+          `${nothingDone ?? "Nothing was done"}: do not ask for passwords or verification codes in ` +
+          "chat. Post a `page:fill` action card (`coforge manual get action-cards`), or " +
+          "`desktop:takeover` when the form cannot be filled, then send a normal reply without " +
+          "requesting the secret."
+        );
+      }
       return (
         `${nothingDone ?? "Nothing was done"}: do not ask for passwords or verification codes in ` +
-        "chat. Post a `page:fill` action card (`coforge manual get action-cards`), or " +
-        "`desktop:takeover` when the form cannot be filled, then send a normal reply without " +
-        "requesting the secret."
+        "chat. Send a normal reply without requesting the secret."
       );
+    }
   }
   if (operation === "send")
     return code === undefined && (status === 400 || status === 403)

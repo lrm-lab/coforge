@@ -45,9 +45,9 @@ export async function resolvePageFillPayload(
 ): Promise<ResolvedPageFillPayload> {
   const agent = await db.agent.findFirst({
     where: { id: agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
-    select: { computerId: true },
+    select: { computerId: true, computer: { select: { kind: true } } },
   });
-  if (!agent?.computerId) {
+  if (!agent?.computerId || agent.computer?.kind !== "cloud") {
     throw new ActionCardError(422, "INVALID_ACTION", "this agent has no cloud computer");
   }
   return {

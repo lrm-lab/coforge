@@ -3,8 +3,22 @@ import { join, resolve } from "node:path";
 
 const STABLE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
-/** Image / entrypoint sets this on CoForge cloud-computer containers only. */
 export const COFORGE_CLOUD_COMPUTER_ENV = "COFORGE_CLOUD_COMPUTER";
+
+export const CLOUD_COMPUTER_ONLY_SKILL_NAMES: ReadonlySet<string> = new Set([
+  "browser-login",
+  "cloud-computer-overview",
+]);
+
+const CLOUD_COMPUTER_APPEND_SYSTEM_HEADING = "# CoForge 云电脑身份与能力";
+
+export function isCloudComputerOnlySkillName(name: string): boolean {
+  return CLOUD_COMPUTER_ONLY_SKILL_NAMES.has(name.trim());
+}
+
+export function isCloudComputerAppendSystemPrompt(text: string): boolean {
+  return text.trimStart().startsWith(CLOUD_COMPUTER_APPEND_SYSTEM_HEADING);
+}
 
 export function isCloudComputerSkillsEnabled(
   environment: Readonly<Record<string, string | undefined>> = Bun.env,
@@ -21,14 +35,12 @@ export function cloudComputerWorkspaceRoot(
   return resolve(root);
 }
 
-/** Container-shared skills (also bind-mounted to /root/.pi/agent/skills on the image). */
 export function cloudComputerSharedSkillsDirectory(
   environment: Readonly<Record<string, string | undefined>> = Bun.env,
 ): string {
   return join(cloudComputerWorkspaceRoot(environment), "skills");
 }
 
-/** Per-Agent skills on the cloud computer persistent volume. */
 export function cloudComputerAgentSkillsDirectory(
   agentId: string,
   environment: Readonly<Record<string, string | undefined>> = Bun.env,
@@ -39,7 +51,6 @@ export function cloudComputerAgentSkillsDirectory(
   return join(cloudComputerWorkspaceRoot(environment), "agent-skills", agentId);
 }
 
-/** Extra Pi skill roots for cloud-computer sessions (empty when gate is off). */
 export function cloudComputerAdditionalSkillPaths(options: {
   agentId?: string;
   environment?: Readonly<Record<string, string | undefined>>;
@@ -53,20 +64,36 @@ export function cloudComputerAdditionalSkillPaths(options: {
   return paths;
 }
 
-/**
- * Ensures the persistent Agent skills directory exists, migrates a legacy
- * `<agentWs>/.pi/skills` tree into it once, seeds shared skills, and mirrors
- * the durable tree back to `.pi/skills` so the default Pi loader finds them.
- * No-op when the cloud gate is off (non-cloud-computer).
- */
+async function isRealDirectory(path: string): Promise<boolean> {
+  try {
+    const stat = await lstat(path);
+    return stat.isDirectory() && !stat.isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
 export async function prepareCloudComputerAgentSkills(options: {
   agentId: string;
   agentWorkspaceDirectory: string;
   environment?: Readonly<Record<string, string | undefined>>;
 }): Promise<{ enabled: boolean; directory: string }> {
   const environment = options.environment ?? Bun.env;
-  const legacy = join(resolve(options.agentWorkspaceDirectory), ".pi", "skills");
+  const workspaceDir = resolve(options.agentWorkspaceDirectory);
+  const dotPi = join(workspaceDir, ".pi");
+  const legacy = join(dotPi, "skills");
   if (!isCloudComputerSkillsEnabled(environment)) {
+    if (
+      (await isRealDirectory(workspaceDir)) &&
+      (await isRealDirectory(dotPi)) &&
+      (await isRealDirectory(legacy))
+    ) {
+      await Promise.all(
+        [...CLOUD_COMPUTER_ONLY_SKILL_NAMES].map((name) =>
+          rm(join(legacy, name), { recursive: true, force: true }),
+        ),
+      );
+    }
     return { enabled: false, directory: legacy };
   }
 

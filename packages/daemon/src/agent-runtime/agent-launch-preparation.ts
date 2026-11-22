@@ -1,7 +1,10 @@
 import { mkdir } from "node:fs/promises";
 import type { AgentRuntimeConfig, AgentSession, AgentSessionOptions } from "@coforge/agent";
 import { evalDisablesHostPiInjection } from "@coforge/agent";
-import { prepareCloudComputerAgentSkills } from "@coforge/agent/cloud-computer-skills";
+import {
+  isCloudComputerSkillsEnabled,
+  prepareCloudComputerAgentSkills,
+} from "@coforge/agent/cloud-computer-skills";
 import type { CodeAgentProviderFactory } from "@lrm/coforge-anvil";
 import {
   buildCoforgeAgentInstructions,
@@ -57,6 +60,7 @@ export async function prepareAgentLaunch(
     onInstructions,
   } = input;
   await mkdir(agentWorkspaceDirectory, { recursive: true, mode: 0o700 });
+  const mergedEnvironment = { ...Bun.env, ...environment };
   const disableHostPiInjection =
     evalDisablesHostPiInjection(environment) || evalDisablesHostPiInjection();
   if (!disableHostPiInjection) {
@@ -67,7 +71,7 @@ export async function prepareAgentLaunch(
     await prepareCloudComputerAgentSkills({
       agentId,
       agentWorkspaceDirectory,
-      environment: { ...Bun.env, ...environment },
+      environment: mergedEnvironment,
     });
     if (assignedSkillPacks.length > 0) {
       await installAssignedSkills({
@@ -75,7 +79,7 @@ export async function prepareAgentLaunch(
         agentWorkspaceDirectory,
         packs: assignedSkillPacks,
         agentId,
-        environment: { ...Bun.env, ...environment },
+        environment: mergedEnvironment,
       });
     }
   }
@@ -91,9 +95,11 @@ export async function prepareAgentLaunch(
     agentWorkspaceDirectory,
     agentId,
     identity,
+    environment: mergedEnvironment,
     ...(extraCriticalRules.length > 0 ? { extraCriticalRules } : {}),
     capabilities: {
-      cloudDesktop: Boolean(environment?.DISPLAY),
+      cloudDesktop:
+        isCloudComputerSkillsEnabled(mergedEnvironment) && Boolean(environment?.DISPLAY),
     },
   });
   onInstructions?.(instructions);

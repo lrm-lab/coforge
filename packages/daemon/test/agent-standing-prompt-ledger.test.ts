@@ -196,3 +196,50 @@ test("prepareAgentLaunch reports built standing instructions through onInstructi
   expect(captured).toBe(options.instructions);
   expect(captured?.length ?? 0).toBeGreaterThan(0);
 });
+
+test("prepareAgentLaunch omits cloud desktop and cloud skill prompts on local computers even when DISPLAY is set", async () => {
+  const workspaceDir = join(tmpdir(), `coforge-launch-local-display-${crypto.randomUUID()}`);
+  directories.push(workspaceDir);
+  const ports = {
+    createProvider: () => {
+      throw new Error("unused");
+    },
+    resolveGitHooks: async () => undefined,
+  };
+  const localOptions = await prepareAgentLaunch(
+    {
+      agentId: "agent-local",
+      config: { provider: "antigravity", model: "gemini-3-flash", reasoning: "medium" },
+      agentWorkspaceDirectory: workspaceDir,
+      environment: {
+        COFORGE_EVAL_DISABLE_HOST_PI_INJECTION: "1",
+        COFORGE_CLOUD_COMPUTER: "0",
+        DISPLAY: ":0",
+      },
+      identity: { systemKind: "workspace-assistant" },
+    },
+    ports,
+  );
+  expect(localOptions.instructions).not.toContain("page:fill");
+  expect(localOptions.instructions).not.toContain("desktop:takeover");
+  expect(localOptions.instructions).not.toContain("Persistent skills on this cloud computer");
+
+  const cloudOptions = await prepareAgentLaunch(
+    {
+      agentId: "agent-cloud",
+      config: { provider: "antigravity", model: "gemini-3-flash", reasoning: "medium" },
+      agentWorkspaceDirectory: workspaceDir,
+      environment: {
+        COFORGE_EVAL_DISABLE_HOST_PI_INJECTION: "1",
+        COFORGE_CLOUD_COMPUTER: "1",
+        WORKSPACE: "/workspace",
+        DISPLAY: ":20",
+      },
+      identity: { systemKind: "workspace-assistant" },
+    },
+    ports,
+  );
+  expect(cloudOptions.instructions).toContain("`page:fill`");
+  expect(cloudOptions.instructions).toContain("`desktop:takeover`");
+  expect(cloudOptions.instructions).toContain("Persistent skills on this cloud computer");
+});
