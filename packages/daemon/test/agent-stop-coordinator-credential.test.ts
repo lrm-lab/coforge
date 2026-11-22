@@ -2,11 +2,11 @@ import { expect, test } from "bun:test";
 import { AgentStopCoordinator } from "#src/daemon-runtime/agent-stop-coordinator";
 
 /** A coordinator over inert collaborators, and what it told the credential holds. */
-function subject() {
+function subject(startupAbort?: AbortController) {
   const told: string[] = [];
   const coordinator = new AgentStopCoordinator({
     agentLaunches: new Map(),
-    currentActivityLaunches: new Map(),
+    currentActivityLaunches: new Map(startupAbort ? [["a", { startupAbort }]] : []),
     inputDrain: { get: () => undefined },
     processManager: { isStopping: () => false, stop: async () => {} },
     activityPublisher: { forgetBusy() {}, publish() {} },
@@ -34,4 +34,11 @@ test("a person's Stop is told to the credential holds", async () => {
   const { coordinator, told } = subject();
   await coordinator.stopAgent("a");
   expect(told).toEqual(["a"]);
+});
+
+test("Stop cancels an OpenCode startup waiting for a database slot", async () => {
+  const startup = new AbortController();
+  const { coordinator } = subject(startup);
+  await coordinator.stopAgent("a");
+  expect(startup.signal.aborted).toBe(true);
 });

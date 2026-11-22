@@ -39,3 +39,8 @@ These rules extend [`../../AGENTS.md`](../../AGENTS.md).
   diagnostics (`stderr.ts`): they stay out of `stderrHint` and the process-stderr warning, while
   WARN and above — or anything outside the log format — still report. Catalog and effort probe
   hints take the first diagnostic line, falling back to the last line for a silent hang.
+
+- Agent launches, model discovery and effort probes share an in-process startup queue keyed by
+  the SQLite path resolved from the child's environment. An Agent keeps its place until ACP
+  setup finishes or the failed child's tree exits. A cancelled or timed-out waiter never spawns.
+  Probe model iteration and live turns run outside this queue.

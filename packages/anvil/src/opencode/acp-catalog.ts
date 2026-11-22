@@ -4,11 +4,11 @@ import {
   diagnosticErrorCode,
 } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
-import { catalogErrorMessage, within } from "#src/catalog-discovery";
-import { acpBounded, acpProcess, type AcpConnection } from "#src/acp/connection";
+import { catalogErrorMessage } from "#src/catalog-discovery";
+import { acpBounded, type AcpConnection } from "#src/acp/connection";
 import { scrubStderrHint } from "#src/stderr-hint";
 import { asRecord } from "#src/json-record";
-import { OPENCODE_ACP_PROFILE } from "./acp-session";
+import { openOpenCodeProbe } from "./acp-probe";
 import type { OpenCodeAcpRuntimeHost } from "./acp-host";
 import { assertOpenCodeAcpVersionSupported } from "./acp-version";
 import { isRoutineOpenCodeStderr } from "./stderr";
@@ -35,25 +35,13 @@ export async function discoverOpenCodeAcpCatalog(
     // The version gate runs before the server spawns: a below-floor opencode is an upgrade
     // prompt, not a failed ACP launch.
     await assertOpenCodeAcpVersionSupported(command, host.versionReader);
-    transport = acpProcess(OPENCODE_ACP_PROFILE, {
-      command,
-      cwd,
-      environment: { ...environment, PWD: cwd },
-      clientInfo: host.clientInfo,
-      processTreeSpawner: host.processTreeSpawner,
-      onStderr: (line) => {
-        // --print-logs opens with routine INFO narrative; the hint is the first real diagnostic,
-        // falling back to the last line so a silent hang still shows where it stalled.
-        if (!line.trim()) return;
-        if (stderrHint === undefined && !isRoutineOpenCodeStderr(line)) stderrHint = line;
-        lastStderrLine = line;
-      },
+    const opened = await openOpenCodeProbe(command, cwd, environment, host, timeoutMs, (line) => {
+      if (!line.trim()) return;
+      if (stderrHint === undefined && !isRoutineOpenCodeStderr(line)) stderrHint = line;
+      lastStderrLine = line;
     });
-    await transport.initialize(timeoutMs);
-    const session = await within(
-      transport.connection.agent.request("session/new", { cwd, mcpServers: [] }),
-      timeoutMs,
-    );
+    transport = opened.transport;
+    const session = opened.session;
     sessionId = session.sessionId;
     const options = Array.isArray(session.configOptions) ? session.configOptions : [];
     const model = options.find(

@@ -20,6 +20,7 @@ import type { LaunchPhaseTiming } from "./launch-phase-timing";
 /** What the runtime tracks about one Agent launch's Activity, from start-up to exit. */
 export type ActivityLaunch = PublishedActivityLaunch & {
   startup?: AgentStartup;
+  startupAbort?: AbortController;
   trajectory?: Pick<ActivityTrajectory, "flush" | "dispose">;
   /** When the provider last reported anything (`stalled-recovery.ts`). */
   progress?: ProviderProgress;

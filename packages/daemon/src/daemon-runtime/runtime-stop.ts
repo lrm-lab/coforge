@@ -105,6 +105,7 @@ export class RuntimeStop {
     ports.contextView.stopMaintenance();
     ports.activityPublisher.disable();
     for (const [agentId, launch] of ports.currentActivityLaunches) {
+      launch.startupAbort?.abort();
       launch.startup?.dispose();
       launch.stalled?.dispose(agentId);
     }

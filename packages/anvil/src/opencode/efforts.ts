@@ -1,10 +1,9 @@
 import { RUNTIME_PROVIDER, diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import { RequestError, type SessionConfigOption } from "@agentclientprotocol/sdk";
-import { within } from "#src/catalog-discovery";
 import { OPENCODE_ACP_CATALOG_TIMEOUT_MS } from "./acp-catalog";
-import { acpBounded, acpProcess, type AcpConnection } from "#src/acp/connection";
-import { OPENCODE_ACP_PROFILE } from "./acp-session";
+import { acpBounded, type AcpConnection } from "#src/acp/connection";
+import { openOpenCodeProbe } from "./acp-probe";
 import type { OpenCodeAcpRuntimeHost } from "./acp-host";
 import { scrubStderrHint } from "#src/stderr-hint";
 import { isRoutineOpenCodeStderr } from "./stderr";
@@ -76,29 +75,25 @@ export async function readOpenCodeModelEfforts(
   let sessionId: string | undefined;
   let stderrHint: string | undefined;
   let lastStderrLine: string | undefined;
-  const expires = setTimeout(() => {
-    void transport?.dispose();
-  }, sweepTimeoutMs);
+  const signal = AbortSignal.timeout(sweepTimeoutMs);
+  const abort = () => void transport?.dispose().catch(() => undefined);
+  signal.addEventListener("abort", abort, { once: true });
   try {
-    transport = acpProcess(OPENCODE_ACP_PROFILE, {
+    const opened = await openOpenCodeProbe(
       command,
       cwd,
-      environment: { ...environment, PWD: cwd },
-      clientInfo: host.clientInfo,
-      processTreeSpawner: host.processTreeSpawner,
-      onStderr: (line) => {
-        // --print-logs opens with routine INFO narrative; the hint is the first real diagnostic,
-        // falling back to the last line so a silent hang still shows where it stalled.
+      environment,
+      host,
+      timeoutMs,
+      (line) => {
         if (!line.trim()) return;
         if (stderrHint === undefined && !isRoutineOpenCodeStderr(line)) stderrHint = line;
         lastStderrLine = line;
       },
-    });
-    await transport.initialize(timeoutMs);
-    const session = await within(
-      transport.connection.agent.request("session/new", { cwd, mcpServers: [] }),
-      timeoutMs,
+      signal,
     );
+    transport = opened.transport;
+    const session = opened.session;
     sessionId = session.sessionId;
     if (!sessionId?.trim()) throw new Error("OpenCode effort discovery unavailable");
     for (const modelId of modelIds) {
@@ -174,7 +169,7 @@ export async function readOpenCodeModelEfforts(
         "opencode acp session/delete timed out",
       ).catch(() => undefined);
     }
-    clearTimeout(expires);
+    signal.removeEventListener("abort", abort);
     await transport?.dispose();
   }
 }

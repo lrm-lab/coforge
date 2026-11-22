@@ -10,6 +10,7 @@ import type { OpenCodeAcpRuntimeHost } from "./acp-host";
 import { OpenCodeAcpTurnEvents } from "./acp-update-events";
 import { OPENCODE_CONFIG_CONTENT_ENV, type OpenCodeInstructions } from "./instructions";
 import { isRoutineOpenCodeStderr } from "./stderr";
+import { runOpenCodeStartup } from "./startup";
 
 /** How long a production session waits for each bounded ACP answer. */
 export const OPENCODE_ACP_TIMEOUT_MS = 120_000;
@@ -61,17 +62,36 @@ export async function createOpenCodeAcpSession(
   acpTimeoutMs?: number,
 ): Promise<AgentSession> {
   const timeoutMs = acpTimeoutMs ?? OPENCODE_ACP_TIMEOUT_MS;
-  const profile = openCodeSessionProfile(options, command, host, instructions, timeoutMs);
-  const session = new AcpSession(profile, options, timeoutMs, (work) =>
-    acpBounded(work, timeoutMs, OPENCODE_ACP_PROFILE.messages.timedOut),
+  const environment = {
+    ...host.buildEnvironment(options),
+    [OPENCODE_CONFIG_CONTENT_ENV]: instructions.configContent,
+  };
+  const profile = openCodeSessionProfile(
+    options,
+    command,
+    host,
+    instructions,
+    environment,
+    timeoutMs,
   );
-  try {
-    await session.open();
-    return session;
-  } catch (error) {
-    await session.dispose();
-    throw error;
-  }
+  return runOpenCodeStartup(
+    options.agentWorkspaceDirectory,
+    environment,
+    timeoutMs,
+    async () => {
+      const session = new AcpSession(profile, options, timeoutMs, (work) =>
+        acpBounded(work, timeoutMs, OPENCODE_ACP_PROFILE.messages.timedOut),
+      );
+      try {
+        await session.open();
+        return session;
+      } catch (error) {
+        await session.dispose();
+        throw error;
+      }
+    },
+    options.startupSignal,
+  );
 }
 
 function openCodeSessionProfile(
@@ -79,6 +99,7 @@ function openCodeSessionProfile(
   command: readonly string[],
   host: OpenCodeAcpRuntimeHost,
   instructions: OpenCodeInstructions,
+  environment: Record<string, string>,
   timeoutMs: number,
 ): AcpSessionProfile {
   return {
@@ -88,13 +109,7 @@ function openCodeSessionProfile(
       const transport = acpProcess(OPENCODE_ACP_PROFILE, {
         command,
         cwd: options.agentWorkspaceDirectory,
-        environment: {
-          ...host.buildEnvironment(options),
-          // Standing instructions ride the process environment, never an ACP field: opencode has
-          // no system-prompt channel, and `OPENCODE_CONFIG_CONTENT` appends the private file
-          // after the project's own instructions on every launch (CLI 2.0.30+).
-          [OPENCODE_CONFIG_CONTENT_ENV]: instructions.configContent,
-        },
+        environment,
         clientInfo: host.clientInfo,
         processTreeSpawner: host.processTreeSpawner,
         onUpdate: (method, params) => {

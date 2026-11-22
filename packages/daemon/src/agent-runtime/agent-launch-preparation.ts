@@ -21,6 +21,7 @@ export type AgentLaunchInput = Readonly<{
   agentWorkspaceDirectory: string;
   sessionId?: string;
   sessionMode?: AgentSessionOptions["sessionMode"];
+  startupSignal?: AbortSignal;
   contextViewRequestLogDirectory?: string;
   environment?: Readonly<Record<string, string>>;
   runtimeId?: string;
@@ -54,6 +55,7 @@ export async function prepareAgentLaunch(
     runtimeId,
     onSessionId,
     sessionMode,
+    startupSignal,
     contextViewRequestLogDirectory,
     assignedSkillPacks = [],
     identity,
@@ -110,6 +112,7 @@ export async function prepareAgentLaunch(
     instructions,
     sessionId,
     sessionMode,
+    ...(startupSignal && { startupSignal }),
     contextViewRequestLogDirectory,
     onSessionId,
     runtime: config.envVars

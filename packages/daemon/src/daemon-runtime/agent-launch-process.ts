@@ -1,3 +1,4 @@
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { AgentAuthorizationError } from "#src/agent-runtime/launch-failure";
 import { agentStartup } from "#src/agent-runtime/agent-startup";
 import { agentRuntimeContextEnvironment } from "#src/code-agent/environment";
@@ -78,6 +79,7 @@ export async function launchAgentProcess(
     | undefined,
 ): Promise<AgentRuntime> {
   const { control } = request;
+  if (config.provider === RUNTIME_PROVIDER.OPENCODE) launch.startupAbort = new AbortController();
   const current = () => ports.currentActivityLaunches.get(agentId) === launch && !launch.stopping;
   const timing = new LaunchPhaseTiming({
     agentId,
@@ -192,6 +194,7 @@ export async function launchAgentProcess(
           COFORGE_AGENT_LAUNCH_ID: launch.launchId,
         },
         runtimeId: launch.launchId,
+        startupSignal: launch.startupAbort?.signal,
         effectiveConfigRevision: launchConfig.runtimeConfigRevision,
         onSessionId: async (sessionId, replacedSessionId) => {
           if (
@@ -245,6 +248,7 @@ export async function launchAgentProcess(
           : undefined,
       },
     );
+    launch.startupAbort = undefined;
     timing.phase("provider_session");
     if (claimAgentLaunchTagSweep(agentId)) sweepAgentLaunchTagStrays(agentId, "launch");
     await openLaunchSessionMemory({

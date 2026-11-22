@@ -111,6 +111,7 @@ type AgentSessionCommonOptions = Readonly<{
   instructions: string;
   sessionId?: string;
   sessionMode?: "create" | "resume";
+  startupSignal?: AbortSignal;
   contextViewRequestLogDirectory?: string;
   onSessionId?(sessionId: string, replacedSessionId?: string): Promise<void>;
   runtime?: AgentRuntimeConfig;

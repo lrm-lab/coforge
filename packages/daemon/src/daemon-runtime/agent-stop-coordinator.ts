@@ -63,6 +63,7 @@ export class AgentStopCoordinator {
   ): Promise<void> {
     const activityLaunch = this.ports.currentActivityLaunches.get(agentId);
     this.ports.desktops.end(agentId);
+    activityLaunch?.startupAbort?.abort();
     activityLaunch?.startup?.dispose();
     void this.ports
       .revokeAgentApiKey(agentId, this.ports.agentApiKeys.get(agentId), "all")
