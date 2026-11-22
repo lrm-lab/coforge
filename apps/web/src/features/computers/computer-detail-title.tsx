@@ -100,7 +100,7 @@ export function ComputerDetailTitle({
           size="xs"
           color="tertiary"
           icon={Pencil}
-          className="-ml-1 shrink-0"
+          className="-ms-1 shrink-0"
           aria-label={m.computer_display_name_edit()}
           onClick={() => {
             setDisplayNameDraft(computer.displayName);
@@ -108,12 +108,14 @@ export function ComputerDetailTitle({
           }}
         />
       )}
-      <ComputerDetailWhere computer={computer} label={label} className="hidden truncate sm:block" />
-      {/* On a phone the name keeps the room: the pill shrinks to its dot and the line below the
-          band (`ComputerDetailWhere`) says the status in words. */}
-      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-secondary px-2 py-0.5 text-xs text-secondary max-sm:border-0 max-sm:p-0">
+      <ComputerDetailWhere
+        computer={computer}
+        label={label}
+        className="hidden truncate @md/comp-header:block"
+      />
+      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border-0 p-0 text-xs text-secondary @md/comp-header:border @md/comp-header:border-secondary @md/comp-header:px-2 @md/comp-header:py-0.5">
         <StatusDot tone={computer.online ? "online" : "offline"} className="size-2" />
-        <span className="max-sm:sr-only">{statusLabel(computer)}</span>
+        <span className="@max-md/comp-header:sr-only">{statusLabel(computer)}</span>
       </span>
     </div>
   );

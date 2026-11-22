@@ -229,7 +229,10 @@ const ActivityTimelineRow = memo(function ActivityTimelineRow({
       aria-controls={contentId}
       onPress={() => setExpanded(!expanded)}
       iconTrailing={
-        <ChevronRight aria-hidden="true" className={cn("size-3", expanded && "rotate-90")} />
+        <ChevronRight
+          aria-hidden="true"
+          className={cn("size-3", expanded ? "rotate-90" : "rtl:rotate-180")}
+        />
       }
     >
       {row.label}

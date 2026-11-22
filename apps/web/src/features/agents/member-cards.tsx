@@ -169,7 +169,9 @@ export function AgentCard({
               {member.displayName}
             </Link>
           </h2>
-          <p className="truncate text-sm text-tertiary">@{member.name}</p>
+          <p dir="ltr" className="truncate text-start text-sm text-tertiary">
+            @{member.name}
+          </p>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {member.canMessage && (
@@ -205,7 +207,7 @@ export function AgentCard({
                     <span className="flex items-center text-error-primary">
                       <Archive
                         aria-hidden="true"
-                        className="mr-2 size-4 shrink-0 stroke-[2.25px]"
+                        className="me-2 size-4 shrink-0 stroke-[2.25px]"
                       />
                       {m.member_agent_delete()}
                     </span>

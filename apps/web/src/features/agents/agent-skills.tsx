@@ -176,13 +176,13 @@ function SkillRow({ entry }: { entry: AgentSkillsScope["entries"][number] }) {
         <>
           <AriaButton
             slot="trigger"
-            className="flex w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-left text-sm outline-focus-ring focus-visible:outline-2 focus-visible:-outline-offset-2"
+            className="flex w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2 text-start text-sm outline-focus-ring focus-visible:outline-2 focus-visible:-outline-offset-2"
           >
             <ChevronRight
               aria-hidden="true"
               className={cn(
                 "size-4 shrink-0 text-fg-quaternary transition-transform duration-(--duration-sm) ease-in-out motion-reduce:transition-none",
-                isExpanded && "rotate-90",
+                isExpanded ? "rotate-90" : "rtl:rotate-180",
               )}
             />
             {name}
@@ -191,9 +191,8 @@ function SkillRow({ entry }: { entry: AgentSkillsScope["entries"][number] }) {
             )}
           </AriaButton>
           <DisclosurePanel
-            // A collapsed panel is `hidden="until-found"`, which Tailwind's preflight leaves displayed: hide it outright.
             className={cn(
-              "pr-3 pb-2.5 pl-8.5 text-sm break-words whitespace-pre-line text-tertiary",
+              "ps-8.5 pe-3 pb-2.5 text-sm break-words whitespace-pre-line text-tertiary",
               !isExpanded && "hidden",
             )}
           >

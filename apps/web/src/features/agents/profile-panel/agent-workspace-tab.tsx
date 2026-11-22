@@ -280,7 +280,7 @@ export function AgentWorkspaceTab({
                 icon={ArrowLeft}
                 size="xs"
                 color="tertiary"
-                className="shrink-0"
+                className="shrink-0 [&_svg]:rtl:rotate-180"
                 tooltip={m.agent_workspace_back()}
                 onClick={() => setSelected(undefined)}
               />

@@ -69,8 +69,16 @@ export function ComputerDetailStats({
               <MachineUsage reading={memory} base={1024} />
             </Stat>
           )}
-          {currentVersion && <Stat label={m.computer_version()}>{currentVersion}</Stat>}
-          {imageVersion && <Stat label={m.computer_image_version()}>{imageVersion}</Stat>}
+          {currentVersion && (
+            <Stat label={m.computer_version()}>
+              <span dir="ltr">{currentVersion}</span>
+            </Stat>
+          )}
+          {imageVersion && (
+            <Stat label={m.computer_image_version()}>
+              <span dir="ltr">{imageVersion}</span>
+            </Stat>
+          )}
           {computer.creator && (
             <Stat label={m.computer_added_by()}>
               <span className="flex min-w-0 items-center gap-2">
@@ -139,7 +147,7 @@ function MachineUsage({
   const low = warn && isMachineDiskLow(reading);
   return (
     <Tooltip title={machineUsageLabel(reading, base)}>
-      <TooltipTrigger className="flex flex-col items-start gap-1.5 rounded-sm text-left">
+      <TooltipTrigger className="flex flex-col items-start gap-1.5 rounded-sm text-start">
         <span className={cn("tabular-nums", low && "text-warning-primary")}>
           {usedPercentText(percent)}
         </span>

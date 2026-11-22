@@ -78,7 +78,7 @@ export function ComputerLayout({
       <nav
         aria-label={m.computer_connected_list()}
         className={cn(
-          "min-w-0 flex-col overflow-hidden bg-primary md:flex md:w-80 md:shrink-0 md:border-r md:border-secondary",
+          "min-w-0 flex-col overflow-hidden bg-primary md:flex md:w-[min(20rem,35%)] md:shrink-0 md:border-e md:border-secondary",
           listHidden ? "hidden" : "flex w-full",
         )}
       >

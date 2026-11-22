@@ -4,26 +4,19 @@ import { Monitor01 as Monitor, RefreshCw01 as RotateCw } from "@untitledui/icons
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { useAppToast } from "#src/components/ui/toast";
-import { useMediaQuery } from "#src/hooks/use-media-query";
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { m } from "#src/paraglide/messages";
 import { BackToComputers } from "./back-to-computers";
 import { CloudDesktopOverlay } from "./cloud-desktop-overlay";
 import { cloudDesktopOpening, cloudDesktopUrl, openCloudDesktopWindow } from "./cloud-desktop-url";
 import { useCloudDesktopOrigin } from "./cloud-desktop-origin";
 
-/** Restart control next to Open desktop. The detail page owns the request. */
 export type ComputerDetailRestart = {
   pending: boolean;
   disabled: boolean;
   onPress: () => void;
 };
 
-/**
- * Detail header band: back to the list, which Computer this is (`identity`), the owner's cloud
- * desktop, restart, and a "more" menu — what the machine is and what can be done to it on one line, as on Coder's
- * workspace page. Open desktop uses this deployment's proxy and stays disabled while the computer
- * is offline.
- */
 export function ComputerDetailHeader({
   computerId,
   identity,
@@ -35,43 +28,54 @@ export function ComputerDetailHeader({
 }: {
   computerId: string;
   identity: ReactNode;
-  /** Window chrome title for the in-page desktop overlay (phone). */
   desktopTitle: string;
   showDesktop: boolean;
   online: boolean;
   restart: ComputerDetailRestart | undefined;
-  /** The "more" menu at the end of the line: the rare actions that change or end the Computer. */
   menu?: ReactNode;
 }) {
   const desktopOrigin = useCloudDesktopOrigin();
   const desktopUrl =
     showDesktop && desktopOrigin ? cloudDesktopUrl(desktopOrigin, computerId) : undefined;
-  const phone = useMediaQuery("(max-width: 639px)", false);
+  const phone = !useBreakpoint("sm");
   const [overlayOpen, setOverlayOpen] = useState(false);
   const toast = useAppToast();
   const restartLabel = restart?.pending
     ? m.computer_restart_requesting()
     : m.computer_restart_action();
+  const openDesktop = () => {
+    if (!desktopUrl) return;
+    const opening = cloudDesktopOpening({ online, phone });
+    if (opening === "offline") toast.error(m.computer_desktop_offline());
+    else if (opening === "overlay") setOverlayOpen(true);
+    else openCloudDesktopWindow(desktopUrl, computerId);
+  };
   return (
-    <div className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-page max-sm:gap-1.5">
+    <div className="@container/comp-header flex h-12 shrink-0 items-center gap-1.5 border-b border-secondary px-page @md/comp-header:gap-3">
       <BackToComputers />
       <div className="min-w-0 flex-1">{identity}</div>
       {desktopUrl ? (
-        <Button
-          type="button"
-          size="sm"
-          color="primary"
-          className="shrink-0"
-          iconLeading={Monitor}
-          onPress={() => {
-            const opening = cloudDesktopOpening({ online, phone });
-            if (opening === "offline") toast.error(m.computer_desktop_offline());
-            else if (opening === "overlay") setOverlayOpen(true);
-            else openCloudDesktopWindow(desktopUrl, computerId);
-          }}
-        >
-          {m.computer_open_desktop()}
-        </Button>
+        <>
+          <Button
+            type="button"
+            size="sm"
+            color="primary"
+            className="hidden shrink-0 @xs/comp-header:inline-flex"
+            iconLeading={Monitor}
+            onPress={openDesktop}
+          >
+            {m.computer_open_desktop()}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            color="primary"
+            aria-label={m.computer_open_desktop()}
+            className="shrink-0 @xs/comp-header:hidden"
+            iconLeading={Monitor}
+            onPress={openDesktop}
+          />
+        </>
       ) : null}
       {overlayOpen && desktopUrl ? (
         <CloudDesktopOverlay
@@ -86,20 +90,18 @@ export function ComputerDetailHeader({
             type="button"
             size="sm"
             color="secondary"
-            className="shrink-0 max-sm:hidden"
+            className="hidden shrink-0 @md/comp-header:inline-flex"
             iconLeading={RotateCw}
             isDisabled={restart.disabled}
             onPress={restart.onPress}
           >
             {restartLabel}
           </Button>
-          {/* A phone keeps the line for the Computer's name: Restart is its icon, named in the
-              tooltip. */}
           <ButtonUtility
             icon={RotateCw}
             size="sm"
             color="tertiary"
-            className="shrink-0 sm:hidden"
+            className="shrink-0 @md/comp-header:hidden"
             tooltip={restartLabel}
             isDisabled={restart.disabled}
             onClick={restart.onPress}

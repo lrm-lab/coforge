@@ -162,9 +162,10 @@ function AgentCard({
               </span>
             )}
           </div>
-          {/* The handle only when it says something the name does not. */}
           {shownHandle && shownHandle !== displayName && (
-            <p className="truncate text-xs text-tertiary">@{shownHandle}</p>
+            <p dir="ltr" className="truncate text-start text-xs text-tertiary">
+              @{shownHandle}
+            </p>
           )}
           {/* A stop's sentence on lines of its own under the name: the card is where it reads
               whole, while a list or a header cuts it to one line. */}
@@ -256,7 +257,7 @@ function CardRecentActivity({
         color="link-gray"
         size="sm"
         iconTrailing={ChevronRight}
-        className="mb-1.5 text-xs"
+        className="mb-1.5 text-xs [&_svg]:rtl:rotate-180"
         onPress={() => {
           closePreview();
           onOpenActivity();

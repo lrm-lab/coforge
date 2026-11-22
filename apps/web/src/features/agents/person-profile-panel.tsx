@@ -152,7 +152,7 @@ function BackButton({ back }: { back: PanelBack }) {
       icon={ArrowLeft}
       size="sm"
       color="tertiary"
-      className="-ml-1.5"
+      className="-ms-1.5 [&_svg]:rtl:rotate-180"
       tooltip={back.label}
       aria-label={back.label}
       onClick={back.onPress}
@@ -166,7 +166,7 @@ function CloseButton({ onClose }: { onClose: () => void }) {
       icon={X}
       size="sm"
       color="tertiary"
-      className="-mr-1.5"
+      className="-me-1.5"
       tooltip={m.controls_close()}
       onClick={onClose}
     />

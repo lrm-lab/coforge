@@ -31,6 +31,7 @@ export function AgentProfileUnavailable({
             icon={ArrowLeft}
             size="sm"
             color="tertiary"
+            className="[&_svg]:rtl:rotate-180"
             tooltip={back.label}
             aria-label={back.label}
             onClick={back.onPress}

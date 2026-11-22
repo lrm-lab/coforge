@@ -160,7 +160,7 @@ export function AgentsContent({
             <Tab id="human">{m.member_tab_humans_count({ count: summary.peopleCount })}</Tab>
           </TabList>
         </div>
-        <div className="ml-auto flex shrink-0 items-center gap-2 @2xl/members:justify-self-end">
+        <div className="ms-auto flex shrink-0 items-center gap-2 @2xl/members:justify-self-end">
           {onAgentTab
             ? canCreateAgent && (
                 <Button
@@ -247,7 +247,7 @@ export function AgentsContent({
           <GridList
             aria-label={onAgentTab ? m.member_tab_agents() : m.member_tab_humans()}
             layout="grid"
-            className="mt-4 grid gap-4 outline-none md:grid-cols-[repeat(auto-fill,minmax(26rem,1fr))]"
+            className="mt-4 grid gap-4 outline-none md:grid-cols-[repeat(auto-fill,minmax(min(100%,26rem),1fr))]"
           >
             {listedPeople.map((person) => (
               <PersonCard

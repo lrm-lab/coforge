@@ -189,7 +189,7 @@ export function ComputerDetail({
               computer={computer}
               label={label}
               phone
-              className="-mb-2 sm:hidden"
+              className="-mb-2 @md:hidden"
             />
             <ComputerDetailStats
               computer={computer}
@@ -293,7 +293,7 @@ export function ComputerDetail({
                   <span className="flex-1">{m.computer_troubleshoot_terminal()}</span>
                   <ChevronRight
                     aria-hidden="true"
-                    className="size-4 text-fg-quaternary transition-transform duration-(--duration-sm) ease-in-out group-open:rotate-90 motion-reduce:transition-none"
+                    className="size-4 text-fg-quaternary transition-transform duration-(--duration-sm) ease-in-out group-open:rotate-90 rtl:rotate-180 rtl:group-open:rotate-90 motion-reduce:transition-none"
                   />
                 </summary>
                 <div className="space-y-2 pb-4">
