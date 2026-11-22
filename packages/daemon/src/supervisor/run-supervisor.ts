@@ -370,7 +370,7 @@ async function runWithSupervisorLock(
     await settlePendingUpgradeOperations();
     for (const operation of await pendingUpgradeOperations())
       watchPendingUpgrade(operation.workspaceId, operation.requestId, operation.requestedAt);
-    const workspaceReconcile = startWorkspaceReconcileLoop(
+    const workspaceReconcile = await startWorkspaceReconcileLoop(
       (workspaceIds) => supervisor.reconcile(workspaceIds),
       {
         pendingUpgradeWorkspaces: () => upgradeRecovery.pendingWorkspaceIds(),

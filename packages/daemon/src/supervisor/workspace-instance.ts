@@ -42,7 +42,7 @@ export function validateWorkspaceEndpoint(value: string | undefined): void {
 }
 
 export interface WorkspaceInstance {
-  ensureStarted(): Promise<number>;
+  ensureStarted(beforeLaunch?: () => Promise<void>): Promise<number>;
   stop(): Promise<void>;
   identity(): Promise<NativeProcessIdentity | null>;
 }

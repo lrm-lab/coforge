@@ -11,40 +11,47 @@ export type WorkspaceReconcileLoop = {
   stop: () => void;
 };
 
-export function startWorkspaceReconcileLoop(
+export async function startWorkspaceReconcileLoop(
   reconcile: (workspaceIds?: readonly string[]) => Promise<void>,
   options: {
     platform?: NodeJS.Platform;
-    pendingUpgradeWorkspaces?: () => readonly string[];
+    pendingUpgradeWorkspaces?: () => Promise<readonly string[]>;
     intervalMs?: number;
     setIntervalFn?: typeof setInterval;
     clearIntervalFn?: typeof clearInterval;
     onError?: (error: unknown) => void;
   } = {},
-): WorkspaceReconcileLoop | null {
+): Promise<WorkspaceReconcileLoop | null> {
   const platform = options.platform ?? process.platform;
-  if (platform !== "win32" && !options.pendingUpgradeWorkspaces?.().length) return null;
+  if (platform !== "win32" && !(await options.pendingUpgradeWorkspaces?.())?.length) return null;
   const intervalMs = options.intervalMs ?? WINDOWS_WORKSPACE_RECONCILE_MS;
   const schedule = options.setIntervalFn ?? setInterval;
   const clear = options.clearIntervalFn ?? clearInterval;
   const onError = options.onError ?? (() => {});
   let inFlight = false;
+  let stopped = false;
   const timer = schedule(() => {
-    if (inFlight) return;
-    const workspaceIds =
-      platform === "win32" ? undefined : (options.pendingUpgradeWorkspaces?.() ?? []);
-    if (workspaceIds?.length === 0) {
-      clear(timer);
-      return;
-    }
+    if (inFlight || stopped) return;
     inFlight = true;
-    void reconcile(workspaceIds)
+    void tick()
       .catch(onError)
       .finally(() => {
         inFlight = false;
       });
   }, intervalMs);
-  return {
-    stop: () => clear(timer),
-  };
+  function stop() {
+    stopped = true;
+    clear(timer);
+  }
+  async function tick() {
+    const workspaceIds =
+      platform === "win32" ? undefined : await options.pendingUpgradeWorkspaces?.();
+    if (stopped) return;
+    if (workspaceIds?.length === 0) {
+      stop();
+      return;
+    }
+    await reconcile(workspaceIds);
+  }
+  return { stop };
 }

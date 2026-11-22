@@ -59,6 +59,21 @@ async function workspaceActivationResult(child: ReturnType<typeof spawnWorkspace
   return output;
 }
 
+async function workspaceIdentity(path: string, processId: number) {
+  const launcher = new LocalDaemonLauncher({
+    executablePath: process.execPath,
+    socketPath: join(path, "daemon.sock"),
+    spawn: () => {},
+  });
+  const until = Date.now() + 3_000;
+  while (Date.now() < until) {
+    const identity = await launcher.identity(100).catch(() => undefined);
+    if (identity?.processId === processId) return identity;
+    await Bun.sleep(25);
+  }
+  throw new Error("fixture Workspace handshake missing");
+}
+
 function runWorkspaceActivation(installRoot: string, version: string, directory: string) {
   return workspaceActivationResult(spawnWorkspaceActivation(installRoot, version, directory));
 }
@@ -147,6 +162,8 @@ for (const mode of [
   "workspace exit before cloud ready",
   "first workspace exit before cloud ready",
   "workspace exit with the same Coordinator",
+  "adopted independent workspace",
+  "adopted authorized workspace",
   "explicit stop",
   "detach and rebind",
 ] as const) {
@@ -183,6 +200,7 @@ for (const mode of [
       })),
     );
     const children = new Map<string, ReturnType<typeof spawnWorkspaceActivation>>();
+    const adopted = new Map<string, ReturnType<typeof spawnWorkspaceActivation>>();
     let bindings: ManagedBinding[] = [alpha, beta];
     async function createCoordinator(startedAt: number) {
       const recovery = await workspaceUpgradeRecovery(installRoot, version, startedAt);
@@ -197,30 +215,28 @@ for (const mode of [
         {
           start(binding, options) {
             const path = pathFor(binding.workspaceId);
-            return recovery.start(binding, options?.reconciling === true, path, async () => {
-              await new DaemonConfigStore(path).save(binding);
-              const child = spawnWorkspaceActivation(installRoot, version, path);
-              children.set(binding.workspaceId, child);
-              const launcher = new LocalDaemonLauncher({
-                executablePath: process.execPath,
-                socketPath: join(path, "daemon.sock"),
-                spawn: () => {},
-              });
-              const until = Date.now() + 3_000;
-              let identity;
-              while (!identity && Date.now() < until) {
-                identity = await launcher.identity(100).catch(() => undefined);
-                if (!identity) await Bun.sleep(25);
-              }
-              if (!identity || identity.processId !== child.pid) {
-                child.kill();
-                throw new Error("fixture Workspace handshake missing");
-              }
-              const { daemonId } = identity;
-              const invocationId = crypto.randomUUID();
-              live.set(binding.workspaceId, invocationId);
-              return { invocationId, daemonId, processId: child.pid };
-            });
+            return recovery.start(
+              binding,
+              options?.reconciling === true,
+              path,
+              async (beforeLaunch?: () => Promise<void>) => {
+                await new DaemonConfigStore(path).save(binding);
+                let child = adopted.get(binding.workspaceId);
+                if (!child) {
+                  await beforeLaunch?.();
+                  child = spawnWorkspaceActivation(installRoot, version, path);
+                }
+                children.set(binding.workspaceId, child);
+                const identity = await workspaceIdentity(path, child.pid).catch((error) => {
+                  child.kill();
+                  throw error;
+                });
+                const { daemonId } = identity;
+                const invocationId = crypto.randomUUID();
+                live.set(binding.workspaceId, invocationId);
+                return { invocationId, daemonId, processId: child.pid };
+              },
+            );
           },
           async stop(binding, preserve) {
             await recovery.discard(binding.workspaceId, preserve);
@@ -252,7 +268,7 @@ for (const mode of [
       alpha.workspaceId,
       activation,
     );
-    expect(recovery.pendingWorkspaceIds()).toEqual([beta.workspaceId]);
+    expect(await recovery.pendingWorkspaceIds()).toEqual([beta.workspaceId]);
 
     const settled = { ...evidence, at: Date.now() };
     await writeUpgradeProgressFile(directory, "healthy.json", { ...settled, kind: "healthy" });
@@ -265,21 +281,21 @@ for (const mode of [
     if (!initialExit) await rm(pathFor(beta.workspaceId));
     if (mode === "same Coordinator" || mode === "workspace exit with the same Coordinator") {
       if (mode === "workspace exit with the same Coordinator") {
-        await supervisor.reconcile(recovery.pendingWorkspaceIds());
+        await supervisor.reconcile(await recovery.pendingWorkspaceIds());
         const failed = children.get(beta.workspaceId)!;
         failed.kill();
         await failed.exited;
       }
-      await supervisor.reconcile(recovery.pendingWorkspaceIds());
+      await supervisor.reconcile(await recovery.pendingWorkspaceIds());
       expect(await workspaceActivationResult(children.get(beta.workspaceId)!)).toEqual(activation);
-      expect(recovery.pendingWorkspaceIds()).toEqual([beta.workspaceId]);
+      expect(await recovery.pendingWorkspaceIds()).toEqual([beta.workspaceId]);
       await persistFixtureReady(
         installRoot,
         pathFor(beta.workspaceId),
         beta.workspaceId,
         activation,
       );
-      expect(recovery.pendingWorkspaceIds()).toEqual([]);
+      expect(await recovery.pendingWorkspaceIds()).toEqual([]);
     } else {
       if (mode === "explicit stop") await supervisor.command("stop", beta.workspaceId);
       if (mode === "detach and rebind") {
@@ -290,7 +306,7 @@ for (const mode of [
         expect(detached.detached).toBeTrue();
       }
       if (mode === "workspace exit before cloud ready") {
-        await supervisor.reconcile(recovery.pendingWorkspaceIds());
+        await supervisor.reconcile(await recovery.pendingWorkspaceIds());
         const failed = children.get(beta.workspaceId)!;
         const receipt = join(
           upgradeReadyReceiptDirectory(pathFor(beta.workspaceId)),
@@ -299,9 +315,24 @@ for (const mode of [
         expect(await Bun.file(receipt).exists()).toBeFalse();
         failed.kill();
         await failed.exited;
-        expect(recovery.pendingWorkspaceIds()).toEqual([beta.workspaceId]);
+        expect(await recovery.pendingWorkspaceIds()).toEqual([beta.workspaceId]);
       }
       await supervisor.shutdown();
+      if (mode === "adopted independent workspace") {
+        const betaPath = pathFor(beta.workspaceId);
+        await new DaemonConfigStore(betaPath).save(beta);
+        const child = spawnWorkspaceActivation(installRoot, version, betaPath);
+        await workspaceIdentity(betaPath, child.pid);
+        adopted.set(beta.workspaceId, child);
+      }
+      if (mode === "adopted authorized workspace") {
+        const authorizing = await createCoordinator(Date.now());
+        await authorizing.supervisor.recover();
+        const child = children.get(beta.workspaceId)!;
+        await workspaceIdentity(pathFor(beta.workspaceId), child.pid);
+        adopted.set(beta.workspaceId, child);
+        await workspaceActivationResult(children.get(alpha.workspaceId)!);
+      }
       const restarted = await createCoordinator(Date.now());
       await restarted.supervisor.recover();
       expect(await workspaceActivationResult(children.get(alpha.workspaceId)!)).toBeNull();
@@ -317,6 +348,7 @@ for (const mode of [
       const restored =
         mode === "restarted Coordinator" ||
         mode === "workspace exit before cloud ready" ||
+        mode === "adopted authorized workspace" ||
         initialExit;
       expect(betaActivation).toEqual(restored ? activation : null);
       if (restored)
@@ -326,14 +358,16 @@ for (const mode of [
           beta.workspaceId,
           activation,
         );
-      expect(restarted.recovery.pendingWorkspaceIds()).toEqual([]);
+      expect(await restarted.recovery.pendingWorkspaceIds()).toEqual(
+        mode === "adopted independent workspace" ? [beta.workspaceId] : [],
+      );
     }
     if (mode === "workspace exit before cloud ready") {
       const afterReady = await createCoordinator(Date.now());
       await afterReady.supervisor.recover();
       expect(await workspaceActivationResult(children.get(alpha.workspaceId)!)).toBeNull();
       expect(await workspaceActivationResult(children.get(beta.workspaceId)!)).toBeNull();
-      expect(afterReady.recovery.pendingWorkspaceIds()).toEqual([]);
+      expect(await afterReady.recovery.pendingWorkspaceIds()).toEqual([]);
     }
     expect(
       await runWorkspaceActivation(installRoot, version, pathFor(alpha.workspaceId)),

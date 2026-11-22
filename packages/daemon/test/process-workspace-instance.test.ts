@@ -31,6 +31,10 @@ async function config(): Promise<WorkspaceInstanceConfig & { root: string }> {
 test("ensureStarted spawns __workspace-daemon once and reuses a live PID", async () => {
   const cfg = await config();
   const spawns: { command: string[]; env: Record<string, string> }[] = [];
+  let authorizations = 0;
+  const authorize = async () => {
+    authorizations++;
+  };
   let alive = true;
   const savedDaemonApiKey = process.env.COFORGE_DAEMON_API_KEY;
   try {
@@ -38,13 +42,15 @@ test("ensureStarted spawns __workspace-daemon once and reuses a live PID", async
     const instance = new ProcessWorkspaceInstance(
       cfg,
       async (input) => {
+        expect(authorizations).toBe(1);
         spawns.push({ command: input.command, env: input.env });
         return { pid: 4242 };
       },
       () => alive,
     );
-    expect(await instance.ensureStarted()).toBe(4242);
-    expect(await instance.ensureStarted()).toBe(4242);
+    expect(await instance.ensureStarted(authorize)).toBe(4242);
+    expect(await instance.ensureStarted(authorize)).toBe(4242);
+    expect(authorizations).toBe(1);
     expect(spawns).toHaveLength(1);
     expect(spawns[0]?.command).toEqual([
       "C:\\Coforge\\coforge-computer.exe",

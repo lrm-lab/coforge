@@ -57,12 +57,14 @@ test("unit puts the Workspace child in a mixed-kill user-manager scope with OOMP
   expect(unit).toContain(config.workspaceId);
 });
 
-test("ensureStarted adopts an active unit without issuing start", async () => {
+test("ensureStarted authorizes a new systemd launch and adopts it without authorizing again", async () => {
   const commands: string[][] = [];
+  let active = false;
   const instance = new SystemdWorkspaceInstance(
     config,
     async (args) => {
       commands.push(args);
+      if (args[0] === "start") active = true;
       return 0;
     },
     async () => {},
@@ -71,13 +73,21 @@ test("ensureStarted adopts an active unit without issuing start", async () => {
       expect(args).not.toContain("--value");
       return {
         code: 0,
-        stdout: `MainPID=4242\nActiveState=active\nLoadState=loaded\nInvocationID=${"a".repeat(32)}\n`,
+        stdout: `MainPID=${active ? 4242 : 0}\nActiveState=${active ? "active" : "inactive"}\nLoadState=loaded\nInvocationID=${"a".repeat(32)}\n`,
       };
     },
   );
-  const pid = await instance.ensureStarted();
-  expect(pid).toBe(4242);
-  expect(commands).toEqual([["daemon-reload"]]);
+  const authorize = async () => {
+    commands.push(["authorized"]);
+  };
+  expect(await instance.ensureStarted(authorize)).toBe(4242);
+  expect(await instance.ensureStarted(authorize)).toBe(4242);
+  expect(commands).toEqual([
+    ["daemon-reload"],
+    ["authorized"],
+    ["start", instance.unitName],
+    ["daemon-reload"],
+  ]);
 });
 
 test("a failed manager query cannot acknowledge a Workspace stop", async () => {

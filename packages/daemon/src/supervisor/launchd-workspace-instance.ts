@@ -75,10 +75,10 @@ export class LaunchdWorkspaceInstance implements WorkspaceInstance {
     this.#agentPrefix = agents.prefix;
     this.#agentDirectory = agents.directory;
   }
-  async ensureStarted(): Promise<number> {
+  async ensureStarted(beforeLaunch?: () => Promise<void>): Promise<number> {
     if (!(await this.#job.identity()))
       await stopLaunchdAgents(this.#agentPrefix, this.#agentDirectory);
-    return (await this.#job.ensureStarted()).mainPid;
+    return (await this.#job.ensureStarted(beforeLaunch)).mainPid;
   }
   async stop(): Promise<void> {
     await this.#job.stop();

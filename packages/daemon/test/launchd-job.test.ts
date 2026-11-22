@@ -87,10 +87,15 @@ test.skipIf(process.platform !== "darwin")(
       command: ["/bin/sleep", "300"],
     });
     try {
-      const first = await job.ensureStarted();
+      let authorizations = 0;
+      const authorize = async () => {
+        authorizations++;
+      };
+      const first = await job.ensureStarted(authorize);
       expect(first.mainPid).toBeGreaterThan(0);
       expect(first.invocationId).not.toBe(String(first.mainPid));
-      expect(await job.ensureStarted()).toEqual(first);
+      expect(await job.ensureStarted(authorize)).toEqual(first);
+      expect(authorizations).toBe(1);
       await Promise.all([job.stop(), job.stop()]);
       expect(await job.identity()).toBeNull();
       expect(() => process.kill(first.mainPid, 0)).toThrow();

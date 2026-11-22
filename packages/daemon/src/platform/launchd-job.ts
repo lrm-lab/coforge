@@ -43,14 +43,16 @@ export class LaunchdJob {
     this.#platform = config.platform ?? nativeLaunchd;
   }
 
-  async ensureStarted(): Promise<NativeProcessIdentity> {
+  async ensureStarted(beforeLaunch?: () => Promise<void>): Promise<NativeProcessIdentity> {
     const existing = await this.identity();
     if (existing?.active) return existing;
     if (!(await this.#platform.jobs()).has(this.config.label)) {
       await mkdir(this.config.directory, { recursive: true, mode: 0o700 });
       await writeFile(this.path, jobPlist(this.config), { mode: 0o600 });
+      if (beforeLaunch) await beforeLaunch();
       await this.#launchctl(["bootstrap", `gui/${process.getuid!()}`, this.path]);
     } else {
+      if (beforeLaunch) await beforeLaunch();
       await this.#launchctl(["kickstart", this.target]);
     }
     const deadline = Date.now() + 10_000;

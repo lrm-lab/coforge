@@ -89,7 +89,6 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 | `src/agent-migration/`                           | Agent migration on this Computer: select, pack and upload a workspace; download, verify, commit                                                                                   |
 | `src/agent-app-inbox/`                           | Typed Agent App items (incl. the transient client-secret notice) and the Agent's sealed source identities, apart from chat Message attention                                      |
 | `src/agent-app-config/`                          | Agent App config sync: snapshot requests per connection, routing each config to its App runtime                                                                                   |
-| `src/daemon-runtime/upgrade-progress-reporter.ts` | Submits installed upgrade evidence and durable ready receipt replays for an authenticated binding. |
 | `src/agent-reminder/`                            | Server-timed reminder Dues: durable occurrence records, Due ACK, App Inbox delivery                                                                                               |
 | `src/system-cleaner/`                            | Per-Agent MEMORY.md and disk measurements, and the hints they present at Working→Idle                                                                                             |
 | `src/agent-context-view/`                        | Agent context view: provider session locators, restore, redaction, and the index store                                                                                            |
@@ -100,6 +99,8 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 | `src/local-rpc.ts`, `src/local-rpc-configure.ts` | Computer↔Daemon local socket server, bounded framing, validation, dispatch, and structured `CONFIGURE` adoption/rollback                                                          |
 | `src/agent-proxy*.ts`                            | Local Agent capability boundary: approved HTTPS forwarding, collaboration/draft/guidance route groups, runtimes, and the domain errors it answers                                 |
 | `src/proc-jobs/`                                 | Managed Agent background jobs (`coforge proc`): detached launch, identity-verified signaling, sanitized env, bounded log rotation/tail, and per-Workspace `proc-jobs.json` ledger |
+
+`src/daemon-runtime/upgrade-progress-reporter.ts` submits installed upgrade evidence and durable ready receipt replays for an authenticated binding.
 
 Host notes for `src/code-agent/<provider>/`: each injects environment, client identity, process, version, auth and usage capabilities into Anvil's native sessions. Kiro's `usage-host.ts` is read-only: only usage JSON crosses into the adapter. Antigravity's `acp-host.ts` strips SSH markers. Droid spawns a wide PTY for `/limits`. Devin runs the `thought_level` effort sweep. `pi/` holds the built-in provider, catalog and metadata and shares the native SDK Session through Anvil.
 

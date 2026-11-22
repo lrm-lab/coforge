@@ -1,5 +1,4 @@
-import { existsSync } from "node:fs";
-import { rm } from "node:fs/promises";
+import { access, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { LocalDaemonLauncher } from "#src/daemon-host/launcher";
 import {
@@ -21,8 +20,8 @@ type RecoveryLaunch = {
   activation: UpgradeActivation;
 } & (
   | { state: "failed" }
-  | { state: "armed" }
-  | { state: "confirmed"; daemon: { processId: number; daemonId: string } }
+  | { state: "armed"; authorizedAt: number }
+  | { state: "confirmed"; authorizedAt: number; daemon: { processId: number; daemonId: string } }
 );
 
 type RecoveryAttempt = {
@@ -34,6 +33,13 @@ type RecoveryAttempt = {
 
 function recoveryFile(workspaceId: string) {
   return `workspace-recovery-${Buffer.from(workspaceId).toString("base64url")}.json`;
+}
+
+function hasReadyReceipt(path: string) {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
 }
 
 async function readRecoveryAttempt(
@@ -129,11 +135,14 @@ export class WorkspaceUpgradeRecovery {
     this.#eligible = new Set(activatedAtStartup ? workspaces : []);
   }
 
-  pendingWorkspaceIds() {
+  async pendingWorkspaceIds() {
     if (!this.attempt || this.attempt.expiresAt <= Date.now()) return [];
-    for (const [workspaceId, path] of this.#pending) {
-      if (existsSync(path)) this.#pending.delete(workspaceId);
-    }
+    await Promise.all(
+      Array.from(this.#pending, async ([workspaceId, path]) => {
+        if ((await hasReadyReceipt(path)) && this.#pending.get(workspaceId) === path)
+          this.#pending.delete(workspaceId);
+      }),
+    );
     return [...this.#pending.keys()];
   }
 
@@ -151,7 +160,7 @@ export class WorkspaceUpgradeRecovery {
     binding: ManagedBinding,
     reconciling: boolean,
     stateDirectory: string,
-    run: () => Promise<{
+    run: (beforeLaunch?: () => Promise<void>) => Promise<{
       invocationId: string;
       processId: number;
       daemonId: string;
@@ -182,7 +191,7 @@ export class WorkspaceUpgradeRecovery {
       upgradeReadyReceiptDirectory(stateDirectory),
       upgradeReadyReceiptName(attempt.activation),
     );
-    if ((!matches && (record || !firstRecovery)) || existsSync(receipt)) {
+    if ((!matches && (record || !firstRecovery)) || (await hasReadyReceipt(receipt))) {
       this.#pending.delete(workspaceId);
       if (record && !matches) await this.discard(workspaceId);
       return (await run()).invocationId;
@@ -198,20 +207,29 @@ export class WorkspaceUpgradeRecovery {
     };
     const save = (state: RecoveryLaunch) =>
       writeUpgradeProgressFile(attempt.directory, name, state).then(
-        () => {
-          this.#pending.set(workspaceId, receipt);
-        },
-        () => {},
+        () => true,
+        () => false,
       );
-    await save({ ...evidence, state: "armed" });
-    try {
-      const { invocationId, processId, daemonId } = await run();
-      await save({ ...evidence, state: "confirmed", daemon: { processId, daemonId } });
-      return invocationId;
-    } catch (error) {
-      await save({ ...evidence, state: "failed" });
-      throw error;
+    if (matches || (await save({ ...evidence, state: "failed" })))
+      this.#pending.set(workspaceId, receipt);
+    let authorizedAt: number | undefined;
+    const { invocationId, processId, daemonId } = await run(async () => {
+      if (attempt.expiresAt <= Date.now() || (await hasReadyReceipt(receipt))) return;
+      const at = performance.timeOrigin + performance.now();
+      if (await save({ ...evidence, state: "armed", authorizedAt: at })) {
+        authorizedAt = at;
+        this.#pending.set(workspaceId, receipt);
+      }
+    });
+    if (authorizedAt !== undefined) {
+      await save({
+        ...evidence,
+        state: "confirmed",
+        authorizedAt,
+        daemon: { processId, daemonId },
+      });
     }
+    return invocationId;
   }
 }
 
@@ -245,7 +263,7 @@ async function readWorkspaceUpgradeRecovery(
     upgradeReadyReceiptName(attempt.activation),
   );
   const deadline = Math.min(Date.now() + 3_000, attempt.expiresAt);
-  while (!signal.aborted && Date.now() < deadline && !existsSync(receipt)) {
+  while (!signal.aborted && Date.now() < deadline && !(await hasReadyReceipt(receipt))) {
     const grant = await readUpgradeProgressFile<RecoveryLaunch>(path);
     if (
       !grant ||
@@ -257,7 +275,9 @@ async function readWorkspaceUpgradeRecovery(
       attempt.activatedAt >= startedAt
     )
       return;
-    if (grant.state === "confirmed" && grant.daemon?.processId === process.pid) {
+    if (grant.state === "failed" || !(grant.authorizedAt < startedAt)) return;
+    if (grant.state === "confirmed") {
+      if (grant.daemon?.processId !== process.pid) return;
       const own = await new LocalDaemonLauncher({
         executablePath: process.execPath,
         socketPath: join(directory, "daemon.sock"),

@@ -65,7 +65,7 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
     this.#legacyRecordPath = join(config.stateDirectory, LEGACY_RECORD_FILE);
   }
 
-  async ensureStarted(): Promise<number> {
+  async ensureStarted(beforeLaunch?: () => Promise<void>): Promise<number> {
     const current = await this.#readRecord();
     if (current && this.isAlive(current.mainPid)) return current.mainPid;
 
@@ -87,6 +87,7 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
       env.COFORGE_DAEMON_CONNECTION_ENDPOINT = this.config.daemonConnectionEndpoint;
 
     const invocationId = crypto.randomUUID().replaceAll("-", "");
+    if (beforeLaunch) await beforeLaunch();
     const child = await this.spawnChild({
       command: [
         this.config.executablePath,
