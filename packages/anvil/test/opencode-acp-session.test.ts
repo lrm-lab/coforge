@@ -241,6 +241,25 @@ test("a process kill mid-turn keeps the stored conversation on reload", async ()
   }
 });
 
+test("a prompt response before peer exit settles after all streamed updates", async () => {
+  const f = await fixture();
+  try {
+    const session = await f.provider.createAgentSession(options(f.cwd) as never);
+    const events: AgentRuntimeEvent[] = [];
+    const exited = Promise.withResolvers<void>();
+    session.subscribe((event) => events.push(event));
+    session.onExit(() => exited.resolve());
+    await session.sendMessage("reply-and-exit");
+    await exited.promise;
+    expect(events.filter((event) => event.type === "text-delta")).toHaveLength(100);
+    expect(events.filter((event) => event.type === "completed")).toEqual([
+      { type: "completed", status: "completed" },
+    ]);
+  } finally {
+    await f.cleanup();
+  }
+});
+
 test("a mid-turn crash fails the turn with the process's stderr tail", async () => {
   const f = await fixture();
   try {

@@ -104,6 +104,7 @@ export class AcpConnection {
   readonly #config = new Map<string, SessionConfigOption[]>();
   readonly #configChanged = new Set<() => void>();
   #closed = false;
+  #inputEnded = false;
 
   constructor(private readonly options: AcpConnectionOptions) {
     const { host } = options;
@@ -147,8 +148,13 @@ export class AcpConnection {
           },
         }),
       });
-    // The readable stream ends with the process. Wake config waiters then, or a dead catalog
-    // probe sits in the inventory refresh until the deadline.
+    const inputEnded = () => {
+      if (this.#inputEnded) return;
+      this.#inputEnded = true;
+      for (const listener of this.#configChanged) listener();
+    };
+    this.process.onFailure(inputEnded);
+    this.process.onClose(inputEnded);
     void this.connection.closed.then(() => this.#close());
   }
 
@@ -172,7 +178,8 @@ export class AcpConnection {
       return await this.bounded(
         new Promise<SessionConfigOption[]>((resolve, reject) => {
           check = () => {
-            if (this.#closed) return reject(new Error(this.options.messages.closedBeforeConfig));
+            if (this.#inputEnded || this.#closed)
+              return reject(new Error(this.options.messages.closedBeforeConfig));
             const options = this.#config.get(sessionId);
             if (options && ready(options)) resolve(options);
           };

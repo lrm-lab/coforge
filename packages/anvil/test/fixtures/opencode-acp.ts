@@ -151,6 +151,16 @@ for await (const line of console) {
       break;
     case "session/prompt": {
       const text = request.params.prompt[0].text;
+      if (text === "reply-and-exit") {
+        for (let i = 0; i < 100; i++) {
+          update({
+            sessionUpdate: "agent_message_chunk",
+            content: { type: "text", text: "final " },
+          });
+        }
+        reply({ stopReason: "end_turn" });
+        process.exit(0);
+      }
       if (text === "crash") {
         // A mid-turn process death: stderr explains the exit before the child dies without a
         // prompt reply.
