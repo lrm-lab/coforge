@@ -118,8 +118,8 @@ describe("list column width", () => {
 
   test("the sidebar never goes narrower than its default and its kept width is restored at boot", () => {
     expect(SIDEBAR_COLUMN.min).toBe(SIDEBAR_COLUMN.defaultWidth);
-    expect(dragListWidth(SIDEBAR_COLUMN, 13.75, 13.75, 6)).toBe(13.75);
-    expect(dragListWidth(SIDEBAR_COLUMN, 13.75, 13.75, 35)).toBe(20);
+    expect(dragListWidth(SIDEBAR_COLUMN, 15, 15, 6)).toBe(15);
+    expect(dragListWidth(SIDEBAR_COLUMN, 15, 15, 35)).toBe(20);
     expect(CONVERSATION_LIST_BOOT).toContain(SIDEBAR_COLUMN.property);
   });
 

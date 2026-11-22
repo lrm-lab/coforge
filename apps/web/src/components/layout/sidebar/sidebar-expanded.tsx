@@ -4,7 +4,7 @@ import { ConversationListResizeHandle } from "#src/features/conversations/conver
 import { SIDEBAR_COLUMN } from "#src/features/conversations/conversation-list-width";
 import { cx } from "#src/utils/cx";
 
-const SIDEBAR_WIDTH_CLASS = "w-(--sidebar-width,13.75rem) min-w-55";
+const SIDEBAR_WIDTH_CLASS = "w-(--sidebar-width,15rem) min-w-60";
 
 type ExpandedItemType = NavItemType & { icon: FC<{ className?: string }>; current?: boolean };
 
