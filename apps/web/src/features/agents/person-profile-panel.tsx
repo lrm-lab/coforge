@@ -404,7 +404,7 @@ function FactRow({
           {label}
           {help}
         </dt>
-        <dd className="ml-auto min-w-0 truncate text-right text-sm text-tertiary">{children}</dd>
+        <dd className="ms-auto min-w-0 text-end text-sm wrap-anywhere text-tertiary">{children}</dd>
         {action}
       </div>
       {error && (

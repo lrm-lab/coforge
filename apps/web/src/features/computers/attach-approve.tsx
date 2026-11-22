@@ -76,35 +76,29 @@ export function AttachApprovePage({
 
   return (
     <main className="mx-auto max-w-md p-8">
-      <h1 className="text-xl font-semibold">Attach a computer</h1>
-      <p className="mt-2 text-sm text-secondary">
-        A computer asked to attach. Check the code below matches what its terminal shows before you
-        approve. Only approve a computer you are operating yourself — if someone sent you this link,
-        do not approve it.
-      </p>
+      <h1 className="text-xl font-semibold">{m.computer_attach_title()}</h1>
+      <p className="mt-2 text-sm text-secondary">{m.computer_attach_description()}</p>
       <dl className="mt-6 space-y-2 text-sm">
-        <div className="flex justify-between">
-          <dt className="text-secondary">Machine</dt>
-          <dd className="font-medium">{machineName}</dd>
+        <div className="flex justify-between gap-4">
+          <dt className="shrink-0 text-secondary">{m.computer_attach_machine()}</dt>
+          <dd className="min-w-0 text-end font-medium wrap-anywhere">{machineName}</dd>
         </div>
-        <div className="flex justify-between">
-          <dt className="text-secondary">Hostname</dt>
-          <dd className="font-medium">{hostname}</dd>
+        <div className="flex justify-between gap-4">
+          <dt className="shrink-0 text-secondary">{m.computer_attach_hostname()}</dt>
+          <dd className="min-w-0 text-end font-medium wrap-anywhere">{hostname}</dd>
         </div>
-        <div className="flex justify-between">
-          <dt className="text-secondary">OS</dt>
-          <dd className="font-medium">{os}</dd>
+        <div className="flex justify-between gap-4">
+          <dt className="shrink-0 text-secondary">{m.computer_os()}</dt>
+          <dd className="min-w-0 text-end font-medium wrap-anywhere">{os}</dd>
         </div>
       </dl>
-      <p className="mt-6 text-center text-2xl font-mono font-semibold tracking-widest">
+      <p dir="ltr" className="mt-6 text-center font-mono text-2xl font-semibold tracking-widest">
         {userCode}
       </p>
-      <p className="mt-1 text-center text-xs text-secondary">
-        Confirm this matches the code on the computer's screen.
-      </p>
+      <p className="mt-1 text-center text-xs text-secondary">{m.computer_attach_confirm_code()}</p>
       <div className="mt-6">
         <Select
-          aria-label="Attach to"
+          aria-label={m.computer_attach_workspace_label()}
           selectedKey={workspaceId}
           onSelectionChange={(key) => setWorkspaceId(String(key))}
           items={workspaces.map((workspace) => ({ id: workspace.id, label: workspace.slug }))}
@@ -113,9 +107,7 @@ export function AttachApprovePage({
         </Select>
       </div>
       {state === "failed" && (
-        <p className="mt-3 text-sm text-error-primary">
-          That did not work — the session may have expired or been decided already.
-        </p>
+        <p className="mt-3 text-sm text-error-primary">{m.computer_attach_failed()}</p>
       )}
       <div className="mt-6 flex gap-3">
         <Button
@@ -124,15 +116,15 @@ export function AttachApprovePage({
           isDisabled={!workspaceId}
           onClick={() => void decide(true)}
         >
-          Approve
+          {m.computer_attach_approve()}
         </Button>
         <Button color="secondary" className="flex-1" onClick={() => void decide(false)}>
-          Refuse
+          {m.computer_attach_refuse()}
         </Button>
       </div>
       <p className="mt-4 text-center text-xs text-secondary">
         <Button color="link-color" onClick={() => void navigate({ to: "/" })}>
-          Cancel
+          {m.controls_cancel()}
         </Button>
       </p>
     </main>

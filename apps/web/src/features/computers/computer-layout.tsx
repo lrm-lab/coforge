@@ -35,7 +35,6 @@ export type ComputerListItem = ComputerIdentity &
     releaseChannel?: string;
     imageVersion?: string | null;
     imageUpdate?: { version: string } | null;
-    /** This Computer's latest upgrade while the server keeps its record; `null` when none. */
     upgrade?: ComputerUpgradeStatus | null;
     creator?: {
       username: string;
@@ -44,12 +43,6 @@ export type ComputerListItem = ComputerIdentity &
     } | null;
   };
 
-/**
- * Two panels on the app's ground: the Computer list and the selected
- * Computer's detail. Below `md` they take turns, since only one fits. With no
- * Computers there is nothing to list or detail, so one panel carries the way
- * to add the first one.
- */
 export function ComputerLayout({
   computers,
   selectedComputerId,
@@ -96,8 +89,6 @@ export function ComputerLayout({
             const selected = computer.id === selectedComputerId;
             const creatorName = computer.creator ? humanLabel(computer.creator) : "";
             const refusal = activeRefusal(computer);
-            // The row's second line: why it is refused, else the hostname when the label is not
-            // it, else the operating system, when reported. Nothing known leaves no empty line.
             const detail = refusal
               ? null
               : computer.name && computer.name !== computerLabel(computer)
@@ -143,11 +134,14 @@ export function ComputerLayout({
                               <span className="truncate text-xs text-tertiary">{detail}</span>
                             )
                           )}
-                          {/* The same version the detail panel states, like that panel's own
-                              row. The hostname or OS gives up its width first: the release is short and
-                              is what this row was asked to carry. */}
                           {computer.computerVersion && (
-                            <span className="shrink-0 text-xs text-tertiary">
+                            <span
+                              dir="ltr"
+                              className={cn(
+                                "min-w-0 truncate text-xs text-tertiary",
+                                detail || refusal ? "max-w-28" : "max-w-full",
+                              )}
+                            >
                               {computer.computerVersion}
                             </span>
                           )}

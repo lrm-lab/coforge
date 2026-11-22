@@ -228,5 +228,14 @@
   "computer_agents_column_name": "Name",
   "computer_agents_column_runtime": "Runtime",
   "computer_agents_column_status": "Status",
-  "computer_more_actions": "More"
+  "computer_more_actions": "More",
+  "computer_attach_title": "Attach a computer",
+  "computer_attach_description": "A computer asked to attach. Check the code below matches what its terminal shows before you approve. Only approve a computer you are operating yourself — if someone sent you this link, do not approve it.",
+  "computer_attach_machine": "Machine",
+  "computer_attach_hostname": "Hostname",
+  "computer_attach_confirm_code": "Confirm this matches the code on the computer's screen.",
+  "computer_attach_workspace_label": "Attach to",
+  "computer_attach_failed": "That did not work — the session may have expired or been decided already.",
+  "computer_attach_approve": "Approve",
+  "computer_attach_refuse": "Refuse"
 }

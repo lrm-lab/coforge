@@ -229,5 +229,14 @@
   "computer_agents_column_name": "名称",
   "computer_agents_column_runtime": "运行时",
   "computer_agents_column_status": "状态",
-  "computer_more_actions": "更多"
+  "computer_more_actions": "更多",
+  "computer_attach_title": "接入电脑",
+  "computer_attach_description": "有一台电脑请求接入。批准前请核对下方代码与该电脑终端显示的一致。只批准你本人正在操作的电脑——如果是别人发给你的链接，请勿批准。",
+  "computer_attach_machine": "机器名称",
+  "computer_attach_hostname": "主机名",
+  "computer_attach_confirm_code": "请确认此代码与电脑屏幕上显示的一致。",
+  "computer_attach_workspace_label": "接入到工作区",
+  "computer_attach_failed": "操作未成功——该会话可能已过期或已处理。",
+  "computer_attach_approve": "批准",
+  "computer_attach_refuse": "拒绝"
 }

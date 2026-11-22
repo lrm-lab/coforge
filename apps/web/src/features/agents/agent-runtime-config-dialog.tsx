@@ -112,7 +112,7 @@ export function AgentRuntimeConfigForm({
   return (
     <form
       ref={formRef}
-      className="max-sm:flex max-sm:min-h-full max-sm:flex-col"
+      className="flex min-h-0 flex-1 flex-col overflow-hidden max-sm:min-h-full"
       onSubmit={(event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         onSave(new FormData(event.currentTarget), {
@@ -130,11 +130,11 @@ export function AgentRuntimeConfigForm({
         onSubmit={() => formRef.current?.requestSubmit()}
       />
       <DialogHeader
-        className={PHONE_PAGE_HEADER}
+        className={`${PHONE_PAGE_HEADER} shrink-0`}
         title={m.agent_profile_edit_runtime_config()}
         onClose={onClose}
       />
-      <div className="grid gap-4 px-6 pt-6 pb-2 max-sm:px-4 max-sm:pt-2">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 pt-6 pb-2 max-sm:px-4 max-sm:pt-2 max-sm:pb-6">
         {showComputerPicker ? (
           <Select
             name="computerId"
@@ -282,7 +282,7 @@ export function AgentRuntimeConfigForm({
           </p>
         )}
       </div>
-      <DialogActions className="px-6 pt-4 pb-6 max-sm:hidden">
+      <DialogActions className="shrink-0 px-6 pt-4 pb-6 max-sm:hidden">
         <DialogCancel type="button" isDisabled={saving} onPress={onClose}>
           {m.controls_cancel()}
         </DialogCancel>
@@ -338,8 +338,8 @@ export function AgentRuntimeConfigDialog({
           if (!next) guard.requestClose();
         }}
       >
-        <Modal className="w-[calc(100vw-2rem)] max-w-md">
-          <Dialog>
+        <Modal className="w-[calc(100vw-2rem)] max-w-xl overflow-hidden">
+          <Dialog className="flex flex-col overflow-hidden max-sm:h-full">
             {({ close }) => (
               <AgentRuntimeConfigForm
                 computerId={computerId}
