@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import type { AgentSessionOptions } from "@coforge/agent";
 import { asRecord, isVersionBelow, JsonlRequestError } from "@lrm/coforge-anvil";
@@ -101,6 +102,16 @@ export async function openCodexThread(
   if (typeof thread?.id !== "string") throw new Error("Codex did not create a thread");
   if (sessionId && !replacedSessionId && thread.id !== sessionId)
     throw new Error("Codex did not resume the requested thread");
+  const instructionsBytes = Buffer.byteLength(options.instructions, "utf8");
+  logger.info("Codex opened thread with developer instructions", {
+    event: "codex.thread.instructions_shape",
+    ...log,
+    thread_id: thread.id,
+    method: sessionId && !replacedSessionId ? "thread/resume" : "thread/start",
+    developer_instructions_utf8_bytes: instructionsBytes,
+    developer_instructions_sha256: createHash("sha256").update(options.instructions).digest("hex"),
+    ...(appServerVersion ? { app_server_version: appServerVersion } : {}),
+  });
   await nameThread(process, options, thread.id, thread.name);
   return { threadId: thread.id, result, replacedSessionId, replacementWarning };
 }

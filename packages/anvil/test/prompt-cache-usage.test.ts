@@ -152,6 +152,17 @@ test("Codex session logs structured prompt cache usage on thread/tokenUsage/upda
       used_tokens: 120_000,
       window_tokens: 258_400,
     });
+    const shape = records.find(
+      (record) => record.properties.event === "codex.thread.instructions_shape",
+    );
+    expect(shape?.properties).toMatchObject({
+      event: "codex.thread.instructions_shape",
+      agent_id: "agent-1",
+      runtime_id: "runtime-1",
+      method: "thread/start",
+      developer_instructions_utf8_bytes: Buffer.byteLength("Test.", "utf8"),
+      developer_instructions_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
+    });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
