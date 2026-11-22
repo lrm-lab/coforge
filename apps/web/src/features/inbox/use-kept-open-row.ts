@@ -7,13 +7,6 @@ import { openedItemKey } from "./activity-open-target";
 
 type KeptRow = { item: ActivityInboxItem; after: string | undefined };
 
-/**
- * In a view that leaves out what was read (Unread, Mentions), the row the pane shows stays in the
- * list, read, until the pane moves on, as Linear's inbox keeps it: opening a row reads it, and
- * the server's next list leaves it out, which pulled the row, and the caret on it, from under the
- * viewer, so j could not walk the view. It stays after the row it followed. A row marked Done
- * leaves at once (`release`).
- */
 export function useKeptOpenRow(
   filter: ActivityInboxFilter,
   items: ActivityInboxItem[],
@@ -26,8 +19,6 @@ export function useKeptOpenRow(
   );
   const showsKept = kept !== undefined && openedItemKey([kept.item], opened) === kept.item.key;
 
-  // The server's own row the pane shows, and the one before it, adjusted while rendering (React's
-  // "storing information from previous renders"): it changes only when the list or the pane does.
   const openKey = filter === "all" ? undefined : openedItemKey(items, opened);
   const at = openKey === undefined ? -1 : items.findIndex((item) => item.key === openKey);
   if (at >= 0) {
