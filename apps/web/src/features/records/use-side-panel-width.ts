@@ -1,5 +1,5 @@
 import {
-  useEffect,
+  useCallback,
   useLayoutEffect,
   useRef,
   useState,
@@ -8,94 +8,118 @@ import {
 } from "react";
 
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
+import { useResizeObserver } from "#src/hooks/use-resize-observer";
 
 import {
+  canDockSidePanel,
   DEFAULT_SIDE_PANEL_WIDTH,
-  MIN_SIDE_PANEL_WIDTH,
   fitSidePanelWidth,
+  maxDockedSidePanelWidth,
+  MIN_SIDE_PANEL_WIDTH,
+  readRootFontSizePx,
   readStoredSidePanelWidth,
+  roundSidePanelRem,
   writeStoredSidePanelWidth,
 } from "./record-side-panel-width";
 
-/**
- * The Record side panel's width: the stored width fitted to its parent (`fitSidePanelWidth`), eased
- * open and closed, and changed by dragging or arrowing its left edge (`resizeHandle`).
- */
 export function useSidePanelWidth(open: boolean) {
   const asideRef = useRef<HTMLElement>(null);
+  const parentRef = useRef<HTMLElement | null>(null);
   const panelDragRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const panelWidthRef = useRef(DEFAULT_SIDE_PANEL_WIDTH);
   const [panelWidth, setPanelWidth] = useState(DEFAULT_SIDE_PANEL_WIDTH);
   panelWidthRef.current = panelWidth;
-  const [displayWidth, setDisplayWidth] = useState(() => (open ? DEFAULT_SIDE_PANEL_WIDTH : 0));
+  const [displayWidth, setDisplayWidth] = useState<number | string>(() =>
+    open ? `min(100%, ${DEFAULT_SIDE_PANEL_WIDTH}rem)` : 0,
+  );
   const [resizing, setResizing] = useState(false);
   const wasOpenRef = useRef(open);
   const beside = useBreakpoint("lg");
+  const [docked, setDocked] = useState(beside);
 
-  useLayoutEffect(() => {
-    const stored = readStoredSidePanelWidth();
-    const parent = asideRef.current?.parentElement;
-    const next = parent ? fitSidePanelWidth(stored, parent.clientWidth, beside) : stored;
-    setPanelWidth(next);
-    if (open) setDisplayWidth(next);
+  const clampToParent = useCallback(() => {
+    const parent = asideRef.current?.parentElement ?? null;
+    parentRef.current = parent;
+    if (!parent) return;
+    const rootPx = readRootFontSizePx();
+    const nextDocked = canDockSidePanel(parent.clientWidth, beside, rootPx);
+    setDocked(nextDocked);
+    const preferred = nextDocked ? readStoredSidePanelWidth() : panelWidthRef.current;
+    setPanelWidth((current) =>
+      fitSidePanelWidth(
+        panelDragRef.current ? current : preferred,
+        parent.clientWidth,
+        beside,
+        rootPx,
+      ),
+    );
   }, [beside]);
 
   useLayoutEffect(() => {
+    parentRef.current = asideRef.current?.parentElement ?? null;
+    clampToParent();
+  }, [clampToParent]);
+
+  useLayoutEffect(() => {
+    const target = beside ? `min(100%, ${panelWidth}rem)` : "100%";
     if (open) {
       const shouldAnimateIn = !wasOpenRef.current;
       wasOpenRef.current = true;
       if (shouldAnimateIn) {
         setDisplayWidth(0);
-        const frame = requestAnimationFrame(() => setDisplayWidth(panelWidth));
+        const frame = requestAnimationFrame(() => setDisplayWidth(target));
         return () => cancelAnimationFrame(frame);
       }
-      setDisplayWidth(panelWidth);
+      setDisplayWidth(target);
       return;
     }
     wasOpenRef.current = false;
     setDisplayWidth(0);
-  }, [open, panelWidth]);
+  }, [beside, open, panelWidth]);
 
-  useEffect(() => {
-    function clampToParent() {
-      const parent = asideRef.current?.parentElement;
-      if (!parent) return;
-      setPanelWidth((current) => fitSidePanelWidth(current, parent.clientWidth, beside));
-    }
-    window.addEventListener("resize", clampToParent);
-    return () => window.removeEventListener("resize", clampToParent);
-  }, [beside]);
+  useResizeObserver({ ref: parentRef, onResize: clampToParent });
 
   function commitPanelWidth(width: number) {
     panelWidthRef.current = width;
     setPanelWidth(width);
-    setDisplayWidth(width);
+    setDisplayWidth(beside ? `min(100%, ${width}rem)` : "100%");
+  }
+
+  function currentMaxWidth() {
+    const parent = asideRef.current?.parentElement;
+    const rootPx = readRootFontSizePx();
+    if (!parent) return roundSidePanelRem(window.innerWidth / rootPx / 2);
+    return Math.max(MIN_SIDE_PANEL_WIDTH, maxDockedSidePanelWidth(parent.clientWidth, rootPx));
   }
 
   function onPanelResizePointerDown(event: PointerEvent<HTMLDivElement>) {
-    if (event.button !== 0) return;
+    const parent = asideRef.current?.parentElement;
+    const isDocked = parent
+      ? canDockSidePanel(parent.clientWidth, beside, readRootFontSizePx())
+      : docked;
+    if (event.button !== 0 || !isDocked) return;
     event.preventDefault();
     panelDragRef.current = { startX: event.clientX, startWidth: panelWidthRef.current };
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
-    // Drop the open/close ease before the first move, so a move in this frame cannot restart it.
     if (asideRef.current) asideRef.current.style.transition = "none";
     setResizing(true);
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
-    } catch {
-      // Pointer capture is best-effort; the move handler still tracks clientX.
-    }
+    } catch {}
   }
 
   function onPanelResizePointerMove(event: PointerEvent<HTMLDivElement>) {
     const drag = panelDragRef.current;
     if (!drag) return;
-    const parent = asideRef.current?.parentElement;
-    const max = parent ? Math.floor(parent.clientWidth / 2) : Math.floor(window.innerWidth / 2);
-    // Dragging the left edge leftward widens the panel. Integer pixels keep the pinned right edge still.
-    const next = drag.startWidth + (drag.startX - event.clientX);
-    commitPanelWidth(Math.round(Math.min(Math.max(next, MIN_SIDE_PANEL_WIDTH), max)));
+    const max = currentMaxWidth();
+    const rootPx = readRootFontSizePx();
+    const rtl = document.documentElement.dir === "rtl";
+    const deltaRem = (rtl ? event.clientX - drag.startX : drag.startX - event.clientX) / rootPx;
+    const next = roundSidePanelRem(
+      Math.min(Math.max(drag.startWidth + deltaRem, MIN_SIDE_PANEL_WIDTH), max),
+    );
+    commitPanelWidth(next);
   }
 
   function onPanelResizePointerUp(event: PointerEvent<HTMLDivElement>) {
@@ -103,9 +127,7 @@ export function useSidePanelWidth(open: boolean) {
     panelDragRef.current = null;
     try {
       event.currentTarget.releasePointerCapture(event.pointerId);
-    } catch {
-      // already released
-    }
+    } catch {}
     document.body.style.cursor = "";
     document.body.style.userSelect = "";
     setResizing(false);
@@ -113,20 +135,25 @@ export function useSidePanelWidth(open: boolean) {
   }
 
   function onPanelResizeKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const parent = asideRef.current?.parentElement;
-    const max = parent ? Math.floor(parent.clientWidth / 2) : Math.floor(window.innerWidth / 2);
-    const step = event.shiftKey ? 48 : 16;
-    if (event.key === "ArrowLeft") {
+    if (!docked) return;
+    const max = currentMaxWidth();
+    const step = event.shiftKey ? 3 : 1;
+    const rtl = document.documentElement.dir === "rtl";
+    const widenKey = rtl ? "ArrowRight" : "ArrowLeft";
+    const shrinkKey = rtl ? "ArrowLeft" : "ArrowRight";
+    if (event.key === widenKey) {
       event.preventDefault();
       setPanelWidth((current) => {
-        const next = Math.min(current + step, max);
+        const next = roundSidePanelRem(Math.min(current + step, max));
+        panelWidthRef.current = next;
         writeStoredSidePanelWidth(next);
         return next;
       });
-    } else if (event.key === "ArrowRight") {
+    } else if (event.key === shrinkKey) {
       event.preventDefault();
       setPanelWidth((current) => {
-        const next = Math.max(current - step, MIN_SIDE_PANEL_WIDTH);
+        const next = roundSidePanelRem(Math.max(current - step, MIN_SIDE_PANEL_WIDTH));
+        panelWidthRef.current = next;
         writeStoredSidePanelWidth(next);
         return next;
       });
@@ -137,6 +164,7 @@ export function useSidePanelWidth(open: boolean) {
     asideRef,
     panelWidth,
     displayWidth,
+    docked,
     resizing,
     resizeHandle: {
       onPointerDown: onPanelResizePointerDown,

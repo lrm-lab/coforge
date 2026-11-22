@@ -74,13 +74,12 @@ export function ReportDetailHeader({
             alt={report.author.displayName}
             src={report.author.avatarUrl}
           />
-          {/* The whole title, wrapped on a narrow screen rather than cut short (task #107). */}
           <h1 className="min-w-0 flex-1 text-lg font-semibold wrap-anywhere text-primary">
-            {report.title}
+            <bdi>{report.title}</bdi>
           </h1>
         </div>
         {report.submittedAt ? (
-          <p className="mt-1 flex min-w-0 flex-wrap items-center gap-x-6 gap-y-1 pl-10.5 text-sm text-tertiary">
+          <p className="mt-1 flex min-w-0 flex-wrap items-center gap-x-6 gap-y-1 ps-10.5 text-sm text-tertiary">
             <span className="min-w-0 wrap-anywhere">
               {m.records_report_completed_at({
                 time: formatWeeklyReportCompletedAt(report.submittedAt),
@@ -88,7 +87,6 @@ export function ReportDetailHeader({
             </span>
             <span className="min-w-0 wrap-anywhere">
               {messageSlots(m.records_report_shared_by, {
-                // The sharer's face before the name (task #521).
                 name: (
                   <ActorName
                     actor={{
@@ -104,7 +102,7 @@ export function ReportDetailHeader({
           </p>
         ) : null}
       </div>
-      <div className="ml-auto flex shrink-0 items-center gap-1 pt-0.5">
+      <div className="ms-auto flex shrink-0 items-center gap-1 pt-0.5">
         {editable && restoreView ? (
           <Button
             size="sm"

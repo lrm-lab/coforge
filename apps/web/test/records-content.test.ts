@@ -154,6 +154,13 @@ test("memberReportTitle uses the member name, year, and week", () => {
   expect(memberReportTitle("李四", 2026, 37)).toBe("李四 2026 W37 工作周报");
 });
 
+test("memberReportTitle bidi-isolates RTL member names so year and week stay ordered", () => {
+  expect(memberReportTitle("نور الهدى عبد الرحمن", 2026, 46)).toBe(
+    "\u2068نور الهدى عبد الرحمن\u2069 2026 W46 工作周报",
+  );
+  expect(memberReportTitle("דוד כהן", 2026, 46)).toBe("\u2068דוד כהן\u2069 2026 W46 工作周报");
+});
+
 test("reportContentToMarkdown joins tabs as headings", () => {
   expect(
     reportContentToMarkdown({

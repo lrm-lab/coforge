@@ -238,7 +238,7 @@ export function RecordsLayout({
         <nav
           aria-label={m.records_list_label()}
           className={cn(
-            "min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-primary lg:flex lg:w-72 lg:flex-none lg:rounded-xl",
+            "min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-primary lg:flex lg:w-[min(18rem,35%)] lg:flex-none lg:rounded-xl",
             listHidden ? "hidden" : "flex w-full",
           )}
         >
@@ -430,7 +430,9 @@ export function RecordsLayout({
                               alt={catalog.actorDisplayName}
                               src={catalog.actorAvatarUrl}
                             />
-                            <span className="truncate">{note.title}</span>
+                            <span className="truncate">
+                              <bdi>{note.title}</bdi>
+                            </span>
                           </RecordLink>
                         </li>
                       ))}
@@ -471,14 +473,13 @@ export function BackToRecords() {
       size="sm"
       color="tertiary"
       icon={ChevronLeft}
-      className="lg:hidden"
+      className="lg:hidden *:data-icon:rtl:rotate-180"
       aria-label={m.controls_back()}
       onClick={back}
     />
   );
 }
 
-/** Back control when arriving from a key-point `@source` link (`?returnTo=`). */
 export function RecordsKeyPointReturnBack({ returnTo }: { returnTo: string }) {
   const router = useRouter();
   return (
@@ -486,6 +487,7 @@ export function RecordsKeyPointReturnBack({ returnTo }: { returnTo: string }) {
       size="sm"
       color="link-color"
       iconLeading={ChevronLeft}
+      className="*:data-icon:rtl:rotate-180"
       onPress={() => {
         void router.navigate({ href: returnTo });
       }}

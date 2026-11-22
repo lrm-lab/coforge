@@ -18,7 +18,6 @@ import { isSelectedMemberWeek, memberWeeksPreview } from "./records-sidebar";
 
 type MemberWeek = RecordsCatalog["memberWeeks"][number] & { key: string };
 
-/** "Member weekly reports" sidebar section: week rows with their expandable submissions. */
 export function RecordsMemberWeeksSection({
   weeks,
   people,
@@ -37,11 +36,8 @@ export function RecordsMemberWeeksSection({
   onOpenChange,
   onSelect,
 }: {
-  /** Weeks already filtered by `query`. */
   weeks: MemberWeek[];
-  /** Who the submissions name, by `authorId`. */
   people: RecordsCatalog["people"];
-  /** Older weeks are still to be read (`onLoadMore`), once every week read so far is listed. */
   hasMore: boolean;
   loadingMore: boolean;
   loadFailed: boolean;
@@ -49,18 +45,14 @@ export function RecordsMemberWeeksSection({
   query: string;
   selectedRecordId?: string;
   selectedWeekKey?: string;
-  /** Per-week toggles chosen by the user; weeks without an entry use the default. */
   expandedWeeks: Record<string, boolean>;
   onExpandedWeekChange: (weekKey: string, expanded: boolean) => void;
-  /** Every week listed, not only the first few; kept by the layout across tab switches. */
   showAll: boolean;
   onShowAll: () => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: () => void;
 }) {
-  // The week on screen is listed even when it falls past the first few, so the reader sees where
-  // they are.
   const preview = useMemo(
     () =>
       memberWeeksPreview(weeks, Boolean(query) || showAll, (week) =>
@@ -121,11 +113,13 @@ export function RecordsMemberWeeksSection({
                     className="min-w-0 flex-1 font-medium"
                   >
                     <WeekBadge week={week.week} className="size-6" />
-                    <span className="truncate">{week.title}</span>
+                    <span className="truncate">
+                      <bdi>{week.title}</bdi>
+                    </span>
                   </RecordLink>
                 </div>
                 {hasSubmissions && expanded ? (
-                  <ul className="ml-7 space-y-0.5">
+                  <ul className="ms-7 space-y-0.5">
                     {week.submissions.map((submission) => {
                       const author = people[submission.authorId];
                       return (
@@ -142,7 +136,9 @@ export function RecordsMemberWeeksSection({
                               alt={author?.displayName}
                               src={author?.avatarUrl}
                             />
-                            <span className="truncate">{submission.title}</span>
+                            <span className="truncate">
+                              <bdi>{submission.title}</bdi>
+                            </span>
                           </RecordLink>
                         </li>
                       );

@@ -86,13 +86,17 @@ export function FormatChipSlot({
 
   const label = (
     <>
-      <span className="truncate">{chipTitle}</span>
+      <span className="truncate">
+        <bdi>{chipTitle}</bdi>
+      </span>
       {alreadySent ? (
-        <span className="ml-auto shrink-0 rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-tertiary">
+        <span className="ms-auto shrink-0 rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-tertiary">
           {m.records_report_sent_badge()}
         </span>
       ) : sendArmed ? (
-        <span className="shrink-0 tabular-nums">{formatSendWindowCountdown(remainingMs)}</span>
+        <span className="ms-auto shrink-0 tabular-nums">
+          {formatSendWindowCountdown(remainingMs)}
+        </span>
       ) : null}
     </>
   );

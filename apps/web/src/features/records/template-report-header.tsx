@@ -60,7 +60,7 @@ export function TemplateReportHeader({
       </span>
       {isOverview ? (
         <h1 className="min-w-0 flex-1 text-md font-semibold wrap-anywhere text-primary sm:text-lg">
-          {title}
+          <bdi>{title}</bdi>
         </h1>
       ) : (
         <input
@@ -74,7 +74,7 @@ export function TemplateReportHeader({
           className="min-w-0 flex-1 truncate bg-transparent text-md font-semibold text-primary outline-none placeholder:text-tertiary focus-visible:outline-none disabled:opacity-60 sm:text-lg"
         />
       )}
-      <div className="ml-auto flex shrink-0 items-center gap-1">
+      <div className="ms-auto flex shrink-0 items-center gap-1">
         {isOverview ? null : (
           <>
             <Button

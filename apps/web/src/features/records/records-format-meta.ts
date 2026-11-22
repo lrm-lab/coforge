@@ -37,12 +37,18 @@ export function parseScheduleMeta(value: unknown): ReportScheduleMeta | undefine
   };
 }
 
+const RTL_SCRIPT_RE = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/;
+
+export function bidiIsolateName(value: string): string {
+  return RTL_SCRIPT_RE.test(value) ? `\u2068${value}\u2069` : value;
+}
+
 export function memberWeekTitle(year: number, week: number): string {
   return `${year} W${week} 工作周报`;
 }
 
 export function memberReportTitle(displayName: string, year: number, week: number): string {
-  return `${displayName} ${year} W${week} 工作周报`;
+  return `${bidiIsolateName(displayName)} ${year} W${week} 工作周报`;
 }
 
 const COMPLETED_AT_FORMATTER = new Intl.DateTimeFormat("en-US", {

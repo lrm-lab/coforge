@@ -10,10 +10,6 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { recordsTabSearch } from "./records-sidebar";
 
-/**
- * The end of a list that has more to read: reading it starts once this comes into view, and goes
- * on while it stays there (`useEndOfList`). A failed read stops and offers a retry.
- */
 export function SidebarLoadMore({
   hasMore,
   loading,
@@ -76,7 +72,6 @@ export function CollapsibleSection({
   title: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Stays on the section title when the list is collapsed. */
   marker?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
@@ -99,11 +94,11 @@ export function CollapsibleSection({
               )}
             />
           }
-          className="min-w-0 flex-1 justify-start px-2 text-left text-sm font-medium text-primary"
+          className="min-w-0 flex-1 justify-start px-2 text-start text-sm font-medium text-primary"
         >
           <span className="truncate">{title}</span>
           {marker ? (
-            <span className="ml-1.5 inline-flex shrink-0 align-middle">{marker}</span>
+            <span className="ms-1.5 inline-flex shrink-0 align-middle">{marker}</span>
           ) : null}
         </Button>
         {actions}

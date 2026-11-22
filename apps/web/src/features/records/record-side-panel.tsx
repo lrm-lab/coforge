@@ -65,7 +65,8 @@ export function RecordSidePanel({
   keyPointRestartBusy?: boolean;
   onRestartKeyPointExtraction?: () => void;
 }) {
-  const { asideRef, panelWidth, displayWidth, resizing, resizeHandle } = useSidePanelWidth(open);
+  const { asideRef, panelWidth, displayWidth, docked, resizing, resizeHandle } =
+    useSidePanelWidth(open);
   const {
     workspaceSlug,
     viewer,
@@ -129,22 +130,32 @@ export function RecordSidePanel({
       }}
       aria-hidden={!open}
       className={cx(
-        "relative flex shrink-0 flex-col overflow-hidden bg-primary",
-        open || displayWidth > 0 ? "border-l border-secondary" : "border-l-0",
+        "flex flex-col overflow-hidden bg-primary",
+        docked
+          ? cx(
+              "relative shrink-0 @max-[37.5rem]/record-split:absolute @max-[37.5rem]/record-split:inset-y-0 @max-[37.5rem]/record-split:end-0 @max-[37.5rem]/record-split:z-20 @max-[37.5rem]/record-split:max-w-full",
+              open && "@max-[37.5rem]/record-split:shadow-lg",
+            )
+          : cx("absolute inset-y-0 end-0 z-20 max-w-full", open && "shadow-lg"),
+        open || displayWidth > 0 ? "border-s border-secondary" : "border-s-0",
       )}
     >
       <div
-        className="flex h-full min-h-0 flex-col"
-        style={{ width: panelWidth, minWidth: panelWidth }}
+        className="flex h-full w-full min-h-0 flex-col"
+        style={{ minWidth: open ? `min(100%, ${panelWidth}rem)` : 0 }}
       >
         <div
           role="separator"
           aria-orientation="vertical"
           aria-label={m.controls_resize_sidebar()}
-          aria-valuenow={Math.round(panelWidth)}
-          tabIndex={open ? 0 : -1}
+          aria-valuenow={Math.round(panelWidth * 10) / 10}
+          tabIndex={open && docked ? 0 : -1}
           {...resizeHandle}
-          className={SIDE_PANEL_RESIZE_HANDLE_CLASS}
+          className={cx(
+            SIDE_PANEL_RESIZE_HANDLE_CLASS,
+            (!docked || undefined) && "hidden",
+            "@max-[37.5rem]/record-split:hidden",
+          )}
         />
         <RecordSideChatHeader
           busy={busy}

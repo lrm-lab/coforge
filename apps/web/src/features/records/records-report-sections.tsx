@@ -8,7 +8,6 @@ import type { RecordsCatalog } from "./records-layout";
 import { sidebarPreview } from "./records-sidebar";
 import { CollapsibleSection, RecordLink, SidebarMore } from "./records-sidebar-parts";
 
-/** The weekly reports the reader starred (rendered only when there is one), a few at first; `showAll` lists every one. */
 export function RecordsFavoritesSection({
   items,
   showAll,
@@ -48,7 +47,9 @@ export function RecordsFavoritesSection({
                 alt={item.author.displayName}
                 src={item.author.avatarUrl}
               />
-              <span className="truncate">{item.title}</span>
+              <span className="truncate">
+                <bdi>{item.title}</bdi>
+              </span>
             </RecordLink>
           </li>
         ))}
@@ -58,7 +59,6 @@ export function RecordsFavoritesSection({
   );
 }
 
-/** The reader's own weekly reports (rendered only when there is one), each marked sent or unread. */
 export function RecordsMyReportsSection({
   items,
   me,
@@ -69,10 +69,7 @@ export function RecordsMyReportsSection({
   onSelect,
 }: {
   items: RecordsCatalog["myReports"];
-  /** The reader, whose face marks each of their reports as an author's face marks a favorite
-   * (jing, task #106); the week is in the title. */
   me: { displayName: string; avatarUrl: string | null };
-  /** One of the reader's reports is unread, filtered out or not. */
   unread: boolean;
   selectedRecordId?: string;
   open: boolean;
@@ -110,13 +107,15 @@ export function RecordsMyReportsSection({
                   alt={me.displayName}
                   src={me.avatarUrl ?? undefined}
                 />
-                <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                <span className="min-w-0 flex-1 truncate">
+                  <bdi>{item.title}</bdi>
+                </span>
                 {sent ? (
-                  <span className="ml-auto shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-tertiary">
+                  <span className="ms-auto shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-tertiary">
                     {m.records_report_sent_badge()}
                   </span>
                 ) : item.unread ? (
-                  <span role="img" aria-label={m.records_report_unread_badge()} className="ml-auto">
+                  <span role="img" aria-label={m.records_report_unread_badge()} className="ms-auto">
                     <UnreadDot />
                   </span>
                 ) : null}
