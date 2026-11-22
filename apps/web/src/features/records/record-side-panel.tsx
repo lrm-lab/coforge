@@ -9,6 +9,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { cx } from "#src/utils/cx";
+import { RecordSidePanelEmpty } from "./record-side-panel-states";
 import { useConversationRealtime } from "#src/features/conversations/conversation-realtime-client";
 import type { WeeklyReportAssistantSuggestion } from "#src/server/records/weekly-report-assistant-suggestion.server";
 import type {
@@ -96,17 +97,13 @@ export function RecordSidePanel({
   subjectType: "report" | "cycle";
   subjectId: string;
   surface: RecordSideSurface;
-  /** End of the open send window; the panel renders the countdown itself. */
   countdownUntil?: Date | null;
   refreshToken?: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onRequestSend?: () => void;
-  /** After Leader dismisses this week's send from the offer-send card. */
   onWeekSendDismissed?: () => void;
-  /** Whether the format can still be sent (hides offer actions when false). */
   sendOfferActive?: boolean;
-  /** After a body-edit write or version switch, parent syncs the open editor. */
   onBodyApplied?: (
     reportId: string,
     content: ReportContent,
@@ -114,7 +111,6 @@ export function RecordSidePanel({
   ) => void;
   bodyRestoreView?: ReportBodyRestoreView | null;
   onSwitchBodyVersion?: () => void;
-  /** Leader member-report: show personal key-point status + re-extract. */
   keyPointExtraction?: KeyPointExtractionMeta;
   keyPointRestartBusy?: boolean;
   onRestartKeyPointExtraction?: () => void;
@@ -122,7 +118,6 @@ export function RecordSidePanel({
   const refresh = useRecordRefresh();
   const workspaceSlug = useWorkspaceSlug();
   const { user: viewer } = appRoute.useLoaderData();
-  // The viewer's name, never their username.
   const viewerName = viewer.name?.trim() || m.records_side_chat_user();
   const post = useServerFn(addRecordComment);
   const ensureIntro = useServerFn(ensureRecordAssistantIntro);
@@ -158,6 +153,9 @@ export function RecordSidePanel({
   const [setupDismissed, setSetupDismissed] = useState(false);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const [error, setError] = useState<string | null>(session.error);
   const [dismissedSuggestionIds, setDismissedSuggestionIds] = useState<string[]>(
     session.dismissedSuggestionIds,
@@ -238,7 +236,6 @@ export function RecordSidePanel({
     session.messages = messages;
     setAssistantMessages(messages);
     maybeResumeAwaitingAssistant(rows, messages);
-    // After async load (incl. refresh), pin to latest turn once layout commits.
     stickToBottomRef.current = true;
   }
 
@@ -257,13 +254,21 @@ export function RecordSidePanel({
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
+    setInitialLoading(true);
+    setLoadFailed(false);
     void (async () => {
-      const ensured = await ensureSessions({ data: { subjectType, subjectId } });
-      if (cancelled) return;
-      setChatSessions(ensured.sessions);
-      setLegacySessionId(ensured.legacySessionId);
-      setActiveSessionId(ensured.activeSessionId);
-      await loadThread(ensured.activeSessionId, ensured.legacySessionId);
+      try {
+        const ensured = await ensureSessions({ data: { subjectType, subjectId } });
+        if (cancelled) return;
+        setChatSessions(ensured.sessions);
+        setLegacySessionId(ensured.legacySessionId);
+        setActiveSessionId(ensured.activeSessionId);
+        await loadThread(ensured.activeSessionId, ensured.legacySessionId);
+      } catch {
+        if (!cancelled) setLoadFailed(true);
+      } finally {
+        if (!cancelled) setInitialLoading(false);
+      }
     })();
     return () => {
       cancelled = true;
@@ -279,6 +284,7 @@ export function RecordSidePanel({
     loadAssistantMessages,
     loadAssistantStatus,
     refreshToken,
+    retryCount,
     session,
   ]);
 
@@ -584,7 +590,6 @@ export function RecordSidePanel({
     }
     scroller.scrollTo({ top: scroller.scrollHeight, behavior });
     scroller.scrollTop = scroller.scrollHeight;
-    // Ignore scroll events from our own move so stick-to-bottom is not cleared mid-flight.
     const releaseMs = behavior === "smooth" ? 450 : 0;
     scrollReleaseTimerRef.current = window.setTimeout(() => {
       programmaticScrollRef.current = false;
@@ -607,11 +612,9 @@ export function RecordSidePanel({
 
   useLayoutEffect(() => {
     if (!stickToBottomRef.current) return;
-    // Jump, don't animate: smooth mid-scroll used to clear stick-to-bottom via onScroll.
     scrollThreadToBottom("auto");
   }, [timelineTailId, timeline.length, awaitingSynthesis]);
 
-  // Collect cards / images can grow after the first paint; keep pinned while sticking.
   useEffect(() => {
     const scroller = scrollRef.current;
     if (!scroller || typeof ResizeObserver === "undefined") return;
@@ -634,8 +637,6 @@ export function RecordSidePanel({
     };
   }, []);
 
-  // Handlers that keep their identity, so the memoized thread renders only when what it shows
-  // changes.
   const timelineActions = {
     openTemplateDetail: useLatestCallback(openTemplateDetail),
     onRequestSend: useLatestCallback(onRequestSend),
@@ -754,9 +755,12 @@ export function RecordSidePanel({
             <p className="text-sm text-tertiary">{m.records_key_points_generating()}</p>
           ) : null}
           {error ? <p className="text-sm text-error-primary">{error}</p> : null}
-          {comments.length === 0 && assistantMessages.length === 0 ? (
-            <p className="text-sm text-tertiary">{m.records_side_chat_empty()}</p>
-          ) : null}
+          <RecordSidePanelEmpty
+            loading={initialLoading}
+            failed={loadFailed}
+            empty={comments.length === 0 && assistantMessages.length === 0}
+            onRetry={() => setRetryCount((n) => n + 1)}
+          />
           <RecordSideTimeline
             timeline={timeline}
             threadStates={threadStates}
@@ -772,7 +776,6 @@ export function RecordSidePanel({
             {...timelineActions}
           />
 
-          {/* Keep latest bubbles above the composer so they are not flush against the edge. */}
           <div className="h-20 shrink-0" aria-hidden />
         </div>
 

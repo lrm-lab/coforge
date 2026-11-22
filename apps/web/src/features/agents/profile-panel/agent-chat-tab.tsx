@@ -1,8 +1,9 @@
-import type { ComponentType } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Hash01, MessageChatCircle } from "@untitledui/icons";
+import { CircleAlert, MessageSquare } from "kubai-icons/duotone";
 
-import { Alert } from "#src/components/ui/alert";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { Skeleton } from "#src/components/ui/skeleton";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { AgentChannelList } from "./agent-chat-channels";
@@ -11,31 +12,47 @@ import { agentChannelsQuery, agentPeerConversationsQuery } from "./agent-profile
 import { SECTION_CAPTION_CLASS } from "./inline-edit-field";
 import { AGENT_TAB_BAR_CLASS, AgentTabEmpty } from "./agent-tab-empty";
 
-/**
- * The Chat tab: the channels the Agent is in and its conversations with other Agents, one read
- * each. The server answers both only to the viewers the tab is shown to.
- */
 export function AgentChatTab({ agentId, timeZone }: { agentId: string; timeZone: string | null }) {
   const channelsQuery = useQuery(agentChannelsQuery(agentId));
   const peersQuery = useQuery(agentPeerConversationsQuery(agentId));
   const channels = channelsQuery.data;
   const peers = peersQuery.data;
 
-  // The heading bar stays over every state, as on Raft; the body below it changes.
   return (
     <div>
       <h2 className={cn(AGENT_TAB_BAR_CLASS, "px-5 text-xs font-medium text-secondary")}>
         {m.agent_chat_heading()}
       </h2>
       {channelsQuery.isError || peersQuery.isError ? (
-        <Alert color="warning" description={m.agent_chat_error()} className="m-5" />
+        <div className="p-5">
+          <EmptyState
+            size="card"
+            role="alert"
+            picture={<EmptyIcon icon={CircleAlert} size="card" />}
+            title={m.agent_chat_error()}
+            primaryAction={
+              <RetryButton
+                size="card"
+                isRetrying={channelsQuery.isRefetching || peersQuery.isRefetching}
+                onPress={() => {
+                  void channelsQuery.refetch();
+                  void peersQuery.refetch();
+                }}
+              />
+            }
+          />
+        </div>
       ) : !channels || !peers ? (
-        <p className="px-5 py-4 text-sm text-tertiary">{m.agent_chat_loading()}</p>
+        <div className="space-y-3 p-5" aria-busy="true" aria-label={m.agent_chat_loading()}>
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <Skeleton className="h-10 w-5/6 rounded-lg" />
+        </div>
       ) : channels.length === 0 && peers.length === 0 ? (
         <AgentTabEmpty
           belowBar
           level={3}
-          icon={MessageChatCircle}
+          picture={<EmptyIcon icon={MessageSquare} />}
           title={m.agent_chat_empty_title()}
           description={m.agent_chat_empty_description()}
         />
@@ -51,11 +68,13 @@ export function AgentChatTab({ agentId, timeZone }: { agentId: string; timeZone:
                 <AgentChannelList channels={channels} />
               </div>
             ) : (
-              <SectionEmpty
-                icon={Hash01}
-                title={m.agent_chat_channels_empty_title()}
-                description={m.agent_chat_channels_empty_description()}
-              />
+              <div className="px-5 pb-4">
+                <EmptyState
+                  size="card"
+                  picture={<EmptyIcon icon={MessageSquare} size="card" muted />}
+                  title={m.agent_chat_channels_empty_title()}
+                />
+              </div>
             )}
           </section>
           <section>
@@ -68,11 +87,13 @@ export function AgentChatTab({ agentId, timeZone }: { agentId: string; timeZone:
                 <AgentPeerDmList cards={peers} timeZone={timeZone} />
               </div>
             ) : (
-              <SectionEmpty
-                icon={MessageChatCircle}
-                title={m.agent_chat_dms_empty_title()}
-                description={m.agent_chat_dms_empty_description()}
-              />
+              <div className="px-5 pb-4">
+                <EmptyState
+                  size="card"
+                  picture={<EmptyIcon icon={MessageSquare} size="card" muted />}
+                  title={m.agent_chat_dms_empty_title()}
+                />
+              </div>
             )}
           </section>
         </>
@@ -86,29 +107,6 @@ function SectionHeader({ caption, hint }: { caption: string; hint: string }) {
     <div className="px-5 py-3">
       <p className={SECTION_CAPTION_CLASS}>{caption}</p>
       <p className="mt-1 text-xs text-tertiary">{hint}</p>
-    </div>
-  );
-}
-
-/** One section with nothing in it yet, while the other has rows. */
-function SectionEmpty({
-  icon: Icon,
-  title,
-  description,
-}: {
-  icon: ComponentType<{ className?: string; "aria-hidden"?: "true" }>;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="flex items-start gap-3 px-5 pb-4">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-secondary text-tertiary">
-        <Icon aria-hidden="true" className="size-4" />
-      </span>
-      <div className="min-w-0">
-        <p className="text-sm font-medium text-secondary">{title}</p>
-        <p className="text-xs text-tertiary">{description}</p>
-      </div>
     </div>
   );
 }

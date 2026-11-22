@@ -1,20 +1,20 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { CatchBoundary, ClientOnly } from "@tanstack/react-router";
-import { Suspense, useMemo } from "react";
+import { CircleAlert } from "kubai-icons/duotone";
+import { Suspense, useMemo, useState } from "react";
 
+import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Button } from "#src/components/base/buttons/button";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { ChannelConversation } from "#src/features/conversations/channel-conversation";
 import { channelNamesQuery } from "#src/features/conversations/conversation-queries";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 import type { TaskPopupControls } from "#src/features/conversations/conversation-types";
 import { useChannelConversation } from "#src/features/conversations/use-conversation-data";
+import { m } from "#src/paraglide/messages";
 
-/**
- * A Task card opened on Activity: the Task's popup over Activity, its discussion and composer as
- * a channel shows them, without the channel's chat behind it (Frank, 11-04), as the Tasks page
- * opens one over its board (`OverviewTaskPopup`), its discussion at the card's first unread
- * message. Another Task named in it opens the same way; closing it goes back to the list.
- */
 export function ActivityTaskPopup({
   target,
   onOpen,
@@ -24,10 +24,39 @@ export function ActivityTaskPopup({
   onOpen: (target: HostedConversationTarget) => void;
   onClose: () => void;
 }) {
+  const [retryCount, setRetryCount] = useState(0);
   return (
     <ClientOnly>
-      {/* A conversation that cannot load shows no popup; the list stays. */}
-      <CatchBoundary getResetKey={() => target.id} errorComponent={() => null}>
+      <CatchBoundary
+        getResetKey={() => `${target.id}:${target.task}:${retryCount}`}
+        errorComponent={({ reset }) => (
+          <ModalOverlay isOpen isDismissable onOpenChange={(open) => !open && onClose()}>
+            <Modal className="w-full max-w-md">
+              <Dialog aria-label={m.empty_activity_task_load_failed_title()} className="p-4">
+                <EmptyState
+                  role="alert"
+                  picture={<EmptyIcon icon={CircleAlert} />}
+                  title={m.empty_activity_task_load_failed_title()}
+                  description={m.empty_load_failed_safe()}
+                  primaryAction={
+                    <RetryButton
+                      onPress={() => {
+                        setRetryCount((n) => n + 1);
+                        reset();
+                      }}
+                    />
+                  }
+                  secondaryAction={
+                    <Button size="sm" color="tertiary" onPress={onClose}>
+                      {m.controls_close()}
+                    </Button>
+                  }
+                />
+              </Dialog>
+            </Modal>
+          </ModalOverlay>
+        )}
+      >
         <Suspense fallback={null}>
           <ActivityTaskConversation target={target} onOpen={onOpen} onClose={onClose} />
         </Suspense>

@@ -2,9 +2,13 @@ import { MemoryScopeLinks } from "./memory-scope-links";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { ArrowLeft, Plus } from "@untitledui/icons";
+import { BookOpen, CircleAlert, Search } from "kubai-icons/duotone";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { LockedWireframe, RecordsWireframe } from "#src/components/ui/empty-wireframes";
 import type { TeamMemoryHead } from "@lrm/coforge-sdk/agent";
 import * as m from "#src/paraglide/messages";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -135,9 +139,38 @@ export function MemoryPage({
       </header>
       <MemoryScopeLinks showReview={list.reviewEnabled && list.kind === "ready"} />
       {list.kind === "error" ? (
-        <p role="alert" className="px-5 py-8 text-sm text-error-primary">
-          {memoryError(list.error)}
-        </p>
+        list.error === "disabled" ? (
+          <EmptyState
+            size="page"
+            picture={<LockedWireframe />}
+            title={m.empty_memory_off_title()}
+            description={memoryError(list.error)}
+            primaryAction={
+              <Button
+                size="sm"
+                color="secondary"
+                onPress={() =>
+                  void navigate({
+                    to: "/w/$workspaceSlug/settings",
+                    params: { workspaceSlug },
+                    search: { section: "experiments" },
+                  })
+                }
+              >
+                {m.empty_memory_off_action()}
+              </Button>
+            }
+          />
+        ) : (
+          <EmptyState
+            size="page"
+            role="alert"
+            picture={<EmptyIcon icon={CircleAlert} />}
+            title={m.empty_memory_load_failed_title()}
+            description={memoryError(list.error)}
+            primaryAction={<RetryButton size="page" onPress={() => void refresh()} />}
+          />
+        )
       ) : (
         <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]">
           <section
@@ -182,10 +215,56 @@ export function MemoryPage({
                 }}
               />
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              {!list.result.entries.length && (
-                <p className="px-5 py-8 text-sm text-tertiary">{m.memory_empty()}</p>
-              )}
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+              {!list.result.entries.length &&
+                (search.q.trim() || search.archived || search.project ? (
+                  <div className="p-4">
+                    <EmptyState
+                      size="card"
+                      live="polite"
+                      picture={<EmptyIcon icon={Search} size="card" />}
+                      title={
+                        search.q.trim()
+                          ? m.empty_memory_no_match_query({ query: search.q.trim() })
+                          : m.empty_memory_no_match_filters()
+                      }
+                      primaryAction={
+                        <Button
+                          size="sm"
+                          color="tertiary"
+                          onPress={() => {
+                            setQuery("");
+                            void updateSearch({
+                              q: "",
+                              archived: false,
+                              project: undefined,
+                              offset: 0,
+                              id: undefined,
+                            });
+                          }}
+                        >
+                          {m.empty_clear_filters()}
+                        </Button>
+                      }
+                    />
+                  </div>
+                ) : (
+                  <EmptyState
+                    size="page"
+                    picture={<RecordsWireframe accent />}
+                    title={m.empty_memory_first_use_title()}
+                    description={m.empty_memory_first_use_description()}
+                    primaryAction={
+                      <Button
+                        size="sm"
+                        iconLeading={Plus}
+                        onPress={() => void updateSearch({ id: "new" })}
+                      >
+                        {m.memory_new()}
+                      </Button>
+                    }
+                  />
+                ))}
               <ul className="divide-y divide-secondary">
                 {list.result.entries.map((item) => (
                   <li key={item.id}>
@@ -247,11 +326,23 @@ export function MemoryPage({
                 </Button>
               </div>
             )}
-            {!selected && <p className="text-sm text-tertiary">{m.memory_choose()}</p>}
+            {!selected && (
+              <EmptyState
+                size="page"
+                picture={<EmptyIcon icon={BookOpen} />}
+                title={m.empty_memory_none_selected_title()}
+                description={m.empty_memory_none_selected_description()}
+              />
+            )}
             {detail?.kind === "error" && (
-              <p role="alert" className="text-sm text-error-primary">
-                {memoryError(detail.error)}
-              </p>
+              <EmptyState
+                size="page"
+                role="alert"
+                picture={<EmptyIcon icon={CircleAlert} />}
+                title={m.empty_memory_load_failed_title()}
+                description={memoryError(detail.error)}
+                primaryAction={<RetryButton size="page" onPress={() => void refresh()} />}
+              />
             )}
             {isEditing && (selected === "new" || entry) ? (
               <MemoryEditor

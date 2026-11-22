@@ -1,8 +1,12 @@
 import { memo, Suspense, useContext, useMemo, useState, type Ref } from "react";
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { CatchBoundary, ClientOnly } from "@tanstack/react-router";
+import { CircleAlert } from "kubai-icons/duotone";
 
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
+import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import {
   ConversationBackHeader,
@@ -19,18 +23,9 @@ import { channelNamesQuery, savedMessagesQuery } from "./conversation-queries";
 import { NO_SAVED } from "./saved-messages-collection";
 import { readChatList } from "./chat-lists-reader";
 
-/** The pane's column beside its host's content. */
 const HOSTED_CONVERSATION_PANE_CLASS =
   "flex min-h-0 min-w-0 flex-1 flex-col border-l border-secondary bg-primary";
 
-/**
- * A conversation beside a page's own content, exactly as Chat opens it: the same page
- * (`ConversationPage`) with its tabs, stream positioned at the target's message, composer, threads,
- * Task board and files, and reading it as Chat does; or only its open thread, under a host's
- * `StandaloneThreadContext` (Activity's thread cards). The host reads its address state
- * (`pickConversationPageSearch`, shared structurally) and keys the pane by conversation, so another
- * conversation starts fresh. Memoized: a re-render of the host's content leaves the conversation be.
- */
 export const HostedConversationPane = memo(function HostedConversationPane({
   target,
   search,
@@ -42,19 +37,14 @@ export const HostedConversationPane = memo(function HostedConversationPane({
 }: {
   target: HostedConversationTarget;
   search: ConversationPageSearch;
-  /** The pane's accessible name. */
   label: string;
   loadingLabel: string;
-  /** Said in place of the conversation when it fails to load. */
   failedText: string;
-  /** Clears the host's landing id once the stream has used it. */
   onJumpMessageConsumed?: () => void;
   ref?: Ref<HTMLElement>;
 }) {
   const [failed, setFailed] = useState(false);
-  // Only a host with a list to go back to (Activity) has a back arrow over the failure,
-  // in a bar shown only where the arrow is; below the width its list sits beside the pane from,
-  // no divider.
+  const [retryCount, setRetryCount] = useState(0);
   const list = useContext(ConversationListContext);
   return (
     <section
@@ -72,14 +62,25 @@ export const HostedConversationPane = memo(function HostedConversationPane({
               className={LIST_BESIDE_CLASSES[list.listBesideFrom].narrowOnly}
             />
           )}
-          <p role="alert" className="p-4 text-sm text-error-primary">
-            {failedText}
-          </p>
+          <EmptyState
+            role="alert"
+            picture={<EmptyIcon icon={CircleAlert} />}
+            title={failedText}
+            description={m.empty_load_failed_safe()}
+            primaryAction={
+              <RetryButton
+                onPress={() => {
+                  setFailed(false);
+                  setRetryCount((n) => n + 1);
+                }}
+              />
+            }
+          />
         </>
       ) : (
         <ClientOnly>
           <CatchBoundary
-            getResetKey={() => `${target.kind}:${target.id}`}
+            getResetKey={() => `${target.kind}:${target.id}:${retryCount}`}
             errorComponent={() => null}
             onCatch={() => setFailed(true)}
           >

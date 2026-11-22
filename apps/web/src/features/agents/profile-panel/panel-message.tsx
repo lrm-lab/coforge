@@ -1,8 +1,8 @@
-import { Button } from "#src/components/base/buttons/button";
+import { CircleAlert } from "kubai-icons/duotone";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { m } from "#src/paraglide/messages";
 
-/** A profile-panel tab's centred one-line state (unavailable, empty, failed), with Retry when the
- * failure can be retried. */
 export function PanelMessage({
   text,
   alert = false,
@@ -13,15 +13,14 @@ export function PanelMessage({
   onRetry?: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center gap-3 px-4 py-10 text-center">
-      <p role={alert ? "alert" : undefined} className="text-sm text-tertiary">
-        {text}
-      </p>
-      {onRetry && (
-        <Button size="sm" color="secondary" onPress={onRetry}>
-          {m.agent_workspace_retry()}
-        </Button>
-      )}
-    </div>
+    <EmptyState
+      role={alert || onRetry ? "alert" : undefined}
+      picture={<EmptyIcon icon={CircleAlert} muted={!alert && !onRetry} />}
+      title={text}
+      description={alert || onRetry ? m.empty_load_failed_safe() : undefined}
+      primaryAction={
+        onRetry ? <RetryButton label={m.agent_workspace_retry()} onPress={onRetry} /> : undefined
+      }
+    />
   );
 }

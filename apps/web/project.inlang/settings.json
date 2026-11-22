@@ -66,7 +66,8 @@
       "./messages/{locale}/onboarding.json",
       "./messages/{locale}/member-onboarding.json",
       "./messages/{locale}/task-assignment.json",
-      "./messages/{locale}/pickers.json"
+      "./messages/{locale}/pickers.json",
+      "./messages/{locale}/empty-states.json"
     ]
   }
 }

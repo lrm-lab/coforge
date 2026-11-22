@@ -2,6 +2,8 @@ import { Link } from "@tanstack/react-router";
 import { ArrowUpRight, CheckCircle } from "@untitledui/icons";
 
 import { PageHeader } from "#src/components/layout/page-header";
+import { EmptyState } from "#src/components/ui/empty";
+import { RecordsWireframe } from "#src/components/ui/empty-wireframes";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
@@ -23,9 +25,13 @@ export function WeeklyReportDashboard({ dashboard }: { dashboard: Dashboard }) {
             <p className="mt-1 text-sm text-tertiary">{m.records_dashboard_hint()}</p>
           </div>
           {dashboard.weeks.length === 0 ? (
-            <p className="rounded-xl border border-secondary p-8 text-center text-sm text-tertiary">
-              {m.records_dashboard_empty()}
-            </p>
+            <div className="rounded-xl border border-secondary py-6">
+              <EmptyState
+                picture={<RecordsWireframe accent={false} />}
+                title={m.records_dashboard_empty()}
+                description={m.empty_records_dashboard_description()}
+              />
+            </div>
           ) : (
             <>
               <div className="grid gap-3 sm:grid-cols-3">
@@ -49,7 +55,6 @@ export function WeeklyReportDashboard({ dashboard }: { dashboard: Dashboard }) {
                     className="rounded-xl border border-secondary bg-primary"
                   >
                     <div className="flex items-center gap-2 border-b border-secondary px-4 py-3">
-                      {/* The person's face, not a generic people icon (task #521). */}
                       <ActorAvatar
                         presence={false}
                         size="xs"

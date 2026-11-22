@@ -1,23 +1,25 @@
-import { ArrowLeft, UserX01, XClose as X } from "@untitledui/icons";
+import { ArrowLeft, XClose as X } from "@untitledui/icons";
+import { CircleAlert } from "kubai-icons/duotone";
 
+import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import {
-  Empty,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-  EmptyDescription,
-} from "#src/components/ui/empty";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { LockedWireframe } from "#src/components/ui/empty-wireframes";
 import { m } from "#src/paraglide/messages";
 
-/** The panel when its Agent's profile could not be read: a bare header and one fact. `notVisible`
- * is an Agent that exists but is private to someone else. */
 export function AgentProfileUnavailable({
   notVisible,
+  loadFailed = false,
+  retrying = false,
+  onRetry,
   back,
   onClose,
 }: {
   notVisible: boolean;
+  loadFailed?: boolean;
+  retrying?: boolean;
+  onRetry?: () => void;
   back?: { label: string; onPress: () => void };
   onClose: () => void;
 }) {
@@ -44,19 +46,40 @@ export function AgentProfileUnavailable({
           onClick={onClose}
         />
       </header>
-      <Empty className="flex-1 items-center justify-center px-6 text-center">
-        <EmptyHeader className="items-center gap-3">
-          <EmptyMedia>
-            <UserX01 aria-hidden="true" className="size-6 text-tertiary" />
-          </EmptyMedia>
-          <EmptyTitle role="heading" aria-level={2}>
-            {notVisible ? m.agent_not_visible() : m.agent_profile_not_found_title()}
-          </EmptyTitle>
-          {!notVisible && (
-            <EmptyDescription>{m.agent_profile_not_found_description()}</EmptyDescription>
-          )}
-        </EmptyHeader>
-      </Empty>
+      {loadFailed ? (
+        <EmptyState
+          size="page"
+          role="alert"
+          headingLevel={2}
+          picture={<EmptyIcon icon={CircleAlert} />}
+          title={m.empty_agent_profile_load_failed_title()}
+          description={m.empty_load_failed_safe()}
+          primaryAction={
+            onRetry ? (
+              <RetryButton size="page" isRetrying={retrying} onPress={onRetry} />
+            ) : undefined
+          }
+        />
+      ) : (
+        <EmptyState
+          size="page"
+          headingLevel={2}
+          picture={<LockedWireframe />}
+          title={
+            notVisible ? m.empty_agent_profile_private_title() : m.agent_profile_not_found_title()
+          }
+          description={
+            notVisible
+              ? m.empty_agent_profile_private_description()
+              : m.agent_profile_not_found_description()
+          }
+          primaryAction={
+            <Button size="sm" color="tertiary" onPress={onClose}>
+              {m.controls_close()}
+            </Button>
+          }
+        />
+      )}
     </div>
   );
 }

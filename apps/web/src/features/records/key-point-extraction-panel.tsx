@@ -1,7 +1,10 @@
 import { RefreshCcw01 as Refresh } from "@untitledui/icons";
 import { Link } from "@tanstack/react-router";
+import { CircleAlert } from "kubai-icons/duotone";
 
 import { Button } from "#src/components/base/buttons/button";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
@@ -116,9 +119,25 @@ export function KeyPointExtractionPanel({
         </p>
       ) : null}
       {status === "failed" && extraction?.error !== "no_submitted_member_reports" ? (
-        <p className="text-sm text-error-primary">
-          {extraction?.error?.trim() || m.records_key_points_failed()}
-        </p>
+        <div className="space-y-2">
+          <EmptyState
+            size="card"
+            role="alert"
+            picture={<EmptyIcon icon={CircleAlert} size="card" />}
+            title={m.empty_records_key_points_failed_title()}
+            primaryAction={
+              onRestart ? (
+                <RetryButton size="card" isRetrying={restartBusy} onPress={onRestart} />
+              ) : undefined
+            }
+          />
+          {extraction?.error?.trim() ? (
+            <details className="px-1 text-xs text-tertiary">
+              <summary className="cursor-pointer select-none">{m.empty_details_toggle()}</summary>
+              <p className="mt-1 font-mono break-words">{extraction.error.trim()}</p>
+            </details>
+          ) : null}
+        </div>
       ) : null}
       {(status === "ready" || status === "generating" || status === "awaiting_confirm") &&
       extraction?.markdown ? (
@@ -131,12 +150,10 @@ export function KeyPointExtractionPanel({
         />
       ) : null}
       {status === "ready" && !extraction?.markdown ? (
-        <p className="text-sm text-tertiary">{m.records_key_points_empty_result()}</p>
+        <EmptyState size="row" title={m.records_key_points_empty_result()} />
       ) : null}
       {!status ? (
-        <p className="text-sm text-tertiary">
-          {waitingLabel ?? m.records_key_points_waiting_submit()}
-        </p>
+        <EmptyState size="row" title={waitingLabel ?? m.records_key_points_waiting_submit()} />
       ) : null}
     </>
   );

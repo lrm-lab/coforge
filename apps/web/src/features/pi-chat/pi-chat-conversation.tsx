@@ -9,6 +9,9 @@ import type {
   WorkbenchRuntime,
 } from "@lrm/coforge-sdk/internal/pi-chat";
 import { Button } from "#src/components/base/buttons/button";
+import { EmptyState } from "#src/components/ui/empty";
+import { ChatWireframe } from "#src/components/ui/empty-wireframes";
+import { Skeleton } from "#src/components/ui/skeleton";
 import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { PageHeader } from "#src/components/layout/page-header";
 import { m } from "#src/paraglide/messages";
@@ -383,9 +386,15 @@ export function PiChatConversation({
               </div>
             )}
             {history.isPending && sessionId !== "new" && (
-              <p role="status" className="py-6 text-sm text-tertiary">
-                {m.pi_chat_loading()}
-              </p>
+              <div
+                role="status"
+                aria-busy="true"
+                aria-label={m.pi_chat_loading()}
+                className="space-y-3 py-6"
+              >
+                <Skeleton className="h-12 w-3/4 rounded-xl" />
+                <Skeleton className="ml-auto h-10 w-1/2 rounded-xl" />
+              </div>
             )}
             <PiChatDisclosureContext value={disclosure}>
               <PiChatTranscript
@@ -403,12 +412,12 @@ export function PiChatConversation({
             {messages.length === 0 &&
               !history.isError &&
               (sessionId === "new" || !history.isPending) && (
-                <div className="py-10">
-                  <p className="text-lg font-semibold text-primary">{m.pi_chat_start_title()}</p>
-                  <p className="mt-2 text-sm text-tertiary">
-                    {isCodex ? m.pi_chat_codex_start_hint() : m.pi_chat_start_hint()}
-                  </p>
-                </div>
+                <EmptyState
+                  className="py-10"
+                  picture={<ChatWireframe accent={false} />}
+                  title={m.empty_pi_chat_messages_empty_title()}
+                  description={isCodex ? m.pi_chat_codex_start_hint() : m.pi_chat_start_hint()}
+                />
               )}
           </div>
         </div>

@@ -16,8 +16,12 @@ import {
   PI_CHAT_UPLOAD_CHUNK_BYTES,
   type PiChatResult,
 } from "@lrm/coforge-sdk/internal/pi-chat";
+import { CircleAlert, Folder as FolderDuotone } from "kubai-icons/duotone";
 import { Button } from "#src/components/base/buttons/button";
 import { Checkbox } from "#src/components/base/checkbox/checkbox";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { Skeleton } from "#src/components/ui/skeleton";
 import { FileTypeIcon } from "#src/features/files/file-type-icon";
 import { formatFileSize } from "#src/features/files/file-meta";
 import { m } from "#src/paraglide/messages";
@@ -190,31 +194,72 @@ export function PiChatFiles(props: Props) {
             </Button>
           </div>
           {preview.isPending && (
-            <p role="status" className="p-3 text-sm text-tertiary">
-              {m.pi_chat_loading()}
-            </p>
+            <div
+              role="status"
+              aria-label={m.empty_pi_chat_files_loading()}
+              className="grid gap-2 p-3"
+            >
+              <Skeleton className="h-5 w-44" />
+              <Skeleton className="h-32 w-full rounded-lg" />
+            </div>
           )}
           {preview.isError && (
-            <p role="alert" className="p-3 text-sm text-error-primary">
-              {m.pi_chat_files_error()}
-            </p>
+            <div className="p-3">
+              <EmptyState
+                size="card"
+                role="alert"
+                picture={<EmptyIcon icon={CircleAlert} size="card" />}
+                title={m.empty_pi_chat_files_load_failed()}
+                primaryAction={
+                  <RetryButton
+                    size="card"
+                    isRetrying={preview.isRefetching}
+                    onPress={() => void preview.refetch()}
+                  />
+                }
+              />
+            </div>
           )}
           {preview.data?.file && <FilePreview file={preview.data.file} />}
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-auto p-2">
           {directory.isPending && (
-            <p role="status" className="p-3 text-sm text-tertiary">
-              {m.pi_chat_loading()}
-            </p>
+            <div
+              role="status"
+              aria-label={m.empty_pi_chat_files_loading()}
+              className="grid gap-2 p-2"
+            >
+              <Skeleton className="h-8 w-full rounded-lg" />
+              <Skeleton className="h-8 w-5/6 rounded-lg" />
+              <Skeleton className="h-8 w-4/5 rounded-lg" />
+            </div>
           )}
           {directory.isError && (
-            <p role="alert" className="p-3 text-sm text-error-primary">
-              {m.pi_chat_files_error()}
-            </p>
+            <div className="p-1">
+              <EmptyState
+                size="card"
+                role="alert"
+                picture={<EmptyIcon icon={CircleAlert} size="card" />}
+                title={m.empty_pi_chat_files_load_failed()}
+                primaryAction={
+                  <RetryButton
+                    size="card"
+                    isRetrying={directory.isRefetching}
+                    onPress={() => void directory.refetch()}
+                  />
+                }
+              />
+            </div>
           )}
           {directory.data?.directory?.entries.length === 0 && (
-            <p className="p-3 text-sm text-tertiary">{m.pi_chat_files_empty()}</p>
+            <div className="p-1">
+              <EmptyState
+                size="card"
+                picture={<EmptyIcon icon={FolderDuotone} size="card" />}
+                title={m.agent_workspace_empty()}
+              />
+            </div>
           )}
           <FileEntries
             entries={directory.data?.directory?.entries ?? []}
@@ -314,14 +359,32 @@ function FileEntry({
       {expanded && (
         <div className="border-l border-secondary pl-3">
           {children.isPending && (
-            <p role="status" className="p-2 text-xs text-tertiary">
-              {m.pi_chat_loading()}
-            </p>
+            <div
+              role="status"
+              aria-label={m.empty_pi_chat_files_loading()}
+              className="grid gap-1.5 py-1.5"
+            >
+              <Skeleton className="h-6 w-3/4 rounded-md" />
+              <Skeleton className="h-6 w-2/3 rounded-md" />
+            </div>
           )}
           {children.isError && (
-            <p role="alert" className="p-2 text-xs text-error-primary">
-              {m.pi_chat_files_error()}
-            </p>
+            <EmptyState
+              size="row"
+              role="alert"
+              className="px-1"
+              title={m.empty_pi_chat_files_load_failed()}
+              primaryAction={
+                <RetryButton
+                  size="row"
+                  isRetrying={children.isRefetching}
+                  onPress={() => void children.refetch()}
+                />
+              }
+            />
+          )}
+          {children.data?.directory?.entries.length === 0 && (
+            <EmptyState size="row" className="px-1" title={m.empty_pi_chat_folder_empty()} />
           )}
           <FileEntries
             entries={children.data?.directory?.entries ?? []}
@@ -380,7 +443,9 @@ function FilePreview({ file }: { file: NonNullable<PiChatResult["file"]> }) {
           <img src={content.url} alt={file.path} className="max-w-full" />
         </div>
       ) : content.text !== null ? (
-        <Suspense fallback={<p className="p-3 text-sm text-tertiary">{m.pi_chat_loading()}</p>}>
+        <Suspense
+          fallback={<p className="p-3 text-sm text-tertiary">{m.empty_pi_chat_files_loading()}</p>}
+        >
           <FileView
             key={file.path}
             path={file.path}

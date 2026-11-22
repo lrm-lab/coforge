@@ -113,7 +113,10 @@ export function AgentProfilePanel({
   );
   const liveAgent = useLiveAgent(agentId);
   const present = useIsPresent();
-  const { profile, unavailable, notVisible } = useAgentProfile(agentId, visible && present);
+  const { profile, unavailable, loadFailed, retrying, retry, notVisible } = useAgentProfile(
+    agentId,
+    visible && present,
+  );
   const invalidate = useInvalidateAgentProfile(agentId);
   const display = liveAgent?.display ?? profile?.display;
 
@@ -161,7 +164,15 @@ export function AgentProfilePanel({
   const envQuery = useQuery(agentEnvironmentQuery(agentId, owned));
   const saveEnvironment = useServerFn(saveAgentEnvironment);
   const environmentState: AgentEnvironmentState | undefined = owned
-    ? { loaded: envQuery.isSuccess, values: envQuery.data ?? {} }
+    ? {
+        loaded: envQuery.isSuccess,
+        failed: envQuery.isError,
+        retrying: envQuery.isRefetching,
+        onRetry: () => {
+          void envQuery.refetch();
+        },
+        values: envQuery.data ?? {},
+      }
     : undefined;
 
   const executeControl = useServerFn(executeAgentControl);
@@ -240,8 +251,17 @@ export function AgentProfilePanel({
     });
   }
 
-  if (unavailable) {
-    return <AgentProfileUnavailable notVisible={notVisible} back={back} onClose={onClose} />;
+  if (unavailable || loadFailed) {
+    return (
+      <AgentProfileUnavailable
+        notVisible={notVisible}
+        loadFailed={loadFailed}
+        retrying={retrying}
+        onRetry={retry}
+        back={back}
+        onClose={onClose}
+      />
+    );
   }
 
   const diagnosticFacts = profile && profileDiagnosticFacts(profile);

@@ -1,7 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, type ReactNode } from "react";
 import { ArrowUpRight } from "@untitledui/icons";
+import { CircleAlert } from "kubai-icons/duotone";
 
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { TaskBoardWireframe } from "#src/components/ui/empty-wireframes";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { ActorAvatarStack } from "#src/features/avatars/actor-avatar-stack";
@@ -10,6 +14,7 @@ import { loadFinishedTasks } from "#src/features/tasks/tasks.functions";
 import { finishedSummaryQuery } from "#src/features/tasks/use-finished-tasks";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
+import { ProjectTaskTreeSkeleton } from "./project-task-tree";
 import {
   projectTaskForest,
   ProjectTaskRow,
@@ -19,15 +24,10 @@ import {
   type ProjectTaskNode,
 } from "./project-tasks";
 
-/** How many of the Project's latest finished Tasks its overview lists. */
 const RECENTLY_DONE = 5;
 
 const ACTIVE = new Set<string>(["in_progress"]);
 
-/**
- * What the Project's overview and its phone Tasks list read (task #504): the unfinished Tasks as a
- * forest, the latest few Done, how many are Done in all, and who owns the unfinished ones.
- */
 function useProjectOverview(projectId: string) {
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const open = useProjectTasks(projectId);
@@ -58,12 +58,13 @@ function useProjectOverview(projectId: string) {
     people,
     pending: open.isPending,
     failed: open.isError,
+    retrying: open.isRefetching,
+    retry: () => void open.refetch(),
   };
 }
 
 type Overview = ReturnType<typeof useProjectOverview>;
 
-/** The Project page's Overview tab: what it is for, how far it got, who is on it, its Tasks. */
 export function ProjectOverview({
   project,
 }: {
@@ -113,13 +114,33 @@ export function ProjectOverview({
 
 function ProjectTaskGroupsOf({ data }: { data: Overview }) {
   if (data.failed) {
-    return <p className="mt-8 text-sm text-error-primary">{m.project_tasks_failed()}</p>;
+    return (
+      <EmptyState
+        size="card"
+        role="alert"
+        className="mt-8"
+        picture={<EmptyIcon icon={CircleAlert} size="card" />}
+        title={m.empty_tasks_load_failed_title()}
+        primaryAction={<RetryButton size="card" isRetrying={data.retrying} onPress={data.retry} />}
+      />
+    );
   }
   if (data.pending) {
-    return <p className="mt-8 text-sm text-tertiary">{m.project_tasks_loading()}</p>;
+    return (
+      <div className="mt-8">
+        <ProjectTaskTreeSkeleton />
+      </div>
+    );
   }
   if (data.active.length + data.next.length + data.recentDone.length === 0) {
-    return <p className="mt-8 text-sm text-tertiary">{m.project_tasks_empty()}</p>;
+    return (
+      <EmptyState
+        className="mt-4"
+        picture={<TaskBoardWireframe accent={false} />}
+        title={m.project_tasks_empty()}
+        description={m.empty_tasks_first_use_description()}
+      />
+    );
   }
   const tree = (nodes: ProjectTaskNode[]) => (
     <ul className="divide-y divide-secondary">

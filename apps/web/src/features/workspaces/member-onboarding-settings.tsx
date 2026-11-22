@@ -2,10 +2,13 @@ import { useEffect, useId, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
+import { CircleAlert } from "kubai-icons/duotone";
 import { Button } from "#src/components/base/buttons/button";
 import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { Select } from "#src/components/base/select/select";
 import { SettingsCardFooter, SettingsField } from "#src/components/settings-layout";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { saveErrorFrom, type SaveError } from "#src/components/save-error";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
@@ -15,10 +18,8 @@ import {
   type WorkspaceOnboardingSettings,
 } from "./onboarding.functions";
 
-/** The Workspace's cache is cleared on a Workspace switch, so the key needs no Workspace id. */
 const ONBOARDING_QUERY_KEY = ["settings-member-onboarding"];
 
-/** The picker's one key for the three modes: the two fixed choices, or `agent:<id>`. */
 type WelcomeKey = "assistant" | "off" | `agent:${string}`;
 
 function welcomeKey(settings: Pick<WorkspaceOnboardingSettings, "mode" | "agentId">): WelcomeKey {
@@ -29,23 +30,28 @@ function welcomeKey(settings: Pick<WorkspaceOnboardingSettings, "mode" | "agentI
       : "assistant";
 }
 
-/**
- * Settings → Members → New member onboarding (task #344), for a Workspace owner or admin: who
- * welcomes someone who joins (each member's own assistant, one chosen Agent, or nobody), and
- * whether Agents created from now on say hello in #general. One Save for both, as System channels
- * beside it: these change what every newcomer and every new Agent does.
- */
 export function MemberOnboardingSettings() {
   const load = useServerFn(loadWorkspaceOnboarding);
   const query = useQuery({ queryKey: ONBOARDING_QUERY_KEY, queryFn: () => load() });
   if (query.isPending) return null;
-  if (query.isError)
+  if (query.isError) {
     return (
-      <p role="alert" className="py-6 text-sm text-error-primary">
-        {m.member_onboarding_load_error()}
-      </p>
+      <EmptyState
+        size="card"
+        role="alert"
+        className="my-6"
+        picture={<EmptyIcon icon={CircleAlert} size="card" />}
+        title={m.member_onboarding_load_error()}
+        primaryAction={
+          <RetryButton
+            size="card"
+            isRetrying={query.isRefetching}
+            onPress={() => void query.refetch()}
+          />
+        }
+      />
     );
-  // Anyone but an owner or admin reads `null`, and sees nothing.
+  }
   return query.data ? <OnboardingForm settings={query.data} /> : null;
 }
 

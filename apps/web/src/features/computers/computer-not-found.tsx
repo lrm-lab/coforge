@@ -1,22 +1,39 @@
-import { Monitor03 as MonitorX } from "@untitledui/icons";
+import { useNavigate } from "@tanstack/react-router";
 
+import { Button } from "#src/components/base/buttons/button";
 import { PageHeader } from "#src/components/layout/page-header";
+import { EmptyState } from "#src/components/ui/empty";
+import { LockedWireframe } from "#src/components/ui/empty-wireframes";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
 import { BackToComputers } from "./back-to-computers";
 
-/**
- * The detail panel when the URL names a Computer this Workspace does not have.
- * It keeps the panel's own header band, so the way back to the list survives
- * the miss on small screens.
- */
 export function ComputerNotFound() {
+  const navigate = useNavigate();
+  const workspaceSlug = useWorkspaceSlug();
   return (
     <>
-      <PageHeader leading={<BackToComputers />} heading={m.computer_not_found()} />
-      <div className="grid flex-1 place-content-center px-6 text-center">
-        <MonitorX aria-hidden="true" className="mx-auto size-6 text-tertiary" />
-        <p className="mt-3 max-w-sm text-sm text-tertiary">{m.computer_not_found_description()}</p>
-      </div>
+      <PageHeader leading={<BackToComputers />} heading={m.empty_computer_not_found_title()} />
+      <EmptyState
+        size="page"
+        picture={<LockedWireframe />}
+        title={m.empty_computer_not_found_title()}
+        description={m.computer_not_found_description()}
+        primaryAction={
+          <Button
+            size="sm"
+            color="tertiary"
+            onPress={() =>
+              void navigate({
+                to: "/w/$workspaceSlug/computers",
+                params: { workspaceSlug },
+              })
+            }
+          >
+            {m.empty_computer_not_found_back()}
+          </Button>
+        }
+      />
     </>
   );
 }

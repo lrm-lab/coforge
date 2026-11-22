@@ -1,19 +1,18 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
+import { Ban, CircleCheck } from "kubai-icons/duotone";
 import { Button } from "#src/components/base/buttons/button";
 import { Select } from "#src/components/base/select/select";
+import { EmptyState } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
 import {
   approveComputerAttach,
   refuseComputerAttach,
 } from "#src/features/computers/attach-approve.functions";
+import { ErrorPageFrame } from "#src/features/errors/error-page-frame";
+import { m } from "#src/paraglide/messages";
 
-/**
- * The approval page a `coforge-computer attach` link opens (task #417): the machine's reported
- * name, host and OS, the userCode the person compares with the CLI's, the workspaces they may
- * attach it to, and Approve / Refuse. Refusing settles the session for good; the machine's next
- * poll hears `access_denied`.
- */
 export function AttachApprovePage({
   sessionId,
   machineName,
@@ -52,21 +51,27 @@ export function AttachApprovePage({
 
   if (state === "done")
     return (
-      <main className="mx-auto max-w-md p-8 text-center">
-        <h1 className="text-xl font-semibold">Computer attached</h1>
-        <p className="mt-2 text-sm text-secondary">
-          {machineName} is attaching to the workspace you chose. You can close this page.
-        </p>
-      </main>
+      <ErrorPageFrame>
+        <EmptyState
+          size="page"
+          headingLevel={1}
+          picture={<EmptyIcon icon={CircleCheck} muted />}
+          title={m.empty_attach_done_title()}
+          description={m.empty_attach_done_description({ machineName })}
+        />
+      </ErrorPageFrame>
     );
   if (state === "refused")
     return (
-      <main className="mx-auto max-w-md p-8 text-center">
-        <h1 className="text-xl font-semibold">Attach refused</h1>
-        <p className="mt-2 text-sm text-secondary">
-          The computer will not attach. You can close this page.
-        </p>
-      </main>
+      <ErrorPageFrame>
+        <EmptyState
+          size="page"
+          headingLevel={1}
+          picture={<EmptyIcon icon={Ban} muted />}
+          title={m.empty_attach_refused_title()}
+          description={m.empty_attach_refused_description()}
+        />
+      </ErrorPageFrame>
     );
 
   return (

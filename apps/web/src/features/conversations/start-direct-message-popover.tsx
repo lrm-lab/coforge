@@ -2,11 +2,15 @@ import { useRef, useState, type RefObject } from "react";
 import { Spinner } from "#src/components/ui/spinner";
 import { Heading, Popover as AriaPopover } from "react-aria-components";
 
+import { CircleAlert } from "kubai-icons/duotone";
 import { Dialog } from "#src/components/application/modals/modal";
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
 import { useOpenDirectConversation } from "./open-direct-conversation";
 import { useWorkspaceDirectory } from "./workspace-directory-query";
@@ -131,16 +135,31 @@ function DirectMessagePicker({ onDone }: { onDone: () => void }) {
         </p>
       )}
       {directory.isPending && (
-        <p className="px-4 pt-4 text-sm text-tertiary">{m.channel_members_loading()}</p>
+        <div
+          role="status"
+          aria-label={m.channel_members_loading()}
+          className="grid gap-2 px-4 pt-4"
+        >
+          <Skeleton className="h-9 w-full rounded-lg" />
+          <Skeleton className="h-9 w-full rounded-lg" />
+          <Skeleton className="h-9 w-full rounded-lg" />
+        </div>
       )}
       {directory.isError && (
-        <div className="flex flex-col items-start gap-3 px-4 pt-4">
-          <p role="alert" className="text-sm text-error-primary">
-            {m.channel_members_load_error()}
-          </p>
-          <Button color="secondary" size="sm" onPress={() => void directory.refetch()}>
-            {m.controls_retry()}
-          </Button>
+        <div className="px-4 pt-4">
+          <EmptyState
+            size="card"
+            role="alert"
+            picture={<EmptyIcon icon={CircleAlert} size="card" />}
+            title={m.empty_members_load_failed_title()}
+            primaryAction={
+              <RetryButton
+                size="card"
+                isRetrying={directory.isRefetching}
+                onPress={() => void directory.refetch()}
+              />
+            }
+          />
         </div>
       )}
       {directory.isSuccess && (
@@ -163,7 +182,15 @@ function DirectMessagePicker({ onDone }: { onDone: () => void }) {
               className="min-h-0 flex-1 overflow-y-auto px-2 py-2"
             >
               {group.members.length === 0 ? (
-                <p className="px-2 py-2 text-sm text-tertiary">{m.channel_members_none()}</p>
+                <EmptyState
+                  size="menu"
+                  live={search.trim() ? "polite" : undefined}
+                  title={
+                    search.trim()
+                      ? m.empty_members_no_match_query({ query: search.trim() })
+                      : m.channel_members_none()
+                  }
+                />
               ) : (
                 <ul className="flex flex-col">
                   {group.members.map((member) => (

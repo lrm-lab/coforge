@@ -5,7 +5,8 @@ import { useServerFn } from "@tanstack/react-start";
 
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
 import { Button } from "#src/components/base/buttons/button";
-import { Empty, EmptyHeader, EmptyTitle } from "#src/components/ui/empty";
+import { EmptyState } from "#src/components/ui/empty";
+import { RecordsWireframe } from "#src/components/ui/empty-wireframes";
 import { edgeFadeStyle, TAB_BAR_END_FADE_WIDTH, useScrollEdges } from "#src/hooks/use-scroll-edges";
 import { m } from "#src/paraglide/messages";
 import { CreateWeeklyTemplateDialog } from "./create-weekly-template-dialog";
@@ -269,11 +270,23 @@ export function WeeklyReportSettings({
         >
           <div ref={templatesRef} tabIndex={-1} className="outline-hidden">
             {templates.length === 0 ? (
-              <Empty className="py-10">
-                <EmptyHeader>
-                  <EmptyTitle>{m.records_templates_empty()}</EmptyTitle>
-                </EmptyHeader>
-              </Empty>
+              <EmptyState
+                className="py-10"
+                picture={<RecordsWireframe accent />}
+                title={m.empty_records_templates_title()}
+                description={m.empty_records_templates_description()}
+                primaryAction={
+                  <Button
+                    size="sm"
+                    color="primary"
+                    className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
+                    iconLeading={Plus}
+                    onPress={openCreate}
+                  >
+                    {m.records_create_template()}
+                  </Button>
+                }
+              />
             ) : (
               <div className="overflow-x-auto rounded-xl border border-secondary">
                 <table className="w-full min-w-[52rem] border-collapse text-left text-sm text-primary">

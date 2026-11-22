@@ -5,6 +5,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Check, SwitchHorizontal01 } from "@untitledui/icons";
 import { Radio, RadioGroup } from "react-aria-components";
 
+import { CircleAlert, Laptop } from "kubai-icons/duotone";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { Skeleton } from "#src/components/ui/skeleton";
 import { Button } from "#src/components/base/buttons/button";
 import { Label } from "#src/components/base/input/label";
 import { Select } from "#src/components/base/select/select";
@@ -74,19 +78,57 @@ export function AgentMigrationForm({
   onSelect,
   disabled,
   direct,
+  loading = false,
+  failed = false,
+  retrying = false,
+  onRetry,
+  connectHref,
 }: {
   computers: readonly ComputerOption[];
   selected: string | null;
   onSelect: (computerId: string) => void;
   disabled?: boolean;
   direct?: boolean;
+  loading?: boolean;
+  failed?: boolean;
+  retrying?: boolean;
+  onRetry?: () => void;
+  connectHref?: string;
 }) {
   const controlSize = useDialogControlSize();
   const isSheet = useConfirmationSheet();
   return (
     <div className="grid gap-4 px-6 pt-4 max-sm:px-4">
-      {computers.length === 0 ? (
-        <p className="text-sm text-tertiary">{m.agent_migration_dialog_no_targets()}</p>
+      {loading ? (
+        <div role="status" aria-label={m.empty_agent_migration_loading()} className="grid gap-2">
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      ) : failed ? (
+        <EmptyState
+          size="card"
+          role="alert"
+          picture={<EmptyIcon icon={CircleAlert} size="card" />}
+          title={m.empty_agent_migration_load_failed()}
+          primaryAction={
+            onRetry ? (
+              <RetryButton size="card" isRetrying={retrying} onPress={onRetry} />
+            ) : undefined
+          }
+        />
+      ) : computers.length === 0 ? (
+        <EmptyState
+          size="card"
+          picture={<EmptyIcon icon={Laptop} size="card" />}
+          title={m.empty_agent_migration_none()}
+          primaryAction={
+            connectHref ? (
+              <Button size="sm" color="tertiary" href={connectHref}>
+                {m.empty_agent_migration_connect()}
+              </Button>
+            ) : undefined
+          }
+        />
       ) : isSheet ? (
         <RadioGroup
           isRequired
@@ -437,6 +479,13 @@ export function AgentMigrationSection({
                   onSelect={setSelected}
                   disabled={submitting}
                   direct={direct}
+                  loading={computers.isPending}
+                  failed={computers.isError && computers.data === undefined}
+                  retrying={computers.isRefetching}
+                  onRetry={() => {
+                    void computers.refetch();
+                  }}
+                  connectHref={localizeHref(workspacePath(workspaceSlug, "/computers?add=1"))}
                 />
                 {refusal && (
                   <AgentMigrationRefusalNotice

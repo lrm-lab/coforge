@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
+import { CircleAlert } from "kubai-icons/duotone";
 
-import { Button } from "#src/components/base/buttons/button";
-import { Alert } from "#src/components/ui/alert";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { Skeleton } from "#src/components/ui/skeleton";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { AppCategory } from "./app-category";
@@ -18,12 +20,6 @@ import type { AppsLayout } from "./apps-layout";
 import { MarketplaceAppDetail } from "./marketplace-app-detail";
 import { MarketplaceCard } from "./marketplace-listing";
 
-/**
- * Settings → Applications → Marketplace: the apps other Workspaces published, searched and
- * filtered by the page's controls. It reads its own list when it opens. An install (owners and
- * admins) approves the declaration shown; a declaration that changed meanwhile reloads the list so
- * the dialog shows the current one, and `onInstalled` makes the page read its Installed list again.
- */
 export function MarketplacePanel({
   query,
   category,
@@ -42,15 +38,19 @@ export function MarketplacePanel({
   const load = useServerFn(loadMarketplaceApps);
   const install = useServerFn(installMarketplaceApp);
   const [apps, setApps] = useState<MarketplaceApp[]>();
+  const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
   const [detail, setDetail] = useState<{ key?: string; open: boolean }>({ open: false });
 
   const refresh = useCallback(async () => {
+    setLoading(true);
     try {
       setApps(await load());
       setLoadFailed(false);
     } catch {
       setLoadFailed(true);
+    } finally {
+      setLoading(false);
     }
   }, [load]);
 
@@ -83,18 +83,24 @@ export function MarketplacePanel({
         {m.apps_marketplace_review_note()}
       </p>
       {apps === undefined && !loadFailed && (
-        <p role="status" className="text-sm text-tertiary">
-          {m.apps_marketplace_loading()}
-        </p>
+        <div
+          role="status"
+          aria-busy="true"
+          aria-label={m.apps_marketplace_loading()}
+          className={cn("gap-3", layout === "grid" ? "grid md:grid-cols-2" : "grid")}
+        >
+          <Skeleton className="h-24 w-full rounded-xl" />
+          <Skeleton className="h-24 w-full rounded-xl" />
+        </div>
       )}
       {loadFailed && (
-        <Alert
-          color="warning"
+        <EmptyState
+          size="card"
+          role="alert"
+          picture={<EmptyIcon icon={CircleAlert} size="card" />}
           title={m.apps_marketplace_load_error()}
-          actions={
-            <Button size="sm" color="secondary" onPress={() => void refresh()}>
-              {m.controls_retry()}
-            </Button>
+          primaryAction={
+            <RetryButton size="card" isRetrying={loading} onPress={() => void refresh()} />
           }
         />
       )}
@@ -103,6 +109,7 @@ export function MarketplacePanel({
           <AppsEmpty
             view="marketplace"
             filtered={apps.length > 0}
+            query={query}
             canManage={canManage}
             onClearFilters={onClearFilters}
           />

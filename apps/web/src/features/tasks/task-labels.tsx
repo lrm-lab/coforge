@@ -16,6 +16,7 @@ import { UnsetValue } from "./task-property";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
+import { EmptyState } from "#src/components/ui/empty";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { m } from "#src/paraglide/messages";
 import { LabelColorSwatches } from "./label-color-swatches";
@@ -194,6 +195,17 @@ export function TaskLabelsField({
               selectionMode="multiple"
               selectedKeys={[...on].filter((id) => offeredIds.has(id))}
               disabledKeys={disabledKeys}
+              renderEmptyState={() => (
+                <EmptyState
+                  size="menu"
+                  live="polite"
+                  title={
+                    wanted
+                      ? m.empty_labels_picker_no_match_query({ query: wanted })
+                      : m.empty_labels_picker_none()
+                  }
+                />
+              )}
               onAction={(key) => {
                 const label = workspaceLabels.find((each) => each.id === key);
                 if (!label) return;

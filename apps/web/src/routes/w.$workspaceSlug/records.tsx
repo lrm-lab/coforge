@@ -8,6 +8,7 @@ import {
 
 import { PageLoadError } from "#src/features/errors/page-load-error";
 import { RecordsLayout, type RecordsTab } from "#src/features/records/records-layout";
+import { RecordsPending } from "#src/features/records/records-pending";
 import { loadRecordsCatalog } from "#src/features/records/records.functions";
 import { latestWeeklyLanding } from "#src/features/records/records-sidebar";
 import { catalogShouldReload } from "#src/features/records/use-record-refresh";
@@ -18,6 +19,7 @@ export const Route = createFileRoute("/w/$workspaceSlug/records")({
   }),
   loader: () => loadRecordsCatalog(),
   shouldReload: catalogShouldReload,
+  pendingComponent: RecordsPending,
   errorComponent: PageLoadError,
   component: RecordsPage,
 });

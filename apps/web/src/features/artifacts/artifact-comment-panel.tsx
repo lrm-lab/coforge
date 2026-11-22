@@ -2,10 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button as AriaButton } from "react-aria-components";
 import { ChevronDown, ChevronRight, SearchLg, SwitchVertical01 } from "@untitledui/icons";
 
+import { CircleAlert, MessageSquare, Search } from "kubai-icons/duotone";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Input } from "#src/components/base/input/input";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { plainMentionsByHandle } from "#src/features/conversations/message-markdown";
 import { SECTION_LABEL_CLASS } from "#src/features/conversations/review-chrome";
@@ -185,14 +188,20 @@ export function ArtifactCommentPanel({
             <Skeleton className="h-16 w-full" />
           </div>
         ) : query.isError && comments.length === 0 ? (
-          <div className="flex flex-col items-start gap-2">
-            <p role="alert" className="text-sm text-error-primary">
-              {m.av_cm_load_failed()}
-            </p>
-            <Button size="sm" color="secondary" onClick={() => void query.refetch()}>
-              {m.av_cm_retry()}
-            </Button>
-          </div>
+          <EmptyState
+            size="card"
+            role="alert"
+            picture={<EmptyIcon icon={CircleAlert} size="card" />}
+            title={m.av_cm_load_failed()}
+            primaryAction={
+              <RetryButton
+                size="card"
+                isRetrying={query.isRefetching}
+                label={m.av_cm_retry()}
+                onPress={() => void query.refetch()}
+              />
+            }
+          />
         ) : (
           <div className="flex flex-col gap-4">
             {!searching && drafts.drafts.length > 0 && (
@@ -224,16 +233,25 @@ export function ArtifactCommentPanel({
               </div>
             )}
             {filteredEmpty && !query.hasNextPage && (
-              <div className="flex flex-col items-start gap-2">
-                <p className="text-sm text-tertiary">
-                  {searching && hasAnyPublished ? m.av_cm_search_empty() : m.av_cm_empty()}
-                </p>
-                {searching && hasAnyPublished && (
-                  <Button size="xs" color="secondary" onClick={() => setSearchQuery("")}>
-                    {m.ag_clear_search()}
-                  </Button>
-                )}
-              </div>
+              <EmptyState
+                size="card"
+                live={searching && hasAnyPublished ? "polite" : undefined}
+                picture={
+                  <EmptyIcon
+                    icon={searching && hasAnyPublished ? Search : MessageSquare}
+                    size="card"
+                    muted={!(searching && hasAnyPublished)}
+                  />
+                }
+                title={searching && hasAnyPublished ? m.av_cm_search_empty() : m.av_cm_empty()}
+                primaryAction={
+                  searching && hasAnyPublished ? (
+                    <Button size="xs" color="tertiary" onPress={() => setSearchQuery("")}>
+                      {m.ag_clear_search()}
+                    </Button>
+                  ) : undefined
+                }
+              />
             )}
             {sortOrder === "updated"
               ? updatedThreads.length > 0 && (

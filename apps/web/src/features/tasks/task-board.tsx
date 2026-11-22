@@ -11,6 +11,8 @@ import { Button as AriaButton } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { EmptyState } from "#src/components/ui/empty";
+import { NoResultsWireframe, TaskBoardWireframe } from "#src/components/ui/empty-wireframes";
 import type { Mentionable } from "#src/features/conversations/mention-text";
 import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { useTaskHiddenColumns } from "#src/features/settings/task-hidden-columns";
@@ -176,23 +178,65 @@ export function TaskBoard<T extends BoardTask>({
           {conversation.error}
         </p>
       )}
-      <div className="min-h-0 flex-1 overflow-auto p-4 md:p-6">
+      <div className="flex min-h-0 flex-1 flex-col overflow-auto p-4 md:p-6">
         {tree?.node}
         {!showTree && loading && (
-          <p role="status" className="text-sm text-tertiary">
-            {m.tasks_loading()}
-          </p>
+          <div role="status" aria-label={m.tasks_loading()} className="grid gap-3">
+            <TaskCardSkeleton list={layout === "list"} />
+            <TaskCardSkeleton list={layout === "list"} />
+            <TaskCardSkeleton list={layout === "list"} />
+          </div>
         )}
         {!showTree && empty && (
-          <div className="py-16 text-center text-sm">
-            <p className="text-tertiary">
-              {filtered
+          <EmptyState
+            size="page"
+            live={filtered ? "polite" : undefined}
+            picture={
+              filtered ? (
+                <NoResultsWireframe />
+              ) : (
+                <TaskBoardWireframe
+                  accent={Boolean(onCreateTask || (newTaskChoice && onCommand && canFile))}
+                />
+              )
+            }
+            title={
+              filtered
                 ? m.tasks_overview_filter_empty()
                 : conversation
                   ? m.tasks_empty()
-                  : m.tasks_overview_empty()}
-            </p>
-          </div>
+                  : m.tasks_overview_empty()
+            }
+            description={
+              filtered
+                ? m.empty_tasks_no_match_description()
+                : conversation
+                  ? m.empty_tasks_conversation_description()
+                  : m.empty_tasks_first_use_description()
+            }
+            primaryAction={
+              filtered ? (
+                <Button
+                  size="sm"
+                  color="secondary"
+                  onPress={() => {
+                    view.changeStatuses([]);
+                    view.changeFilter({ owners: [], projects: [], labels: [] });
+                  }}
+                >
+                  {m.empty_clear_filters()}
+                </Button>
+              ) : onCreateTask ? (
+                <Button size="sm" iconLeading={Plus} onPress={() => setCreateOpen(true)}>
+                  {m.tasks_create()}
+                </Button>
+              ) : newTaskChoice && onCommand && canFile ? (
+                <Button size="sm" iconLeading={Plus} onPress={() => setCreating("todo")}>
+                  {m.task_board_create_new_task()}
+                </Button>
+              ) : undefined
+            }
+          />
         )}
         {!showTree && (
           <TaskWorkflow

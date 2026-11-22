@@ -1,11 +1,15 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ChevronDown, ChevronRight, Plus, SearchLg } from "@untitledui/icons";
+import { CircleAlert, Tag } from "kubai-icons/duotone";
 import { useCallback, useState } from "react";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { SettingsPage } from "#src/components/settings-layout";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { Skeleton } from "#src/components/ui/skeleton";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { workspaceConversationChannel } from "#src/features/conversations/conversation-realtime";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
@@ -172,20 +176,58 @@ export function LabelSettings() {
         )}
 
         {query.isPending ? (
-          <p className="text-sm text-tertiary">{m.labels_settings_loading()}</p>
-        ) : query.isError ? (
-          <div className="flex flex-col items-start gap-3">
-            <p role="alert" className="text-sm text-error-primary">
-              {m.labels_settings_load_failed()}
-            </p>
-            <Button color="secondary" size="sm" onPress={() => void query.refetch()}>
-              {m.controls_retry()}
-            </Button>
+          <div role="status" aria-label={m.labels_settings_loading()} className="grid gap-2">
+            <Skeleton className="h-12 w-full rounded-xl" />
+            <Skeleton className="h-12 w-full rounded-xl" />
+            <Skeleton className="h-12 w-full rounded-xl" />
           </div>
+        ) : query.isError ? (
+          <EmptyState
+            size="page"
+            role="alert"
+            picture={<EmptyIcon icon={CircleAlert} />}
+            title={m.labels_settings_load_failed()}
+            description={m.empty_load_failed_safe()}
+            primaryAction={
+              <RetryButton
+                size="page"
+                isRetrying={query.isRefetching}
+                onPress={() => void query.refetch()}
+              />
+            }
+          />
         ) : live.length === 0 && archived.length === 0 && !adding ? (
-          <p className="text-sm text-tertiary">
-            {search.trim() ? m.labels_settings_no_match() : m.labels_settings_empty()}
-          </p>
+          search.trim() ? (
+            <EmptyState
+              size="row"
+              live="polite"
+              title={m.empty_labels_no_match_query({ query: search.trim() })}
+              primaryAction={
+                <Button size="xs" color="link-gray" onPress={() => setSearch("")}>
+                  {m.empty_clear_search()}
+                </Button>
+              }
+            />
+          ) : (
+            <EmptyState
+              size="page"
+              picture={<EmptyIcon icon={Tag} />}
+              title={m.empty_labels_settings_title()}
+              description={m.empty_labels_settings_description()}
+              primaryAction={
+                <Button
+                  size="sm"
+                  iconLeading={Plus}
+                  onPress={() => {
+                    setAdding(true);
+                    setCreateError(null);
+                  }}
+                >
+                  {m.empty_labels_new()}
+                </Button>
+              }
+            />
+          )
         ) : (
           <div className="overflow-hidden rounded-xl border border-secondary">
             {addRow && <ul className="border-b border-secondary last:border-b-0">{addRow}</ul>}

@@ -1,34 +1,33 @@
-import { ErrorPageFrame } from "./error-page-frame";
 import { useNavigate, useRouter } from "@tanstack/react-router";
-import { SearchLg } from "@untitledui/icons";
 
-import { EmptyState } from "#src/components/application/empty-state/empty-state";
 import { Button } from "#src/components/base/buttons/button";
+import { EmptyState } from "#src/components/ui/empty";
+import { LockedWireframe } from "#src/components/ui/empty-wireframes";
 import { m } from "#src/paraglide/messages";
+import { ErrorPageFrame } from "./error-page-frame";
 
-/** The router's fallback for a URL no route matches. */
 export function NotFoundPage() {
   const router = useRouter();
   const navigate = useNavigate();
   return (
     <ErrorPageFrame>
-      <EmptyState size="lg">
-        <EmptyState.Header>
-          <EmptyState.FeaturedIcon color="gray" icon={SearchLg} />
-        </EmptyState.Header>
-        <EmptyState.Content>
-          <EmptyState.Title>{m.not_found_title()}</EmptyState.Title>
-        </EmptyState.Content>
-        <EmptyState.Footer>
-          {/* A link opened in a new tab has no history to go back to. */}
-          {router.history.canGoBack() && (
-            <Button color="secondary" onPress={() => router.history.back()}>
+      <EmptyState
+        size="page"
+        headingLevel={1}
+        picture={<LockedWireframe />}
+        title={m.not_found_title()}
+        description={m.empty_not_found_description()}
+        primaryAction={
+          <Button onPress={() => void navigate({ to: "/" })}>{m.not_found_home()}</Button>
+        }
+        secondaryAction={
+          router.history.canGoBack() ? (
+            <Button color="tertiary" onPress={() => router.history.back()}>
               {m.controls_back()}
             </Button>
-          )}
-          <Button onPress={() => void navigate({ to: "/" })}>{m.not_found_home()}</Button>
-        </EmptyState.Footer>
-      </EmptyState>
+          ) : undefined
+        }
+      />
     </ErrorPageFrame>
   );
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 import { getRouteApi } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { Grid01, Link03, List, Plus, SearchLg } from "@untitledui/icons";
+import { CircleAlert } from "kubai-icons/duotone";
 
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
 import { Badge } from "#src/components/base/badges/badges";
@@ -11,7 +12,9 @@ import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
 import { SelectItem } from "#src/components/base/select/select-item";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
-import { Alert } from "#src/components/ui/alert";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { Skeleton } from "#src/components/ui/skeleton";
 import { canManageApps } from "#src/features/workspaces/workspace-roles";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { cn } from "#src/lib/utils";
@@ -371,13 +374,13 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
 
           {loadFailed && !editorOpen && (
             <div className="mt-4">
-              <Alert
-                color="warning"
+              <EmptyState
+                size="card"
+                role="alert"
+                picture={<EmptyIcon icon={CircleAlert} size="card" />}
                 title={m.apps_load_error()}
-                actions={
-                  <Button size="sm" color="secondary" onPress={() => void refresh()}>
-                    {m.controls_retry()}
-                  </Button>
+                primaryAction={
+                  <RetryButton size="card" isRetrying={loading} onPress={() => void refresh()} />
                 }
               />
             </div>
@@ -408,10 +411,21 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
                     {canManage ? m.apps_mine_intro_manage() : m.apps_mine_intro_view()}
                   </p>
                 )}
-                {apps && shown.length === 0 ? (
+                {!apps && loading && !loadFailed ? (
+                  <div
+                    role="status"
+                    aria-busy="true"
+                    aria-label={m.apps_loading()}
+                    className={cn("gap-3", layout === "grid" ? "grid md:grid-cols-2" : "grid")}
+                  >
+                    <Skeleton className="h-24 w-full rounded-xl" />
+                    <Skeleton className="h-24 w-full rounded-xl" />
+                  </div>
+                ) : apps && shown.length === 0 ? (
                   <AppsEmpty
                     view={id}
                     filtered={list.length > 0}
+                    query={query}
                     canManage={canManage}
                     onRegister={canManage ? () => openEditor({ mode: "register" }) : undefined}
                     onClearFilters={clearFilters}

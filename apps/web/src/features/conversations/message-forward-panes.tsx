@@ -3,6 +3,8 @@ import { Button as AriaButton } from "react-aria-components";
 import { ChevronDown, SearchLg } from "@untitledui/icons";
 
 import { Input } from "#src/components/base/input/input";
+import { EmptyState } from "#src/components/ui/empty";
+import { Skeleton } from "#src/components/ui/skeleton";
 import { Face } from "#src/features/pickers/entity-picker";
 import { PickerListRow } from "#src/features/pickers/picker-list";
 import { cn } from "#src/lib/utils";
@@ -151,11 +153,28 @@ export function ForwardTargetPane({
       )}
       <div className="min-h-0 flex-1 overflow-y-auto px-2 sm:px-4">
         {error ? (
-          <p role="alert" className="py-6 text-center text-sm text-error-primary">
-            {m.message_forward_search_failed()}
-          </p>
+          <EmptyState size="row" role="alert" title={m.message_forward_search_failed()} />
+        ) : targets === null && rows.length === 0 ? (
+          <div
+            role="status"
+            aria-label={m.message_forward_search()}
+            className="grid gap-2 px-2 py-2"
+          >
+            <Skeleton className="h-10 w-full rounded-lg" />
+            <Skeleton className="h-10 w-full rounded-lg" />
+            <Skeleton className="h-10 w-full rounded-lg" />
+          </div>
         ) : rows.length === 0 && targets !== null ? (
-          <p className="py-6 text-center text-sm text-tertiary">{m.message_forward_no_matches()}</p>
+          <EmptyState
+            size="menu"
+            live={query.trim() ? "polite" : undefined}
+            className="py-6 text-center"
+            title={
+              query.trim()
+                ? m.empty_forward_no_match_query({ query: query.trim() })
+                : m.empty_forward_none()
+            }
+          />
         ) : (
           <ul className="flex flex-col py-1">
             {rows.map((target) => {

@@ -1,5 +1,6 @@
 import type { LocalMemoryEntry } from "@lrm/coforge-sdk/agent";
 import { Button } from "#src/components/base/buttons/button";
+import { EmptyState } from "#src/components/ui/empty";
 import * as m from "#src/paraglide/messages";
 import { PersonalMemoryVersionTime } from "./personal-memory-record";
 
@@ -25,6 +26,9 @@ export function PersonalMemoryHistoryPanel({
       {history && (
         <section className="flex flex-col gap-3 border-t border-secondary pt-4">
           <h3 className="text-sm font-semibold text-primary">{m.memory_history()}</h3>
+          {history.length === 0 && (
+            <EmptyState size="row" className="px-0" title={m.empty_memory_history_empty()} />
+          )}
           {history.map((version) => (
             <div
               key={version.revision}

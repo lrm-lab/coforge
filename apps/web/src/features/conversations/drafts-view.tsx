@@ -1,17 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Link, Navigate } from "@tanstack/react-router";
-import { Edit01, Edit03 } from "@untitledui/icons";
+import { Edit01 } from "@untitledui/icons";
+import { Pencil } from "kubai-icons/duotone";
 
 import { PageHeader } from "#src/components/layout/page-header";
 import { ConversationListButton } from "./conversation-list-button";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "#src/components/ui/empty";
+import { EmptyState } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { overviewTaskQuery } from "#src/features/tasks/use-finished-tasks";
@@ -23,13 +19,6 @@ import { draftRoute, type DraftRow } from "./drafts-model";
 import { useDraftRows } from "./use-drafts";
 import { useDraftsOn } from "./use-drafts-on";
 
-/**
- * The Drafts view: every message typed and not sent in a conversation of this Workspace, newest
- * edit first. A row goes back to the place the text was written, whose composer still holds it
- * (see `drafts.md`). Nothing here deletes a draft: sending or emptying the composer does. It is
- * the Drafts experiment's page: with the experiment off, Chat opens instead, and nothing shows
- * until that is known.
- */
 export function DraftsView() {
   const on = useDraftsOn();
   const workspaceSlug = useWorkspaceSlug();
@@ -54,17 +43,12 @@ function DraftsList() {
         }
       />
       {rows.length === 0 ? (
-        <div className="flex min-h-0 flex-1 items-center justify-center px-6">
-          <Empty>
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <Edit03 aria-hidden="true" />
-              </EmptyMedia>
-              <EmptyTitle>{m.conversation_drafts_empty_title()}</EmptyTitle>
-              <EmptyDescription>{m.conversation_drafts_empty_description()}</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        </div>
+        <EmptyState
+          size="page"
+          picture={<EmptyIcon icon={Pencil} muted />}
+          title={m.conversation_drafts_empty_title()}
+          description={m.conversation_drafts_empty_description()}
+        />
       ) : (
         <ol className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-4">
           {rows.map((row) => (

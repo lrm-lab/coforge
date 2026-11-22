@@ -1,17 +1,14 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { SearchLg, XClose } from "@untitledui/icons";
+import { Search } from "kubai-icons/duotone";
 import { Button as AriaButton } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "#src/components/ui/empty";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { Skeleton } from "#src/components/ui/skeleton";
 import { useAgentDisplays } from "#src/features/agents/workspace-agents-realtime";
 import { m } from "#src/paraglide/messages";
 import type { SearchEntity } from "./search-entities";
@@ -41,25 +38,25 @@ export function SearchHome({
   const frequent = useFrequentEntities(workspaceId, usage);
   const displays = useAgentDisplays();
 
-  if (frequent.pending) return null;
+  if (frequent.pending) {
+    return (
+      <div role="status" aria-label={m.search_searching()} className="grid gap-2 p-3">
+        <Skeleton className="h-9 rounded-lg" />
+        <Skeleton className="h-9 rounded-lg" />
+        <Skeleton className="h-9 rounded-lg" />
+      </div>
+    );
+  }
 
   if (history.length === 0 && frequent.entities.length === 0 && !frequent.failed) {
     return (
-      <div className="py-10">
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <SearchLg aria-hidden="true" />
-            </EmptyMedia>
-            <EmptyTitle>
-              {channel ? m.search_empty_title_in({ channel }) : m.search_empty_title()}
-            </EmptyTitle>
-            <EmptyDescription>
-              {channel ? m.search_empty_description_in() : m.search_empty_description()}
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      </div>
+      <EmptyState
+        size="page"
+        className="py-10"
+        picture={<EmptyIcon icon={Search} />}
+        title={channel ? m.search_empty_title_in({ channel }) : m.search_empty_title()}
+        description={channel ? m.search_empty_description_in() : m.search_empty_description()}
+      />
     );
   }
 
@@ -105,9 +102,14 @@ export function SearchHome({
           {m.search_frequent_heading()}
         </h2>
         {frequent.failed ? (
-          <p role="alert" className="px-2 py-1 text-sm text-error-primary">
-            {m.search_frequent_failed()}
-          </p>
+          <EmptyState
+            size="row"
+            role="alert"
+            title={m.search_frequent_failed()}
+            primaryAction={
+              <RetryButton size="row" isRetrying={frequent.retrying} onPress={frequent.retry} />
+            }
+          />
         ) : frequent.entities.length > 0 ? (
           <ul className="flex flex-col">
             {frequent.entities.map((entity) => (
@@ -121,7 +123,7 @@ export function SearchHome({
             ))}
           </ul>
         ) : (
-          <p className="px-2 py-1 text-sm text-tertiary">{m.search_frequent_empty()}</p>
+          <EmptyState size="row" title={m.search_frequent_empty()} />
         )}
       </section>
     </div>
@@ -131,8 +133,20 @@ export function SearchHome({
 function useFrequentEntities(
   workspaceId: string,
   usage: SearchUsage,
-): { entities: SearchEntity[]; pending: boolean; failed: boolean } {
-  const { data: directory, isPending, isError } = useQuery(searchDirectoryQuery(workspaceId));
+): {
+  entities: SearchEntity[];
+  pending: boolean;
+  failed: boolean;
+  retrying: boolean;
+  retry: () => void;
+} {
+  const {
+    data: directory,
+    isPending,
+    isError,
+    isRefetching,
+    refetch,
+  } = useQuery(searchDirectoryQuery(workspaceId));
   const entities = useMemo(() => {
     if (!directory) return [];
     const channels = new Map(
@@ -166,5 +180,9 @@ function useFrequentEntities(
     entities,
     pending: remembered && isPending,
     failed: remembered && isError && !directory,
+    retrying: isRefetching,
+    retry: () => {
+      void refetch();
+    },
   };
 }

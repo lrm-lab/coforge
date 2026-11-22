@@ -1,27 +1,15 @@
 import { useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import {
-  Copy01,
-  DotsVertical,
-  FileX02,
-  Flag01,
-  Link01,
-  LinkExternal01,
-  XClose,
-} from "@untitledui/icons";
+import { Copy01, DotsVertical, Flag01, Link01, LinkExternal01, XClose } from "@untitledui/icons";
+import { CircleAlert } from "kubai-icons/duotone";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "#src/components/ui/empty";
+import { EmptyState } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { LockedWireframe } from "#src/components/ui/empty-wireframes";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { useAppToast } from "#src/components/ui/toast";
 import { copyText } from "#src/lib/clipboard";
@@ -88,31 +76,34 @@ export function PublicArtifactShell({
   };
 
   if (!artifact) {
+    const openApp = (
+      <Button
+        size="sm"
+        color={signedIn ? "primary" : "secondary"}
+        onPress={() => void navigate({ to: "/" })}
+      >
+        {m.ap_open_in_coforge()}
+      </Button>
+    );
     return (
-      <main className="flex min-h-dvh flex-col items-center justify-center bg-primary px-6">
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <FileX02 />
-            </EmptyMedia>
-            <EmptyTitle>{m.ap_unavailable_title()}</EmptyTitle>
-            <EmptyDescription>
-              {rateLimited ? m.ap_rate_limited() : m.ap_unavailable_body()}
-            </EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            <div className="flex flex-wrap items-center justify-center gap-2.5">
-              <Button size="sm" color="secondary" onPress={() => void navigate({ to: "/" })}>
-                {m.ap_open_in_coforge()}
+      <main className="flex min-h-dvh flex-col bg-primary">
+        <EmptyState
+          headingLevel={1}
+          role={rateLimited ? "alert" : undefined}
+          picture={rateLimited ? <EmptyIcon icon={CircleAlert} /> : <LockedWireframe />}
+          title={m.ap_unavailable_title()}
+          description={rateLimited ? m.ap_rate_limited() : m.ap_unavailable_body()}
+          primaryAction={
+            signedIn ? (
+              openApp
+            ) : (
+              <Button size="sm" color="primary" onPress={openSignIn}>
+                {m.ap_sign_in_to_view()}
               </Button>
-              {!signedIn && (
-                <Button size="sm" color="primary" onPress={openSignIn}>
-                  {m.ap_sign_in_to_view()}
-                </Button>
-              )}
-            </div>
-          </EmptyContent>
-        </Empty>
+            )
+          }
+          secondaryAction={signedIn ? undefined : openApp}
+        />
       </main>
     );
   }

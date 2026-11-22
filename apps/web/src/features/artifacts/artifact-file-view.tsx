@@ -3,7 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Download01 } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
 
+import { CircleAlert, FileText } from "kubai-icons/duotone";
 import { Button } from "#src/components/base/buttons/button";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { Skeleton } from "#src/components/ui/skeleton";
 import "#src/features/records/report-editor/styles/code.css";
 import { cn } from "#src/lib/utils";
@@ -124,17 +127,34 @@ export function ArtifactFile({
   );
 }
 
-function FileLoadError({ url }: { url?: string }) {
+function FileLoadError({
+  url,
+  retrying = false,
+  onRetry,
+}: {
+  url?: string;
+  retrying?: boolean;
+  onRetry?: () => void;
+}) {
+  const download = url ? (
+    <Button
+      size="sm"
+      color={onRetry ? "tertiary" : "secondary"}
+      iconLeading={Download01}
+      href={url}
+    >
+      {m.av_menu_download()}
+    </Button>
+  ) : undefined;
   return (
-    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
-      <p className="text-sm font-medium text-primary">{m.av_file_failed()}</p>
-      <p className="max-w-sm text-sm text-tertiary">{m.doc_load_failed_retry()}</p>
-      {url && (
-        <Button size="sm" color="secondary" iconLeading={Download01} href={url}>
-          {m.av_menu_download()}
-        </Button>
-      )}
-    </div>
+    <EmptyState
+      role="alert"
+      picture={<EmptyIcon icon={CircleAlert} />}
+      title={m.av_file_failed()}
+      description={m.doc_load_failed_retry()}
+      primaryAction={onRetry ? <RetryButton isRetrying={retrying} onPress={onRetry} /> : download}
+      secondaryAction={onRetry ? download : undefined}
+    />
   );
 }
 
@@ -150,7 +170,7 @@ function ImageFile({
   const workspaceSlug = useWorkspaceSlug();
   const [failed, setFailed] = useState(false);
   const url = artifactDownloadUrl(workspaceSlug, artifactId, { path, version });
-  if (failed) return <FileLoadError url={url} />;
+  if (failed) return <FileLoadError url={url} onRetry={() => setFailed(false)} />;
   return (
     <div className="flex min-h-0 flex-1 items-start justify-center overflow-auto p-4">
       <img
@@ -176,7 +196,7 @@ function VideoFile({
   const workspaceSlug = useWorkspaceSlug();
   const [failed, setFailed] = useState(false);
   const url = artifactDownloadUrl(workspaceSlug, artifactId, { path, version });
-  if (failed) return <FileLoadError url={url} />;
+  if (failed) return <FileLoadError url={url} onRetry={() => setFailed(false)} />;
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4">
       <video
@@ -211,7 +231,7 @@ function FilePreview({
       {preview.isPending ? (
         <Skeleton className="m-4 h-40" />
       ) : preview.isError ? (
-        <FileLoadError />
+        <FileLoadError retrying={preview.isRefetching} onRetry={() => void preview.refetch()} />
       ) : (
         <FileBody
           path={path}
@@ -237,8 +257,11 @@ function FileBody({
 }) {
   const kind = artifactKindOfPath(path);
   const { commenting } = useArtifactCommenting();
-  if (preview.text === null)
-    return <p className="p-6 text-sm text-tertiary">{m.av_file_no_preview()}</p>;
+  if (preview.text === null) {
+    return (
+      <EmptyState picture={<EmptyIcon icon={FileText} muted />} title={m.av_file_no_preview()} />
+    );
+  }
   if (kind === "markdown")
     return (
       <ArtifactMarkdown

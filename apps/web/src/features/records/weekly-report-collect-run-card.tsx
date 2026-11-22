@@ -1,8 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { ChevronDown, ChevronUp } from "@untitledui/icons";
+import { CircleAlert } from "kubai-icons/duotone";
 
 import { Button } from "#src/components/base/buttons/button";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
 import { loadWeeklyReportCollectRun } from "./records-collect.functions";
 
@@ -33,17 +37,32 @@ function slotTitle(status: string, name: string): string {
 
 export function WeeklyReportCollectRunCard(props: {
   runId: string;
-  /** Called while the run is synthesizing (and once when it leaves collecting). */
   onCollectAdvanced?: (status: string) => void;
 }) {
   const load = useServerFn(loadWeeklyReportCollectRun);
   const [run, setRun] = useState<Awaited<ReturnType<typeof loadWeeklyReportCollectRun>> | null>(
     null,
   );
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [openIds, setOpenIds] = useState<string[]>([]);
   const onAdvancedRef = useRef(props.onCollectAdvanced);
   onAdvancedRef.current = props.onCollectAdvanced;
   const leftCollectingNotified = useRef(false);
+
+  const fetchRun = useCallback(async () => {
+    const next = await load({ data: { runId: props.runId } });
+    setRun(next);
+    setLoadFailed(false);
+    const notify = onAdvancedRef.current;
+    if (next.status === "synthesizing") {
+      notify?.(next.status);
+    } else if (next.status !== "collecting" && !leftCollectingNotified.current) {
+      leftCollectingNotified.current = true;
+      notify?.(next.status);
+    }
+    return next;
+  }, [load, props.runId]);
 
   useEffect(() => {
     leftCollectingNotified.current = false;
@@ -51,25 +70,15 @@ export function WeeklyReportCollectRunCard(props: {
     let timer: ReturnType<typeof setInterval> | undefined;
     async function refresh() {
       try {
-        const next = await load({ data: { runId: props.runId } });
+        const next = await fetchRun();
         if (cancelled) return;
-        setRun(next);
-        const notify = onAdvancedRef.current;
-        if (next.status === "synthesizing") {
-          notify?.(next.status);
-        } else if (next.status !== "collecting" && !leftCollectingNotified.current) {
-          leftCollectingNotified.current = true;
-          notify?.(next.status);
-        }
-        // Stop once the wave is no longer in flight — including allTerminal with
-        // status still briefly collecting before settle, or cancelled after LLM failure.
         const inFlight = next.status === "collecting" || next.status === "synthesizing";
         if ((!inFlight || next.allTerminal) && timer) {
           clearInterval(timer);
           timer = undefined;
         }
       } catch {
-        // Keep last good snapshot; next poll retries.
+        if (!cancelled) setLoadFailed(true);
       }
     }
     void refresh();
@@ -78,10 +87,37 @@ export function WeeklyReportCollectRunCard(props: {
       cancelled = true;
       if (timer) clearInterval(timer);
     };
-  }, [load, props.runId]);
+  }, [fetchRun]);
 
   if (!run) {
-    return <p className="text-sm text-tertiary">{m.records_collect_run_loading()}</p>;
+    if (loadFailed) {
+      return (
+        <EmptyState
+          size="card"
+          role="alert"
+          picture={<EmptyIcon icon={CircleAlert} size="card" />}
+          title={m.empty_records_collect_load_failed()}
+          primaryAction={
+            <RetryButton
+              size="card"
+              isRetrying={retrying}
+              onPress={() => {
+                setRetrying(true);
+                void fetchRun()
+                  .catch(() => setLoadFailed(true))
+                  .finally(() => setRetrying(false));
+              }}
+            />
+          }
+        />
+      );
+    }
+    return (
+      <div role="status" aria-label={m.records_collect_run_loading()} className="space-y-2">
+        <Skeleton className="h-9 w-full rounded-lg" />
+        <Skeleton className="h-10 w-full rounded-lg" />
+      </div>
+    );
   }
 
   const terminalCount = run.slots.filter((slot) =>
@@ -131,11 +167,6 @@ export function WeeklyReportCollectRunCard(props: {
               </span>
               {open ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
             </Button>
-            {!open && failedLike && slot.failureReason ? (
-              <p className="border-t border-secondary px-3 py-1.5 text-xs text-error-primary line-clamp-2">
-                {slot.failureReason}
-              </p>
-            ) : null}
             {open ? (
               <div className="border-t border-secondary px-3 py-2">
                 {slot.packMarkdown ? (
@@ -143,9 +174,21 @@ export function WeeklyReportCollectRunCard(props: {
                     {slot.packMarkdown}
                   </pre>
                 ) : (
-                  <p className="text-sm text-tertiary">
-                    {slot.failureReason ?? m.records_collect_slot_no_body()}
-                  </p>
+                  <div className="space-y-1.5">
+                    <p className="text-sm text-tertiary">
+                      {failedLike
+                        ? m.empty_records_collect_load_failed()
+                        : m.records_collect_slot_no_body()}
+                    </p>
+                    {slot.failureReason ? (
+                      <details className="text-xs text-tertiary">
+                        <summary className="cursor-pointer select-none">
+                          {m.empty_details_toggle()}
+                        </summary>
+                        <p className="mt-1 font-mono break-words">{slot.failureReason}</p>
+                      </details>
+                    ) : null}
+                  </div>
                 )}
               </div>
             ) : null}

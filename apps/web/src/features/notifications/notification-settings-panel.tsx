@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { Globe01, MessageTextSquare01, Monitor01, PauseCircle, Phone01 } from "@untitledui/icons";
+import { CircleAlert } from "kubai-icons/duotone";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
@@ -11,6 +12,9 @@ import { Select } from "#src/components/base/select/select";
 import { SelectItem } from "#src/components/base/select/select-item";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { SettingsCard, SettingsField, SettingsGroup } from "#src/components/settings-layout";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { Skeleton } from "#src/components/ui/skeleton";
 import { useAppToast } from "#src/components/ui/toast";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { isAppError } from "#src/lib/app-error";
@@ -44,13 +48,11 @@ const VERSION_CONFLICT = "notification-settings-version-conflict";
 type Loaded = Awaited<ReturnType<typeof getNotificationSettings>>;
 type Changes = NotificationSettingsChange["changes"];
 
-/** A minute of the day as the quiet-hours pickers show it, `HH:MM`. */
 export function minuteLabel(minute: number): string {
   const hours = String(Math.floor(minute / 60)).padStart(2, "0");
   return `${hours}:${String(minute % 60).padStart(2, "0")}`;
 }
 
-/** The quiet-hours pickers' choices: every half hour of the day. */
 const HALF_HOURS = Array.from({ length: 48 }, (_, index) => index * 30);
 
 const PAUSE_LABELS: Record<Pause, () => string> = {
@@ -74,7 +76,6 @@ const MOBILE_LABELS: Record<MobileDelay, () => string> = {
   idle_10m: m.notif_mobile_idle_10m,
 };
 
-/** Why a device's last notification failed, as the person can act on it. */
 function failureReason(reason: string | null): string {
   if (reason === "removed") return m.notif_failure_removed();
   if (reason === "unreachable") return m.notif_failure_unreachable();
@@ -86,7 +87,6 @@ const when = (iso: string) =>
     new Date(iso),
   );
 
-/** A device as the page names it: its own label, or what kind of device it is. */
 function deviceName(device: { deviceKind: string | null; deviceLabel: string | null }): string {
   if (device.deviceLabel && device.deviceLabel !== "Browser") return device.deviceLabel;
   if (device.deviceKind === "mobile") return m.notif_device_mobile();
@@ -94,7 +94,6 @@ function deviceName(device: { deviceKind: string | null; deviceLabel: string | n
   return m.notif_device_browser();
 }
 
-/** A device's last delivery: when it last failed and why, when it last arrived, or never. */
 function deliveryLine(device: {
   lastSuccessAt: string | null;
   lastFailureAt: string | null;
@@ -113,21 +112,11 @@ function deliveryLine(device: {
   return m.notif_device_never();
 }
 
-/**
- * The account's notification settings (task #469, in the order of Raft's settings.notifications):
- * this device, its last delivery and a test to it; a pause (a span, or a time of one's own) and
- * quiet hours; what a notification shows and whether it sounds, and how long the phone waits
- * while the person is at a computer. Each change saves at once from the version it was made from;
- * another device's save in between is shown and the change is asked for again.
- */
 export function NotificationSettingsPanel({
   enabled,
   onTest,
 }: {
-  /** Whether message notifications are on at all; off, these settings do nothing. */
   enabled: boolean;
-  /** Sends this browser a test notification: how its push service took it, or null when it could
-   * not be sent at all (that failure says why itself). */
   onTest: () => Promise<TestDelivery | null>;
 }) {
   const workspaceSlug = useWorkspaceSlug();
@@ -142,12 +131,34 @@ export function NotificationSettingsPanel({
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [tested, setTested] = useState<TestDelivery | null>(null);
-  /** A custom pause being picked: the input's value, or null while none is. */
   const [until, setUntil] = useState<string | null>(null);
 
-  if (query.isError) return <p className="text-sm text-error-primary">{m.notif_load_failed()}</p>;
+  if (query.isError) {
+    return (
+      <EmptyState
+        size="card"
+        role="alert"
+        picture={<EmptyIcon icon={CircleAlert} size="card" />}
+        title={m.notif_load_failed()}
+        primaryAction={
+          <RetryButton
+            size="card"
+            isRetrying={query.isRefetching}
+            onPress={() => void query.refetch()}
+          />
+        }
+      />
+    );
+  }
   const loaded = query.data;
-  if (!loaded) return null;
+  if (!loaded) {
+    return (
+      <div className="space-y-4" aria-busy="true">
+        <Skeleton className="h-24 w-full rounded-xl" />
+        <Skeleton className="h-36 w-full rounded-xl" />
+      </div>
+    );
+  }
   const { settings, timeZone, devices } = loaded;
 
   async function save(changes: Changes) {

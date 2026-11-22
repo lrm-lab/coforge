@@ -2,11 +2,13 @@ import { useState } from "react";
 import { Link, useHydrated, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft } from "@untitledui/icons";
+import { Inbox } from "kubai-icons/duotone";
 
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { Alert } from "#src/components/ui/alert";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "#src/components/ui/empty";
+import { EmptyState } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { isAppErrorCode } from "#src/lib/app-error";
@@ -21,10 +23,6 @@ import { RejectReviewDialog } from "./app-review-reject-dialog";
 import { ReviewersSection } from "./app-reviewers-section";
 import { decideAppReview, type ReviewRequestSummary } from "./app-publishing.functions";
 
-/**
- * The Marketplace review queue, for platform operators: every pending publish or offline request
- * with what the reviewer judges it by, and Approve or Reject (with a reason kept for reviewers).
- */
 export function AppReviewPage({ requests }: { requests: ReviewRequestSummary[] }) {
   const slug = useWorkspaceSlug();
   return (
@@ -46,14 +44,14 @@ export function AppReviewPage({ requests }: { requests: ReviewRequestSummary[] }
           <p className="text-sm text-tertiary">{m.apps_review_description()}</p>
         </header>
         {requests.length === 0 ? (
-          <Empty className="max-w-none rounded-xl border border-dashed border-secondary px-4 py-10">
-            <EmptyHeader className="gap-2">
-              <EmptyTitle role="heading" aria-level={2}>
-                {m.apps_review_empty_title()}
-              </EmptyTitle>
-              <EmptyDescription>{m.apps_review_empty_description()}</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
+          <EmptyState
+            size="page"
+            headingLevel={2}
+            className="max-w-none rounded-xl border border-dashed border-secondary px-4 py-10"
+            picture={<EmptyIcon icon={Inbox} muted />}
+            title={m.apps_review_empty_title()}
+            description={m.apps_review_empty_description()}
+          />
         ) : (
           <ul className="grid gap-3">
             {requests.map((request) => (

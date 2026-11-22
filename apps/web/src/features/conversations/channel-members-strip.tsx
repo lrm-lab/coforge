@@ -4,6 +4,7 @@ import { ChevronRight } from "@untitledui/icons";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { AvatarAddButton } from "#src/components/base/avatar/base-components/avatar-add-button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
 import { useChannelMembers } from "./channel-members-query";
@@ -43,7 +44,9 @@ export function MembersStrip({
             <span className="truncate">
               {members.data
                 ? `${m.channel_settings_humans({ count: humans.length })} · ${m.channel_settings_agents({ count: agents.length })}`
-                : m.channel_members_loading()}
+                : members.isError
+                  ? ""
+                  : m.channel_members_loading()}
             </span>
             <ChevronRight aria-hidden="true" className="size-4 shrink-0" />
           </span>
@@ -55,9 +58,19 @@ export function MembersStrip({
             <Skeleton key={index} className="size-[2.375rem] rounded-full" />
           ))}
         {members.isError && (
-          <p role="alert" className="text-sm text-error-primary">
-            {m.channel_members_load_error()}
-          </p>
+          <EmptyState
+            size="row"
+            role="alert"
+            className="w-full px-0"
+            title={m.empty_members_load_failed_title()}
+            primaryAction={
+              <RetryButton
+                size="row"
+                isRetrying={members.isRefetching}
+                onPress={() => void members.refetch()}
+              />
+            }
+          />
         )}
         {shown.map((entry) => (
           <Tooltip key={entry.key} title={entry.displayName}>

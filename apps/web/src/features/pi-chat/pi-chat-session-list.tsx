@@ -1,9 +1,11 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { useEffect, useState } from "react";
 import { Link, useHydrated } from "@tanstack/react-router";
-import { SearchLg } from "@untitledui/icons";
+import { MessagesSquare } from "kubai-icons/duotone";
 import type { PiChatSession } from "@lrm/coforge-sdk/internal/pi-chat";
 import { Button } from "#src/components/base/buttons/button";
+import { EmptyState } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { useTimeZone } from "#src/lib/time-zone-context";
 import { cn } from "#src/lib/utils";
@@ -48,7 +50,8 @@ export function PiChatSessionList({
     m.pi_chat_earlier(),
   ];
   const groups = labels.map(() => [] as PiChatSession[]);
-  const query = search.trim().toLocaleLowerCase();
+  const trimmed = search.trim();
+  const query = trimmed.toLocaleLowerCase();
   for (const session of [...sessions].sort((a, b) => b.updatedAt - a.updatedAt)) {
     if (!session.title.toLocaleLowerCase().includes(query)) continue;
     const date = today
@@ -60,18 +63,28 @@ export function PiChatSessionList({
     const group = days <= 0 ? 0 : days === 1 ? 1 : days < 7 ? 2 : 3;
     groups[group]!.push(session);
   }
-  if (!groups.some((group) => group.length))
-    return (
-      <div className="space-y-2 px-3 py-6 text-sm text-tertiary">
-        <SearchLg aria-hidden="true" className="mb-3 size-5" />
-        <p>{query ? m.pi_chat_no_matches() : m.pi_chat_no_sessions()}</p>
-        {query && (
-          <Button color="link-gray" size="sm" onClick={clearSearch}>
+  if (!groups.some((group) => group.length)) {
+    return trimmed ? (
+      <EmptyState
+        size="row"
+        live="polite"
+        title={m.empty_pi_chat_sessions_no_match({ query: trimmed })}
+        primaryAction={
+          <Button color="link-gray" size="xs" onClick={clearSearch}>
             {m.pi_chat_clear_search()}
           </Button>
-        )}
+        }
+      />
+    ) : (
+      <div className="p-2">
+        <EmptyState
+          size="card"
+          picture={<EmptyIcon icon={MessagesSquare} size="card" />}
+          title={m.pi_chat_no_sessions()}
+        />
       </div>
     );
+  }
   return groups.map((group, index) =>
     group.length ? (
       <section key={labels[index]} aria-label={labels[index]} className="mb-4">

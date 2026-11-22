@@ -6,6 +6,10 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
+import { CircleAlert } from "kubai-icons/duotone";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { Skeleton } from "#src/components/ui/skeleton";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { PHONE_PAGE_HEADER, PhoneFormBar } from "#src/components/ui/phone-form-bar";
 import {
@@ -34,7 +38,13 @@ import {
 
 const MAX_ENV_ROWS = 64;
 
-export type AgentEnvironmentState = { loaded: boolean; values: Record<string, string> };
+export type AgentEnvironmentState = {
+  loaded: boolean;
+  failed?: boolean;
+  retrying?: boolean;
+  onRetry?: () => void;
+  values: Record<string, string>;
+};
 
 export type AgentRuntimeComputerOption = {
   id: string;
@@ -90,12 +100,13 @@ export function AgentRuntimeConfigForm({
     setEnvRows(Object.entries(environment.values).map(([key, value]) => ({ key, value })));
   }, [environment]);
 
-  const envDirty = agentEnvironmentRowsChanged(envRows, environment?.values ?? {});
+  const envFailed = Boolean(environment?.failed && !environment.loaded);
+  const envPending = environment !== undefined && !environment.loaded && !envFailed;
+  const envDirty = !envFailed && agentEnvironmentRowsChanged(envRows, environment?.values ?? {});
   const envKeyErrors = envRows.map((row) => agentEnvironmentNameError(row.key));
   const computerDirty = Boolean(computers) && selectedComputerId !== (computerId || "");
   const dirty = runtimeDirty || envDirty || computerDirty;
   useReportDirty(dirty, onDirtyChange);
-  const envPending = environment !== undefined && !environment.loaded;
   const showComputerPicker = Boolean(computers && computers.length > 0);
 
   return (
@@ -182,7 +193,26 @@ export function AgentRuntimeConfigForm({
             <DisclosurePanel>
               <div className="grid gap-3 pt-3">
                 {envPending ? (
-                  <p className="text-sm text-tertiary">{m.agent_env_loading()}</p>
+                  <div role="status" aria-label={m.agent_env_loading()} className="grid gap-2">
+                    <Skeleton className="h-9 w-full" />
+                    <Skeleton className="h-9 w-full" />
+                  </div>
+                ) : envFailed ? (
+                  <EmptyState
+                    size="card"
+                    role="alert"
+                    picture={<EmptyIcon icon={CircleAlert} size="card" />}
+                    title={m.empty_agent_env_load_failed()}
+                    primaryAction={
+                      environment.onRetry ? (
+                        <RetryButton
+                          size="card"
+                          isRetrying={environment.retrying}
+                          onPress={environment.onRetry}
+                        />
+                      ) : undefined
+                    }
+                  />
                 ) : (
                   <>
                     <div className="grid gap-1">

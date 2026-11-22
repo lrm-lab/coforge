@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 
+import { EmptyState } from "#src/components/ui/empty";
 import { m } from "#src/paraglide/messages";
 import { ActorName } from "#src/features/avatars/actor-name";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -69,9 +70,9 @@ export function TemplateChildrenTable({ children }: { children: readonly Templat
         <tbody>
           {rows.length === 0 ? (
             <tr>
-              <td className="border-r border-secondary px-3 py-2 text-tertiary">&nbsp;</td>
-              <td className="border-r border-secondary px-3 py-2" />
-              <td className="px-3 py-2" />
+              <td colSpan={3} className="p-0">
+                <EmptyState size="row" title={m.empty_records_member_reports_empty()} />
+              </td>
             </tr>
           ) : (
             rows.map((row) => {

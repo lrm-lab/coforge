@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
+import { CircleAlert, CircleCheck } from "kubai-icons/duotone";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { TextArea } from "#src/components/base/textarea/textarea";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import * as m from "#src/paraglide/messages";
 import { MemoryScopeLinks } from "./memory-scope-links";
@@ -113,14 +116,26 @@ export function MemoryReviewPage({ suggestions }: { suggestions: Response }) {
           </p>
         )}
         {suggestions.kind === "error" && (
-          <p role="alert" className="text-sm text-error-primary">
-            {memoryError(suggestions.error)}
-          </p>
+          <EmptyState
+            size="page"
+            role="alert"
+            picture={<EmptyIcon icon={CircleAlert} />}
+            title={m.empty_memory_load_failed_title()}
+            description={memoryError(suggestions.error)}
+            primaryAction={
+              <RetryButton size="page" onPress={() => void router.invalidate({ sync: true })} />
+            }
+          />
         )}
         {suggestions.kind === "list" && (
           <div className="flex max-w-3xl flex-col gap-4">
             {!suggestions.rows.length && (
-              <p className="text-sm text-tertiary">{m.memory_review_empty()}</p>
+              <EmptyState
+                size="page"
+                picture={<EmptyIcon icon={CircleCheck} muted />}
+                title={m.empty_memory_review_caught_up_title()}
+                description={m.empty_memory_review_caught_up_description()}
+              />
             )}
             {suggestions.rows.map((row) => {
               const draft =

@@ -1,31 +1,14 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { CircleAlert } from "kubai-icons/duotone";
 
 import { Button } from "#src/components/base/buttons/button";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 
 import type { EmojiClickData, PickerLabels, Theme } from "emoji-picker-react";
 
-/**
- * The one emoji grid: the third-party `emoji-picker-react` (v5), loaded as a real dynamic import —
- * the library and this locale's dataset only reach the browser the first time a caller opens it
- * (a static import would ship both on the chat route's preloaded chunk; see Task #199's perf
- * review). Until it resolves, and again if the import fails, the host shows a matching-sized
- * placeholder with a retry action, so a flaky chunk request reads as the app's loading state, not
- * a broken popover.
- *
- * The visuals come from the app: the host element carries `data-epr-host`, whose `styles.css`
- * block pins the epr variables to the app's tokens (hover/focus/search/category surfaces), and
- * the theme follows the root `dark-mode` class (see `routes/__root.tsx`'s boot script), not the
- * OS preference.
- *
- * It renders nothing around itself: the call site composes it with the official `Button` +
- * React Aria `DialogTrigger`/`Popover`/`Dialog`, and owns nullable-value semantics (an optional
- * field renders its own "no emoji" action inside the same `Dialog`, where `Dialog`'s render prop
- * supplies `close`). Used by `features/conversations/chat-section-emoji-picker.tsx`.
- */
-
-/** Every user-facing string in the app's language; omitted keys keep the English defaults, so
- * English call sites pass only the placeholder. */
 const zhLabels: Partial<PickerLabels> = {
   searchPlaceholder: "搜索表情",
   searchLabel: "搜索表情",
@@ -45,8 +28,6 @@ const zhLabels: Partial<PickerLabels> = {
   retryLoading: "重试",
 };
 
-/** One state, not two: a function-sized state would be read by React as a lazy initializer /
- * updater and called with the previous state, which never are the picker's props. */
 type Library = {
   picker: typeof import("emoji-picker-react").default;
   data: object;
@@ -56,7 +37,6 @@ export function EmojiPicker({
   pickerHostClassName,
   onPick,
 }: {
-  /** Extra class for the host element, alongside its `data-epr-host` attribute. */
   pickerHostClassName?: string;
   onPick: (emoji: string) => void;
 }) {
@@ -95,9 +75,6 @@ export function EmojiPicker({
     grid = (
       <Picker
         theme={(dark ? "dark" : "light") as Theme}
-        // `width: 100%`: the picker's own mount sizing hardcodes a 350px inline width; filling
-        // the host lets the host's own max-width (call site) or the narrow-screen tokens below
-        // (styles.css) decide the real width.
         width="100%"
         lazyLoadEmojis
         previewConfig={{ showPreview: false }}
@@ -107,27 +84,27 @@ export function EmojiPicker({
       />
     );
   } else if (failed) {
-    // A module URL whose fetch failed is remembered by the document, so a second import() of the
-    // same URL cannot recover — the first retry is an honest second attempt, and after it the
-    // only real recovery is a fresh document load.
     const exhausted = attempt > 0;
     grid = (
-      <div className="flex min-h-90 flex-col items-center justify-center gap-2 text-sm text-tertiary">
-        <span>{zh ? "加载失败" : "Failed to load"}</span>
-        {exhausted ? (
-          <Button color="link-gray" size="sm" onPress={() => window.location.reload()}>
-            {zh ? "刷新页面" : "Reload page"}
-          </Button>
-        ) : (
-          <Button color="link-gray" size="sm" onPress={() => setAttempt((n) => n + 1)}>
-            {zh ? "重试" : "Retry"}
-          </Button>
-        )}
+      <div className="flex min-h-90 items-center justify-center p-4">
+        <EmptyState
+          size="page"
+          picture={<EmptyIcon icon={CircleAlert} />}
+          title={m.empty_emoji_load_failed()}
+          description={m.empty_load_failed_safe()}
+          primaryAction={
+            exhausted ? (
+              <Button color="secondary" size="sm" onPress={() => window.location.reload()}>
+                {m.empty_emoji_reload()}
+              </Button>
+            ) : (
+              <RetryButton onPress={() => setAttempt((n) => n + 1)} />
+            )
+          }
+        />
       </div>
     );
   } else {
-    // The placeholder's height is the picker's settled one, so the popover does not jump when
-    // the library arrives.
     grid = <div className="min-h-90 animate-pulse bg-secondary" aria-hidden="true" />;
   }
 

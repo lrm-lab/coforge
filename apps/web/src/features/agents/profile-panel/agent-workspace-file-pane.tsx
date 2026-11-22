@@ -2,7 +2,9 @@ import { lazy, Suspense, type ReactNode } from "react";
 import { CatchBoundary } from "@tanstack/react-router";
 import type { AgentWorkspaceFileReadResult } from "@lrm/coforge-sdk/internal";
 
-import { Button } from "#src/components/base/buttons/button";
+import { CircleAlert, FileText } from "kubai-icons/duotone";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { ProjectFileViewSkeleton } from "#src/features/projects/project-file-view-pending";
 import { Attachment } from "#src/features/records/report-editor/attachment";
 import { m } from "#src/paraglide/messages";
@@ -156,15 +158,14 @@ function EmptyFileState({
   alert?: boolean;
 }) {
   return (
-    <div className="flex flex-col items-center gap-3 px-5 py-16 text-center">
-      <p role={alert ? "alert" : undefined} className="text-sm text-tertiary">
-        {text}
-      </p>
-      {onRetry && (
-        <Button size="sm" color="secondary" onPress={onRetry}>
-          {retryLabel}
-        </Button>
-      )}
-    </div>
+    <EmptyState
+      role={alert || onRetry ? "alert" : undefined}
+      picture={
+        alert || onRetry ? <EmptyIcon icon={CircleAlert} /> : <EmptyIcon icon={FileText} muted />
+      }
+      title={text}
+      description={alert || onRetry ? m.empty_load_failed_safe() : undefined}
+      primaryAction={onRetry ? <RetryButton label={retryLabel} onPress={onRetry} /> : undefined}
+    />
   );
 }

@@ -2,9 +2,13 @@ import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
+import { CircleAlert, Flask } from "kubai-icons/duotone";
 import { Button } from "#src/components/base/buttons/button";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { SettingsCard, SettingsField, SettingsPage } from "#src/components/settings-layout";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { Skeleton } from "#src/components/ui/skeleton";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { workspaceConversationChannel } from "#src/features/conversations/conversation-realtime";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
@@ -80,54 +84,69 @@ export function ExperimentsSettings({
     onError: () => queryClient.invalidateQueries({ queryKey: EXPERIMENTS_QUERY_KEY }),
   });
   const content = experiments.isPending ? (
-    <p className="text-sm text-tertiary">{m.experiments_loading()}</p>
-  ) : !experiments.data ? (
-    <div className="flex flex-col items-start gap-3">
-      <p role="alert" className="text-sm text-error-primary">
-        {m.experiments_load_error()}
-      </p>
-      <Button color="secondary" size="sm" onPress={() => void experiments.refetch()}>
-        {m.controls_retry()}
-      </Button>
+    <div role="status" aria-label={m.experiments_loading()} className="grid gap-3">
+      <Skeleton className="h-16 w-full rounded-xl" />
+      <Skeleton className="h-16 w-full rounded-xl" />
+      <Skeleton className="h-16 w-full rounded-xl" />
     </div>
+  ) : !experiments.data ? (
+    <EmptyState
+      size="page"
+      role="alert"
+      picture={<EmptyIcon icon={CircleAlert} />}
+      title={m.experiments_load_error()}
+      description={m.empty_load_failed_safe()}
+      primaryAction={
+        <RetryButton
+          size="page"
+          isRetrying={experiments.isRefetching}
+          onPress={() => void experiments.refetch()}
+        />
+      }
+    />
+  ) : experiments.data.experiments.length === 0 ? (
+    <EmptyState
+      size="page"
+      picture={<EmptyIcon icon={Flask} />}
+      title={m.empty_experiments_none_title()}
+      description={m.empty_experiments_none_description()}
+    />
   ) : (
-    experiments.data.experiments.length > 0 && (
-      <SettingsCard>
-        {experiments.data.experiments.map((experiment) => {
-          const text = EXPERIMENT_TEXT[experiment.key];
-          const failed = toggle.isError && toggle.variables.key === experiment.key;
-          return (
-            <div key={experiment.key} className="flex flex-col gap-2">
-              <SettingsField inline label={text.name()} description={text.description()}>
-                <div className="flex shrink-0 items-center gap-3">
-                  {experiment.reload && changed.has(experiment.key) && (
-                    <Button color="link-color" size="sm" onPress={() => window.location.reload()}>
-                      {m.experiments_reload()}
-                    </Button>
-                  )}
-                  <Toggle
-                    size="md"
-                    aria-label={text.name()}
-                    isSelected={
-                      toggle.isPending && toggle.variables.key === experiment.key
-                        ? toggle.variables.enabled
-                        : experiment.enabled
-                    }
-                    isDisabled={toggle.isPending || !experiments.data.canManage}
-                    onChange={(enabled) => toggle.mutate({ key: experiment.key, enabled })}
-                  />
-                </div>
-              </SettingsField>
-              {failed && (
-                <p role="alert" className="text-sm text-error-primary">
-                  {m.experiments_save_error()}
-                </p>
-              )}
-            </div>
-          );
-        })}
-      </SettingsCard>
-    )
+    <SettingsCard>
+      {experiments.data.experiments.map((experiment) => {
+        const text = EXPERIMENT_TEXT[experiment.key];
+        const failed = toggle.isError && toggle.variables.key === experiment.key;
+        return (
+          <div key={experiment.key} className="flex flex-col gap-2">
+            <SettingsField inline label={text.name()} description={text.description()}>
+              <div className="flex shrink-0 items-center gap-3">
+                {experiment.reload && changed.has(experiment.key) && (
+                  <Button color="link-color" size="sm" onPress={() => window.location.reload()}>
+                    {m.experiments_reload()}
+                  </Button>
+                )}
+                <Toggle
+                  size="md"
+                  aria-label={text.name()}
+                  isSelected={
+                    toggle.isPending && toggle.variables.key === experiment.key
+                      ? toggle.variables.enabled
+                      : experiment.enabled
+                  }
+                  isDisabled={toggle.isPending || !experiments.data.canManage}
+                  onChange={(enabled) => toggle.mutate({ key: experiment.key, enabled })}
+                />
+              </div>
+            </SettingsField>
+            {failed && (
+              <p role="alert" className="text-sm text-error-primary">
+                {m.experiments_save_error()}
+              </p>
+            )}
+          </div>
+        );
+      })}
+    </SettingsCard>
   );
   return <SettingsPage>{content}</SettingsPage>;
 }

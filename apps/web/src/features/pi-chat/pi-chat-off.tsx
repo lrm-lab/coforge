@@ -1,26 +1,38 @@
-import { Link, useParams } from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
+import { Button } from "#src/components/base/buttons/button";
 import { PageHeader } from "#src/components/layout/page-header";
+import { EmptyState } from "#src/components/ui/empty";
+import { LockedWireframe } from "#src/components/ui/empty-wireframes";
 import { m } from "#src/paraglide/messages";
 
-/** Replaces the whole Workbench page while the Workspace's switch is off. */
 export function PiChatOff() {
   const { workspaceSlug } = useParams({ strict: false });
+  const navigate = useNavigate();
   return (
-    <main className="flex h-full min-h-0 flex-col">
+    <main className="flex h-full min-h-0 flex-col bg-primary">
       <PageHeader heading={m.pi_chat_title()} />
-      <div role="status" className="flex flex-col items-start gap-2 p-page">
-        <p className="text-sm text-primary">{m.pi_chat_off()}</p>
-        {workspaceSlug && (
-          <Link
-            to="/w/$workspaceSlug/settings"
-            params={{ workspaceSlug }}
-            search={{ section: "experiments" }}
-            className="text-sm text-brand-secondary"
-          >
-            {m.pi_chat_off_settings()}
-          </Link>
-        )}
-      </div>
+      <EmptyState
+        role="status"
+        picture={<LockedWireframe />}
+        title={m.pi_chat_off()}
+        primaryAction={
+          workspaceSlug ? (
+            <Button
+              size="sm"
+              color="primary"
+              onPress={() =>
+                void navigate({
+                  to: "/w/$workspaceSlug/settings",
+                  params: { workspaceSlug },
+                  search: { section: "experiments" },
+                })
+              }
+            >
+              {m.pi_chat_off_settings()}
+            </Button>
+          ) : undefined
+        }
+      />
     </main>
   );
 }

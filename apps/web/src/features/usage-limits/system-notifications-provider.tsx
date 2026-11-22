@@ -28,28 +28,29 @@ const usageLimitsQuery = (workspaceId: string | undefined, enabled: boolean) =>
 type SystemNotifications = {
   notices: readonly UsageLimitNotice[];
   unseen: number;
+  loading: boolean;
+  failed: boolean;
+  retrying: boolean;
+  retry: () => void;
   markSeen: (ids: readonly string[]) => void;
   dismiss: (id: string) => void;
 };
 
-/** What a viewer with nothing of this kind to see has: an empty bell. */
 const NO_NOTIFICATIONS: SystemNotifications = {
   notices: [],
   unseen: 0,
+  loading: false,
+  failed: false,
+  retrying: false,
+  retry: () => {},
   markSeen: () => {},
   dismiss: () => {},
 };
 
 const SystemNotificationsContext = createContext<SystemNotifications>(NO_NOTIFICATIONS);
 
-/** The bell's data. */
 export const useSystemNotifications = () => use(SystemNotificationsContext);
 
-/**
- * The Workspace's system notifications, which every member's bell shows (task #641). Today they
- * are usage-limit events, read only for an owner or admin (`enabled`), so anyone else's bell is
- * empty. Any change on the viewer's own channel, or a gap in it, rereads the list.
- */
 export function SystemNotificationsProvider({
   viewerId,
   enabled,
@@ -57,9 +58,9 @@ export function SystemNotificationsProvider({
 }: PropsWithChildren<{ viewerId: string; enabled: boolean }>) {
   const workspaceId = useCurrentWorkspaceId();
   const queryClient = useQueryClient();
-  const query = usageLimitsQuery(workspaceId, enabled);
-  const { queryKey } = query;
-  const events = useQuery(query).data;
+  const options = usageLimitsQuery(workspaceId, enabled);
+  const { queryKey } = options;
+  const query = useQuery(options);
   useRealtimeSubscription({
     channel: enabled ? userConversationChannel(viewerId) : undefined,
     onSubscribed: () => void queryClient.invalidateQueries({ queryKey }),
@@ -70,7 +71,6 @@ export function SystemNotificationsProvider({
   });
   const value = useMemo(() => {
     if (!enabled) return NO_NOTIFICATIONS;
-    // A mark shows at once; a failed save rereads what the server holds.
     const mark = (
       ids: readonly string[],
       field: "seenAt" | "dismissedAt",
@@ -82,15 +82,31 @@ export function SystemNotificationsProvider({
       );
       Promise.all(ids.map(save)).catch(() => queryClient.invalidateQueries({ queryKey }));
     };
-    const all = events ?? [];
+    const all = query.data ?? [];
     return {
       notices: visibleNotices(all),
       unseen: unseenNotices(all).length,
+      loading: query.isPending && query.fetchStatus === "fetching",
+      failed: query.isError && query.data === undefined,
+      retrying: query.isRefetching,
+      retry: () => {
+        void query.refetch();
+      },
       markSeen: (ids: readonly string[]) =>
         mark(ids, "seenAt", (eventId) => seenUsageLimitEvent({ data: { eventId } })),
       dismiss: (id: string) =>
         mark([id], "dismissedAt", (eventId) => dismissUsageLimitEvent({ data: { eventId } })),
     };
-  }, [enabled, events, queryClient, queryKey]);
+  }, [
+    enabled,
+    query.data,
+    query.fetchStatus,
+    query.isError,
+    query.isPending,
+    query.isRefetching,
+    query.refetch,
+    queryClient,
+    queryKey,
+  ]);
   return <SystemNotificationsContext value={value}>{children}</SystemNotificationsContext>;
 }

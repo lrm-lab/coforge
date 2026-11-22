@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { SearchLg, XClose } from "@untitledui/icons";
+import { CircleAlert } from "kubai-icons/duotone";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { GalleryWireframe, NoResultsWireframe } from "#src/components/ui/empty-wireframes";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
 import { loadArtifactGallery } from "./artifact-gallery.functions";
@@ -24,7 +28,6 @@ import {
   type GalleryFilters,
 } from "./artifact-gallery-model";
 import { ArtifactPage } from "./artifact-page";
-import { ArtifactIcon } from "./artifact-parts";
 import { ARTIFACTS_KEY } from "./artifact-queries";
 import { useScopeOf } from "./artifact-scope";
 
@@ -130,18 +133,28 @@ export function ArtifactGalleryPage({
             <ViewSwitch view={view} onChange={setView} />
           </div>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 sm:px-6">
           {gallery.isPending ? (
             <Loading />
           ) : gallery.isError && cards.length === 0 ? (
-            <Notice title={m.ag_error()}>
-              <Button size="sm" color="secondary" onClick={() => void gallery.refetch()}>
-                {m.ag_retry()}
-              </Button>
-            </Notice>
+            <EmptyState
+              size="page"
+              role="alert"
+              picture={<EmptyIcon icon={CircleAlert} />}
+              title={m.empty_artifacts_load_failed_title()}
+              description={m.empty_load_failed_safe()}
+              primaryAction={
+                <RetryButton
+                  size="page"
+                  isRetrying={gallery.isRefetching}
+                  onPress={() => void gallery.refetch()}
+                />
+              }
+            />
           ) : cards.length === 0 ? (
             <EmptyGallery
               state={emptyState}
+              query={filters.query.trim()}
               onClear={clearAll}
               onSeeAll={() => update({ related: false })}
             />
@@ -209,48 +222,70 @@ function Loading() {
   );
 }
 
-function Notice({ title, children }: { title: string; children?: React.ReactNode }) {
-  return (
-    <div className="flex flex-col items-center gap-3 py-16 text-center">
-      <ArtifactIcon entryPath="index.html" />
-      <p className="text-sm font-medium text-secondary">{title}</p>
-      {children}
-    </div>
-  );
-}
-
 function EmptyGallery({
   state,
+  query,
   onClear,
   onSeeAll,
 }: {
   state: EmptyGalleryState;
+  query: string;
   onClear: () => void;
   onSeeAll: () => void;
 }) {
-  if (state.kind === "empty") return <Notice title={m.ag_empty()} />;
-  if (state.kind === "empty-related")
+  if (state.kind === "empty") {
     return (
-      <Notice title={m.ag_empty_related()}>
-        <Button size="sm" color="link-color" onClick={onSeeAll}>
-          {m.ag_see_all()}
-        </Button>
-      </Notice>
+      <EmptyState
+        size="page"
+        picture={<GalleryWireframe />}
+        title={m.ag_empty()}
+        description={m.empty_artifacts_description()}
+      />
     );
+  }
+  if (state.kind === "empty-related") {
+    return (
+      <EmptyState
+        size="page"
+        live="polite"
+        picture={<NoResultsWireframe />}
+        title={m.ag_empty_related()}
+        description={m.empty_artifacts_no_match_description()}
+        primaryAction={
+          <Button size="sm" color="secondary" onClick={onSeeAll}>
+            {m.ag_see_all()}
+          </Button>
+        }
+      />
+    );
+  }
+  const title =
+    state.kind === "no-match-search" && query
+      ? m.empty_artifacts_no_match_query({ query })
+      : state.kind === "no-match-search"
+        ? m.ag_no_match_search()
+        : m.ag_no_match_filters();
   return (
-    <Notice
-      title={state.kind === "no-match-search" ? m.ag_no_match_search() : m.ag_no_match_filters()}
-    >
-      {state.kind === "no-match-filters" && state.showSeeAll && (
-        <Button size="sm" color="link-color" onClick={onSeeAll}>
-          {m.ag_see_all()}
+    <EmptyState
+      size="page"
+      live="polite"
+      picture={<NoResultsWireframe />}
+      title={title}
+      description={m.empty_artifacts_no_match_description()}
+      primaryAction={
+        <Button size="sm" color="secondary" iconLeading={XClose} onClick={onClear}>
+          {state.kind === "no-match-search" && state.clearKind === "search"
+            ? m.ag_clear_search()
+            : m.ag_clear_filters()}
         </Button>
-      )}
-      <Button size="sm" color="secondary" iconLeading={XClose} onClick={onClear}>
-        {state.kind === "no-match-search" && state.clearKind === "search"
-          ? m.ag_clear_search()
-          : m.ag_clear_filters()}
-      </Button>
-    </Notice>
+      }
+      secondaryAction={
+        state.kind === "no-match-filters" && state.showSeeAll ? (
+          <Button size="sm" color="tertiary" onClick={onSeeAll}>
+            {m.ag_see_all()}
+          </Button>
+        ) : undefined
+      }
+    />
   );
 }

@@ -1,60 +1,78 @@
 import { useState } from "react";
-import { Link, useRouter } from "@tanstack/react-router";
+import { useNavigate, useRouter } from "@tanstack/react-router";
+import { CircleAlert, Folder } from "kubai-icons/duotone";
 import { Button } from "#src/components/base/buttons/button";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { LockedWireframe } from "#src/components/ui/empty-wireframes";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
 
-/**
- * Shared unlinked/denied/unavailable repository message, used by both the project
- * detail page's repository sections and the in-app repository browser.
- */
 export function RepositoryStatusMessage({
   status,
   onRetry,
 }: {
   status: "unlinked" | "denied" | "unavailable";
-  /** Pages that read through React Query refetch here; the default reruns the route loaders. */
   onRetry?: () => Promise<unknown>;
 }) {
   const router = useRouter();
+  const navigate = useNavigate();
   const workspaceSlug = useWorkspaceSlug();
   const [retrying, setRetrying] = useState(false);
-  const text =
-    status === "unlinked"
-      ? m.project_no_repository()
-      : status === "denied"
-        ? m.project_repository_denied()
-        : m.project_repository_unavailable();
-  return (
-    <div className="flex min-h-52 flex-col items-center justify-center gap-3 px-5 py-8 text-center">
-      <p className="text-sm text-tertiary">{text}</p>
-      {status !== "unlinked" && (
-        <>
-          <Link
-            to="/w/$workspaceSlug/settings"
-            params={{ workspaceSlug }}
-            search={{ section: "integrations" }}
-            className="text-sm font-medium text-brand-secondary hover:underline"
-          >
+
+  const openGitHubSettings = () => {
+    void navigate({
+      to: "/w/$workspaceSlug/settings",
+      params: { workspaceSlug },
+      search: { section: "integrations" },
+    });
+  };
+
+  const handleRetry = async () => {
+    setRetrying(true);
+    try {
+      await (onRetry ? onRetry() : router.invalidate({ sync: true }));
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  if (status === "unlinked") {
+    return (
+      <EmptyState
+        className="min-h-52"
+        picture={<EmptyIcon icon={Folder} />}
+        title={m.project_no_repository()}
+        primaryAction={
+          <Button size="sm" color="secondary" onPress={openGitHubSettings}>
             {m.project_github_settings()}
-          </Link>
-          <Button
-            size="sm"
-            color="secondary"
-            isLoading={retrying}
-            onPress={async () => {
-              setRetrying(true);
-              try {
-                await (onRetry ? onRetry() : router.invalidate({ sync: true }));
-              } finally {
-                setRetrying(false);
-              }
-            }}
-          >
-            {m.project_retry()}
           </Button>
-        </>
-      )}
-    </div>
+        }
+      />
+    );
+  }
+
+  return (
+    <EmptyState
+      className="min-h-52"
+      role={status === "unavailable" ? "alert" : undefined}
+      picture={status === "denied" ? <LockedWireframe /> : <EmptyIcon icon={CircleAlert} />}
+      title={
+        status === "denied" ? m.project_repository_denied() : m.project_repository_unavailable()
+      }
+      description={status === "unavailable" ? m.empty_load_failed_safe() : undefined}
+      primaryAction={
+        <RetryButton
+          isRetrying={retrying}
+          label={m.project_retry()}
+          onPress={() => void handleRetry()}
+        />
+      }
+      secondaryAction={
+        <Button size="sm" color="tertiary" onPress={openGitHubSettings}>
+          {m.project_github_settings()}
+        </Button>
+      }
+    />
   );
 }

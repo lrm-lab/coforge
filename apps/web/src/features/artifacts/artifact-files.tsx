@@ -3,6 +3,11 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
+import { CircleAlert } from "kubai-icons/duotone";
+
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { GalleryWireframe } from "#src/components/ui/empty-wireframes";
 import {
   ConversationFilesPanel,
   conversationFilesQuery,
@@ -15,11 +20,6 @@ import { useArtifactLink } from "./artifact-beside-chat";
 
 type Filter = "all" | "files" | "artifacts";
 
-/**
- * A conversation's Files tab with its artifacts (task #385; #514, Frank: All / Files / Artifacts,
- * documents and web pages together under Artifacts): on All the artifacts (most recently changed
- * first) above the files, each under its heading.
- */
 export function ConversationFilesWithDocuments({
   conversationId,
   onOpenMessage,
@@ -67,7 +67,6 @@ function Count({ of }: { of: number | undefined }) {
   return of ? <span className="text-tertiary"> {of}</span> : null;
 }
 
-/** A group's name on All, where artifacts and files show one above the other. */
 function GroupHeading({ children }: { children: React.ReactNode }) {
   return <h3 className="px-4 pt-5 text-xs font-medium text-tertiary md:px-6">{children}</h3>;
 }
@@ -95,7 +94,6 @@ function FilterChip({
   );
 }
 
-/** The artifacts, or on All nothing when there are none: the files below say the rest. */
 function ArtifactList({
   artifacts,
   heading,
@@ -104,12 +102,34 @@ function ArtifactList({
   heading: boolean;
 }) {
   if (artifacts.isPending) return null;
-  if (artifacts.isError)
-    return <p className="px-4 pt-3 text-sm text-error-primary md:px-6">{m.doc_list_failed()}</p>;
-  if (artifacts.data.length === 0)
-    return heading ? null : (
-      <p className="px-4 pt-4 text-sm text-tertiary md:px-6">{m.doc_list_empty()}</p>
+  if (artifacts.isError) {
+    return (
+      <div className="px-4 pt-3 md:px-6">
+        <EmptyState
+          size="card"
+          role="alert"
+          picture={<EmptyIcon icon={CircleAlert} size="card" />}
+          title={m.doc_list_failed()}
+          primaryAction={
+            <RetryButton
+              size="card"
+              isRetrying={artifacts.isRefetching}
+              onPress={() => void artifacts.refetch()}
+            />
+          }
+        />
+      </div>
     );
+  }
+  if (artifacts.data.length === 0) {
+    return heading ? null : (
+      <EmptyState
+        picture={<GalleryWireframe accent={false} />}
+        title={m.doc_list_empty()}
+        description={m.empty_artifacts_description()}
+      />
+    );
+  }
   return (
     <section aria-label={m.doc_filter_artifacts()} className="flex flex-col">
       {heading && <GroupHeading>{m.doc_filter_artifacts()}</GroupHeading>}

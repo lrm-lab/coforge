@@ -36,19 +36,17 @@ type Undelivered = {
   reason: Awaited<ReturnType<typeof loadMessageSeenBy>>["undeliveredAgents"][number]["reason"];
 };
 
-/** The message's readers, resolved against the directory at render (the query caches ids only,
- * so a directory that fills in later still names them); one the directory does not hold (they have
- * since left, or joined after the page was read) is counted but not listed. */
 function useSeenBy(conversationId: string, messageId: string, enabled: boolean) {
   const directory = useMemberDirectory();
   const load = useServerFn(loadMessageSeenBy);
-  const { data } = useQuery({
+  const { data, isError } = useQuery({
     queryKey: ["conversation", "seen-by", conversationId, messageId],
     queryFn: () => load({ data: { conversationId, messageId } }),
     enabled,
     staleTime: 10_000,
   });
   return useMemo(() => {
+    if (isError && !data) return { failed: true as const };
     if (!data) return undefined;
     const { seen, seenAt, undeliveredAgents } = data;
     const members = new Map(directory?.map((member) => [mentionKey(member), member]));
@@ -56,14 +54,12 @@ function useSeenBy(conversationId: string, messageId: string, enabled: boolean) 
       const member = members.get(mentionKey(reader));
       return member ? [member] : [];
     });
-    // Only an Agent the viewer can name is listed: a blocker is no use without a face and a name.
     const undelivered = undeliveredAgents.flatMap(({ id, reason }): Undelivered[] => {
       const agent = members.get(mentionKey({ kind: "agent", id }));
       return agent ? [{ agent, reason }] : [];
     });
-    // Counted like the ticks count them, even a reader the directory cannot name yet.
-    return { readers, undelivered, count: seen.length, seenAt };
-  }, [data, directory]);
+    return { failed: false as const, readers, undelivered, count: seen.length, seenAt };
+  }, [data, directory, isError]);
 }
 
 /** When the other side of a direct message read it, in the viewer's own zone and clock. */
@@ -151,11 +147,18 @@ function ListedMember({
   );
 }
 
-/** The entry's own label: the read count, and under it how many Agents the message missed. */
-function SeenSummary({ count, undelivered }: { count?: number; undelivered: number }) {
+function SeenSummary({
+  count,
+  failed,
+  undelivered,
+}: {
+  count?: number;
+  failed?: boolean;
+  undelivered: number;
+}) {
   return (
     <span className="flex min-w-0 grow flex-col text-left">
-      <span className="truncate">{seenLabel(count)}</span>
+      <span className="truncate">{seenLabel(count, failed)}</span>
       {undelivered > 0 && (
         <span className="text-xs font-normal text-tertiary">
           {m.conversation_seen_undelivered({ count: undelivered })}
@@ -165,17 +168,15 @@ function SeenSummary({ count, undelivered }: { count?: number; undelivered: numb
   );
 }
 
-const seenLabel = (count: number | undefined) =>
-  count === undefined
-    ? m.conversation_seen_loading()
-    : count === 0
-      ? m.conversation_seen_none()
-      : m.conversation_seen_count({ count: String(count) });
+const seenLabel = (count: number | undefined, failed?: boolean) =>
+  failed
+    ? m.empty_seen_by_load_failed()
+    : count === undefined
+      ? m.conversation_seen_loading()
+      : count === 0
+        ? m.empty_seen_by_none()
+        : m.conversation_seen_count({ count: String(count) });
 
-/**
- * The "N seen" entry of the hover toolbar's "…" menu on an own message, which opens the list of
- * readers. Read when the menu opens.
- */
 export function MessageSeenByMenuEntry({
   conversationId,
   messageId,
@@ -186,16 +187,18 @@ export function MessageSeenByMenuEntry({
   menuOpen: boolean;
 }) {
   const seen = useSeenBy(conversationId, messageId, menuOpen);
-  const readers = seen?.readers ?? [];
-  const undelivered = seen?.undelivered ?? [];
-  const seenAt = useSeenAtLabel(seen?.seenAt);
+  const failed = seen?.failed === true;
+  const data = seen && !seen.failed ? seen : undefined;
+  const readers = data?.readers ?? [];
+  const undelivered = data?.undelivered ?? [];
+  const seenAt = useSeenAtLabel(data?.seenAt);
   return seenAt ? (
     <Dropdown.Item icon={SeenIcon} label={seenAt} />
   ) : readers.length || undelivered.length ? (
     <Dropdown.SubmenuTrigger>
-      <Dropdown.Item textValue={seenLabel(seen?.count)} icon={SeenIcon}>
+      <Dropdown.Item textValue={seenLabel(data?.count, failed)} icon={SeenIcon}>
         <span className="flex items-center">
-          <SeenSummary count={seen?.count} undelivered={undelivered.length} />
+          <SeenSummary count={data?.count} failed={failed} undelivered={undelivered.length} />
           <ReaderFaces readers={readers} />
         </span>
       </Dropdown.Item>
@@ -224,14 +227,10 @@ export function MessageSeenByMenuEntry({
       </Dropdown.SubmenuPopover>
     </Dropdown.SubmenuTrigger>
   ) : (
-    <Dropdown.Item isDisabled icon={SeenIcon} label={seenLabel(seen?.count)} />
+    <Dropdown.Item isDisabled icon={SeenIcon} label={seenLabel(data?.count, failed)} />
   );
 }
 
-/**
- * The action sheet's counterpart on a phone: the same "N seen" row, which unfolds the readers
- * under it. Read when the sheet opens.
- */
 export function MessageSeenBySheetEntry({
   conversationId,
   messageId,
@@ -241,9 +240,11 @@ export function MessageSeenBySheetEntry({
 }) {
   const [expanded, setExpanded] = useState(false);
   const seen = useSeenBy(conversationId, messageId, true);
-  const readers = seen?.readers ?? [];
-  const undelivered = seen?.undelivered ?? [];
-  const seenAt = useSeenAtLabel(seen?.seenAt);
+  const failed = seen?.failed === true;
+  const data = seen && !seen.failed ? seen : undefined;
+  const readers = data?.readers ?? [];
+  const undelivered = data?.undelivered ?? [];
+  const seenAt = useSeenAtLabel(data?.seenAt);
   const listed = !seenAt && readers.length + undelivered.length > 0;
   return (
     <>
@@ -260,7 +261,7 @@ export function MessageSeenBySheetEntry({
         {seenAt ? (
           <span className="grow text-left">{seenAt}</span>
         ) : (
-          <SeenSummary count={seen?.count} undelivered={undelivered.length} />
+          <SeenSummary count={data?.count} failed={failed} undelivered={undelivered.length} />
         )}
         {listed ? (
           <>

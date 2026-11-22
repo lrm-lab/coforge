@@ -7,7 +7,11 @@ import {
 import { getRouteApi } from "@tanstack/react-router";
 import { ArrowRight } from "@untitledui/icons";
 
+import { CircleAlert } from "kubai-icons/duotone";
 import { Badge } from "#src/components/base/badges/badges";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { Skeleton } from "#src/components/ui/skeleton";
 import { ActorName, type NamedActor } from "#src/features/avatars/actor-name";
 import { messageSlots } from "#src/lib/message-slots";
 import { formatDateForDisplay } from "#src/lib/dates";
@@ -29,7 +33,6 @@ export function StatusBadge({ status }: { status: TaskStatus }) {
   );
 }
 
-/** Who History names: a person or an Agent by face and name (task #521); the system by name. */
 export type TimelineNames = {
   actor: (type: TaskHistoryEvent["actorType"], handle: string | null) => NamedActor | string;
   assignee: (kind: "user" | "agent", id: string) => NamedActor;
@@ -38,25 +41,48 @@ export type TimelineNames = {
 const actorNode = (actor: NamedActor | string) =>
   typeof actor === "string" ? actor : <ActorName actor={actor} />;
 
-/** The Task popup's change history: its read failing, empty, or the timeline of events. */
 export function TaskHistory({
+  loading = false,
   failed,
+  retrying = false,
+  onRetry,
   events,
   names,
 }: {
+  loading?: boolean;
   failed: boolean;
+  retrying?: boolean;
+  onRetry?: () => void;
   events?: readonly TaskHistoryEvent[];
   names: TimelineNames;
 }) {
-  if (failed)
+  if (failed) {
     return (
-      <p role="alert" className="mt-3 text-sm text-error-primary">
-        {m.tasks_history_error()}
-      </p>
+      <EmptyState
+        size="card"
+        role="alert"
+        className="mt-3"
+        picture={<EmptyIcon icon={CircleAlert} size="card" />}
+        title={m.empty_tasks_history_load_failed()}
+        primaryAction={
+          onRetry ? <RetryButton size="card" isRetrying={retrying} onPress={onRetry} /> : undefined
+        }
+      />
     );
+  }
+  if (loading && !events) {
+    return (
+      <div className="mt-3 space-y-3" aria-busy="true">
+        <Skeleton className="h-10 w-full rounded-lg" />
+        <Skeleton className="h-10 w-5/6 rounded-lg" />
+        <Skeleton className="h-10 w-2/3 rounded-lg" />
+      </div>
+    );
+  }
   if (!events) return null;
-  if (events.length === 0)
-    return <p className="mt-3 text-sm text-tertiary">{m.tasks_history_empty()}</p>;
+  if (events.length === 0) {
+    return <EmptyState size="row" className="mt-3 px-0" title={m.tasks_history_empty()} />;
+  }
   return <TaskTimeline events={events} names={names} />;
 }
 

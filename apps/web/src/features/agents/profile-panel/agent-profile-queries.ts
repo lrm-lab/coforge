@@ -129,7 +129,12 @@ export function useAgentProfile(agentId: string, visible: boolean) {
 
   return {
     profile,
-    unavailable: profile === null || redirecting || (query.isError && !profile),
+    unavailable: profile === null || redirecting,
+    loadFailed: !redirecting && query.isError && !profile,
+    retrying: query.isFetching,
+    retry: () => {
+      void query.refetch();
+    },
     notVisible: query.data?.notVisible ?? false,
   };
 }

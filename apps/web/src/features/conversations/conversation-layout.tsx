@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { MessageSquare01 as MessagesSquare } from "@untitledui/icons";
 
+import { EmptyState } from "#src/components/ui/empty";
+import { ChatWireframe } from "#src/components/ui/empty-wireframes";
 import {
   useCurrentWorkspaceId,
   useVisibleAgentDirectory,
@@ -21,12 +22,6 @@ import {
 } from "./last-conversation";
 import { listedDirectIds } from "./sidebar-rows";
 
-/**
- * The Chat detail pane with no conversation in the URL. On a desktop-wide viewport, where list and
- * detail sit side by side, Chat opens a conversation instead of asking for a choice
- * (`landingConversation`). Narrower viewports show the list and never jump past it
- * (docs/design/task-first-layout.md §2.1). With nothing to open, the pane asks for a choice.
- */
 export function EmptyConversation() {
   const { channels, directs } = useSidebarLists();
   const agents = useVisibleAgentDirectory();
@@ -35,13 +30,10 @@ export function EmptyConversation() {
   const draftsOn = useDraftsOn();
   const desktop = useBreakpoint("lg");
   const navigate = useNavigate();
-  // While any navigation is under way (the landing one included) the pane leaves it alone; once
-  // the router settles back here — say a Chat click interrupted the landing — it lands again.
   const navigating = useRouterState({ select: (state) => state.status === "pending" });
   useEffect(() => {
     if (!desktop || navigating) return;
     const remembered = workspaceId ? rememberedConversation(workspaceId) : undefined;
-    // Drafts is a place to land only once its experiment is known to be on: wait for that.
     if (
       draftsOn === undefined &&
       remembered &&
@@ -67,9 +59,6 @@ export function EmptyConversation() {
     navigate,
   ]);
 
-  // While a channel or direct message is opening, this pane would still ask for the choice just
-  // made until the router's pending fallback is due: show the conversation skeleton instead, and
-  // likewise when a joined channel will be opened, so no frame asks first.
   const opening = useRouterState({
     select: (state) => {
       if (state.status !== "pending") return false;
@@ -79,12 +68,12 @@ export function EmptyConversation() {
   });
   if (opening || firstJoinedChannel(channels)) return <ConversationPending />;
   return (
-    <div className="grid h-full place-content-center justify-items-center px-6 text-center">
-      <div className="mb-5 flex size-12 items-center justify-center rounded-xl border border-secondary bg-primary">
-        <MessagesSquare aria-hidden="true" className="size-6 text-tertiary" />
-      </div>
-      <p className="text-lg font-semibold">{m.messages_empty_title()}</p>
-      <p className="mt-2 max-w-sm text-sm text-tertiary">{m.messages_empty_description()}</p>
-    </div>
+    <EmptyState
+      size="page"
+      className="h-full"
+      picture={<ChatWireframe accent={channels.length === 0} />}
+      title={m.empty_conversation_none_selected_title()}
+      description={m.empty_conversation_none_selected_description()}
+    />
   );
 }

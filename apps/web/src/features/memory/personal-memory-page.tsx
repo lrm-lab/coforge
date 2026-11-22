@@ -15,6 +15,12 @@ import {
 } from "./personal-memory-editor";
 import { PersonalMemoryHistoryPanel } from "./personal-memory-history-panel";
 import { personalResponseError as responseError } from "./personal-memory-response";
+import {
+  PersonalMemoryAgentsEmpty,
+  PersonalMemoryDetailEmpty,
+  PersonalMemoryErrorState,
+  PersonalMemoryListEmpty,
+} from "./personal-memory-states";
 import { MemoryScopeLinks } from "./memory-scope-links";
 import { listMyMemoryAgents, personalMemoryCommand } from "./personal-memory.functions";
 
@@ -189,7 +195,10 @@ export function PersonalMemoryPage({
               ))}
             </Select>
             {!agents.agents.length && (
-              <p className="text-sm text-tertiary">{m.memory_no_agents()}</p>
+              <PersonalMemoryAgentsEmpty
+                agentQuery={search.agentQuery}
+                onClear={() => void update({ agentQuery: "", page: 1 })}
+              />
             )}
             <div className="flex gap-3">
               {search.page > 1 && (
@@ -246,12 +255,24 @@ export function PersonalMemoryPage({
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             {list && responseError(list) && (
-              <p role="alert" className="px-5 py-5 text-sm text-error-primary">
-                {responseError(list)}
-              </p>
+              <div className="p-4">
+                <PersonalMemoryErrorState
+                  message={responseError(list)!}
+                  onRetry={() => void router.invalidate({ sync: true })}
+                />
+              </div>
             )}
             {list && !responseError(list) && !entries.length && next === undefined && (
-              <p className="px-5 py-8 text-sm text-tertiary">{m.memory_empty()}</p>
+              <PersonalMemoryListEmpty
+                query={search.q}
+                archived={search.archived}
+                agentName={agents.selected?.displayName || agents.selected?.name || ""}
+                onClear={() => void update({ q: "", archived: false, offset: 0 })}
+                onCreate={() => {
+                  setEditing(false);
+                  void update({ key: undefined, create: true });
+                }}
+              />
             )}
             <ul className="divide-y divide-secondary">
               {entries.map((item) => (
@@ -313,13 +334,21 @@ export function PersonalMemoryPage({
               </Button>
             </div>
           )}
-          <p className="text-sm text-tertiary">
-            {search.agent ? m.memory_private_help() : m.memory_choose_agent()}
-          </p>
+          {(isEditing || entry) && (
+            <p className="text-sm text-tertiary">{m.memory_private_help()}</p>
+          )}
           {detail && responseError(detail) && (
-            <p role="alert" className="text-sm text-error-primary">
-              {responseError(detail)}
-            </p>
+            <PersonalMemoryErrorState
+              size="page"
+              message={responseError(detail)!}
+              onRetry={() => void router.invalidate({ sync: true })}
+            />
+          )}
+          {!isEditing && !entry && !(detail && responseError(detail)) && (
+            <PersonalMemoryDetailEmpty
+              hasAgents={agentItems.length > 0 || Boolean(search.agent)}
+              hasAgentSelected={Boolean(search.agent)}
+            />
           )}
           {isEditing && search.agent && (search.create || entry) ? (
             <PersonalMemoryEditor
@@ -435,9 +464,10 @@ export function PersonalMemoryPage({
             )
           )}
           {error && (
-            <p role="alert" className="text-sm text-error-primary">
-              {error}
-            </p>
+            <PersonalMemoryErrorState
+              message={error}
+              onRetry={() => void router.invalidate({ sync: true })}
+            />
           )}
         </section>
       </div>

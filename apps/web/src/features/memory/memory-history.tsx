@@ -1,7 +1,10 @@
 import { useState } from "react";
+import { CircleAlert } from "kubai-icons/duotone";
 import type { TeamMemoryHead } from "@lrm/coforge-sdk/agent";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { MemoryProvenance } from "./memory-provenance";
 import * as m from "#src/paraglide/messages";
 import { memoryCommand } from "./memory.functions";
@@ -52,7 +55,10 @@ export function MemoryHistory({
       >
         {m.memory_history()}
       </Button>
-      {opened && (
+      {opened && versions.length === 0 && (
+        <EmptyState size="row" className="px-0" title={m.empty_memory_history_empty()} />
+      )}
+      {opened && versions.length > 0 && (
         <ol className="divide-y divide-secondary">
           {versions.map((entry) => (
             <li key={entry.revision} className="flex flex-col gap-2 py-3">
@@ -140,9 +146,13 @@ export function MemoryHistory({
         </div>
       )}
       {error && (
-        <p role="alert" className="text-sm text-error-primary">
-          {error}
-        </p>
+        <EmptyState
+          size="card"
+          role="alert"
+          picture={<EmptyIcon icon={CircleAlert} size="card" />}
+          title={error}
+          primaryAction={<RetryButton size="card" isRetrying={busy} onPress={() => void load()} />}
+        />
       )}
     </section>
   );

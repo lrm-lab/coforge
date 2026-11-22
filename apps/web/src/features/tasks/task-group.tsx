@@ -14,6 +14,7 @@ import { Button as AriaButton, Disclosure, DisclosurePanel, Heading } from "reac
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { EmptyState } from "#src/components/ui/empty";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import {
@@ -210,8 +211,8 @@ export function TaskGroup({
             </div>
           )}
           {expanded && paged?.footer}
-          {expanded && !paged && !board && count === 0 && (
-            <p className="px-4 py-3 text-sm text-tertiary">{m.tasks_group_empty()}</p>
+          {expanded && !board && count === 0 && !paged?.footer && (
+            <EmptyState size="row" className="px-4" title={m.tasks_group_empty()} />
           )}
         </DisclosurePanel>
       </Disclosure>

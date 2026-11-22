@@ -1,11 +1,14 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
 import { Download01, MarkerPin01 } from "@untitledui/icons";
+import { CircleAlert, Folder } from "kubai-icons/duotone";
 
 import { m } from "#src/paraglide/messages";
 import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { FileTypeIcon } from "#src/features/files/file-type-icon";
 import { formatDateForDisplay } from "#src/lib/dates";
@@ -181,19 +184,42 @@ export function ConversationFilesPanel({
   onOpenMessage,
 }: {
   conversationId: string;
-  /** Files-tab "locate in chat": switches to the chat view scrolled to the file's message. */
   onOpenMessage?: (messageId: string) => Promise<void>;
 }) {
   const timeZone = appRoute.useLoaderData().timeZone;
-  const { data: files, isPending, isError } = useConversationFiles(conversationId);
+  const {
+    data: files,
+    isPending,
+    isError,
+    isRefetching,
+    refetch,
+  } = useConversationFiles(conversationId);
   if (isPending) {
     return <FilesSkeleton />;
   }
   if (isError) {
-    return <p className="p-4 text-sm text-destructive md:px-6">{m.files_load_failed()}</p>;
+    return (
+      <EmptyState
+        size="page"
+        role="alert"
+        picture={<EmptyIcon icon={CircleAlert} />}
+        title={m.empty_files_load_failed_title()}
+        description={m.empty_load_failed_safe()}
+        primaryAction={
+          <RetryButton size="page" isRetrying={isRefetching} onPress={() => void refetch()} />
+        }
+      />
+    );
   }
   if (!files || files.length === 0) {
-    return <p className="p-4 text-sm text-tertiary md:px-6">{m.files_empty()}</p>;
+    return (
+      <EmptyState
+        size="page"
+        picture={<EmptyIcon icon={Folder} />}
+        title={m.empty_files_empty_title()}
+        description={m.empty_files_empty_description()}
+      />
+    );
   }
   return (
     <div className="flex min-h-0 flex-1 flex-col">

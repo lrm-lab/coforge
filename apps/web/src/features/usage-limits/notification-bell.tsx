@@ -10,9 +10,13 @@ import {
   Popover as AriaPopover,
 } from "react-aria-components";
 
+import { Bell, CircleAlert } from "kubai-icons/duotone";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { Fold } from "#src/components/ui/fold";
+import { Skeleton } from "#src/components/ui/skeleton";
 import { UnreadBadge } from "#src/components/ui/unread-marker";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
@@ -92,10 +96,35 @@ function NoticeList({
       <h2 className="border-b border-secondary px-4 py-3 text-sm font-semibold text-primary">
         {m.system_notifications_title()}
       </h2>
-      {rows.length === 0 ? (
-        <p className="px-4 py-8 text-center text-sm text-tertiary">
-          {m.system_notifications_empty()}
-        </p>
+      {notifications.loading ? (
+        <div role="status" aria-label={m.empty_notifications_loading()} className="grid gap-3 p-4">
+          <Skeleton className="h-14 w-full" />
+          <Skeleton className="h-14 w-full" />
+        </div>
+      ) : notifications.failed ? (
+        <div className="p-3">
+          <EmptyState
+            size="card"
+            role="alert"
+            picture={<EmptyIcon icon={CircleAlert} size="card" />}
+            title={m.empty_notifications_load_failed()}
+            primaryAction={
+              <RetryButton
+                size="card"
+                isRetrying={notifications.retrying}
+                onPress={notifications.retry}
+              />
+            }
+          />
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="p-3">
+          <EmptyState
+            size="card"
+            picture={<EmptyIcon icon={Bell} size="card" muted />}
+            title={m.empty_notifications_all_done()}
+          />
+        </div>
       ) : (
         <ul className="-mb-px min-h-0 flex-1 overflow-y-auto [scrollbar-width:thin]">
           {rows.map(({ item, leaving }) => (

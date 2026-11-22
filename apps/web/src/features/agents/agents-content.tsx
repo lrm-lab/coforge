@@ -13,7 +13,8 @@ import {
   consumeSharedRect,
 } from "#src/lib/shared-element-rect";
 import { DURATION_S, EASE_IN, EASE_OUT } from "#src/utils/motion-tokens";
-import { Plus, SearchLg as Search, Users01 as UsersRound, UsersPlus } from "@untitledui/icons";
+import { Plus, SearchLg as Search, UsersPlus } from "@untitledui/icons";
+import { CircleAlert } from "kubai-icons/duotone";
 import { Spinner } from "#src/components/ui/spinner";
 
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
@@ -23,14 +24,10 @@ import { formatCalendarDate } from "#src/lib/dates";
 import { getLocale } from "#src/paraglide/runtime";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "#src/components/ui/empty";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { MembersWireframe, NoResultsWireframe } from "#src/components/ui/empty-wireframes";
+import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
 import { localLayoutStorage } from "#src/features/conversations/local-layout-storage";
 
@@ -217,15 +214,36 @@ export function AgentsContent({
           />
         </div>
       )}
-      <TabPanel id={memberType} className="relative min-h-0 flex-1 overflow-y-auto px-page pb-8">
+      <TabPanel
+        id={memberType}
+        className="relative flex min-h-0 flex-1 flex-col overflow-y-auto px-page pb-8"
+      >
         {pages.isError && !pages.data ? (
-          <div role="alert" className="mt-8 flex flex-col items-center gap-3 text-center">
-            <p className="text-sm text-error-primary">{m.member_directory_load_error()}</p>
-            <Button size="sm" color="secondary" onPress={() => void pages.refetch()}>
-              {m.controls_retry()}
-            </Button>
+          <EmptyState
+            size="page"
+            role="alert"
+            picture={<EmptyIcon icon={CircleAlert} />}
+            title={m.empty_members_load_failed_title()}
+            description={m.empty_load_failed_safe()}
+            primaryAction={
+              <RetryButton
+                size="page"
+                isRetrying={pages.isRefetching}
+                onPress={() => void pages.refetch()}
+              />
+            }
+          />
+        ) : pages.isPending ? (
+          <div
+            role="status"
+            aria-label={m.agents_loading()}
+            className="mt-4 grid gap-4 md:grid-cols-[repeat(auto-fill,minmax(26rem,1fr))]"
+          >
+            <Skeleton className="h-32 rounded-xl" />
+            <Skeleton className="h-32 rounded-xl" />
+            <Skeleton className="h-32 rounded-xl" />
           </div>
-        ) : pages.isPending ? null : listedPeople.length + listedAgents.length ? (
+        ) : listedPeople.length + listedAgents.length ? (
           <GridList
             aria-label={onAgentTab ? m.member_tab_agents() : m.member_tab_humans()}
             layout="grid"
@@ -273,52 +291,55 @@ export function AgentsContent({
           </GridList>
         ) : null}
         {pages.isFetchNextPageError ? (
-          <div role="alert" className="mt-4 flex flex-col items-center gap-3 text-center">
-            <p className="text-sm text-error-primary">{m.member_directory_load_error()}</p>
-            <Button size="sm" color="secondary" onPress={() => void pages.fetchNextPage()}>
-              {m.controls_retry()}
-            </Button>
-          </div>
-        ) : pages.isError || pages.isPending || listedPeople.length + listedAgents.length ? null : (
-          <Empty
-            className={
-              tabTotal ? "gap-5 px-0 py-12" : "gap-6 px-0 pt-[clamp(3rem,12svh,7rem)] pb-10"
+          <EmptyState
+            size="row"
+            role="alert"
+            className="mt-4"
+            title={m.empty_members_load_failed_title()}
+            primaryAction={
+              <RetryButton
+                size="row"
+                isRetrying={pages.isFetchingNextPage}
+                onPress={() => void pages.fetchNextPage()}
+              />
             }
-          >
-            <EmptyHeader className="max-w-xs gap-3">
-              {tabTotal ? (
-                <EmptyMedia>
-                  <Search aria-hidden="true" className="size-8 text-tertiary" strokeWidth={1.5} />
-                </EmptyMedia>
+          />
+        ) : pages.isError || pages.isPending || listedPeople.length + listedAgents.length ? null : (
+          <EmptyState
+            size="page"
+            headingLevel={2}
+            live={tabTotal ? "polite" : undefined}
+            picture={
+              tabTotal ? (
+                <NoResultsWireframe />
               ) : (
-                <EmptyMedia aria-hidden="true" className="relative mb-3 h-28 w-44">
-                  <span className="absolute inset-x-2 top-0 h-24 rounded-full bg-secondary" />
-                  <UsersRound className="relative size-20 text-tertiary" strokeWidth={1} />
-                  <span className="absolute right-2 bottom-0 flex size-10 items-center justify-center rounded-xl border border-secondary bg-primary text-tertiary shadow-sm">
-                    <Plus className="size-5" />
-                  </span>
-                </EmptyMedia>
-              )}
-              <EmptyTitle role="heading" aria-level={2} className="text-lg font-semibold">
-                {tabTotal
-                  ? m.agent_no_search_results()
-                  : onAgentTab
-                    ? m.agent_empty_title()
-                    : m.member_no_humans()}
-              </EmptyTitle>
-              <EmptyDescription>
-                {tabTotal
-                  ? filtersActive
-                    ? m.member_filter_empty_description()
-                    : m.agent_search_description()
-                  : onAgentTab
-                    ? m.agent_empty_description()
-                    : null}
-              </EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              {tabTotal ? (
+                <MembersWireframe accent={onAgentTab ? canCreateAgent : canInviteMember} />
+              )
+            }
+            title={
+              tabTotal
+                ? query.trim()
+                  ? m.empty_members_no_match_query({ query: query.trim() })
+                  : filtersActive
+                    ? m.empty_members_filter_empty_title()
+                    : m.agent_no_search_results()
+                : onAgentTab
+                  ? m.agent_empty_title()
+                  : m.empty_members_humans_title()
+            }
+            description={
+              tabTotal
+                ? filtersActive
+                  ? m.member_filter_empty_description()
+                  : m.agent_search_description()
+                : onAgentTab
+                  ? m.empty_members_agents_description()
+                  : m.empty_members_humans_description()
+            }
+            primaryAction={
+              tabTotal ? (
                 <Button
+                  size="sm"
                   color="secondary"
                   onPress={() => {
                     setSearch("");
@@ -328,9 +349,17 @@ export function AgentsContent({
                 >
                   {filtersActive ? m.member_clear_filters() : m.agent_clear_search()}
                 </Button>
-              ) : null}
-            </EmptyContent>
-          </Empty>
+              ) : onAgentTab && canCreateAgent ? (
+                <Button size="sm" iconLeading={Plus} onPress={() => onDialogChange("create-agent")}>
+                  {m.header_new_agent()}
+                </Button>
+              ) : !onAgentTab && canInviteMember ? (
+                <Button size="sm" iconLeading={UsersPlus} onPress={() => onDialogChange("invite")}>
+                  {m.member_invite_humans()}
+                </Button>
+              ) : undefined
+            }
+          />
         )}
       </TabPanel>
     </Tabs>

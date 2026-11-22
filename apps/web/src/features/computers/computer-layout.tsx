@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { Dataflow03 as Cable, Laptop01 as LaptopMinimal, Plus } from "@untitledui/icons";
+import { Plus } from "@untitledui/icons";
 
 import { PageHeader } from "#src/components/layout/page-header";
-import { Empty, EmptyContent, EmptyHeader, EmptyMedia, EmptyTitle } from "#src/components/ui/empty";
+import { EmptyState } from "#src/components/ui/empty";
+import { ComputersWireframe } from "#src/components/ui/empty-wireframes";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -208,24 +209,17 @@ function AddComputer({ onAdd }: { onAdd: () => void }) {
 
 function NoComputers({ onAdd }: { onAdd: () => void }) {
   return (
-    <Empty className="gap-6 px-6 pt-[clamp(3rem,12svh,7rem)] pb-10">
-      <EmptyHeader className="max-w-xs gap-3">
-        <EmptyMedia aria-hidden="true" className="relative mb-3 h-28 w-44">
-          <span className="absolute inset-x-2 top-0 h-24 rounded-full bg-secondary/70" />
-          <LaptopMinimal className="relative size-28 text-tertiary" strokeWidth={1} />
-          <span className="absolute right-2 bottom-0 flex size-10 items-center justify-center rounded-xl border border-secondary bg-primary text-tertiary shadow-sm">
-            <Cable className="size-5" strokeWidth={1.5} />
-          </span>
-        </EmptyMedia>
-        <EmptyTitle role="heading" aria-level={2} className="text-lg font-semibold">
-          {m.computer_empty_title()}
-        </EmptyTitle>
-      </EmptyHeader>
-      <EmptyContent>
+    <EmptyState
+      size="page"
+      headingLevel={2}
+      picture={<ComputersWireframe accent />}
+      title={m.empty_computers_title()}
+      description={m.empty_computers_description()}
+      primaryAction={
         <Button iconLeading={Plus} onPress={onAdd}>
           {m.computer_add_title()}
         </Button>
-      </EmptyContent>
-    </Empty>
+      }
+    />
   );
 }

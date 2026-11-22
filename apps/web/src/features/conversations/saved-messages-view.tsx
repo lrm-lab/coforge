@@ -1,7 +1,8 @@
 import { ChannelPlace } from "./channel-name";
 import { actionCardPreviewText } from "./action-card-preview";
 import { Link, useRouter } from "@tanstack/react-router";
-import { Bookmark, BookmarkCheck, Copy01, Link01, MessageTextSquare01 } from "@untitledui/icons";
+import { BookmarkCheck, Copy01, Link01, MessageTextSquare01 } from "@untitledui/icons";
+import { Bookmark as BookmarkDuotone } from "kubai-icons/duotone";
 import { Link as AriaLink } from "react-aria-components";
 
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
@@ -9,13 +10,8 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { PageHeader } from "#src/components/layout/page-header";
 import { ConversationListButton } from "./conversation-list-button";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "#src/components/ui/empty";
+import { EmptyState } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { useAppToast } from "#src/components/ui/toast";
 import { copyText } from "#src/lib/clipboard";
@@ -26,13 +22,6 @@ import { savedJumpTarget } from "./saved-messages-model";
 import type { SavedEntry } from "./saved-messages-collection";
 import { messagePlainText } from "./selection-copy";
 
-/**
- * The Saved view (#127). A card jumps back to the message's position in its conversation — a
- * thread reply lands on its root's row and the thread stays closed (position-only `?message=`,
- * not the notification deep link's `#message-<id>` hash; see `saved-messages-model`). The trailing
- * bookmark unsaves in one click, without a confirm: the card goes at once and the toast offers Undo,
- * which saves the same message again (docs/design/toast-vs-inline.md §13).
- */
 export function SavedMessagesView() {
   const saved = useSavedMessages();
   const entries = useSavedEntries() ?? [];
@@ -50,17 +39,12 @@ export function SavedMessagesView() {
         }
       />
       {entries.length === 0 ? (
-        <div className="flex min-h-0 flex-1 items-center justify-center px-6">
-          <Empty>
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <Bookmark aria-hidden="true" />
-              </EmptyMedia>
-              <EmptyTitle>{m.conversation_saved_empty_title()}</EmptyTitle>
-              <EmptyDescription>{m.conversation_saved_empty_description()}</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        </div>
+        <EmptyState
+          size="page"
+          picture={<EmptyIcon icon={BookmarkDuotone} />}
+          title={m.conversation_saved_empty_title()}
+          description={m.conversation_saved_empty_description()}
+        />
       ) : (
         <ol className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-4">
           {entries.map((entry) => (

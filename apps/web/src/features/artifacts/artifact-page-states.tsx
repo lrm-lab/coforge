@@ -1,8 +1,10 @@
 import { useRouter } from "@tanstack/react-router";
-
-import { RefreshCw01 } from "@untitledui/icons";
+import { CircleAlert } from "kubai-icons/duotone";
 
 import { Button } from "#src/components/base/buttons/button";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { LockedWireframe } from "#src/components/ui/empty-wireframes";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { isAppError } from "#src/lib/app-error";
@@ -36,38 +38,35 @@ export function ArtifactUnavailable({
   const workspaceSlug = useWorkspaceSlug();
   const router = useRouter();
   const Root = onClose ? "div" : "main";
-  const Title = onClose ? "h2" : "h1";
+  const backAction = (
+    <Button
+      size="sm"
+      color={gone ? "secondary" : "tertiary"}
+      onPress={
+        onClose ??
+        (() => void router.navigate({ to: "/w/$workspaceSlug", params: { workspaceSlug } }))
+      }
+    >
+      {onClose ? m.doc_close() : m.doc_back_to_workspace()}
+    </Button>
+  );
   return (
-    <Root className="flex h-full min-w-0 flex-1 flex-col items-center justify-center gap-3 bg-primary px-6 text-center">
-      <Title className="text-md font-medium text-primary">
-        {gone ? m.doc_unavailable_title() : m.doc_load_failed_title()}
-      </Title>
-      <p className="max-w-sm text-sm text-tertiary">
-        {gone ? m.doc_load_failed() : m.doc_load_failed_retry()}
-      </p>
-      <div className="flex items-center gap-4">
-        {!gone && onRetry && (
-          <Button
-            size="sm"
-            color="secondary"
-            iconLeading={RefreshCw01}
-            isLoading={retrying}
-            onClick={onRetry}
-          >
-            {m.doc_retry()}
-          </Button>
-        )}
-        <Button
-          size="sm"
-          color="link-gray"
-          onClick={
-            onClose ??
-            (() => void router.navigate({ to: "/w/$workspaceSlug", params: { workspaceSlug } }))
-          }
-        >
-          {onClose ? m.doc_close() : m.doc_back_to_workspace()}
-        </Button>
-      </div>
+    <Root className="flex h-full min-w-0 flex-1 flex-col bg-primary">
+      <EmptyState
+        headingLevel={onClose ? 2 : 1}
+        role={gone ? undefined : "alert"}
+        picture={gone ? <LockedWireframe /> : <EmptyIcon icon={CircleAlert} />}
+        title={gone ? m.doc_unavailable_title() : m.doc_load_failed_title()}
+        description={gone ? m.doc_load_failed() : m.doc_load_failed_retry()}
+        primaryAction={
+          !gone && onRetry ? (
+            <RetryButton isRetrying={retrying} label={m.doc_retry()} onPress={onRetry} />
+          ) : (
+            backAction
+          )
+        }
+        secondaryAction={!gone && onRetry ? backAction : undefined}
+      />
     </Root>
   );
 }

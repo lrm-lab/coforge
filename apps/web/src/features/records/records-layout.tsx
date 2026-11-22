@@ -24,6 +24,7 @@ import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/t
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
+import { EmptyState } from "#src/components/ui/empty";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -358,7 +359,19 @@ export function RecordsLayout({
                     />
                   )}
                   {weeklyEmpty && (
-                    <p className="px-2 text-sm wrap-anywhere text-tertiary">{weeklyEmpty}</p>
+                    <EmptyState
+                      size="row"
+                      live={query.trim() ? "polite" : undefined}
+                      className="px-2"
+                      title={weeklyEmpty}
+                      primaryAction={
+                        query.trim() ? (
+                          <Button size="xs" color="link-gray" onPress={() => setQuery("")}>
+                            {m.empty_clear_search()}
+                          </Button>
+                        ) : undefined
+                      }
+                    />
                   )}
                 </div>
               ) : (
@@ -381,7 +394,23 @@ export function RecordsLayout({
                   }
                 >
                   {filteredNotes.length === 0 ? (
-                    <p className="px-1 py-4 text-sm text-tertiary">{m.records_notes_empty()}</p>
+                    <EmptyState
+                      size="row"
+                      live={query.trim() ? "polite" : undefined}
+                      className="px-1"
+                      title={
+                        query.trim()
+                          ? m.empty_records_notes_no_match({ query: query.trim() })
+                          : m.records_notes_empty()
+                      }
+                      primaryAction={
+                        query.trim() ? (
+                          <Button size="xs" color="link-gray" onPress={() => setQuery("")}>
+                            {m.empty_clear_search()}
+                          </Button>
+                        ) : undefined
+                      }
+                    />
                   ) : (
                     <ul className="space-y-0.5">
                       {filteredNotes.map((note) => (

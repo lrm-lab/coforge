@@ -16,6 +16,7 @@ import {
 import { Check, Folder } from "@untitledui/icons";
 
 import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
+import { EmptyState } from "#src/components/ui/empty";
 import { Dialog, DialogTrigger, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 
@@ -197,7 +198,15 @@ export function PickerMenu({
       className={PICKER_LIST}
       disabledKeys={all.filter((option) => option.isDisabled).map((option) => option.id)}
       renderEmptyState={() => (
-        <p className="px-2.5 py-2 text-sm text-tertiary">{m.picker_no_matches()}</p>
+        <EmptyState
+          size="menu"
+          live="polite"
+          title={
+            search.trim()
+              ? m.empty_picker_no_matches_query({ query: search.trim() })
+              : m.empty_picker_no_options()
+          }
+        />
       )}
       {...(multiple
         ? {

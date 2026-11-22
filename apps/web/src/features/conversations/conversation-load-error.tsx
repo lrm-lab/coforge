@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { useMatch, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
+import { CircleAlert } from "kubai-icons/duotone";
 import { z } from "zod";
-import { AlertCircle } from "@untitledui/icons";
+
 import { Button } from "#src/components/base/buttons/button";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { isAppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { artifactPageRoute } from "#src/features/artifacts/artifact-search";
@@ -19,17 +22,14 @@ export function ConversationLoadError({ error }: { error: unknown }) {
   const workspaceSlug = useWorkspaceSlug();
   const refreshSidebarChannels = useRefreshSidebarChannels();
   const gone = isConversationGone(error);
-  // An artifact linked beside a conversation the viewer cannot open (`?doc=`), whatever the
-  // reason: its own page decides, as one the Workspace may read is still theirs (task #529).
-  // Read once: leaving for it changes the address, which must not then read as no link at all.
   const search = useRouterState({ select: (state) => state.location.search });
   const [doc] = useState(() => {
     const id = (search as { doc?: unknown }).doc;
     return z.uuid().safeParse(id).success ? (id as string) : undefined;
   });
-  // A conversation that no longer exists for the viewer (a channel hidden from the Workspace)
-  // leaves for Chat, which opens the viewer's next conversation. The channel list is re-read
-  // first, so Chat does not land straight back on the channel that just went away.
+  const [retrying, setRetrying] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+
   useEffect(() => {
     if (doc) {
       void navigate({ ...artifactPageRoute(workspaceSlug, doc), replace: true });
@@ -40,28 +40,51 @@ export function ConversationLoadError({ error }: { error: unknown }) {
       () => void navigate({ to: "/w/$workspaceSlug", params: { workspaceSlug }, replace: true }),
     );
   }, [gone, doc, navigate, workspaceSlug, refreshSidebarChannels]);
+
   if (gone || doc) return <ConversationPending />;
+
+  const errorId = isAppError(error) ? error.errorId : undefined;
+  async function retry() {
+    setRetrying(true);
+    try {
+      await router.invalidate({ filter: (match) => match.routeId === routeId });
+    } finally {
+      setRetrying(false);
+    }
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <ConversationBackHeader>
         <h1 className="text-md font-semibold">{m.messages_title()}</h1>
       </ConversationBackHeader>
-      <div className="grid flex-1 place-content-center gap-4 p-6 text-center">
-        <AlertCircle aria-hidden="true" className="mx-auto size-5 text-error-primary" />
-        <p role="alert" className="text-sm">
-          {m.conversation_history_load_error()}
+      <EmptyState
+        size="page"
+        role="alert"
+        picture={<EmptyIcon icon={CircleAlert} />}
+        title={m.empty_conversation_load_failed_title()}
+        description={m.empty_load_failed_safe()}
+        primaryAction={
+          <RetryButton size="page" isRetrying={retrying} onPress={() => void retry()} />
+        }
+        secondaryAction={
+          errorId ? (
+            <Button
+              size="sm"
+              color="tertiary"
+              aria-expanded={showDetails}
+              onPress={() => setShowDetails((value) => !value)}
+            >
+              {m.empty_details_toggle()}
+            </Button>
+          ) : undefined
+        }
+      />
+      {errorId && showDetails && (
+        <p className="pb-6 text-center font-mono text-xs text-tertiary">
+          {m.error_reference({ errorId })}
         </p>
-        {isAppError(error) && error.errorId && (
-          <p className="text-xs text-tertiary">{m.error_reference({ errorId: error.errorId })}</p>
-        )}
-        <Button
-          color="secondary"
-          className="justify-self-center"
-          onPress={() => void router.invalidate({ filter: (match) => match.routeId === routeId })}
-        >
-          {m.controls_retry()}
-        </Button>
-      </div>
+      )}
     </div>
   );
 }

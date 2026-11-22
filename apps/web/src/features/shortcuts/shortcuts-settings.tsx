@@ -1,11 +1,14 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useHydrated } from "@tanstack/react-router";
 import { Edit02, Keyboard01, Plus, RefreshCcw01, SearchMd, Trash01 } from "@untitledui/icons";
+import { Search } from "kubai-icons/duotone";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { SettingsCard, SettingsGroup, SettingsPage } from "#src/components/settings-layout";
+import { EmptyState } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { SEARCH_KEY } from "#src/features/search/search-key-hints";
 import {
   hotkeyKeycaps,
@@ -206,7 +209,21 @@ export function ShortcutsSettings() {
       </div>
 
       {noResults ? (
-        <p className="text-sm text-tertiary">{m.shortcuts_filter_empty()}</p>
+        <EmptyState
+          size="card"
+          live="polite"
+          picture={<EmptyIcon icon={Search} size="card" />}
+          title={
+            query.trim()
+              ? m.empty_shortcuts_no_match_query({ query: query.trim() })
+              : m.shortcuts_filter_empty()
+          }
+          primaryAction={
+            <Button size="sm" color="tertiary" onPress={() => setQuery("")}>
+              {m.empty_shortcuts_clear_filter()}
+            </Button>
+          }
+        />
       ) : (
         <>
           {filteredGroups.map((group) => (

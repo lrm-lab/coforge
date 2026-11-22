@@ -11,6 +11,7 @@ import { Plus, SearchLg } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { EmptyState } from "#src/components/ui/empty";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { m } from "#src/paraglide/messages";
 
@@ -72,9 +73,18 @@ function TaskPickerList({ task, rules, parentsFor, label, onPick, disabled }: Pi
       <Dropdown.Menu
         aria-label={label}
         className="max-h-72"
-        // Only a change still saving disables the rows; one that would loop stays reachable and
-        // says why (TaskPickerItem), and choosing it does nothing.
         disabledKeys={disabled ? shown.map(taskNameLabel) : []}
+        renderEmptyState={() => (
+          <EmptyState
+            size="menu"
+            live="polite"
+            title={
+              search.trim()
+                ? m.empty_tasks_picker_no_match_query({ query: search.trim() })
+                : m.empty_tasks_picker_none()
+            }
+          />
+        )}
         onAction={(key) => {
           const picked = shown.find((candidate) => taskNameLabel(candidate) === key);
           if (picked && !rules.loops.has(taskNameLabel(picked))) onPick(picked);

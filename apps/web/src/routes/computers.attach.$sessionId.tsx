@@ -1,14 +1,13 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
+import { Button } from "#src/components/base/buttons/button";
+import { EmptyState } from "#src/components/ui/empty";
+import { LockedWireframe } from "#src/components/ui/empty-wireframes";
 import { AttachApprovePage } from "#src/features/computers/attach-approve";
 import { readComputerAttach } from "#src/features/computers/attach-approve.functions";
+import { ErrorPageFrame } from "#src/features/errors/error-page-frame";
+import { m } from "#src/paraglide/messages";
 
-/**
- * Where a `coforge-computer attach` approval link opens (task #417): the machine's reported
- * name, host, OS and code, the workspaces the person may attach it to, and Approve / Refuse.
- * Outside the Workspace layout: the page picks the workspace, and a link pasted from a terminal
- * has to stand alone. The loader's sign-in requirement is the route's, not an instruction.
- */
 export const Route = createFileRoute("/computers/attach/$sessionId")({
   loader: async ({ params }) => ({
     session: await readComputerAttach({ data: { sessionId: params.sessionId } }),
@@ -19,15 +18,23 @@ export const Route = createFileRoute("/computers/attach/$sessionId")({
 function Approve() {
   const { session } = Route.useLoaderData();
   const { sessionId } = Route.useParams();
+  const navigate = useNavigate();
   if (!session)
     return (
-      <main className="mx-auto max-w-md p-8 text-center">
-        <h1 className="text-xl font-semibold">Attach session not found</h1>
-        <p className="mt-2 text-sm text-secondary">
-          This attach request expired or was decided already. Ask the computer to run
-          `coforge-computer attach` again for a fresh link.
-        </p>
-      </main>
+      <ErrorPageFrame>
+        <EmptyState
+          size="page"
+          headingLevel={1}
+          picture={<LockedWireframe />}
+          title={m.empty_attach_not_found_title()}
+          description={m.empty_attach_not_found_description()}
+          primaryAction={
+            <Button size="sm" color="tertiary" onPress={() => void navigate({ to: "/" })}>
+              {m.workspace_join_back()}
+            </Button>
+          }
+        />
+      </ErrorPageFrame>
     );
   return <AttachApprovePage sessionId={sessionId} {...session} />;
 }

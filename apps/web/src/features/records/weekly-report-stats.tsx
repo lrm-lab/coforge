@@ -3,6 +3,8 @@ import { Check, ChevronLeft, ChevronRight } from "@untitledui/icons";
 
 import { PageHeader } from "#src/components/layout/page-header";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { EmptyState } from "#src/components/ui/empty";
+import { RecordsWireframe } from "#src/components/ui/empty-wireframes";
 import { m } from "#src/paraglide/messages";
 import type { loadWeeklyReportStats } from "./records.functions";
 import { BackToRecords } from "./records-layout";
@@ -59,9 +61,13 @@ export function WeeklyReportStats({
           </div>
         }
       />
-      <div className="min-h-0 flex-1 overflow-auto bg-primary">
+      <div className="flex min-h-0 flex-1 flex-col overflow-auto bg-primary">
         {stats.members.length === 0 ? (
-          <p className="py-10 text-center text-sm text-tertiary">{m.records_stats_empty()}</p>
+          <EmptyState
+            picture={<RecordsWireframe accent={false} />}
+            title={m.empty_records_stats_title()}
+            description={m.empty_records_stats_description()}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[40rem] border-collapse text-left text-sm">

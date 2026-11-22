@@ -6,18 +6,14 @@ import { Link, useRouterState } from "@tanstack/react-router";
 
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { conversationAt } from "#src/features/conversations/last-conversation";
-import { MessageTextSquare01, SearchLg } from "@untitledui/icons";
+import { MessageTextSquare01 } from "@untitledui/icons";
+import { CircleAlert } from "kubai-icons/duotone";
 
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "#src/components/ui/empty";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { NoResultsWireframe } from "#src/components/ui/empty-wireframes";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { conversationSearchWithThread } from "#src/features/conversations/conversation-thread-search";
@@ -83,26 +79,19 @@ export function SearchResults({
     !artifactsPending
   ) {
     return (
-      <div className="flex items-start justify-center px-6 py-10">
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <SearchLg aria-hidden="true" />
-            </EmptyMedia>
-            <EmptyTitle>
-              {query ? m.search_no_results_title({ query }) : m.search_no_matching_messages()}
-            </EmptyTitle>
-            <EmptyDescription>
-              {query ? m.search_no_results_description() : m.search_try_different_filters()}
-            </EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            <Button size="sm" color="secondary" onClick={onClear}>
-              {query ? m.search_clear() : m.search_clear_filters()}
-            </Button>
-          </EmptyContent>
-        </Empty>
-      </div>
+      <EmptyState
+        size="page"
+        live="polite"
+        className="py-10"
+        picture={<NoResultsWireframe />}
+        title={query ? m.search_no_results_title({ query }) : m.search_no_matching_messages()}
+        description={query ? m.search_no_results_description() : m.search_try_different_filters()}
+        primaryAction={
+          <Button size="sm" color="secondary" onClick={onClear}>
+            {query ? m.search_clear() : m.search_clear_filters()}
+          </Button>
+        }
+      />
     );
   }
 
@@ -240,13 +229,21 @@ function MessageResults({
 
   if (search.isError && hits.length === 0) {
     return (
-      <div role="alert" className="flex flex-col items-center gap-3 px-6 py-10 text-center">
-        <p className="text-sm font-semibold text-primary">{m.search_failed_title()}</p>
-        <p className="max-w-sm text-sm text-tertiary">{m.search_failed_description()}</p>
-        <Button size="sm" color="secondary" onClick={() => void search.refetch()}>
-          {m.search_retry()}
-        </Button>
-      </div>
+      <EmptyState
+        size="page"
+        role="alert"
+        className="py-10"
+        picture={<EmptyIcon icon={CircleAlert} />}
+        title={m.search_failed_title()}
+        description={m.search_failed_description()}
+        primaryAction={
+          <RetryButton
+            size="page"
+            isRetrying={search.isRefetching}
+            onPress={() => void search.refetch()}
+          />
+        }
+      />
     );
   }
 
@@ -265,12 +262,17 @@ function MessageResults({
         )}
       </div>
       {hits.length === 0 && (
-        <p className="flex flex-wrap items-center gap-x-2 px-2 py-1 text-sm text-tertiary">
-          {m.search_no_messages_match()}
-          <Button size="sm" color="link-gray" onClick={onClear}>
-            {clearLabel}
-          </Button>
-        </p>
+        <EmptyState
+          size="row"
+          live="polite"
+          className="px-2"
+          title={m.search_no_messages_match()}
+          primaryAction={
+            <Button size="xs" color="link-gray" onClick={onClear}>
+              {clearLabel}
+            </Button>
+          }
+        />
       )}
       {hits.length > 0 && (
         <ol className="flex flex-col">

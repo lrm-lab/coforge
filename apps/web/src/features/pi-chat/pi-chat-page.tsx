@@ -1,16 +1,20 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Plus, RefreshCw01, SearchLg } from "@untitledui/icons";
+import { Plus, SearchLg } from "@untitledui/icons";
+import { CircleAlert } from "kubai-icons/duotone";
 import type { WorkbenchRuntime } from "@lrm/coforge-sdk/internal/pi-chat";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
 import { PageHeader } from "#src/components/layout/page-header";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "#src/components/ui/empty";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { ChatWireframe, ComputersWireframe } from "#src/components/ui/empty-wireframes";
+import { Skeleton } from "#src/components/ui/skeleton";
 import { markAiWorkbenchOff, useAiWorkbenchEnabled } from "#src/features/settings/ai-workbench";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { cn } from "#src/lib/utils";
@@ -44,6 +48,7 @@ export function PiChatPage(props: Props) {
 }
 
 function PiChatContent(props: Props) {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { workspaceSlug, configured, sessionId, select, runtime } = props;
   const getComputers = useServerFn(getPiChatComputers);
@@ -110,27 +115,26 @@ function PiChatContent(props: Props) {
   selection.current = key;
   if (!configured || !computerId || !computer)
     return (
-      <main className="flex h-full min-h-0 flex-col">
+      <main className="flex h-full min-h-0 flex-col bg-primary">
         <PageHeader heading={m.pi_chat_title()} />
-        <Empty>
-          <EmptyHeader>
-            <EmptyTitle>
-              {configured ? m.pi_chat_no_computer() : m.pi_chat_unconfigured()}
-            </EmptyTitle>
-            <EmptyDescription>
-              {configured ? m.pi_chat_no_computer_hint() : m.pi_chat_unconfigured_hint()}
-            </EmptyDescription>
-          </EmptyHeader>
-          {configured && (
-            <Link
-              to="/w/$workspaceSlug/computers"
-              params={{ workspaceSlug }}
-              className="text-sm text-brand-secondary"
-            >
-              {m.navigation_computers()}
-            </Link>
-          )}
-        </Empty>
+        <EmptyState
+          picture={<ComputersWireframe accent={configured} />}
+          title={configured ? m.empty_pi_chat_no_computer_title() : m.pi_chat_unconfigured()}
+          description={configured ? m.pi_chat_no_computer_hint() : m.pi_chat_unconfigured_hint()}
+          primaryAction={
+            configured ? (
+              <Button
+                size="sm"
+                color="primary"
+                onPress={() =>
+                  void navigate({ to: "/w/$workspaceSlug/computers", params: { workspaceSlug } })
+                }
+              >
+                {m.navigation_computers()}
+              </Button>
+            ) : undefined
+          }
+        />
       </main>
     );
   const initialSession = sessions.data?.sessions?.find((session) => session.id === sessionId);
@@ -184,21 +188,33 @@ function PiChatContent(props: Props) {
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
             {sessions.isPending && (
-              <p role="status" className="p-3 text-sm text-tertiary">
-                {m.pi_chat_loading()}
-              </p>
+              <div
+                role="status"
+                aria-busy="true"
+                aria-label={m.pi_chat_loading()}
+                className="space-y-2 p-2"
+              >
+                <Skeleton className="h-11 w-full rounded-lg" />
+                <Skeleton className="h-11 w-full rounded-lg" />
+                <Skeleton className="h-11 w-5/6 rounded-lg" />
+              </div>
             )}
             {sessions.isError && (
-              <div role="alert" className="space-y-2 p-3 text-sm text-error-primary">
-                <p>{piChatFailureMessage("load")}</p>
-                <Button
-                  size="sm"
-                  color="secondary"
-                  iconLeading={RefreshCw01}
-                  onClick={() => void sessions.refetch()}
-                >
-                  {m.pi_chat_retry()}
-                </Button>
+              <div className="p-2">
+                <EmptyState
+                  size="card"
+                  role="alert"
+                  picture={<EmptyIcon icon={CircleAlert} size="card" />}
+                  title={piChatFailureMessage("load")}
+                  primaryAction={
+                    <RetryButton
+                      size="card"
+                      isRetrying={sessions.isRefetching}
+                      label={m.pi_chat_retry()}
+                      onPress={() => void sessions.refetch()}
+                    />
+                  }
+                />
               </div>
             )}
             {sessions.data?.sessions && !sessions.isError && (
@@ -254,20 +270,23 @@ function PiChatContent(props: Props) {
           />
         ) : (
           <section className="hidden min-w-0 flex-1 lg:flex">
-            <Empty>
-              <EmptyHeader>
-                <EmptyTitle>{m.pi_chat_start_title()}</EmptyTitle>
-                <EmptyDescription>{m.pi_chat_start_hint()}</EmptyDescription>
-              </EmptyHeader>
-              <Button
-                iconLeading={Plus}
-                onClick={() =>
-                  select(computerId, "new", computer.codex ? undefined : RUNTIME_PROVIDER.PI)
-                }
-              >
-                {m.pi_chat_new()}
-              </Button>
-            </Empty>
+            <EmptyState
+              picture={<ChatWireframe accent />}
+              title={m.empty_pi_chat_none_selected_title()}
+              description={m.empty_pi_chat_none_selected_description()}
+              primaryAction={
+                <Button
+                  size="sm"
+                  color="primary"
+                  iconLeading={Plus}
+                  onPress={() =>
+                    select(computerId, "new", computer.codex ? undefined : RUNTIME_PROVIDER.PI)
+                  }
+                >
+                  {m.pi_chat_new()}
+                </Button>
+              }
+            />
           </section>
         )}
         {filePanel?.open && sessionId && (

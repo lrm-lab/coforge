@@ -134,7 +134,14 @@ export function TaskHistoryPage({ task, members, onBack }: HistoryProps) {
         </Button>
       </div>
       <div className="px-4 py-4 sm:px-6">
-        <TaskHistory failed={history.isError} events={history.data} names={names} />
+        <TaskHistory
+          loading={history.isPending}
+          failed={history.isError}
+          retrying={history.isRefetching}
+          onRetry={() => void history.refetch()}
+          events={history.data}
+          names={names}
+        />
       </div>
     </div>
   );

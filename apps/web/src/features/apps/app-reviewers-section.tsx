@@ -6,6 +6,8 @@ import { XClose } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
 import { formatDateForDisplay } from "#src/lib/dates";
 import { getLocale } from "#src/paraglide/runtime";
@@ -19,11 +21,6 @@ import type { PlatformOperatorRow } from "#src/server/app-marketplace/platform-o
 
 const operatorsQueryKey = ["platform-operators"] as const;
 
-/**
- * Who reviews Marketplace apps, for the review page: the operators themselves, an operator's
- * removal, and adding one by a verified email or phone number. The last operator's remove button is
- * disabled, with the reason on its tooltip: an empty list could never be refilled from here.
- */
 export function ReviewersSection() {
   const queryClient = useQueryClient();
   const load = useServerFn(loadPlatformOperators);
@@ -64,17 +61,39 @@ export function ReviewersSection() {
       <h2 id="app-reviewers-title" className="text-md font-semibold text-primary">
         {m.apps_review_reviewers_title()}
       </h2>
-      <ul className="grid gap-2">
-        {rows.map((row) => (
-          <ReviewerRow
-            key={row.userId}
-            row={row}
-            last={rows.length === 1}
-            removing={removing.isPending}
-            onRemove={() => removing.mutate(row.userId)}
-          />
-        ))}
-      </ul>
+      {operators.isPending ? (
+        <div role="status" aria-label={m.empty_reviewers_loading()} className="grid gap-2">
+          <Skeleton className="h-14 w-full rounded-xl" />
+          <Skeleton className="h-14 w-full rounded-xl" />
+        </div>
+      ) : operators.isError && !operators.data ? (
+        <EmptyState
+          size="row"
+          role="alert"
+          title={m.empty_reviewers_load_failed()}
+          primaryAction={
+            <RetryButton
+              size="row"
+              isRetrying={operators.isRefetching}
+              onPress={() => void operators.refetch()}
+            />
+          }
+        />
+      ) : rows.length === 0 ? (
+        <EmptyState size="row" title={m.empty_reviewers_none()} />
+      ) : (
+        <ul className="grid gap-2">
+          {rows.map((row) => (
+            <ReviewerRow
+              key={row.userId}
+              row={row}
+              last={rows.length === 1}
+              removing={removing.isPending}
+              onRemove={() => removing.mutate(row.userId)}
+            />
+          ))}
+        </ul>
+      )}
       <form
         className="flex items-end gap-2"
         onSubmit={(event) => {

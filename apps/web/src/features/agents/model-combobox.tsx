@@ -12,6 +12,7 @@ import { searchModelChoices, type ModelChoice } from "./model-search";
 const showEverything = () => true;
 
 const REFRESH_KEY = "\u0000refresh";
+const EMPTY_KEY = "\u0000empty";
 
 export type ModelListRefresh = { run: () => void; busy: boolean; refreshing: boolean };
 
@@ -77,13 +78,29 @@ export function ModelComboBox({
   const controlSize = useDialogControlSize();
   const selectedLabel = choices.find((choice) => choice.id === selectedKey)?.label ?? "";
   const [query, setQuery] = useState<string | null>(null);
-  const shown = useMemo(
-    () => [
-      ...searchModelChoices(choices, query ?? "", pinned).map(({ id, label }) => ({ id, label })),
+  const shown = useMemo(() => {
+    const matches = searchModelChoices(choices, query ?? "", pinned).map(({ id, label }) => ({
+      id,
+      label,
+    }));
+    const trimmed = (query ?? "").trim();
+    const emptyRow =
+      matches.length === 0
+        ? [
+            {
+              id: EMPTY_KEY,
+              label: trimmed
+                ? m.empty_model_no_match_query({ query: trimmed })
+                : m.empty_picker_no_options(),
+            },
+          ]
+        : [];
+    return [
+      ...matches,
+      ...emptyRow,
       ...(refresh ? [{ id: REFRESH_KEY, label: m.agent_form_model_refresh() }] : []),
-    ],
-    [choices, query, pinned, refresh],
-  );
+    ];
+  }, [choices, query, pinned, refresh]);
   return (
     <ComboBox
       label={label}
@@ -101,6 +118,7 @@ export function ModelComboBox({
       selectedKey={selectedKey}
       onSelectionChange={(key: Key | null) => {
         setQuery(null);
+        if (key === EMPTY_KEY) return;
         if (key === REFRESH_KEY) {
           refresh?.run();
           return;
@@ -112,7 +130,15 @@ export function ModelComboBox({
       }}
     >
       {(item) =>
-        item.id === REFRESH_KEY ? (
+        item.id === EMPTY_KEY ? (
+          <SelectItem
+            id={item.id}
+            label={item.label}
+            isDisabled
+            selectionIndicator="none"
+            className="text-tertiary"
+          />
+        ) : item.id === REFRESH_KEY ? (
           <SelectItem
             id={item.id}
             label={item.label}

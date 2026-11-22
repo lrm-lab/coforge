@@ -12,7 +12,12 @@ import {
 } from "react-aria-components";
 import { ChevronRight } from "@untitledui/icons";
 
+import { CircleAlert } from "kubai-icons/duotone";
+
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { EmptyState, RetryButton } from "#src/components/ui/empty";
+import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { NoResultsWireframe, TaskBoardWireframe } from "#src/components/ui/empty-wireframes";
 import { Skeleton } from "#src/components/ui/skeleton";
 
 import { statusMatches, taskMatches } from "#src/features/tasks/task-filters";
@@ -30,22 +35,11 @@ import { filterTaskForest, parentIds, type FilteredNode } from "./project-task-t
 import { rowLabel } from "./project-task-row-label";
 import { projectTaskForest, type ProjectTask, type useProjectTasks } from "./project-tasks";
 
-/**
- * A Project's Tasks as a tree (task #462), the list layout of its Tasks tab, as Linear's list shows
- * sub-issues nested under their parents: every unfinished Task the viewer can read, each under its
- * parent. A row reads its status, number and title, what it still waits on, how far its sub-tasks
- * are and its owner, with its channel under the title; a sub-task whose parent is not in the tree
- * (finished, in another Project or not the viewer's) sits at the top, naming that parent. A filter
- * keeps a passing Task's ancestors, greyed and read as outside the filter, still opening. Arrow
- * keys move and fold (React Aria's treegrid), Enter or a click opens the Task's popup; live like
- * the Overview.
- */
 export function ProjectTaskTreeView({
   query,
   view,
   onOpenTask,
 }: {
-  /** The Project's Tasks (`useProjectTasks`), read by the board, whose picks offer them too. */
   query: ReturnType<typeof useProjectTasks>;
   view: Pick<TaskBoardView, "statuses" | "filter">;
   onOpenTask: (task: ProjectTask) => void;
@@ -64,7 +58,6 @@ export function ProjectTaskTreeView({
     filter.owners.length > 0 ||
     filter.labels.length > 0 ||
     (filter.channels?.length ?? 0) > 0;
-  // Folding is the page's own: every parent opens unfolded, and one that appears later does too.
   const [folded, setFolded] = useState<ReadonlySet<Key>>(new Set());
   const expandedKeys = useMemo(
     () => new Set(parentIds(nodes).filter((id) => !folded.has(id))),
@@ -75,15 +68,36 @@ export function ProjectTaskTreeView({
     [query.data],
   );
 
-  if (query.isError)
-    return <p className="text-sm text-error-primary">{m.project_tasks_failed()}</p>;
-  if (query.isPending) return <ProjectTaskTreeSkeleton />;
-  if (nodes.length === 0)
+  if (query.isError) {
     return (
-      <p className="py-16 text-center text-sm text-tertiary">
-        {filtered ? m.tasks_overview_filter_empty() : m.project_tasks_empty()}
-      </p>
+      <EmptyState
+        role="alert"
+        picture={<EmptyIcon icon={CircleAlert} />}
+        title={m.empty_tasks_load_failed_title()}
+        description={m.empty_load_failed_safe()}
+        primaryAction={
+          <RetryButton isRetrying={query.isRefetching} onPress={() => void query.refetch()} />
+        }
+      />
     );
+  }
+  if (query.isPending) return <ProjectTaskTreeSkeleton />;
+  if (nodes.length === 0) {
+    return filtered ? (
+      <EmptyState
+        live="polite"
+        picture={<NoResultsWireframe />}
+        title={m.tasks_overview_filter_empty()}
+        description={m.empty_tasks_no_match_description()}
+      />
+    ) : (
+      <EmptyState
+        picture={<TaskBoardWireframe accent={false} />}
+        title={m.project_tasks_empty()}
+        description={m.empty_tasks_first_use_description()}
+      />
+    );
+  }
   return (
     <Tree
       aria-label={m.project_task_tree()}
