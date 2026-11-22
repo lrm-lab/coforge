@@ -1,11 +1,13 @@
 import { createContext, type RefObject, useContext, useEffect, useState } from "react";
 import { useHydrated } from "@tanstack/react-router";
 
+import { COMPOSER_EDGE_PILL_CLASS } from "#src/features/conversations/composer-edge-pill";
 import { SEARCH_KEY } from "#src/features/search/search-key-hints";
 import { useShortcutBindings } from "#src/features/shortcuts/shortcut-bindings";
 import { hotkeyKeycaps } from "#src/lib/hotkeys";
 import { isApplePlatform } from "#src/lib/platform";
 import { m } from "#src/paraglide/messages";
+import { cx } from "#src/utils/cx";
 
 export const ActivityFlowHintContext = createContext<{
   done: boolean;
@@ -43,7 +45,10 @@ export function ActivityFlowHint() {
     <div
       aria-hidden
       data-activity-flow-hint
-      className="flex h-8 shrink-0 items-center gap-3 rounded-full bg-primary px-2.5 text-xs text-tertiary shadow-xs ring-1 ring-secondary ring-inset"
+      className={cx(
+        COMPOSER_EDGE_PILL_CLASS,
+        "flex shrink-0 items-center gap-3 px-2.5 text-tertiary",
+      )}
     >
       {typing ? (
         <Keys keys={["Esc"]} label={m.activity_flow_back()} />

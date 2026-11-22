@@ -1,16 +1,28 @@
-import { useMemo, useState } from "react";
-import { DialogTrigger as AriaDialogTrigger } from "react-aria-components";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useSelector } from "@tanstack/react-store";
 
 import { Button } from "#src/components/base/buttons/button";
 import { AvatarSticker } from "#src/features/avatars/avatar-sticker";
+import {
+  COMPOSER_EDGE_PILL_CLASS,
+  COMPOSER_EDGE_PILL_SURFACE_CLASS,
+} from "#src/features/conversations/composer-edge-pill";
 import { useLiveAgentActivity } from "#src/features/settings/live-agent-activity";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { cx } from "#src/utils/cx";
 
 import { activitySentenceLabel } from "./agent-activity-presentation";
-import { AgentListPopover, AgentListRow, AgentListRows } from "./agent-list-popover";
+import { AgentListRow } from "./agent-list-popover";
 import { AgentMascotView } from "./agent-mascot-view";
 import { agentDisplay } from "./agent-status-display";
 import { pickBusyAgents } from "./busy-agents";
@@ -33,31 +45,27 @@ import {
 } from "./workspace-agents-realtime";
 import "./replying-agents-line.css";
 
-/** Agent ids never contain a comma, so a place's Agents travel as one comparable string. */
 const ID_SEPARATOR = ",";
-/** Nor a bar: the typing and the working Agents of one line, as one comparable string. */
 const GROUP_SEPARATOR = "|";
+const EXPANDED_MIN_WIDTH_PX = 240;
+const VIEWPORT_MARGIN_PX = 32;
+const CLOSE_FALLBACK_MS = 240;
+const REDUCED_MOTION_CLOSE_MS = 20;
 
 const idsOf = (joined: string) => (joined ? joined.split(ID_SEPARATOR) : []);
 
-const PILL_CLASS =
-  "h-8 max-w-full rounded-full bg-primary ps-1.5 pe-3 text-xs text-tertiary ring-1 ring-secondary ring-inset";
+const PILL_CLASS = `${COMPOSER_EDGE_PILL_CLASS} max-w-full ps-1.5 pe-3 text-tertiary`;
 
-/**
- * The line at the foot of a conversation pane: which Agents are about to post in this place (the
- * open conversation's top level, or the open thread, `threadRootId`) and, in a channel's main
- * stream (`useChannelAgents`), which of the channel's Agents are working anywhere. Everyone who can
- * read the place sees who is typing, whether or not they can write there. It renders nothing while
- * nobody is typing or working or Live agent activity is off, and does not read the Agents then. An
- * Agent's message arriving in the place ends its entry there (`useEndReplyIntentsOnArrival`).
- */
+type MorphPhase = "closed" | "opening" | "open" | "closing";
+type BoxSize = { width: number; height: number };
+type AgentRowEntry = { agent: ReplyingAgent; isTyping: boolean };
+
 export function ReplyingAgentsLine({
   conversationId,
   threadRootId,
   className,
 }: {
   conversationId: string;
-  /** The open thread's root; null at the conversation's top level. */
   threadRootId: string | null;
   className?: string;
 }) {
@@ -86,8 +94,6 @@ export function ReplyingAgentsLine({
   );
 }
 
-/** The line under a root in the conversation's stream saying which Agents are about to reply in
- * its thread. */
 export function ThreadReplyingLine({
   conversationId,
   rootId,
@@ -99,8 +105,6 @@ export function ThreadReplyingLine({
   return replyingIds ? <ThreadReplyingAgents replyingIds={replyingIds} /> : null;
 }
 
-/** The Agents replying in one place, as one string (an entry elsewhere re-renders nothing here),
- * or "" while nobody is or Live agent activity is off. */
 function useReplyingAgentIds(conversationId: string, threadRootId: string | null) {
   const [live] = useLiveAgentActivity();
   const intents = useReplyIntentStore();
@@ -109,8 +113,6 @@ function useReplyingAgentIds(conversationId: string, threadRootId: string | null
   );
 }
 
-/** The channel's Agents working or thinking right now, wherever that work is, as one string; ""
- * outside a channel's main stream or while Live agent activity is off. */
 function useWorkingAgentIds(channelAgentIds?: readonly string[]) {
   const [live] = useLiveAgentActivity();
   const members = useMemo(() => new Set(channelAgentIds), [channelAgentIds]);
@@ -134,8 +136,6 @@ const SENTENCES = {
   },
 };
 
-/** The clause naming `agents`. The wording comes from the messages and locale at render, so a
- * locale change shows at once. */
 function namingClause(kind: keyof typeof SENTENCES, agents: readonly ReplyingAgent[]) {
   const names = replyingNames(
     agents.map((agent) => agent.name),
@@ -186,12 +186,259 @@ function ThreadReplyingAgents({ replyingIds }: { replyingIds: string }) {
   );
 }
 
-/**
- * The pill along the composer's top edge. In a channel's main stream it says who is typing and how
- * many of the channel's other Agents are working, and a press lists them all. A screen reader hears
- * who is typing, never the working count, which changes with every tool call. The status sits
- * outside `.replying-line` so that element's text stays exactly the sentence shown.
- */
+function expandedWidthFor(collapsedWidth: number) {
+  const viewportLimit =
+    typeof window === "undefined"
+      ? EXPANDED_MIN_WIDTH_PX
+      : Math.max(collapsedWidth, window.innerWidth - VIEWPORT_MARGIN_PX);
+  return Math.min(Math.max(collapsedWidth, EXPANDED_MIN_WIDTH_PX), viewportLimit);
+}
+
+function prefersReducedMotion() {
+  return (
+    typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
+function ExpandableAgentsPill({
+  content,
+  entries,
+  leaving,
+  onOpenAgentProfile,
+}: {
+  content: ReactNode;
+  entries: readonly AgentRowEntry[];
+  leaving: boolean;
+  onOpenAgentProfile?: OpenAgentProfile;
+}) {
+  const listId = useId();
+  const shellRef = useRef<HTMLDivElement>(null);
+  const listWrapRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const restoreFocusRef = useRef(false);
+
+  const [phase, setPhase] = useState<MorphPhase>("closed");
+  const [anchorSize, setAnchorSize] = useState<BoxSize | null>(null);
+  const [shellSize, setShellSize] = useState<BoxSize | null>(null);
+  const [scrollFade, setScrollFade] = useState({ top: false, bottom: false });
+
+  const updateScrollFade = useCallback(() => {
+    const node = listRef.current;
+    if (!node) return;
+    const overflow = node.scrollHeight > node.clientHeight + 1;
+    const top = overflow && node.scrollTop > 4;
+    const bottom = overflow && node.scrollTop + node.clientHeight < node.scrollHeight - 4;
+    setScrollFade((prev) => (prev.top === top && prev.bottom === bottom ? prev : { top, bottom }));
+  }, []);
+
+  const finishClose = useCallback(() => {
+    setPhase("closed");
+    setAnchorSize(null);
+    setShellSize(null);
+    setScrollFade({ top: false, bottom: false });
+    if (restoreFocusRef.current) {
+      restoreFocusRef.current = false;
+      requestAnimationFrame(() => shellRef.current?.querySelector("button")?.focus());
+    }
+  }, []);
+
+  const closePill = useCallback(
+    (restoreFocus = false) => {
+      if (phase === "closed" || phase === "closing") return;
+      restoreFocusRef.current = restoreFocus;
+      if (!anchorSize) {
+        finishClose();
+        return;
+      }
+      setShellSize(anchorSize);
+      setPhase("closing");
+    },
+    [anchorSize, finishClose, phase],
+  );
+
+  const openPill = useCallback(() => {
+    if (phase !== "closed" || leaving) return;
+    const rect = shellRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const collapsed = { width: rect.width, height: rect.height };
+    setAnchorSize(collapsed);
+    setShellSize(collapsed);
+    setPhase("opening");
+  }, [leaving, phase]);
+
+  useEffect(() => {
+    if (leaving && phase !== "closed") {
+      restoreFocusRef.current = false;
+      finishClose();
+    }
+  }, [finishClose, leaving, phase]);
+
+  useLayoutEffect(() => {
+    if (phase !== "opening" || !anchorSize) return;
+    const wrap = listWrapRef.current;
+    const list = listRef.current;
+    if (!wrap || !list) return;
+    list.scrollTop = 0;
+    const target = {
+      width: expandedWidthFor(anchorSize.width),
+      height: wrap.offsetHeight,
+    };
+    const frame = requestAnimationFrame(() => {
+      setShellSize(target);
+      setPhase("open");
+      updateScrollFade();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [anchorSize, phase, updateScrollFade]);
+
+  useEffect(() => {
+    if (phase !== "open" || !anchorSize) return;
+    const wrap = listWrapRef.current;
+    if (!wrap) return;
+    const syncHeight = () => {
+      setShellSize({
+        width: expandedWidthFor(anchorSize.width),
+        height: wrap.offsetHeight,
+      });
+      updateScrollFade();
+    };
+    syncHeight();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(syncHeight);
+    observer.observe(wrap);
+    return () => observer.disconnect();
+  }, [anchorSize, entries.length, phase, updateScrollFade]);
+
+  useEffect(() => {
+    if (phase !== "closing") return;
+    const timeout = window.setTimeout(
+      finishClose,
+      prefersReducedMotion() ? REDUCED_MOTION_CLOSE_MS : CLOSE_FALLBACK_MS,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [finishClose, phase]);
+
+  useEffect(() => {
+    if (phase !== "opening" && phase !== "open") return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (shellRef.current && !shellRef.current.contains(event.target as Node)) {
+        closePill(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closePill(true);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [closePill, phase]);
+
+  const active = phase !== "closed";
+  const expanded = phase === "open";
+  const shellStyle =
+    active && shellSize ? { width: shellSize.width, height: shellSize.height } : undefined;
+  const anchorStyle = active && anchorSize ? { width: anchorSize.width } : undefined;
+
+  return (
+    <div className="relative h-8 max-w-full" style={anchorStyle}>
+      <div
+        ref={shellRef}
+        data-phase={phase}
+        style={shellStyle}
+        onTransitionEnd={(event) => {
+          if (
+            phase === "closing" &&
+            event.target === event.currentTarget &&
+            (event.propertyName === "height" || event.propertyName === "width")
+          ) {
+            finishClose();
+          }
+        }}
+        className={cx(
+          "pointer-events-auto overflow-hidden",
+          active
+            ? cx(
+                "replying-morph-shell absolute start-0 bottom-0 z-20",
+                COMPOSER_EDGE_PILL_SURFACE_CLASS,
+                expanded && "shadow-lg",
+              )
+            : "inline-flex h-8 max-w-full",
+        )}
+      >
+        <Button
+          color="tertiary"
+          size="xs"
+          noTextPadding
+          aria-expanded={expanded}
+          aria-controls={active ? listId : undefined}
+          onPress={openPill}
+          className={cx(
+            active
+              ? "replying-morph-pill absolute inset-x-0 bottom-0 h-8 w-full justify-start rounded-2xl bg-transparent py-0 ps-1.5 pe-3 text-xs font-normal text-tertiary hover:bg-primary_hover hover:text-tertiary [&>[data-text]]:flex [&>[data-text]]:min-w-0 [&>[data-text]]:items-center [&>[data-text]]:gap-1.5"
+              : cx(
+                  PILL_CLASS,
+                  "min-w-[min(15rem,100%)] justify-start py-0 font-normal hover:bg-primary_hover hover:text-tertiary [&>[data-text]]:flex [&>[data-text]]:min-w-0 [&>[data-text]]:items-center [&>[data-text]]:gap-1.5",
+                ),
+          )}
+        >
+          {content}
+        </Button>
+        {active && (
+          <div
+            ref={listWrapRef}
+            id={listId}
+            role="region"
+            aria-label={m.agent_busy_agents()}
+            className="replying-morph-list absolute inset-x-0 bottom-0"
+          >
+            <div
+              aria-hidden="true"
+              className={cx(
+                "pointer-events-none absolute inset-x-0 top-0 z-10 h-5 bg-linear-to-b from-bg-primary to-transparent transition-opacity duration-150",
+                scrollFade.top ? "opacity-100" : "opacity-0",
+              )}
+            />
+            <ul
+              ref={listRef}
+              onScroll={updateScrollFade}
+              className="max-h-[min(14rem,45dvh)] overflow-y-auto overscroll-contain py-1 [scrollbar-width:thin]"
+            >
+              {entries.map(({ agent, isTyping }) => (
+                <AgentsLineRow
+                  key={agent.id}
+                  agent={agent}
+                  isTyping={isTyping}
+                  onOpen={
+                    onOpenAgentProfile
+                      ? () => {
+                          closePill(false);
+                          onOpenAgentProfile(agent.id);
+                        }
+                      : undefined
+                  }
+                />
+              ))}
+            </ul>
+            <div
+              aria-hidden="true"
+              className={cx(
+                "pointer-events-none absolute inset-x-0 bottom-0 z-10 h-5 bg-linear-to-t from-bg-primary to-transparent transition-opacity duration-150",
+                scrollFade.bottom ? "opacity-100" : "opacity-0",
+              )}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ComposerAgentsPill({
   typingIds,
   workingIds,
@@ -205,7 +452,6 @@ function ComposerAgentsPill({
   listsAgents: boolean;
   onOpenAgentProfile?: OpenAgentProfile;
   leaving: boolean;
-  /** Called when the pill's exit animation ends. */
   onLeft: () => void;
 }) {
   const agents = useVisibleLiveAgents();
@@ -230,6 +476,10 @@ function ComposerAgentsPill({
       <span className="min-w-0 truncate">{sentence}</span>
     </>
   );
+  const entries: AgentRowEntry[] = [
+    ...typing.map((agent) => ({ agent, isTyping: true })),
+    ...summary.others.map((agent) => ({ agent, isTyping: false })),
+  ];
   return (
     <>
       <span role="status" className="sr-only">
@@ -243,43 +493,12 @@ function ComposerAgentsPill({
         className="replying-line inline-flex max-w-full"
       >
         {listsAgents ? (
-          <AriaDialogTrigger>
-            <Button
-              color="tertiary"
-              size="xs"
-              noTextPadding
-              className={cx(
-                PILL_CLASS,
-                "pointer-events-auto py-0 font-normal hover:bg-primary_hover hover:text-tertiary [&>[data-text]]:flex [&>[data-text]]:min-w-0 [&>[data-text]]:items-center [&>[data-text]]:gap-1.5",
-              )}
-            >
-              {content}
-            </Button>
-            <AgentListPopover label={m.agent_busy_agents()} placement="top start">
-              {(close) => (
-                <AgentListRows>
-                  {[
-                    ...typing.map((agent) => ({ agent, isTyping: true })),
-                    ...summary.others.map((agent) => ({ agent, isTyping: false })),
-                  ].map(({ agent, isTyping }) => (
-                    <AgentsLineRow
-                      key={agent.id}
-                      agent={agent}
-                      isTyping={isTyping}
-                      onOpen={
-                        onOpenAgentProfile
-                          ? () => {
-                              close();
-                              onOpenAgentProfile(agent.id);
-                            }
-                          : undefined
-                      }
-                    />
-                  ))}
-                </AgentListRows>
-              )}
-            </AgentListPopover>
-          </AriaDialogTrigger>
+          <ExpandableAgentsPill
+            content={content}
+            entries={entries}
+            leaving={leaving}
+            onOpenAgentProfile={onOpenAgentProfile}
+          />
         ) : (
           <div aria-hidden="true" className={cx(PILL_CLASS, "inline-flex items-center gap-1.5")}>
             {content}

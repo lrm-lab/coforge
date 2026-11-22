@@ -4,6 +4,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { UnreadBadge, UnreadDot } from "#src/components/ui/unread-marker";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
+import { COMPOSER_EDGE_PILL_CLASS } from "./composer-edge-pill";
 import { usePushedNewMessages } from "./pushed-new-messages";
 
 export function NewMessagesPill({
@@ -39,7 +40,8 @@ export function NewMessagesPill({
         iconTrailing={ArrowDown}
         onClick={onShowLatest}
         className={cx(
-          "h-8 rounded-full py-0 text-xs font-medium whitespace-nowrap shadow-xs ring-secondary max-md:w-8 max-md:p-0 max-md:*:data-text:sr-only max-md:after:absolute max-md:after:-inset-1.5 max-md:after:content-['']",
+          COMPOSER_EDGE_PILL_CLASS,
+          "py-0 font-medium whitespace-nowrap max-md:w-8 max-md:p-0 max-md:*:data-text:sr-only max-md:after:absolute max-md:after:-inset-1.5 max-md:after:content-['']",
           count > 0 && "text-primary tabular-nums hover:text-primary",
         )}
       >

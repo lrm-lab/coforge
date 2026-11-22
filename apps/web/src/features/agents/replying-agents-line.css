@@ -1,8 +1,3 @@
-/*
- * The replying line eases in rather than popping, and the typing pill eases out the same way; with
- * reduced motion they simply appear and go. Offsets are in rem (0.25rem is 4px). The mascots
- * animate themselves.
- */
 @keyframes replying-line-in {
   from {
     opacity: 0;
@@ -44,6 +39,48 @@
   animation: replying-line-out var(--duration-sm-out) var(--ease-in) both;
 }
 
+.replying-morph-shell {
+  transition:
+    width var(--duration-sm) var(--ease-out-strong),
+    height var(--duration-sm) var(--ease-out-strong),
+    box-shadow var(--duration-sm) var(--ease-out-strong);
+  will-change: width, height;
+}
+
+.replying-morph-pill {
+  transition:
+    opacity 140ms var(--ease-out) 60ms,
+    transform 180ms var(--ease-out-strong) 40ms;
+}
+
+.replying-morph-shell[data-phase="opening"] .replying-morph-pill,
+.replying-morph-shell[data-phase="open"] .replying-morph-pill {
+  opacity: 0;
+  transform: translateY(-0.125rem);
+  pointer-events: none;
+  transition:
+    opacity 80ms var(--ease-in),
+    transform 120ms var(--ease-in);
+}
+
+.replying-morph-list {
+  opacity: 0;
+  transform: translateY(0.25rem);
+  pointer-events: none;
+  transition:
+    opacity 75ms var(--ease-in),
+    transform 110ms var(--ease-in);
+}
+
+.replying-morph-shell[data-phase="open"] .replying-morph-list {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+  transition:
+    opacity 160ms var(--ease-out) 55ms,
+    transform 210ms var(--ease-out-strong) 35ms;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .replying-line {
     animation: replying-line-fade-in 150ms var(--ease-out) both;
@@ -51,5 +88,12 @@
 
   .replying-line[data-leaving] {
     animation: replying-line-fade-out 150ms var(--ease-out) both;
+  }
+
+  .replying-morph-shell,
+  .replying-morph-pill,
+  .replying-morph-list {
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
   }
 }

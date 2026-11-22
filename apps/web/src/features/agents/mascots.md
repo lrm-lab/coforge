@@ -103,9 +103,12 @@ Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
   Agents): "Atlas is typing, 2 others are working" (`agent_typing_and_working`), "3 agents working
   here" with nobody typing (`agent_working_here`), and the ellipsis only on typing alone
   (`agent_typing_alone`). The faces are the typing Agents first, then the others. A DM or a thread
-  pane shows typing only, in a plain pill. There the pill is a button opening `AgentListPopover`
-  upward, the typing Agents first ("typing"), then each other Agent with its current label; a row
-  opens its profile. A polite `role="status"` beside the line carries only who is typing, so a
+  pane shows typing only, in a plain pill. In a channel's main stream the pill morphs upward in
+  place into one card (`ExpandableAgentsPill`, sharing `COMPOSER_EDGE_PILL_CLASS` with
+  `NewMessagesPill` and `ActivityFlowHint`) showing the typing Agents first ("typing"), then each
+  other Agent with its current label, capped at `min(14rem, 45dvh)` with scroll-edge fades and
+  `overscroll-contain`; a row opens its profile, and clicking outside or pressing Escape collapses
+  it back into the pill. A polite `role="status"` beside the line carries only who is typing, so a
   screen reader is not told each change in who is working.
 - `ThreadReplyingLine` is the same line under a root's thread preview in the conversation's stream
   (never in a thread pane, which has its own), worded "is replying" (`agent_thread_replying_*`),
