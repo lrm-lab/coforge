@@ -170,6 +170,10 @@ export class JsonlProcess {
     return this.#cleanupUnconfirmed ? { ...exit, cleanupUnconfirmed: true } : exit;
   }
 
+  async waitForOwnedTreeExit(timeoutMs: number): Promise<boolean> {
+    return this.#tree.waitForExit(timeoutMs);
+  }
+
   async send(message: JsonRecord): Promise<void> {
     this.#assertOpen();
     try {

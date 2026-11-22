@@ -43,4 +43,5 @@ These rules extend [`../../AGENTS.md`](../../AGENTS.md).
 - Agent launches, model discovery and effort probes share an in-process startup queue keyed by
   the SQLite path resolved from the child's environment. An Agent keeps its place until ACP
   setup finishes or the failed child's tree exits. A cancelled or timed-out waiter never spawns.
-  Probe model iteration and live turns run outside this queue.
+  After unconfirmed cleanup, queued startups check the existing process owner for exit before
+  admitting the next child. Probe model iteration and live turns run outside this queue.

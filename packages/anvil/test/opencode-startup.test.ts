@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
+import { createOpenCodeAcpSession } from "#src/opencode/acp-session";
+import type { OwnedChildProcess } from "#src/process-tree";
 import {
   discoverOpenCodeAcpCatalog,
   OpenCodeAcpProvider,
@@ -165,3 +167,124 @@ test("a timed-out OpenCode startup releases the same db only after the owned chi
     await rm(cwd, { recursive: true, force: true });
   }
 });
+
+test("a cold database and a dangling symlink to it share startup", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "anvil-oc-startup-alias-"));
+  const windows = process.platform === "win32";
+  const target = windows ? join(cwd, "cold", "db.sqlite") : join(cwd, "cold.db");
+  const alias = windows ? join(cwd, "alias", "db.sqlite") : join(cwd, "alias.db");
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const spawned: string[] = [];
+  const host = startupHost((env) => spawned.push(env.TEST_LAUNCH ?? ""));
+  const provider = new OpenCodeAcpProvider({ command, host });
+  const runs: Promise<AgentSession>[] = [];
+  try {
+    if (windows) await symlink(join(cwd, "cold"), join(cwd, "alias"), "junction");
+    else await symlink("cold.db", alias);
+    const options = (db: string, name: string): AgentSessionOptions => ({
+      agentWorkspaceDirectory: cwd,
+      instructions: name,
+      environment: { XDG_DATA_HOME: cwd, OPENCODE_DB: db, TEST_LAUNCH: name },
+    });
+    runs.push(
+      provider.createAgentSession({
+        ...options(alias, "alias"),
+        async onSessionId() {
+          entered.resolve();
+          await release.promise;
+        },
+      }),
+    );
+    await Promise.race([entered.promise, runs[0]]);
+    runs.push(provider.createAgentSession(options(target, "target")));
+    runs.push(provider.createAgentSession(options(join(cwd, "unrelated.db"), "other")));
+    await runs.at(-1);
+    expect(spawned).toEqual(["alias", "other"]);
+    release.resolve();
+    await Promise.all(runs);
+    expect(spawned).toEqual(["alias", "other", "target"]);
+  } finally {
+    release.resolve();
+    for (const result of await Promise.allSettled(runs))
+      if (result.status === "fulfilled") await result.value.dispose();
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("dual cleanup failures retain the queue until a late exit can be confirmed", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "anvil-oc-startup-late-exit-"));
+  const spawned: string[] = [];
+  let firstChild: OwnedChildProcess | undefined;
+  let removed = 0;
+  const host = startupHost((env) => spawned.push(env.TEST_LAUNCH ?? ""));
+  const spawn = host.processTreeSpawner.spawn;
+  host.processTreeSpawner.spawn = (...args) => {
+    const tree = spawn(...args);
+    if (args[2].TEST_LAUNCH !== "first") return tree;
+    const child = (firstChild = tree.child);
+    let exited = false;
+    void child.exited.then(() => {
+      exited = true;
+    });
+    return {
+      ...tree,
+      async terminate() {},
+      async waitForExit() {
+        return exited;
+      },
+    };
+  };
+  const options = (name: string): AgentSessionOptions => ({
+    agentWorkspaceDirectory: cwd,
+    instructions: name,
+    environment: { XDG_DATA_HOME: cwd, TEST_LAUNCH: name },
+  });
+  const provider = new OpenCodeAcpProvider({ command, host, acpTimeoutMs: 200 });
+  const pending: Promise<AgentSession>[] = [];
+  try {
+    await expect(
+      createOpenCodeAcpSession(
+        {
+          ...options("first"),
+          environment: {
+            ...options("first").environment,
+            OPENCODE_ACP_FIXTURE_HANG_SESSION_OPEN: "1",
+          },
+        },
+        command,
+        host,
+        {
+          directory: cwd,
+          path: join(cwd, "instructions.md"),
+          configContent: "{}",
+          async remove() {
+            removed += 1;
+            throw new Error("Cannot delete test instructions");
+          },
+        },
+        400,
+      ),
+    ).rejects.toHaveProperty("name", "AgentProcessCleanupError");
+    expect(removed).toBe(1);
+    const blocked = provider.createAgentSession(options("before-exit"));
+    pending.push(blocked);
+    await expect(blocked).rejects.toThrow("timed out waiting for database startup");
+    expect(spawned).toEqual(["first"]);
+    expect(firstChild?.exitCode).toBe(null);
+    const recovered = new OpenCodeAcpProvider({ command, host }).createAgentSession(
+      options("after-exit"),
+    );
+    pending.push(recovered);
+    firstChild?.kill("SIGKILL");
+    await firstChild?.exited;
+    await recovered;
+    expect(spawned).toEqual(["first", "after-exit"]);
+  } finally {
+    firstChild?.kill("SIGKILL");
+    await firstChild?.exited;
+    for (const result of await Promise.allSettled(pending))
+      if (result.status === "fulfilled") await result.value.dispose();
+    await rm(cwd, { recursive: true, force: true });
+  }
+}, 8000);

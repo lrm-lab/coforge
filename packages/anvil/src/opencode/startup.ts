@@ -1,19 +1,32 @@
-import { realpath } from "node:fs/promises";
+import { readlink, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { AcpTimeoutError } from "#src/acp/connection";
 import { AgentProcessCleanupError } from "#src/contract";
+import type { JsonlProcess } from "#src/jsonl-process";
 
-type StartupWaiter = () => void;
-const queues = new Map<string, Set<StartupWaiter>>();
+type StartupQueue = {
+  waiters: Set<() => void>;
+  unconfirmedProcess?: JsonlProcess;
+  checking?: boolean;
+};
 
-async function canonicalPath(path: string): Promise<string> {
+const queues = new Map<string, StartupQueue>();
+
+async function canonicalPath(path: string, links = new Set<string>()): Promise<string> {
   try {
     return await realpath(path);
   } catch (error) {
     const parent = dirname(path);
     if ((error as NodeJS.ErrnoException).code !== "ENOENT" || parent === path) throw error;
-    return join(await canonicalPath(parent), basename(path));
+    const directory = await canonicalPath(parent, links);
+    const target = await readlink(path).catch((linkError: NodeJS.ErrnoException) => {
+      if (linkError.code !== "ENOENT" && linkError.code !== "EINVAL") throw linkError;
+    });
+    if (target === undefined) return join(directory, basename(path));
+    if (links.has(path)) throw error;
+    links.add(path);
+    return canonicalPath(resolve(directory, target), links);
   }
 }
 
@@ -27,16 +40,41 @@ async function databaseKey(cwd: string, environment: Readonly<Record<string, str
   return process.platform === "win32" ? key.toLowerCase() : key;
 }
 
+function release(key: string, queue: StartupQueue) {
+  const next = queue.waiters.values().next().value;
+  if (next) next();
+  else queues.delete(key);
+}
+
+async function confirmExit(key: string, queue: StartupQueue) {
+  const process = queue.unconfirmedProcess;
+  if (!process || queue.checking) return;
+  queue.checking = true;
+  try {
+    while (queue.waiters.size) {
+      if (await process.waitForOwnedTreeExit(250).catch(() => false)) {
+        queue.unconfirmedProcess = undefined;
+        release(key, queue);
+        return;
+      }
+      await Bun.sleep(250);
+    }
+  } finally {
+    queue.checking = false;
+  }
+}
+
 async function takeStartupSlot(key: string, timeoutMs: number, signal?: AbortSignal) {
   signal?.throwIfAborted();
   const queue = queues.get(key);
   if (!queue) {
-    queues.set(key, new Set());
-    return;
+    const acquired: StartupQueue = { waiters: new Set() };
+    queues.set(key, acquired);
+    return acquired;
   }
   await new Promise<void>((resolve, reject) => {
     const leave = () => {
-      queue.delete(enter);
+      queue.waiters.delete(enter);
       clearTimeout(timer);
       signal?.removeEventListener("abort", cancel);
     };
@@ -52,33 +90,40 @@ async function takeStartupSlot(key: string, timeoutMs: number, signal?: AbortSig
       leave();
       reject(new AcpTimeoutError("opencode acp timed out waiting for database startup"));
     }, timeoutMs);
-    queue.add(enter);
+    queue.waiters.add(enter);
     signal?.addEventListener("abort", cancel, { once: true });
+    void confirmExit(key, queue);
   });
+  return queue;
 }
 
 export async function runOpenCodeStartup<T>(
   cwd: string,
   environment: Readonly<Record<string, string | undefined>>,
   timeoutMs: number,
-  start: () => Promise<T>,
+  start: (track: (process: JsonlProcess) => void) => Promise<T>,
   signal?: AbortSignal,
 ): Promise<T> {
   signal?.throwIfAborted();
   const key = await databaseKey(cwd, environment);
-  if (key !== undefined) await takeStartupSlot(key, timeoutMs, signal);
-  let cleanupUnconfirmed = false;
+  const queue = key === undefined ? undefined : await takeStartupSlot(key, timeoutMs, signal);
+  let process: JsonlProcess | undefined;
   try {
     signal?.throwIfAborted();
-    return await start();
+    return await start((child) => {
+      process = child;
+    });
   } catch (error) {
-    cleanupUnconfirmed = error instanceof AgentProcessCleanupError;
+    if (process?.exitInfo().cleanupUnconfirmed) {
+      if (queue) queue.unconfirmedProcess = process;
+      if (!(error instanceof AgentProcessCleanupError))
+        throw new AgentProcessCleanupError({ cause: error });
+    }
     throw error;
   } finally {
-    if (key !== undefined && !cleanupUnconfirmed) {
-      const next = queues.get(key)?.values().next().value;
-      if (next) next();
-      else queues.delete(key);
+    if (key !== undefined && queue) {
+      if (queue.unconfirmedProcess) void confirmExit(key, queue);
+      else release(key, queue);
     }
   }
 }

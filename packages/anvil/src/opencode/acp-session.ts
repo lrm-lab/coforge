@@ -4,6 +4,7 @@ import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
 import { acpApplyRuntimeConfig, acpConfigOptions } from "#src/acp/config-options";
 import { acpBounded, acpProcess } from "#src/acp/connection";
 import type { AcpRuntimeProfile, AcpSessionProfile } from "#src/acp/profile";
+import type { JsonlProcess } from "#src/jsonl-process";
 import { AcpSession } from "#src/acp/session";
 import { asRecord, nonEmptyString } from "#src/json-record";
 import type { OpenCodeAcpRuntimeHost } from "./acp-host";
@@ -66,19 +67,20 @@ export async function createOpenCodeAcpSession(
     ...host.buildEnvironment(options),
     [OPENCODE_CONFIG_CONTENT_ENV]: instructions.configContent,
   };
-  const profile = openCodeSessionProfile(
-    options,
-    command,
-    host,
-    instructions,
-    environment,
-    timeoutMs,
-  );
   return runOpenCodeStartup(
     options.agentWorkspaceDirectory,
     environment,
     timeoutMs,
-    async () => {
+    async (track) => {
+      const profile = openCodeSessionProfile(
+        options,
+        command,
+        host,
+        instructions,
+        environment,
+        timeoutMs,
+        track,
+      );
       const session = new AcpSession(profile, options, timeoutMs, (work) =>
         acpBounded(work, timeoutMs, OPENCODE_ACP_PROFILE.messages.timedOut),
       );
@@ -101,6 +103,7 @@ function openCodeSessionProfile(
   instructions: OpenCodeInstructions,
   environment: Record<string, string>,
   timeoutMs: number,
+  track: (process: JsonlProcess) => void,
 ): AcpSessionProfile {
   return {
     label: "OpenCode",
@@ -125,6 +128,7 @@ function openCodeSessionProfile(
           stderrTail.push(line);
         },
       });
+      track(transport.process);
       transport.process.onClose(() => {
         const diagnostics = stderrTail.filter((line) => !isRoutineOpenCodeStderr(line));
         if (diagnostics.length > 0) host.stderrHint?.(diagnostics);

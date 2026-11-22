@@ -18,7 +18,7 @@ export async function openOpenCodeProbe(
     cwd,
     childEnvironment,
     timeoutMs,
-    async () => {
+    async (track) => {
       const transport = acpProcess(OPENCODE_ACP_PROFILE, {
         command,
         cwd,
@@ -27,6 +27,7 @@ export async function openOpenCodeProbe(
         processTreeSpawner: host.processTreeSpawner,
         onStderr,
       });
+      track(transport.process);
       let disposal: Promise<void> | undefined;
       const abort = () => {
         disposal ??= transport.dispose();

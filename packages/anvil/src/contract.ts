@@ -353,8 +353,8 @@ export class AgentEnvironmentError extends Error {
 }
 
 export class AgentProcessCleanupError extends Error {
-  constructor() {
-    super("code agent process tree did not exit");
+  constructor(options?: ErrorOptions) {
+    super("code agent process tree did not exit", options);
     this.name = "AgentProcessCleanupError";
   }
 }
