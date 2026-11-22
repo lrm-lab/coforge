@@ -3,10 +3,8 @@ import { OVERLAY_LAYER } from "#src/lib/overlay-layer";
 import { useEffectEvent, useLayoutEffect, useMemo, useState, type FormEvent } from "react";
 import { Heading } from "react-aria-components";
 
-import { BadgeWithButton } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { CloseButton } from "#src/components/base/buttons/close-button";
-import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Input } from "#src/components/base/input/input";
 import {
   Dialog as SlideoutDialog,
@@ -19,13 +17,12 @@ import {
   useUnsavedChangesGuard,
 } from "#src/components/ui/unsaved-changes-dialog";
 import { Select } from "#src/components/base/select/select";
-import { PickerMenu, type PickerOption } from "#src/features/pickers/entity-picker";
+import type { PickerOption } from "#src/features/pickers/entity-picker";
 import { m } from "#src/paraglide/messages";
 import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import { isValidTemplateName, hourlySendTimes } from "./records-content";
 import { FOUNDATION_MODELS_WEEKLY_TEMPLATE_NAME } from "./foundation-models-weekly";
 import { parseTemplateSections, type TemplateOutlineSection } from "./template-outline-sections";
-import { ActorName } from "#src/features/avatars/actor-name";
 import { memberLabel, weekdayLabel, type TemplateMemberOption } from "./weekly-template-members";
 import type { WeeklyTemplateList } from "./weekly-report-settings";
 import {
@@ -34,7 +31,7 @@ import {
   DialogCancel,
   useDialogControlSize,
 } from "#src/components/ui/dialog-actions";
-import { Field, OutlineRow } from "./weekly-template-fields";
+import { OutlineRow, TemplateRecipientsField } from "./weekly-template-fields";
 import {
   emptySection,
   foundationModelsSections,
@@ -357,78 +354,20 @@ export function CreateWeeklyTemplateDialog({
                   </Button>
                 </div>
 
-                <Field label={m.records_template_recipients()}>
-                  <div className="space-y-2">
-                    {allMembers || recipientIds.length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        {allMembers ? (
-                          <BadgeWithButton
-                            size="sm"
-                            color="gray"
-                            type="modern"
-                            buttonLabel={m.records_template_remove_recipient({
-                              name: m.records_template_all_members(),
-                            })}
-                            onButtonClick={() => {
-                              setAllMembers(false);
-                              setRecipientIds([]);
-                            }}
-                          >
-                            {m.records_template_all_members()}
-                          </BadgeWithButton>
-                        ) : (
-                          recipientIds.map((id) => {
-                            const member = members.find((row) => row.userId === id);
-                            const name = memberLabel(member ?? { username: id, displayName: null });
-                            return (
-                              <BadgeWithButton
-                                key={id}
-                                size="sm"
-                                color="gray"
-                                type="modern"
-                                buttonLabel={m.records_template_remove_recipient({ name })}
-                                onButtonClick={() => toggleRecipient(id)}
-                              >
-                                {member ? (
-                                  // The recipient's face before the name (task #521).
-                                  <ActorName
-                                    actor={{
-                                      kind: "user",
-                                      id,
-                                      name: humanLabel(member),
-                                      avatarUrl: member.avatarUrl,
-                                    }}
-                                  />
-                                ) : (
-                                  id
-                                )}
-                              </BadgeWithButton>
-                            );
-                          })
-                        )}
-                      </div>
-                    ) : null}
-                    <Dropdown.Root>
-                      <Button
-                        type="button"
-                        color="secondary"
-                        className="w-full justify-start font-normal"
-                      >
-                        <span className={recipientLabel ? "truncate" : "truncate text-placeholder"}>
-                          {recipientLabel || m.records_template_recipients_placeholder()}
-                        </span>
-                      </Button>
-                      <Dropdown.Popover placement="bottom start" className="w-80">
-                        <PickerMenu
-                          label={m.records_template_recipients_title()}
-                          options={recipientOptions}
-                          selectedKeys={selectedRecipientKeys}
-                          onSelectedKeysChange={onRecipientSelectionChange}
-                        />
-                      </Dropdown.Popover>
-                    </Dropdown.Root>
-                  </div>
-                </Field>
+                <TemplateRecipientsField
+                  allMembers={allMembers}
+                  recipientIds={recipientIds}
+                  members={members}
+                  recipientLabel={recipientLabel}
+                  recipientOptions={recipientOptions}
+                  selectedRecipientKeys={selectedRecipientKeys}
+                  onClearAll={() => {
+                    setAllMembers(false);
+                    setRecipientIds([]);
+                  }}
+                  onToggleRecipient={toggleRecipient}
+                  onRecipientSelectionChange={onRecipientSelectionChange}
+                />
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Select

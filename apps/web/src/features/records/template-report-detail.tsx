@@ -1,17 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { DotsHorizontal, Trash01 as Trash } from "@untitledui/icons";
 
-import { SideChatIcon } from "./side-chat-icon";
-import { Button } from "#src/components/base/buttons/button";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { useAppToast } from "#src/components/ui/toast";
 import { TeamKeyPointSection } from "./team-key-point-section";
-import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import { ReportTabsEditor } from "./report-tabs-editor";
+import { TemplateReportHeader } from "./template-report-header";
 import {
   readReportDraft,
   clearReportDraft,
@@ -34,8 +29,7 @@ import {
   withWeekSendDismissed,
   type ReportContent,
 } from "./records-content";
-import { BackToRecords, RecordsKeyPointReturnBack, useFormatEditHint } from "./records-layout";
-import { WeekBadge } from "./records-sidebar-parts";
+import { useFormatEditHint } from "./records-layout";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { RecordsReadingColumn } from "./records-reading-column";
 import { RecordSidePanel } from "./record-side-panel";
@@ -333,112 +327,36 @@ export function TemplateReportDetail({
       <div
         className={`${sideOpen ? "hidden lg:flex" : "flex"} relative min-w-0 flex-1 flex-col overflow-hidden`}
       >
-        <header className="flex min-h-12 shrink-0 items-center gap-3 border-b border-secondary px-4 py-2 sm:px-6">
-          <span className="flex shrink-0 items-center gap-2">
-            {returnTo ? <RecordsKeyPointReturnBack returnTo={returnTo} /> : <BackToRecords />}
-            <WeekBadge week={report.cycle.week} />
-          </span>
-          {isOverview ? (
-            <h1 className="min-w-0 flex-1 text-md font-semibold wrap-anywhere text-primary sm:text-lg">
-              {report.title}
-            </h1>
-          ) : (
-            <input
-              type="text"
-              aria-label={m.records_template_name()}
-              value={titleDraft}
-              disabled={saving || sending}
-              aria-invalid={titleError !== null}
-              aria-describedby={titleError ? "report-title-error" : undefined}
-              onChange={(event) => {
-                setTitleDraft(event.target.value);
-                setTitleError(null);
-              }}
-              className="min-w-0 flex-1 truncate bg-transparent text-md font-semibold text-primary outline-none placeholder:text-tertiary focus-visible:outline-none disabled:opacity-60 sm:text-lg"
-            />
-          )}
-          <div className="ml-auto flex shrink-0 items-center gap-1">
-            {isOverview ? null : (
-              <>
-                <Button
-                  size="sm"
-                  color="primary"
-                  className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
-                  isDisabled={
-                    saving ||
-                    sending ||
-                    hasUnsavedEdits ||
-                    Boolean(sendSchedule?.alreadySent) ||
-                    (!canSendAssignments && !weekDismissed)
-                  }
-                  onPress={() => setConfirmOpen(true)}
-                >
-                  {m.records_report_send()}
-                </Button>
-                {hasUnsavedEdits ? (
-                  <Button
-                    size="sm"
-                    color="secondary"
-                    isDisabled={saving || sending}
-                    onPress={() => void saveFormatEdits()}
-                  >
-                    {m.records_report_save()}
-                  </Button>
-                ) : null}
-              </>
-            )}
-            {sideOpen ? null : (
-              <ButtonUtility
-                size="sm"
-                color="tertiary"
-                icon={SideChatIcon}
-                aria-label={m.records_side_chat()}
-                onClick={() => setSideOpen(true)}
-              />
-            )}
-            {isOverview ? (
-              isOverviewLeader ? (
-                <Dropdown.Root>
-                  <ButtonUtility
-                    size="sm"
-                    color="tertiary"
-                    icon={DotsHorizontal}
-                    aria-label={m.records_report_actions()}
-                    isDisabled={saving || sending}
-                  />
-                  <Dropdown.Popover placement="bottom end" className="w-44">
-                    <Dropdown.Menu onAction={deleteDialog.request}>
-                      <Dropdown.Item id="delete" icon={Trash} label={m.records_week_delete()} />
-                    </Dropdown.Menu>
-                  </Dropdown.Popover>
-                </Dropdown.Root>
-              ) : null
-            ) : (
-              <Dropdown.Root>
-                <ButtonUtility
-                  size="sm"
-                  color="tertiary"
-                  icon={DotsHorizontal}
-                  aria-label={m.records_report_actions()}
-                  isDisabled={saving || sending}
-                />
-                <Dropdown.Popover placement="bottom end" className="w-44">
-                  <Dropdown.Menu
-                    onAction={() => {
-                      const page =
-                        formatPageRef.current || Object.keys(contentRef.current.tabs ?? {})[0];
-                      if (!page) return;
-                      markLocalContent(resetLeaderFormatPage(contentRef.current, page));
-                      setEditorRevision((revision) => revision + 1);
-                    }}
-                  >
-                    <Dropdown.Item id="reset" icon={Trash} label={m.records_report_reset()} />
-                  </Dropdown.Menu>
-                </Dropdown.Popover>
-              </Dropdown.Root>
-            )}
-          </div>
-        </header>
+        <TemplateReportHeader
+          week={report.cycle.week}
+          title={report.title}
+          returnTo={returnTo}
+          isOverview={isOverview}
+          isOverviewLeader={isOverviewLeader}
+          titleDraft={titleDraft}
+          titleError={titleError}
+          onTitleDraftChange={(value) => {
+            setTitleDraft(value);
+            setTitleError(null);
+          }}
+          saving={saving}
+          sending={sending}
+          hasUnsavedEdits={hasUnsavedEdits}
+          alreadySent={Boolean(sendSchedule?.alreadySent)}
+          canSendAssignments={canSendAssignments}
+          weekDismissed={weekDismissed}
+          onOpenConfirmSend={() => setConfirmOpen(true)}
+          onSaveFormatEdits={() => void saveFormatEdits()}
+          sideOpen={sideOpen}
+          onOpenSide={() => setSideOpen(true)}
+          onRequestDeleteOverview={deleteDialog.request}
+          onResetPage={() => {
+            const page = formatPageRef.current || Object.keys(contentRef.current.tabs ?? {})[0];
+            if (!page) return;
+            markLocalContent(resetLeaderFormatPage(contentRef.current, page));
+            setEditorRevision((revision) => revision + 1);
+          }}
+        />
         {failure && <ReportSaveFailureBar failure={failure} retrying={saving} />}
         {isOverview || !(titleError ?? sendError) ? null : (
           <p

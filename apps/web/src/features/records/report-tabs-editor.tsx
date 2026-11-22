@@ -18,22 +18,14 @@ import { ReportSectionEditor } from "#src/features/records/report-editor/report-
 import type { ReportContent } from "./records-content";
 import { cn } from "#src/lib/utils";
 import type { UploadResult } from "#src/features/records/report-editor/types";
-import { isReportImageZoomOpen } from "./report-image-zoom";
 import { ReportPresentMode } from "./report-present-mode";
 import { ReportTabDrag, ReportTabDragItem, type ReportTabPress } from "./report-tab-drag";
 import { adjacentReportTabId } from "./report-tab-keyboard";
 import { RecordsReadingColumn } from "./records-reading-column";
 import {
-  clearReadingEdge,
-  measureBodyEdge,
-  nestedScrollOwnsWheel,
-  noteReadingWheel,
-  readReadingEdge,
-  readingWheelPixels,
-  stepMemberReportPage,
-  type ReadingEdge,
-  type ReadingWheelGesture,
-} from "./weekly-report-reading-turn";
+  useReportTabsReadingTurn,
+  type ReportTabsReadingTurn,
+} from "./use-report-tabs-reading-turn";
 import { FIELD_STATES } from "#src/components/base/input/field-states";
 
 export function ReportTabsEditor({
@@ -61,13 +53,7 @@ export function ReportTabsEditor({
   onActiveTabChange?: (name: string) => void;
   onBlur?: () => void;
   onUploadFile?: (file: File) => Promise<UploadResult | null>;
-  readingTurn?: {
-    reportId: string;
-    previousReportId: string | null;
-    nextReportId: string | null;
-    wheel: { current: ReadingWheelGesture };
-    onOpenReport: (reportId: string, edge: ReadingEdge) => void;
-  };
+  readingTurn?: ReportTabsReadingTurn;
 }) {
   const pages = content.tabs ?? { Summary: { markdown: content.markdown ?? "" } };
   const tabNames = Object.keys(pages);
@@ -80,18 +66,11 @@ export function ReportTabsEditor({
   const scrollerRef = useRef<HTMLDivElement>(null);
   const bodyScrollerRef = useRef<HTMLDivElement>(null);
   const contentEndRef = useRef<HTMLDivElement>(null);
-  const scrollPlanRef = useRef<{ pageId: string; edge: ReadingEdge } | null>(null);
-  const readingTurnRef = useRef(readingTurn);
-  readingTurnRef.current = readingTurn;
-  const pageIdsRef = useRef(allTabIds);
-  pageIdsRef.current = allTabIds;
   const [tabOverflow, setTabOverflow] = useState({ left: false, right: false });
   const activeTab = allTabIds.includes(selectedTab)
     ? selectedTab
     : (tabNames[0] ?? trailing[0]?.id ?? "");
   const trailingActive = trailing.some((tab) => tab.id === activeTab);
-  const activeTabRef = useRef(activeTab);
-  activeTabRef.current = activeTab;
 
   useEffect(() => {
     if (activeTab) onActiveTabChange?.(activeTab);
@@ -128,72 +107,14 @@ export function ReportTabsEditor({
     updateTabOverflow();
   }, [activeTab]);
 
-  useLayoutEffect(() => {
-    if (!readingTurn) return;
-    const edge = readReadingEdge(readingTurn.reportId);
-    if (!edge) return;
-    const pageId = edge === "end" ? (allTabIds.at(-1) ?? "") : (allTabIds[0] ?? "");
-    if (!pageId) return;
-    scrollPlanRef.current = { pageId, edge };
-    setSelectedTab(pageId);
-    const reportId = readingTurn.reportId;
-    const timer = window.setTimeout(() => clearReadingEdge(reportId), 0);
-    return () => window.clearTimeout(timer);
-  }, [readingTurn?.reportId, allTabIds.join("\u0000")]);
-
-  useLayoutEffect(() => {
-    const plan = scrollPlanRef.current;
-    const scroller = bodyScrollerRef.current;
-    if (!plan || !scroller || plan.pageId !== activeTab) return;
-    if (plan.edge === "start") {
-      scroller.scrollTop = 0;
-    } else if (contentEndRef.current) {
-      const delta =
-        contentEndRef.current.getBoundingClientRect().bottom -
-        scroller.getBoundingClientRect().bottom;
-      scroller.scrollTop += delta;
-    }
-    scrollPlanRef.current = null;
-  }, [activeTab]);
-
-  useEffect(() => {
-    const scroller = bodyScrollerRef.current;
-    if (!readingTurn || !scroller) return;
-    const onWheel = (event: WheelEvent) => {
-      const current = readingTurnRef.current;
-      if (!current || event.ctrlKey || isReportImageZoomOpen()) return;
-      if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
-      const deltaY = readingWheelPixels(event.deltaY, event.deltaMode, scroller.clientHeight);
-      if (deltaY === 0 || nestedScrollOwnsWheel(event.target, scroller, deltaY)) return;
-      const edge = measureBodyEdge(scroller, contentEndRef.current);
-      if (!edge) return;
-      const pinned = deltaY > 0 ? edge.atEnd : edge.atStart;
-      const turned = noteReadingWheel(current.wheel.current, {
-        deltaY,
-        pinned,
-        now: event.timeStamp || performance.now(),
-      });
-      current.wheel.current = turned.gesture;
-      if (!pinned) return;
-      event.preventDefault();
-      if (turned.step === 0) return;
-      const moved = stepMemberReportPage({
-        pageIds: pageIdsRef.current,
-        activePageId: activeTabRef.current,
-        direction: turned.step,
-        previousReportId: current.previousReportId,
-        nextReportId: current.nextReportId,
-      });
-      if (moved.kind === "page") {
-        scrollPlanRef.current = { pageId: moved.pageId, edge: moved.edge };
-        setSelectedTab(moved.pageId);
-      } else if (moved.kind === "report") {
-        current.onOpenReport(moved.reportId, moved.edge);
-      }
-    };
-    scroller.addEventListener("wheel", onWheel, { passive: false });
-    return () => scroller.removeEventListener("wheel", onWheel);
-  }, [readingTurn?.reportId]);
+  useReportTabsReadingTurn({
+    readingTurn,
+    allTabIds,
+    activeTab,
+    setSelectedTab,
+    bodyScrollerRef,
+    contentEndRef,
+  });
 
   function scrollTabs(direction: -1 | 1) {
     scrollerRef.current?.scrollBy({ left: direction * 160, behavior: "smooth" });

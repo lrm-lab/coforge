@@ -1,140 +1,71 @@
-import { WEEKLY_REPORT_SCHEDULE_TIME_ZONE } from "./weekly-report-schedule-due";
+import {
+  parseAssignmentMeta,
+  parseScheduleMeta,
+  type ReportAssignmentMeta,
+  type ReportScheduleMeta,
+} from "./records-format-meta";
+import {
+  parseKeyPointExtraction,
+  parseKeyPointPrompts,
+  type KeyPointExtractionMeta,
+  type KeyPointPromptsMeta,
+} from "./records-key-points";
 
-/** Weekly-report body: named display pages with one rich-text document per page. */
+export {
+  formatRecipientSummary,
+  formatWeeklyReportCompletedAt,
+  hourlySendTimes,
+  isHourlySendTime,
+  isValidIsoWeekNumber,
+  isValidTemplateName,
+  memberReportTitle,
+  memberWeekTitle,
+  type ReportAssignmentMeta,
+  type ReportScheduleMeta,
+} from "./records-format-meta";
+
+export {
+  applyKeyPointPromptText,
+  DEFAULT_PERSONAL_KEY_POINT_PROMPT,
+  DEFAULT_TEAM_KEY_POINT_PROMPT,
+  emptyKeyPointPrompt,
+  emptyKeyPointPrompts,
+  KEY_POINT_PROMPT_HISTORY_LIMIT,
+  keyPointHistoryIndexOf,
+  removeKeyPointPromptHistoryEntry,
+  type KeyPointExtractionMeta,
+  type KeyPointExtractionStatus,
+  type KeyPointPromptHistoryEntry,
+  type KeyPointPromptsMeta,
+  type KeyPointPromptState,
+} from "./records-key-points";
+
+export {
+  isAssignmentUnread,
+  isAutoSendCancelled,
+  isWeekSendDismissed,
+  withAssignmentUnread,
+  withAutoSendCancelled,
+  withKeyPointExtraction,
+  withKeyPointPrompts,
+  withoutWeekSendDismissed,
+  withWeekSendDismissed,
+} from "./records-schedule-state";
 
 export type ReportTab = {
   markdown: string;
 };
 
-/** Leader-assignment inbox state stored in content JSON (no schema column yet). */
-export type ReportAssignmentMeta = {
-  unread: boolean;
-};
-
-/** Auto-send cancel / week dismiss for one ISO week, stored on the live format document. */
-export type ReportScheduleMeta = {
-  cancelledYear: number;
-  cancelledWeek: number;
-  /**
-   * When true with matching cancelledYear/Week, Leader dismissed the week's
-   * send entirely（取消本周周报）— manual send is also blocked.
-   */
-  dismissSend?: boolean;
-};
-
-export type KeyPointPromptHistoryEntry = {
-  text: string;
-  updatedAt: string;
-};
-
-/**
- * Where a previously captured history entry sits in the latest history, or -1 when it is gone.
- * The server deletes history entries by position, so a delete confirmed against an older snapshot
- * resolves the position again instead of trusting the one it was opened with.
- */
-export function keyPointHistoryIndexOf(
-  history: readonly KeyPointPromptHistoryEntry[],
-  entry: KeyPointPromptHistoryEntry,
-): number {
-  return history.findIndex(
-    (candidate) => candidate.updatedAt === entry.updatedAt && candidate.text === entry.text,
-  );
-}
-
-/** One prompt slot (team or personal) with history. */
-export type KeyPointPromptState = {
-  text: string;
-  updatedAt?: string;
-  history: KeyPointPromptHistoryEntry[];
-};
-
-/** Leader-owned prompts on live format documents (`kind=template`). */
-export type KeyPointPromptsMeta = {
-  team: KeyPointPromptState;
-  personal: KeyPointPromptState;
-};
-
-export type KeyPointExtractionStatus =
-  | "generating"
-  | "ready"
-  | "failed"
-  | "pending_setup"
-  | "awaiting_confirm";
-
-/** Personal / team key-point extraction result (Leader-owned UI). */
-export type KeyPointExtractionMeta = {
-  status: KeyPointExtractionStatus;
-  promptSnapshot: string;
-  /** Last Insert-confirmed (or direct-submit) body shown on the page. */
-  markdown?: string;
-  /**
-   * Draft parked for side-chat Insert. Must not replace `markdown` until the
-   * Leader confirms — the page keeps showing the previous `markdown`.
-   */
-  pendingMarkdown?: string;
-  generatedAt?: string;
-  error?: string;
-  /**
-   * When `side-chat-confirm`, Agent HTTPS submit parks markdown as
-   * `awaiting_confirm` and posts a side-chat Insert suggestion instead of
-   * writing `ready` immediately.
-   */
-  delivery?: "side-chat-confirm";
-  /** Side-chat session that should receive the confirm suggestion. */
-  confirmSessionId?: string;
-};
-
-export const KEY_POINT_PROMPT_HISTORY_LIMIT = 20;
-
-export const DEFAULT_TEAM_KEY_POINT_PROMPT = [
-  "请基于本周全组成员已提交的周报，提炼一份团队要点纪要。要求：",
-  "1、按「本周进展、下周计划、要点总结」三部分组织，使用 Markdown 标题与条目列表；",
-  "2、优先保留可核对的事实：完成事项、阻塞风险、关键结论与明确计划，避免空泛表述；",
-  "3、合并重复信息，按主题归类；每条要点末尾必须用 Markdown 链接标注来源成员，格式为 [@显示名](/records/<reportId>)，reportId 取自「已提交成员」列表；同一事项多名成员则并列多个链接；",
-  "4、语言简洁、描述清晰，少用过重的专业黑话；不确定处写「待确认」而非臆测；",
-  "5、不要复述整篇周报原文，只输出提炼后的要点正文。",
-].join("\n");
-
-export const DEFAULT_PERSONAL_KEY_POINT_PROMPT = [
-  "请阅读该成员本周已提交的周报全文，提炼个人要点。要求：",
-  "1、按「本周进展、下周计划、要点总结」三部分组织，使用 Markdown 标题与条目列表；",
-  "2、本周进展：列出已完成或推进中的关键事项，突出结果与影响；",
-  "3、下周计划：列出明确计划与优先级，标出依赖或风险（如有）；",
-  "4、要点总结：用 2–5 条概括本周核心信息，便于 Leader 快速扫读；",
-  "5、语言简洁、描述清晰，少用过重的专业黑话；不要臆造周报中未出现的内容；",
-  "6、只输出提炼后的 Markdown 正文，不要解释你的思考过程。",
-].join("\n");
-
 export type ReportContent = {
   tabs?: Record<string, ReportTab>;
-  /** Temporary compatibility field used by the Notes draft cache. */
   markdown?: string;
   assignment?: ReportAssignmentMeta;
   schedule?: ReportScheduleMeta;
-  /** Live format only: team + personal extraction prompts. */
   keyPointPrompts?: KeyPointPromptsMeta;
-  /** Member report only: personal extraction run state + markdown. */
   keyPointExtraction?: KeyPointExtractionMeta;
-  /**
-   * Last body a recipient already received. Working `tabs` may move ahead
-   * until the author sends again.
-   */
   delivered?: { tabs: Record<string, ReportTab> };
-  /**
-   * Body inserted from the assistant. Later author edits change `tabs` and
-   * leave this snapshot in place until the next confirmed assistant write.
-   */
   assistantDraft?: { tabs: Record<string, ReportTab> };
-  /**
-   * Body the member received with the assignment. Working `tabs` must differ
-   * from this snapshot before the member can send.
-   */
   received?: { tabs: Record<string, ReportTab> };
-  /**
-   * The body before the latest assistant insert, and that insert. `showing`
-   * is which one `tabs` currently displays. Author edits stay on the side
-   * they were made until the author switches.
-   */
   bodyRestore?: ReportBodyRestore;
 };
 
@@ -216,34 +147,7 @@ function withBodyRestore(
   return { ...content, bodyRestore };
 }
 
-function parseAssignmentMeta(value: unknown): ReportAssignmentMeta | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const unread = (value as { unread?: unknown }).unread;
-  if (typeof unread !== "boolean") return undefined;
-  return { unread };
-}
-
-function parseScheduleMeta(value: unknown): ReportScheduleMeta | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const row = value as {
-    cancelledYear?: unknown;
-    cancelledWeek?: unknown;
-    dismissSend?: unknown;
-  };
-  if (typeof row.cancelledYear !== "number" || typeof row.cancelledWeek !== "number") {
-    return undefined;
-  }
-  if (!Number.isInteger(row.cancelledYear) || !Number.isInteger(row.cancelledWeek)) {
-    return undefined;
-  }
-  return {
-    cancelledYear: row.cancelledYear,
-    cancelledWeek: row.cancelledWeek,
-    ...(row.dismissSend === true ? { dismissSend: true } : {}),
-  };
-}
-
-function withOptionalMeta(
+export function withOptionalMeta(
   content: ReportContent,
   assignment: ReportAssignmentMeta | undefined,
   schedule: ReportScheduleMeta | undefined,
@@ -257,163 +161,6 @@ function withOptionalMeta(
     ...(keyPointPrompts ? { keyPointPrompts } : {}),
     ...(keyPointExtraction ? { keyPointExtraction } : {}),
   };
-}
-
-function withOptionalAssignment(
-  content: ReportContent,
-  assignment: ReportAssignmentMeta | undefined,
-): ReportContent {
-  return withOptionalMeta(
-    content,
-    assignment,
-    content.schedule,
-    content.keyPointPrompts,
-    content.keyPointExtraction,
-  );
-}
-
-function parseKeyPointPromptState(value: unknown): KeyPointPromptState | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const row = value as { text?: unknown; updatedAt?: unknown; history?: unknown };
-  const text = typeof row.text === "string" ? row.text : "";
-  const updatedAt = typeof row.updatedAt === "string" ? row.updatedAt : undefined;
-  const history = Array.isArray(row.history)
-    ? row.history
-        .map((entry) => {
-          if (!entry || typeof entry !== "object") return null;
-          const item = entry as { text?: unknown; updatedAt?: unknown };
-          if (typeof item.text !== "string" || typeof item.updatedAt !== "string") return null;
-          return { text: item.text, updatedAt: item.updatedAt };
-        })
-        .filter((entry): entry is KeyPointPromptHistoryEntry => entry !== null)
-    : [];
-  return updatedAt ? { text, updatedAt, history } : { text, history };
-}
-
-function parseKeyPointPrompts(value: unknown): KeyPointPromptsMeta | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const row = value as { team?: unknown; personal?: unknown };
-  const team = parseKeyPointPromptState(row.team);
-  const personal = parseKeyPointPromptState(row.personal);
-  if (!team && !personal) return undefined;
-  return {
-    team: team ?? emptyKeyPointPrompt(DEFAULT_TEAM_KEY_POINT_PROMPT),
-    personal: personal ?? emptyKeyPointPrompt(DEFAULT_PERSONAL_KEY_POINT_PROMPT),
-  };
-}
-
-const EXTRACTION_STATUSES = new Set<string>([
-  "generating",
-  "ready",
-  "failed",
-  "pending_setup",
-  "awaiting_confirm",
-]);
-
-function parseKeyPointExtraction(value: unknown): KeyPointExtractionMeta | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const row = value as {
-    status?: unknown;
-    promptSnapshot?: unknown;
-    markdown?: unknown;
-    pendingMarkdown?: unknown;
-    generatedAt?: unknown;
-    error?: unknown;
-    delivery?: unknown;
-    confirmSessionId?: unknown;
-  };
-  if (typeof row.status !== "string" || !EXTRACTION_STATUSES.has(row.status)) return undefined;
-  if (typeof row.promptSnapshot !== "string") return undefined;
-  return {
-    status: row.status as KeyPointExtractionStatus,
-    promptSnapshot: row.promptSnapshot,
-    ...(typeof row.markdown === "string" ? { markdown: row.markdown } : {}),
-    ...(typeof row.pendingMarkdown === "string" ? { pendingMarkdown: row.pendingMarkdown } : {}),
-    ...(typeof row.generatedAt === "string" ? { generatedAt: row.generatedAt } : {}),
-    ...(typeof row.error === "string" ? { error: row.error } : {}),
-    ...(row.delivery === "side-chat-confirm" ? { delivery: "side-chat-confirm" as const } : {}),
-    ...(typeof row.confirmSessionId === "string" && row.confirmSessionId.trim()
-      ? { confirmSessionId: row.confirmSessionId.trim() }
-      : {}),
-  };
-}
-
-export function emptyKeyPointPrompt(text = ""): KeyPointPromptState {
-  return { text, history: [] };
-}
-
-export function emptyKeyPointPrompts(): KeyPointPromptsMeta {
-  return {
-    team: emptyKeyPointPrompt(DEFAULT_TEAM_KEY_POINT_PROMPT),
-    personal: emptyKeyPointPrompt(DEFAULT_PERSONAL_KEY_POINT_PROMPT),
-  };
-}
-
-/** Save a prompt slot: push previous non-empty text onto history when it changes. */
-export function applyKeyPointPromptText(
-  current: KeyPointPromptState | undefined,
-  nextText: string,
-  updatedAt: Date,
-): KeyPointPromptState {
-  const previous = current ?? emptyKeyPointPrompt();
-  const text = nextText;
-  const stamp = updatedAt.toISOString();
-  if (previous.text === text) {
-    return previous.updatedAt
-      ? { text, updatedAt: previous.updatedAt, history: previous.history }
-      : { text, updatedAt: stamp, history: previous.history };
-  }
-  const history =
-    previous.text.trim().length > 0
-      ? [
-          {
-            text: previous.text,
-            updatedAt: previous.updatedAt ?? stamp,
-          },
-          ...previous.history,
-        ].slice(0, KEY_POINT_PROMPT_HISTORY_LIMIT)
-      : previous.history;
-  return { text, updatedAt: stamp, history };
-}
-
-/** Remove one history entry by index (settings「删除」). */
-export function removeKeyPointPromptHistoryEntry(
-  current: KeyPointPromptState,
-  historyIndex: number,
-): KeyPointPromptState {
-  if (historyIndex < 0 || historyIndex >= current.history.length) return current;
-  return {
-    ...current,
-    history: current.history.filter((_, index) => index !== historyIndex),
-  };
-}
-
-export function withKeyPointPrompts(
-  content: ReportContent,
-  prompts: KeyPointPromptsMeta,
-): ReportContent {
-  const normalized = normalizeReportContent(content);
-  return withOptionalMeta(
-    normalized,
-    normalized.assignment,
-    normalized.schedule,
-    prompts,
-    normalized.keyPointExtraction,
-  );
-}
-
-export function withKeyPointExtraction(
-  content: ReportContent,
-  extraction: KeyPointExtractionMeta,
-): ReportContent {
-  const normalized = normalizeReportContent(content);
-  return withOptionalMeta(
-    normalized,
-    normalized.assignment,
-    normalized.schedule,
-    normalized.keyPointPrompts,
-    extraction,
-  );
 }
 
 function legacyOutlineToMarkdown(nodes: LegacyOutlineNode[], depth = 0): string {
@@ -443,7 +190,6 @@ function legacySectionsToMarkdown(sections: LegacySection[]): string {
     .trim();
 }
 
-/** Create a blank report with one page when no template pages have been configured. */
 export function emptyReportContent(dimensions: string[] = []): ReportContent {
   const names = dimensions.map((name) => name.trim()).filter(Boolean);
   const uniqueNames = [...new Set(names.length > 0 ? names : [newTabName()])];
@@ -452,7 +198,6 @@ export function emptyReportContent(dimensions: string[] = []): ReportContent {
   };
 }
 
-/** Keep page content while applying a template's current page names. */
 export function alignReportContentToTemplate(
   content: ReportContent,
   dimensions: string[],
@@ -478,7 +223,6 @@ export function alignReportContentToTemplate(
   );
 }
 
-/** Remove every heading: level-1 pages and the level-2 blocks stored in their markdown. */
 export function clearReportContent(content: ReportContent): ReportContent {
   const normalized = normalizeReportContent(content);
   return withBodyRestore(
@@ -496,7 +240,6 @@ export function clearReportContent(content: ReportContent): ReportContent {
   );
 }
 
-/** Normalize persisted JSON, including the former single-markdown representation. */
 export function normalizeReportContent(value: unknown): ReportContent {
   if (!value || typeof value !== "object") return emptyReportContent();
   const record = value as {
@@ -620,7 +363,6 @@ function reportTabsSnapshot(content: ReportContent): Record<string, ReportTab> {
   return { ...normalizeReportContent(content).tabs };
 }
 
-/** Remember the body on screen, then show the assistant insert as the latest version. */
 export function insertAssistantReportBody(
   stored: ReportContent,
   inserted: ReportContent,
@@ -644,10 +386,6 @@ export function insertAssistantReportBody(
   };
 }
 
-/**
- * Leave the version on screen, keeping edits on that side, and show the other.
- * The assistant original stays put.
- */
 export function switchReportBodyVersion(stored: ReportContent): ReportContent {
   const current = normalizeReportContent(stored);
   const restore = current.bodyRestore;
@@ -670,7 +408,6 @@ export function switchReportBodyVersion(stored: ReportContent): ReportContent {
   };
 }
 
-/** Which version the author is viewing, without the stored snapshots. */
 export function reportBodyRestoreView(content: ReportContent): ReportBodyRestoreView | null {
   const restore = normalizeReportContent(content).bodyRestore;
   if (!restore) return null;
@@ -681,16 +418,11 @@ export function reportBodyRestoreView(content: ReportContent): ReportBodyRestore
   };
 }
 
-/** Copy the working body into the copy recipients already hold. */
 export function publishMemberReportDelivery(content: ReportContent): ReportContent {
   const next = normalizeReportContent(content);
   return { ...next, delivered: { tabs: { ...next.tabs } } };
 }
 
-/**
- * Keep the last sent body while the author keeps editing.
- * Reports sent before a delivery snapshot existed freeze the stored body.
- */
 export function retainMemberReportDelivery(
   stored: ReportContent,
   incoming: ReportContent,
@@ -703,7 +435,6 @@ export function retainMemberReportDelivery(
   };
 }
 
-/** Author editor: working body, without the recipient snapshot or assistant original. */
 export function reportContentForAuthor(content: ReportContent): ReportContent {
   const {
     delivered: _delivered,
@@ -714,7 +445,6 @@ export function reportContentForAuthor(content: ReportContent): ReportContent {
   return rest;
 }
 
-/** Recipient view: the last sent body, or the only stored body when none was snapshotted. */
 export function reportContentForRecipient(content: ReportContent): ReportContent {
   const {
     delivered,
@@ -726,21 +456,12 @@ export function reportContentForRecipient(content: ReportContent): ReportContent
   return { ...rest, tabs: delivered.tabs };
 }
 
-export function isAssignmentUnread(content: ReportContent): boolean {
-  return normalizeReportContent(content).assignment?.unread === true;
-}
-
-export function withAssignmentUnread(content: ReportContent, unread: boolean): ReportContent {
-  return withOptionalAssignment(normalizeReportContent(content), { unread });
-}
-
 export function reportTabsEqual(left: ReportContent, right: ReportContent): boolean {
   const a = normalizeReportContent(left).tabs ?? {};
   const b = normalizeReportContent(right).tabs ?? {};
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-/** Remember the body a member received, so later edits can be told apart from it. */
 export function withReceivedSnapshot(content: ReportContent): ReportContent {
   const normalized = normalizeReportContent(content);
   const tabs = Object.fromEntries(
@@ -749,117 +470,12 @@ export function withReceivedSnapshot(content: ReportContent): ReportContent {
   return { ...normalized, received: { tabs } };
 }
 
-/** True when the working body is still the one the member received. */
 export function memberReportMatchesReceived(content: ReportContent): boolean {
   const normalized = normalizeReportContent(content);
   if (!normalized.received) return false;
   return reportTabsEqual(normalized, { tabs: normalized.received.tabs });
 }
 
-export function isAutoSendCancelled(content: ReportContent, year: number, week: number): boolean {
-  const schedule = normalizeReportContent(content).schedule;
-  return schedule?.cancelledYear === year && schedule?.cancelledWeek === week;
-}
-
-/** Leader dismissed sending this ISO week entirely（取消本周周报）. */
-export function isWeekSendDismissed(content: ReportContent, year: number, week: number): boolean {
-  const schedule = normalizeReportContent(content).schedule;
-  return (
-    schedule?.dismissSend === true &&
-    schedule.cancelledYear === year &&
-    schedule.cancelledWeek === week
-  );
-}
-
-export function withAutoSendCancelled(
-  content: ReportContent,
-  year: number,
-  week: number,
-): ReportContent {
-  const normalized = normalizeReportContent(content);
-  const prior = normalized.schedule;
-  return withOptionalMeta(
-    normalized,
-    normalized.assignment,
-    {
-      cancelledYear: year,
-      cancelledWeek: week,
-      ...(prior?.dismissSend && prior.cancelledYear === year && prior.cancelledWeek === week
-        ? { dismissSend: true }
-        : {}),
-    },
-    normalized.keyPointPrompts,
-    normalized.keyPointExtraction,
-  );
-}
-
-/** Drop this ISO week's cancel/dismiss stamp so the template can be sent again. */
-export function withoutWeekSendDismissed(
-  content: ReportContent,
-  year: number,
-  week: number,
-): ReportContent {
-  const normalized = normalizeReportContent(content);
-  if (!isAutoSendCancelled(normalized, year, week)) return normalized;
-  const { schedule: _schedule, ...rest } = normalized;
-  return rest;
-}
-
-/** Cancel auto-send and block manual send for this ISO week. */
-export function withWeekSendDismissed(
-  content: ReportContent,
-  year: number,
-  week: number,
-): ReportContent {
-  const normalized = normalizeReportContent(content);
-  return withOptionalMeta(
-    normalized,
-    normalized.assignment,
-    {
-      cancelledYear: year,
-      cancelledWeek: week,
-      dismissSend: true,
-    },
-    normalized.keyPointPrompts,
-    normalized.keyPointExtraction,
-  );
-}
-
-export function memberWeekTitle(year: number, week: number): string {
-  return `${year} W${week} 工作周报`;
-}
-
-/** Member report title: `{name} {year} W{week} 工作周报`. */
-export function memberReportTitle(displayName: string, year: number, week: number): string {
-  return `${displayName} ${year} W${week} 工作周报`;
-}
-
-/**
- * Submitted-at stamp for the member-report header (WR-35 / M1): `YYYY.MM.DD HH:mm:ss` on the same
- * clock the weekly send schedule runs on, so a reported stamp and a scheduled send never disagree.
- */
-/** Built once: the locale, clock and timezone are fixed here, and building it per call costs about
- * as much as the formatting it is built for. */
-const COMPLETED_AT_FORMATTER = new Intl.DateTimeFormat("en-US", {
-  timeZone: WEEKLY_REPORT_SCHEDULE_TIME_ZONE,
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hour12: false,
-});
-
-export function formatWeeklyReportCompletedAt(value: string | Date): string {
-  const date = value instanceof Date ? value : new Date(value);
-  const parts = COMPLETED_AT_FORMATTER.formatToParts(date);
-  const get = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((part) => part.type === type)?.value ?? "";
-  return `${get("year")}.${get("month")}.${get("day")} ${get("hour")}:${get("minute")}:${get("second")}`;
-}
-
-/** Markdown export of multi-tab report content. */
 export function reportContentToMarkdown(content: ReportContent): string {
   const normalized = normalizeReportContent(content);
   const tabs = Object.entries(normalized.tabs ?? {});
@@ -870,32 +486,4 @@ export function reportContentToMarkdown(content: ReportContent): string {
       return body.length > 0 ? `# ${name}\n\n${body}` : `# ${name}`;
     })
     .join("\n\n");
-}
-
-/** ISO week-of-year for format meta edits (1–53). */
-export function isValidIsoWeekNumber(week: number): boolean {
-  return Number.isInteger(week) && week >= 1 && week <= 53;
-}
-
-/** Template names include full named formats such as Foundation Models Weekly. */
-export function isValidTemplateName(name: string): boolean {
-  const length = name.trim().length;
-  return length > 0 && length <= 100;
-}
-
-export function hourlySendTimes(): string[] {
-  return Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`);
-}
-
-export function isHourlySendTime(value: string): boolean {
-  return /^([01]\d|2[0-3]):00$/.test(value);
-}
-
-/** Settings-table preview: first three names, then `...+N`. */
-export function formatRecipientSummary(names: readonly string[]): string {
-  if (names.length === 0) return "";
-  const visible = names.slice(0, 3);
-  const more = names.length - visible.length;
-  const label = visible.join("，");
-  return more > 0 ? `${label}...+${more}` : label;
 }

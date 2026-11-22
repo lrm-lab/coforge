@@ -2,9 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
-
-// The weekly report collector's server functions: the viewer's Computers it can read from, and its
-// collect runs.
+import { submitCollectPlanInputSchema } from "./records-schemas";
 
 export const listWeeklyReportCollectorSlots = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
@@ -29,26 +27,7 @@ export const ensureWeeklyReportCollector = createServerFn({ method: "POST" })
 
 export const submitWeeklyReportCollectPlan = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(
-    z.object({
-      reportId: z.uuid(),
-      windowKind: z.enum(["week", "month", "quarter", "year", "custom"]),
-      year: z.number().int().optional(),
-      week: z.number().int().optional(),
-      month: z.number().int().optional(),
-      quarter: z.number().int().optional(),
-      customStart: z.string().optional(),
-      customEnd: z.string().optional(),
-      computers: z
-        .array(
-          z.object({
-            computerId: z.uuid(),
-            scanPaths: z.array(z.string()),
-          }),
-        )
-        .min(1),
-    }),
-  )
+  .validator(submitCollectPlanInputSchema)
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     const { submitWeeklyReportCollectPlan: submit } =
       await import("#src/server/records/weekly-report-collect-orchestrate.server");

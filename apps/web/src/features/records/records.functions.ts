@@ -18,19 +18,21 @@ import { recordReportManagement } from "#src/server/records/record-report-manage
 import { updateFormatReportMeta as updateFormatReportMetaData } from "#src/server/records/record-catalog-format.server";
 import { recordReportSend } from "#src/server/records/record-report-send.server";
 import { ensureFormatForSettings } from "#src/server/records/record-catalog-format.server";
-import { normalizeReportContent, type ReportContent } from "./records-content";
+import { normalizeReportContent } from "./records-content";
+import {
+  createWeeklyTemplateInputSchema,
+  reportContentSchema,
+  saveKeyPointPromptsInputSchema,
+  saveRecordNoteInputSchema,
+  updateFormatReportMetaInputSchema,
+  updateWeeklyTemplateInputSchema,
+} from "./records-schemas";
 
 export const loadRecordsNavAttention = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context: { user, db, workspaceId } }) => {
     return recordNavAttention(db).loadNavAttention({ workspaceId, userId: user.id });
   });
-
-const reportContentSchema: z.ZodType<ReportContent> = z.object({
-  tabs: z.record(z.string(), z.object({ markdown: z.string() })),
-  markdown: z.string().optional(),
-  assignment: z.object({ unread: z.boolean() }).optional(),
-});
 
 export const loadRecordsCatalog = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
@@ -135,13 +137,7 @@ export const createRecordNote = createServerFn({ method: "POST" })
 
 export const saveRecordNote = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(
-    z.object({
-      noteId: z.uuid(),
-      title: z.string().trim().min(1).max(200).optional(),
-      body: z.string().optional(),
-    }),
-  )
+  .validator(saveRecordNoteInputSchema)
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return recordAssistantCatalog(db).saveNote({
       workspaceId,
@@ -188,12 +184,7 @@ export const saveWeeklyReportContent = createServerFn({ method: "POST" })
 
 export const updateFormatReportMeta = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(
-    z.object({
-      reportId: z.uuid(),
-      title: z.string().trim().min(1),
-    }),
-  )
+  .validator(updateFormatReportMetaInputSchema)
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return updateFormatReportMetaData(db, {
       workspaceId,
@@ -327,12 +318,7 @@ export const loadKeyPointPrompts = createServerFn({ method: "GET" })
 
 export const saveKeyPointPrompts = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(
-    z.object({
-      slot: z.enum(["team", "personal"]),
-      text: z.string(),
-    }),
-  )
+  .validator(saveKeyPointPromptsInputSchema)
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return recordTemplates(db).saveKeyPointPrompts({
       workspaceId,
@@ -398,44 +384,16 @@ export const applyWeeklyTemplate = createServerFn({ method: "POST" })
     });
   });
 
-const templateSectionSchema = z.object({
-  title: z.string(),
-  children: z.array(z.string()),
-});
-
 export const createWeeklyTemplate = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(
-    z.object({
-      name: z.string().trim().min(1),
-      frequency: z.literal("weekly"),
-      sendTime: z.string().min(1),
-      sendWeekday: z.number().int().min(1).max(7),
-      scheduleEnabled: z.boolean(),
-      sections: z.array(templateSectionSchema),
-      allMembers: z.boolean(),
-      recipientUserIds: z.array(z.uuid()),
-    }),
-  )
+  .validator(createWeeklyTemplateInputSchema)
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return recordTemplates(db).createTemplate({ workspaceId, userId: user.id, ...data });
   });
 
 export const updateWeeklyTemplate = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(
-    z.object({
-      templateId: z.uuid(),
-      name: z.string().trim().min(1),
-      frequency: z.literal("weekly"),
-      sendTime: z.string().min(1),
-      sendWeekday: z.number().int().min(1).max(7),
-      scheduleEnabled: z.boolean(),
-      sections: z.array(templateSectionSchema),
-      allMembers: z.boolean(),
-      recipientUserIds: z.array(z.uuid()),
-    }),
-  )
+  .validator(updateWeeklyTemplateInputSchema)
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     return recordTemplates(db).updateTemplate({
       workspaceId,
