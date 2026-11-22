@@ -20,7 +20,7 @@ test("Kiro catalog fails closed when model discovery never completes", async () 
   ).toBeUndefined();
 });
 
-test.each(["", "--early-config", "--delayed-config"])(
+test.each(["", "--early-config", "--delayed-config", "--catalog-final-config"])(
   "Kiro discovers native models and per-model effort %s",
   async (flag) => {
     const catalog = await discoverKiroCatalog(

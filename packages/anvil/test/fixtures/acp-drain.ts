@@ -19,9 +19,11 @@ const sessionUpdate = {
   },
 };
 
-/** A child that answers its first request with `notifications` updates and then `result`, all in
- * one chunk that only becomes readable after its exit has been observed. */
-export function exitingTree(notifications: number, result: object): OwnedProcessTree {
+export function exitingTree(
+  notifications: number,
+  result: object,
+  updateAfterResult = false,
+): OwnedProcessTree {
   const exited = Promise.withResolvers<number>();
   const sent = Promise.withResolvers<{ id: string }>();
   return {
@@ -44,9 +46,9 @@ export function exitingTree(notifications: number, result: object): OwnedProcess
           await new Promise((resolve) => setImmediate(resolve));
           const update = JSON.stringify(sessionUpdate);
           const response = JSON.stringify({ jsonrpc: "2.0", id: request.id, result });
-          yield new TextEncoder().encode(
-            [...Array(notifications).fill(update), response].join("\n") + "\n",
-          );
+          const updates = Array(notifications).fill(update);
+          const lines = updateAfterResult ? [response, ...updates] : [...updates, response];
+          yield new TextEncoder().encode(lines.join("\n") + "\n");
         },
       },
       stderr: { async *[Symbol.asyncIterator]() {} },

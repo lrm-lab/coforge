@@ -178,10 +178,10 @@ export class AcpConnection {
       return await this.bounded(
         new Promise<SessionConfigOption[]>((resolve, reject) => {
           check = () => {
-            if (this.#inputEnded || this.#closed)
-              return reject(new Error(this.options.messages.closedBeforeConfig));
             const options = this.#config.get(sessionId);
-            if (options && ready(options)) resolve(options);
+            if (options && ready(options)) return resolve(options);
+            if (this.#inputEnded || this.#closed)
+              reject(new Error(this.options.messages.closedBeforeConfig));
           };
           this.#configChanged.add(check);
           check();
@@ -212,6 +212,7 @@ export class AcpConnection {
   }
 
   async dispose(options?: Readonly<{ cutoffAtMs?: number }>): Promise<void> {
+    this.#config.clear();
     this.#close();
     await this.process.dispose(options);
   }
@@ -226,7 +227,6 @@ export class AcpConnection {
     this.#closed = true;
     this.connection.close();
     for (const listener of this.#configChanged) listener();
-    this.#config.clear();
   }
 }
 

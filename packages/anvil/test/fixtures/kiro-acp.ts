@@ -32,6 +32,7 @@ const missingConfig = process.argv.includes("--missing-config");
 // model answers successfully while the reason rides the next session update.
 const profileMissing = process.argv.includes("--profile-missing");
 const closedConfig = process.argv.includes("--closed-config");
+const finalConfig = process.argv.includes("--catalog-final-config");
 let modelsReady = !(
   delayedConfig ||
   earlyConfig ||
@@ -111,6 +112,16 @@ async function handle(request: Message) {
       break;
     case "session/new": {
       if (catalog) {
+        if (finalConfig) {
+          modelsReady = false;
+          for (let i = 0; i < 100; i++) {
+            update({ sessionUpdate: "config_option_update", configOptions: configOptions() });
+          }
+          result(request, { sessionId: sid });
+          modelsReady = true;
+          update({ sessionUpdate: "config_option_update", configOptions: configOptions() });
+          process.exit(0);
+        }
         const initial = configOptions();
         if (earlyConfig) {
           modelsReady = true;

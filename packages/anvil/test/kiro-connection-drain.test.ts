@@ -33,3 +33,30 @@ test.each([0, 10, 100])(
     }
   },
 );
+
+test("a usable config update following session/new is available after the peer stream drains", async () => {
+  const connection = new KiroConnection(
+    ["unused"],
+    ".",
+    {},
+    {
+      ...fixtureKiroHost,
+      processTreeSpawner: {
+        spawn: () => exitingTree(1, { sessionId: "s" }, true),
+      },
+    },
+  );
+  try {
+    const response = await connection.connection.agent.request("session/new", {
+      cwd: ".",
+      mcpServers: [],
+    });
+    await connection.connection.closed;
+    expect(response.configOptions).toBeUndefined();
+    expect(await connection.waitForConfig(response.sessionId, [], "mode", 1000)).toEqual(
+      modeOptions,
+    );
+  } finally {
+    await connection.dispose();
+  }
+});
