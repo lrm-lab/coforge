@@ -10,6 +10,7 @@ import {
   useContext,
   useEffect,
   useId,
+  useRef,
   useState,
 } from "react";
 import { Check, ChevronRight, DotsVertical, Folder } from "@untitledui/icons";
@@ -155,26 +156,36 @@ const DropdownItem = ({
   const rowId = props.id !== undefined ? String(props.id) : generatedId;
   const hasSubmenu = Boolean(submenuItem);
   const submenuId = submenuItem?.submenuId ?? null;
+  const triggerRef = submenuItem?.triggerRef;
+  const anchorName = submenuItem?.anchorName;
   const rowState = cascade ? cascade.getRowState(depth, rowId, submenuId) : "idle";
 
-  const handleSubmenuKeyDown = useCallback(
-    (event: globalThis.KeyboardEvent) => {
-      if (event.key !== "ArrowRight" && event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      event.stopPropagation();
-      cascade?.markSuppressRootClose();
-      submenuItem?.openSubmenuNow(true);
-    },
-    [cascade, submenuItem],
-  );
+  const submenuKeyDownRef = useRef<((event: globalThis.KeyboardEvent) => void) | null>(null);
+  submenuKeyDownRef.current =
+    hasSubmenu && !props.isDisabled
+      ? (event: globalThis.KeyboardEvent) => {
+          if (event.key !== "ArrowRight" && event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          event.stopPropagation();
+          cascade?.markSuppressRootClose();
+          submenuItem?.openSubmenuNow(true);
+        }
+      : null;
 
   const setItemRef = useCallback(
     (node: HTMLDivElement | null) => {
-      if (submenuItem) {
-        submenuItem.triggerRef.current = node;
+      if (triggerRef) {
+        triggerRef.current = node;
       }
-      const listenForSubmenuKeys = node && submenuItem && !props.isDisabled;
-      if (listenForSubmenuKeys) node.addEventListener("keydown", handleSubmenuKeyDown, true);
+      if (node && anchorName) {
+        node.style.setProperty("anchor-name", anchorName);
+      }
+      const onKeyDown = (event: globalThis.KeyboardEvent) => {
+        submenuKeyDownRef.current?.(event);
+      };
+      if (node && triggerRef) {
+        node.addEventListener("keydown", onKeyDown, true);
+      }
       if (typeof ref === "function") {
         ref(node);
       } else if (ref && "current" in ref) {
@@ -182,13 +193,20 @@ const DropdownItem = ({
       }
       if (!node) return;
       return () => {
-        if (listenForSubmenuKeys) node.removeEventListener("keydown", handleSubmenuKeyDown, true);
-        if (submenuItem) submenuItem.triggerRef.current = null;
+        if (triggerRef) {
+          node.removeEventListener("keydown", onKeyDown, true);
+          if (anchorName) {
+            node.style.removeProperty("anchor-name");
+          }
+          if (triggerRef.current === node) {
+            triggerRef.current = null;
+          }
+        }
         if (typeof ref === "function") ref(null);
         else if (ref && "current" in ref) ref.current = null;
       };
     },
-    [handleSubmenuKeyDown, props.isDisabled, ref, submenuItem],
+    [anchorName, ref, triggerRef],
   );
 
   const handlePointerEnter = useCallback(
@@ -423,11 +441,14 @@ const DropdownPopover = ({ title, children, ...props }: DropdownPopoverProps) =>
     }
   }, [cascade, depth, popoverCtx]);
 
+  const cascadeRef = useRef(cascade);
+  cascadeRef.current = cascade;
+
   const setLevelRef = useCallback(
     (el: HTMLElement | null) => {
-      cascade?.registerLevel(depth, el);
+      cascadeRef.current?.registerLevel(depth, el);
     },
-    [cascade, depth],
+    [depth],
   );
 
   const handleKeyDown = useCallback(

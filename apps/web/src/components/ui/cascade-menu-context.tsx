@@ -31,6 +31,7 @@ export interface CascadeMenuContextValue {
 
 export interface CascadeSubmenuItemContextValue {
   readonly submenuId: string;
+  readonly anchorName: string;
   readonly isSubmenuOpen: boolean;
   readonly triggerRef: RefObject<HTMLDivElement | null>;
   readonly openSubmenuNow: (focusFirstItem: boolean) => void;

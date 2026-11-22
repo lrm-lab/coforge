@@ -94,6 +94,7 @@ export const DropdownSubmenuTrigger = ({ children }: DropdownSubmenuTriggerProps
   const itemContextValue = useMemo(
     () => ({
       submenuId,
+      anchorName,
       isSubmenuOpen,
       triggerRef,
       openSubmenuNow,
@@ -105,7 +106,16 @@ export const DropdownSubmenuTrigger = ({ children }: DropdownSubmenuTriggerProps
         </CascadeDepthProvider>
       ),
     }),
-    [depth, isSubmenuOpen, mounted, openSubmenuNow, popoverContextValue, popoverElement, submenuId],
+    [
+      anchorName,
+      depth,
+      isSubmenuOpen,
+      mounted,
+      openSubmenuNow,
+      popoverContextValue,
+      popoverElement,
+      submenuId,
+    ],
   );
 
   return (
@@ -205,12 +215,11 @@ export const DropdownSubmenuPopover = ({
         exitTimerRef.current = null;
       }
       cascadeRef.current?.registerLevel(depth, null);
-      triggerRef?.current?.style.removeProperty("anchor-name");
       if (el?.isConnected && el.matches(":popover-open")) {
         el.hidePopover();
       }
     };
-  }, [depth, triggerRef]);
+  }, [depth]);
 
   const handleTransitionEnd = useCallback(
     (event: TransitionEvent<HTMLDivElement>) => {

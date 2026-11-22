@@ -155,7 +155,8 @@
   transform: translateX(8px) scale(0.88, 0.98);
 }
 
-.cascade-menu-level[popover]:popover-open {
+.cascade-menu-level[popover]:popover-open,
+.cascade-menu-level[popover][data-cascade-level="submenu"][data-placement="left"]:popover-open {
   opacity: 1;
   transform: translate(0, 0) scale(1, 1);
 }
