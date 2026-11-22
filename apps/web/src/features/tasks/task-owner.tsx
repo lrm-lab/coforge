@@ -34,8 +34,9 @@ export function TaskPerson({
         {...faceOf(person)}
       />
       <span
+        dir="auto"
         className={cn(
-          wrap ? "min-w-0 text-left break-words [[data-layout=chips]_&]:truncate" : "truncate",
+          wrap ? "min-w-0 text-start break-words [[data-layout=chips]_&]:truncate" : "truncate",
           person.deleted && DELETED_AGENT_NAME_CLASS,
         )}
       >
@@ -76,6 +77,7 @@ export function TaskOwnerAvatar({
       {showName && owner && (
         <span
           aria-hidden="true"
+          dir="auto"
           className={cn(
             "min-w-0 truncate text-xs",
             owner.deleted ? DELETED_AGENT_NAME_CLASS : "text-secondary",

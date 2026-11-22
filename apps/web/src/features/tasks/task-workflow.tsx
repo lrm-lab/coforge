@@ -194,8 +194,8 @@ export function TaskWorkflow<T extends TaskView>({
             layout === "list"
               ? "flex flex-col gap-4"
               : groups.length > 1
-                ? "flex flex-col gap-3 md:h-full md:flex-row md:items-stretch md:justify-center-safe md:overflow-x-auto"
-                : "flex max-w-sm flex-col md:h-full"
+                ? "flex flex-col gap-3 md:h-full md:flex-row md:items-stretch md:justify-center-safe md:overflow-x-auto [@media(max-height:32rem)]:md:h-auto [@media(max-height:32rem)]:md:items-start"
+                : "flex max-w-sm flex-col md:h-full [@media(max-height:32rem)]:md:h-auto"
           }
         >
           {shownGroups.map((group) => (

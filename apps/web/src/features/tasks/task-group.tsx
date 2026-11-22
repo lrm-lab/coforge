@@ -24,19 +24,12 @@ import {
 import { dropTargetClass, type DropState } from "./task-drop-target";
 import { TaskStatusIcon, statusLabel } from "./task-status-icon";
 
-/**
- * A group whose Tasks the caller reads in pages rather than holding them all: its header shows
- * `count` (every Task in the group, not only the loaded ones), `onExpandedChange` says when it
- * opens so its first page is read only then, and `footer` goes under its loaded cards.
- */
 export type PagedTaskGroup = {
   count: number;
   onExpandedChange: (expanded: boolean) => void;
   footer: ReactNode;
 };
 
-/** How many cards a group shows at first, and how many more "Show more" adds: a group of
- * hundreds would otherwise build every card, handle and menu at once. */
 const RENDER_PAGE = 50;
 
 export function TaskGroup({
@@ -55,43 +48,28 @@ export function TaskGroup({
   children,
 }: {
   status: TaskStatus;
-  /** A board column the viewer can hide: before hydration it follows the stored choice by CSS,
-   * and a hidden paged column never reads its pages. */
   hidable?: boolean;
-  /** Hides this board column; given, the column header has a menu offering it. */
   onHide?: () => void;
-  /** Starts a new Task in this column; given, the board header has a "+" and a menu entry. */
   onAdd?: () => void;
-  /** Sets or clears the column's by-priority order; given, the column menu offers it. */
   onSortByPriority?: (on: boolean) => void;
   sortedByPriority?: boolean;
-  /** Every Task in the group; for a paged group, more than those read. */
   count: number;
-  /** The cards the group holds now. */
   loaded: number;
   board: boolean;
   compact?: boolean;
   dropState: DropState;
   paged?: PagedTaskGroup;
-  /** The group's first `shown` cards. */
   children: (shown: number) => ReactNode;
 }) {
-  // A collapsed group stays a drop target, so a card can still be moved into it.
   const drop = useDroppable({ id: status, disabled: dropState !== "open" });
   const label = statusLabel(status);
-  // Every group starts open; its header collapses it for as long as the board is shown.
   const [expanded, setExpanded] = useState(true);
   const onExpandedChange = paged?.onExpandedChange;
-  // A paged group reads its Tasks only while open, including when it starts open.
   useEffect(() => {
-    // Mounted while hydrating although the viewer hid it (the render cannot know yet): no read.
     if (hidable && isTaskColumnHidden(status)) return;
     onExpandedChange?.(expanded);
-    // A group that leaves the board (another status picked) stops reading too.
     return () => onExpandedChange?.(false);
   }, [onExpandedChange, expanded, hidable, status]);
-  // A group renders its cards in pages. A paged group is already read in pages no longer than
-  // one render page, so it renders every card it has read and keeps to its own footer.
   const [shown, setShown] = useState(RENDER_PAGE);
   const hidden = paged ? 0 : loaded - shown;
   return (
@@ -122,7 +100,7 @@ export function TaskGroup({
         <div
           className={cn(
             "flex items-center",
-            board ? "shrink-0 pr-1" : cn("bg-secondary", expanded && "border-b border-secondary"),
+            board ? "shrink-0 pe-1" : cn("bg-secondary", expanded && "border-b border-secondary"),
           )}
         >
           <Heading level={2} className="min-w-0 flex-1">
@@ -140,16 +118,13 @@ export function TaskGroup({
               <ChevronDown
                 aria-hidden="true"
                 className={cn(
-                  "ml-auto size-4 shrink-0 text-fg-quaternary transition-transform duration-(--duration-sm) ease-in-out motion-reduce:transition-none",
-                  // A board column at desktop width gives the room to its title; clicking the
-                  // heading still folds it, and a folded column is plainly short.
+                  "ms-auto size-4 shrink-0 text-fg-quaternary transition-transform duration-(--duration-sm) ease-in-out motion-reduce:transition-none",
                   board && "md:hidden",
-                  !expanded && "-rotate-90",
+                  !expanded && "-rotate-90 rtl:rotate-90",
                 )}
               />
             </AriaButton>
           </Heading>
-          {/* "+" and "···" sit beside the heading, not in it, so the heading names the column alone. */}
           {board && onAdd && (
             <ButtonUtility
               size="xs"
@@ -189,15 +164,13 @@ export function TaskGroup({
           )}
         </div>
         <DisclosurePanel
-          // A collapsed panel is `hidden="until-found"`, which Tailwind's preflight leaves displayed: hide it outright.
           className={cn(
             board
-              ? "flex min-h-16 flex-col gap-2 px-2 pb-2 md:min-h-0 md:flex-1 md:overflow-y-auto"
+              ? "flex min-h-16 flex-col gap-2 px-2 pb-4 md:min-h-0 md:flex-1 md:overflow-y-auto [@media(max-height:32rem)]:md:overflow-y-visible"
               : "flex flex-col divide-y divide-secondary",
             !expanded && "hidden",
           )}
         >
-          {/* The panel keeps its children mounted while hidden; a collapsed group renders none. */}
           {expanded && children(paged ? loaded : shown)}
           {expanded && hidden > 0 && (
             <div className={cn("flex", board ? "justify-center" : "justify-start px-4 py-2")}>
@@ -220,8 +193,6 @@ export function TaskGroup({
   );
 }
 
-/** A hidden board column: its name and count, a drop target still, and pressing it shows the
- * column again. */
 export function HiddenColumn({
   status,
   count,
@@ -251,7 +222,7 @@ export function HiddenColumn({
       }
     >
       <TaskStatusIcon status={status} />
-      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+      <span className="min-w-0 flex-1 truncate text-start">{label}</span>
       <span className="text-quaternary tabular-nums">{count}</span>
     </AriaButton>
   );

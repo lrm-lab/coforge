@@ -269,7 +269,7 @@ export function TaskDetailDialog({
             <Dialog className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <div
                 {...headerDragProps}
-                className="flex shrink-0 items-center gap-1 pt-2 pr-3 pl-2 max-sm:h-11 max-sm:touch-none max-sm:gap-0 max-sm:p-0 sm:pl-4"
+                className="flex shrink-0 items-center gap-1 pt-2 pe-3 ps-2 max-sm:h-11 max-sm:touch-none max-sm:gap-0 max-sm:p-0 sm:ps-4"
               >
                 <TaskTrail
                   task={task}
@@ -335,7 +335,7 @@ export function TaskDetailDialog({
                   className={cn(
                     PHONE_BAR_BUTTON,
                     "max-sm:order-first",
-                    showBackToTop && "max-sm:mr-24 max-[360px]:mr-18",
+                    showBackToTop && "max-sm:me-24 max-[360px]:me-18",
                   )}
                 />
               </div>
@@ -359,7 +359,7 @@ export function TaskDetailDialog({
                   )}
                 </div>
                 {sidebar && (
-                  <aside className="w-72 shrink-0 overflow-x-hidden overflow-y-auto border-l border-secondary bg-secondary_alt px-5 py-5">
+                  <aside className="w-72 shrink-0 overflow-x-hidden overflow-y-auto border-s border-secondary bg-secondary_alt px-5 py-5">
                     {section}
                   </aside>
                 )}

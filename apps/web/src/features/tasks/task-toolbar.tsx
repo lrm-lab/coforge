@@ -162,7 +162,7 @@ export function TaskToolbar({
     <div className="flex min-h-11 shrink-0 items-center justify-between gap-3 px-4 py-1.5 max-sm:flex-wrap md:px-6">
       <div className="flex min-w-0 flex-wrap items-center gap-1">
         <Dropdown.Root>
-          <Button size="sm" color="tertiary" iconLeading={FilterLines} className="-ml-3">
+          <Button size="sm" color="tertiary" iconLeading={FilterLines} className="-ms-3">
             {m.tasks_filter()}
           </Button>
           <Dropdown.Popover placement="bottom start" className="w-52">
@@ -227,7 +227,7 @@ export function TaskToolbar({
                 key={chip.id}
                 id={chip.id}
                 textValue={chip.label}
-                className="inline-flex h-7 max-w-full min-w-0 cursor-default items-center gap-1 rounded-md border border-secondary pr-1.5 pl-2.5 text-xs text-secondary outline-focus-ring focus-visible:outline-2 sm:max-w-[20rem]"
+                className="inline-flex h-7 max-w-full min-w-0 cursor-default items-center gap-1 rounded-md border border-secondary pe-1.5 ps-2.5 text-xs text-secondary outline-focus-ring focus-visible:outline-2 sm:max-w-[20rem]"
               >
                 <span className="min-w-0 truncate">{chip.content ?? chip.label}</span>
                 <TagCloseX size="md" aria-label={m.tasks_filter_remove()} />
@@ -339,7 +339,7 @@ function LayoutSwitch({
           style={style}
           className={cn(
             "pointer-events-none absolute top-0 left-0 bg-primary_hover",
-            layout === "board" ? "rounded-l-lg" : "rounded-r-lg",
+            layout === "board" ? "rounded-s-lg" : "rounded-e-lg",
           )}
         />
       )}
@@ -358,7 +358,7 @@ function LayoutSwitch({
           id="board"
           iconLeading={Columns03}
           aria-label={m.tasks_layout_board()}
-          className="bg-transparent selected:bg-transparent"
+          className="bg-transparent selected:bg-transparent rtl:first:rounded-l-none rtl:first:rounded-s-lg rtl:last:rounded-r-none rtl:last:rounded-e-lg"
         >
           {words && m.tasks_layout_board()}
         </ButtonGroupItem>
@@ -366,7 +366,7 @@ function LayoutSwitch({
           id="list"
           iconLeading={List}
           aria-label={m.tasks_layout_list()}
-          className="bg-transparent selected:bg-transparent"
+          className="bg-transparent selected:bg-transparent rtl:first:rounded-l-none rtl:first:rounded-s-lg rtl:last:rounded-r-none rtl:last:rounded-e-lg"
         >
           {words && m.tasks_layout_list()}
         </ButtonGroupItem>
