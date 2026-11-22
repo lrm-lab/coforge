@@ -4,6 +4,7 @@
 // works identically in the Vite production build and in the test runner without a separate
 // loader or a generated TS module.
 import actionCardsBody from "#src/server/agents/manual/topics/action-cards.md?raw";
+import actionCardsCloudDesktopBody from "#src/server/agents/manual/topics/action-cards-cloud-desktop.md?raw";
 import appsBody from "#src/server/agents/manual/topics/apps.md?raw";
 import artifactPagesBody from "#src/server/agents/manual/topics/artifact-pages.md?raw";
 import artifactsBody from "#src/server/agents/manual/topics/artifacts.md?raw";
@@ -40,7 +41,10 @@ export const MANUAL_TOPICS: readonly AgentManualTopic[] = [
     title: "Action cards: proposing a channel, Agent, or membership",
     summary:
       "How to post a typed action card with coforge action prepare, the three supported kinds, and how to tell pending from executed without claiming you created the resource.",
-    body: actionCardsBody,
+    body: actionCardsBody.replace(
+      "\n## Choices\n",
+      `\n${actionCardsCloudDesktopBody.trim()}\n\n## Choices\n`,
+    ),
   },
   {
     slug: "apps",
