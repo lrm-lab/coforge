@@ -34,7 +34,7 @@ export function SavedMessagesView() {
         leading={<ConversationListButton />}
         heading={m.conversation_saved_nav()}
         meta={
-          <span className="shrink-0 text-sm text-tertiary">
+          <span className="shrink-0 text-sm text-tertiary tabular-nums">
             {m.conversation_saved_count({ count: entries.length })}
           </span>
         }
@@ -183,7 +183,9 @@ function SavedMessageCard({
               />
               <span className="truncate font-semibold text-secondary">{message.senderName}</span>
             </span>
-            <RelativeTime value={message.createdAt} />
+            <span className="ms-auto shrink-0 whitespace-nowrap tabular-nums">
+              <RelativeTime value={message.createdAt} />
+            </span>
           </div>
           {/* Every card is the same size: a plain-text excerpt in one type size, always two lines
               tall, the rest hidden. */}
@@ -228,7 +230,7 @@ function SavedMessageCard({
         tooltip={m.conversation_unsave()}
         aria-label={m.conversation_unsave()}
         onClick={remove}
-        className="shrink-0"
+        className="shrink-0 any-pointer-coarse:-m-2 any-pointer-coarse:size-11"
       />
     </li>
   );

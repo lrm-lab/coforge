@@ -392,7 +392,7 @@ export function MessageComposer({
               iconLeading={Plus}
               aria-label={m.conversation_attachment_label()}
               isDisabled={composerDisabled}
-              className={className}
+              className={`${className} any-pointer-coarse:after:absolute any-pointer-coarse:after:-inset-2`}
             />
           </FileTrigger>
         )}

@@ -107,9 +107,29 @@
   "conversation_audio_unsupported": "This audio format can't be played",
   "conversation_thread": "Thread",
   "conversation_thread_reply": "Reply in thread",
-  "conversation_thread_one_reply": "1 reply",
-  "conversation_thread_replies": "{count} replies",
-  "conversation_thread_unread": "{count} unread",
+  "conversation_thread_replies": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural",
+        "local countNumber = count: number"
+      ],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{countNumber} reply",
+        "countPlural=other": "{countNumber} replies"
+      }
+    }
+  ],
+  "conversation_thread_unread": [
+    {
+      "declarations": ["input count", "local countNumber = count: number"],
+      "selectors": [],
+      "match": {
+        "*": "{countNumber} unread"
+      }
+    }
+  ],
   "conversation_thread_back": "Back to chat",
   "conversation_thread_root": "Original message",
   "conversation_thread_empty_title": "No replies yet",

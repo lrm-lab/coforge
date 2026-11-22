@@ -104,9 +104,24 @@
   "conversation_audio_unsupported": "无法播放这种格式",
   "conversation_thread": "讨论",
   "conversation_thread_reply": "在讨论中回复",
-  "conversation_thread_one_reply": "1 条回复",
-  "conversation_thread_replies": "{count} 条回复",
-  "conversation_thread_unread": "{count} 条未读",
+  "conversation_thread_replies": [
+    {
+      "declarations": ["input count", "local countNumber = count: number"],
+      "selectors": [],
+      "match": {
+        "*": "{countNumber} 条回复"
+      }
+    }
+  ],
+  "conversation_thread_unread": [
+    {
+      "declarations": ["input count", "local countNumber = count: number"],
+      "selectors": [],
+      "match": {
+        "*": "{countNumber} 条未读"
+      }
+    }
+  ],
   "conversation_thread_back": "返回聊天",
   "conversation_thread_root": "原始消息",
   "conversation_thread_empty_title": "还没有回复",

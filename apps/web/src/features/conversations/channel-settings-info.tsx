@@ -14,6 +14,7 @@ import type { ChannelConversationView } from "./channel-conversation";
 import { ChannelFace, ChannelTitle } from "./channel-name";
 import { isPrivateChannel } from "./channel-visibility";
 import { updatePublicChannelInfo } from "./channels.functions";
+import { CHANNEL_DESCRIPTION_MAX_LENGTH, CHANNEL_NAME_MAX_LENGTH } from "./conversation.schemas";
 
 export type InfoForm = ReturnType<typeof useInfoForm>;
 
@@ -132,6 +133,7 @@ export function ChannelIdentitySection({
           value={form.name}
           onChange={form.setName}
           isRequired
+          maxLength={CHANNEL_NAME_MAX_LENGTH}
           isDisabled={isGeneral || locked}
           autoFocus={!isGeneral}
           hint={isGeneral ? m.channel_settings_general_cannot_rename() : m.channel_name_hint()}
@@ -143,6 +145,7 @@ export function ChannelIdentitySection({
           placeholder={m.channel_settings_description_placeholder()}
           value={form.description}
           onChange={form.setDescription}
+          maxLength={CHANNEL_DESCRIPTION_MAX_LENGTH}
           isDisabled={locked}
           rows={3}
           autoFocus={isGeneral}

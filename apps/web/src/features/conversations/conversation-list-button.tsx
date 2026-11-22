@@ -68,7 +68,7 @@ export function ConversationListButton() {
       aria-label={navigation.backLabel ?? m.conversation_back_to_list()}
       onClick={navigation.showList}
       className={cx(
-        "-ms-2 shrink-0 *:data-icon:rtl:rotate-180",
+        "-ms-2 shrink-0 *:data-icon:rtl:rotate-180 any-pointer-coarse:size-11",
         LIST_BESIDE_CLASSES[navigation.listBesideFrom].narrowOnly,
       )}
     />

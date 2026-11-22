@@ -1,6 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  CHANNEL_DESCRIPTION_MAX_LENGTH,
+  CHANNEL_NAME_MAX_LENGTH,
+  updatePublicChannelInfoInputSchema,
+} from "#src/features/conversations/conversation.schemas";
+import type { PrismaClient } from "#src/generated/prisma/client";
+import {
+  listUserSavedMessages,
   savedMessageView,
   type SavedMessageRow,
 } from "#src/server/conversations/saved-messages.server";
@@ -266,6 +273,58 @@ describe("savedMessageView", () => {
       handle: "muse",
       avatarUrl: expect.any(String),
       deleted: false,
+    });
+  });
+});
+
+describe("updatePublicChannelInfoInputSchema and listUserSavedMessages bounds", () => {
+  test("rejects oversized channel names and descriptions while allowing valid updates", () => {
+    const channelId = "22222222-2222-4222-8222-222222222222";
+    expect(
+      updatePublicChannelInfoInputSchema.safeParse({
+        channelId,
+        name: "a".repeat(CHANNEL_NAME_MAX_LENGTH),
+        description: "d".repeat(CHANNEL_DESCRIPTION_MAX_LENGTH),
+      }).success,
+    ).toBe(true);
+    expect(
+      updatePublicChannelInfoInputSchema.safeParse({
+        channelId,
+        name: "a".repeat(CHANNEL_NAME_MAX_LENGTH + 1),
+      }).success,
+    ).toBe(false);
+    expect(
+      updatePublicChannelInfoInputSchema.safeParse({
+        channelId,
+        description: "d".repeat(CHANNEL_DESCRIPTION_MAX_LENGTH + 1),
+      }).success,
+    ).toBe(false);
+  });
+
+  test("bounds listUserSavedMessages findMany queries and supports cursor pagination", async () => {
+    let capturedArgs: Record<string, unknown> | undefined;
+    const db = {
+      savedMessage: {
+        findMany: async (args: Record<string, unknown>) => {
+          capturedArgs = args;
+          return [];
+        },
+      },
+    } as unknown as PrismaClient;
+    const cursorDate = new Date("2026-09-23T02:00:00Z");
+    await listUserSavedMessages(db, {
+      workspaceId: WORKSPACE_ID,
+      userId: "55555555-5555-4555-8555-555555555555",
+      limit: 99_999,
+      cursor: { savedAt: cursorDate, messageId: "33333333-3333-4333-8333-333333333333" },
+    } as Parameters<typeof listUserSavedMessages>[1]);
+    expect(capturedArgs?.take).toBe(500);
+    expect(capturedArgs?.orderBy).toEqual([{ createdAt: "desc" }, { messageId: "desc" }]);
+    expect(capturedArgs?.where).toMatchObject({
+      OR: [
+        { createdAt: { lt: cursorDate } },
+        { createdAt: cursorDate, messageId: { lt: "33333333-3333-4333-8333-333333333333" } },
+      ],
     });
   });
 });

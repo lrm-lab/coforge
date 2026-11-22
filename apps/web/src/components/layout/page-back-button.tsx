@@ -36,7 +36,7 @@ export function PageBackButton() {
       color="tertiary"
       aria-label={m.controls_back()}
       onClick={goBack}
-      className="-ms-2 shrink-0 *:data-icon:rtl:rotate-180"
+      className="-ms-2 shrink-0 *:data-icon:rtl:rotate-180 any-pointer-coarse:size-11"
     />
   );
 }

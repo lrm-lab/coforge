@@ -120,3 +120,12 @@ export const savedMessageInputSchema = z.object({
   conversationId: uuid,
   messageId: uuid,
 });
+
+export const CHANNEL_NAME_MAX_LENGTH = 32;
+export const CHANNEL_DESCRIPTION_MAX_LENGTH = 500;
+
+export const updatePublicChannelInfoInputSchema = z.object({
+  channelId: uuid,
+  name: z.string().trim().max(CHANNEL_NAME_MAX_LENGTH).optional(),
+  description: z.string().trim().max(CHANNEL_DESCRIPTION_MAX_LENGTH).optional(),
+});

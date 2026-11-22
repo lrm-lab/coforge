@@ -19,6 +19,7 @@ import {
   conversationPageInputSchema,
   conversationUpdatesCursorSchema,
   mentionSelectorsSchema,
+  updatePublicChannelInfoInputSchema,
 } from "./conversation.schemas";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { readWindowAfterStreamPosition } from "#src/server/conversations/chat-stream-positions.server";
@@ -117,8 +118,8 @@ export const addPublicChannelMembers = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(
     channelInput.extend({
-      userIds: z.array(z.uuid()).default([]),
-      agentIds: z.array(z.uuid()).default([]),
+      userIds: z.array(z.uuid()).max(100).default([]),
+      agentIds: z.array(z.uuid()).max(100).default([]),
     }),
   )
   .handler(async ({ data, context }) => {
@@ -211,15 +212,9 @@ export const removePublicChannelMember = createServerFn({ method: "POST" })
     );
   });
 
-/** The settings panel's Info form: renames the channel and/or changes its description. */
 export const updatePublicChannelInfo = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(
-    channelInput.extend({
-      name: z.string().trim().optional(),
-      description: z.string().trim().optional(),
-    }),
-  )
+  .validator(updatePublicChannelInfoInputSchema)
   .handler(async ({ data, context }) => {
     const { channels, workspaceId, userId } = channelScope(context);
     return channels.updateInfo(workspaceId, { userId }, data.channelId, {

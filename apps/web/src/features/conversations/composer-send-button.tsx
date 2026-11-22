@@ -15,7 +15,7 @@ const NEAR_BLACK_NOT_BRAND_VIOLET_SEND_CLASS =
 const MENU_OFFSET_CLEARING_COMPOSER_PADDING_AND_BORDER = 17;
 
 const SPLIT_HALF_OVERLAPS_ONE_PIXEL_WITH_NO_SEAM_HIGHLIGHT =
-  "-ml-px rounded-l-none before:rounded-l-none before:border-l-0";
+  "-ms-px rounded-s-none before:rounded-s-none before:border-s-0";
 
 export function ComposerSendButton({
   asTask,
@@ -58,7 +58,9 @@ export function ComposerSendButton({
           aria-label={label}
           className={cx(
             look.className,
-            taskMode && "rounded-r-none before:rounded-r-none before:border-r-0",
+            taskMode
+              ? "rounded-e-none before:rounded-e-none before:border-e-0 any-pointer-coarse:after:absolute any-pointer-coarse:after:-inset-y-2 any-pointer-coarse:after:-start-2 any-pointer-coarse:after:end-0"
+              : "any-pointer-coarse:after:absolute any-pointer-coarse:after:-inset-2",
           )}
           isDisabled={isDisabled}
         />
@@ -71,7 +73,11 @@ export function ComposerSendButton({
               size="xs"
               iconLeading={ChevronDown}
               aria-label={m.conversation_send_options()}
-              className={cx(look.className, SPLIT_HALF_OVERLAPS_ONE_PIXEL_WITH_NO_SEAM_HIGHLIGHT)}
+              className={cx(
+                look.className,
+                "any-pointer-coarse:after:absolute any-pointer-coarse:after:-inset-y-2 any-pointer-coarse:after:start-0 any-pointer-coarse:after:-end-2",
+                SPLIT_HALF_OVERLAPS_ONE_PIXEL_WITH_NO_SEAM_HIGHLIGHT,
+              )}
               isDisabled={isDisabled}
             />
           </Tooltip>

@@ -10,6 +10,7 @@ import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { humanLabel } from "#src/lib/human-label";
 import { APP_BOT_LOGO_SELECT, agentFaceUrl } from "#src/server/apps/app-logo.server";
+import { clampPageLimit } from "#src/server/db/page-limit.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import { readableConversationWhere } from "./channel-read-access.server";
@@ -234,20 +235,47 @@ export function savedMessageView(
   };
 }
 
+export const SAVED_MESSAGES_DEFAULT_LIMIT = 200;
+export const SAVED_MESSAGES_MAX_LIMIT = 500;
+
+export type SavedMessagesCursor = {
+  savedAt: Date;
+  messageId: string;
+};
+
 export async function listUserSavedMessages(
   db: PrismaClient,
-  input: { workspaceId: string; userId: string },
+  input: {
+    workspaceId: string;
+    userId: string;
+    limit?: number;
+    cursor?: SavedMessagesCursor;
+  },
 ): Promise<SavedMessageView[]> {
-  const { workspaceId, userId } = input;
+  const { workspaceId, userId, cursor } = input;
+  const take = clampPageLimit(
+    input.limit ?? SAVED_MESSAGES_DEFAULT_LIMIT,
+    SAVED_MESSAGES_MAX_LIMIT,
+  );
   const rows = await db.savedMessage.findMany({
     where: {
       workspaceId,
       member: { workspaceId, userId },
       conversation: readableConversationWhere(workspaceId, { userId }),
+      ...(cursor
+        ? {
+            OR: [
+              { createdAt: { lt: cursor.savedAt } },
+              { createdAt: cursor.savedAt, messageId: { lt: cursor.messageId } },
+            ],
+          }
+        : {}),
     },
     select: savedMessageSelect,
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { messageId: "desc" }],
+    take,
   });
+  if (rows.length === 0) return [];
   const views = rows.map((row) => savedMessageView(row, workspaceId, userId));
   const messages = await attachForwardedAccess(
     db,

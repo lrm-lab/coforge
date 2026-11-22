@@ -8,6 +8,7 @@ import { rememberSharedRect } from "#src/lib/shared-element-rect";
 import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
 import { MentionBadge } from "./mention-badge";
+import { formatConversationCount } from "./conversation-labels";
 import { useCloseConversationList, useConversationListVisible } from "./conversation-navigation";
 import { conversationRoute, type ConversationTarget } from "./last-conversation";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -167,7 +168,9 @@ export function ConversationRow({
       className={cx(
         "flex w-full cursor-pointer items-center p-2 outline-focus-ring transition duration-100 ease-out select-none [-webkit-user-drag:none] focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2",
         card ? "rounded-xl border" : "rounded-md",
-        lastMessage ? "gap-2" : "max-h-9 gap-1.5",
+        lastMessage
+          ? "gap-2"
+          : "max-h-9 gap-1.5 any-pointer-coarse:min-h-11 any-pointer-coarse:max-h-none",
         current ? (card ? "bg-chat-selected-bg" : "bg-sidebar-accent") : "hover:bg-primary_hover",
         card && (current ? "border-chat-selected-border" : "border-transparent"),
       )}
@@ -269,7 +272,7 @@ export function ConversationRow({
       ) : null}
       {count ? (
         <span aria-hidden="true" className="shrink-0 text-xs text-quaternary tabular-nums">
-          {count.value}
+          {formatConversationCount(count.value)}
         </span>
       ) : null}
     </AriaLink>
