@@ -38,12 +38,11 @@ export class SystemdWorkspaceInstance {
     this.unitPath = join(config.unitDirectory, this.unitName);
   }
 
-  async ensureStarted(beforeLaunch?: () => Promise<void>): Promise<number> {
+  async ensureStarted(): Promise<number> {
     await this.write(this.unitPath, workspaceUnit(this.config));
     await this.#runChecked(["daemon-reload"], "reload the systemd user manager");
     const state = await this.#show();
     if (state.active && state.mainPid > 0) return state.mainPid;
-    if (beforeLaunch) await beforeLaunch();
     await this.#runChecked(["start", this.unitName], `start ${this.unitName}`);
     return (await this.#waitForMainPid()).mainPid;
   }

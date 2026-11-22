@@ -52,7 +52,6 @@ export class LaunchdJob {
       if (beforeLaunch) await beforeLaunch();
       await this.#launchctl(["bootstrap", `gui/${process.getuid!()}`, this.path]);
     } else {
-      if (beforeLaunch) await beforeLaunch();
       await this.#launchctl(["kickstart", this.target]);
     }
     const deadline = Date.now() + 10_000;

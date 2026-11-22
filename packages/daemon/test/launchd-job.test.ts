@@ -96,6 +96,20 @@ test.skipIf(process.platform !== "darwin")(
       expect(first.invocationId).not.toBe(String(first.mainPid));
       expect(await job.ensureStarted(authorize)).toEqual(first);
       expect(authorizations).toBe(1);
+      let listedPid = 0;
+      const loadedJob = new LaunchdJob({
+        ...job.config,
+        platform: {
+          jobs: async () => new Map([[job.config.label, listedPid]]),
+          run: async (args) => {
+            expect(args).toEqual(["kickstart", job.target]);
+            listedPid = first.mainPid;
+            return { code: 0, stdout: "", stderr: "" };
+          },
+        },
+      });
+      expect(await loadedJob.ensureStarted(authorize)).toEqual(first);
+      expect(authorizations).toBe(1);
       await Promise.all([job.stop(), job.stop()]);
       expect(await job.identity()).toBeNull();
       expect(() => process.kill(first.mainPid, 0)).toThrow();

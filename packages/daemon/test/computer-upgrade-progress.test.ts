@@ -12,6 +12,8 @@ import {
 } from "../src/platform/computer-upgrade-progress";
 import { DaemonConfigStore } from "../src/persistence/daemon-config";
 import { MachineSupervisor, type ManagedBinding } from "../src/supervisor/machine-supervisor";
+import { SystemdWorkspaceInstance } from "../src/supervisor/systemd-workspace-instance";
+import type { WorkspaceInstance } from "../src/supervisor/workspace-instance";
 import { workspaceUpgradeRecovery } from "../src/supervisor/workspace-upgrade-recovery";
 import { UpgradeProgressReporter } from "../src/daemon-runtime/upgrade-progress-reporter";
 import {
@@ -116,6 +118,7 @@ for (const mode of [
   "adopted authorized workspace",
   "adopted workspace before confirmation",
   "adopted workspace with different invocation",
+  "systemd start raced by an external workspace",
   "explicit stop",
   "detach and rebind",
 ] as const) {
@@ -154,6 +157,7 @@ for (const mode of [
     const children = new Map<string, ReturnType<typeof spawnWorkspaceActivation>>();
     const adopted = new Map<string, ReturnType<typeof spawnWorkspaceActivation>>();
     const invocations = new WeakMap<ReturnType<typeof spawnWorkspaceActivation>, string>();
+    const systemdRace = mode === "systemd start raced by an external workspace";
     const interruptedBeforeLaunch =
       mode === "adopted independent workspace after interrupted authorization";
     const interrupted =
@@ -179,25 +183,55 @@ for (const mode of [
             return recovery.start(binding, options?.reconciling === true, path, async (launch) => {
               await new DaemonConfigStore(path).save(binding);
               let child = adopted.get(binding.workspaceId);
-              if (!child) {
+              let systemdInvocation: string | undefined;
+              if (systemdRace && binding.workspaceId === beta.workspaceId) {
+                const invocationId = crypto.randomUUID().replaceAll("-", "");
+                const instance: WorkspaceInstance = new SystemdWorkspaceInstance(
+                  {
+                    stateRoot: stateDirectory,
+                    workspaceId: binding.workspaceId,
+                    executablePath: process.execPath,
+                    socketPath: join(path, "daemon.sock"),
+                    stateDirectory: path,
+                    unitDirectory: stateDirectory,
+                  },
+                  async ([command]) => {
+                    if (command === "start")
+                      child = spawnWorkspaceActivation(installRoot, version, path);
+                    return 0;
+                  },
+                  async () => {},
+                  async () => ({
+                    code: 0,
+                    stdout: `MainPID=${child?.pid ?? 0}\nActiveState=${child ? "active" : "inactive"}\nLoadState=loaded\nInvocationID=${invocationId}\n`,
+                  }),
+                );
+                const processId = await instance.ensureStarted(launch?.beforeLaunch);
+                const observed = await instance.identity();
+                expect(observed).toEqual({ mainPid: processId, active: true, invocationId });
+                systemdInvocation = invocationId;
+              } else if (!child) {
                 await launch?.beforeLaunch();
                 if (interrupt === "before launch" && binding.workspaceId === beta.workspaceId)
                   throw new Error("fixture Coordinator exited before launch");
                 child = spawnWorkspaceActivation(installRoot, version, path);
               }
-              children.set(binding.workspaceId, child);
-              const invocationId = invocations.get(child) ?? crypto.randomUUID();
-              invocations.set(child, invocationId);
-              await launch?.observeLaunch({ mainPid: child.pid, invocationId });
-              const identity = await workspaceIdentity(path, child.pid).catch((error) => {
-                child.kill();
+              const startedChild = child;
+              if (!startedChild) throw new Error("fixture Workspace did not start");
+              children.set(binding.workspaceId, startedChild);
+              const invocationId =
+                systemdInvocation ?? invocations.get(startedChild) ?? crypto.randomUUID();
+              invocations.set(startedChild, invocationId);
+              await launch?.observeLaunch({ mainPid: startedChild.pid, invocationId });
+              const identity = await workspaceIdentity(path, startedChild.pid).catch((error) => {
+                startedChild.kill();
                 throw error;
               });
               const { daemonId } = identity;
               if (interrupt === "after handshake" && binding.workspaceId === beta.workspaceId)
                 throw new Error("fixture Coordinator exited after handshake");
               live.set(binding.workspaceId, invocationId);
-              return { invocationId, daemonId, processId: child.pid };
+              return { invocationId, daemonId, processId: startedChild.pid };
             });
           },
           async stop(binding, preserve) {
@@ -345,6 +379,8 @@ for (const mode of [
           state: interruptedBeforeLaunch ? "armed" : restored ? "confirmed" : "launched",
         });
       }
+      if (systemdRace)
+        expect(await readUpgradeProgressFile(grantPath)).toMatchObject({ state: "failed" });
       if (restored)
         await persistFixtureReady(
           installRoot,
@@ -355,6 +391,7 @@ for (const mode of [
       expect(await restarted.recovery.pendingWorkspaceIds()).toEqual(
         mode === "adopted independent workspace" ||
           interruptedBeforeLaunch ||
+          systemdRace ||
           mode === "adopted workspace with different invocation"
           ? [beta.workspaceId]
           : [],

@@ -4,7 +4,10 @@ import {
   workspaceUnit,
   type WorkspaceInstanceConfig,
 } from "#src/supervisor/systemd-workspace-instance";
-import { WORKSPACE_RELAUNCH_SECONDS } from "#src/supervisor/workspace-instance";
+import {
+  WORKSPACE_RELAUNCH_SECONDS,
+  type WorkspaceInstance,
+} from "#src/supervisor/workspace-instance";
 
 const config: WorkspaceInstanceConfig = {
   stateRoot: "/tmp/coforge-state",
@@ -57,7 +60,7 @@ test("unit puts the Workspace child in a mixed-kill user-manager scope with OOMP
   expect(unit).toContain(config.workspaceId);
 });
 
-test("ensureStarted authorizes a new systemd launch and adopts it without authorizing again", async () => {
+test("ensureStarted starts and adopts a systemd unit without granting launch attribution", async () => {
   const commands: string[][] = [];
   let active = false;
   const instance = new SystemdWorkspaceInstance(
@@ -80,14 +83,10 @@ test("ensureStarted authorizes a new systemd launch and adopts it without author
   const authorize = async () => {
     commands.push(["authorized"]);
   };
-  expect(await instance.ensureStarted(authorize)).toBe(4242);
-  expect(await instance.ensureStarted(authorize)).toBe(4242);
-  expect(commands).toEqual([
-    ["daemon-reload"],
-    ["authorized"],
-    ["start", instance.unitName],
-    ["daemon-reload"],
-  ]);
+  const workspace: WorkspaceInstance = instance;
+  expect(await workspace.ensureStarted(authorize)).toBe(4242);
+  expect(await workspace.ensureStarted(authorize)).toBe(4242);
+  expect(commands).toEqual([["daemon-reload"], ["start", instance.unitName], ["daemon-reload"]]);
 });
 
 test("a failed manager query cannot acknowledge a Workspace stop", async () => {

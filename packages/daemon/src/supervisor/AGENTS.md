@@ -38,6 +38,10 @@ Rules for the machine Coordinator in `src/supervisor/`. They extend
   invocation the Coordinator does not track (launchd relaunched it) is adopted
   once its handshake holds, so `status` and the upgrade preflight report what
   the OS runs.
+- A successful systemd start job or launchd kickstart can reuse an invocation
+  launched externally or by automatic restart. Keep scoped upgrade recovery
+  pending when the original Installer transaction has settled and the launch's
+  provenance is unknown.
 - `workspace-adoption.ts` owns the record of adopted Workspace daemons. Reading
   a Workspace's OS identity only observes: a read that finds it gone never
   drops the adopted child; only `stop` or a failed start does. One failed
