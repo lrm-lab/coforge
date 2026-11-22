@@ -63,7 +63,9 @@ export function WeeklyReportDashboard({ dashboard }: { dashboard: Dashboard }) {
                         src={member.avatarUrl}
                         className="size-5 shrink-0"
                       />
-                      <h3 className="font-semibold text-primary">{member.displayName}</h3>
+                      <h3 className="min-w-0 font-semibold wrap-anywhere text-primary">
+                        {member.displayName}
+                      </h3>
                     </div>
                     <div className="grid gap-3 p-4 md:grid-cols-3">
                       {dashboard.weeks.map((week) => {
@@ -71,7 +73,7 @@ export function WeeklyReportDashboard({ dashboard }: { dashboard: Dashboard }) {
                         return (
                           <div
                             key={`${member.userId}-${week.year}-${week.week}`}
-                            className="rounded-lg bg-secondary p-3"
+                            className="min-w-0 rounded-lg bg-secondary p-3"
                           >
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-xs font-semibold text-tertiary">
@@ -84,7 +86,7 @@ export function WeeklyReportDashboard({ dashboard }: { dashboard: Dashboard }) {
                                 />
                               ) : null}
                             </div>
-                            <p className="mt-2 min-h-10 text-sm text-primary">
+                            <p className="mt-2 line-clamp-3 min-h-10 text-sm wrap-anywhere text-primary">
                               {report?.summary || m.records_dashboard_not_submitted()}
                             </p>
                             {report ? (

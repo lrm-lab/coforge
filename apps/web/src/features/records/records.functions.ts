@@ -70,7 +70,6 @@ export const setWeeklyReportFavorite = createServerFn({ method: "POST" })
     });
   });
 
-/** Deletes the Leader overview week node without removing member or favorited reports. */
 export const deleteOverviewReport = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ reportId: z.uuid() }))
@@ -82,7 +81,6 @@ export const deleteOverviewReport = createServerFn({ method: "POST" })
     });
   });
 
-/** Deletes the viewer's member-week node (templates + submissions). */
 export const deleteMemberWeek = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ cycleId: z.uuid() }))
@@ -94,8 +92,6 @@ export const deleteMemberWeek = createServerFn({ method: "POST" })
     });
   });
 
-/** One report or note, with where the viewer's own channel stood before it was read: the page
- * reads it again when a `record.changed.v1` it may have missed came after (`missedBySubscribe`). */
 export const loadRecordSubject = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ id: z.uuid() }))

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { DotsHorizontal, Trash01 as Trash } from "@untitledui/icons";
@@ -33,6 +33,7 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
   const [body, setBody] = useState(() => readReportDraft(note.id)?.markdown ?? note.body);
   const titleRef = useRef(title);
   const bodyRef = useRef(body);
+  const titleInputRef = useRef<HTMLTextAreaElement>(null);
   titleRef.current = title;
   bodyRef.current = body;
   const noteIdRef = useRef(note.id);
@@ -42,11 +43,16 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
   const deleteDialog = useRecordDeleteDialog();
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const editorRef = useRef<ContentEditorRef>(null);
-  /** The Undo toast for the last Clear, while it still applies. */
   const clearedToastRef = useRef<string>(undefined);
 
-  /** Saves the note; resolves to whether the server took it. A failure is not thrown: autosaves
-   * ignore it, a Clear and its Undo report it. */
+  useLayoutEffect(() => {
+    const element = titleInputRef.current;
+    if (!editingTitle || !element) return;
+    if (typeof CSS !== "undefined" && CSS.supports("field-sizing", "content")) return;
+    element.style.height = "auto";
+    element.style.height = `${element.scrollHeight}px`;
+  }, [editingTitle, title]);
+
   async function persist(
     next: { title?: string; body?: string },
     noteId = noteIdRef.current,
@@ -79,7 +85,6 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
   }
 
   function schedulePersist(nextBody: string) {
-    // Typing after a Clear ends its Undo: restoring would overwrite the new text.
     dismissClearedToast();
     setBody(nextBody);
     bodyRef.current = nextBody;
@@ -104,8 +109,6 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
     await persist({ title: next });
   }
 
-  /** Replaces the whole body at once and saves it. The editor is told directly: once the user has
-   * typed, it ignores a new `defaultValue`. Resolves to whether the save went through. */
   async function replaceBody(next: string): Promise<boolean> {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = undefined;
@@ -116,21 +119,18 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
     return persist({ body: next });
   }
 
-  /** Clears the note at once and, once the save went through, offers Undo, which puts the cleared
-   * text back unless something was typed since. */
   async function clearBody() {
     const previous = editorRef.current?.getMarkdown() ?? bodyRef.current;
-    const title = m.records_note_cleared();
-    // Registered before the save is awaited, so typing while it runs withdraws the Undo.
-    if (previous) clearedToastRef.current = title;
+    const titleText = m.records_note_cleared();
+    if (previous) clearedToastRef.current = titleText;
     const saved = await replaceBody("");
     if (!previous) return;
     if (!saved) {
-      if (clearedToastRef.current === title) clearedToastRef.current = undefined;
+      if (clearedToastRef.current === titleText) clearedToastRef.current = undefined;
       return;
     }
-    if (clearedToastRef.current !== title) return;
-    toast.undoable(title, {
+    if (clearedToastRef.current !== titleText) return;
+    toast.undoable(titleText, {
       failed: m.records_note_restore_failed(),
       onUndo: async () => {
         if ((editorRef.current?.getMarkdown() ?? bodyRef.current) !== "")
@@ -152,7 +152,6 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
     });
   }
 
-  // Leaving the note ends its Undo: another view of the note may have been edited since.
   useEffect(() => {
     return () => {
       if (clearedToastRef.current) toast.dismiss(clearedToastRef.current);
@@ -210,12 +209,15 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
         <div className="min-h-0 flex-1 overflow-y-auto">
           <RecordsReadingColumn>
             {editingTitle ? (
-              <input
+              <textarea
+                ref={titleInputRef}
                 autoFocus
+                rows={1}
+                maxLength={200}
                 value={title}
                 aria-label={m.records_note_title()}
                 onChange={(event) => {
-                  const next = event.target.value;
+                  const next = event.target.value.replace(/[\r\n]+/g, " ");
                   setTitle(next);
                   titleRef.current = next;
                 }}
@@ -231,7 +233,7 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
                     setEditingTitle(false);
                   }
                 }}
-                className="mb-6 w-full bg-transparent text-display-sm font-semibold tracking-tight text-primary outline-none md:text-display-md"
+                className="mb-6 w-full resize-none overflow-hidden bg-transparent text-display-sm font-semibold tracking-tight wrap-anywhere text-primary outline-none [field-sizing:content] md:text-display-md"
               />
             ) : (
               <Button
@@ -239,7 +241,7 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
                 size="sm"
                 color="tertiary"
                 onPress={() => setEditingTitle(true)}
-                className="mb-6 h-auto w-full justify-start px-0 py-0 text-left text-display-sm font-semibold tracking-tight text-primary md:text-display-md"
+                className="mb-6 h-auto w-full min-w-0 justify-start px-0 py-0 text-start text-display-sm font-semibold tracking-tight whitespace-normal wrap-anywhere text-primary *:data-text:min-w-0 *:data-text:whitespace-normal *:data-text:wrap-anywhere md:text-display-md"
               >
                 {title}
               </Button>

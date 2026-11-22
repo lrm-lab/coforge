@@ -11,6 +11,8 @@ import {
   formatWeeklyReportCompletedAt,
   memberReportMatchesReceived,
   normalizeReportContent,
+  orderedReportTabNames,
+  publishMemberReportDelivery,
   withReceivedSnapshot,
   removeKeyPointPromptHistoryEntry,
   reportBodyRestoreView,
@@ -33,6 +35,7 @@ test("emptyReportContent creates named display pages", () => {
       Summary: { markdown: "" },
       Research: { markdown: "" },
     },
+    tabOrder: ["Summary", "Research"],
   });
 });
 
@@ -66,6 +69,7 @@ test("alignReportContentToTemplate adds and removes display pages without losing
     ),
   ).toEqual({
     tabs: { Summary: { markdown: "keep" }, Research: { markdown: "" } },
+    tabOrder: ["Summary", "Research"],
   });
 });
 
@@ -387,4 +391,77 @@ test("a later assistant insert replaces the pair with the body on screen", () =>
   expect(next.bodyRestore?.latest.tabs).toEqual({ Progress: { markdown: "第二次整理" } });
   expect(next.bodyRestore?.showing).toBe("latest");
   expect(next.bodyRestore?.revision).toBe(2);
+});
+
+test("tabOrder preserves multi-tab order across jsonb key-length reordering", () => {
+  const jsonbReordered = {
+    tabs: {
+      A: { markdown: "third" },
+      下周计划: { markdown: "second" },
+      本周工作总结: { markdown: "first" },
+    },
+    tabOrder: ["本周工作总结", "下周计划", "A"],
+  };
+  const normalized = normalizeReportContent(jsonbReordered);
+  expect(normalized.tabOrder).toEqual(["本周工作总结", "下周计划", "A"]);
+  expect(orderedReportTabNames(normalized)).toEqual(["本周工作总结", "下周计划", "A"]);
+  expect(Object.keys(normalized.tabs ?? {})).toEqual(["本周工作总结", "下周计划", "A"]);
+  expect(reportContentToMarkdown(jsonbReordered)).toBe(
+    "# 本周工作总结\n\nfirst\n\n# 下周计划\n\nsecond\n\n# A\n\nthird",
+  );
+});
+
+test("tabOrder filters removed tabs, appends unindexed tabs, and stays optional for legacy rows", () => {
+  const legacy = normalizeReportContent({
+    tabs: {
+      Summary: { markdown: "one" },
+      Research: { markdown: "two" },
+    },
+  });
+  expect(legacy.tabOrder).toBeUndefined();
+  expect(orderedReportTabNames(legacy)).toEqual(["Summary", "Research"]);
+
+  const partial = normalizeReportContent({
+    tabs: {
+      A: { markdown: "last" },
+      Summary: { markdown: "first" },
+      Extra: { markdown: "appended" },
+    },
+    tabOrder: ["Ghost", "Summary", "Summary", "A"],
+  });
+  expect(partial.tabOrder).toEqual(["Summary", "A", "Extra"]);
+  expect(orderedReportTabNames(partial)).toEqual(["Summary", "A", "Extra"]);
+});
+
+test("reportTabsEqual and delivery snapshots preserve tabOrder", () => {
+  const firstOrder = {
+    tabs: { A: { markdown: "x" }, Summary: { markdown: "y" } },
+    tabOrder: ["Summary", "A"],
+  };
+  const movedOrder = {
+    tabs: { A: { markdown: "x" }, Summary: { markdown: "y" } },
+    tabOrder: ["A", "Summary"],
+  };
+  expect(reportTabsEqual(firstOrder, movedOrder)).toBe(false);
+
+  const delivered = publishMemberReportDelivery(firstOrder);
+  const recipientAfterJsonb = reportContentForRecipient({
+    tabs: { A: { markdown: "draft" }, Summary: { markdown: "draft" } },
+    delivered: {
+      tabs: { A: { markdown: "x" }, Summary: { markdown: "y" } },
+      tabOrder: delivered.delivered?.tabOrder,
+    },
+  });
+  expect(orderedReportTabNames(recipientAfterJsonb)).toEqual(["Summary", "A"]);
+
+  const fromDimensions = emptyReportContent(["本周工作总结", "下周计划", "A"]);
+  const roundTripped = normalizeReportContent({
+    tabs: {
+      A: fromDimensions.tabs!.A!,
+      下周计划: fromDimensions.tabs!.下周计划!,
+      本周工作总结: fromDimensions.tabs!.本周工作总结!,
+    },
+    tabOrder: fromDimensions.tabOrder,
+  });
+  expect(orderedReportTabNames(roundTripped)).toEqual(["本周工作总结", "下周计划", "A"]);
 });

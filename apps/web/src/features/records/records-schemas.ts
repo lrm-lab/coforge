@@ -3,6 +3,7 @@ import type { ReportContent } from "./records-content";
 
 export const reportContentSchema: z.ZodType<ReportContent> = z.object({
   tabs: z.record(z.string(), z.object({ markdown: z.string() })),
+  tabOrder: z.array(z.string()).optional(),
   markdown: z.string().optional(),
   assignment: z.object({ unread: z.boolean() }).optional(),
 });

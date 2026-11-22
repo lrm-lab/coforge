@@ -1,7 +1,11 @@
 import { parseOutline, serializeOutline, type OutlineNode } from "./report-template-outline";
-import { emptyReportContent, normalizeReportContent, type ReportContent } from "./records-content";
+import {
+  emptyReportContent,
+  normalizeReportContent,
+  orderedReportTabNames,
+  type ReportContent,
+} from "./records-content";
 
-/** Settings-dialog outline: one level-1 title with optional level-2 children. */
 export type TemplateOutlineSection = {
   title: string;
   children: string[];
@@ -11,7 +15,6 @@ function trimTitle(value: string) {
   return value.trim();
 }
 
-/** Normalize Json from WeeklyReportTemplate.dimensions (legacy string[] or sections). */
 export function parseTemplateSections(value: unknown): TemplateOutlineSection[] {
   if (!Array.isArray(value)) return [];
   if (value.length === 0) return [];
@@ -54,7 +57,6 @@ export function sectionsToMarkdown(sections: TemplateOutlineSection[]): string {
   return serializeOutline(nodes);
 }
 
-/** Extract only H1/H2 titles for the settings dialog (body / deeper headings ignored). */
 export function markdownToSections(markdown: string): TemplateOutlineSection[] {
   const sections: TemplateOutlineSection[] = [];
   let current: TemplateOutlineSection | null = null;
@@ -76,10 +78,6 @@ function headingKey(level: number, text: string) {
   return `${level}:${text.trim()}`;
 }
 
-/**
- * Rebuild markdown from settings sections while preserving body lines that
- * already sit under a heading with the same level+title.
- */
 export function alignMarkdownToSections(
   existingMarkdown: string,
   sections: TemplateOutlineSection[],
@@ -147,25 +145,30 @@ function markdownFromLevel2Titles(titles: string[]): string {
 
 function reportContentFromCombinedMarkdown(markdown: string): ReportContent {
   const tabs: Record<string, OutlineNode[]> = {};
+  const names: string[] = [];
   let current: string | null = null;
   for (const node of parseOutline(markdown)) {
     if (node.kind === "heading" && node.level === 1) {
       current = trimTitle(node.text) || "Summary";
-      if (!tabs[current]) tabs[current] = [];
+      if (!tabs[current]) {
+        tabs[current] = [];
+        names.push(current);
+      }
       continue;
     }
     if (!current) {
       current = "Summary";
       tabs[current] = [];
+      names.push(current);
     }
     tabs[current]!.push(node);
   }
-  const names = Object.keys(tabs);
   if (names.length === 0) return emptyReportContent();
   return {
     tabs: Object.fromEntries(
       names.map((name) => [name, { markdown: serializeOutline(tabs[name] ?? []) }]),
     ),
+    ...(names.length > 1 ? { tabOrder: names } : {}),
   };
 }
 
@@ -212,10 +215,9 @@ export function parseLevel2Blocks(markdown: string): Level2Block[] {
   return leadingBodyAndBlocks(markdown).blocks;
 }
 
-/** Empty the current H1 page's bodies; keep its H2 titles and every other page. */
 export function resetLeaderFormatPage(content: ReportContent, pageName: string): ReportContent {
   const normalized = normalizeLeaderFormatTabs(content);
-  const tabs = { ...(normalized.tabs ?? {}) };
+  const tabs = { ...normalized.tabs };
   const current = tabs[pageName];
   if (!current) return normalized;
   const blocks = parseLevel2Blocks(current.markdown).map((block) => ({
@@ -240,23 +242,24 @@ export function serializeLevel2Blocks(blocks: Level2Block[]): string {
   return serializeOutline(nodes);
 }
 
-/** Tabs are first-level titles; each tab's markdown holds only second-level headings. */
 export function reportContentFromSections(sections: TemplateOutlineSection[]): ReportContent {
   if (sections.length === 0) return emptyReportContent();
+  const names: string[] = [];
+  const tabs: Record<string, { markdown: string }> = {};
+  for (const section of sections) {
+    if (!Object.hasOwn(tabs, section.title)) names.push(section.title);
+    tabs[section.title] = { markdown: markdownFromLevel2Titles(section.children) };
+  }
   return {
-    tabs: Object.fromEntries(
-      sections.map((section) => [
-        section.title,
-        { markdown: markdownFromLevel2Titles(section.children) },
-      ]),
-    ),
+    tabs,
+    ...(names.length > 1 ? { tabOrder: names } : {}),
   };
 }
 
 export function sectionsFromReportContent(content: ReportContent): TemplateOutlineSection[] {
   const normalized = normalizeReportContent(content);
   const tabs = normalized.tabs ?? {};
-  const names = Object.keys(tabs);
+  const names = normalized.tabs ? orderedReportTabNames(normalized) : [];
   const firstMarkdown = names[0] ? (tabs[names[0]]?.markdown ?? "") : (normalized.markdown ?? "");
   if (names.length === 1 && tabHasLevel1Heading(firstMarkdown)) {
     return markdownToSections(firstMarkdown);
@@ -267,11 +270,10 @@ export function sectionsFromReportContent(content: ReportContent): TemplateOutli
   }));
 }
 
-/** Split a legacy single-tab H1 document so the editor can treat tabs as level-1 titles. */
 export function normalizeLeaderFormatTabs(content: ReportContent): ReportContent {
   const normalized = normalizeReportContent(content);
   const tabs = normalized.tabs ?? {};
-  const names = Object.keys(tabs);
+  const names = normalized.tabs ? orderedReportTabNames(normalized) : [];
   const firstMarkdown = names[0] ? (tabs[names[0]]?.markdown ?? "") : "";
   if (names.length === 1 && tabHasLevel1Heading(firstMarkdown)) {
     return withAssignment(reportContentFromCombinedMarkdown(firstMarkdown), normalized);
@@ -285,12 +287,14 @@ export function alignReportContentToSections(
 ): ReportContent {
   const normalized = normalizeLeaderFormatTabs(content);
   if (sections.length === 0) return normalized;
+  const names: string[] = [];
   const tabs: Record<string, { markdown: string }> = {};
   for (const section of sections) {
+    if (!Object.hasOwn(tabs, section.title)) names.push(section.title);
     const existing = leadingBodyAndBlocks(normalized.tabs?.[section.title]?.markdown ?? "");
     const byTitle = new Map(existing.blocks.map((block) => [block.title, block]));
     const blocks = section.children.map((title) => byTitle.get(title) ?? { title, body: "" });
     tabs[section.title] = { markdown: joinTabMarkdown(existing.leading, blocks) };
   }
-  return withAssignment({ tabs }, normalized);
+  return withAssignment({ tabs, ...(names.length > 1 ? { tabOrder: names } : {}) }, normalized);
 }

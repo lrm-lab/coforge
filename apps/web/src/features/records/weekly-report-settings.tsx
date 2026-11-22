@@ -63,7 +63,6 @@ export function WeeklyReportSettings({
   openCreateOnMount?: boolean;
   initialSection?: SettingsTopTab;
   initialSlot?: KeyPointSlot;
-  /** Safe Records path to return to after editing prompts. */
   returnTo?: string;
 }) {
   const router = useRouter();
@@ -82,11 +81,8 @@ export function WeeklyReportSettings({
   const [prompts, setPrompts] = useState<KeyPointPromptsMeta>(initialPrompts);
   const [draftText, setDraftText] = useState(initialPrompts[resolvedSlot].text);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  // Where focus lands after a deleted template's row (and its button) is gone.
   const templatesRef = useRef<HTMLDivElement>(null);
-  /** True while the textarea is focused / composing — ignore loader overwrites. */
   const editingRef = useRef(false);
-  /** Last text we intentionally applied from server or a successful save. */
   const appliedServerTextRef = useRef(initialPrompts[resolvedSlot].text);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<WeeklyTemplateList[number] | null>(null);
@@ -108,7 +104,6 @@ export function WeeklyReportSettings({
     }
   }
 
-  // Sync from loader only when the user is not actively editing the field.
   useEffect(() => {
     const next = keyPointPrompts ?? emptyKeyPointPrompts();
     setPrompts(next);
@@ -169,7 +164,6 @@ export function WeeklyReportSettings({
 
   async function onSavePrompt() {
     if (busy) return;
-    // Always read the live DOM value (IME composition / last keystroke may lag React state).
     const textToSave = readEditorText();
     editingRef.current = false;
     setDraftText(textToSave);
@@ -180,7 +174,6 @@ export function WeeklyReportSettings({
       });
       applyServerPrompts(saved, keyPointSlot);
       await refresh.records();
-      // Loader may briefly return stale data; pin the just-saved snapshot again.
       applyServerPrompts(saved, keyPointSlot);
     } finally {
       setBusy(false);
@@ -188,8 +181,6 @@ export function WeeklyReportSettings({
   }
 
   async function deleteHistoryEntry(entry: KeyPointPromptHistoryEntry) {
-    // Resolve the entry's position in the latest snapshot: a history that changed while the
-    // popover was open must not make this delete a different entry.
     const historyIndex = keyPointHistoryIndexOf(prompts[keyPointSlot].history, entry);
     if (historyIndex < 0) return;
     const saved = await deleteHistory({ data: { slot: keyPointSlot, historyIndex } });
@@ -294,10 +285,18 @@ export function WeeklyReportSettings({
                     <tr className="bg-secondary_subtle text-tertiary">
                       <th className="px-4 py-3 font-medium">{m.records_template_name()}</th>
                       <th className="px-4 py-3 font-medium">{m.records_template_recipients()}</th>
-                      <th className="px-4 py-3 font-medium">{m.records_template_frequency()}</th>
-                      <th className="px-4 py-3 font-medium">{m.records_template_send_time()}</th>
-                      <th className="px-4 py-3 font-medium">{m.records_template_enabled()}</th>
-                      <th className="px-4 py-3 font-medium">{m.records_template_actions()}</th>
+                      <th className="px-4 py-3 font-medium whitespace-nowrap">
+                        {m.records_template_frequency()}
+                      </th>
+                      <th className="px-4 py-3 font-medium whitespace-nowrap">
+                        {m.records_template_send_time()}
+                      </th>
+                      <th className="px-4 py-3 font-medium whitespace-nowrap">
+                        {m.records_template_enabled()}
+                      </th>
+                      <th className="px-4 py-3 font-medium whitespace-nowrap">
+                        {m.records_template_actions()}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -307,30 +306,31 @@ export function WeeklyReportSettings({
                         className="cursor-pointer border-t border-secondary hover:bg-primary_hover"
                         onClick={() => setDetail(template)}
                       >
-                        <td className="px-4 py-3">
-                          {/* The row stays clickable for pointers; this button is the same action
-                            for keyboard and assistive technology. */}
+                        <td className="max-w-[20rem] px-4 py-3">
                           <Button
                             size="sm"
                             color="link-gray"
                             aria-label={`${m.records_template_open_detail()}: ${template.name}`}
                             onPress={() => setDetail(template)}
-                            className="font-medium text-primary"
+                            className="h-auto max-w-[20rem] justify-start text-start font-medium whitespace-normal wrap-anywhere text-primary *:data-text:whitespace-normal *:data-text:wrap-anywhere"
                           >
                             {template.name}
                           </Button>
                         </td>
                         <td className="px-4 py-3 text-secondary">{recipientsCell(template)}</td>
-                        <td className="px-4 py-3 text-secondary">
+                        <td className="px-4 py-3 whitespace-nowrap text-secondary">
                           {m.records_template_frequency_weekly()}
                         </td>
-                        <td className="px-4 py-3 text-secondary">
+                        <td className="px-4 py-3 whitespace-nowrap text-secondary">
                           {m.records_template_send_on({
                             weekday: weekdayLabel(template.sendWeekday),
                             time: template.sendTime,
                           })}
                         </td>
-                        <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
+                        <td
+                          className="px-4 py-3 whitespace-nowrap"
+                          onClick={(event) => event.stopPropagation()}
+                        >
                           <Button
                             size="sm"
                             color="link-gray"
@@ -342,7 +342,10 @@ export function WeeklyReportSettings({
                               : m.records_template_enabled_no()}
                           </Button>
                         </td>
-                        <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
+                        <td
+                          className="px-4 py-3 whitespace-nowrap"
+                          onClick={(event) => event.stopPropagation()}
+                        >
                           <div className="flex items-center gap-3">
                             <Button
                               size="sm"

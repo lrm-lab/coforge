@@ -102,10 +102,10 @@ export function ReportDetail({
   const sent = status === "submitted";
   const receivedBaseline = useMemo(() => {
     if (!memberAssignee) return null;
-    return normalizeReportContent(report.content).received?.tabs ?? null;
+    return normalizeReportContent(report.content).received ?? null;
   }, [memberAssignee, report.content]);
   const assignmentUnchanged =
-    receivedBaseline != null && reportTabsEqual(content, { tabs: receivedBaseline });
+    receivedBaseline != null && reportTabsEqual(content, receivedBaseline);
   // Leader reads a submitted assignment; the assignee turns the same pages while filling it in.
   const readingScroll = (leaderReading && sent) || memberAssignee;
   const readingTurn = useReportReadingTurn(report.id, report.cycle, readingScroll);

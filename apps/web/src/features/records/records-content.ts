@@ -56,16 +56,22 @@ export type ReportTab = {
   markdown: string;
 };
 
+export type ReportBodySnapshot = {
+  tabs: Record<string, ReportTab>;
+  tabOrder?: string[];
+};
+
 export type ReportContent = {
   tabs?: Record<string, ReportTab>;
+  tabOrder?: string[];
   markdown?: string;
   assignment?: ReportAssignmentMeta;
   schedule?: ReportScheduleMeta;
   keyPointPrompts?: KeyPointPromptsMeta;
   keyPointExtraction?: KeyPointExtractionMeta;
-  delivered?: { tabs: Record<string, ReportTab> };
-  assistantDraft?: { tabs: Record<string, ReportTab> };
-  received?: { tabs: Record<string, ReportTab> };
+  delivered?: ReportBodySnapshot;
+  assistantDraft?: ReportBodySnapshot;
+  received?: ReportBodySnapshot;
   bodyRestore?: ReportBodyRestore;
 };
 
@@ -73,8 +79,8 @@ export type ReportBodyRestore = {
   sourceMessageId: string;
   revision: number;
   showing: "latest" | "previous";
-  previous: { tabs: Record<string, ReportTab> };
-  latest: { tabs: Record<string, ReportTab> };
+  previous: ReportBodySnapshot;
+  latest: ReportBodySnapshot;
 };
 
 export type ReportBodyRestoreView = {
@@ -98,6 +104,46 @@ function newTabName() {
   return "Summary";
 }
 
+function resolveTabNames(tabs: Record<string, ReportTab>, rawOrder?: readonly unknown[]): string[] {
+  const keys = Object.keys(tabs);
+  if (!Array.isArray(rawOrder)) return keys;
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+  for (const item of rawOrder) {
+    if (typeof item !== "string" || seen.has(item) || !Object.hasOwn(tabs, item)) continue;
+    seen.add(item);
+    ordered.push(item);
+  }
+  for (const key of keys) {
+    if (!seen.has(key)) {
+      seen.add(key);
+      ordered.push(key);
+    }
+  }
+  return ordered;
+}
+
+function reorderTabsRecord(
+  tabs: Record<string, ReportTab>,
+  names: readonly string[],
+): Record<string, ReportTab> {
+  return Object.fromEntries(names.map((name) => [name, tabs[name]!]));
+}
+
+export function orderedReportTabNames(content: ReportContent): string[] {
+  if (content.tabs) return resolveTabNames(content.tabs, content.tabOrder);
+  return [newTabName()];
+}
+
+export function orderedReportTabEntries(content: ReportContent): [string, ReportTab][] {
+  if (content.tabs) {
+    const tabs = content.tabs;
+    return resolveTabNames(tabs, content.tabOrder).map((name) => [name, tabs[name]!]);
+  }
+  const fallbackName = newTabName();
+  return [[fallbackName, { markdown: content.markdown ?? "" }]];
+}
+
 function parseReportTabs(value: unknown): Record<string, ReportTab> | undefined {
   if (!value || typeof value !== "object") return undefined;
   const tabs = Object.fromEntries(
@@ -116,16 +162,27 @@ function parseReportTabs(value: unknown): Record<string, ReportTab> | undefined 
   return Object.keys(tabs).length > 0 ? tabs : undefined;
 }
 
-function parseDeliveredBody(value: unknown): { tabs: Record<string, ReportTab> } | undefined {
+function parseBodySnapshot(value: unknown, allowEmpty: boolean): ReportBodySnapshot | undefined {
   if (!value || typeof value !== "object") return undefined;
-  const tabs = parseReportTabs((value as { tabs?: unknown }).tabs);
+  const row = value as { tabs?: unknown; tabOrder?: unknown };
+  const raw = row.tabs;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  if (Object.keys(raw).length === 0) return allowEmpty ? { tabs: {} } : undefined;
+  const tabs = parseReportTabs(raw);
   if (!tabs) return undefined;
+  if (Array.isArray(row.tabOrder)) {
+    const tabOrder = resolveTabNames(tabs, row.tabOrder);
+    return {
+      tabs: reorderTabsRecord(tabs, tabOrder),
+      ...(tabOrder.length > 0 ? { tabOrder } : {}),
+    };
+  }
   return { tabs };
 }
 
 function withDeliveredBody(
   content: ReportContent,
-  delivered: { tabs: Record<string, ReportTab> } | undefined,
+  delivered: ReportBodySnapshot | undefined,
 ): ReportContent {
   if (!delivered) return content;
   return { ...content, delivered };
@@ -133,7 +190,7 @@ function withDeliveredBody(
 
 function withAssistantDraft(
   content: ReportContent,
-  assistantDraft: { tabs: Record<string, ReportTab> } | undefined,
+  assistantDraft: ReportBodySnapshot | undefined,
 ): ReportContent {
   if (!assistantDraft) return content;
   return { ...content, assistantDraft };
@@ -195,6 +252,7 @@ export function emptyReportContent(dimensions: string[] = []): ReportContent {
   const uniqueNames = [...new Set(names.length > 0 ? names : [newTabName()])];
   return {
     tabs: Object.fromEntries(uniqueNames.map((name) => [name, { markdown: "" }])),
+    ...(uniqueNames.length > 1 ? { tabOrder: uniqueNames } : {}),
   };
 }
 
@@ -245,6 +303,7 @@ export function normalizeReportContent(value: unknown): ReportContent {
   const record = value as {
     markdown?: unknown;
     tabs?: Record<string, { markdown?: unknown; sections?: LegacySection[] }>;
+    tabOrder?: unknown;
     assignment?: unknown;
     schedule?: unknown;
     keyPointPrompts?: unknown;
@@ -258,14 +317,25 @@ export function normalizeReportContent(value: unknown): ReportContent {
   const schedule = parseScheduleMeta(record.schedule);
   const keyPointPrompts = parseKeyPointPrompts(record.keyPointPrompts);
   const keyPointExtraction = parseKeyPointExtraction(record.keyPointExtraction);
-  const delivered = parseDeliveredBody(record.delivered);
-  const assistantDraft = parseDeliveredBody(record.assistantDraft);
+  const delivered = parseBodySnapshot(record.delivered, false);
+  const assistantDraft = parseBodySnapshot(record.assistantDraft, false);
   const bodyRestore = parseBodyRestore(record.bodyRestore);
-  const received = parseSnapshotBody(record.received);
+  const received = parseBodySnapshot(record.received, true);
 
   if (record.tabs && typeof record.tabs === "object") {
     const tabs = parseReportTabs(record.tabs);
-    const base = tabs ? { tabs } : { tabs: {} };
+    let base: ReportContent;
+    if (!tabs) {
+      base = { tabs: {} };
+    } else if (Array.isArray(record.tabOrder)) {
+      const tabOrder = resolveTabNames(tabs, record.tabOrder);
+      base = {
+        tabs: reorderTabsRecord(tabs, tabOrder),
+        ...(tabOrder.length > 0 ? { tabOrder } : {}),
+      };
+    } else {
+      base = { tabs };
+    }
     return finishReportContent(
       withOptionalMeta(base, assignment, schedule, keyPointPrompts, keyPointExtraction),
       delivered,
@@ -307,10 +377,10 @@ export function normalizeReportContent(value: unknown): ReportContent {
 
 function finishReportContent(
   content: ReportContent,
-  delivered: { tabs: Record<string, ReportTab> } | undefined,
-  assistantDraft: { tabs: Record<string, ReportTab> } | undefined,
+  delivered: ReportBodySnapshot | undefined,
+  assistantDraft: ReportBodySnapshot | undefined,
   bodyRestore: ReportBodyRestore | undefined,
-  received: { tabs: Record<string, ReportTab> } | undefined,
+  received: ReportBodySnapshot | undefined,
 ): ReportContent {
   return withReceivedBody(
     withBodyRestore(
@@ -323,27 +393,17 @@ function finishReportContent(
 
 function withReceivedBody(
   content: ReportContent,
-  received: { tabs: Record<string, ReportTab> } | undefined,
+  received: ReportBodySnapshot | undefined,
 ): ReportContent {
   if (!received) return content;
   return { ...content, received };
 }
 
-function parseSnapshotBody(value: unknown): { tabs: Record<string, ReportTab> } | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const raw = (value as { tabs?: unknown }).tabs;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
-  if (Object.keys(raw).length === 0) return { tabs: {} };
-  const tabs = parseReportTabs(raw);
-  if (!tabs) return undefined;
-  return { tabs };
-}
-
 function parseBodyRestore(value: unknown): ReportBodyRestore | undefined {
   if (!value || typeof value !== "object") return undefined;
   const row = value as Partial<ReportBodyRestore>;
-  const previous = parseSnapshotBody(row.previous);
-  const latest = parseSnapshotBody(row.latest);
+  const previous = parseBodySnapshot(row.previous, true);
+  const latest = parseBodySnapshot(row.latest, true);
   if (!previous || !latest) return undefined;
   if (row.showing !== "latest" && row.showing !== "previous") return undefined;
   if (typeof row.sourceMessageId !== "string" || row.sourceMessageId.length === 0) return undefined;
@@ -359,8 +419,19 @@ function parseBodyRestore(value: unknown): ReportBodyRestore | undefined {
   };
 }
 
-function reportTabsSnapshot(content: ReportContent): Record<string, ReportTab> {
-  return { ...normalizeReportContent(content).tabs };
+function reportBodySnapshot(content: ReportContent): ReportBodySnapshot {
+  const normalized = normalizeReportContent(content);
+  return {
+    tabs: { ...normalized.tabs },
+    ...(normalized.tabOrder ? { tabOrder: [...normalized.tabOrder] } : {}),
+  };
+}
+
+function cloneSnapshot(snapshot: ReportBodySnapshot): ReportBodySnapshot {
+  return {
+    tabs: { ...snapshot.tabs },
+    ...(snapshot.tabOrder ? { tabOrder: [...snapshot.tabOrder] } : {}),
+  };
 }
 
 export function insertAssistantReportBody(
@@ -370,18 +441,20 @@ export function insertAssistantReportBody(
 ): ReportContent {
   const current = normalizeReportContent(stored);
   if (current.bodyRestore?.sourceMessageId === sourceMessageId) return current;
-  const latest = reportTabsSnapshot(inserted);
-  const previous = reportTabsSnapshot(current);
+  const latest = reportBodySnapshot(inserted);
+  const previous = reportBodySnapshot(current);
+  const { tabOrder: _dropOrder, ...rest } = current;
   return {
-    ...current,
-    tabs: latest,
-    assistantDraft: { tabs: { ...latest } },
+    ...rest,
+    tabs: { ...latest.tabs },
+    ...(latest.tabOrder ? { tabOrder: [...latest.tabOrder] } : {}),
+    assistantDraft: cloneSnapshot(latest),
     bodyRestore: {
       sourceMessageId,
       revision: (current.bodyRestore?.revision ?? 0) + 1,
       showing: "latest",
-      previous: { tabs: previous },
-      latest: { tabs: { ...latest } },
+      previous,
+      latest: cloneSnapshot(latest),
     },
   };
 }
@@ -390,14 +463,16 @@ export function switchReportBodyVersion(stored: ReportContent): ReportContent {
   const current = normalizeReportContent(stored);
   const restore = current.bodyRestore;
   if (!restore) return current;
-  const live = reportTabsSnapshot(current);
+  const live = reportBodySnapshot(current);
   const showing = restore.showing === "latest" ? "previous" : "latest";
-  const previous = restore.showing === "previous" ? { tabs: live } : restore.previous;
-  const latest = restore.showing === "latest" ? { tabs: live } : restore.latest;
-  const tabs = showing === "latest" ? latest.tabs : previous.tabs;
+  const previous = restore.showing === "previous" ? live : restore.previous;
+  const latest = restore.showing === "latest" ? live : restore.latest;
+  const target = showing === "latest" ? latest : previous;
+  const { tabOrder: _dropOrder, ...rest } = current;
   return {
-    ...current,
-    tabs: { ...tabs },
+    ...rest,
+    tabs: { ...target.tabs },
+    ...(target.tabOrder ? { tabOrder: [...target.tabOrder] } : {}),
     bodyRestore: {
       ...restore,
       showing,
@@ -420,7 +495,7 @@ export function reportBodyRestoreView(content: ReportContent): ReportBodyRestore
 
 export function publishMemberReportDelivery(content: ReportContent): ReportContent {
   const next = normalizeReportContent(content);
-  return { ...next, delivered: { tabs: { ...next.tabs } } };
+  return { ...next, delivered: reportBodySnapshot(next) };
 }
 
 export function retainMemberReportDelivery(
@@ -429,9 +504,12 @@ export function retainMemberReportDelivery(
 ): ReportContent {
   const previous = normalizeReportContent(stored);
   const next = normalizeReportContent(incoming);
+  const delivered = previous.delivered
+    ? cloneSnapshot(previous.delivered)
+    : reportBodySnapshot(previous);
   return {
     ...next,
-    delivered: { tabs: { ...(previous.delivered?.tabs ?? previous.tabs) } },
+    delivered,
   };
 }
 
@@ -446,39 +524,56 @@ export function reportContentForAuthor(content: ReportContent): ReportContent {
 }
 
 export function reportContentForRecipient(content: ReportContent): ReportContent {
+  const normalized = normalizeReportContent(content);
   const {
     delivered,
     assistantDraft: _assistantDraft,
     bodyRestore: _bodyRestore,
+    tabOrder: _authorTabOrder,
     ...rest
-  } = normalizeReportContent(content);
-  if (!delivered) return rest;
-  return { ...rest, tabs: delivered.tabs };
+  } = normalized;
+  if (!delivered) {
+    return normalized.tabOrder ? { ...rest, tabOrder: normalized.tabOrder } : rest;
+  }
+  const names = resolveTabNames(delivered.tabs, delivered.tabOrder);
+  return {
+    ...rest,
+    tabs: reorderTabsRecord(delivered.tabs, names),
+    ...(delivered.tabOrder ? { tabOrder: names } : {}),
+  };
 }
 
 export function reportTabsEqual(left: ReportContent, right: ReportContent): boolean {
-  const a = normalizeReportContent(left).tabs ?? {};
-  const b = normalizeReportContent(right).tabs ?? {};
+  const a = orderedReportTabEntries(normalizeReportContent(left));
+  const b = orderedReportTabEntries(normalizeReportContent(right));
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
 export function withReceivedSnapshot(content: ReportContent): ReportContent {
   const normalized = normalizeReportContent(content);
-  const tabs = Object.fromEntries(
-    Object.entries(normalized.tabs ?? {}).map(([name, tab]) => [name, { markdown: tab.markdown }]),
-  );
-  return { ...normalized, received: { tabs } };
+  const entries = orderedReportTabEntries(normalized);
+  const tabs = Object.fromEntries(entries.map(([name, tab]) => [name, { markdown: tab.markdown }]));
+  return {
+    ...normalized,
+    received: {
+      tabs,
+      ...(normalized.tabOrder ? { tabOrder: entries.map(([name]) => name) } : {}),
+    },
+  };
 }
 
 export function memberReportMatchesReceived(content: ReportContent): boolean {
   const normalized = normalizeReportContent(content);
   if (!normalized.received) return false;
-  return reportTabsEqual(normalized, { tabs: normalized.received.tabs });
+  return reportTabsEqual(normalized, {
+    tabs: normalized.received.tabs,
+    ...(normalized.received.tabOrder ? { tabOrder: normalized.received.tabOrder } : {}),
+  });
 }
 
 export function reportContentToMarkdown(content: ReportContent): string {
   const normalized = normalizeReportContent(content);
-  const tabs = Object.entries(normalized.tabs ?? {});
+  const tabs = orderedReportTabEntries(normalized);
   if (tabs.length === 0) return "";
   return tabs
     .map(([name, tab]) => {

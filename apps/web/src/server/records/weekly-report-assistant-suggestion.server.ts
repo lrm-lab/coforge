@@ -6,10 +6,6 @@ const OPEN = "[weekly-report-suggestion]";
 const CLOSE = "[/weekly-report-suggestion]";
 const UUID_RE = UUID_LIKE_PATTERN;
 
-/**
- * Real envelopes put JSON right after the open tag. Prose that merely mentions
- * `[weekly-report-suggestion]` (e.g. inside backticks) must not truncate the DM.
- */
 function findSuggestionEnvelopeStart(body: string): number {
   let from = 0;
   while (from < body.length) {
@@ -27,7 +23,6 @@ export type WeeklyReportBodyEditSuggestion = {
   reportId: string;
   summary: string;
   content: ReportContent;
-  /** The report `updatedAt` the assistant read; the write is refused when it moved. */
   baseUpdatedAt?: string;
 };
 
@@ -62,7 +57,6 @@ export type WeeklyReportAssistantSuggestion =
   | WeeklyReportSendPromptSuggestion
   | WeeklyReportTemplateCreateSuggestion;
 
-/** Builds an Agent→User DM body that carries a confirmable write suggestion. */
 export function buildWeeklyReportAssistantSuggestionBody(input: {
   displayText: string;
   suggestion: WeeklyReportAssistantSuggestion;
@@ -93,7 +87,6 @@ export function parseWeeklyReportAssistantSuggestion(
   }
 }
 
-/** When the Agent omits `[/weekly-report-suggestion]`, take the first JSON object. */
 function extractLeadingJsonObject(text: string): string | null {
   const trimmed = text.trim();
   if (!trimmed.startsWith("{")) return null;
@@ -188,7 +181,6 @@ function normalizeSuggestion(value: unknown): WeeklyReportAssistantSuggestion | 
   if (row.type === "body-edit") {
     if (typeof row.reportId !== "string" || !UUID_RE.test(row.reportId)) return null;
     if (typeof row.summary !== "string" || row.summary.trim().length === 0) return null;
-    // A present-but-malformed version is refused rather than silently unguarded.
     if (
       row.baseUpdatedAt !== undefined &&
       row.baseUpdatedAt !== null &&
@@ -220,24 +212,49 @@ function isTemplateOutlineSection(section: unknown): section is TemplateOutlineS
   );
 }
 
+function withParsedTabOrder(
+  tabs: NonNullable<ReportContent["tabs"]>,
+  rawOrder: unknown,
+): ReportContent {
+  if (!Array.isArray(rawOrder)) return { tabs };
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+  for (const item of rawOrder) {
+    if (typeof item !== "string" || seen.has(item) || !Object.hasOwn(tabs, item)) continue;
+    seen.add(item);
+    ordered.push(item);
+  }
+  for (const key of Object.keys(tabs)) {
+    if (!seen.has(key)) {
+      seen.add(key);
+      ordered.push(key);
+    }
+  }
+  return {
+    tabs: Object.fromEntries(ordered.map((name) => [name, tabs[name]!])),
+    ...(ordered.length > 0 ? { tabOrder: ordered } : {}),
+  };
+}
+
 function parseStoredReportContent(value: unknown): ReportContent | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const rawOrder = Reflect.get(value, "tabOrder");
   const tabsValue = Reflect.get(value, "tabs");
   if (tabsValue === undefined) {
     const markdown = Reflect.get(value, "markdown");
     if (typeof markdown === "string") return { markdown };
-    // Agents sometimes omit the `tabs` wrapper and put tab names directly on content.
-    return asTabMap(value);
+    const flat = asTabMap(value, true);
+    return flat?.tabs ? withParsedTabOrder(flat.tabs, rawOrder) : null;
   }
   if (!tabsValue || typeof tabsValue !== "object" || Array.isArray(tabsValue)) return null;
-  return asTabMap(tabsValue);
+  const parsed = asTabMap(tabsValue, false);
+  return parsed?.tabs ? withParsedTabOrder(parsed.tabs, rawOrder) : null;
 }
 
-/** Canonical `{ tabs: { Name: { markdown } } }` or a flat tab map. Empty maps are rejected. */
-function asTabMap(value: object): ReportContent | null {
+function asTabMap(value: object, ignoreTabOrderKey: boolean): ReportContent | null {
   const tabs: NonNullable<ReportContent["tabs"]> = {};
   for (const [name, tab] of Object.entries(value)) {
-    // Agents often emit `"Summary": "## ..."`; canonical form is `{ markdown }`.
+    if (ignoreTabOrderKey && name === "tabOrder") continue;
     if (typeof tab === "string") {
       tabs[name] = { markdown: tab };
       continue;

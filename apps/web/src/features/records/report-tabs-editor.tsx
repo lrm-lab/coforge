@@ -15,7 +15,7 @@ import { edgeFadeStyle, TAB_BAR_END_FADE_WIDTH } from "#src/hooks/use-scroll-edg
 import { m } from "#src/paraglide/messages";
 import { LeaderFormatSectionsEditor } from "./leader-format-sections-editor";
 import { ReportSectionEditor } from "#src/features/records/report-editor/report-section-editor";
-import type { ReportContent } from "./records-content";
+import { orderedReportTabNames, type ReportContent, type ReportTab } from "./records-content";
 import { cn } from "#src/lib/utils";
 import type { UploadResult } from "#src/features/records/report-editor/types";
 import { ReportPresentMode } from "./report-present-mode";
@@ -56,7 +56,7 @@ export function ReportTabsEditor({
   readingTurn?: ReportTabsReadingTurn;
 }) {
   const pages = content.tabs ?? { Summary: { markdown: content.markdown ?? "" } };
-  const tabNames = Object.keys(pages);
+  const tabNames = content.tabs ? orderedReportTabNames(content) : Object.keys(pages);
   const trailing = trailingTabs ?? [];
   const allTabIds = [...tabNames, ...trailing.map((tab) => tab.id)];
   const [selectedTab, setSelectedTab] = useState(tabNames[0] ?? trailing[0]?.id ?? "");
@@ -128,14 +128,19 @@ export function ReportTabsEditor({
     return `${base} ${index}`;
   }
 
+  function emitOrderedTabs(entries: [string, ReportTab][]) {
+    onChange({
+      tabs: Object.fromEntries(entries),
+      tabOrder: entries.map(([name]) => name),
+    });
+  }
+
   function addTab() {
     const name = defaultTabName();
-    onChange({
-      tabs: {
-        ...pages,
-        [name]: { markdown: "" },
-      },
-    });
+    emitOrderedTabs([
+      ...tabNames.map((tabName): [string, ReportTab] => [tabName, pages[tabName]!]),
+      [name, { markdown: "" }],
+    ]);
     setSelectedTab(name);
     setEditingTab(name);
     setEditingName("");
@@ -153,10 +158,12 @@ export function ReportTabsEditor({
     const original = editingTab;
     setEditingTab(null);
     if (!name || name === original || pages[name]) return;
-    const renamed = Object.fromEntries(
-      Object.entries(pages).map(([tabName, tab]) => [tabName === original ? name : tabName, tab]),
+    emitOrderedTabs(
+      tabNames.map((tabName): [string, ReportTab] => [
+        tabName === original ? name : tabName,
+        pages[tabName]!,
+      ]),
     );
-    onChange({ tabs: renamed });
     if (activeTab === original) setSelectedTab(name);
   }
 
@@ -187,22 +194,22 @@ export function ReportTabsEditor({
   }
 
   function moveTab(source: string, index: number) {
-    const entries = Object.entries(pages);
+    const entries = tabNames.map((tabName): [string, ReportTab] => [tabName, pages[tabName]!]);
     const sourceEntry = entries.find(([name]) => name === source);
     if (!sourceEntry) return;
     const remaining = entries.filter(([name]) => name !== source);
     remaining.splice(index, 0, sourceEntry);
-    onChange({ tabs: Object.fromEntries(remaining) });
+    emitOrderedTabs(remaining);
   }
 
   function removeTab(name: string) {
     if (tabNames.length <= 1) return;
-    const nextTabs = Object.fromEntries(
-      Object.entries(pages).filter(([tabName]) => tabName !== name),
-    );
-    onChange({ tabs: nextTabs });
+    const remaining = tabNames
+      .filter((tabName) => tabName !== name)
+      .map((tabName): [string, ReportTab] => [tabName, pages[tabName]!]);
+    emitOrderedTabs(remaining);
     if (activeTab === name) {
-      const nextName = Object.keys(nextTabs)[0] ?? "";
+      const nextName = remaining[0]?.[0] ?? "";
       setSelectedTab(nextName);
     }
   }
@@ -211,12 +218,12 @@ export function ReportTabsEditor({
     if (!editable) return;
     const tab = pages[activeTab];
     if (!tab) return;
-    onChange({
-      tabs: {
-        ...pages,
-        [activeTab]: { ...tab, markdown },
-      },
-    });
+    emitOrderedTabs(
+      tabNames.map((tabName): [string, ReportTab] => [
+        tabName,
+        tabName === activeTab ? { ...tab, markdown } : pages[tabName]!,
+      ]),
+    );
   }
 
   const activeContent = pages[activeTab]?.markdown ?? "";

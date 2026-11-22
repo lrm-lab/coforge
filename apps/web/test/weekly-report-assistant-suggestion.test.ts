@@ -161,7 +161,6 @@ test("body-edit tabs accept plain markdown strings as well as {markdown} objects
 });
 
 test("body-edit content accepts a flat tab map when Agents omit the tabs wrapper", () => {
-  // Incident shape: synthesizer put Summary/Research/… directly under content.
   const body = [
     "W39 周报草稿已整理完成。",
     "",
@@ -243,6 +242,39 @@ test("body-edit suggestions still parse when the closing fence is omitted", () =
     reportId: "891871b0-2bbb-4bea-ade4-821b08390cbc",
     summary: "草稿",
     content: { tabs: { Summary: { markdown: "- item\n" } } },
+  });
+});
+
+test("body-edit suggestions preserve tabOrder across jsonb key reordering", () => {
+  const body = buildWeeklyReportAssistantSuggestionBody({
+    displayText: "已整理多页草稿",
+    suggestion: {
+      type: "body-edit",
+      reportId: "891871b0-2bbb-4bea-ade4-821b08390cbc",
+      summary: "多页草稿",
+      content: {
+        tabs: {
+          A: { markdown: "third" },
+          下周计划: { markdown: "second" },
+          本周工作总结: { markdown: "first" },
+        },
+        tabOrder: ["本周工作总结", "下周计划", "A"],
+      },
+    },
+  });
+  const parsed = parseWeeklyReportAssistantSuggestion(body);
+  expect(parsed).toEqual({
+    type: "body-edit",
+    reportId: "891871b0-2bbb-4bea-ade4-821b08390cbc",
+    summary: "多页草稿",
+    content: {
+      tabs: {
+        本周工作总结: { markdown: "first" },
+        下周计划: { markdown: "second" },
+        A: { markdown: "third" },
+      },
+      tabOrder: ["本周工作总结", "下周计划", "A"],
+    },
   });
 });
 

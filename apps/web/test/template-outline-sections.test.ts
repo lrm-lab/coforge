@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 
 import {
+  normalizeReportContent,
+  orderedReportTabNames,
+} from "#src/features/records/records-content";
+import {
   alignMarkdownToSections,
   alignReportContentToSections,
   markdownToSections,
@@ -66,6 +70,7 @@ test("reportContentFromSections uses each H1 as a tab and H2 as that tab's markd
       Summary: { markdown: "## Current Works\n## Next Steps" },
       Technique: { markdown: "" },
     },
+    tabOrder: ["Summary", "Technique"],
   });
   expect(sectionsFromReportContent(content)).toEqual([
     { title: "Summary", children: ["Current Works", "Next Steps"] },
@@ -98,6 +103,7 @@ test("normalizeLeaderFormatTabs splits a legacy H1 document into tabs", () => {
       Summary: { markdown: "kept-a\n## Current Works\nkept-b" },
       Technique: { markdown: "" },
     },
+    tabOrder: ["Summary", "Technique"],
   });
 });
 
@@ -119,7 +125,36 @@ test("alignReportContentToSections keeps bodies under matching H2 titles across 
       Summary: { markdown: "kept-a\n## Current Works\nkept-b\n## Next Steps" },
       Technique: { markdown: "" },
     },
+    tabOrder: ["Summary", "Technique"],
   });
+});
+
+test("section builders preserve multi-tab order across jsonb key-length sorting", () => {
+  const sections = [
+    { title: "本周工作总结", children: ["已完成"] },
+    { title: "下周计划", children: [] },
+    { title: "A", children: [] },
+  ];
+  const created = reportContentFromSections(sections);
+  expect(created.tabOrder).toEqual(["本周工作总结", "下周计划", "A"]);
+
+  const afterJsonb = normalizeReportContent({
+    tabs: {
+      A: created.tabs!.A!,
+      下周计划: created.tabs!.下周计划!,
+      本周工作总结: created.tabs!.本周工作总结!,
+    },
+    tabOrder: created.tabOrder,
+  });
+  expect(orderedReportTabNames(afterJsonb)).toEqual(["本周工作总结", "下周计划", "A"]);
+  expect(sectionsFromReportContent(afterJsonb)).toEqual(sections);
+
+  const aligned = alignReportContentToSections(afterJsonb, [
+    { title: "本周工作总结", children: ["已完成"] },
+    { title: "A", children: [] },
+    { title: "下周计划", children: [] },
+  ]);
+  expect(aligned.tabOrder).toEqual(["本周工作总结", "A", "下周计划"]);
 });
 
 test("resetLeaderFormatPage clears the current page body and leaves other pages", () => {

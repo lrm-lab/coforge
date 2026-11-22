@@ -65,12 +65,12 @@ export function RecordSideChatHeader({
           <Button
             size="sm"
             color="tertiary"
-            className="min-w-0 flex-1 justify-start"
+            className="min-w-0 flex-1 justify-start overflow-hidden *:data-text:min-w-0 *:data-text:truncate"
             iconTrailing={ChevronDown}
             isDisabled={busy || chatSessions.length === 0}
             aria-label={m.records_side_chat_history()}
           >
-            <span className="truncate">{sessionTitle}</span>
+            {sessionTitle}
           </Button>
           <Dropdown.Popover placement="bottom start" className="w-64">
             <Dropdown.Menu
