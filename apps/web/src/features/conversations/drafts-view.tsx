@@ -113,8 +113,9 @@ function DraftListItem({ row }: { row: DraftRow }) {
             />
             <span className="line-clamp-2 min-w-0 break-words">
               {target.kind === "task" && (
-                <span className="text-tertiary">
-                  {homeLabel(row)} · #{target.number}{" "}
+                <span className="me-1.5 inline-flex items-baseline gap-1.5 text-tertiary">
+                  <span>{homeLabel(row)}</span>
+                  <span className="text-quaternary">#{target.number}</span>
                 </span>
               )}
               {row.body}

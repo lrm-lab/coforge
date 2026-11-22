@@ -148,24 +148,18 @@ function ArchivedChannelRow({
           >
             {channel.name}
           </Link>
-          <p className="text-sm text-tertiary">
-            {isPrivateChannel(channel)
-              ? m.settings_archived_channels_private()
-              : m.settings_archived_channels_public()}
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-tertiary">
+            <span>
+              {isPrivateChannel(channel)
+                ? m.settings_archived_channels_private()
+                : m.settings_archived_channels_public()}
+            </span>
             {hydrated && (
-              <>
-                {" · "}
-                <time dateTime={channel.archivedAt.toISOString()}>
-                  {m.settings_archived_channels_archived_at({
-                    time: formatDateForDisplay(
-                      channel.archivedAt,
-                      timeZone,
-                      getLocale(),
-                      timeFormat,
-                    ),
-                  })}
-                </time>
-              </>
+              <time dateTime={channel.archivedAt.toISOString()} className="text-quaternary">
+                {m.settings_archived_channels_archived_at({
+                  time: formatDateForDisplay(channel.archivedAt, timeZone, getLocale(), timeFormat),
+                })}
+              </time>
             )}
           </p>
         </div>

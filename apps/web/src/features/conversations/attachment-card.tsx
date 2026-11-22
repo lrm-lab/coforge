@@ -173,8 +173,8 @@ export function MessageAttachments({ attachments }: { attachments: readonly Atta
                 "grid gap-1",
                 row.length === 1 ? "grid-cols-1" : "grid-cols-2",
                 row.length === 3
-                  ? "auto-rows-[7rem] @min-[360px]:auto-rows-[8rem]"
-                  : "auto-rows-[8rem] @min-[360px]:auto-rows-[9rem]",
+                  ? "auto-rows-[7rem] @min-[22.5rem]:auto-rows-[8rem]"
+                  : "auto-rows-[8rem] @min-[22.5rem]:auto-rows-[9rem]",
               )}
             >
               {row.map(({ index, fit }) => {

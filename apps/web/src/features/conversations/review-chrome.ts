@@ -3,13 +3,12 @@ export const CHIP_CLASS =
 
 export const PRESSABLE_CHIP_CLASS = `${CHIP_CLASS} cursor-pointer outline-focus-ring transition-colors duration-150 hover:bg-primary_hover hover:text-secondary focus-visible:outline-2`;
 
-export const FLOATING_SURFACE_CLASS =
-  "rounded-xl border border-secondary bg-primary shadow-lg dark:shadow-none";
+export const FLOATING_SURFACE_CLASS = "rounded-xl border border-secondary bg-primary shadow-lg";
 
 export const TOOLBAR_BUTTON_ON_CLASS = "bg-active text-fg-secondary hover:bg-active";
 
 export const PANEL_HEADER_CLASS =
-  "flex h-12 shrink-0 items-center gap-1 border-b border-secondary pr-2 pl-4";
+  "flex h-12 shrink-0 items-center gap-1 border-b border-secondary pe-2 ps-4";
 
 export const PANEL_TITLE_CLASS = "min-w-0 flex-1 truncate text-sm font-medium text-primary";
 

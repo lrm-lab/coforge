@@ -48,15 +48,11 @@ export const WaitingChoiceRow = memo(function WaitingChoiceRow({
   const taskLabel = card.task && m.activity_inbox_waiting_task({ number: card.task.number });
   const place =
     channel || taskLabel ? (
-      <>
+      <span className="me-1.5 inline-flex items-center gap-1.5 text-tertiary">
         {channel && <ChannelPlace {...channel} />}
-        {channel && taskLabel && " · "}
-        {taskLabel}
-      </>
+        {taskLabel && <span>{taskLabel}</span>}
+      </span>
     ) : null;
-  const options = card.options
-    .map((option, index) => `${choiceNumber(index)}. ${option.label}`)
-    .join(" · ");
 
   async function decline() {
     try {
@@ -115,13 +111,17 @@ export const WaitingChoiceRow = memo(function WaitingChoiceRow({
               <RelativeTime
                 value={card.createdAt}
                 plain
-                className="ml-auto shrink-0 pl-2 text-xs text-quaternary tabular-nums transition-opacity group-hover:opacity-0 not-any-pointer-coarse:group-focus-within:opacity-0"
+                className="ms-auto shrink-0 ps-2 text-xs text-quaternary tabular-nums transition-opacity group-hover:opacity-0 not-any-pointer-coarse:group-focus-within:opacity-0"
               />
             </span>
             <span className="truncate text-sm text-tertiary">
-              {place && <>{place} · </>}
+              {place}
               <span className="font-semibold text-secondary">{card.preparedBy.name}: </span>
-              {options}
+              {card.options.map((option, index) => (
+                <span key={index} className="me-2 last:me-0">
+                  {choiceNumber(index)}. {option.label}
+                </span>
+              ))}
             </span>
           </span>
         </AriaLink>

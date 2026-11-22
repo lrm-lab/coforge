@@ -185,7 +185,7 @@ export function MessageActionSheet({
       data-message-actions-popover
       className={(state) =>
         cn(
-          "fixed inset-x-0 top-0 z-50 flex h-[var(--app-height,100dvh)] items-end justify-center bg-modal-scrim/70 outline-hidden backdrop-blur-[6px]",
+          "fixed inset-x-0 top-0 z-50 flex h-[var(--app-height,100dvh)] items-end justify-center bg-modal-scrim/70 outline-hidden",
           state.isEntering && "motion-enter animate-in scrim-in",
           state.isExiting && "motion-leave animate-out scrim-out",
         )
@@ -202,7 +202,7 @@ export function MessageActionSheet({
       >
         <Dialog aria-label={m.conversation_message_actions()} className="pb-safe-bottom">
           <div aria-hidden="true" className="mx-auto mt-2 h-1 w-9 rounded-full bg-quaternary/40" />
-          <div className="mx-3 mt-3 flex gap-2.5 rounded-xl bg-secondary/60 p-3">
+          <div className="mt-2 flex gap-2.5 border-b border-secondary px-4 py-3">
             <span className="shrink-0">{avatar}</span>
             <div className="flex min-w-0 flex-col gap-0.5">
               <p className="flex items-baseline gap-2">

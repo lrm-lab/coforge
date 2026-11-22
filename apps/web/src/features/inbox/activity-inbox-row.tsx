@@ -189,7 +189,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
               {time}
             </span>
             <span className={cn("truncate text-sm", unread ? "text-secondary" : "text-quaternary")}>
-              {placeLabel && <>{placeLabel} · </>}
+              {placeLabel && <span className="me-1.5 text-tertiary">{placeLabel}</span>}
               {sender}: <Preview message={item.latest} />
             </span>
           </span>

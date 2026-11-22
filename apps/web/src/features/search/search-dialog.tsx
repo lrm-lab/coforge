@@ -126,7 +126,7 @@ export function SearchDialog({
       onOpenChange={(open) => !open && onClose()}
       className="bg-overlay/30 backdrop-blur-none max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px] sm:items-start sm:[--modal-pt:12vh]"
     >
-      <Modal className="flex w-full flex-col overflow-hidden max-sm:h-full max-sm:rounded-none sm:max-w-[40rem] dark:bg-secondary">
+      <Modal className="flex w-full flex-col overflow-hidden max-sm:h-full max-sm:rounded-none sm:max-w-[40rem]">
         <Dialog
           aria-label={m.search_title()}
           data-input-focused={inputFocused ? "" : undefined}

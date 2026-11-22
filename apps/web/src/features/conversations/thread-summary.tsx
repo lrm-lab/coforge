@@ -78,15 +78,12 @@ export function ThreadPreview({ rootId, onOpen }: ThreadPartProps) {
     >
       <span
         className={cx(
-          "message-text flex items-center gap-0.5 text-md font-medium",
+          "message-text flex items-center gap-1.5 text-md font-medium",
           unread > 0 ? "text-brand-secondary" : "text-thread-reply-count",
         )}
       >
-        <span className="text-thread-reply-count">
-          {label}
-          {unread > 0 && " · "}
-        </span>
-        {unread > 0 && m.conversation_thread_unread({ count: unread })}
+        <span className="text-thread-reply-count">{label}</span>
+        {unread > 0 && <span>{m.conversation_thread_unread({ count: unread })}</span>}
         <ChevronRight aria-hidden="true" className="size-4 shrink-0 rtl:rotate-180" />
       </span>
       <span className="mt-1 flex flex-col gap-1.5">

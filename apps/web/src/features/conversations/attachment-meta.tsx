@@ -3,12 +3,11 @@ import { MessageChatSquare } from "@untitledui/icons";
 import { fileTypeLabel } from "#src/features/files/file-meta";
 import { m } from "#src/paraglide/messages";
 
-/** A file's type as a small monospace tag ("MP3", "PDF"), or nothing when it has none. */
 export function FileTypeTag({ fileName, contentType }: { fileName: string; contentType: string }) {
   const label = fileTypeLabel(fileName, contentType);
   if (!label) return null;
   return (
-    <span className="inline-flex shrink-0 items-center rounded-[4px] bg-secondary px-1 text-xs font-semibold text-tertiary ring-1 ring-secondary ring-inset">
+    <span className="inline-flex shrink-0 items-center rounded-xs bg-secondary px-1 text-xs font-semibold text-tertiary ring-1 ring-secondary ring-inset">
       {label}
     </span>
   );

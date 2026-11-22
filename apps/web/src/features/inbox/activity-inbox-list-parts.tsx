@@ -65,10 +65,7 @@ function ActivityInboxSectionHeading({
       {Icon && <Icon aria-hidden="true" className="size-3 shrink-0 text-fg-quaternary" />}
       {label}
       {count !== undefined && (
-        <span className="font-normal text-quaternary tabular-nums">
-          <span aria-hidden="true">· </span>
-          {count}
-        </span>
+        <span className="font-normal text-quaternary tabular-nums">{count}</span>
       )}
     </h2>
   );

@@ -43,10 +43,9 @@ export function SearchArtifactList({
               <span className="min-w-0 flex-1 truncate text-sm text-primary">
                 <SearchMatches text={artifact.title} terms={terms} lead={Infinity} />
               </span>
-              <span className="flex shrink-0 items-center gap-1.5 text-xs text-tertiary tabular-nums">
+              <span className="flex shrink-0 items-center gap-2 text-xs text-tertiary tabular-nums">
                 <span>{kindLabel(artifact.entryPath)}</span>
-                <span>·</span>
-                <span>v{artifact.currentVersion}</span>
+                <span className="text-quaternary">v{artifact.currentVersion}</span>
               </span>
             </Link>
           </li>

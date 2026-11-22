@@ -248,21 +248,20 @@
 
 @keyframes inline-embed-progress {
   0% {
-    transform: translateX(-100%);
-    width: 38%;
+    transform: translateX(-40%) scaleX(0.38);
   }
   50% {
-    transform: translateX(65%);
-    width: 55%;
+    transform: translateX(35%) scaleX(0.55);
   }
   100% {
-    transform: translateX(260%);
-    width: 38%;
+    transform: translateX(102%) scaleX(0.38);
   }
 }
 
 @utility inline-embed-progress {
   && {
+    transform-origin: 0 50%;
+    will-change: transform;
     animation: inline-embed-progress 1.35s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   }
 }

@@ -68,13 +68,13 @@ export function SearchTaskList({
                   onClick={onOpen}
                   className={SEARCH_ROW_CLASS}
                 >
-                  <span className="flex max-w-[40%] min-w-0 shrink-0 items-center gap-1 text-xs text-tertiary tabular-nums">
+                  <span className="flex max-w-[40%] min-w-0 shrink-0 items-center gap-1.5 text-xs text-tertiary tabular-nums">
                     {channelName ? (
                       <ChannelPlace id={id} name={channelName} />
                     ) : (
                       <span className="truncate">{m.search_task_direct()}</span>
                     )}
-                    <span className="shrink-0">· #{task.number}</span>
+                    <span className="shrink-0 text-quaternary">#{task.number}</span>
                   </span>
                   <span className="min-w-0 flex-1 truncate text-sm text-primary">
                     <SearchMatches text={task.title} terms={terms} lead={Infinity} />

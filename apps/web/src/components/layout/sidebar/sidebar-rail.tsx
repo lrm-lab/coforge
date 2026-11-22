@@ -6,24 +6,13 @@ import { UnreadBadge, UnreadDot } from "#src/components/ui/unread-marker";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 
-// Adapted from Untitled's sidebar-slim.tsx (MIT; docs/design/official-components.md §7) —
-// the demo hardcodes Untitled's own logo/account card with no override
-// props. The rail is the collapsed desktop sidebar; the expanded one is `sidebar-expanded.tsx`.
-
-/**
- * 3.5rem (56px at the default 16px root). The collapsed rail is icons only.
- * The hit target is the 2.75rem icon button, and the name tooltip anchors to
- * that button, not the rail edge. 5rem still left a gutter that pushed the
- * tooltip away from the icon once the caption was gone.
- */
 export const SIDEBAR_RAIL_WIDTH = "3.5rem";
 
-// The rail's icon: a 2.75rem hit target around a 2.5rem tile, shared by its links and buttons.
 const RAIL_TARGET =
   "group mx-auto flex size-11 items-center justify-center rounded-lg outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2";
 const RAIL_TILE =
   "relative flex size-10 items-center justify-center rounded-lg transition-colors duration-100 ease-out";
-const RAIL_ICON = "size-5 stroke-[2.4] transition-colors duration-100 ease-out";
+const RAIL_ICON = "size-5 transition-colors duration-100 ease-out";
 
 type RailItemType = NavItemType & {
   icon: FC<{ className?: string }>;
