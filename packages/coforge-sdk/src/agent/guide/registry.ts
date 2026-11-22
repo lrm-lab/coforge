@@ -1,10 +1,14 @@
 import { ARTIFACTS_GUIDE_ENTRY } from "./entries/artifacts";
+import { CLOUD_COMPUTER_SKILLS_GUIDE_ENTRY } from "./entries/cloud-computer-skills";
+import { CLOUD_DESKTOP_GUIDE_ENTRY } from "./entries/cloud-desktop";
 import { TASKS_GUIDE_ENTRY } from "./entries/tasks";
 import type { FeatureGuideContext, FeatureGuideEntry, ResolvedFeatureGuide } from "./types";
 
 export const FIRST_PARTY_GUIDE_ENTRIES: readonly FeatureGuideEntry[] = [
   TASKS_GUIDE_ENTRY,
   ARTIFACTS_GUIDE_ENTRY,
+  CLOUD_DESKTOP_GUIDE_ENTRY,
+  CLOUD_COMPUTER_SKILLS_GUIDE_ENTRY,
 ];
 
 export function resolveFeatureGuides(

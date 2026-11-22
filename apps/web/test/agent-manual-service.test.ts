@@ -4,6 +4,7 @@ import {
   resolveManualGet,
   resolveManualSearch,
 } from "#src/server/agents/agent-manual.server";
+import { manualTopicUsesCapability } from "#src/server/agents/manual/manual-registry.server";
 
 const VALID_INTENT = "Open a pull request for a bound repository";
 const VALID_REASON = "Confirm the exact clone and push commands to use";
@@ -263,10 +264,13 @@ test("action-cards manual and search omit cloud-desktop cards unless cloudDeskto
   });
   expect(cloudTopic.status).toBe(200);
   if (cloudTopic.status !== 200) throw new Error("expected a hit");
+  expect(cloudTopic.body.content.startsWith(localTopic.body.content.trimEnd())).toBe(true);
   expect(cloudTopic.body.content).toContain("page:fill");
   expect(cloudTopic.body.content).toContain("desktop:takeover");
   expect(cloudTopic.body.content).toContain("## Filling a page");
   expect(cloudTopic.body.content).toContain("## Opening the cloud desktop");
+  expect(manualTopicUsesCapability("action-cards", "cloudDesktop")).toBe(true);
+  expect(manualTopicUsesCapability("tasks", "cloudDesktop")).toBe(false);
 
   const cloudSearch = resolveManualSearch({
     query: "takeover",

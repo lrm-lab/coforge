@@ -11,7 +11,10 @@ instructions. It discovers current commands through the built-in Manual. It can 
 with channels, messages, Tasks, reminders, Projects, Records, Agents, Computers and
 platform settings. Operations use the questioner's current permissions; it does not
 grant members admin privileges. External chat operations are posted as the member.
-Private assistant replies remain in that member's assistant DM.
+Private assistant replies remain in that member's assistant DM. When bound to a local
+Computer (`COFORGE_CLOUD_COMPUTER` off), both the platform playbook and standing
+instructions omit cloud-desktop (`page:fill`, `desktop:takeover`) and cloud-computer
+skill guidance.
 
 ## Naming
 

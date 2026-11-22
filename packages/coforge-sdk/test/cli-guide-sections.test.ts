@@ -7,11 +7,16 @@ import {
 } from "../src/agent/guide";
 
 describe("cli-guide-sections", () => {
-  test("managed audience preserves daemon standing prompt sections verbatim", () => {
+  test("managed audience preserves daemon standing prompt sections and capability feature guides", () => {
     const sections = buildCoforgeCliGuideSections({
       audience: "managed",
-      capabilities: { cloudDesktop: true },
-      cloudSkillsGuidance: "Cloud skills here.\n",
+      capabilities: {
+        cloudDesktop: true,
+        cloudSkills: {
+          sharedDirectory: "/workspace/skills",
+          agentDirectory: "/workspace/agent-skills/agent-1",
+        },
+      },
       extraCriticalRules: ["Extra rule."],
     });
     expect(sections.communication).toContain("without asking");
@@ -21,29 +26,42 @@ describe("cli-guide-sections", () => {
     expect(sections.messages).toContain("coforge message continue <id> a|b|c");
     expect(sections.messages).toContain("A `held` count means the daemon has not shown");
     expect(sections.messages).toContain("`system.reminder` delivers due reminders as App items");
-    expect(sections.execution).toContain("Cloud skills here.");
     expect(sections.execution).toContain("Local memory: save decisions/corrections with sources.");
+    expect(sections.execution).not.toContain("Persistent skills on this cloud computer");
     expect(sections.safety).toContain("Sub-agents have no CoForge identity");
-    expect(sections.safety).toContain("post a `page:fill` action card");
+    expect(sections.safety).not.toContain("page:fill");
     expect(sections.safety).toContain("Extra rule.");
     expect(sections.tasks).toContain("## Tasks\n");
     expect(sections.artifacts).toContain("## Artifacts\n");
     expect(sections.artifacts).toContain("coforge artifact push");
     expect(sections.artifacts).toContain("?embed=1");
     expect(sections.artifacts).toContain("coforge manual get artifacts");
+    expect(sections.cloudDesktop).toContain("## Cloud desktop\n");
+    expect(sections.cloudDesktop).toContain("post a `page:fill` action card");
+    expect(sections.cloudDesktop).toContain("`desktop:takeover`");
+    expect(sections.cloudComputerSkills).toContain("## Cloud computer skills\n");
+    expect(sections.cloudComputerSkills).toContain("/workspace/skills/<name>/SKILL.md");
+    expect(sections.cloudComputerSkills).toContain(
+      "/workspace/agent-skills/agent-1/<name>/SKILL.md",
+    );
   });
 
-  test("external audience omits Computer/daemon/memory-file assumptions and keeps shared rules", () => {
+  test("external audience omits Computer/daemon/memory-file and cloud-computer guides while keeping shared rules", () => {
     const sections = buildCoforgeCliGuideSections({
       audience: "external",
-      capabilities: { cloudDesktop: true },
-      cloudSkillsGuidance: "Cloud skills here.\n",
+      capabilities: {
+        cloudDesktop: true,
+        cloudSkills: {
+          sharedDirectory: "/workspace/skills",
+          agentDirectory: "/workspace/agent-skills/agent-1",
+        },
+      },
     });
     const combined = Object.values(sections).join("\n\n");
     expect(combined).not.toContain("Agent workspace");
     expect(combined).not.toContain("held` count");
     expect(combined).not.toContain("system.reminder");
-    expect(combined).not.toContain("Cloud skills here.");
+    expect(combined).not.toContain("Persistent skills on this cloud computer");
     expect(combined).not.toContain("MEMORY.md");
     expect(combined).not.toContain("page:fill");
     expect(combined).not.toContain("coforge message continue");
@@ -59,10 +77,31 @@ describe("cli-guide-sections", () => {
     expect(combined).toContain("?embed=1");
   });
 
-  test("feature guide registry omits Artifacts when features.artifacts is false", () => {
-    expect(FIRST_PARTY_GUIDE_ENTRIES.map((entry) => entry.id)).toEqual(["tasks", "artifacts"]);
+  test("feature guide registry gates Artifacts and cloud-computer entries declaratively", () => {
+    expect(FIRST_PARTY_GUIDE_ENTRIES.map((entry) => entry.id)).toEqual([
+      "tasks",
+      "artifacts",
+      "cloudDesktop",
+      "cloudComputerSkills",
+    ]);
     const enabled = resolveFeatureGuides({ audience: "managed" });
     expect(enabled.map((entry) => entry.id)).toEqual(["tasks", "artifacts"]);
+    const cloudEnabled = resolveFeatureGuides({
+      audience: "managed",
+      capabilities: {
+        cloudDesktop: true,
+        cloudSkills: {
+          sharedDirectory: "/workspace/skills",
+          agentDirectory: "/workspace/agent-skills/agent-1",
+        },
+      },
+    });
+    expect(cloudEnabled.map((entry) => entry.id)).toEqual([
+      "tasks",
+      "artifacts",
+      "cloudDesktop",
+      "cloudComputerSkills",
+    ]);
     const disabled = resolveFeatureGuides({
       audience: "managed",
       features: { artifacts: false },
@@ -73,6 +112,8 @@ describe("cli-guide-sections", () => {
       features: { artifacts: false },
     });
     expect(sections.artifacts).toBeUndefined();
+    expect(sections.cloudDesktop).toBeUndefined();
+    expect(sections.cloudComputerSkills).toBeUndefined();
     expect(sections.tasks).toContain("## Tasks\n");
 
     const checksOff = buildCoforgeCliGuideSections({

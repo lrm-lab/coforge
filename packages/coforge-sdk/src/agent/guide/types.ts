@@ -6,8 +6,14 @@ export type GuideFeatures = {
   artifactChecks?: boolean;
 };
 
+export type CloudComputerSkillsCapability = {
+  readonly sharedDirectory: string;
+  readonly agentDirectory: string;
+};
+
 export type GuideCapabilities = {
   cloudDesktop?: boolean;
+  cloudSkills?: CloudComputerSkillsCapability;
 };
 
 export type CoforgeCliGuideOptions = {
@@ -15,7 +21,6 @@ export type CoforgeCliGuideOptions = {
   features?: GuideFeatures;
   extraCriticalRules?: readonly string[];
   capabilities?: GuideCapabilities;
-  cloudSkillsGuidance?: string;
 };
 
 export type FeatureGuideContext = {

@@ -7,7 +7,10 @@ import {
   resolveManualGet,
   type AgentManualEventRepository,
 } from "#src/server/agents/agent-manual.server";
-import type { AgentManualExperiments } from "#src/server/agents/manual/manual-registry.server";
+import {
+  manualTopicUsesCapability,
+  type AgentManualExperiments,
+} from "#src/server/agents/manual/manual-registry.server";
 
 export type AgentManualGetPrincipal = { workspaceId: string; agentId: string };
 
@@ -44,7 +47,8 @@ export const Route = createFileRoute("/api/agent/v1/manual")({
     middleware: [agentAuthMiddleware],
     handlers: {
       GET: async ({ request, context: { principal, db } }) => {
-        const needsCloudCheck = new URL(request.url).searchParams.get("topic") === "action-cards";
+        const topic = new URL(request.url).searchParams.get("topic") ?? "";
+        const needsCloudCheck = manualTopicUsesCapability(topic, "cloudDesktop");
         return handleAgentManualGet(
           request,
           principal,

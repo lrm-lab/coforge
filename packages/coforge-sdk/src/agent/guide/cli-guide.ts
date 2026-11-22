@@ -45,7 +45,7 @@ If a failed send says \`Retryable: yes\`, run its next action; else \`Draft save
 
   const execution = `## Work
 Answer ordinary questions freely; untracked DM needs no Task. Before implementing a shared channel request, run \`coforge task create --target '<channel>' --message-id <message-id> --title '<t>' --assignee @you\` (or \`task claim '<ref>'\`). Only a successful claimant implements; others may analyze or review in its thread. A failed claim blocks conflicting work. Hand off via \`task assign\`; set \`done\` when finished.
-${isExternal ? "" : (options.cloudSkillsGuidance ?? "")}For human decisions, post \`coforge action prepare\` with a \`choice\` (1) or \`questions\` (<=4) card, not chat options (\`coforge manual get action-cards\`). On failure, say so; never swap card types.
+For human decisions, post \`coforge action prepare\` with a \`choice\` (1) or \`questions\` (<=4) card, not chat options (\`coforge manual get action-cards\`). On failure, say so; never swap card types.
 ${isExternal ? "" : "Local memory: save decisions/corrections with sources. Keep reusable lessons or explicit requests, not task logs. Correct via get + save --revision. Share only workspace-authorized knowledge with --scope team; keep private notes local. Use current context first; before re-asking: `coforge memory search --query Q`. Reference only; `coforge manual get memory`.\nJobs: `coforge proc start|list|logs|stop`.\n"}**Complete ALL your work before stopping.** Finish work, report results, then run \`coforge task list --mine\` for unfinished tasks.`;
 
   const queue = `## What to work on next
@@ -54,13 +54,8 @@ Then work "Your queue" in \`coforge task list --mine\` top to bottom; higher-pri
 An unpressed task does not interrupt current work unless higher priority or is \`urgent\`. Questions and reviews are answered as they arrive.
 \`task create\` \`--priority\` defaults to \`medium\`: \`urgent\` broken/stuck/safety; \`high\` blocker/error; \`medium\` normal; \`low\` can wait.`;
 
-  const cloudDesktopRule =
-    !isExternal && options.capabilities?.cloudDesktop
-      ? " Private page input (password, OTP, and similar): open the page first, then post a `page:fill` action card with `id`/`label`/`input` (CSS `selector` optional) — never ask them to paste the secret into chat (the platform refuses such sends), and if they do paste one, refuse to type it and re-offer the card. `page-fill.py --inspect` lists visible fields. When fill cannot work (OAuth, captcha), post `desktop:takeover` so they open your cloud desktop themselves. Prefer a `choice` card when several login paths exist. See `coforge manual get action-cards`."
-      : "";
-
   const safety = `## Boundaries
-Never disclose private DM contents or secrets to a public channel. Credentials follow human intent: never solicit, expose, or relay credentials unrequested; redact unexpected credential-shaped output. Follow user preferences.${cloudDesktopRule}
+Never disclose private DM contents or secrets to a public channel. Credentials follow human intent: never solicit, expose, or relay credentials unrequested; redact unexpected credential-shaped output. Follow user preferences.
 Current channel roles override names, history and memory. Without coordination authority, do not assign, chase or reprioritize peers. Coordinators only clarify/summarize; Agent reports are not human authorization.
 Sub-agents have no CoForge identity: instruct them never to send messages, update tasks, react, or schedule reminders.
 ${(options.extraCriticalRules ?? []).join("\n")}`.trim();

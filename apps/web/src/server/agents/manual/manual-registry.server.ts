@@ -15,7 +15,14 @@ import remindersBody from "#src/server/agents/manual/topics/reminders.md?raw";
 import tasksBody from "#src/server/agents/manual/topics/tasks.md?raw";
 import workspaceCleanupBody from "#src/server/agents/manual/topics/workspace-cleanup.md?raw";
 
+export type AgentManualCapability = "cloudDesktop";
+
 export type AgentManualExperiments = { artifacts?: boolean; cloudDesktop?: boolean };
+
+export type AgentManualTopicAddendum = {
+  capability: AgentManualCapability;
+  body: string;
+};
 
 export type AgentManualTopic = {
   slug: string;
@@ -23,20 +30,8 @@ export type AgentManualTopic = {
   summary: string;
   body: string;
   experiment?: "artifacts";
+  addenda?: readonly AgentManualTopicAddendum[];
 };
-
-function buildCloudDesktopActionCardsBody(): string {
-  return actionCardsBody
-    .replace(
-      "- `choice` and `questions` (below)",
-      "- `page:fill`, `desktop:takeover`, `choice`, and `questions` (below)",
-    )
-    .replace(
-      "Only\n`executed` means the channel, Agent, membership, or choice now stands;",
-      "Only\n`executed` means the channel, Agent, membership, fill, desktop step, or choice now stands;",
-    )
-    .replace("\n## Choices\n", `\n${actionCardsCloudDesktopBody.trim()}\n\n## Choices\n`);
-}
 
 export const MANUAL_TOPICS: readonly AgentManualTopic[] = [
   {
@@ -45,6 +40,7 @@ export const MANUAL_TOPICS: readonly AgentManualTopic[] = [
     summary:
       "How to post a typed action card with coforge action prepare, the supported kinds, and how to tell pending from executed without claiming you created the resource.",
     body: actionCardsBody,
+    addenda: [{ capability: "cloudDesktop", body: actionCardsCloudDesktopBody }],
   },
   {
     slug: "apps",
@@ -154,14 +150,31 @@ export function manualDocVersion(content: string): string {
   return new Bun.CryptoHasher("sha256").update(content).digest("hex").slice(0, 16);
 }
 
+export function manualTopicUsesCapability(
+  slug: string,
+  capability: AgentManualCapability,
+): boolean {
+  const topic = MANUAL_TOPICS.find((entry) => entry.slug === slug);
+  return topic?.addenda?.some((addendum) => addendum.capability === capability) ?? false;
+}
+
+function renderTopicBody(topic: AgentManualTopic, experiments?: AgentManualExperiments): string {
+  const activeAddenda = topic.addenda
+    ?.filter((addendum) => experiments?.[addendum.capability] === true)
+    .map((addendum) => addendum.body.trim())
+    .filter(Boolean);
+  if (!activeAddenda?.length) return topic.body;
+  return `${topic.body.trimEnd()}\n\n${activeAddenda.join("\n\n")}\n`;
+}
+
 export function manualTopicsFor(experiments?: AgentManualExperiments): readonly AgentManualTopic[] {
   return MANUAL_TOPICS.filter(
     (topic) => topic.experiment === undefined || experiments?.[topic.experiment] !== false,
-  ).map((topic) =>
-    topic.slug === "action-cards" && experiments?.cloudDesktop === true
-      ? { ...topic, body: buildCloudDesktopActionCardsBody() }
-      : topic,
-  );
+  ).map((topic) => {
+    if (!topic.addenda?.length) return topic;
+    const body = renderTopicBody(topic, experiments);
+    return body === topic.body ? topic : { ...topic, body };
+  });
 }
 
 /** The `index` topic: a generated markdown catalog, never hand-maintained separately from
