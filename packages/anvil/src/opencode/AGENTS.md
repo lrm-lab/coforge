@@ -44,4 +44,6 @@ These rules extend [`../../AGENTS.md`](../../AGENTS.md).
   the SQLite path resolved from the child's environment. An Agent keeps its place until ACP
   setup finishes or the failed child's tree exits. A cancelled or timed-out waiter never spawns.
   After unconfirmed cleanup, queued startups check the existing process owner for exit before
-  admitting the next child. Probe model iteration and live turns run outside this queue.
+  admitting the next child. Case variants share a queue only when the filesystem treats them as
+  the same name, or its case behavior cannot be confirmed. Probe model iteration and live turns
+  run outside this queue.

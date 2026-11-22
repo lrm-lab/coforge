@@ -1,4 +1,4 @@
-import { readlink, realpath } from "node:fs/promises";
+import { mkdtemp, readlink, realpath, rmdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { AcpTimeoutError } from "#src/acp/connection";
@@ -6,12 +6,22 @@ import { AgentProcessCleanupError } from "#src/contract";
 import type { JsonlProcess } from "#src/jsonl-process";
 
 type StartupQueue = {
+  path: string;
   waiters: Set<() => void>;
   unconfirmedProcess?: JsonlProcess;
   checking?: boolean;
 };
 
-const queues = new Map<string, StartupQueue>();
+type StartupQueues = {
+  paths: Map<string, StartupQueue>;
+  caseSensitive?: Promise<boolean>;
+};
+
+const queues = new Map<string, StartupQueues>();
+
+function foldedPath(path: string) {
+  return path.normalize("NFC").toLowerCase();
+}
 
 async function canonicalPath(path: string, links = new Set<string>()): Promise<string> {
   try {
@@ -36,17 +46,46 @@ async function databaseKey(cwd: string, environment: Readonly<Record<string, str
   const home =
     (process.platform === "win32" ? environment.USERPROFILE : environment.HOME) || homedir();
   const data = environment.XDG_DATA_HOME || join(home, ".local", "share");
-  const key = await canonicalPath(resolve(cwd, data, "opencode", database));
-  return process.platform === "win32" ? key.toLowerCase() : key;
+  return canonicalPath(resolve(cwd, data, "opencode", database));
 }
 
-function release(key: string, queue: StartupQueue) {
+async function isCaseSensitive(directory: string): Promise<boolean> {
+  let probe: string;
+  try {
+    probe = await mkdtemp(join(directory, "coforge-opencode-case-"));
+  } catch (error) {
+    const parent = dirname(directory);
+    if ((error as NodeJS.ErrnoException).code === "ENOENT" && parent !== directory)
+      return isCaseSensitive(parent);
+    throw error;
+  }
+  try {
+    const actual = await stat(probe);
+    const folded = await stat(join(dirname(probe), basename(probe).toUpperCase())).catch(
+      (error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+        return undefined;
+      },
+    );
+    return folded === undefined || actual.dev !== folded.dev || actual.ino !== folded.ino;
+  } finally {
+    await rmdir(probe);
+  }
+}
+
+function release(queue: StartupQueue) {
   const next = queue.waiters.values().next().value;
-  if (next) next();
-  else queues.delete(key);
+  if (next) {
+    next();
+    return;
+  }
+  const key = foldedPath(queue.path);
+  const bucket = queues.get(key);
+  bucket?.paths.delete(queue.path);
+  if (bucket?.paths.size === 0) queues.delete(key);
 }
 
-async function confirmExit(key: string, queue: StartupQueue) {
+async function confirmExit(queue: StartupQueue) {
   const process = queue.unconfirmedProcess;
   if (!process || queue.checking) return;
   queue.checking = true;
@@ -54,7 +93,7 @@ async function confirmExit(key: string, queue: StartupQueue) {
     while (queue.waiters.size) {
       if (await process.waitForOwnedTreeExit(250).catch(() => false)) {
         queue.unconfirmedProcess = undefined;
-        release(key, queue);
+        release(queue);
         return;
       }
       await Bun.sleep(250);
@@ -64,17 +103,34 @@ async function confirmExit(key: string, queue: StartupQueue) {
   }
 }
 
-async function takeStartupSlot(key: string, timeoutMs: number, signal?: AbortSignal) {
+async function takeStartupSlot(
+  path: string,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<StartupQueue> {
   signal?.throwIfAborted();
-  const queue = queues.get(key);
+  const key = foldedPath(path);
+  const bucket: StartupQueues = queues.get(key) ?? { paths: new Map<string, StartupQueue>() };
+  queues.set(key, bucket);
+  let queue = bucket.paths.get(path);
+  if (!queue && bucket.paths.size) {
+    const caseSensitive = await (bucket.caseSensitive ??= isCaseSensitive(dirname(path)).catch(
+      () => false,
+    ));
+    if (queues.get(key) !== bucket) return takeStartupSlot(path, timeoutMs, signal);
+    signal?.throwIfAborted();
+    queue = bucket.paths.get(path);
+    if (!caseSensitive) queue ??= bucket.paths.values().next().value;
+  }
   if (!queue) {
-    const acquired: StartupQueue = { waiters: new Set() };
-    queues.set(key, acquired);
+    const acquired: StartupQueue = { path, waiters: new Set() };
+    bucket.paths.set(path, acquired);
     return acquired;
   }
+  const waiting = queue;
   await new Promise<void>((resolve, reject) => {
     const leave = () => {
-      queue.waiters.delete(enter);
+      waiting.waiters.delete(enter);
       clearTimeout(timer);
       signal?.removeEventListener("abort", cancel);
     };
@@ -90,11 +146,11 @@ async function takeStartupSlot(key: string, timeoutMs: number, signal?: AbortSig
       leave();
       reject(new AcpTimeoutError("opencode acp timed out waiting for database startup"));
     }, timeoutMs);
-    queue.waiters.add(enter);
+    waiting.waiters.add(enter);
     signal?.addEventListener("abort", cancel, { once: true });
-    void confirmExit(key, queue);
+    void confirmExit(waiting);
   });
-  return queue;
+  return waiting;
 }
 
 export async function runOpenCodeStartup<T>(
@@ -121,9 +177,9 @@ export async function runOpenCodeStartup<T>(
     }
     throw error;
   } finally {
-    if (key !== undefined && queue) {
-      if (queue.unconfirmedProcess) void confirmExit(key, queue);
-      else release(key, queue);
+    if (queue) {
+      if (queue.unconfirmedProcess) void confirmExit(queue);
+      else release(queue);
     }
   }
 }

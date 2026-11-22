@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
@@ -288,3 +288,50 @@ test("dual cleanup failures retain the queue until a late exit can be confirmed"
     await rm(cwd, { recursive: true, force: true });
   }
 }, 8000);
+
+test("cold database names follow the filesystem's case semantics", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "anvil-oc-startup-case-"));
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const spawned: string[] = [];
+  const host = startupHost((env) => spawned.push(env.TEST_LAUNCH ?? ""));
+  const provider = new OpenCodeAcpProvider({ command, host });
+  const runs: Promise<AgentSession>[] = [];
+  try {
+    await mkdir(join(cwd, "case-sample"));
+    const caseInsensitive = await stat(join(cwd, "CASE-SAMPLE")).then(
+      () => true,
+      (error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+        return false;
+      },
+    );
+    const open = (name: string, onSessionId?: AgentSessionOptions["onSessionId"]) => {
+      const session = provider.createAgentSession({
+        agentWorkspaceDirectory: cwd,
+        instructions: name,
+        onSessionId,
+        environment: { OPENCODE_DB: join(cwd, name), TEST_LAUNCH: name },
+      });
+      runs.push(session);
+      return session;
+    };
+    const first = open("DATA.db", async () => {
+      entered.resolve();
+      await release.promise;
+    });
+    await Promise.race([entered.promise, first]);
+    const alias = open("data.db");
+    await open("separate.db");
+    if (!caseInsensitive) await alias;
+    expect(spawned.includes("data.db")).toBe(!caseInsensitive);
+    release.resolve();
+    await Promise.all(runs);
+    expect(spawned).toContain("data.db");
+  } finally {
+    release.resolve();
+    for (const result of await Promise.allSettled(runs))
+      if (result.status === "fulfilled") await result.value.dispose();
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
