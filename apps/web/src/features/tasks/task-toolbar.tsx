@@ -33,16 +33,9 @@ import {
 } from "./task-filters";
 import { statusLabel, type TaskLayout } from "./task-workflow";
 
-/** The status choices in the board's column order; read per render, so the language follows. */
 const STATUS_OPTIONS = (statuses: readonly TaskStatus[]): PickerOption[] =>
   statuses.map((value) => ({ id: value, label: statusLabel(value) }));
 
-/**
- * A Task board's toolbar: "Filter" (owner, Project, labels and status, each a submenu where
- * several may be picked; owners, Projects and labels show how many Tasks each has) followed by
- * one removable chip per filter in use, and the board or list switch on
- * the right (board or list, and which parts of a Task show).
- */
 export function TaskToolbar({
   tasks,
   filter,
@@ -58,22 +51,16 @@ export function TaskToolbar({
 }: {
   tasks: readonly FilterableTask[];
   filter: TaskFilter;
-  /** The statuses shown; none picked shows every status. */
   statuses: readonly TaskStatus[];
   availableStatuses?: readonly TaskStatus[];
   layout: TaskLayout;
   onFilterChange: (filter: TaskFilter) => void;
   onStatusesChange: (statuses: readonly TaskStatus[]) => void;
   onLayoutChange: (layout: TaskLayout) => void;
-  /** One Project's board: every Task shares its Project, so none is offered. */
   project?: boolean;
-  /** A Project's task tree shows (task #462): its Tasks span conversations, so the channel picks
-   * are offered; it lists no finished Task and no card, so Display offers only the layout. */
   tree?: boolean;
-  /** The board's own button (a conversation's "Create task"), after the switch. */
   action?: ReactNode;
 }) {
-  // Counted over every Task, so the numbers hold still while picking.
   const owners = useMemo(
     () =>
       ownerOptions(tasks).map((option): PickerOption => ({
@@ -86,7 +73,6 @@ export function TaskToolbar({
                 kind: "identity",
                 name: option.name,
                 src: option.avatarUrl,
-                // The ids give an Agent its mascot and a person their status dot (task #521).
                 ...(option.kind === "agent" ? { agentId: option.id } : { userId: option.id }),
               },
         ...(option.handle !== undefined && agentHandle(option.handle)),
@@ -123,7 +109,6 @@ export function TaskToolbar({
     [tasks],
   );
   const pickedChannels = tree ? (filter.channels ?? []) : [];
-  // A pick no listed Task has (a saved link, an older finished Task's owner) has no name here.
   const labelsOf = (options: readonly PickerOption[], picked: readonly string[], none: string) =>
     picked.map(
       (id) =>
@@ -174,10 +159,9 @@ export function TaskToolbar({
   const chips = candidates.filter((chip) => chip !== false && chip !== undefined);
 
   return (
-    <div className="flex min-h-11 shrink-0 items-center justify-between gap-3 px-4 py-1.5 md:px-6">
+    <div className="flex min-h-11 shrink-0 items-center justify-between gap-3 px-4 py-1.5 max-sm:flex-wrap md:px-6">
       <div className="flex min-w-0 flex-wrap items-center gap-1">
         <Dropdown.Root>
-          {/* The two views of the board read alike, and Filter's icon starts on the page's edge. */}
           <Button size="sm" color="tertiary" iconLeading={FilterLines} className="-ml-3">
             {m.tasks_filter()}
           </Button>
@@ -209,7 +193,6 @@ export function TaskToolbar({
                 name={m.tasks_labels()}
                 options={labels}
                 picked={filter.labels}
-                // "No label" stands alone: it cannot be had together with a label.
                 onChange={(picked) => {
                   const fresh = picked.filter((id) => !filter.labels.includes(id));
                   onFilterChange({
@@ -220,7 +203,6 @@ export function TaskToolbar({
                   });
                 }}
               />
-              {/* Several statuses at once, picked like owners and labels (task #506). */}
               <FilterSubmenu
                 name={m.tasks_overview_status()}
                 options={STATUS_OPTIONS(availableStatuses)}
@@ -232,31 +214,27 @@ export function TaskToolbar({
             </Dropdown.Menu>
           </Dropdown.Popover>
         </Dropdown.Root>
-        {
-          // Removing one moves focus to its neighbour, or to the group once none is left, so the
-          // group stays mounted (React Aria TagGroup).
-          <TagGroup
-            aria-label={m.tasks_filters_in_use()}
-            onRemove={(keys) => {
-              for (const chip of chips) if (keys.has(chip.id)) chip.remove();
-            }}
-          >
-            <TagList className="flex flex-wrap items-center gap-2">
-              {chips.map((chip) => (
-                <Tag
-                  key={chip.id}
-                  id={chip.id}
-                  textValue={chip.label}
-                  className="inline-flex h-7 max-w-[20rem] cursor-default items-center gap-1 rounded-md border border-secondary pr-1.5 pl-2.5 text-xs text-secondary outline-focus-ring focus-visible:outline-2"
-                >
-                  <span className="truncate">{chip.content ?? chip.label}</span>
-                  {/* React Aria names it "<this label> <the chip>". */}
-                  <TagCloseX size="md" aria-label={m.tasks_filter_remove()} />
-                </Tag>
-              ))}
-            </TagList>
-          </TagGroup>
-        }
+        <TagGroup
+          aria-label={m.tasks_filters_in_use()}
+          className="max-w-full min-w-0"
+          onRemove={(keys) => {
+            for (const chip of chips) if (keys.has(chip.id)) chip.remove();
+          }}
+        >
+          <TagList className="flex min-w-0 flex-wrap items-center gap-2">
+            {chips.map((chip) => (
+              <Tag
+                key={chip.id}
+                id={chip.id}
+                textValue={chip.label}
+                className="inline-flex h-7 max-w-full min-w-0 cursor-default items-center gap-1 rounded-md border border-secondary pr-1.5 pl-2.5 text-xs text-secondary outline-focus-ring focus-visible:outline-2 sm:max-w-[20rem]"
+              >
+                <span className="min-w-0 truncate">{chip.content ?? chip.label}</span>
+                <TagCloseX size="md" aria-label={m.tasks_filter_remove()} />
+              </Tag>
+            ))}
+          </TagList>
+        </TagGroup>
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <LayoutSwitch layout={layout} onLayoutChange={onLayoutChange} />
@@ -272,7 +250,6 @@ function ownerLabel(option: OwnerOption) {
   return option.name;
 }
 
-/** Up to two names, then how many more. */
 function namesLabel(names: readonly string[]) {
   return names.length <= 2
     ? names.join(", ")
@@ -281,7 +258,6 @@ function namesLabel(names: readonly string[]) {
 
 type Chip = { id: string; label: string; content?: ReactNode; remove: () => void };
 
-/** The owner chip with a face before each name shown (task #521); the others stay text. */
 function ownersChip(
   options: readonly PickerOption[],
   picked: readonly string[],
@@ -293,6 +269,7 @@ function ownersChip(
     return (
       <ActorName
         key={id}
+        inline
         actor={{
           kind: face.agentId ? "agent" : "user",
           id: face.agentId ?? face.userId,
@@ -328,7 +305,7 @@ function FilterSubmenu({
   return (
     <Dropdown.SubmenuTrigger>
       <Dropdown.Item label={name} />
-      <Dropdown.SubmenuPopover className="w-64">
+      <Dropdown.SubmenuPopover className="w-64 [position-try-fallbacks:flip-block,--cascade-submenu-below-start,flip-inline,flip-inline_flip-block]">
         <PickerMenu
           label={name}
           options={options}

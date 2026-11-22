@@ -1,4 +1,6 @@
+import { mentionToken } from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { humanLabel } from "#src/lib/human-label";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
@@ -11,18 +13,35 @@ import { readTaskText, TASK_MEMBER_SELECT } from "./task-view.server";
 export const TASK_DUE_SWEEP_INTERVAL_MS = 60_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-type MemberRow = {
+export type DueMemberRow = {
   id: string;
   userId: string | null;
   agentId: string | null;
-  user: { id: string; username: string; name: string | null } | null;
-  agent: { id: string; name: string } | null;
+  user: { username: string; displayName?: string | null } | null;
+  agent: { name: string } | null;
 };
 
-function memberHandle(member: MemberRow): string | null {
+function memberHandle(member: DueMemberRow): string | null {
   if (member.agent) return member.agent.name;
   if (member.user) return member.user.username;
   return null;
+}
+
+export function memberMention(member: DueMemberRow): string | null {
+  if (member.agentId && member.agent) return mentionToken("agent", member.agentId);
+  if (member.userId && member.user) return mentionToken("user", member.userId);
+  return null;
+}
+
+export function senderNoticeLabel(
+  sender: {
+    user: { username: string; displayName?: string | null } | null;
+    agent: { name: string } | null;
+  } | null,
+): string {
+  if (sender?.agent?.name) return `@${sender.agent.name}`;
+  if (sender?.user) return humanLabel(sender.user);
+  return "system";
 }
 
 function formatDueForNotice(dueAt: Date, dueHasTime: boolean): string {
@@ -32,9 +51,9 @@ function formatDueForNotice(dueAt: Date, dueHasTime: boolean): string {
   return dueAt.toISOString();
 }
 
-function buildDueNoticeBody(input: {
-  primaryHandle: string;
-  ccHandle: string | null;
+export function buildDueNoticeBody(input: {
+  primaryMention: string;
+  ccMention: string | null;
   occurrence: number;
   title: string;
   status: string;
@@ -42,11 +61,11 @@ function buildDueNoticeBody(input: {
   dueHasTime: boolean;
   lastDiscussion: string;
 }): string {
-  const cc = input.ccHandle ? ` (CC @${input.ccHandle})` : "";
+  const cc = input.ccMention ? ` (CC ${input.ccMention})` : "";
   const heading =
     input.occurrence === 1
-      ? `@${input.primaryHandle}${cc} Task due: "${input.title}"`
-      : `@${input.primaryHandle}${cc} Overdue reminder #${input.occurrence}: "${input.title}"`;
+      ? `${input.primaryMention}${cc} Task due: "${input.title}"`
+      : `${input.primaryMention}${cc} Overdue reminder #${input.occurrence}: "${input.title}"`;
   return [
     heading,
     `Status: ${input.status} | Due: ${formatDueForNotice(input.dueAt, input.dueHasTime)}`,
@@ -55,12 +74,6 @@ function buildDueNoticeBody(input: {
   ].join("\n");
 }
 
-/**
- * Periodically scans open tasks whose `dueAt <= now` (unlocked, backed by `tasks_dueAt_open_idx`),
- * claims `(taskId, dueAt, targetOccurrence)` via `INSERT ... ON CONFLICT DO NOTHING RETURNING`
- * so multi-instance workers never double-notify, and posts a targeted system notice in the task's
- * discussion thread mentioning and delivering only to the intended recipient(s).
- */
 export async function sweepDueTasks(
   db: PrismaClient,
   centrifugo?: Pick<CentrifugoServerApi, "publish" | "publishBatch">,
@@ -130,18 +143,18 @@ export async function sweepDueTasks(
     const targetOccurrence = 1 + Math.floor((now.getTime() - dueAt.getTime()) / DAY_MS);
     if (targetOccurrence < 1) continue;
 
-    const primary = (task.owner ?? task.creator) as MemberRow | null;
+    const primary = (task.owner ?? task.creator) as DueMemberRow | null;
     if (!primary) continue;
-    const primaryHandle = memberHandle(primary);
-    if (!primaryHandle) continue;
+    const primaryMention = memberMention(primary);
+    if (!primaryMention || !memberHandle(primary)) continue;
 
     const cc =
       targetOccurrence >= 2 && task.creator && task.creator.id !== primary.id
-        ? (task.creator as MemberRow)
+        ? (task.creator as DueMemberRow)
         : null;
-    const ccHandle = cc ? memberHandle(cc) : null;
+    const ccMention = cc && memberHandle(cc) ? memberMention(cc) : null;
 
-    const recipients = cc && ccHandle ? [primary, cc] : [primary];
+    const recipients = cc && ccMention ? [primary, cc] : [primary];
 
     const lastMessage = task.discussionConversationId
       ? await db.message.findFirst({
@@ -151,7 +164,7 @@ export async function sweepDueTasks(
             createdAt: true,
             sender: {
               select: {
-                user: { select: { username: true } },
+                user: { select: { username: true, displayName: true } },
                 agent: { select: { name: true } },
               },
             },
@@ -159,19 +172,15 @@ export async function sweepDueTasks(
         })
       : null;
 
-    const lastSender = lastMessage?.sender?.agent?.name
-      ? `@${lastMessage.sender.agent.name}`
-      : lastMessage?.sender?.user?.username
-        ? `@${lastMessage.sender.user.username}`
-        : "system";
+    const lastSender = senderNoticeLabel(lastMessage?.sender ?? null);
     const lastDiscussion = lastMessage
       ? `${lastSender} (${lastMessage.createdAt.toISOString()})`
       : "none yet";
 
     const readableTitle = readTaskText(task.title, "agent", task.message?.mentions ?? []);
     const body = buildDueNoticeBody({
-      primaryHandle,
-      ccHandle,
+      primaryMention,
+      ccMention,
       occurrence: targetOccurrence,
       title: readableTitle,
       status: task.status,

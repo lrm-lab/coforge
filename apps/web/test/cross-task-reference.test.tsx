@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { UnresolvedTaskReference } from "#src/features/tasks/cross-task-reference";
+import { directPeerLabel, UnresolvedTaskReference } from "#src/features/tasks/cross-task-reference";
 
 test("a written reference the reader cannot resolve reads as the sender's words", () => {
   const html = renderToStaticMarkup(
@@ -16,4 +16,23 @@ test("a stored token's reader who cannot see the Task gets the locked chip", () 
   );
   expect(html).not.toBe("#design:#7");
   expect(html).toContain("<span");
+});
+
+test("directPeerLabel formats humans with humanLabel without @ and Agents with @handle", () => {
+  expect(
+    directPeerLabel(
+      {
+        kind: "people",
+        userId: "user-1",
+        username: "internal_username",
+        displayName: "Aleksandra Wiśniewska",
+        avatarUrl: null,
+      },
+      undefined,
+    ),
+  ).toBe("Aleksandra Wiśniewska");
+  expect(directPeerLabel({ kind: "agent", agentId: "agent-1" }, "release-bot")).toBe(
+    "@release-bot",
+  );
+  expect(directPeerLabel({ kind: "agent", agentId: "agent-1" }, undefined)).toBeUndefined();
 });

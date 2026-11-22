@@ -35,7 +35,7 @@
   "task_card_files": "Files: {count}",
   "tasks_ref_hidden": "Task you can't view",
   "tasks_ref_hidden_hint": "You don't have access to this task",
-  "tasks_ref_dm": "DM with @{peer}",
+  "tasks_ref_dm": "DM with {peer}",
   "tasks_trail": "Where this task is",
   "tasks_scroll_to_top": "Back to top",
   "tasks_full_history": "View full history",

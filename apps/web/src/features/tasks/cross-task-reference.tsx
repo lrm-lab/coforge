@@ -9,6 +9,8 @@ import {
 import { useConversationId } from "#src/features/conversations/conversation-id";
 import { sidebarDirectsQuery } from "#src/features/conversations/sidebar-collections";
 import { useLiveDirectRow } from "#src/features/conversations/sidebar-lists";
+import type { DirectPeer } from "#src/features/conversations/sidebar-rows";
+import { humanLabel } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
 import { useOpenOtherTask } from "./other-task-search";
 import { directTaskQuery } from "./referenced-task";
@@ -20,29 +22,13 @@ type CrossTaskReferenceProps = {
   conversationId: string;
   number: number;
   kind: "channel" | "dm";
-  /** The reference as the sender wrote it (`#design:#7`, `dm:@ada:#7`): what a reader who cannot
-   * see the Task reads. */
   children: ReactNode;
-  /** Opens a Task of the open conversation, for a reference that names it. */
   onOpenTask?: (number: number) => void;
-  /** Parsed back out of the written `#channel:#N` / `dm:@peer:#N` form rather than a stored
-   * token: the sender may never have been able to resolve it, so a reader who cannot sees the
-   * words, never the locked chip a stored token's reader gets. */
   prose?: boolean;
 };
 
-/**
- * Another conversation's Task in a message body (task #437): the Task's badge under its
- * conversation's current name, its title as the tooltip, a press that opens its popup over the
- * page. A reader who cannot see that Task — a private channel they are not in, a direct message of
- * others' — reads the locked chip when the sender's stored token asserts one may be there, or the
- * sender's written words when the body only holds the typed form; either way no title, status or
- * press.
- */
 export function CrossTaskReference(props: CrossTaskReferenceProps) {
   const openConversationId = useConversationId();
-  // Outside a conversation (a forwarded card, itself one link) a reference is its words; one that
-  // names the open conversation is its own Task's badge.
   if (!openConversationId) return <>{props.children}</>;
   if (props.conversationId === openConversationId)
     return (
@@ -57,9 +43,6 @@ export function CrossTaskReference(props: CrossTaskReferenceProps) {
   );
 }
 
-/** What an unresolved cross-conversation reference shows: a stored token's reader who cannot
- * see the Task gets the locked chip (the sender could, so a Task may really be there); a
- * written reference's reader gets the sender's words back — nothing proves a Task exists. */
 export function UnresolvedTaskReference({
   prose,
   children,
@@ -91,10 +74,18 @@ function ChannelTaskReference({
   );
 }
 
+export function directPeerLabel(
+  peer: DirectPeer | undefined,
+  agentName: string | undefined,
+): string | undefined {
+  if (!peer) return undefined;
+  if (peer.kind === "people") return humanLabel(peer);
+  return agentName ? `@${agentName}` : undefined;
+}
+
 function DirectTaskReference({ conversationId, number, children, prose }: CrossTaskReferenceProps) {
   const workspaceId = useCurrentWorkspaceId() ?? "";
-  const peer = useDirectPeerHandle(conversationId);
-  // A direct message the viewer is not in has no Task of theirs to read.
+  const peer = useDirectPeerLabel(conversationId);
   const { data: task, isPending } = useQuery({
     ...directTaskQuery(workspaceId, { conversationId, number }),
     enabled: peer !== undefined,
@@ -112,12 +103,6 @@ function DirectTaskReference({ conversationId, number, children, prose }: CrossT
   );
 }
 
-/**
- * A direct message's Task as written, `dm:@peer:#N` (task #472): the viewer's direct message with
- * that peer, then that DM's Task as `CrossTaskReference` draws it. A Raft-style `~agent`/`~human`
- * suffix says which kind of peer it is. A reader with no such direct message (the peer themself,
- * reading the sender's words, or anyone else) reads the words as written.
- */
 export function DirectTaskReferenceByPeer({
   peer,
   number,
@@ -144,7 +129,6 @@ export function DirectTaskReferenceByPeer({
   );
 }
 
-/** The viewer's direct message with the member or Agent `handle` names, from the sidebar's DM list. */
 function useDirectConversationWith(handle: string): string | undefined {
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const { data: rows } = useQuery({
@@ -166,11 +150,8 @@ function useDirectConversationWith(handle: string): string | undefined {
   return row?.conversationId;
 }
 
-/** Who a direct message is with, from the viewer's seat: the other side's handle, or undefined
- * when the viewer is not in it. */
-function useDirectPeerHandle(conversationId: string): string | undefined {
+function useDirectPeerLabel(conversationId: string): string | undefined {
   const peer = useLiveDirectRow(conversationId)?.peer;
   const agent = useLiveAgent(peer?.kind === "agent" ? peer.agentId : "");
-  if (!peer) return undefined;
-  return peer.kind === "people" ? peer.username : agent?.name;
+  return directPeerLabel(peer, agent?.name);
 }

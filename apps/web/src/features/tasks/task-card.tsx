@@ -25,7 +25,6 @@ import { TaskOwnerAvatar } from "./task-owner";
 import { TaskStatusIcon } from "./task-status-icon";
 import type { TaskControls } from "./task-workflow";
 
-/** When the Task was made, at a card's foot (Frank, 11-06): the day, as narrow columns allow. */
 function TaskCreatedAt({ at }: { at: string | Date }) {
   const timeZone = useTimeZone();
   return (
@@ -35,10 +34,6 @@ function TaskCreatedAt({ at }: { at: string | Date }) {
   );
 }
 
-/**
- * A Task's due day at a card's foot, next to when it was made: overdue and due soon in their own
- * colours (task #13). Nothing while the Task has no due date.
- */
 function TaskDueAt({ task }: { task: TaskView }) {
   const timeZone = useTimeZone();
   if (!task.dueAt) return null;
@@ -72,7 +67,6 @@ function TaskDueAt({ task }: { task: TaskView }) {
   );
 }
 
-/** One of a card's counts at its foot: nothing while there are none. */
 function TaskCount({
   icon: Icon,
   count,
@@ -95,11 +89,9 @@ function TaskCount({
   );
 }
 
-/** Classes for the link or button a caller wraps around the title. */
 export const TASK_TITLE_CLASS =
   "block w-full rounded-sm text-left outline-none hover:underline hover:decoration-fg-quaternary hover:underline-offset-2 focus-visible:ring-2 focus-visible:ring-focus-ring";
 
-/** A source or Project as a small outlined pill, as Linear shows an issue's labels. */
 function Pill({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <span
@@ -115,10 +107,6 @@ function Pill({ children, className }: { children: ReactNode; className?: string
 
 type TaskCardProject = Pick<NonNullable<FilterableTask["project"]>, "name" | "iconUrl">;
 
-/**
- * A Project pill leads with the Project's own icon, as Linear's project label does, and with the
- * Projects nav icon when none was uploaded: a first letter this small reads as an owner avatar.
- */
 function ProjectPill({ project, className }: { project: TaskCardProject; className?: string }) {
   return (
     <Pill className={className}>
@@ -133,11 +121,6 @@ function ProjectPill({ project, className }: { project: TaskCardProject; classNa
   );
 }
 
-/**
- * One task on the board (a card) or in the list (a row), laid out as Linear lays out issues. The
- * caller supplies what differs per surface: the clickable title, where the task lives and its
- * menu.
- */
 export function TaskCard({
   task,
   renderTitle,
@@ -150,21 +133,13 @@ export function TaskCard({
   onReach,
 }: {
   task: TaskView;
-  /** Wraps the title text in the surface's link or button. */
   renderTitle: (title: ReactNode) => ReactNode;
-  /** The conversation the task belongs to, on surfaces that mix conversations. */
   source?: string;
-  /** The channel the task lives in, when `source` is one: named by its group avatar and its name,
-   * not `#name`. */
   channel?: string | null;
-  /** The Project the task's conversation belongs to, on surfaces that mix Projects; null when it
-   * has none. */
   project?: TaskCardProject | null;
   controls: TaskControls;
   menu?: ReactNode;
   list: boolean;
-  /** Someone is reaching for the card: a mouse came over it. Not a touch or a pen, which can
-   * come down on a button with no hover first, and whose press must land on what it started on. */
   onReach?: () => void;
 }) {
   const cardRef = useRef<HTMLElement>(null);
@@ -218,7 +193,7 @@ export function TaskCard({
           #{task.number}
         </span>
         <TaskStatusIcon status={task.status} />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 sm:min-w-[12rem]">
           <h3 ref={titleRef} className="text-sm font-medium text-primary [overflow-wrap:anywhere]">
             {renderTitle(<span className="line-clamp-2 sm:line-clamp-1">{task.title}</span>)}
           </h3>
@@ -239,24 +214,26 @@ export function TaskCard({
             )}
           </p>
         </div>
-        {blocked}
+        {blocked && <span className="hidden shrink-0 lg:inline-flex">{blocked}</span>}
         {(parent || subtasks) && (
-          <span className="hidden shrink-0 items-center gap-2 text-xs text-tertiary sm:inline-flex">
+          <span className="hidden shrink-0 items-center gap-2 text-xs text-tertiary xl:inline-flex">
             {parent}
             {subtasks}
           </span>
         )}
         {source && (
-          <Pill className="hidden sm:inline-flex">
+          <Pill className="hidden min-w-10 shrink sm:inline-flex">
             {channel ? <ChannelPlace name={channel} /> : <span className="truncate">{source}</span>}
           </Pill>
         )}
         {task.labels?.length ? (
-          <span className="hidden shrink-0 sm:inline-flex">
+          <span className="hidden min-w-0 shrink md:inline-flex">
             <TaskCardLabels labels={task.labels} />
           </span>
         ) : null}
-        {project && <ProjectPill project={project} className="hidden sm:inline-flex" />}
+        {project && (
+          <ProjectPill project={project} className="hidden min-w-12 shrink lg:inline-flex" />
+        )}
         {task.dueAt && (
           <span className="hidden shrink-0 sm:inline-flex">
             <TaskDueAt task={task} />
@@ -300,17 +277,15 @@ export function TaskCard({
           </span>
         </p>
       ) : (
-        // Blocked only by Tasks the viewer cannot see: there is nothing to name, only the count.
         blocked
       )}
       {(label || project) && (
         <div className="flex min-w-0 items-center gap-1.5">
-          {label && <TaskLabelChip label={label} />}
+          {label && <TaskLabelChip label={label} className="min-w-0 shrink" />}
           {moreLabels.length > 0 && (
-            <span className="text-xs text-tertiary">+{moreLabels.length}</span>
+            <span className="shrink-0 text-xs text-tertiary">+{moreLabels.length}</span>
           )}
-          {/* The Project gives way to the label: it truncates rather than leave the card. */}
-          {project && <ProjectPill project={project} className="shrink" />}
+          {project && <ProjectPill project={project} className="min-w-12 shrink" />}
         </div>
       )}
       {steps && steps.total > 0 && (
@@ -326,8 +301,6 @@ export function TaskCard({
           </span>
         </div>
       )}
-      {/* Its owner, then how much talk it holds and when it was made. With a touch pointer the
-          tools sit at this row's end, so it keeps room for them and stays even with no owner. */}
       <div
         data-task-card-footer
         className={cn(
@@ -336,7 +309,6 @@ export function TaskCard({
         )}
       >
         <TaskOwnerAvatar owner={task.owner} showName />
-        {/* The counts and the date keep their room; the owner's name gives way first. */}
         <span className="flex shrink-0 items-center gap-3">
           <TaskCount
             icon={MessageChatCircle}
@@ -353,9 +325,6 @@ export function TaskCard({
         </span>
       </div>
       {tools && (
-        // After the title in the DOM so assistive tech names the task first. With a mouse, over
-        // the top corner (the priority) while hovered or focused; with a touch pointer, always
-        // shown at the bottom row's end, so the priority is never covered for good.
         <div className="absolute top-2 right-1.5 rounded-md bg-primary opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 has-[[aria-expanded=true]]:opacity-100 any-pointer-coarse:top-auto any-pointer-coarse:bottom-2.5 any-pointer-coarse:opacity-100">
           {tools}
         </div>

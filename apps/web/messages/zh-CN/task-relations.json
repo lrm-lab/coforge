@@ -35,7 +35,7 @@
   "task_card_files": "文件：{count}",
   "tasks_ref_hidden": "无权查看的任务",
   "tasks_ref_hidden_hint": "你没有权限查看这个任务",
-  "tasks_ref_dm": "与 @{peer} 的私聊",
+  "tasks_ref_dm": "与 {peer} 的私聊",
   "tasks_trail": "任务所在位置",
   "tasks_scroll_to_top": "回到顶部",
   "tasks_full_history": "查看完整历史",

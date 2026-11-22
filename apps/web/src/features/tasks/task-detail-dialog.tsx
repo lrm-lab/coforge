@@ -36,8 +36,6 @@ import { statusLabel, taskStatusColor, type TaskControls } from "./task-workflow
 import { useTaskDialogTransition } from "./use-task-dialog-transition";
 import { useTaskRelationAccess, type DetailCommand } from "./use-task-relations";
 
-/** A Task card's "More actions" button, as the menu shows it and as the card's stand-in for the
- * menu does until someone reaches for it (`BoardTaskCard`). */
 export function taskMenuButton(task: Pick<TaskView, "number">) {
   return {
     label: m.tasks_more_actions({ number: String(task.number) }),
@@ -55,16 +53,9 @@ export function TaskDetailMenu({
   onStarted,
   ...dialog
 }: Omit<TaskDetailDialogProps, "open" | "onOpenChange" | "thread"> & {
-  /** What the stand-in this replaces was doing: tabbed to (`focus`) or pressed (`open`). The
-   * button takes the focus first, so the menu gives it back there when it closes; then, if the
-   * stand-in was pressed, the menu opens. `onStarted` says it is done, so a later mount (another
-   * layout) does neither. */
   start?: "focus" | "open";
   onStarted?: () => void;
-  /** Board and list moves, listed under "Move to". */
   moves?: TaskControls["moves"];
-  /** Opens the caller's own Task popup for "View details" — the conversation's, which also
-   * shows the Task's thread. Without it the menu opens a popup of the Task alone. */
   onOpenDetails?: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -92,7 +83,7 @@ export function TaskDetailMenu({
             }}
           >
             <Dropdown.Section>
-              <Dropdown.Item id="details" label={m.tasks_view_details()} />
+              <Dropdown.Item id="details" label={m.task_menu_view_details()} />
             </Dropdown.Section>
             {moves.length > 0 && (
               <Dropdown.Section className="border-t border-secondary pt-1">
@@ -131,25 +122,15 @@ type TaskDetailDialogProps = {
   task: TaskView;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Runs a mutation through the caller's task command (which owns the conversation's task
-   * list). Absent where no such owner is threaded in — a task-reference chip inside the message
-   * stream, say — and the dialog then runs the command itself and refreshes that list. */
   onCommand?: (command: DetailCommand) => Promise<void>;
-  /** The Task was deleted from the popup's More menu; the popup closes either way. */
   onDeleted?: () => void;
-  /** `#channel` or the direct conversation's name, shown above the task number. */
   conversationName?: string;
-  /** The conversation's members, which name people in the history and offer who to assign.
-   * Without them the assignee is shown but cannot be changed. */
   members?: readonly Mentionable[];
   currentMemberId: string | null;
   thread?: (lead: ReactNode) => ReactNode;
-  /** Opens a Task this one is related to, in its own channel where that is where it lives. Where
-   * absent, related Tasks are named but not opened. */
   onOpenRelated?: (task: VisibleTaskName) => void;
 };
 
-/** A phone top bar's button: 44px to touch, its icon centred. */
 const PHONE_BAR_BUTTON = "max-sm:size-11 max-sm:justify-center";
 
 export function TaskDetailDialog({
@@ -172,31 +153,19 @@ export function TaskDetailDialog({
       onDeleted?.();
     },
   });
-  // The relation pickers belong to the popup, not its task section: the header menu opens them too.
   const [picker, setPicker] = useState<RelationPicker | null>(null);
   const [history, setHistory] = useState(false);
   const canDelete = useCanDeleteTask(task, currentMemberId);
   const relations = useTaskRelationAccess(task, currentMemberId);
-  // A Task followed for its own conversation; a message's thread keeps the thread's own follow.
   const follow = useTaskFollow(task, open && Boolean(thread) && ownsDiscussion(task));
   const sidebar = useMediaQuery("(min-width: 1024px)", true);
-  // Opened from another Task's popup: Esc and the back arrow step back up to it (browser Back
-  // does by itself); only the first popup closes.
   const router = useRouter();
   const step = useRouterState({ select: (state) => isTaskStep(state.location) });
   const stepBack = step ? () => router.history.back() : undefined;
-  // Esc on a step goes back up to the popup it was opened from; the overlay's own Escape, which
-  // would close every step at once, is off while it is a step. Esc is the popup's only after
-  // everything inside has had it: an input method composing, the composer's mention or task
-  // completion, a menu, a picker, an image or a confirmation over the popup each take their own
-  // Escape first (they mark it handled), and only an Escape nothing took steps back (task #478).
   const stepOnEscape = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "Escape") return;
-    // Taken inside (the composer's completion closing): the overlay, which does not look at
-    // that, must not close the popup on the same press.
     if (event.defaultPrevented) return event.stopPropagation();
     if ((!step && !history) || event.nativeEvent.isComposing || event.keyCode === 229) return;
-    // Only from the popup itself, not from an overlay over it that the React tree passes through.
     if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return;
     event.preventDefault();
     if (history) setHistory(false);
@@ -403,16 +372,10 @@ export function TaskDetailDialog({
   );
 }
 
-/**
- * The popup's overlay. A phone shows the popup as a full-screen sheet over the visual viewport the
- * overlay follows: with the keyboard up, the header stays at the top and the composer sits right
- * above the keyboard.
- */
 function TaskPopupOverlay({
   keyboardDismiss,
   ...props
 }: Pick<ComponentProps<typeof ModalOverlay>, "isOpen" | "onOpenChange" | "children"> & {
-  /** Off for a step, whose Escape steps back instead of closing every step. */
   keyboardDismiss: boolean;
 }) {
   return (

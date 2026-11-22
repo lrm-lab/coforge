@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 
 import type { ForwardTarget } from "#src/features/conversations/message-forward";
+import { assignTargetName } from "#src/features/tasks/board-assign-to";
 import {
   canFileNewTask,
   defaultTarget,
@@ -29,15 +30,24 @@ const place = (name: string): NewTaskPlace => ({
 const person: ForwardTarget = {
   kind: "person",
   userId: "user-1",
-  name: "Ada",
+  name: "Ada Lovelace",
   avatarUrl: null,
   joined: true,
   canSend: true,
 };
 
+const agent: ForwardTarget = {
+  kind: "agent",
+  agentId: "agent-1",
+  name: "Reviewer Bot",
+  handle: "reviewer",
+  description: "",
+  avatarUrl: "",
+  joined: true,
+  canSend: true,
+};
+
 test("a board that holds no Task offers no place of its own", () => {
-  // A new Workspace, a new Project, or a box whose Tasks a filter hid: the places are read from
-  // the Tasks the board shows, so there is nothing to read.
   expect(newTaskChoices([]).places).toEqual([]);
 });
 
@@ -58,8 +68,6 @@ test("the channels the board's Tasks were filed in come newest first", () => {
 });
 
 test("a board with no place of its own files into one of the viewer's channels", () => {
-  // The defect behind task #60: with no Task on the board there was no place, so the control was
-  // disabled and a Workspace's first Task could never be made from its board.
   expect(canFileNewTask([], [channel("general")])).toBe(true);
 });
 
@@ -78,7 +86,6 @@ test("a new Task goes where the board last filed one, not to the first channel",
   expect(defaultTarget([place("launch")], targets)).toMatchObject({
     conversationId: "conversation-launch",
   });
-  // With no Task to learn from, the viewer's channels stand in, in the server's order.
   expect(defaultTarget([], targets)).toMatchObject({ conversationId: "conversation-general" });
 });
 
@@ -90,4 +97,10 @@ test("a place the viewer can no longer post in is skipped, and so is an archived
     ),
   ).toMatchObject({ conversationId: "conversation-launch" });
   expect(defaultTarget([], [channel("archive", { canSend: false })])).toBeUndefined();
+});
+
+test("assignTargetName formats people with humanLabel without @ and Agents with @handle", () => {
+  expect(assignTargetName(channel("general"))).toBe("general");
+  expect(assignTargetName(person)).toBe("Ada Lovelace");
+  expect(assignTargetName(agent)).toBe("@reviewer");
 });

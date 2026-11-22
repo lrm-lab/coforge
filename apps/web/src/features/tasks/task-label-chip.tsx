@@ -22,7 +22,6 @@ import { updateTaskLabel } from "./labels.functions";
 import { useCloseOnBack } from "./use-close-on-back";
 import { useCachedLabel, workspaceLabelsKey, type WorkspaceLabels } from "./workspace-labels";
 
-/** A label's color as a dot, as its chip shows it. */
 export function LabelDot({ color, className }: { color: string; className?: string }) {
   return (
     <span
@@ -32,11 +31,6 @@ export function LabelDot({ color, className }: { color: string; className?: stri
   );
 }
 
-/**
- * One label: its color as a dot, then its name, as Linear's labels read. A card or a chip row cuts
- * a long name; `full` (the Task popup) writes it whole, wrapping if it must: the popup is the one
- * place the whole name shows, since its menu does not repeat the label (Frank, task #7).
- */
 export function TaskLabelChip({
   label,
   className,
@@ -47,17 +41,16 @@ export function TaskLabelChip({
   full?: boolean;
 }) {
   const { color, archived } = useCachedLabel(label);
-  // Archived (deleted) while the Task is on screen: it is off the Task already, though the Task
-  // has not been read again.
   if (archived) return null;
   return (
     <BadgeWithDot
       type="modern"
       size="sm"
       color={badgeColor(color)}
-      // The badge is one line at its text's width; a whole name may take the row and wrap in it.
       className={
-        full ? cn("h-auto w-fit max-w-full whitespace-normal text-left", className) : className
+        full
+          ? cn("h-auto w-fit max-w-full whitespace-normal text-left", className)
+          : cn("w-auto max-w-full min-w-0 overflow-hidden", className)
       }
     >
       <span className={full ? "min-w-0 wrap-anywhere" : "min-w-0 max-w-32 truncate"}>
@@ -67,11 +60,6 @@ export function TaskLabelChip({
   );
 }
 
-/**
- * A Task's label chip for an owner or admin: it opens a small menu to recolor the label (a pick
- * applies at once) or archive it. Archiving, which takes it off every Task and out
- * of the pickers and filters but keeps its rows, so it can come back.
- */
 export function ManageableLabelChip({ label }: { label: TaskLabel }) {
   const [open, setOpen] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -85,8 +73,6 @@ export function ManageableLabelChip({ label }: { label: TaskLabel }) {
 
   const toast = useAppToast();
 
-  /** Settings can restore it, so it does not ask (Frank, 11-06); the toast says where it went
-   * and offers Undo. */
   async function archive() {
     setFailed(false);
     try {
@@ -153,7 +139,6 @@ export function ManageableLabelChip({ label }: { label: TaskLabel }) {
         </AriaButton>
         <Dropdown.Popover placement="bottom start" className="w-56">
           <AriaDialog aria-label={label.name} className="outline-hidden">
-            {/* The chip it opens from already names the label: no label inside a label (Frank). */}
             <div className="p-3">
               <LabelColorSwatches
                 value={picked}

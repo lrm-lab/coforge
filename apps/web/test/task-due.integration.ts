@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { mentionToken } from "@lrm/coforge-sdk/internal";
 import { sweepDueTasks } from "#src/server/tasks/task-due-worker.server";
 import { setup } from "./fixtures/task-dependencies";
 
@@ -223,6 +224,8 @@ test("due worker notifies owner at dueAt, CCs creator from 2nd occurrence, skips
       include: { mentions: true },
     });
     expect(occ1Msg.mentions.map((m) => m.actorId)).toEqual([bob.id]);
+    expect(occ1Msg.body).toContain(mentionToken("user", bob.id));
+    expect(occ1Msg.body).not.toContain(`@${bob.username}`);
 
     // Unassigned task occurrence 1 mentioned creator alice.
     const unassignedThread = (await db.task.findUniqueOrThrow({ where: { id: unassignedTask.id } }))
@@ -243,7 +246,7 @@ test("due worker notifies owner at dueAt, CCs creator from 2nd occurrence, skips
     expect(agentDeliveries.length).toBeGreaterThanOrEqual(2);
     const dueDelivery = agentDeliveries[0]!;
     expect(dueDelivery.receivedAt).toBeNull();
-    expect(dueDelivery.message.body).toContain(`@${one.name}`);
+    expect(dueDelivery.message.body).toContain(mentionToken("agent", one.id));
 
     // Simulate Agent finishing its turn and acknowledging pending deliveries.
     await db.agentMessageDelivery.update({

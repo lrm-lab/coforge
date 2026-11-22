@@ -4,19 +4,20 @@ import { useEffect, useState } from "react";
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { searchForwardDestinations } from "#src/features/conversations/message-forward.functions";
-import {
-  forwardTargetKey,
-  forwardTargetLabel,
-} from "#src/features/conversations/message-forward-model";
+import { forwardTargetKey } from "#src/features/conversations/message-forward-model";
 import type { ForwardTarget } from "#src/features/conversations/message-forward";
-import { EntityPicker, Face, type PickerFace } from "#src/features/pickers/entity-picker";
+import {
+  EntityPicker,
+  Face,
+  agentHandle,
+  type PickerFace,
+} from "#src/features/pickers/entity-picker";
 import { useLiveChannelRow } from "#src/features/conversations/sidebar-lists";
+import { humanLabel } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
 import { TaskFieldTrigger } from "./task-field-trigger";
 
-/** How many of each kind the picker lists; its search reaches the rest. */
 const LIMIT = 50;
-/** How long typing pauses before everyone is searched. */
 const SEARCH_DEBOUNCE_MS = 250;
 
 function faceOf(target: ForwardTarget): PickerFace {
@@ -30,15 +31,12 @@ function faceOf(target: ForwardTarget): PickerFace {
   };
 }
 
-/** A channel by its name beside its group avatar, as the sidebar lists it (no `#`); a person or an
- * Agent as `@name`. */
-function targetName(target: ForwardTarget) {
-  return target.kind === "channel" ? target.name : forwardTargetLabel(target);
+export function assignTargetName(target: ForwardTarget) {
+  if (target.kind === "channel") return target.name;
+  if (target.kind === "person") return humanLabel({ displayName: target.name });
+  return `@${target.handle}`;
 }
 
-/** Everyone a new Task can go to, searched on the server: a Workspace can hold more than a list
- * can send. Those the viewer cannot post to (an archived channel) stay in, so a default can be
- * judged; `BoardAssignTo` does not offer them. */
 export function useAssignTargets({ enabled = true }: { enabled?: boolean } = {}) {
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const search = useServerFn(searchForwardDestinations);
@@ -58,8 +56,6 @@ export function useAssignTargets({ enabled = true }: { enabled?: boolean } = {})
   return { targets: targets.data ?? [], setQuery };
 }
 
-/** Who a new Task goes to: a channel, or a person or an Agent, from everyone the viewer can reach,
- * as a forward picks where a message goes. */
 export function BoardAssignTo({
   value,
   targets,
@@ -73,10 +69,8 @@ export function BoardAssignTo({
   onSearch: (term: string) => void;
   onChange: (target: ForwardTarget) => void;
 }) {
-  // The list knows a channel's visibility; a default taken from the board does not.
   const listed =
     targets.find((each) => value && forwardTargetKey(each) === forwardTargetKey(value)) ?? value;
-  // A default the search has not listed yet takes its group avatar from the sidebar's row.
   const sidebarMembers = useLiveChannelRow(
     listed?.kind === "channel" ? listed.conversationId : "",
   )?.members;
@@ -84,7 +78,7 @@ export function BoardAssignTo({
     listed?.kind === "channel" && listed.members.length === 0 && sidebarMembers
       ? { ...listed, members: sidebarMembers }
       : listed;
-  const label = shown ? targetName(shown) : m.task_board_create_assign_pick();
+  const label = shown ? assignTargetName(shown) : m.task_board_create_assign_pick();
   return (
     <EntityPicker
       trigger={
@@ -110,8 +104,9 @@ export function BoardAssignTo({
         .filter((target) => target.canSend)
         .map((target) => ({
           id: forwardTargetKey(target),
-          label: targetName(target),
+          label: assignTargetName(target),
           face: faceOf(target),
+          ...(target.kind === "agent" && agentHandle(target.handle)),
         }))}
       onSelect={(key) => {
         const target = targets.find((each) => forwardTargetKey(each) === key);

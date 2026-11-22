@@ -13,5 +13,6 @@
   "task_board_create_assign_to": "Assign to",
   "task_board_create_assign_search": "Search channels and people",
   "task_board_create_assign_pick": "Choose",
-  "tasks_project_last_used": "Last used"
+  "tasks_project_last_used": "Last used",
+  "task_menu_view_details": "View details"
 }
