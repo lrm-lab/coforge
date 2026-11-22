@@ -61,7 +61,7 @@ type CreateChannelDialogProps = {
   defaultName?: string;
   initialMembers?: {
     humans: { id: string; displayName: string }[];
-    agents: { id: string; displayName: string }[];
+    agents: { id: string; name?: string; displayName: string }[];
   };
   memberPicker?: boolean;
   minMembers?: number;
@@ -332,16 +332,16 @@ function CreateChannelForm({
                 {[
                   ...initialMembers.humans.map((human) => ({
                     key: `user:${human.id}`,
-                    member: human,
+                    label: human.displayName,
                   })),
                   ...initialMembers.agents.map((agent) => ({
                     key: `agent:${agent.id}`,
-                    member: agent,
+                    label: `@${agent.name ?? agent.displayName}`,
                   })),
-                ].map(({ key, member }) => (
+                ].map(({ key, label }) => (
                   <Checkbox
                     key={key}
-                    label={`@${member.displayName}`}
+                    label={label}
                     isDisabled={locked}
                     isSelected={selectedKeys.has(key)}
                     onChange={(next) => toggle(key, next)}

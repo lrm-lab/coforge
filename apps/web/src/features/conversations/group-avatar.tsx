@@ -1,4 +1,5 @@
 import { DotsHorizontal } from "@untitledui/icons";
+import { useImageFallback } from "#src/hooks/use-image-fallback";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import {
   AvatarSticker,
@@ -49,6 +50,7 @@ export function GroupAvatar({
 
 function MemberFace({ member, alone }: { member: GroupAvatarMember; alone: boolean }) {
   const initial = avatarInitial(member.name);
+  const image = useImageFallback(isStickerPicture(member.avatarUrl) ? null : member.avatarUrl);
   if (isStickerPicture(member.avatarUrl)) {
     return alone ? (
       <AvatarSticker size="fill">
@@ -65,8 +67,15 @@ function MemberFace({ member, alone }: { member: GroupAvatarMember; alone: boole
       />
     );
   }
-  const face = member.avatarUrl ? (
-    <img src={member.avatarUrl} alt="" loading="lazy" className="size-full object-cover" />
+  const face = image.src ? (
+    <img
+      ref={image.ref}
+      src={image.src}
+      alt=""
+      loading="lazy"
+      className="size-full object-cover"
+      onError={image.onError}
+    />
   ) : (
     <span
       className={cx(

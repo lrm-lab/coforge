@@ -1,5 +1,6 @@
 import { ACTION_CARD_PREVIEW_SELECT, previewCardFieldOf } from "./action-card-preview.server";
 import type { PreviewCard } from "#src/features/conversations/action-card-preview";
+import { isUserAgentDirectKey, peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import {
   channelVisibilityOf,
@@ -7,6 +8,9 @@ import {
 } from "#src/features/conversations/channel-visibility";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
+import { humanLabel } from "#src/lib/human-label";
+import { APP_BOT_LOGO_SELECT, agentFaceUrl } from "#src/server/apps/app-logo.server";
+import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import { readableConversationWhere } from "./channel-read-access.server";
 import { browserMessageFields, mapBrowserMessage } from "./browser-message-projection.server";
@@ -118,31 +122,102 @@ export async function unsaveUserMessage(
 
 const savedMessageSelect = {
   createdAt: true,
-  conversation: { select: { id: true, channelName: true, visibility: true, directKey: true } },
-  // The exact row shape the message stream renders with, so the Saved view reuses the same
-  // projection (sender, attachments, mentions, reactions) instead of a near-copy.
+  conversation: {
+    select: {
+      id: true,
+      channelName: true,
+      visibility: true,
+      directKey: true,
+      members: {
+        where: { conversation: { directKey: { not: null } } },
+        select: {
+          userId: true,
+          agentId: true,
+          user: { select: { id: true, username: true, displayName: true, avatarObjectKey: true } },
+          agent: {
+            select: {
+              id: true,
+              name: true,
+              displayName: true,
+              deletedAt: true,
+              avatarMascot: true,
+              appBot: APP_BOT_LOGO_SELECT,
+            },
+          },
+        },
+      },
+    },
+  },
   message: { select: { ...browserMessageFields, actionCard: ACTION_CARD_PREVIEW_SELECT } },
 } as const;
 
 export type SavedMessageRow = Prisma.SavedMessageGetPayload<{ select: typeof savedMessageSelect }>;
 
+export type SavedDirectPeer = {
+  kind: "user" | "agent";
+  id: string;
+  name: string;
+  handle?: string;
+  avatarUrl: string | null;
+  deleted?: boolean;
+};
+
 export type SavedMessageView = {
-  /** When the viewer saved it; the list orders by this, newest first. */
   savedAt: Date;
-  /** Enough conversation context to label the card; the jump target is `message.conversationId`. */
   conversation: {
     id: string;
     channelName: string | null;
     visibility: ChannelVisibility;
     directKey: string | null;
+    peer?: SavedDirectPeer;
   };
-  /** `card` is set when the message is an action card: what its line is written from in the
-   * viewer's language. */
   message: ReturnType<typeof mapBrowserMessage> & { card?: PreviewCard };
 };
 
-/** Pure projection of one saved row (unit-tested without a database), like `mapBrowserMessage`. */
-export function savedMessageView(row: SavedMessageRow, workspaceId: string): SavedMessageView {
+function resolveSavedDirectPeer(
+  conversation: Omit<SavedMessageRow["conversation"], "members"> & {
+    members?: SavedMessageRow["conversation"]["members"];
+  },
+  workspaceId: string,
+  viewerId?: string,
+): SavedDirectPeer | undefined {
+  if (conversation.channelName !== null || !conversation.directKey) return undefined;
+  const members = conversation.members ?? [];
+  if (isUserAgentDirectKey(conversation.directKey)) {
+    const agent = members.find((member) => member.agent)?.agent;
+    if (!agent) return undefined;
+    return {
+      kind: "agent",
+      id: agent.id,
+      name: agent.displayName.trim() || agent.name,
+      handle: agent.name,
+      avatarUrl: agentFaceUrl(agent),
+      deleted: Boolean(agent.deletedAt),
+    };
+  }
+  const peerUserId = viewerId ? peopleDirectPeerId(conversation.directKey, viewerId) : undefined;
+  const person = peerUserId
+    ? members.find((member) => member.userId === peerUserId)?.user
+    : members.find((member) => member.user)?.user;
+  if (!person) return undefined;
+  return {
+    kind: "user",
+    id: person.id,
+    name: humanLabel(person),
+    avatarUrl: workspaceUserAvatarUrl(workspaceId, person.id, person.avatarObjectKey),
+  };
+}
+
+export function savedMessageView(
+  row: Omit<SavedMessageRow, "conversation"> & {
+    conversation: Omit<SavedMessageRow["conversation"], "members"> & {
+      members?: SavedMessageRow["conversation"]["members"];
+    };
+  },
+  workspaceId: string,
+  viewerId?: string,
+): SavedMessageView {
+  const peer = resolveSavedDirectPeer(row.conversation, workspaceId, viewerId);
   return {
     savedAt: row.createdAt,
     conversation: {
@@ -150,6 +225,7 @@ export function savedMessageView(row: SavedMessageRow, workspaceId: string): Sav
       channelName: row.conversation.channelName,
       visibility: channelVisibilityOf(row.conversation),
       directKey: row.conversation.directKey,
+      ...(peer ? { peer } : {}),
     },
     message: {
       ...mapBrowserMessage(row.message, workspaceId),
@@ -158,21 +234,12 @@ export function savedMessageView(row: SavedMessageRow, workspaceId: string): Sav
   };
 }
 
-/**
- * The viewer's bookmarks across every conversation in the Workspace, newest save first. The
- * `member` relation filter reduces the query to the viewer's own member rows (one per
- * conversation), so cross-conversation saves need no manual member-id list and can never leak
- * another member's list. Unpaginated for now — personal bookmark lists are small; add a
- * `(workspaceId, memberId, createdAt)` cursor when a view asks for pages.
- */
 export async function listUserSavedMessages(
   db: PrismaClient,
   input: { workspaceId: string; userId: string },
 ): Promise<SavedMessageView[]> {
   const { workspaceId, userId } = input;
   const rows = await db.savedMessage.findMany({
-    // A message in a channel hidden from the Workspace, or a private one the person has left,
-    // leaves Saved until the channel is readable again.
     where: {
       workspaceId,
       member: { workspaceId, userId },
@@ -181,7 +248,7 @@ export async function listUserSavedMessages(
     select: savedMessageSelect,
     orderBy: { createdAt: "desc" },
   });
-  const views = rows.map((row) => savedMessageView(row, workspaceId));
+  const views = rows.map((row) => savedMessageView(row, workspaceId, userId));
   const messages = await attachForwardedAccess(
     db,
     workspaceId,

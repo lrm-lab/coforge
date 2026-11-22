@@ -48,8 +48,7 @@ export function TabbedHeader({
         {tabs && (
           <div
             className={cx(
-              "col-span-2 row-start-2 flex @2xl/tabbed-header:col-span-1 @2xl/tabbed-header:col-start-2 @2xl/tabbed-header:row-start-1",
-              // Underline tabs sit on the header's rule; pills beside the title centre on its line.
+              "col-span-2 row-start-2 flex min-w-0 max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden @2xl/tabbed-header:col-span-1 @2xl/tabbed-header:col-start-2 @2xl/tabbed-header:row-start-1",
               tabsStart ? "items-center pb-2 @2xl/tabbed-header:pb-0" : "-mb-px items-end",
             )}
           >

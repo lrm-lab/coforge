@@ -99,7 +99,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
         lockClassName="size-3.5"
       />
     ) : (
-      rowPlace && `@${title}`
+      rowPlace && (place.kind === "direct" && place.peer.kind === "agent" ? `@${title}` : title)
     );
   const { latest } = item;
   const sender =
@@ -172,7 +172,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="flex min-w-0 items-center gap-2">
               {unread && <ActivityUnreadDot />}
-              <span ref={titleRef} className="min-w-0">
+              <span ref={titleRef} className="flex min-w-0">
                 <ActivityRowTitle unread={unread}>
                   {task ? (
                     task.title

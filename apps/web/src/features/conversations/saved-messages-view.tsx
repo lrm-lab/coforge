@@ -6,6 +6,7 @@ import { Bookmark as BookmarkDuotone } from "kubai-icons/duotone";
 import { Link as AriaLink } from "react-aria-components";
 
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { ActorName } from "#src/features/avatars/actor-name";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { PageHeader } from "#src/components/layout/page-header";
@@ -77,17 +78,38 @@ function SavedMessageCard({
   const workspaceSlug = useWorkspaceSlug();
   const { conversation, message } = entry;
   const jump = savedJumpTarget(workspaceSlug, conversation, message);
-  // The localized URL (`publicHref`), the one the card links to and the address bar shows.
   const href = router.buildLocation(jump).publicHref;
   const place = conversation.channelName ? (
-    // Its group avatar and name; a private channel with its lock (tasks #375, #55).
     <ChannelPlace
       id={conversation.id}
       name={conversation.channelName}
       visibility={conversation.visibility}
     />
+  ) : conversation.peer ? (
+    <ActorName
+      actor={{
+        kind: conversation.peer.kind,
+        id: conversation.peer.id,
+        name:
+          conversation.peer.kind === "agent" && conversation.peer.handle
+            ? `@${conversation.peer.handle}`
+            : conversation.peer.name,
+        avatarUrl: conversation.peer.avatarUrl,
+        deleted: conversation.peer.deleted,
+      }}
+    />
+  ) : message.senderKind === "agent" ? (
+    `@${message.senderHandle ?? message.senderName}`
   ) : (
-    `@${message.senderName}`
+    <ActorName
+      actor={{
+        kind: "user",
+        id: message.senderUserId,
+        name: message.senderName,
+        avatarUrl: message.senderAvatarUrl,
+        deleted: message.senderDeleted,
+      }}
+    />
   );
   const attachmentName = message.attachments[0]?.fileName;
 
@@ -140,7 +162,9 @@ function SavedMessageCard({
           className="min-w-0 flex-1 rounded-lg outline-focus-ring focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           <div className="flex min-w-0 items-center gap-2 text-xs text-tertiary">
-            <span className="truncate font-medium text-tertiary">{place}</span>
+            <span className="flex min-w-0 shrink items-center font-medium text-tertiary">
+              {place}
+            </span>
             {message.threadRootId && (
               <span className="inline-flex shrink-0 items-center gap-1 text-quaternary">
                 <MessageTextSquare01 aria-hidden="true" className="size-3" />

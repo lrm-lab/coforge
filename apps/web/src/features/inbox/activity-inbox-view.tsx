@@ -433,7 +433,9 @@ export function ActivityInboxView({
         <>
           <TabHomeHeader title={m.navigation_activity()} meta={activeCountMeta} />
           <div className="flex shrink-0 items-center gap-2 border-b border-secondary px-page py-2">
-            <div className="flex min-w-0 flex-1">{filterTabs}</div>
+            <div className="flex min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {filterTabs}
+            </div>
             {moreActions}
           </div>
         </>

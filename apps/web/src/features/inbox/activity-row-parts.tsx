@@ -21,7 +21,9 @@ export function ActivityRowTitle({
   children: React.ReactNode;
 }) {
   return (
-    <span className={cn("min-w-10 truncate text-md", unread ? "text-primary" : "text-tertiary")}>
+    <span
+      className={cn("block min-w-10 truncate text-md", unread ? "text-primary" : "text-tertiary")}
+    >
       {children}
     </span>
   );

@@ -1,4 +1,5 @@
 import { Avatar, type AvatarProps } from "#src/components/base/avatar/avatar";
+import { useAvatarImageFallback } from "#src/hooks/use-image-fallback";
 import { avatarInitial, avatarToneClassName } from "#src/lib/avatar-tone";
 import { isPersonPicture, personAvatarUrl } from "#src/lib/person-picture";
 import { cx } from "#src/utils/cx";
@@ -19,25 +20,11 @@ export type IdentityAvatarProps = Pick<
   | "badge"
   | "rounded"
 > & {
-  /** Who this is: the initial shown while there is no picture, and the tone behind it, derive from
-   * it. `initials` and `contentClassName` override either. */
   name?: string;
-  /** A person's id: with no `src`, the face is the cartoon person this id chooses
-   * (`personAvatarUrl`), the same one the server resolves. Only for a picture that can be missing
-   * locally (a preview after removing the avatar); server-read pictures are never null. */
   userId?: string;
-  /** Greys an archived identity: its sticker, or the base avatar's tile. */
   deleted?: boolean;
 };
 
-/**
- * The avatar of anyone shown by their picture, a person or an Agent: an Agent's mascot
- * (`isStickerPicture`) as a sticker, anything else, a person's cartoon portrait or uploaded photo,
- * the base `Avatar` on a tone tile. Use it wherever a picture may be either; the base `Avatar`
- * knows nothing of stickers, so a person's face is never drawn through it directly. An Agent known
- * to be one goes through `AgentDisplayAvatar` (status dot) or `AgentMascotAvatar` (moving).
- * `status` is a member's presence dot.
- */
 export function IdentityAvatar({
   name,
   userId,
@@ -49,17 +36,18 @@ export function IdentityAvatar({
   ...props
 }: IdentityAvatarProps) {
   const src = userId ? personAvatarUrl(userId, given) : given;
-  if (!src || !isStickerPicture(src)) {
-    // A cartoon person is round artwork: a circle at every size, never the rounded square a
-    // profile-sized photo takes.
-    const portrait = isPersonPicture(src);
+  const sticker = Boolean(src && isStickerPicture(src));
+  const activeSrc = useAvatarImageFallback(src, sticker);
+
+  if (!src || !sticker) {
+    const portrait = isPersonPicture(activeSrc);
     return (
       <Avatar
         {...props}
         rounded={portrait || props.rounded}
         className={cx(props.className, portrait && "avatar-portrait")}
         alt={alt}
-        src={src}
+        src={activeSrc}
         initials={initials}
         contentClassName={
           deleted ? cx(DELETED_AVATAR_CLASS, DELETED_PICTURE_CLASS) : contentClassName
@@ -67,7 +55,6 @@ export function IdentityAvatar({
       />
     );
   }
-  // The initials' tone (`contentClassName`) has nothing to colour on a sticker.
   return (
     <AvatarSticker
       size={props.size}

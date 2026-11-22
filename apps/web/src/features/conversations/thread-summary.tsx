@@ -61,12 +61,6 @@ export function ThreadSheetEntry({ rootId, onOpen }: ThreadPartProps) {
   );
 }
 
-/**
- * The preview card under a root: the reply count, the unread count and the newest few replies,
- * which the thread's summary carries. System notices are stream bookkeeping, not a person
- * replying: they belong to the full thread pane, never to the preview, and a thread with only
- * notices shows no preview at all.
- */
 export function ThreadPreview({ rootId, onOpen }: ThreadPartProps) {
   const summary = useThreadSummary(rootId);
   const unread = useThreadUnread(rootId);
@@ -74,20 +68,14 @@ export function ThreadPreview({ rootId, onOpen }: ThreadPartProps) {
   if (!summary?.replyCount) return null;
   const label = replyCountLabel(summary.replyCount);
   return (
-    // The text spans carry `message-text`, which scopes the type scale to Settings → Message font
-    // size as in the message above (so `md` is the body size and `sm` the small one). The
-    // avatars stay outside it: they do not change with that setting.
     <Button
       color="tertiary"
       size="sm"
       noTextPadding
       onPress={() => onOpen(rootId)}
-      // Design spec: 8px above the content, 16px below it and on each side.
-      className="mt-1.5 block h-auto w-full rounded-lg bg-secondary px-4 pt-2 pb-4 text-left font-normal hover:bg-secondary_hover"
+      className="mt-1.5 block h-auto w-full overflow-hidden rounded-lg bg-secondary px-4 pt-2 pb-4 text-left font-normal hover:bg-secondary_hover *:data-text:block *:data-text:min-w-0"
       data-thread-preview=""
     >
-      {/* The reply count reads in the spec's text grey; only the viewer's unread count (and the
-          chevron after it) keeps the brand accent, so "something new" is the one coloured part. */}
       <span
         className={cx(
           "message-text flex items-center gap-0.5 text-md font-medium",
@@ -99,10 +87,9 @@ export function ThreadPreview({ rootId, onOpen }: ThreadPartProps) {
           {unread > 0 && " · "}
         </span>
         {unread > 0 && m.conversation_thread_unread({ count: unread })}
-        <ChevronRight aria-hidden="true" className="size-4" />
+        <ChevronRight aria-hidden="true" className="size-4 shrink-0" />
       </span>
       <span className="mt-1 flex flex-col gap-1.5">
-        {/* The newest few only; the side pane holds the full thread. */}
         {summary.latestReplies.map((reply) => (
           <span key={reply.id} className="flex min-w-0 items-center gap-2">
             <ActorAvatar
@@ -114,7 +101,7 @@ export function ThreadPreview({ rootId, onOpen }: ThreadPartProps) {
               deleted={reply.senderDeleted}
               className="shrink-0"
             />
-            <span className="message-text shrink-0 text-md font-medium text-primary">
+            <span className="message-text max-w-[45%] shrink truncate text-md font-medium text-primary">
               {reply.senderName}
             </span>
             <span className="message-text min-w-0 flex-1 truncate text-md text-secondary">

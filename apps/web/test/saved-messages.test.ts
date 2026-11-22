@@ -7,19 +7,22 @@ import {
 
 const WORKSPACE_ID = "11111111-1111-4111-8111-111111111111";
 
-/** One full row as `savedMessageSelect` returns it; sender details vary per case. */
 function row(overrides: {
   message?: Partial<SavedMessageRow["message"]>;
   savedAt?: Date;
-  conversation?: SavedMessageRow["conversation"];
+  conversation?: Partial<SavedMessageRow["conversation"]> &
+    Pick<SavedMessageRow["conversation"], "id" | "channelName" | "visibility" | "directKey">;
 }): SavedMessageRow {
   return {
     createdAt: overrides.savedAt ?? new Date("2026-09-23T02:00:00Z"),
-    conversation: overrides.conversation ?? {
-      id: "22222222-2222-4222-8222-222222222222",
-      channelName: "coforge",
-      visibility: "public",
-      directKey: null,
+    conversation: {
+      members: [],
+      ...(overrides.conversation ?? {
+        id: "22222222-2222-4222-8222-222222222222",
+        channelName: "coforge",
+        visibility: "public",
+        directKey: null,
+      }),
     },
     message: {
       id: "33333333-3333-4333-8333-333333333333",
@@ -161,5 +164,108 @@ describe("savedMessageView", () => {
     expect(systemView.message.senderKind).toBe("system");
     expect(systemView.message.senderAvatarUrl).toBeNull();
     expect(systemView.message.senderName).toBe("System");
+  });
+
+  test("resolves the DM peer instead of the viewer when the viewer saves their own DM message", () => {
+    const viewerId = "55555555-5555-4555-8555-555555555555";
+    const peerId = "88888888-8888-4888-8888-888888888888";
+    const peopleDmView = savedMessageView(
+      row({
+        conversation: {
+          id: "22222222-2222-4222-8222-222222222222",
+          channelName: null,
+          visibility: "public",
+          directKey: `user:${viewerId}|user:${peerId}`,
+          members: [
+            {
+              userId: viewerId,
+              agentId: null,
+              user: {
+                id: viewerId,
+                username: "konstantin",
+                displayName: "Konstantin",
+                avatarObjectKey: null,
+              },
+              agent: null,
+            },
+            {
+              userId: peerId,
+              agentId: null,
+              user: {
+                id: peerId,
+                username: "aleksandra",
+                displayName: "Aleksandra Wiśniewska-Kowalczyk",
+                avatarObjectKey: null,
+              },
+              agent: null,
+            },
+          ],
+        },
+        message: {
+          sender: {
+            userId: viewerId,
+            agentId: null,
+            user: { username: "konstantin", displayName: "Konstantin", avatarObjectKey: null },
+            agent: null,
+          },
+        },
+      }),
+      WORKSPACE_ID,
+      viewerId,
+    );
+    expect(peopleDmView.conversation.peer).toEqual({
+      kind: "user",
+      id: peerId,
+      name: "Aleksandra Wiśniewska-Kowalczyk",
+      avatarUrl: expect.any(String),
+    });
+
+    const agentId = "77777777-7777-4777-8777-777777777777";
+    const agentDmView = savedMessageView(
+      row({
+        conversation: {
+          id: "99999999-9999-4999-8999-999999999999",
+          channelName: null,
+          visibility: "public",
+          directKey: `agent:${agentId}|user:${viewerId}`,
+          members: [
+            {
+              userId: viewerId,
+              agentId: null,
+              user: {
+                id: viewerId,
+                username: "konstantin",
+                displayName: "Konstantin",
+                avatarObjectKey: null,
+              },
+              agent: null,
+            },
+            {
+              userId: null,
+              agentId,
+              user: null,
+              agent: {
+                id: agentId,
+                name: "muse",
+                displayName: "Muse",
+                deletedAt: null,
+                avatarMascot: null,
+                appBot: null,
+              },
+            },
+          ],
+        },
+      }),
+      WORKSPACE_ID,
+      viewerId,
+    );
+    expect(agentDmView.conversation.peer).toEqual({
+      kind: "agent",
+      id: agentId,
+      name: "Muse",
+      handle: "muse",
+      avatarUrl: expect.any(String),
+      deleted: false,
+    });
   });
 });

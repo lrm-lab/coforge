@@ -2,18 +2,14 @@ import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import type { ThreadedConversationProps } from "./conversation-types";
 import { ThreadedConversation } from "./threaded-conversation";
 
-/**
- * The stream both kinds of direct message share: named after the other side (`@name` over each
- * thread, `name` on the Task popup), with that side's large avatar on the empty state. Each kind
- * brings its own header, identity and copy.
- */
 export function DirectThreadedConversation({
   name,
+  threadContext,
   emptyState: { avatar, ...emptyState },
   ...props
 }: Omit<ThreadedConversationProps, "conversationName" | "threadContext" | "emptyState"> & {
-  /** The other side's name, as the conversation is called. */
   name: string;
+  threadContext?: string;
   emptyState: {
     title: string;
     description: string;
@@ -24,7 +20,7 @@ export function DirectThreadedConversation({
     <ThreadedConversation
       {...props}
       conversationName={name}
-      threadContext={`@${name}`}
+      threadContext={threadContext ?? name}
       emptyState={{
         ...emptyState,
         media: (

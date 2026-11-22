@@ -41,19 +41,11 @@ import { useConversationDetailsState } from "./use-conversation-details-state";
 
 type ConversationPageProps = {
   search: ConversationPageSearch;
-  /** The message the stream lands on, for a host that keeps it itself (the hosted pane). */
   jumpMessage?: string;
-  /** Clears the host's landing once the pane has used it. */
   onJumpMessageConsumed?: () => void;
-  /** Shown inside another page (Activity's pane) rather than as the page itself. */
   hosted?: boolean;
 };
 
-/**
- * A conversation as Chat opens it: its header with the Chat / Tasks / Files tabs, the stream (jumped
- * to `jumpMessage` when a host keeps the target itself), its Task board and files, and reading it.
- * Chat's routes and the hosted pane both render it, so every host shows the same page.
- */
 export function ConversationPage({
   target,
   ...props
@@ -76,10 +68,6 @@ function ChannelConversationPage({
 }: ConversationPageProps & { channelId: string }) {
   const { page, taskView, conversationProps } = useChannelConversation(channelId);
   const { conversation } = page;
-  // The page payload's member directory is a mount-time copy: it only changes on a full reload.
-  // Every surface below the composer — the settings panel's coordinator picker, the header, the
-  // Tasks tab's member list — reads the live directory instead, the same one `member.changed.v1`
-  // already refreshes for @-completion (task #736).
   const freshMentionables = useChannelMentionables(channelId, conversation.mentionables);
   const freshConversation = useMemo(
     () => ({
@@ -146,7 +134,6 @@ function AgentDirectConversationPage({
   ...props
 }: ConversationPageProps & {
   data: ReturnType<typeof useDirectConversation>;
-  /** The page's conversation, known to be with an Agent. */
   conversation: DirectConversationView;
 }) {
   const agentId = conversation.agent.id;
@@ -156,6 +143,7 @@ function AgentDirectConversationPage({
       {...props}
       data={data}
       name={conversation.agent.displayName}
+      tabLabel={`@${conversation.agent.name}`}
       header={(tabs, openAgentProfile, details) => (
         <DirectConversationHeader
           conversation={conversation}
@@ -184,7 +172,6 @@ function PeopleDirectConversationPage({
   ...props
 }: ConversationPageProps & {
   data: ReturnType<typeof useDirectConversation>;
-  /** The page's conversation, known to be between members. */
   conversation: PeopleDirectConversationView;
 }) {
   return (
@@ -192,6 +179,7 @@ function PeopleDirectConversationPage({
       {...props}
       data={data}
       name={conversation.peer.displayName}
+      tabLabel={conversation.peer.displayName}
       header={(tabs, _openAgentProfile, details) => (
         <PeopleDirectConversationHeader
           conversation={conversation}
@@ -232,16 +220,11 @@ function PeopleDirectConversationPage({
   );
 }
 
-/**
- * What every direct message's page shares, whichever kind it is: the viewer is always a member, and
- * the sidebar badge and read cursor go by the conversation id. Each kind supplies its name, header
- * and conversation.
- */
 function DirectConversationPageBody({
   data: { page, taskView },
   ...props
 }: ConversationPageProps &
-  Pick<ConversationPageBodyProps, "name" | "header" | "conversation"> & {
+  Pick<ConversationPageBodyProps, "name" | "tabLabel" | "header" | "conversation"> & {
     data: ReturnType<typeof useDirectConversation>;
   }) {
   const { conversationId } = page.conversation;
@@ -254,7 +237,6 @@ function DirectConversationPageBody({
       taskView={taskView}
       isMember
       direct
-      tabLabel={`@${props.name}`}
       readCursor={{
         key: `dm:${conversationId}`,
         advance: (throughSequence) =>
@@ -268,22 +250,13 @@ type ConversationPageData =
   | ReturnType<typeof useChannelConversation>
   | ReturnType<typeof useDirectConversation>;
 
-/** What a conversation kind gives the shared page. */
 type ConversationPageBodyProps = {
-  /** The key the sidebar's unread badge is kept under: the channel id, or the direct
-   * conversation's id. */
   unreadKey: string;
   page: ConversationPageData["page"];
   taskView: ConversationPageData["taskView"];
-  /** Whether the viewer is a member: only a member advances the read cursor, creates Tasks and
-   * moves them. */
   isMember: boolean;
-  /** A direct conversation, whose row counts its thread replies too (`rowReadEnd`). */
   direct?: boolean;
-  /** The conversation's name on its Task board. */
   name: string;
-  /** What the browser tab calls the conversation: a channel's bare name (its face is the group
-   * avatar, never a `#`), or `@Name` for a direct message. */
   tabLabel: string;
   readCursor: { key: string; advance: (throughSequence: number) => Promise<unknown> };
   header: (
@@ -359,16 +332,9 @@ function ConversationPageMain({
   const { showChat, showTasks, showFiles, openTask, openTaskThread, openMessage } =
     useConversationView(page.ensureLoaded);
 
-  // Opening the conversation clears its badge and advances the server cursor through the end of
-  // what its row counts (`rowReadEnd`). A thread shown alone leaves the conversation out of view,
-  // so it stays unread.
   const markSeen = useMarkConversationSeen();
   const clearSidebarTopLevelUnread = useClearSidebarTopLevelUnread();
   const threadAlone = useStandaloneThread() !== null;
-  // The tab title names the conversation, with " - Thread" while a thread is open (as Raft's). A
-  // conversation hosted in Activity leaves the title alone: Activity is the page, and a row being
-  // previewed is not where the person is. A thread shown alone there does name itself, as Raft's
-  // Activity does for an opened thread.
   const threadOpen = threadAlone || pageSearch.threadRootId !== undefined;
   usePageTitleLabel(
     hosted && !threadAlone
@@ -381,11 +347,6 @@ function ConversationPageMain({
     markSeen(unreadKey, readEnd);
     if (isMember) clearSidebarTopLevelUnread(unreadKey);
   }, [markSeen, clearSidebarTopLevelUnread, isMember, unreadKey, readEnd, threadAlone]);
-  // A conversation opened from Activity is read here, not by its row (task #358), so its first
-  // read in each visit refreshes Activity's lists, and so does reading to the latest. Not every
-  // message that arrives while it is open: that would refetch Activity's whole list per message.
-  // The nav dot is not read again: a read that moved the cursor has the server announce where the
-  // dot stands (task #496), and one that moved nothing leaves it as it was.
   const queryClient = useQueryClient();
   const refreshedActivity = useRef<string | undefined>(undefined);
   const advance = (throughSequence: number, label: string, refreshActivity: boolean) =>
@@ -394,10 +355,6 @@ function ConversationPageMain({
       if (refreshActivity)
         void queryClient.invalidateQueries({ queryKey: ACTIVITY_INBOX_LISTS_KEY });
     });
-  // The cursor's write is rebuilt each render around the same conversation; the effect reruns only
-  // when what it reads changes. It waits, like the divider, for this open's read of where the
-  // viewer's unread starts (task #378): moving the server's cursor first would bring that read back
-  // with nothing unread.
   const readThrough = useEffectEvent((throughSequence: number) => {
     const first = refreshedActivity.current !== readCursor.key;
     refreshedActivity.current = readCursor.key;
@@ -408,10 +365,7 @@ function ConversationPageMain({
     undefined,
     isMember && !threadAlone,
   );
-  // Nobody looking, nothing is reported (task #549): a background tab, or a window without focus,
-  // reads what it loaded once it is in front with focus and this conversation still open.
   const attended = usePageAttended();
-  // While it is read here, its messages leave the Activity count alone (task #62).
   useReportViewingItem(
     isMember && !threadAlone && opened && attended
       ? activityItemKey({ conversationId: conversation.conversationId })

@@ -191,6 +191,7 @@ export function DirectConversation({
     <DirectThreadedConversation
       {...props}
       name={agentName}
+      threadContext={`@${conversation.agent.name}`}
       plainMentions={plainMentions}
       detailsOpen={details.open}
       detailsPane={
