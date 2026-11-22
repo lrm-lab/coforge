@@ -1,6 +1,7 @@
 import type { AgentRuntimeEvent, createSession } from "@coforge/agent";
 import { AGENT_RUNTIME_EVENT_TYPE } from "#src/contract";
 import { asRecord, integerField, textContent } from "#src/json-record";
+import { buildPromptCacheUsage, type PromptCacheUsage } from "#src/prompt-cache-usage";
 
 type PiSession = Awaited<ReturnType<typeof createSession>>["session"];
 export type PiSessionEvent = Parameters<Parameters<PiSession["subscribe"]>[0]>[0];
@@ -28,6 +29,20 @@ function piMessageContextTokens(usage: unknown): number {
     nonNegativeFinite(record.cacheRead) +
     nonNegativeFinite(record.cacheWrite)
   );
+}
+
+export function piPromptCacheUsage(usage: unknown): PromptCacheUsage | undefined {
+  const record = asRecord(usage);
+  if (!record) return undefined;
+  const cachedInputTokens = nonNegativeFinite(record.cacheRead);
+  const cacheWriteInputTokens = nonNegativeFinite(record.cacheWrite);
+  const inputTokens = nonNegativeFinite(record.input) + cachedInputTokens + cacheWriteInputTokens;
+  return buildPromptCacheUsage({
+    inputTokens,
+    cachedInputTokens,
+    cacheWriteInputTokens,
+    outputTokens: record.output,
+  });
 }
 
 export function piSessionEvents(event: PiSessionEvent, windowTokens?: number): AgentRuntimeEvent[] {

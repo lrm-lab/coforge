@@ -7,7 +7,8 @@ import type {
 } from "@coforge/agent";
 import { createSession, SessionEnvironmentError } from "@coforge/agent";
 import { piContextHasMedia, piRequestBody } from "@coforge/agent";
-import { AGENT_ACTIVITY_DETAIL_KIND } from "@lrm/coforge-sdk/internal";
+import { getLogger } from "@logtape/logtape";
+import { AGENT_ACTIVITY_DETAIL_KIND, RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import {
   AgentEnvironmentError,
   AgentSessionRecoveryError,
@@ -15,10 +16,13 @@ import {
   RuntimeModelNotFoundError,
 } from "#src/contract";
 import { errorMessage } from "#src/json-record";
+import { promptCacheLogFields } from "#src/prompt-cache-usage";
 import { SessionExit } from "#src/session-exit";
 import type { PiSessionHost } from "./host";
 import { PiReplyIntents } from "./reply-intents";
-import { piSessionEvents } from "./session-events";
+import { piPromptCacheUsage, piSessionEvents } from "./session-events";
+
+const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.PI]);
 
 /** Adapt one embedded SDK session without exposing the private Session state machine. */
 export async function createPiAgentSession(
@@ -182,6 +186,17 @@ class AgentSessionImpl implements AgentSession {
           body: event.message,
           timestamp: new Date().toISOString(),
         });
+        if (event.message.stopReason !== "error" && event.message.stopReason !== "aborted") {
+          const cacheUsage = piPromptCacheUsage(event.message.usage);
+          if (cacheUsage) {
+            logger.info("Pi observed prompt cache usage", {
+              event: "pi.prompt_cache.usage",
+              session_id: runtime.sessionId,
+              ...promptCacheLogFields(cacheUsage),
+              ...(this.#windowTokens !== undefined ? { window_tokens: this.#windowTokens } : {}),
+            });
+          }
+        }
         this.#failure =
           event.message.stopReason === "error"
             ? (event.message.errorMessage ?? "Agent failed")
