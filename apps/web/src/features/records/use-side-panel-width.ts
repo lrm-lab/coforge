@@ -29,11 +29,6 @@ export function useSidePanelWidth(open: boolean) {
   const panelWidthRef = useRef(DEFAULT_SIDE_PANEL_WIDTH);
   const [panelWidth, setPanelWidth] = useState(DEFAULT_SIDE_PANEL_WIDTH);
   panelWidthRef.current = panelWidth;
-  const [displayWidth, setDisplayWidth] = useState<number | string>(() =>
-    open ? `min(100%, ${DEFAULT_SIDE_PANEL_WIDTH}rem)` : 0,
-  );
-  const [resizing, setResizing] = useState(false);
-  const wasOpenRef = useRef(open);
   const beside = useBreakpoint("lg");
   const [docked, setDocked] = useState(beside);
 
@@ -60,29 +55,11 @@ export function useSidePanelWidth(open: boolean) {
     clampToParent();
   }, [clampToParent]);
 
-  useLayoutEffect(() => {
-    const target = beside ? `min(100%, ${panelWidth}rem)` : "100%";
-    if (open) {
-      const shouldAnimateIn = !wasOpenRef.current;
-      wasOpenRef.current = true;
-      if (shouldAnimateIn) {
-        setDisplayWidth(0);
-        const frame = requestAnimationFrame(() => setDisplayWidth(target));
-        return () => cancelAnimationFrame(frame);
-      }
-      setDisplayWidth(target);
-      return;
-    }
-    wasOpenRef.current = false;
-    setDisplayWidth(0);
-  }, [beside, open, panelWidth]);
-
   useResizeObserver({ ref: parentRef, onResize: clampToParent });
 
   function commitPanelWidth(width: number) {
     panelWidthRef.current = width;
     setPanelWidth(width);
-    setDisplayWidth(beside ? `min(100%, ${width}rem)` : "100%");
   }
 
   function currentMaxWidth() {
@@ -102,8 +79,6 @@ export function useSidePanelWidth(open: boolean) {
     panelDragRef.current = { startX: event.clientX, startWidth: panelWidthRef.current };
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
-    if (asideRef.current) asideRef.current.style.transition = "none";
-    setResizing(true);
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
     } catch {}
@@ -114,7 +89,7 @@ export function useSidePanelWidth(open: boolean) {
     if (!drag) return;
     const max = currentMaxWidth();
     const rootPx = readRootFontSizePx();
-    const rtl = document.documentElement.dir === "rtl";
+    const rtl = window.getComputedStyle(event.currentTarget).direction === "rtl";
     const deltaRem = (rtl ? event.clientX - drag.startX : drag.startX - event.clientX) / rootPx;
     const next = roundSidePanelRem(
       Math.min(Math.max(drag.startWidth + deltaRem, MIN_SIDE_PANEL_WIDTH), max),
@@ -130,7 +105,6 @@ export function useSidePanelWidth(open: boolean) {
     } catch {}
     document.body.style.cursor = "";
     document.body.style.userSelect = "";
-    setResizing(false);
     writeStoredSidePanelWidth(panelWidthRef.current);
   }
 
@@ -138,7 +112,7 @@ export function useSidePanelWidth(open: boolean) {
     if (!docked) return;
     const max = currentMaxWidth();
     const step = event.shiftKey ? 3 : 1;
-    const rtl = document.documentElement.dir === "rtl";
+    const rtl = window.getComputedStyle(event.currentTarget).direction === "rtl";
     const widenKey = rtl ? "ArrowRight" : "ArrowLeft";
     const shrinkKey = rtl ? "ArrowLeft" : "ArrowRight";
     if (event.key === widenKey) {
@@ -160,12 +134,13 @@ export function useSidePanelWidth(open: boolean) {
     }
   }
 
+  const displayWidth = open ? (beside ? `min(100%, ${panelWidth}rem)` : "100%") : 0;
+
   return {
     asideRef,
     panelWidth,
     displayWidth,
     docked,
-    resizing,
     resizeHandle: {
       onPointerDown: onPanelResizePointerDown,
       onPointerMove: onPanelResizePointerMove,

@@ -14,7 +14,6 @@ import {
 } from "./records.functions";
 import { dismissWeeklyFormatSend } from "./records-side-chat.functions";
 import type { ReportBodyRestoreView } from "./records-content";
-import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import { WeeklySendConfirmDialog } from "./weekly-send-confirm-dialog";
 import { WeeklyReportCollectPlanCard } from "./weekly-report-collect-plan-card";
 import { WeeklyReportCollectRunCard } from "./weekly-report-collect-run-card";
@@ -149,7 +148,6 @@ export function WeeklyReportMessageCard(props: {
           <Button
             size="sm"
             color="primary"
-            className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
             isDisabled={busy || applied || props.disabled}
             isLoading={busy && !confirmOpen}
             onPress={() => setConfirmOpen(true)}

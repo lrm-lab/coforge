@@ -106,7 +106,6 @@ export function ReportDetail({
   }, [memberAssignee, report.content]);
   const assignmentUnchanged =
     receivedBaseline != null && reportTabsEqual(content, receivedBaseline);
-  // Leader reads a submitted assignment; the assignee turns the same pages while filling it in.
   const readingScroll = (leaderReading && sent) || memberAssignee;
   const readingTurn = useReportReadingTurn(report.id, report.cycle, readingScroll);
 
@@ -114,7 +113,6 @@ export function ReportDetail({
     setFavorited(Boolean(report.favorited));
   }, [report.favorited, report.id]);
 
-  // The status the server holds, whenever it changes: it was copied once, at mount.
   useEffect(() => {
     setStatus(report.status);
   }, [report.status, report.id]);
@@ -168,13 +166,10 @@ export function ReportDetail({
   ) {
     if (!editable) return true;
     const { normalized, saved } = saveDraft(reportId, next, { status: nextStatus });
-    // The edits stay in the editor and in the browser's draft when the server refuses.
     const ok = await track(
       () => saved,
       () => void persist(contentRef.current, nextStatus),
       () => reportId === reportIdRef.current,
-      // The row moved under this editor (another save landed first): reload it, so the retry
-      // carries the fresh version. The draft stays.
       (cause) => {
         if (isAppErrorCode(cause, "CONFLICT")) void refresh.record();
       },
@@ -214,7 +209,6 @@ export function ReportDetail({
       await waitForReportSave(report.id);
       await persist(contentRef.current, "submitted");
     } catch (cause) {
-      // An earlier save the send waited for had failed: say so; the label stays 发送 / 重新发送.
       setFailure(reportSaveFailure(cause, () => void submitReport()));
     } finally {
       submitInFlightRef.current = false;
@@ -227,13 +221,11 @@ export function ReportDetail({
     writeReportDraft(reportIdRef.current, next);
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     const reportId = reportIdRef.current;
-    // Autosave delay: 900ms, debounced per keystroke.
     saveTimerRef.current = setTimeout(() => {
       void persist(contentRef.current, undefined, reportId);
     }, 900);
   }
 
-  /** Waits out an autosave in flight, so a delete pressed mid-save still goes through. */
   async function removeCurrentReport() {
     if (!editable) throw new Error("This report cannot be deleted");
     const end = begin();
@@ -301,7 +293,6 @@ export function ReportDetail({
       setRestoreView(restore);
       seenRestoreRevisionRef.current = restore.revision;
     }
-    // TipTap keeps a dirty buffer; remount so the inserted body is visible immediately.
     setEditorRevision((value) => value + 1);
   }
 
@@ -358,7 +349,7 @@ export function ReportDetail({
 
   return (
     <div className="@container/record-split relative flex min-h-0 flex-1 overflow-hidden">
-      <div className="relative flex min-w-[min(100%,20rem)] flex-1 flex-col overflow-hidden bg-[linear-gradient(to_bottom,rgb(93_54_220/0.1),rgb(93_54_220/0)_202px)] bg-no-repeat dark:bg-none">
+      <div className="relative flex min-w-[min(100%,20rem)] flex-1 flex-col overflow-hidden bg-primary">
         <ReportDetailHeader
           report={report}
           returnTo={returnTo}
@@ -392,7 +383,7 @@ export function ReportDetail({
             onUploadFile={editable ? fileToDataUrlUpload : undefined}
             trailingTabs={
               leaderReading && sent
-                ? [{ id: KEY_POINT_EXTRACTION_TAB, label: KEY_POINT_EXTRACTION_TAB }]
+                ? [{ id: KEY_POINT_EXTRACTION_TAB, label: m.records_key_points_tab() }]
                 : undefined
             }
             renderTrailingTab={(id) =>

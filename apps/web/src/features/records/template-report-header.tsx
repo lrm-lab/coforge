@@ -5,7 +5,6 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { m } from "#src/paraglide/messages";
-import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import { BackToRecords, RecordsKeyPointReturnBack } from "./records-layout";
 import { WeekBadge } from "./records-sidebar-parts";
 
@@ -59,7 +58,7 @@ export function TemplateReportHeader({
         <WeekBadge week={week} />
       </span>
       {isOverview ? (
-        <h1 className="min-w-0 flex-1 text-md font-semibold wrap-anywhere text-primary sm:text-lg">
+        <h1 className="min-w-0 flex-1 text-md font-semibold wrap-anywhere text-primary">
           <bdi>{title}</bdi>
         </h1>
       ) : (
@@ -71,7 +70,7 @@ export function TemplateReportHeader({
           aria-invalid={titleError !== null}
           aria-describedby={titleError ? "report-title-error" : undefined}
           onChange={(event) => onTitleDraftChange(event.target.value)}
-          className="min-w-0 flex-1 truncate bg-transparent text-md font-semibold text-primary outline-none placeholder:text-tertiary focus-visible:outline-none disabled:opacity-60 sm:text-lg"
+          className="min-w-0 flex-1 truncate bg-transparent text-md font-semibold text-primary outline-none placeholder:text-tertiary focus-visible:outline-none disabled:opacity-60"
         />
       )}
       <div className="ms-auto flex shrink-0 items-center gap-1">
@@ -80,7 +79,6 @@ export function TemplateReportHeader({
             <Button
               size="sm"
               color="primary"
-              className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
               isDisabled={
                 saving ||
                 sending ||

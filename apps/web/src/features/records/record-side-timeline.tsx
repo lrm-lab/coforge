@@ -2,10 +2,10 @@ import { memo } from "react";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { humanLabel } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
 import type { WeeklyReportAssistantSuggestion } from "#src/server/records/weekly-report-assistant-suggestion.server";
 import type { ReportBodyRestoreView } from "./records-content";
-import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import {
   AssistantAttachmentCard,
   AutoSendCountdown,
@@ -21,11 +21,6 @@ import { WeeklyReportMessageCard } from "./weekly-report-message-card";
 
 export type CommentRow = Awaited<ReturnType<typeof ensureRecordAssistantIntro>>[number];
 
-/**
- * The Record side panel's thread: its comments and assistant messages, each with the card it
- * carries. Memoized, with handlers that keep their identity, so typing in the composer or the
- * send countdown's tick does not render the whole thread again (task #366).
- */
 export const RecordSideTimeline = memo(function RecordSideTimeline({
   timeline,
   threadStates,
@@ -89,9 +84,9 @@ export const RecordSideTimeline = memo(function RecordSideTimeline({
               ? m.records_side_chat_assistant()
               : comment.authorType === "system"
                 ? m.records_side_chat_system()
-                : comment.author?.displayName?.trim() ||
-                  comment.author?.username?.trim() ||
-                  viewerName;
+                : comment.author
+                  ? humanLabel(comment.author)
+                  : viewerName;
           const state = threadStates.byId.get(comment.id)!;
           const payload = state.payload;
           const offerResolved =
@@ -139,7 +134,6 @@ export const RecordSideTimeline = memo(function RecordSideTimeline({
                 <Button
                   size="sm"
                   color="primary"
-                  className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
                   isDisabled={busy}
                   onPress={() => void onAcceptGenerateHelp()}
                 >
@@ -151,7 +145,6 @@ export const RecordSideTimeline = memo(function RecordSideTimeline({
                   <Button
                     size="sm"
                     color="primary"
-                    className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
                     isDisabled={busy}
                     onPress={() => void onConfirmIntent(payload.intent, payload.userGuidance)}
                   >
@@ -285,7 +278,6 @@ export const RecordSideTimeline = memo(function RecordSideTimeline({
                     <Button
                       size="sm"
                       color="primary"
-                      className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
                       isDisabled={busy}
                       onPress={() => void confirmSuggestion(message.id, suggestion)}
                     >

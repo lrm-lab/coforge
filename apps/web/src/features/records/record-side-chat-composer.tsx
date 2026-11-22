@@ -1,18 +1,14 @@
 import { useRef, type FormEvent, type KeyboardEvent } from "react";
 import { Microphone02 as Microphone, Paperclip, Send01 as Send } from "@untitledui/icons";
 import { FIELD_STATES } from "#src/components/base/input/field-states";
+import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { shouldSendOnEnter } from "#src/features/conversations/composer-behavior";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
-import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import { SendCountdownBadge } from "./record-side-panel-cards";
 
-/**
- * The side chat's composer under its timeline: the draft, Enter to send (Ctrl+Enter for a new
- * line, and never while an input method is composing), and the send button with its countdown.
- */
 export function RecordSideChatComposer({
   draft,
   onDraftChange,
@@ -23,7 +19,6 @@ export function RecordSideChatComposer({
   draft: string;
   onDraftChange: (value: string) => void;
   onSubmit: (event: FormEvent) => void;
-  /** A reply is being written or the assistant is still working: nothing can be sent. */
   sendLocked: boolean;
   countdownUntil?: Date | null;
 }) {
@@ -89,12 +84,11 @@ export function RecordSideChatComposer({
             aria-label={m.records_side_chat_voice()}
             isDisabled
           />
-          <ButtonUtility
+          <Button
             type="submit"
             size="sm"
-            color="secondary"
-            icon={Send}
-            className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
+            color="primary"
+            iconLeading={Send}
             aria-label={m.records_side_chat_send()}
             isDisabled={sendLocked || !draft.trim()}
           />

@@ -7,7 +7,6 @@ import {
 } from "#src/components/ui/dialog-actions";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { m } from "#src/paraglide/messages";
-import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 
 export function RecordSideRenameDialog({
   open,
@@ -33,8 +32,6 @@ export function RecordSideRenameDialog({
           <h2 className="text-md font-semibold text-primary">
             {m.records_side_chat_rename_title()}
           </h2>
-          {/* A form: Enter saves through the browser's own submit, which waits out an input
-              method's candidates and holds while Save is disabled (task #101). */}
           <form
             onSubmit={(event) => {
               event.preventDefault();
@@ -52,11 +49,7 @@ export function RecordSideRenameDialog({
             </div>
             <DialogActions className="mt-4">
               <DialogCancel onPress={onClose}>{m.controls_cancel()}</DialogCancel>
-              <DialogAction
-                className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
-                isDisabled={!draft.trim() || busy}
-                type="submit"
-              >
+              <DialogAction isDisabled={!draft.trim() || busy} type="submit">
                 {m.records_side_chat_rename_save()}
               </DialogAction>
             </DialogActions>

@@ -13,7 +13,6 @@ import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { ActorName } from "#src/features/avatars/actor-name";
 import { messageSlots } from "#src/lib/message-slots";
 import { m } from "#src/paraglide/messages";
-import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import { SideChatIcon } from "./side-chat-icon";
 import { formatWeeklyReportCompletedAt, type ReportBodyRestoreView } from "./records-content";
 import { BackToRecords, RecordsKeyPointReturnBack } from "./records-layout";
@@ -74,7 +73,7 @@ export function ReportDetailHeader({
             alt={report.author.displayName}
             src={report.author.avatarUrl}
           />
-          <h1 className="min-w-0 flex-1 text-lg font-semibold wrap-anywhere text-primary">
+          <h1 className="min-w-0 flex-1 text-md font-semibold wrap-anywhere text-primary">
             <bdi>{report.title}</bdi>
           </h1>
         </div>
@@ -130,7 +129,6 @@ export function ReportDetailHeader({
             <Button
               size="sm"
               color="primary"
-              className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
               preventFocusOnPress
               isDisabled={assignmentUnchanged}
               onPress={onSubmit}

@@ -131,7 +131,7 @@ export function RecordLink({
       resetScroll={false}
       onClick={onSelect}
       className={cn(
-        "flex min-w-0 items-center gap-2 rounded-xl border p-2 text-sm transition duration-100 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
+        "flex min-w-0 items-center gap-2 rounded-xl border p-2 text-sm transition-colors duration-100 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
         selected
           ? "border-chat-selected-border bg-chat-selected-bg font-medium text-brand-secondary"
           : "border-transparent text-secondary hover:bg-primary_hover",
@@ -148,7 +148,7 @@ export function WeekBadge({ week, className }: { week: number; className?: strin
     <span
       aria-hidden="true"
       className={cn(
-        "flex size-8 shrink-0 items-center justify-center rounded-full bg-primary-solid text-xs font-semibold text-white",
+        "flex size-8 shrink-0 items-center justify-center rounded-full bg-brand-solid text-xs font-semibold text-fg-white",
         className,
       )}
     >

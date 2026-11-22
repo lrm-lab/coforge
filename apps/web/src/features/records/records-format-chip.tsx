@@ -81,7 +81,7 @@ export function FormatChipSlot({
   });
   const chipTitle =
     distinguishSettingsName && chip.name.trim() && chip.name.trim() !== weekLabel
-      ? `${weekLabel} · ${chip.name.trim()}`
+      ? `${weekLabel} ${chip.name.trim()}`
       : weekLabel;
 
   const label = (

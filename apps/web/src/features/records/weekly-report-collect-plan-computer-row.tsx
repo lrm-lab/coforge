@@ -9,10 +9,6 @@ import type { listWeeklyReportCollectorSlots } from "./records-collect.functions
 
 type SlotRow = Awaited<ReturnType<typeof listWeeklyReportCollectorSlots>>[number];
 
-/** Selected state uses the same neutral black fill as Records primary buttons. */
-const COLLECT_PLAN_CHECKBOX_CLASSNAME =
-  "[&[data-selected]>div]:bg-primary-solid! [&[data-selected]>div]:ring-primary-solid!";
-
 export function CollectComputerRow(props: {
   slot: SlotRow;
   checked: boolean;
@@ -34,7 +30,7 @@ export function CollectComputerRow(props: {
     <div
       className={`rounded-xl border border-secondary p-3 ${props.checked ? "bg-secondary" : "bg-primary"}`}
     >
-      <div className="flex items-center gap-2 pl-6">
+      <div className="flex items-center gap-2 ps-6">
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-primary">
           {slot.displayName}
         </span>
@@ -56,7 +52,7 @@ export function CollectComputerRow(props: {
       </div>
       <div className="mt-2 flex items-center gap-2">
         <Checkbox
-          className={`${COLLECT_PLAN_CHECKBOX_CLASSNAME} self-center`}
+          className="self-center"
           isSelected={props.checked}
           isDisabled={props.disabled}
           onChange={(next) => props.onToggle(next)}
@@ -78,7 +74,7 @@ export function CollectComputerRow(props: {
         </div>
       </div>
       {!slot.ready ? (
-        <div className="mt-1 flex flex-wrap items-center gap-2 pl-6">
+        <div className="mt-1 flex flex-wrap items-center gap-2 ps-6">
           <p className="min-w-0 flex-1 basis-40 text-xs text-warning-primary">
             {slot.agentIssue === "stopped"
               ? m.records_collect_plan_agent_stopped()

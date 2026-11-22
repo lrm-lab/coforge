@@ -39,16 +39,9 @@ import {
   writeMermaidViewPreference,
 } from "#src/features/records/report-editor/mermaid-view-preference";
 
-// Coalesces fast keystrokes before re-rendering live previews.
-// `mermaid.initialize()` mutates a process-global config, so back-to-back
-// renders during typing can race a concurrent ReadonlyContent render
-// (e.g. a comment card) and clobber its theme variables. 200ms keeps the
-// "live preview" feel while making concurrent inits unlikely in practice.
-// HTML preview reuses the same debounce: re-keying iframe.srcDoc on every
-// keystroke causes the iframe to re-load and flicker.
 const PREVIEW_DEBOUNCE_MS = 200;
 
-const HTML_PREVIEW_HEIGHT = "h-[480px]";
+const HTML_PREVIEW_HEIGHT = "h-[30rem]";
 
 type CodeLanguage = InsertableCodeBlockLanguage | "markdown" | "html";
 

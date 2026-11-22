@@ -19,7 +19,6 @@ import {
 import { Select } from "#src/components/base/select/select";
 import type { PickerOption } from "#src/features/pickers/entity-picker";
 import { m } from "#src/paraglide/messages";
-import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import { isValidTemplateName, hourlySendTimes } from "./records-content";
 import { FOUNDATION_MODELS_WEEKLY_TEMPLATE_NAME } from "./foundation-models-weekly";
 import { parseTemplateSections, type TemplateOutlineSection } from "./template-outline-sections";
@@ -41,7 +40,6 @@ import {
 const SEND_TIMES = hourlySendTimes();
 const SEND_WEEKDAYS = [1, 2, 3, 4, 5, 6, 7] as const;
 
-/** What the form edits; the form is dirty when it differs from the draft it opened with. */
 type TemplateDraft = {
   name: string;
   sections: TemplateOutlineSection[];
@@ -76,7 +74,6 @@ function draftOf(template: WeeklyTemplateDraft | null): TemplateDraft {
   };
 }
 
-/** Recipient order is not an edit. */
 function draftKey(draft: TemplateDraft): string {
   return JSON.stringify({ ...draft, recipientIds: [...draft.recipientIds].sort() });
 }
@@ -129,7 +126,6 @@ export function CreateWeeklyTemplateDialog({
   const [nameError, setNameError] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Everyone first, then each person, searched by name, username and role too.
   const recipientOptions = useMemo(
     (): PickerOption[] => [
       { id: "all", label: m.records_template_all_members() },
@@ -137,7 +133,7 @@ export function CreateWeeklyTemplateDialog({
         id: member.userId,
         label: memberLabel(member),
         face: { kind: "identity" as const, name: humanLabel(member), src: member.avatarUrl },
-        keywords: [member.username, member.role].filter(Boolean).join(" "),
+        keywords: member.role || undefined,
       })),
     ],
     [members],
@@ -189,7 +185,6 @@ export function CreateWeeklyTemplateDialog({
     setRecipientIds(next);
   }
 
-  /** The one recipient a tick or untick changed. */
   function onRecipientSelectionChange(ids: string[]) {
     const changed =
       ids.find((id) => !selectedRecipientKeys.includes(id)) ??
@@ -197,7 +192,6 @@ export function CreateWeeklyTemplateDialog({
     if (changed !== undefined) toggleRecipient(changed);
   }
 
-  /** Saves; false when the name is invalid, so nothing was saved. */
   async function save(): Promise<boolean> {
     if (!isValidTemplateName(name)) {
       setNameError(true);
@@ -223,7 +217,6 @@ export function CreateWeeklyTemplateDialog({
       });
       return true;
     } catch {
-      // A refused save keeps the drawer open with the edits, as before.
       return false;
     } finally {
       setSaving(false);
@@ -231,19 +224,17 @@ export function CreateWeeklyTemplateDialog({
   }
 
   const baseline = useMemo(() => draftKey(draftOf(initial)), [initial]);
-  // Compared only while open: the closed drawer stays mounted under the settings page.
   const dirty =
     open &&
     baseline !==
       draftKey({ name, sections, allMembers, recipientIds, sendTime, sendWeekday, enabled });
-  // Save and Close only when the form would accept a save.
   const guard = useUnsavedChangesGuard({
     overlayOpen: open,
     dirty,
     close: () => onOpenChange(false),
     onSave: isValidTemplateName(name) ? save : undefined,
   });
-  /** Every way out of the drawer comes through here; none while a save runs. */
+
   function requestClose() {
     if (!saving) guard.requestClose();
   }
@@ -278,15 +269,14 @@ export function CreateWeeklyTemplateDialog({
             aria-label={editing ? m.records_edit_template() : m.records_create_template()}
             className="gap-0"
           >
-            {/* `SlideoutMenu.Header`'s frame, with a close button labelled in the app's language. */}
             <header className="relative z-1 w-full border-b border-secondary px-4 pt-6 pb-4 md:px-6">
-              <Heading slot="title" className="pr-8 text-lg font-semibold text-primary">
+              <Heading slot="title" className="pe-8 text-md font-semibold text-primary">
                 {editing ? m.records_edit_template() : m.records_create_template()}
               </Heading>
               <CloseButton
                 size="sm"
                 label={m.controls_close()}
-                className="absolute top-3 right-3 shrink-0"
+                className="absolute end-3 top-3 shrink-0"
               />
             </header>
 
@@ -322,7 +312,7 @@ export function CreateWeeklyTemplateDialog({
                         removeLabel={m.records_template_delete_heading()}
                       />
                       {section.children.length > 0 ? (
-                        <div className="relative ml-3 space-y-2 border-l-2 border-secondary pl-4">
+                        <div className="relative ms-3 space-y-2 border-s-2 border-secondary ps-4">
                           {section.children.map((child, childIndex) => (
                             <OutlineRow
                               key={`${sectionIndex}-${childIndex}`}
@@ -337,7 +327,7 @@ export function CreateWeeklyTemplateDialog({
                           ))}
                         </div>
                       ) : null}
-                      <div className="pl-1">
+                      <div className="ps-1">
                         <Button
                           type="button"
                           size="sm"
@@ -421,11 +411,7 @@ export function CreateWeeklyTemplateDialog({
                   <DialogCancel type="button" isDisabled={saving} onPress={requestClose}>
                     {m.records_template_cancel()}
                   </DialogCancel>
-                  <DialogAction
-                    type="submit"
-                    className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
-                    isDisabled={saving}
-                  >
+                  <DialogAction type="submit" isDisabled={saving}>
                     {m.records_template_save()}
                   </DialogAction>
                 </DialogActions>

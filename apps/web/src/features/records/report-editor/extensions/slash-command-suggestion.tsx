@@ -1,10 +1,5 @@
 "use client";
 
-/**
- * Slash command suggestion — block commands only (/code /table /formula).
- * Skill and built-in chat commands are omitted.
- */
-
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { SuggestionOptions } from "@tiptap/suggestion";
 import { PluginKey } from "@tiptap/pm/state";
@@ -12,6 +7,7 @@ import { Calculator as Sigma, Code02 as Code2, Table as Table2 } from "@untitled
 import { Button } from "#src/components/base/buttons/button";
 import { isImeComposing } from "#src/lib/ime";
 import { getLastInsertedCodeBlockLanguage } from "#src/features/records/report-editor/code-block-language";
+import { m } from "#src/paraglide/messages";
 import { createSuggestionPopupRender } from "./suggestion-popup";
 
 export type BuiltinCommandKey = "code" | "table" | "formula";
@@ -91,13 +87,13 @@ export const SlashCommandList = forwardRef<SlashCommandListRef, SlashCommandList
       if (hideOnEmpty) return null;
       return (
         <div className="rounded-md border border-secondary bg-primary p-2 text-sm text-tertiary shadow-md">
-          {query.trim() ? "No matching commands" : "No commands"}
+          {query.trim() ? m.records_editor_no_matching_commands() : m.records_editor_no_commands()}
         </div>
       );
     }
 
     return (
-      <div className="max-h-[300px] w-72 overflow-y-auto rounded-md border border-secondary bg-primary py-1 shadow-md">
+      <div className="max-h-[18.75rem] w-72 overflow-y-auto rounded-md border border-secondary bg-primary py-1 shadow-md">
         {items.map((item, index) => (
           <div
             key={item.id}
@@ -109,7 +105,7 @@ export const SlashCommandList = forwardRef<SlashCommandListRef, SlashCommandList
               color="tertiary"
               size="sm"
               type="button"
-              className={`flex w-full items-start justify-start gap-2 px-3 py-1.5 text-left text-sm transition-colors ${
+              className={`flex w-full items-start justify-start gap-2 px-3 py-1.5 text-start text-sm transition-colors ${
                 selectedIndex === index ? "bg-primary_hover" : "hover:bg-primary_hover"
               }`}
               onClick={() => selectItem(index)}

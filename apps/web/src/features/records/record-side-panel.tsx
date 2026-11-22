@@ -13,10 +13,7 @@ import type {
 } from "./records-content";
 import { RecordAssistantSetupCard } from "./record-assistant-setup-card";
 import { RecordSideTimeline } from "./record-side-timeline";
-import {
-  SIDE_PANEL_RESIZE_HANDLE_CLASS,
-  SIDE_PANEL_WIDTH_TRANSITION,
-} from "./record-side-panel-width";
+import { SIDE_PANEL_RESIZE_HANDLE_CLASS } from "./record-side-panel-width";
 import { useSidePanelWidth } from "./use-side-panel-width";
 import type { RecordSideSurface } from "./record-side-panel-pin";
 import { WeeklyTemplateDetailDialog } from "./weekly-template-detail-dialog";
@@ -65,8 +62,7 @@ export function RecordSidePanel({
   keyPointRestartBusy?: boolean;
   onRestartKeyPointExtraction?: () => void;
 }) {
-  const { asideRef, panelWidth, displayWidth, docked, resizing, resizeHandle } =
-    useSidePanelWidth(open);
+  const { asideRef, panelWidth, displayWidth, docked, resizeHandle } = useSidePanelWidth(open);
   const {
     workspaceSlug,
     viewer,
@@ -124,10 +120,7 @@ export function RecordSidePanel({
   return (
     <aside
       ref={asideRef}
-      style={{
-        width: displayWidth,
-        transition: resizing ? "none" : SIDE_PANEL_WIDTH_TRANSITION,
-      }}
+      style={{ width: displayWidth }}
       aria-hidden={!open}
       className={cx(
         "flex flex-col overflow-hidden bg-primary",
@@ -137,7 +130,7 @@ export function RecordSidePanel({
               open && "@max-[37.5rem]/record-split:shadow-lg",
             )
           : cx("absolute inset-y-0 end-0 z-20 max-w-full", open && "shadow-lg"),
-        open || displayWidth > 0 ? "border-s border-secondary" : "border-s-0",
+        open ? "border-s border-secondary" : "border-s-0",
       )}
     >
       <div

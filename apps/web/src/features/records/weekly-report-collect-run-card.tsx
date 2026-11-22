@@ -135,15 +135,24 @@ export function WeeklyReportCollectRunCard(props: {
   return (
     <div className="space-y-2">
       <div
-        className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm ${statusTone}`}
+        className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm ${statusTone}`}
         role="status"
         aria-live="polite"
       >
         <span className="font-medium">{collectRunStatusLabel(run.status)}</span>
-        <span className="text-xs tabular-nums">
-          {terminalCount}/{run.slots.length} computers
-          {readyCount > 0 ? ` · ${readyCount} ready` : ""}
-          {runningCount > 0 ? ` · ${runningCount} running` : ""}
+        <span className="flex flex-wrap items-center gap-2 text-xs tabular-nums">
+          <span>
+            {m.records_collect_run_computers({
+              done: terminalCount,
+              total: run.slots.length,
+            })}
+          </span>
+          {readyCount > 0 ? (
+            <span>{m.records_collect_run_ready({ count: readyCount })}</span>
+          ) : null}
+          {runningCount > 0 ? (
+            <span>{m.records_collect_run_running({ count: runningCount })}</span>
+          ) : null}
         </span>
       </div>
       {run.slots.map((slot) => {
@@ -162,15 +171,20 @@ export function WeeklyReportCollectRunCard(props: {
                 )
               }
             >
-              <span className="min-w-0 truncate text-left text-sm font-medium text-primary">
+              <span className="min-w-0 truncate text-start text-sm font-medium text-primary">
                 {slotTitle(slot.status, slot.computerLabel)}
               </span>
               {open ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
             </Button>
+            {!open && failedLike && slot.failureReason ? (
+              <p className="line-clamp-2 border-t border-secondary px-3 py-1.5 text-xs text-error-primary">
+                {slot.failureReason}
+              </p>
+            ) : null}
             {open ? (
               <div className="border-t border-secondary px-3 py-2">
                 {slot.packMarkdown ? (
-                  <pre className="max-h-64 overflow-auto whitespace-pre-wrap text-xs text-secondary">
+                  <pre className="max-h-64 overflow-auto text-xs whitespace-pre-wrap text-secondary">
                     {slot.packMarkdown}
                   </pre>
                 ) : (

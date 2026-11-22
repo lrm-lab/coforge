@@ -8,7 +8,6 @@ import { m } from "#src/paraglide/messages";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import type { KeyPointExtractionMeta } from "./records-content";
 import { KeyPointExtractionPanel } from "./key-point-extraction-panel";
-import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 
 export class KeyPointStartRefusal extends Error {}
 
@@ -16,14 +15,12 @@ function startFailure(cause: unknown) {
   return cause instanceof KeyPointStartRefusal ? cause.message : m.records_key_points_failed();
 }
 
-/** Failed because nobody submitted: said where the start was pressed, never a parked panel state. */
 export function isNoneSubmittedKeyPointFailure(
   extraction: KeyPointExtractionMeta | undefined,
 ): boolean {
   return extraction?.status === "failed" && extraction.error === "no_submitted_member_reports";
 }
 
-/** Overview-page team key-point block: start button + shared extraction panel. */
 export function TeamKeyPointSection({
   overviewReportId,
   extraction,
@@ -35,11 +32,9 @@ export function TeamKeyPointSection({
   extraction: KeyPointExtractionMeta | undefined;
   assistantAgentId?: string | null;
   busy?: boolean;
-  /** Starts the extraction; throws when it could not be started. */
   onStart: () => Promise<void>;
 }) {
   const workspaceSlug = useWorkspaceSlug();
-  // Stale persisted none-submitted failures stay invisible; waiting copy replaces them.
   const panelExtraction = isNoneSubmittedKeyPointFailure(extraction) ? undefined : extraction;
   const status = panelExtraction?.status;
   const canStart =
@@ -49,9 +44,7 @@ export function TeamKeyPointSection({
       status === "failed" ||
       status === "pending_setup");
   const willOverwrite = status === "ready";
-  // Where focus lands when the button gives way to the running extraction.
   const sectionRef = useRef<HTMLElement>(null);
-  // A first start has no popover to show a refusal in, so the section says it.
   const [startError, setStartError] = useState<string | null>(null);
 
   function startFirst() {
@@ -69,10 +62,8 @@ export function TeamKeyPointSection({
       type="button"
       size="sm"
       color="primary"
-      className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
       iconLeading={Stars}
       isDisabled={busy}
-      // Overwriting asks first: the popconfirm around the button owns its press.
       onPress={willOverwrite ? undefined : startFirst}
     >
       {status ? m.records_key_points_team_restart() : m.records_key_points_team_start()}
@@ -123,8 +114,6 @@ export function TeamKeyPointSection({
             {m.records_weekly_export_html()}
           </a>
           {canStart ? (
-            // One element for both states, so focus stays on the button; a first start has
-            // nothing to confirm.
             <Popconfirm
               isDisabled={!willOverwrite}
               title={m.records_key_points_team_restart_confirm_title()}

@@ -6,10 +6,7 @@ import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import type { RecordAssistantPayload } from "./weekly-highlight-extract";
 import { formatWeeklyReportCompletedAt } from "./records-content";
-import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import { useSendWindowCountdown } from "./use-send-window";
-
-// The cards the Record side chat shows in its timeline: a week's send offer and its actions.
 
 export function FormatSendActions({
   disabled,
@@ -22,13 +19,7 @@ export function FormatSendActions({
 }) {
   return (
     <div className="flex flex-wrap gap-2">
-      <Button
-        size="sm"
-        color="primary"
-        className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
-        isDisabled={disabled}
-        onPress={onSend}
-      >
+      <Button size="sm" color="primary" isDisabled={disabled} onPress={onSend}>
         {m.records_assistant_confirm_send()}
       </Button>
       <Button size="sm" color="secondary" isDisabled={disabled} onPress={onCancel}>
@@ -72,7 +63,7 @@ export function AssistantAttachmentCard({
       isDisabled={disabled}
       aria-label={`${m.records_template_open_detail()}: ${title}`}
       onPress={onOpen}
-      className="h-auto w-full items-start justify-start whitespace-normal rounded-xl bg-gradient-to-br from-secondary via-secondary/40 to-primary p-3 text-left font-normal hover:bg-primary_hover"
+      className="h-auto w-full items-start justify-start rounded-xl border border-secondary bg-secondary p-3 text-start font-normal whitespace-normal hover:bg-primary_hover"
     >
       <div className="flex w-full items-start gap-3">
         <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-tertiary text-fg-secondary">
@@ -96,11 +87,11 @@ export function AssistantAttachmentCard({
                   alt={person.displayName}
                   userId={person.userId}
                   src={person.avatarUrl}
-                  className={cx("ring-2 ring-primary", index > 0 ? "-ml-1.5" : undefined)}
+                  className={cx("ring-2 ring-primary", index > 0 ? "-ms-1.5" : undefined)}
                 />
               ))}
               {overflow > 0 ? (
-                <span className="ml-1.5 text-xs font-medium text-tertiary">
+                <span className="ms-1.5 text-xs font-medium text-tertiary">
                   {m.records_assistant_recipients_overflow({ count: overflow })}
                 </span>
               ) : null}
@@ -112,19 +103,14 @@ export function AssistantAttachmentCard({
   );
 }
 
-/**
- * The time left before this week's automatic send, ticking each second in its own component so
- * the tick re-renders only this line, never the panel's thread (task #366).
- */
 export function AutoSendCountdown({ until }: { until: Date | null | undefined }) {
   const countdown = useSendWindowCountdown(until);
   if (!countdown) return null;
   return <p className="text-xs text-tertiary">{m.records_assistant_auto_send_in({ countdown })}</p>;
 }
 
-/** The same time left, beside the composer's send button. */
 export function SendCountdownBadge({ until }: { until: Date | null | undefined }) {
   const countdown = useSendWindowCountdown(until);
   if (!countdown) return null;
-  return <span className="mr-1 text-xs text-brand-secondary tabular-nums">{countdown}</span>;
+  return <span className="me-1 text-xs text-brand-secondary tabular-nums">{countdown}</span>;
 }

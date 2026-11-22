@@ -3,7 +3,6 @@ export const DEFAULT_SIDE_PANEL_WIDTH = 24;
 export const MIN_SIDE_PANEL_WIDTH = 17.5;
 export const MAIN_COLUMN_MIN_REM = 20;
 export const DOCK_SPLIT_MIN_REM = MAIN_COLUMN_MIN_REM + MIN_SIDE_PANEL_WIDTH;
-export const SIDE_PANEL_WIDTH_TRANSITION = "width var(--duration-md) var(--ease-in-out)";
 
 const LEGACY_PX_THRESHOLD = 80;
 const LEGACY_BASE_FONT_PX = 16;

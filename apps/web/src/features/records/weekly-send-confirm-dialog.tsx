@@ -5,7 +5,6 @@ import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
 import { m } from "#src/paraglide/messages";
-import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 
 export const WEEKLY_SEND_TOAST_MS = 3000;
@@ -41,10 +40,10 @@ export function WeeklySendConfirmDialog({
                 size="sm"
                 color="tertiary"
                 isDisabled={busy}
-                className="absolute top-4 right-4"
+                className="absolute end-4 top-4"
                 onClick={close}
               />
-              <div className="flex items-start gap-3 pr-8">
+              <div className="flex items-start gap-3 pe-8">
                 <FeaturedIcon color="warning" theme="light" size="sm" icon={AlertCircle} />
                 <div className="min-w-0 space-y-2">
                   <Heading slot="title" className="text-md font-semibold text-primary">
@@ -62,7 +61,6 @@ export function WeeklySendConfirmDialog({
                 <DialogAction
                   autoFocus
                   type="button"
-                  className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
                   isDisabled={busy}
                   onPress={() => void onConfirm()}
                 >

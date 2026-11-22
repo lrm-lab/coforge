@@ -1,10 +1,5 @@
 "use client";
 
-/**
- * Floating formatting toolbar for text selection (no AI / issue actions).
- * Show/hide and positioning follow the standard bubble-menu behavior.
- */
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Separator } from "react-aria-components";
@@ -40,13 +35,14 @@ import { cn } from "#src/lib/utils";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Input } from "#src/components/base/input/input";
+import { m } from "#src/paraglide/messages";
 import {
   NOTE_COLORS,
   NOTE_FONT_SIZES,
+  cssToNoteColor,
   cssToNoteFontSize,
   fontSizeToCss,
-  hexToNoteColor,
-  noteColorToHex,
+  noteColorToCss,
   type NoteColor,
 } from "#src/features/records/report-editor/utils/text-style";
 
@@ -60,6 +56,29 @@ function shouldShowBubbleMenu(editor: Editor): boolean {
   const $from = editor.state.doc.resolve(from);
   if ($from.parent.type.name === "codeBlock") return false;
   return true;
+}
+
+function noteColorLabel(color: NoteColor): string {
+  switch (color) {
+    case "gray":
+      return m.records_editor_color_gray();
+    case "red":
+      return m.records_editor_color_red();
+    case "orange":
+      return m.records_editor_color_orange();
+    case "yellow":
+      return m.records_editor_color_yellow();
+    case "green":
+      return m.records_editor_color_green();
+    case "blue":
+      return m.records_editor_color_blue();
+    case "purple":
+      return m.records_editor_color_purple();
+    case "pink":
+      return m.records_editor_color_pink();
+    default:
+      return m.records_editor_color_default();
+  }
 }
 
 function MarkButton({
@@ -98,39 +117,45 @@ function HeadingDropdown({
   onOpenChange: (open: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const label = activeLevel ? `H${activeLevel}` : "Text";
+  const label = activeLevel ? `H${activeLevel}` : m.records_editor_text();
   const items = [
     {
-      label: "Normal text",
+      id: "normal",
+      label: m.records_editor_normal_text(),
       icon: Type,
       active: !activeLevel,
       action: () => editor.chain().focus().setParagraph().run(),
     },
     {
-      label: "Heading 1",
+      id: "h1",
+      label: m.records_editor_heading({ level: 1 }),
       icon: Heading1,
       active: activeLevel === 1,
       action: () => editor.chain().focus().toggleHeading({ level: 1 }).run(),
     },
     {
-      label: "Heading 2",
+      id: "h2",
+      label: m.records_editor_heading({ level: 2 }),
       icon: Heading2,
       active: activeLevel === 2,
       action: () => editor.chain().focus().toggleHeading({ level: 2 }).run(),
     },
     {
-      label: "Heading 3",
+      id: "h3",
+      label: m.records_editor_heading({ level: 3 }),
       icon: Heading3,
       active: activeLevel === 3,
       action: () => editor.chain().focus().toggleHeading({ level: 3 }).run(),
     },
     {
-      label: "Heading 4",
+      id: "h4",
+      label: m.records_editor_heading({ level: 4 }),
       active: activeLevel === 4,
       action: () => editor.chain().focus().toggleHeading({ level: 4 }).run(),
     },
     {
-      label: "Heading 5",
+      id: "h5",
+      label: m.records_editor_heading({ level: 5 }),
       active: activeLevel === 5,
       action: () => editor.chain().focus().toggleHeading({ level: 5 }).run(),
     },
@@ -158,12 +183,12 @@ function HeadingDropdown({
       <Dropdown.Popover placement="bottom start" offset={8} className="w-40">
         <Dropdown.Menu
           selectionMode="single"
-          selectedKeys={[activeLevel ? `Heading ${activeLevel}` : "Normal text"]}
+          selectedKeys={[activeLevel ? `h${activeLevel}` : "normal"]}
         >
           {items.map((item) => (
             <Dropdown.Item
-              key={item.label}
-              id={item.label}
+              key={item.id}
+              id={item.id}
               label={item.label}
               icon={item.icon}
               onAction={() => {
@@ -188,7 +213,7 @@ function ColorDropdown({
   activeColor: string | null;
 }) {
   const [open, setOpen] = useState(false);
-  const current = hexToNoteColor(activeColor);
+  const current = cssToNoteColor(activeColor);
 
   const handleOpenChange = useCallback(
     (next: boolean) => {
@@ -199,8 +224,8 @@ function ColorDropdown({
   );
 
   const apply = (color: NoteColor) => {
-    const hex = noteColorToHex(color);
-    if (hex) editor.chain().focus().setTextColor(hex).run();
+    const cssColor = noteColorToCss(color);
+    if (cssColor) editor.chain().focus().setTextColor(cssColor).run();
     else editor.chain().focus().unsetTextColor().run();
     handleOpenChange(false);
   };
@@ -211,19 +236,24 @@ function ColorDropdown({
         color="tertiary"
         size="sm"
         className="inline-flex h-7 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-secondary outline-focus-ring hover:bg-primary_hover focus-visible:outline-2"
-        aria-label="Text color"
+        aria-label={m.records_editor_text_color()}
         onMouseDown={(event) => event.preventDefault()}
       >
         <Palette className="size-3.5" />
         <span
           className="size-2 rounded-full border border-secondary"
-          style={{ backgroundColor: noteColorToHex(current) ?? "var(--color-text-primary)" }}
+          style={{ backgroundColor: noteColorToCss(current) ?? "var(--color-text-primary)" }}
         />
       </Button>
       <Dropdown.Popover placement="bottom start" offset={8} className="w-44">
         <Dropdown.Menu selectionMode="single" selectedKeys={[current]}>
           {NOTE_COLORS.map((color) => (
-            <Dropdown.Item key={color} id={color} label={color} onAction={() => apply(color)} />
+            <Dropdown.Item
+              key={color}
+              id={color}
+              label={noteColorLabel(color)}
+              onAction={() => apply(color)}
+            />
           ))}
         </Dropdown.Menu>
       </Dropdown.Popover>
@@ -242,7 +272,7 @@ function FontSizeDropdown({
 }) {
   const [open, setOpen] = useState(false);
   const current = cssToNoteFontSize(activeSize);
-  const label = current ?? "Size";
+  const label = current ?? m.records_editor_font_size();
 
   const handleOpenChange = useCallback(
     (next: boolean) => {
@@ -264,10 +294,10 @@ function FontSizeDropdown({
         <ChevronDown className="size-3" />
       </Button>
       <Dropdown.Popover placement="bottom start" offset={8} className="w-32">
-        <Dropdown.Menu selectionMode="single" selectedKeys={[current ?? "Default"]}>
+        <Dropdown.Menu selectionMode="single" selectedKeys={[current ?? "default"]}>
           <Dropdown.Item
-            id="Default"
-            label="Default"
+            id="default"
+            label={m.records_editor_default()}
             onAction={() => {
               editor.chain().focus().unsetFontSize().run();
               handleOpenChange(false);
@@ -401,7 +431,6 @@ export function EditorBubbleMenu({ editor }: { editor: Editor }) {
       )}
       style={{ visibility: "hidden" }}
       onMouseDown={(event) => {
-        // Keep editor selection when interacting with the toolbar chrome.
         if (event.target === event.currentTarget) event.preventDefault();
       }}
     >
@@ -419,7 +448,7 @@ export function EditorBubbleMenu({ editor }: { editor: Editor }) {
           <ButtonUtility
             size="xs"
             type="button"
-            tooltip="Apply Link"
+            tooltip={m.records_editor_apply_link()}
             icon={Check}
             onMouseDown={(event: React.MouseEvent<HTMLButtonElement>) => event.preventDefault()}
             onClick={() => {
@@ -440,7 +469,7 @@ export function EditorBubbleMenu({ editor }: { editor: Editor }) {
             <ButtonUtility
               size="xs"
               type="button"
-              tooltip="Unlink"
+              tooltip={m.records_editor_unlink()}
               icon={Unlink}
               onMouseDown={(event: React.MouseEvent<HTMLButtonElement>) => event.preventDefault()}
               onClick={() => {
@@ -452,7 +481,7 @@ export function EditorBubbleMenu({ editor }: { editor: Editor }) {
           <ButtonUtility
             size="xs"
             type="button"
-            tooltip="Cancel"
+            tooltip={m.records_editor_cancel()}
             icon={X}
             onMouseDown={(event: React.MouseEvent<HTMLButtonElement>) => event.preventDefault()}
             onClick={() => {
@@ -470,35 +499,35 @@ export function EditorBubbleMenu({ editor }: { editor: Editor }) {
           <Separator orientation="vertical" className="mx-0.5 h-5 w-px bg-border-secondary" />
 
           <MarkButton
-            label="Bold"
+            label={m.records_editor_bold()}
             pressed={fmt.bold}
             onAction={() => editor.chain().focus().toggleBold().run()}
           >
             <Bold className="size-3.5" />
           </MarkButton>
           <MarkButton
-            label="Italic"
+            label={m.records_editor_italic()}
             pressed={fmt.italic}
             onAction={() => editor.chain().focus().toggleItalic().run()}
           >
             <Italic className="size-3.5" />
           </MarkButton>
           <MarkButton
-            label="Strikethrough"
+            label={m.records_editor_strikethrough()}
             pressed={fmt.strike}
             onAction={() => editor.chain().focus().toggleStrike().run()}
           >
             <Strikethrough className="size-3.5" />
           </MarkButton>
           <MarkButton
-            label="Code"
+            label={m.records_editor_code()}
             pressed={fmt.code}
             onAction={() => editor.chain().focus().toggleCode().run()}
           >
             <Code className="size-3.5" />
           </MarkButton>
           <MarkButton
-            label="Highlight"
+            label={m.records_editor_highlight()}
             pressed={fmt.highlight}
             onAction={() => editor.chain().focus().toggleHighlight().run()}
           >
@@ -508,28 +537,28 @@ export function EditorBubbleMenu({ editor }: { editor: Editor }) {
           <Separator orientation="vertical" className="mx-0.5 h-5 w-px bg-border-secondary" />
 
           <MarkButton
-            label="Bullet list"
+            label={m.records_editor_bullet_list()}
             pressed={fmt.bulletList}
             onAction={() => editor.chain().focus().toggleBulletList().run()}
           >
             <List className="size-3.5" />
           </MarkButton>
           <MarkButton
-            label="Numbered list"
+            label={m.records_editor_numbered_list()}
             pressed={fmt.orderedList}
             onAction={() => editor.chain().focus().toggleOrderedList().run()}
           >
             <ListOrdered className="size-3.5" />
           </MarkButton>
           <MarkButton
-            label="Task list"
+            label={m.records_editor_task_list()}
             pressed={fmt.taskList}
             onAction={() => editor.chain().focus().toggleTaskList().run()}
           >
             <ListTodo className="size-3.5" />
           </MarkButton>
           <MarkButton
-            label="Quote"
+            label={m.records_editor_quote()}
             pressed={fmt.blockquote}
             onAction={() => editor.chain().focus().toggleBlockquote().run()}
           >
@@ -539,7 +568,7 @@ export function EditorBubbleMenu({ editor }: { editor: Editor }) {
           <Separator orientation="vertical" className="mx-0.5 h-5 w-px bg-border-secondary" />
 
           <MarkButton
-            label="Link"
+            label={m.records_editor_link()}
             pressed={fmt.link}
             onAction={() => {
               setLinkUrl((editor.getAttributes("link").href as string) ?? "");

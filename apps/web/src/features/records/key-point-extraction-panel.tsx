@@ -13,21 +13,17 @@ import type { KeyPointExtractionMeta } from "./records-content";
 import { ReportSectionEditor } from "#src/features/records/report-editor/report-section-editor";
 import { RecordsReadingColumn } from "./records-reading-column";
 
-export const KEY_POINT_EXTRACTION_TAB = "✨ 要点提炼";
+export const KEY_POINT_EXTRACTION_TAB = "key_points";
 
-/** Leader-only personal / team key-point extraction result panel. */
 export function KeyPointExtractionPanel({
   extraction,
   assistantAgentId,
   restartBusy,
   onRestart,
   waitingLabel,
-  /** Settings deep-link for the prompt editor (personal or team slot). */
   editPrompt,
   className,
-  /** When false, skip the centered reading column (already nested in one). */
   framed = true,
-  /** When false, the parent scroller owns vertical overflow. */
   scrollable = true,
 }: {
   extraction: KeyPointExtractionMeta | undefined;

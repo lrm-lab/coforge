@@ -35,12 +35,12 @@ function AxisHandle({ axis, active }: { axis: Axis; active?: boolean }) {
       aria-hidden
       className={cn(
         "flex items-center justify-center rounded-sm bg-quaternary transition-colors",
-        axis === "row" ? "h-5 w-2 flex-col gap-[2px]" : "h-2 w-5 flex-row gap-[2px]",
+        axis === "row" ? "h-5 w-2 flex-col gap-0.5" : "h-2 w-5 flex-row gap-0.5",
         active ? "bg-secondary-solid" : "group-hover/handle:bg-secondary-solid",
       )}
     >
-      <span className="size-[3px] rounded-full bg-white" />
-      <span className="size-[3px] rounded-full bg-white" />
+      <span className="size-[0.1875rem] rounded-full bg-fg-white" />
+      <span className="size-[0.1875rem] rounded-full bg-fg-white" />
     </span>
   );
 }

@@ -21,7 +21,7 @@ export function WeeklyReportDashboard({ dashboard }: { dashboard: Dashboard }) {
       <div className="min-h-0 flex-1 overflow-auto bg-primary px-page py-5">
         <div className="mx-auto w-full max-w-6xl space-y-6">
           <div>
-            <h2 className="text-lg font-semibold text-primary">{m.records_dashboard_title()}</h2>
+            <h2 className="text-md font-semibold text-primary">{m.records_dashboard_title()}</h2>
             <p className="mt-1 text-sm text-tertiary">{m.records_dashboard_hint()}</p>
           </div>
           {dashboard.weeks.length === 0 ? (
@@ -52,7 +52,7 @@ export function WeeklyReportDashboard({ dashboard }: { dashboard: Dashboard }) {
                 {dashboard.members.map((member) => (
                   <section
                     key={member.userId}
-                    className="rounded-xl border border-secondary bg-primary"
+                    className="overflow-hidden rounded-xl border border-secondary bg-primary"
                   >
                     <div className="flex items-center gap-2 border-b border-secondary px-4 py-3">
                       <ActorAvatar
@@ -64,16 +64,16 @@ export function WeeklyReportDashboard({ dashboard }: { dashboard: Dashboard }) {
                         className="size-5 shrink-0"
                       />
                       <h3 className="min-w-0 font-semibold wrap-anywhere text-primary">
-                        {member.displayName}
+                        <bdi>{member.displayName}</bdi>
                       </h3>
                     </div>
-                    <div className="grid gap-3 p-4 md:grid-cols-3">
+                    <div className="grid divide-y divide-secondary md:grid-cols-3 md:divide-y-0">
                       {dashboard.weeks.map((week) => {
                         const report = week.reports.find((item) => item.authorId === member.userId);
                         return (
                           <div
                             key={`${member.userId}-${week.year}-${week.week}`}
-                            className="min-w-0 rounded-lg bg-secondary p-3"
+                            className="min-w-0 border-secondary p-4 md:border-e md:nth-[3n]:border-e-0 md:nth-[n+4]:border-t"
                           >
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-xs font-semibold text-tertiary">

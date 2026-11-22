@@ -12,7 +12,6 @@ import { m } from "#src/paraglide/messages";
 import { CreateWeeklyTemplateDialog } from "./create-weekly-template-dialog";
 import { KeyPointPromptEditor } from "./key-point-prompt-editor";
 import { Popconfirm } from "#src/components/ui/popconfirm";
-import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import {
   emptyKeyPointPrompts,
   formatRecipientSummary,
@@ -233,23 +232,11 @@ export function WeeklyReportSettings({
             </TabList>
           </div>
           {topTab === "templates" ? (
-            <Button
-              size="sm"
-              color="primary"
-              className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
-              iconLeading={Plus}
-              onPress={openCreate}
-            >
+            <Button size="sm" color="primary" iconLeading={Plus} onPress={openCreate}>
               {m.records_create_template()}
             </Button>
           ) : (
-            <Button
-              size="sm"
-              color="primary"
-              className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
-              isDisabled={busy}
-              onPress={() => void onSavePrompt()}
-            >
+            <Button size="sm" color="primary" isDisabled={busy} onPress={() => void onSavePrompt()}>
               {m.records_key_points_prompt_save()}
             </Button>
           )}
@@ -267,13 +254,7 @@ export function WeeklyReportSettings({
                 title={m.empty_records_templates_title()}
                 description={m.empty_records_templates_description()}
                 primaryAction={
-                  <Button
-                    size="sm"
-                    color="primary"
-                    className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
-                    iconLeading={Plus}
-                    onPress={openCreate}
-                  >
+                  <Button size="sm" color="primary" iconLeading={Plus} onPress={openCreate}>
                     {m.records_create_template()}
                   </Button>
                 }

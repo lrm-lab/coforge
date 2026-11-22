@@ -37,7 +37,6 @@ import {
 import { collectPlanSubmitBlocked } from "./weekly-report-collect-plan";
 import { CollectComputerRow } from "./weekly-report-collect-plan-computer-row";
 import { executeAgentControl } from "#src/features/agents/agent-control.functions";
-import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 
 type SlotRow = Awaited<ReturnType<typeof listWeeklyReportCollectorSlots>>[number];
 
@@ -186,7 +185,6 @@ export function WeeklyReportCollectPlanCard(props: {
       const binding = await ensure({ data: { computerId } });
       const rows = await listSlots();
       setSlots(rows);
-      // New collectors start unconfigured; open Agent edit so the User can pick runtime.
       if (binding.collectorAgentId) {
         setConfiguringComputerId(computerId);
         setSelected((previous) => [...new Set([...previous, computerId])]);
@@ -431,9 +429,9 @@ export function WeeklyReportCollectPlanCard(props: {
 
       <div className="mt-4 flex justify-center">
         <Button
-          size="md"
+          size="sm"
           color="primary"
-          className={`px-8 ${RECORDS_PRIMARY_BUTTON_CLASSNAME}`}
+          className="px-6"
           isDisabled={busy || props.disabled || submitBlocked}
           isLoading={busy}
           onPress={() => void onSubmit()}

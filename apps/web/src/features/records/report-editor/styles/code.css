@@ -1,12 +1,3 @@
-/*
- * Code typography and lowlight highlighting.
- *
- * The literal-code rules intentionally disable font ligatures for both inline
- * code and code blocks. Command flags such as `--extra` must render as the
- * exact characters the user can copy.
- */
-
-/* Inline code */
 .rich-text-editor code {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-variant-ligatures: none;
@@ -22,7 +13,6 @@
   line-height: var(--text-sm--line-height);
 }
 
-/* Code blocks */
 .rich-text-editor .code-block-wrapper {
   max-width: 100%;
 }
@@ -59,7 +49,6 @@
 }
 
 .rich-text-editor .code-block-frame .mermaid-diagram-toolbar {
-  /* Diagram chrome is owned by the code-block hover toolbar when embedded. */
   display: none;
 }
 
@@ -76,14 +65,12 @@ pre.rich-text-editor {
   border-radius: var(--radius-md);
   padding: 0.75rem 1rem;
   margin: 0.75rem 0;
-  /* LRM-268: Slack-style long code — scroll inside the block, not the page. */
-  max-height: 300px;
+  max-height: 18.75rem;
   max-width: 100%;
   overflow-x: auto;
   overflow-y: auto;
 }
 
-/* Framed NodeView owns the card chrome; keep the inner <pre> flush. */
 .rich-text-editor .code-block-frame > pre,
 .rich-text-editor .code-block-frame .code-block-source {
   background: transparent;
@@ -95,11 +82,6 @@ pre.rich-text-editor {
   border-top: 1px solid color-mix(in srgb, var(--color-text-primary) 7%, transparent);
 }
 
-/*
- * Visually hide source while keeping the <pre> mounted for ProseMirror's
- * contentDOM. Plain Tailwind `sr-only` loses to `.rich-text-editor pre`
- * (padding / overflow / max-height), so diagram-only mode looked broken.
- */
 .rich-text-editor pre.code-block-source-visually-hidden {
   position: absolute !important;
   width: 1px !important;
@@ -126,110 +108,51 @@ pre.rich-text-editor code {
   line-height: var(--text-xs--line-height);
 }
 
-/* Syntax highlighting — lowlight (hljs) */
 .rich-text-editor .hljs-keyword,
 .rich-text-editor .hljs-selector-tag,
-.rich-text-editor .hljs-built_in {
-  color: oklch(0.55 0.16 255);
+.rich-text-editor .hljs-built_in,
+.rich-text-editor .hljs-name {
+  color: var(--color-utility-blue-600);
 }
 
 .rich-text-editor .hljs-string,
 .rich-text-editor .hljs-addition {
-  color: oklch(0.55 0.14 155);
+  color: var(--color-utility-green-600);
 }
 
 .rich-text-editor .hljs-comment,
-.rich-text-editor .hljs-quote {
+.rich-text-editor .hljs-quote,
+.rich-text-editor .hljs-meta,
+.rich-text-editor .hljs-tag {
   color: var(--color-text-tertiary);
-  font-style: italic;
 }
 
 .rich-text-editor .hljs-number,
 .rich-text-editor .hljs-literal {
-  color: oklch(0.58 0.16 30);
+  color: var(--color-utility-orange-600);
 }
 
 .rich-text-editor .hljs-title,
 .rich-text-editor .hljs-section,
 .rich-text-editor .hljs-title\.function_ {
-  color: oklch(0.55 0.14 280);
+  color: var(--color-utility-purple-600);
 }
 
 .rich-text-editor .hljs-attr,
 .rich-text-editor .hljs-attribute {
-  color: oklch(0.58 0.12 60);
+  color: var(--color-utility-amber-600);
 }
 
 .rich-text-editor .hljs-variable,
 .rich-text-editor .hljs-template-variable {
-  color: oklch(0.58 0.14 20);
+  color: var(--color-utility-pink-600);
 }
 
 .rich-text-editor .hljs-type,
 .rich-text-editor .hljs-title\.class_ {
-  color: oklch(0.55 0.14 200);
+  color: var(--color-utility-sky-600);
 }
 
 .rich-text-editor .hljs-deletion {
-  color: oklch(0.55 0.2 25);
-}
-
-.rich-text-editor .hljs-meta {
-  color: var(--color-text-tertiary);
-}
-
-/* XML / HTML — lowlight emits .hljs-tag for `<` `>` brackets and .hljs-name
-   for the element name. Without these rules, HTML source renders mostly in
-   the default text color and looks unhighlighted. */
-.rich-text-editor .hljs-tag {
-  color: var(--color-text-tertiary);
-}
-.rich-text-editor .hljs-name {
-  color: oklch(0.55 0.16 255);
-}
-
-/* Dark mode overrides */
-.dark-mode .rich-text-editor .hljs-keyword,
-.dark-mode .rich-text-editor .hljs-selector-tag,
-.dark-mode .rich-text-editor .hljs-built_in {
-  color: oklch(0.7 0.14 255);
-}
-
-.dark-mode .rich-text-editor .hljs-string,
-.dark-mode .rich-text-editor .hljs-addition {
-  color: oklch(0.7 0.14 155);
-}
-
-.dark-mode .rich-text-editor .hljs-number,
-.dark-mode .rich-text-editor .hljs-literal {
-  color: oklch(0.72 0.14 30);
-}
-
-.dark-mode .rich-text-editor .hljs-title,
-.dark-mode .rich-text-editor .hljs-section,
-.dark-mode .rich-text-editor .hljs-title\.function_ {
-  color: oklch(0.72 0.12 280);
-}
-
-.dark-mode .rich-text-editor .hljs-attr,
-.dark-mode .rich-text-editor .hljs-attribute {
-  color: oklch(0.72 0.1 60);
-}
-
-.dark-mode .rich-text-editor .hljs-variable,
-.dark-mode .rich-text-editor .hljs-template-variable {
-  color: oklch(0.72 0.12 20);
-}
-
-.dark-mode .rich-text-editor .hljs-type,
-.dark-mode .rich-text-editor .hljs-title\.class_ {
-  color: oklch(0.72 0.12 200);
-}
-
-.dark-mode .rich-text-editor .hljs-deletion {
-  color: oklch(0.7 0.18 25);
-}
-
-.dark-mode .rich-text-editor .hljs-name {
-  color: oklch(0.72 0.14 255);
+  color: var(--color-text-error-primary);
 }
