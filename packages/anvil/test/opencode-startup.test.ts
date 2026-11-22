@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, stat, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, rmdir, stat, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
@@ -289,7 +289,11 @@ test("dual cleanup failures retain the queue until a late exit can be confirmed"
   }
 }, 8000);
 
-test("cold database names follow the filesystem's case semantics", async () => {
+test.each([
+  ["DATA.db", "data.db"],
+  ["Σ.db", "ς.db"],
+  ["ß.db", "ss.db"],
+])("cold database names %s and %s follow filesystem semantics", async (firstName, secondName) => {
   const cwd = await mkdtemp(join(tmpdir(), "anvil-oc-startup-case-"));
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
@@ -298,14 +302,15 @@ test("cold database names follow the filesystem's case semantics", async () => {
   const provider = new OpenCodeAcpProvider({ command, host });
   const runs: Promise<AgentSession>[] = [];
   try {
-    await mkdir(join(cwd, "case-sample"));
-    const caseInsensitive = await stat(join(cwd, "CASE-SAMPLE")).then(
+    await mkdir(join(cwd, firstName));
+    const caseInsensitive = await stat(join(cwd, secondName)).then(
       () => true,
       (error: NodeJS.ErrnoException) => {
         if (error.code !== "ENOENT") throw error;
         return false;
       },
     );
+    await rmdir(join(cwd, firstName));
     const open = (name: string, onSessionId?: AgentSessionOptions["onSessionId"]) => {
       const session = provider.createAgentSession({
         agentWorkspaceDirectory: cwd,
@@ -316,18 +321,18 @@ test("cold database names follow the filesystem's case semantics", async () => {
       runs.push(session);
       return session;
     };
-    const first = open("DATA.db", async () => {
+    const first = open(firstName, async () => {
       entered.resolve();
       await release.promise;
     });
     await Promise.race([entered.promise, first]);
-    const alias = open("data.db");
+    const alias = open(secondName);
     await open("separate.db");
     if (!caseInsensitive) await alias;
-    expect(spawned.includes("data.db")).toBe(!caseInsensitive);
+    expect(spawned.includes(secondName)).toBe(!caseInsensitive);
     release.resolve();
     await Promise.all(runs);
-    expect(spawned).toContain("data.db");
+    expect(spawned).toContain(secondName);
   } finally {
     release.resolve();
     for (const result of await Promise.allSettled(runs))

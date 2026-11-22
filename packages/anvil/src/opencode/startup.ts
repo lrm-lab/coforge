@@ -1,6 +1,6 @@
-import { mkdtemp, readlink, realpath, rmdir, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readlink, realpath, rm, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { AcpTimeoutError } from "#src/acp/connection";
 import { AgentProcessCleanupError } from "#src/contract";
 import type { JsonlProcess } from "#src/jsonl-process";
@@ -12,15 +12,10 @@ type StartupQueue = {
   checking?: boolean;
 };
 
-type StartupQueues = {
-  paths: Map<string, StartupQueue>;
-  caseSensitive?: Promise<boolean>;
-};
-
-const queues = new Map<string, StartupQueues>();
+const queues = new Map<string, Map<string, StartupQueue>>();
 
 function foldedPath(path: string) {
-  return path.normalize("NFC").toLowerCase();
+  return path.normalize("NFD").toLowerCase().toUpperCase().normalize("NFC");
 }
 
 async function canonicalPath(path: string, links = new Set<string>()): Promise<string> {
@@ -49,27 +44,36 @@ async function databaseKey(cwd: string, environment: Readonly<Record<string, str
   return canonicalPath(resolve(cwd, data, "opencode", database));
 }
 
-async function isCaseSensitive(directory: string): Promise<boolean> {
-  let probe: string;
+async function makeNameProbe(directory: string): Promise<string> {
   try {
-    probe = await mkdtemp(join(directory, "coforge-opencode-case-"));
+    return await mkdtemp(join(directory, "coforge-opencode-name-"));
   } catch (error) {
     const parent = dirname(directory);
     if ((error as NodeJS.ErrnoException).code === "ENOENT" && parent !== directory)
-      return isCaseSensitive(parent);
+      return makeNameProbe(parent);
     throw error;
   }
+}
+
+async function sameFilesystemName(first: string, second: string): Promise<boolean> {
+  let common = dirname(first);
+  while (!second.startsWith(common.endsWith(sep) ? common : common + sep)) {
+    const parent = dirname(common);
+    if (parent === common) return true;
+    common = parent;
+  }
+  const probe = await makeNameProbe(common);
   try {
-    const actual = await stat(probe);
-    const folded = await stat(join(dirname(probe), basename(probe).toUpperCase())).catch(
-      (error: NodeJS.ErrnoException) => {
-        if (error.code !== "ENOENT") throw error;
-        return undefined;
-      },
-    );
-    return folded === undefined || actual.dev !== folded.dev || actual.ino !== folded.ino;
+    const firstPath = join(probe, relative(dirname(probe), first));
+    const secondPath = join(probe, relative(dirname(probe), second));
+    await mkdir(firstPath, { recursive: true });
+    const existing = await stat(secondPath).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+      return undefined;
+    });
+    return existing !== undefined;
   } finally {
-    await rmdir(probe);
+    await rm(probe, { recursive: true, force: true });
   }
 }
 
@@ -81,8 +85,8 @@ function release(queue: StartupQueue) {
   }
   const key = foldedPath(queue.path);
   const bucket = queues.get(key);
-  bucket?.paths.delete(queue.path);
-  if (bucket?.paths.size === 0) queues.delete(key);
+  bucket?.delete(queue.path);
+  if (bucket?.size === 0) queues.delete(key);
 }
 
 async function confirmExit(queue: StartupQueue) {
@@ -110,21 +114,25 @@ async function takeStartupSlot(
 ): Promise<StartupQueue> {
   signal?.throwIfAborted();
   const key = foldedPath(path);
-  const bucket: StartupQueues = queues.get(key) ?? { paths: new Map<string, StartupQueue>() };
+  const bucket = queues.get(key) ?? new Map<string, StartupQueue>();
   queues.set(key, bucket);
-  let queue = bucket.paths.get(path);
-  if (!queue && bucket.paths.size) {
-    const caseSensitive = await (bucket.caseSensitive ??= isCaseSensitive(dirname(path)).catch(
-      () => false,
-    ));
-    if (queues.get(key) !== bucket) return takeStartupSlot(path, timeoutMs, signal);
-    signal?.throwIfAborted();
-    queue = bucket.paths.get(path);
-    if (!caseSensitive) queue ??= bucket.paths.values().next().value;
+  let queue = bucket.get(path);
+  if (!queue) {
+    for (const candidate of bucket.values()) {
+      const sameName =
+        candidate.path === path ||
+        (await sameFilesystemName(candidate.path, path).catch(() => true));
+      if (queues.get(key) !== bucket) return takeStartupSlot(path, timeoutMs, signal);
+      signal?.throwIfAborted();
+      if (sameName && bucket.get(candidate.path) === candidate) {
+        queue = candidate;
+        break;
+      }
+    }
   }
   if (!queue) {
     const acquired: StartupQueue = { path, waiters: new Set() };
-    bucket.paths.set(path, acquired);
+    bucket.set(path, acquired);
     return acquired;
   }
   const waiting = queue;
