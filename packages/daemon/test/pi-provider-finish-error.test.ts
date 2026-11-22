@@ -16,6 +16,7 @@ const encryptedThinking = {
 type ModelMessage = { role: string; content: unknown };
 type Scenario =
   | "continue"
+  | "transport-and-finish-error"
   | "built-in"
   | "repeat-error"
   | "rejected-continuation"
@@ -43,6 +44,7 @@ const partialOutput: Partial<Record<Scenario, Record<string, unknown>>> = {
 
 test.each<Scenario>([
   "continue",
+  "transport-and-finish-error",
   "built-in",
   "repeat-error",
   "rejected-continuation",
@@ -68,7 +70,8 @@ test.each<Scenario>([
     const requests: ModelMessage[][] = [];
     const events: AgentRuntimeEvent[] = [];
     const liveAtCompleted: Array<boolean | undefined> = [];
-    const errorRequest = scenario === "no-tool" ? 1 : 2;
+    const transportRetry = scenario === "transport-and-finish-error";
+    const errorRequest = scenario === "no-tool" ? 1 : transportRetry ? 3 : 2;
     const cancellationPoint = Promise.withResolvers<void>();
     const releaseResponse = Promise.withResolvers<void>();
     const server = Bun.serve({
@@ -82,6 +85,14 @@ test.each<Scenario>([
         }
         const body = (await request.json()) as { messages: ModelMessage[] };
         const count = requests.push(body.messages);
+        if (transportRetry && count === 2) {
+          const error = JSON.stringify({
+            error: { message: "Connection closed.", type: "api_error" },
+          });
+          return new Response(`data: ${error}\n\n`, {
+            headers: { "content-type": "text/event-stream" },
+          });
+        }
         if (count === errorRequest && (scenario === "cancel" || scenario === "dispose")) {
           cancellationPoint.resolve();
           await releaseResponse.promise;
@@ -106,6 +117,14 @@ test.each<Scenario>([
       await mkdir(workspace);
       await Bun.write(join(workspace, "fixture.txt"), toolOutput);
       await writeOpenAiHost(agentDir, `${server.url}v1`);
+      if (transportRetry) {
+        await Bun.write(
+          join(agentDir, "settings.json"),
+          JSON.stringify({
+            retry: { enabled: true, maxRetries: 1, baseDelayMs: 10, provider: { maxRetries: 0 } },
+          }),
+        );
+      }
       if (scenario === "erased-output" || scenario === "erased-thinking") {
         await Bun.write(
           join(agentDir, "extensions", "erase-error-output.ts"),
@@ -190,7 +209,8 @@ test.each<Scenario>([
       await turn;
 
       const extensionRun = scenario === "settled-extension";
-      const succeeded = scenario === "continue" || scenario === "built-in" || extensionRun;
+      const succeeded =
+        scenario === "continue" || scenario === "built-in" || extensionRun || transportRetry;
       const continued = succeeded || scenario === "repeat-error";
       expect(requests).toHaveLength(
         errorRequest + Number(continued) + Number(scenario === "repeat-error" || extensionRun),
@@ -218,7 +238,7 @@ test.each<Scenario>([
         shouldFail ? [{ type: "error", message: failureMessage }] : [],
       );
       if (continued) {
-        const recoveryContext = requests[2] ?? [];
+        const recoveryContext = requests[errorRequest] ?? [];
         expect(
           recoveryContext.filter((message) => JSON.stringify(message.content).includes(input)),
         ).toHaveLength(1);
@@ -227,6 +247,18 @@ test.each<Scenario>([
         ]);
       }
 
+      if (transportRetry) {
+        expect(events.filter((event) => event.type === "reconnecting")).toEqual([
+          {
+            type: "reconnecting",
+            attempt: 1,
+            maxAttempts: 1,
+            delayMs: 10,
+            message: "Connection closed.",
+          },
+        ]);
+        expect(requests[2]).toEqual(requests[1] ?? []);
+      }
       if (scenario === "erased-output") {
         expect(events).toContainEqual({ type: "text-delta", text: "partial answer" });
       }
