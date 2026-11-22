@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { TASK_TITLE_SCROLL_EVENT } from "#src/features/conversations/conversation-scroll-anchor";
 
 import {
   findScrollContainer,
@@ -117,6 +118,7 @@ describe("scrollContainerToTop", () => {
     const calls: ScrollToOptions[] = [];
     scrollContainerToTop(
       {
+        querySelector: () => null,
         scrollTo: (options: ScrollToOptions) => {
           calls.push(options);
         },
@@ -126,16 +128,35 @@ describe("scrollContainerToTop", () => {
     expect(calls).toEqual([{ top: 0, behavior: "smooth" }]);
   });
 
-  test("uses auto scrolling when reduced motion is enabled", () => {
+  test("notifies the older message loader before jumping directly to the title", () => {
+    const row = new EventTarget();
+    let notified = false;
+    row.addEventListener(TASK_TITLE_SCROLL_EVENT, () => {
+      notified = true;
+    });
+    scrollContainerToTop(
+      {
+        querySelector: (selector) => (selector === "[data-scroll-older]" ? row : null),
+        scrollTo: (options) => {
+          expect(notified).toBe(true);
+          expect(options).toEqual({ top: 0, behavior: "instant" });
+        },
+      },
+      false,
+    );
+  });
+
+  test("uses instant scrolling when reduced motion is enabled", () => {
     const calls: ScrollToOptions[] = [];
     scrollContainerToTop(
       {
+        querySelector: () => null,
         scrollTo: (options: ScrollToOptions) => {
           calls.push(options);
         },
       },
       true,
     );
-    expect(calls).toEqual([{ top: 0, behavior: "auto" }]);
+    expect(calls).toEqual([{ top: 0, behavior: "instant" }]);
   });
 });

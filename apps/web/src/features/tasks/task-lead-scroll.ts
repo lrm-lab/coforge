@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 
+import { TASK_TITLE_SCROLL_EVENT } from "../conversations/conversation-scroll-anchor";
+
 type ParentChainNode = {
   parentElement: ParentChainNode | null;
 };
@@ -12,6 +14,7 @@ type LeadIntersectionEntry = {
 
 type ScrollableTarget = {
   scrollTo: (options: ScrollToOptions) => void;
+  querySelector: (selector: string) => EventTarget | null;
 };
 
 const SCROLLABLE_OVERFLOW = /^(auto|scroll|overlay)$/;
@@ -35,7 +38,12 @@ export function isLeadScrolledOut(entry: LeadIntersectionEntry, scrollTop: numbe
 }
 
 export function scrollContainerToTop(container: ScrollableTarget, reducedMotion: boolean) {
-  container.scrollTo({ top: 0, behavior: reducedMotion ? "auto" : "smooth" });
+  const olderRow = container.querySelector("[data-scroll-older]");
+  olderRow?.dispatchEvent(new Event(TASK_TITLE_SCROLL_EVENT));
+  container.scrollTo({
+    top: 0,
+    behavior: reducedMotion || olderRow ? "instant" : "smooth",
+  });
 }
 
 export function useTaskLeadScroll({

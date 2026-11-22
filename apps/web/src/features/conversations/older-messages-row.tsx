@@ -2,6 +2,7 @@ import { useEffect, useRef, type RefObject } from "react";
 import { Button } from "#src/components/base/buttons/button";
 import { Spinner } from "#src/components/ui/spinner";
 import { m } from "#src/paraglide/messages";
+import { TASK_TITLE_SCROLL_EVENT } from "./conversation-scroll-anchor";
 
 /** Where paging older history stands: nothing in flight, a page being read, or the last read failed. */
 export type OlderLoad = "idle" | "loading" | "failed";
@@ -26,14 +27,11 @@ export function OlderMessagesRow({
   onLoad: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const returnPosition = useRef<number | null>(null);
   const onLoadRef = useRef(onLoad);
   onLoadRef.current = onLoad;
 
-  // An IntersectionObserver rather than a scroll handler: it also fires when the pane is laid out
-  // already showing the top, which a scroll handler never sees. The margin starts the load a
-  // screenful early. It only fires on a crossing, so it is observed afresh whenever a page lands:
-  // a page shorter than the margin leaves the row in range, and the reader at the top would
-  // otherwise wait for a crossing that never comes.
   useEffect(() => {
     const row = ref.current;
     const root = rootRef.current;
@@ -44,13 +42,48 @@ export function OlderMessagesRow({
       },
       { root, rootMargin: "600px 0px 0px 0px" },
     );
+    const resumeOnUpwardScroll = () => {
+      const previous = returnPosition.current;
+      const top = root.scrollTop;
+      if (previous !== null && top < previous) {
+        returnPosition.current = null;
+        root.removeEventListener("scroll", resumeOnUpwardScroll);
+        observer.unobserve(row);
+        observer.observe(row);
+      } else {
+        returnPosition.current = top;
+      }
+    };
+    const returningToTitle = () => {
+      returnPosition.current = 0;
+      root.addEventListener("scroll", resumeOnUpwardScroll, { passive: true });
+    };
+    row.addEventListener(TASK_TITLE_SCROLL_EVENT, returningToTitle);
+    observerRef.current = observer;
     observer.observe(row);
-    return () => observer.disconnect();
+    return () => {
+      row.removeEventListener(TASK_TITLE_SCROLL_EVENT, returningToTitle);
+      root.removeEventListener("scroll", resumeOnUpwardScroll);
+      returnPosition.current = null;
+      observer.disconnect();
+      observerRef.current = null;
+    };
+  }, [rootRef]);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    const row = ref.current;
+    const observer = observerRef.current;
+    if (!row || !root || !observer) return;
+    if (returnPosition.current !== null) return;
+    observer.unobserve(row);
+    observer.observe(row);
   }, [rootRef, loadedCount]);
 
   return (
     <div
       ref={ref}
+      data-scroll-older
       aria-live="polite"
       className="flex h-8 items-center justify-center gap-2 px-4 pt-4 text-xs text-tertiary md:px-6"
     >

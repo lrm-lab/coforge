@@ -1,3 +1,5 @@
+export const TASK_TITLE_SCROLL_EVENT = "task-scroll-to-title";
+
 export interface ScrollAnchor {
   lead?: boolean;
   rowId?: string;
@@ -37,8 +39,9 @@ export function restoreScrollAnchor(
   anchor: ScrollAnchor | undefined,
 ) {
   if (!anchor || !history) return;
-  const lead = anchor.lead && history.querySelector<HTMLElement>("[data-scroll-lead]");
-  if (lead) {
+  const lead = history.querySelector<HTMLElement>("[data-scroll-lead]");
+  if (lead && history.scrollTop === 0) return;
+  if (anchor.lead && lead) {
     const delta =
       lead.getBoundingClientRect().top - (history.getBoundingClientRect().top + anchor.offset);
     if (delta) history.scrollTop += delta;
