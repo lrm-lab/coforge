@@ -1,3 +1,4 @@
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { mkdir, mkdtemp, readlink, realpath, rm, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
@@ -41,7 +42,7 @@ async function databaseKey(cwd: string, environment: Readonly<Record<string, str
   const home =
     (process.platform === "win32" ? environment.USERPROFILE : environment.HOME) || homedir();
   const data = environment.XDG_DATA_HOME || join(home, ".local", "share");
-  return canonicalPath(resolve(cwd, data, "opencode", database));
+  return canonicalPath(resolve(cwd, data, RUNTIME_PROVIDER.OPENCODE, database));
 }
 
 async function makeNameProbe(directory: string): Promise<string> {
