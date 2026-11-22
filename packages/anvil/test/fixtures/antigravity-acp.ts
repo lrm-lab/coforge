@@ -271,8 +271,19 @@ for await (const line of console) {
       break;
     case "session/set_config_option": {
       const { configId, value } = request.params;
-      if (Bun.env.AGY_ACP_FIXTURE_HANG_CONFIG && value === Bun.env.AGY_ACP_FIXTURE_HANG_CONFIG)
+      if (value === Bun.env.AGY_ACP_FIXTURE_REJECT_CONFIG) {
+        fail(-32602, "selection rejected");
         break;
+      }
+      if (configId === "model" && value === Bun.env.AGY_ACP_FIXTURE_IGNORE_MODEL) {
+        reply({ configOptions });
+        break;
+      }
+      if (value === Bun.env.AGY_ACP_FIXTURE_HANG_CONFIG) {
+        const releaseAfter = Bun.env.AGY_ACP_FIXTURE_RELEASE_CONFIG_AFTER_MS;
+        if (!releaseAfter) break;
+        await Bun.sleep(Number(releaseAfter));
+      }
       const option = configOptions.find((entry) => entry.id === configId);
       if (!option) {
         fail(-32602, `Unknown config option: ${configId}`);
@@ -286,6 +297,25 @@ for await (const line of console) {
       configOptions = (configId === "model" ? withEfforts(value) : configOptions).map((entry) =>
         entry.id === configId ? { ...entry, currentValue: value } : entry,
       );
+      const malformedOptions =
+        value === Bun.env.AGY_ACP_FIXTURE_MALFORMED_EFFORT
+          ? [null]
+          : value === Bun.env.AGY_ACP_FIXTURE_EMPTY_EFFORT_OPTIONS
+            ? []
+            : undefined;
+      if (configId === "model" && malformedOptions) {
+        reply({
+          configOptions: configOptions.map((entry) =>
+            entry.id === "thought_level" ? { ...entry, options: malformedOptions } : entry,
+          ),
+        });
+        break;
+      }
+      if (configId === "thought_level" && Bun.env.AGY_ACP_FIXTURE_CHANGE_MODEL_ON_EFFORT) {
+        configOptions = configOptions.map((entry) =>
+          entry.id === "model" ? { ...entry, currentValue: "gemini-4-hydrogen" } : entry,
+        );
+      }
       reply({ configOptions });
       break;
     }

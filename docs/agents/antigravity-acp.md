@@ -26,7 +26,8 @@ Part of [the documentation index](../../README.md). The Antigravity adapter runs
   live.
 - Model and effort replay on every open, because a loaded session starts at agy's defaults. They
   apply by `category` (`model`, then `thought_level`) through `session/set_config_option`, skipped
-  when already current, and the shared ACP rule decides failures. The `thought_level` choices follow the model just applied:
+  when already current. A thinking-level update must confirm the requested level and retain the
+  selected model before the session can send prompts. The `thought_level` choices follow the model just applied:
   Hydrogen adds `xhigh`, and Orchestrator and GPT-OSS have no `thought_level` select.
 - The adapter checks the saved session with [ACP session listing](https://agentclientprotocol.com/protocol/v1/session-list)
   when agy advertises it. Listing all directories lets it distinguish a missing ID from an ID
@@ -65,12 +66,17 @@ Part of [the documentation index](../../README.md). The Antigravity adapter runs
   `CommandLine` is also given as `command` and `Path` as `file_path`, the keys Activity and the
   reply-intent scanner read.
 - `usage_update` (`used`/`size`) is reported as context usage after each model call.
-- The model catalog is `session/new`'s `model` select (`acp-catalog.ts`), not `agy models`. The
-  daemon runs the probe in a fresh temporary directory removed after the probe; the probe session
-  switches through the models once to read each one's `thought_level` choices and current value
-  (`acpReadModelEfforts`, shared with Droid), restores the initial model and `thought_level`, and
-  then closes with `session/close`. Account usage reads `agy -p /usage --output-format json`, which
-  answers without a turn (and is refused when `GEMINI_HOME` selects a non-default profile).
+- The model catalog comes from `session/new`'s `model` select. The daemon runs the probe
+  in a temporary directory. It reads the active model's
+  [thinking levels](https://antigravity.google/docs/cli/commands/effort/) from the initial
+  configuration and probes the others. A single 15-second budget covers the version probe,
+  ACP initialization, discovery, and cleanup requests, leaving time for process disposal and the
+  model-refresh response. A rejected, unconfirmed, or malformed result leaves that model's levels
+  unknown. A valid full configuration without a thinking-level picker confirms a fixed budget.
+  A stalled probe retains earlier confirmations. With time remaining, the probe confirms the
+  original model before restoring and checking the original effort, then sends `session/close`.
+  Account usage reads `agy -p /usage --output-format json` without a turn. Usage reads require
+  the default profile.
 - Headless login (`agy acp --login`) runs with a temporary `0700` `PATH`/`BROWSER` shim
   (`xdg-open`, `open`, `browser-shim`) scoped only to that child process and removed on exit. URLs
   captured either from stdout or from the shim pass through the same `https://accounts.google.com`

@@ -212,6 +212,7 @@ export async function planCatalogDiscoveries(
               probeCwd,
               agentEnvironment(undefined, environment),
               antigravityAcpRuntimeHost,
+              options.catalogDiscoveryTimeoutMs,
             );
             return { keyPaths: [executable], catalog };
           } finally {

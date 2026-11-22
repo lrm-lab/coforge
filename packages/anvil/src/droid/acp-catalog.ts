@@ -68,8 +68,8 @@ export async function discoverDroidAcpCatalog(
         displayName: entry.name ?? entry.value,
         description: entry.description ?? "",
         modelProvider: "",
-        reasoningEfforts: efforts.values,
-        defaultReasoning: efforts.current,
+        reasoningEfforts: efforts?.values ?? [],
+        defaultReasoning: efforts?.current ?? "",
         recommended: entry.value === model.currentValue,
       });
     }

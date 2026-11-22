@@ -4,7 +4,7 @@ import {
   type SessionConfigSelectOption,
 } from "@agentclientprotocol/sdk";
 import { RuntimeModelNotFoundError } from "#src/contract";
-import { asRecord } from "#src/json-record";
+import { asRecord, nonEmptyString } from "#src/json-record";
 import { acpBounded, type AcpConnection } from "./connection";
 
 export function acpConfigOptions(response: unknown): SessionConfigOption[] {
@@ -25,6 +25,42 @@ export function acpSelectValues(option: SessionConfigOption | undefined): string
 
 export type AcpModelEfforts = { values: string[]; current: string };
 
+function hasConfigState(option: SessionConfigOption): boolean {
+  const state = asRecord(option);
+  if (!nonEmptyString(state?.id) || !nonEmptyString(state?.name)) return false;
+  if (state?.id === "thought_level" && state.category !== "thought_level") return false;
+  if (option.type === "boolean") return typeof option.currentValue === "boolean";
+  if (option.type !== "select") return false;
+  const values = acpSelectValues(option);
+  return (
+    values.every((value) => typeof value === "string" && value.length > 0) &&
+    values.includes(option.currentValue)
+  );
+}
+
+export function acpModelEfforts(
+  config: readonly SessionConfigOption[],
+  configId: string,
+  modelId: string,
+): AcpModelEfforts | undefined {
+  const selected = config.find((entry) => asRecord(entry)?.id === configId);
+  if (selected?.type !== "select" || selected.currentValue !== modelId) return undefined;
+  const effort = config.find((entry) => asRecord(entry)?.category === "thought_level");
+  try {
+    if (!effort) return config.every(hasConfigState) ? { values: [], current: "" } : undefined;
+    if (effort.type !== "select") return undefined;
+    const values = acpSelectValues(effort);
+    if (
+      !values.includes(effort.currentValue) ||
+      !values.every((value) => typeof value === "string" && value.length > 0)
+    )
+      return undefined;
+    return { values, current: effort.currentValue };
+  } catch {
+    return undefined;
+  }
+}
+
 export async function acpReadModelEfforts(
   transport: AcpConnection,
   sessionId: string,
@@ -32,7 +68,7 @@ export async function acpReadModelEfforts(
   modelId: string,
   timeoutMs: number,
   timedOut: string,
-): Promise<AcpModelEfforts> {
+): Promise<AcpModelEfforts | undefined> {
   let config: SessionConfigOption[];
   try {
     config = acpConfigOptions(
@@ -47,15 +83,10 @@ export async function acpReadModelEfforts(
       ),
     );
   } catch (error) {
-    if (error instanceof RequestError) return { values: [], current: "" };
+    if (error instanceof RequestError) return undefined;
     throw error;
   }
-  if (!config.some((entry) => entry.id === model.id && entry.currentValue === modelId))
-    return { values: [], current: "" };
-  const effort = config.find((entry) => entry.category === "thought_level");
-  const values = acpSelectValues(effort);
-  const current = typeof effort?.currentValue === "string" ? effort.currentValue : "";
-  return { values, current: values.includes(current) ? current : "" };
+  return acpModelEfforts(config, model.id, modelId);
 }
 
 export type AcpRuntimeConfigTarget = Readonly<{
@@ -65,6 +96,7 @@ export type AcpRuntimeConfigTarget = Readonly<{
   timedOut: string;
   label: string;
   missingModel?: string;
+  verifyModelAfterEffort?: boolean;
 }>;
 
 export async function acpApplyRuntimeConfig(
@@ -89,8 +121,10 @@ export async function acpApplyRuntimeConfig(
     if (!config.some((entry) => entry.id === option.id && entry.currentValue === value))
       throw new Error(`${target.label} did not apply ${option.id} ${value}`);
   };
+  const modelOption = (entry: SessionConfigOption) =>
+    entry.id === "model" || entry.category === "model";
   const model = runtime?.model;
-  const option = config.find((entry) => entry.id === "model" || entry.category === "model");
+  const option = config.find(modelOption);
   const offered = acpSelectValues(option);
   if (model && (model !== "default" || offered.includes(model))) {
     if (!option) {
@@ -105,6 +139,12 @@ export async function acpApplyRuntimeConfig(
   if (!reasoning || !effort) return config;
   if (!acpSelectValues(effort).includes(reasoning))
     throw new Error(`${target.label} does not offer ${effort.id} ${reasoning} for this model`);
+  const selectedModel = target.verifyModelAfterEffort ? config.find(modelOption) : undefined;
   await apply(effort, reasoning);
+  if (
+    selectedModel?.type === "select" &&
+    config.find(modelOption)?.currentValue !== selectedModel.currentValue
+  )
+    throw new Error(`${target.label} changed the model while applying ${effort.id}`);
   return config;
 }

@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { AgentSessionOptions } from "@coforge/agent";
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import {
   AntigravityAcpProvider,
   type AntigravityAcpRuntimeHost,
@@ -14,7 +16,12 @@ const FIXTURE = new URL("./fixtures/antigravity-acp.ts", import.meta.url).pathna
 async function openResumed(
   sessionId: string,
   env: Record<string, string>,
-  options: { error?: string; prompt?: string; timeoutMs?: number } = {},
+  options: {
+    error?: string;
+    prompt?: string;
+    timeoutMs?: number;
+    runtime?: AgentSessionOptions["runtime"];
+  } = {},
 ) {
   const cwd = await mkdtemp(join(tmpdir(), "agy-resume-"));
   const log = join(cwd, "rpc.jsonl");
@@ -36,6 +43,7 @@ async function openResumed(
       instructions: "Updated standing prompt",
       sessionId,
       sessionMode: "resume",
+      runtime: options.runtime,
       onSessionId: async (next, replaced) => {
         bindings.push({ sessionId: next, replaced });
       },
@@ -218,3 +226,25 @@ test.each(["resume", "load"])(
     expect(bindings).toEqual([]);
   },
 );
+
+test("keeps the existing binding when applying effort changes the selected model", async () => {
+  const { requests, bindings } = await openResumed(
+    "existing-session",
+    { AGY_ACP_FIXTURE_CHANGE_MODEL_ON_EFFORT: "1" },
+    {
+      runtime: {
+        provider: RUNTIME_PROVIDER.ANTIGRAVITY,
+        model: "gemini-4-carbon",
+        reasoning: "high",
+      },
+      error: "agy acp changed the model while applying thought_level",
+    },
+  );
+  expect(requests.map((request) => request.method)).toEqual([
+    "initialize",
+    "session/load",
+    "session/set_mode",
+    "session/set_config_option",
+  ]);
+  expect(bindings).toEqual([]);
+});

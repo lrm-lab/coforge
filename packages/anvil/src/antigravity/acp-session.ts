@@ -314,6 +314,7 @@ function antigravitySessionProfile(
           timeoutMs,
           timedOut: "agy acp session/set_config_option timed out",
           label: "agy acp",
+          verifyModelAfterEffort: true,
         },
         acpConfigOptions(state),
         options.runtime,
