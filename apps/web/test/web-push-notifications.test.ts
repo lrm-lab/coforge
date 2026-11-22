@@ -196,6 +196,61 @@ describe("WebPushNotifications", () => {
     expect(repository.removed).toEqual([first.id]);
   });
 
+  test("records a rejected endpoint still in Settings and settles the other subscription", async () => {
+    const repository = store({
+      subscriptions: [first, second],
+      message: {
+        title: "CoForge",
+        body: "Ready",
+        url: "/w/acme/dm/dm-a",
+        workspaceId: "workspace-a",
+        recipients: [{ userId: "alice", subscriptions: [first, second] }],
+      },
+    });
+    repository.value.removeSubscriptionById = async () => {
+      throw new Error("database unavailable");
+    };
+    const outcomes: Parameters<WebPushSubscriptionStore["recordDeliveries"]>[0] = [];
+    repository.value.recordDeliveries = async (batch) => {
+      outcomes.push(...batch);
+    };
+    const log = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const transport: WebPushTransport = {
+        send: async ({ id }) => {
+          if (id === first.id) throw new WebPushDeliveryError(410);
+        },
+      };
+
+      const notifications = new WebPushNotifications(repository.value, transport);
+      await expect(notifications.notifyMessage("message-a")).resolves.toEqual({
+        sent: 1,
+        failed: 1,
+        removed: 0,
+        unreachable: 0,
+        errorId: expect.any(String),
+      });
+      expect(outcomes).toEqual([
+        { id: first.id, ok: false, at: expect.any(Date), reason: "failed" },
+        { id: second.id, ok: true, at: expect.any(Date) },
+      ]);
+
+      outcomes.length = 0;
+      const result = await notifications.sendTest("alice", first.endpoint, "en", "acme");
+      expect(classifyTestDelivery(result)).toBe("failed");
+      expect(outcomes).toEqual([
+        { id: first.id, ok: false, at: expect.any(Date), reason: "failed" },
+      ]);
+      expect(
+        log.mock.calls.some(
+          ([line]) => JSON.parse(String(line)).event === "web_push.subscription_removal_failed",
+        ),
+      ).toBeTrue();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   test("classifies a connection failure (no status code) as push-service-unreachable", async () => {
     const repository = store({
       message: {

@@ -89,17 +89,25 @@ export class WebPushLibraryTransport implements WebPushTransport {
   }
 
   async send(subscription: StoredWebPushSubscription, payload: WebPushPayload) {
+    const { requestDetails, target } = await this.prepare(subscription, payload);
+    const response = await this.sendRequest(requestDetails, target, this.timeoutMs).catch(
+      (error) => {
+        if (error instanceof WebPushDeliveryError) throw error;
+        throw new WebPushDeliveryError();
+      },
+    );
+    if (response.statusCode < 200 || response.statusCode > 299) {
+      throw new WebPushDeliveryError(response.statusCode);
+    }
+  }
+
+  private async prepare(subscription: StoredWebPushSubscription, payload: WebPushPayload) {
     try {
       const requestDetails = createWebPushRequestDetails(this.config, subscription, payload);
       const target = await this.resolveTarget(subscription.endpoint);
-      const response = await this.sendRequest(requestDetails, target, this.timeoutMs);
-      // Mirrors web-push 3.6.7's own success range (web-push-lib.js `sendNotification`).
-      if (response.statusCode < 200 || response.statusCode > 299) {
-        throw new WebPushDeliveryError(response.statusCode);
-      }
-    } catch (error) {
-      if (error instanceof WebPushDeliveryError) throw error;
-      throw new WebPushDeliveryError(undefined);
+      return { requestDetails, target };
+    } catch {
+      throw new WebPushDeliveryError(undefined, true);
     }
   }
 }

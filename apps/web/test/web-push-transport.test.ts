@@ -89,6 +89,7 @@ test("WebPushLibraryTransport.send maps a 410 response to WebPushDeliveryError(4
   const error = await transport.send(subscription, payload).catch((caught: unknown) => caught);
   expect(error).toBeInstanceOf(WebPushDeliveryError);
   expect((error as WebPushDeliveryError).statusCode).toBe(410);
+  expect((error as WebPushDeliveryError).canFallback).toBeTrue();
 });
 
 test("WebPushLibraryTransport.send maps a 301 redirect response to WebPushDeliveryError(301)", async () => {
@@ -116,6 +117,7 @@ test("WebPushLibraryTransport.send maps a thrown network/timeout error to WebPus
   const error = await transport.send(subscription, payload).catch((caught: unknown) => caught);
   expect(error).toBeInstanceOf(WebPushDeliveryError);
   expect((error as WebPushDeliveryError).statusCode).toBeUndefined();
+  expect((error as WebPushDeliveryError).canFallback).toBeFalse();
 });
 
 test("WebPushLibraryTransport.send maps invalid subscription keys to WebPushDeliveryError(undefined)", async () => {
@@ -130,4 +132,34 @@ test("WebPushLibraryTransport.send maps invalid subscription keys to WebPushDeli
     .catch((caught: unknown) => caught);
   expect(error).toBeInstanceOf(WebPushDeliveryError);
   expect((error as WebPushDeliveryError).statusCode).toBeUndefined();
+  expect((error as WebPushDeliveryError).canFallback).toBeTrue();
+});
+
+test("a target resolution failure is safe for page fallback without an HTTP status", async () => {
+  let sent = false;
+  const transport = new WebPushLibraryTransport(webPushConfig, {
+    resolveTarget: async () => {
+      throw new Error("DNS refused");
+    },
+    sendRequest: async () => {
+      sent = true;
+      return { statusCode: 201 };
+    },
+  });
+  const error = await transport.send(subscription, payload).catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(WebPushDeliveryError);
+  expect((error as WebPushDeliveryError).statusCode).toBeUndefined();
+  expect((error as WebPushDeliveryError).canFallback).toBeTrue();
+  expect(sent).toBeFalse();
+});
+
+test.each([408, 502])("an ambiguous HTTP %d leaves Push responsible", async (statusCode) => {
+  const transport = new WebPushLibraryTransport(webPushConfig, {
+    resolveTarget: async () => target,
+    sendRequest: async () => ({ statusCode }),
+  });
+  const error = await transport.send(subscription, payload).catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(WebPushDeliveryError);
+  expect((error as WebPushDeliveryError).statusCode).toBe(statusCode);
+  expect((error as WebPushDeliveryError).canFallback).toBeFalse();
 });

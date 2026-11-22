@@ -124,9 +124,20 @@ export interface WebPushTransport {
 }
 
 export class WebPushDeliveryError extends Error {
-  constructor(readonly statusCode?: number) {
+  constructor(
+    readonly statusCode?: number,
+    private readonly failedBeforeSend = false,
+  ) {
     super("Web Push delivery failed");
     this.name = "WebPushDeliveryError";
+  }
+
+  get canFallback(): boolean {
+    const status = this.statusCode;
+    return (
+      this.failedBeforeSend ||
+      (status !== undefined && status >= 300 && status < 500 && status !== 408)
+    );
   }
 }
 
@@ -427,16 +438,21 @@ export class WebPushNotifications {
         } catch (error) {
           const statusCode = error instanceof WebPushDeliveryError ? error.statusCode : undefined;
           if (statusCode === 404 || statusCode === 410) {
-            await this.subscriptions.removeSubscriptionById(subscription.id);
-            console.error(
-              JSON.stringify({
-                event: "web_push.subscription_removed",
-                errorId,
-                subscriptionId: subscription.id,
-                statusCode,
-                outcome: "failed",
-              }),
-            );
+            const fields = {
+              errorId,
+              subscriptionId: subscription.id,
+              statusCode,
+              outcome: "failed",
+            };
+            try {
+              await this.subscriptions.removeSubscriptionById(subscription.id);
+              console.error(JSON.stringify({ event: "web_push.subscription_removed", ...fields }));
+            } catch {
+              console.error(
+                JSON.stringify({ event: "web_push.subscription_removal_failed", ...fields }),
+              );
+              return "failed" as const;
+            }
             return "removed" as const;
           }
           // No status code means the transport never got a response at all (timeout, connection
