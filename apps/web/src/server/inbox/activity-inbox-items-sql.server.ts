@@ -1,6 +1,7 @@
 import { Prisma } from "#src/generated/prisma/client";
 import {
   HUMAN_UNREAD_BASE_SQL,
+  conversationUnreadMessageSql,
   directThreadsSql,
   followedChannelThreadsSql,
   humanUnreadReplySql,
@@ -22,9 +23,7 @@ const unreadReplySql = humanUnreadReplySql(
 
 /** A top-level message unread for the viewer of a joined conversation (`cm`). The list counts these
  * and the nav dot probes for one, so the two share this definition. */
-export const conversationUnreadMessageSql = Prisma.sql`m."conversationId" = cm."conversationId"
-    AND m."threadRootId" IS NULL
-    AND ${HUMAN_UNREAD_BASE_SQL}`;
+export { conversationUnreadMessageSql };
 
 /** A reply unread for the viewer of a followed thread: `thread` names the row with its
  * `memberId`, `conversationId` and `rootMessageId`, beside its cursors (`tr`). The list probes for

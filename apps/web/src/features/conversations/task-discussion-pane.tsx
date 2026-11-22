@@ -9,21 +9,12 @@ import { taskDraftKey } from "./composer-draft";
 import { ComposerScopeProvider, type ComposerScope } from "./composer-scope";
 import type { DirectConversationView } from "./conversation-types";
 import { ThreadLoadStatus, threadRootLoadOf } from "./thread-root-state";
+import { OpenUnreadHintContext } from "./use-conversation-open";
 import { useTaskConversation } from "./use-task-conversation";
 import { useTaskEvents } from "./use-task-events";
 
 type PaneProps = ComponentProps<typeof ConversationPane>;
 
-/**
- * A Task's own conversation under the Task in its popup, where a Task made from a message shows
- * that message's thread (`useTaskConversation` reads it). A reader with a seat opens on their first
- * unread under the "New messages" divider; one without has no read position, so no divider.
- *
- * Opening it makes nothing: a Task nobody has spoken about has no conversation, and a reader has
- * no seat in one until they write. A reply makes both on the server; a file, which is uploaded to
- * the conversation before the reply that carries it, makes them as it starts uploading. The draft
- * is kept under the Task, so it survives the conversation coming into being.
- */
 export function TaskDiscussionPane({
   conversationId: known,
   board,
@@ -43,12 +34,9 @@ export function TaskDiscussionPane({
   | "onReadLatest"
   | "onFollowingLatestChange"
 > & {
-  /** The Task's conversation; absent until someone has spoken there. */
   conversationId: string | undefined;
-  /** The Task by its board and number, the address a reply goes to. */
   board: { conversationId: string; number: number };
   changedAt: string | undefined;
-  /** Whom a reply may mention before the conversation exists: the board's members. */
   mentionables: DirectConversationView["mentionables"];
 }) {
   const reply = useServerFn(replyToTask);
@@ -63,6 +51,7 @@ export function TaskDiscussionPane({
     hasNewer,
     hasOlder,
     unreadCount,
+    firstUnreadMessageId,
     catchUp,
     ensure,
     loadOlder,
@@ -88,6 +77,13 @@ export function TaskDiscussionPane({
     }),
     [board.conversationId, board.number, conversationId, seated, ensure],
   );
+  const unreadHint = useMemo(
+    () =>
+      conversationId && firstUnreadMessageId
+        ? { conversationId, messageId: firstUnreadMessageId }
+        : null,
+    [conversationId, firstUnreadMessageId],
+  );
   if (known && !made && !newest)
     return (
       <ThreadLoadStatus
@@ -106,43 +102,45 @@ export function TaskDiscussionPane({
         readWindow={false}
         openTaskNumber={undefined}
       />
-      <ConversationPane
-        {...pane}
-        inTaskPopup
-        keepsReadCursor={Boolean(conversationId && seated)}
-        onLoadMessageAround={loadMessageAround}
-        onLoadOlder={loadOlder}
-        onLoadNewer={loadNewer}
-        onShowLatest={showLatest}
-        onReadLatest={readLatest}
-        onFollowingLatestChange={setFollowingLatest}
-        conversation={{
-          mentionables,
-          ...newest,
-          conversationId: conversationId ?? "",
-          senderMemberId: newest?.senderMemberId ?? "",
-          threads: undefined,
-          messages: timeline,
-          hasOlder,
-          hasNewer,
-          unreadCount,
-        }}
-        onSend={async (body, idempotencyKey, attachmentIds, options) => {
-          await reply({
-            data: {
-              ...board,
-              body,
-              idempotencyKey,
-              attachmentIds,
-              mentions: options?.mentions ?? [],
-            },
-          });
-          void queryClient.invalidateQueries({ queryKey: taskFollowQueryKey(board) });
-          if (!conversationId || !seated) await ensure().catch(() => {});
-          if (conversationId) await catchUp(conversationId);
-          readLatest();
-        }}
-      />
+      <OpenUnreadHintContext value={unreadHint}>
+        <ConversationPane
+          {...pane}
+          inTaskPopup
+          keepsReadCursor={Boolean(conversationId && seated)}
+          onLoadMessageAround={loadMessageAround}
+          onLoadOlder={loadOlder}
+          onLoadNewer={loadNewer}
+          onShowLatest={showLatest}
+          onReadLatest={readLatest}
+          onFollowingLatestChange={setFollowingLatest}
+          conversation={{
+            mentionables,
+            ...newest,
+            conversationId: conversationId ?? "",
+            senderMemberId: newest?.senderMemberId ?? "",
+            threads: undefined,
+            messages: timeline,
+            hasOlder,
+            hasNewer,
+            unreadCount,
+          }}
+          onSend={async (body, idempotencyKey, attachmentIds, options) => {
+            await reply({
+              data: {
+                ...board,
+                body,
+                idempotencyKey,
+                attachmentIds,
+                mentions: options?.mentions ?? [],
+              },
+            });
+            void queryClient.invalidateQueries({ queryKey: taskFollowQueryKey(board) });
+            if (!conversationId || !seated) await ensure().catch(() => {});
+            if (conversationId) await catchUp(conversationId);
+            readLatest();
+          }}
+        />
+      </OpenUnreadHintContext>
     </ComposerScopeProvider>
   );
 }

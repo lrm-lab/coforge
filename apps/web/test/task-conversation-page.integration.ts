@@ -166,11 +166,11 @@ test("the unread count is others' messages past the read position, never notices
     db.message.create({
       data: { workspaceId, conversationId, body: `u${sequence}`, sequence, senderMemberId },
     });
-  await say(2, other!.id);
+  const first = await say(2, other!.id);
   await say(3, null);
   await say(4, reader!.id);
-  await say(5, other!.id);
-  await say(6, other!.id);
+  const fifth = await say(5, other!.id);
+  const sixth = await say(6, other!.id);
   await db.conversation.update({ where: { id: conversationId }, data: { lastSequence: 6 } });
   const readThrough = (sequence: number, unreadFromSequence: number | null = null) =>
     db.conversationMember.update({
@@ -178,13 +178,28 @@ test("the unread count is others' messages past the read position, never notices
       data: { readThroughSequence: sequence, unreadFromSequence },
     });
   await readThrough(1);
-  expect(await pages.unreadCount(workspaceId, users.reader.id, conversationId)).toBe(3);
+  expect(await pages.page(workspaceId, users.reader.id, conversationId)).toMatchObject({
+    firstUnreadMessageId: first.id,
+  });
+  expect(await pages.unread(workspaceId, users.reader.id, conversationId)).toEqual({
+    unreadCount: 3,
+    firstUnreadMessageId: first.id,
+  });
   await readThrough(5);
-  expect(await pages.unreadCount(workspaceId, users.reader.id, conversationId)).toBe(1);
+  expect(await pages.unread(workspaceId, users.reader.id, conversationId)).toEqual({
+    unreadCount: 1,
+    firstUnreadMessageId: sixth.id,
+  });
   await readThrough(6, 5);
-  expect(await pages.unreadCount(workspaceId, users.reader.id, conversationId)).toBe(2);
+  expect(await pages.unread(workspaceId, users.reader.id, conversationId)).toEqual({
+    unreadCount: 2,
+    firstUnreadMessageId: fifth.id,
+  });
 });
 
 test("a reader with no seat has nothing unread", async () => {
-  expect(await pages.unreadCount(workspaceId, users.outsider.id, discussionId)).toBe(0);
+  expect(await pages.unread(workspaceId, users.outsider.id, discussionId)).toEqual({
+    unreadCount: 0,
+    firstUnreadMessageId: null,
+  });
 });

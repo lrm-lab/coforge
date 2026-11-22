@@ -16,7 +16,10 @@ import type { ChannelName } from "#src/features/conversations/channel-signals";
 import { channelListMembers } from "./channel-list-preview.server";
 import { channelInfoOf } from "./conversation-realtime.server";
 import { workspaceChannelThreadUnreads } from "./channel-thread-unread.server";
-import { HUMAN_UNREAD_BASE_SQL } from "./human-unread.server";
+import {
+  conversationUnreadMessageSql,
+  unreadMessageIdAtFirstSequenceSql,
+} from "./human-unread.server";
 
 /** The Workspace's channels as lists: every name the composer may reference, the viewer's Chat
  * list with unread counts and previews, and the archived ones Workspace settings shows. */
@@ -96,12 +99,16 @@ export async function listChannels(
     {
       conversationId: string;
       unread: number;
+      firstUnreadMessageId: string | null;
       arrivedSinceClosed: number;
       mentioned: boolean;
     }[]
   >`
       SELECT cm."conversationId" AS "conversationId",
         unread."count" AS "unread",
+        CASE WHEN unread."firstSequence" IS NOT NULL
+          THEN ${unreadMessageIdAtFirstSequenceSql}
+          END AS "firstUnreadMessageId",
         unread."arrivedSinceClosed" AS "arrivedSinceClosed",
         unread."mentioned" AS "mentioned"
       FROM "conversation_members" cm
@@ -112,15 +119,14 @@ export async function listChannels(
        AND c."hiddenFromWorkspaceAt" IS NULL
       CROSS JOIN LATERAL (
         SELECT COUNT(*)::int AS "count",
+          MIN(m."sequence") AS "firstSequence",
           COUNT(*) FILTER (WHERE m."createdAt" > cm."hiddenAt")::int AS "arrivedSinceClosed",
           COALESCE(BOOL_OR(EXISTS (
             SELECT 1 FROM "message_mentions" mm
             WHERE mm."messageId" = m."id" AND mm."memberId" = cm."id"
           )), false) AS "mentioned"
         FROM "messages" m
-        WHERE m."conversationId" = cm."conversationId"
-          AND m."threadRootId" IS NULL
-          AND ${HUMAN_UNREAD_BASE_SQL}
+        WHERE ${conversationUnreadMessageSql}
       ) unread
       WHERE cm."userId" = ${userId}::uuid
         AND cm."leftAt" IS NULL
@@ -142,7 +148,7 @@ export async function listChannels(
       ),
     ),
   ]);
-  const unreadByConversation = new Map(unread.map((row) => [row.conversationId, row.unread]));
+  const unreadByConversation = new Map(unread.map((row) => [row.conversationId, row]));
   const mentionedConversations = new Set(
     unread.filter((row) => row.mentioned).map((row) => row.conversationId),
   );
@@ -163,6 +169,7 @@ export async function listChannels(
       // or the row's `pinSortOrder` narrows to `number` and cannot hold "not pinned".
       const pin = member?.pins.at(0);
       const preview = previews.get(channel.id);
+      const read = member ? unreadByConversation.get(channel.id) : undefined;
       const threadUnread = member ? threadUnreads.get(channel.id) : undefined;
       return {
         id: channel.id,
@@ -172,7 +179,8 @@ export async function listChannels(
         visibility: channelVisibilityOf(channel),
         muted: isMutedLevel(member?.notificationLevel),
         notificationLevel: readNotificationLevel(member?.notificationLevel),
-        unreadCount: member ? (unreadByConversation.get(channel.id) ?? 0) : 0,
+        unreadCount: read?.unread ?? 0,
+        firstUnreadMessageId: read?.firstUnreadMessageId ?? null,
         mentioned: member ? mentionedConversations.has(channel.id) : false,
         ...(member?.unreadFromSequence != null ? { markedUnread: true as boolean } : {}),
         ...(threadUnread && threadUnread.unreadThreadCount > 0

@@ -6,6 +6,7 @@ import {
 import {
   HUMAN_UNREAD_BASE_SQL,
   markUnreadAnchor,
+  unreadMessageIdAtFirstSequenceSql,
 } from "#src/server/conversations/human-unread.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { FORWARDED_PREVIEW_SOURCE_LENGTH } from "#src/server/conversations/message-preview-line.server";
@@ -326,13 +327,20 @@ export class PrismaDirectConversationPreferences {
    * hash-join every message of every DM instead.
    */
   async unreadCountsForUser(workspaceId: string, userId: string) {
-    return this.db.$queryRaw<{ conversationId: string; unread: number }[]>`
-      SELECT cm."conversationId" AS "conversationId", unread."count"::int AS "unread"
+    return this.db.$queryRaw<
+      { conversationId: string; unread: number; firstUnreadMessageId: string | null }[]
+    >`
+      SELECT cm."conversationId" AS "conversationId", unread."count"::int AS "unread",
+        CASE WHEN unread."firstSequence" IS NOT NULL
+          AND c."hiddenFromWorkspaceAt" IS NULL AND ${viewerDirectConversationSql(userId)}
+          THEN ${unreadMessageIdAtFirstSequenceSql}
+          END AS "firstUnreadMessageId"
       FROM "conversation_members" cm
       JOIN "conversations" c
         ON c."id" = cm."conversationId" AND c."directKey" IS NOT NULL
       CROSS JOIN LATERAL (
-        SELECT COUNT(*) AS "count"
+        SELECT COUNT(*) AS "count",
+          MIN(m."sequence") FILTER (WHERE m."threadRootId" IS NULL) AS "firstSequence"
         FROM "messages" m
         WHERE m."conversationId" = cm."conversationId"
           AND ${HUMAN_UNREAD_BASE_SQL}

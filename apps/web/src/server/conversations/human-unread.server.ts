@@ -23,6 +23,22 @@ export const HUMAN_UNREAD_BASE_SQL = Prisma.sql`m."sequence" > LEAST(cm."readThr
   AND m."senderMemberId" IS NOT NULL
   AND m."senderMemberId" <> cm."id"`;
 
+export const conversationUnreadMessageSql = Prisma.sql`m."conversationId" = cm."conversationId"
+    AND m."threadRootId" IS NULL
+    AND ${HUMAN_UNREAD_BASE_SQL}`;
+
+export const firstUnreadMessageIdSql = Prisma.sql`(
+  SELECT m."id" FROM "messages" m
+  WHERE ${conversationUnreadMessageSql}
+  ORDER BY m."sequence" LIMIT 1
+)`;
+
+export const unreadMessageIdAtFirstSequenceSql = Prisma.sql`(
+  SELECT anchor."id" FROM "messages" anchor
+  WHERE anchor."conversationId" = cm."conversationId"
+    AND anchor."sequence" = unread."firstSequence"
+)`;
+
 /**
  * The messages a conversation's sidebar row stands for, for a conversation `c` and its messages
  * `m`: a channel's top-level messages, and every message of a direct conversation, thread replies

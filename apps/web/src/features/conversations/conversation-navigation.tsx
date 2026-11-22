@@ -1,3 +1,4 @@
+import { OpenUnreadHintContext } from "./use-conversation-open";
 import {
   useContext,
   useEffect,
@@ -96,6 +97,15 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
     shouldThrow: false,
   });
   const openDm = useParams({ from: "/w/$workspaceSlug/_chat/dm/$dmId", shouldThrow: false });
+  const conversationId = channel?.channelId ?? openDm?.dmId;
+  const sidebarHint = useMemo(() => {
+    const row = channel?.channelId
+      ? channels.find((row) => row.id === conversationId)
+      : directs.rows.find((row) => row.conversationId === conversationId);
+    return conversationId && row?.unreadCount && row.firstUnreadMessageId
+      ? { conversationId, messageId: row.firstUnreadMessageId }
+      : null;
+  }, [channel?.channelId, conversationId, channels, directs.rows]);
   const showList =
     browsing ||
     pathname === workspacePath(workspaceSlug) ||
@@ -372,7 +382,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
                     phone && showList && "pointer-events-none",
                   )}
                 >
-                  {children}
+                  <OpenUnreadHintContext value={sidebarHint}>{children}</OpenUnreadHintContext>
                 </div>
               </main>
               {creating && (

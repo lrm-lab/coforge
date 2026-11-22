@@ -222,7 +222,12 @@ describe("the DM list's stream positions", () => {
       },
       loadDirectBadges: async () => {
         if (read.failing === "badges") throw new Error("offline");
-        return { viewerId: "viewer", unread: {}, streamPositions: read.badges };
+        return {
+          viewerId: "viewer",
+          unread: {},
+          firstUnreadMessageIds: {},
+          streamPositions: read.badges,
+        };
       },
     };
     return new QueryClient().query(sidebarDirectsQuery("w", { tolerant, api }));

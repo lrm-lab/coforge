@@ -1,4 +1,4 @@
-import { HUMAN_UNREAD_BASE_SQL } from "./human-unread.server";
+import { conversationUnreadMessageSql, firstUnreadMessageIdSql } from "./human-unread.server";
 import { LIVE_TASK_WHERE, taskMentions } from "#src/server/tasks/task-view.server";
 import {
   taskEventsInWindow,
@@ -69,10 +69,10 @@ export class TaskConversationPages {
         select: browserMessageFields,
       }),
       activeMemberId
-        ? this.db.conversationMember.findUnique({
-            where: { id: activeMemberId },
-            select: { readThroughSequence: true },
-          })
+        ? this.db.$queryRaw<{ readThroughSequence: number; firstUnreadMessageId: string | null }[]>`
+            SELECT cm."readThroughSequence", ${firstUnreadMessageIdSql} AS "firstUnreadMessageId"
+            FROM "conversation_members" cm
+            WHERE cm."id" = ${activeMemberId}::uuid AND cm."leftAt" IS NULL`.then(([row]) => row)
         : null,
       this.db.conversation.findUniqueOrThrow({
         where: { id: conversationId },
@@ -125,6 +125,7 @@ export class TaskConversationPages {
       // unread for them.
       senderMemberId: activeMemberId,
       readThroughSequence: seat?.readThroughSequence ?? newest.lastSequence,
+      firstUnreadMessageId: seat?.firstUnreadMessageId ?? null,
       othersReadThroughSequence: 0,
       threads: {},
       threadReadThrough: {},
@@ -137,19 +138,21 @@ export class TaskConversationPages {
 
   /**
    * How many top-level messages with a sender (never a system notice, never the viewer's own) lie
-   * past the viewer's read position or their mark-as-unread marker (`HUMAN_UNREAD_BASE_SQL`'s
-   * rule). Nothing for a viewer with no seat.
+   * past the viewer's read position or their mark-as-unread marker, and the first one's id.
    */
-  async unreadCount(workspaceId: string, userId: string, conversationId: string) {
+  async unread(workspaceId: string, userId: string, conversationId: string) {
     const { activeMemberId } = await this.authorize(workspaceId, userId, conversationId);
-    if (!activeMemberId) return 0;
-    const [unread] = await this.db.$queryRaw<{ count: number }[]>`
-      SELECT COUNT(*)::int AS "count"
+    const empty = { unreadCount: 0, firstUnreadMessageId: null };
+    if (!activeMemberId) return empty;
+    const [unread] = await this.db.$queryRaw<
+      { unreadCount: number; firstUnreadMessageId: string | null }[]
+    >`
+      SELECT (
+        SELECT COUNT(*)::int FROM "messages" m WHERE ${conversationUnreadMessageSql}
+      ) AS "unreadCount", ${firstUnreadMessageIdSql} AS "firstUnreadMessageId"
       FROM "conversation_members" cm
-      JOIN "messages" m ON m."conversationId" = cm."conversationId" AND m."threadRootId" IS NULL
-        AND ${HUMAN_UNREAD_BASE_SQL}
-      WHERE cm."id" = ${activeMemberId}::uuid`;
-    return unread?.count ?? 0;
+      WHERE cm."id" = ${activeMemberId}::uuid AND cm."leftAt" IS NULL`;
+    return unread ?? empty;
   }
 
   /** What arrived after `afterSequence`. */

@@ -52,8 +52,12 @@ function listReaders(
     directBadges: async () => {
       const rows = await directs().unreadCounts(workspaceId, user.id);
       const unread: Record<string, number> = {};
-      for (const row of rows) unread[row.conversationId] = row.unread;
-      return { viewerId: user.id, unread };
+      const firstUnreadMessageIds: Record<string, string | null> = {};
+      for (const row of rows) {
+        unread[row.conversationId] = row.unread;
+        firstUnreadMessageIds[row.conversationId] = row.firstUnreadMessageId;
+      }
+      return { viewerId: user.id, unread, firstUnreadMessageIds };
     },
     sections: async () => ({ sections: await sections().list() }),
     sectionOrder: async () => ({ order: await sections().order() }),

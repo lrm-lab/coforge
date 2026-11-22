@@ -45,7 +45,7 @@ describe("loadSidebarLists", () => {
       ...api,
       loadDirectBadges: async () => {
         if (badgesDown) throw new Error("offline");
-        return { viewerId: "viewer", unread: {}, streamPositions: {} };
+        return { viewerId: "viewer", unread: {}, firstUnreadMessageIds: {}, streamPositions: {} };
       },
     };
     await loadSidebarLists(fresh, "w", "enter", flaky);

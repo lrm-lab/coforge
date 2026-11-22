@@ -52,14 +52,23 @@ test("channel unread: list counts other-authored top-level messages past the cur
     const root = await send(alice.id, "root from alice");
     // bob's view: alice's top-level message is unread; alice's own never is.
     let list = await channels.list(workspace.id, bob.id);
-    expect(list.find((c) => c.id === engineering.id)?.unreadCount).toBe(1);
+    expect(list.find((c) => c.id === engineering.id)).toMatchObject({
+      unreadCount: 1,
+      firstUnreadMessageId: root.id,
+    });
     list = await channels.list(workspace.id, alice.id);
-    expect(list.find((c) => c.id === engineering.id)?.unreadCount).toBe(0);
+    expect(list.find((c) => c.id === engineering.id)).toMatchObject({
+      unreadCount: 0,
+      firstUnreadMessageId: null,
+    });
 
     // A thread reply never adds channel unread for bob.
     await send(alice.id, "thread reply", root.id);
     list = await channels.list(workspace.id, bob.id);
-    expect(list.find((c) => c.id === engineering.id)?.unreadCount).toBe(1);
+    expect(list.find((c) => c.id === engineering.id)).toMatchObject({
+      unreadCount: 1,
+      firstUnreadMessageId: root.id,
+    });
 
     // A second top-level message bumps the count to 2.
     await send(alice.id, "second top-level");

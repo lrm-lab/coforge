@@ -101,6 +101,7 @@ test("Workspace humans enrolled in general see one general channel; outsiders ca
         muted: false,
         notificationLevel: "all",
         unreadCount: 0,
+        firstUnreadMessageId: null,
         mentioned: false,
         lastMessage: null,
         members: expect.any(Array),

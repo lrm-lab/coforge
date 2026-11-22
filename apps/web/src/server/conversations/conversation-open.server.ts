@@ -1,6 +1,5 @@
 import { Prisma } from "#src/generated/prisma/client";
-import { conversationUnreadMessageSql } from "#src/server/inbox/activity-inbox-items-sql.server";
-import { humanUnreadReplySql } from "./human-unread.server";
+import { conversationUnreadMessageSql, humanUnreadReplySql } from "./human-unread.server";
 
 /** The first message unread for the viewer, where a pane draws its "New messages" divider. */
 export type FirstUnread = { id: string; sequence: number };

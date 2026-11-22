@@ -105,10 +105,6 @@ export const loadTaskConversationEvents = createServerFn({ method: "GET" })
 export const loadTaskConversationUnread = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ conversationId: z.uuid() }))
-  .handler(async ({ context: { db, user, workspaceId }, data }) => ({
-    unreadCount: await new TaskConversationPages(db).unreadCount(
-      workspaceId,
-      user.id,
-      data.conversationId,
-    ),
-  }));
+  .handler(({ context: { db, user, workspaceId }, data }) =>
+    new TaskConversationPages(db).unread(workspaceId, user.id, data.conversationId),
+  );

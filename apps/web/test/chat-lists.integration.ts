@@ -92,7 +92,9 @@ test("every list answers as its own read did, after one read of the positions it
       directPreferences: {
         value: { ...(await directs.list(workspaceId, user.id)), streamPositions: own },
       },
-      directBadges: { value: { viewerId: user.id, unread: {}, streamPositions: own } },
+      directBadges: {
+        value: { viewerId: user.id, unread: {}, firstUnreadMessageIds: {}, streamPositions: own },
+      },
       sections: { value: { streamPositions: own, sections: await sections.list() } },
       sectionOrder: { value: { streamPositions: own, order: await sections.order() } },
     });

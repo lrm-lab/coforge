@@ -20,6 +20,7 @@ const channel = (id: string, fields: Partial<Channel> = {}): Channel => ({
   muted: false,
   notificationLevel: "all",
   unreadCount: 0,
+  firstUnreadMessageId: null,
   mentioned: false,
   lastMessage: null,
   members: [],
@@ -113,7 +114,12 @@ export async function sidebarWith(
       if (server.failReads) throw new Error("offline");
       return server.preferences;
     },
-    loadDirectBadges: async () => ({ viewerId: "viewer", unread: {}, streamPositions: {} }),
+    loadDirectBadges: async () => ({
+      viewerId: "viewer",
+      unread: {},
+      firstUnreadMessageIds: {},
+      streamPositions: {},
+    }),
     pin: async (target, pinned) => void saves.push(`pin ${JSON.stringify(target)} ${pinned}`),
     setMuted: async (target, muted) => void saves.push(`mute ${JSON.stringify(target)} ${muted}`),
     setNotificationLevel: async (channelId, level) =>
@@ -142,7 +148,12 @@ export function serverlessApi(server: {
     sections: sectionApi,
     listChannels: async () => ({ streamPositions: {}, channels: server.channels }),
     loadDirectPreferences: async () => server.preferences,
-    loadDirectBadges: async () => ({ viewerId: "viewer", unread: {}, streamPositions: {} }),
+    loadDirectBadges: async () => ({
+      viewerId: "viewer",
+      unread: {},
+      firstUnreadMessageIds: {},
+      streamPositions: {},
+    }),
     pin: async () => {},
     setMuted: async () => {},
     setNotificationLevel: async () => {},

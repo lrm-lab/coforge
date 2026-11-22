@@ -2,56 +2,36 @@ import type { ChatListValue } from "./chat-lists-reader";
 import type { PreviewCard } from "./action-card-preview";
 import type { PreviewNotice } from "./preview-line";
 
-/** What the server says about the viewer's DMs, by conversation id; the stream positions it was
- * read at (`streamPositions`) belong to the list, not to a row. */
 type DirectPreferences = Omit<ChatListValue<"directPreferences">, "streamPositions">;
 
-/** Who a DM is with: the viewer's Agent, or a member (the viewer themself in their own DM). */
 export type DirectPeer = DirectPreferences["conversations"][number]["peer"];
 
-/**
- * One DM's row in the Chat sidebar's Direct messages (see `sidebar-lists.ts`), with an Agent or a
- * member alike: who it is with, its pin, whether it is muted or closed, and its unread count. The fields a
- * sidebar change touches are named as on a channel row, so one change reads the same for both.
- */
 export type DirectRow = {
   conversationId: string;
-  /** Where the server lists it (the order the DMs started): the synced collection hands rows back
-   * in its own key order, so the list sorts by this. */
   position: number;
   peer: DirectPeer;
   pinned: boolean;
   pinSortOrder: number | null;
   hidden: boolean;
-  /** The viewer muted this DM: no pushes, but its unread count stays. Absent from a copy stored
-   * before DMs carried it, which reads as audible until the list is read again. */
   muted?: boolean;
   markedUnread?: boolean;
   unreadCount: number;
-  /** When the DM's last message was sent (ISO), or `null` while the DM has no message yet. */
+  firstUnreadMessageId?: string | null;
   lastMessageAt: string | null;
-  /** The start of the DM's last message, for the row's second line. `""` when that message's body
-   * is empty; `null` only when the DM has no top-level message. */
   lastMessagePreview: string | null;
-  /** Set when that message is a system notice: what the row renders it from in the viewer's
-   * language, `lastMessagePreview` being its stored English. Absent from a copy stored before
-   * rows carried it, which shows the stored English until the list is read again. */
   lastMessageNotice?: PreviewNotice | null;
-  /** Set when that message is an action card, likewise. */
   lastMessageCard?: PreviewCard | null;
 };
 
-/** A DM row as the list holds it: without its last message, which moves on every message and is
- * read per row (`useLiveDirectRow`), so a message does not render the whole list. */
 export type ListedDirect = Omit<
   DirectRow,
   "lastMessageAt" | "lastMessagePreview" | "lastMessageNotice" | "lastMessageCard"
 >;
 
-/** One row per DM the preferences list, in their order, with its unread count. */
 export function directRowsOf(
   preferences: DirectPreferences,
   unread: Readonly<Record<string, number>>,
+  firstUnreadMessageIds?: Readonly<Record<string, string | null>>,
 ): DirectRow[] {
   const pins = new Map(preferences.pinned.map((pin) => [pin.conversationId, pin.sortOrder]));
   const hidden = new Set(preferences.hidden);
@@ -66,6 +46,9 @@ export function directRowsOf(
       muted,
       ...(markedUnread ? { markedUnread: true } : {}),
       unreadCount: unread[conversationId] ?? 0,
+      ...(firstUnreadMessageIds?.[conversationId]
+        ? { firstUnreadMessageId: firstUnreadMessageIds[conversationId] }
+        : {}),
       lastMessageAt: lastMessage?.createdAt ?? null,
       lastMessagePreview: lastMessage?.preview ?? null,
       lastMessageNotice: lastMessage?.notice ?? null,
@@ -74,9 +57,6 @@ export function directRowsOf(
   );
 }
 
-/** The rows as the sidebar reads them: all of them in the server's order, the closed ones (a
- * closed DM that is pinned stays listed, in Pinned), and the unread counts, all by conversation
- * id. */
 export function directListsOf(unordered: readonly ListedDirect[]) {
   const rows = [...unordered].sort((left, right) => left.position - right.position);
   return {
@@ -88,14 +68,11 @@ export function directListsOf(unordered: readonly ListedDirect[]) {
   };
 }
 
-/** The rows the sidebar does not close: the one place a closed DM is told from a listed one. */
 function openDirectRows(lists: ReturnType<typeof directListsOf>): ListedDirect[] {
   const closed = new Set(lists.closedIds);
   return lists.rows.filter((row) => !closed.has(row.conversationId));
 }
 
-/** The direct messages the sidebar lists, by conversation id: each open one with a member, or with
- * an Agent that is still in the Workspace. */
 export function listedDirectIds(
   lists: ReturnType<typeof directListsOf>,
   agents: readonly { id: string }[],
@@ -106,8 +83,6 @@ export function listedDirectIds(
   );
 }
 
-/** The Agents the viewer has an open DM with, by Agent id to that DM's conversation id: the DMs the
- * sidebar lists with an Agent (`listedDirectIds`), whether or not the Agent is still there. */
 export function listedDirectAgentIds(
   lists: ReturnType<typeof directListsOf>,
 ): ReadonlyMap<string, string> {

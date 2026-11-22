@@ -138,7 +138,10 @@ export function useTaskConversation({
         () => {
           readThrough.current = Math.max(readThrough.current, through);
           if (through === readingRef.current.last && !readingRef.current.hasNewer)
-            queryClient.setQueryData(taskUnreadQueryKey(conversationId), { unreadCount: 0 });
+            queryClient.setQueryData(taskUnreadQueryKey(conversationId), {
+              unreadCount: 0,
+              firstUnreadMessageId: null,
+            });
           else void queryClient.invalidateQueries({ queryKey: taskUnreadQueryKey(conversationId) });
         },
         () => {},
@@ -216,6 +219,11 @@ export function useTaskConversation({
     newest,
     seated,
     messages,
+    firstUnreadMessageId: seated
+      ? unread.data?.firstUnreadMessageId === undefined
+        ? newest?.firstUnreadMessageId
+        : unread.data.firstUnreadMessageId
+      : null,
     unreadCount: seated ? (unread.data?.unreadCount ?? 0) : undefined,
     hasOlder: hasPreviousPage,
     hasNewer,
