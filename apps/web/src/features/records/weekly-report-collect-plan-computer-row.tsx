@@ -4,6 +4,7 @@ import { Edit01 as Edit, Settings01 as Settings } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Checkbox } from "#src/components/base/checkbox/checkbox";
+import { Input } from "#src/components/base/input/input";
 import { m } from "#src/paraglide/messages";
 import type { listWeeklyReportCollectorSlots } from "./records-collect.functions";
 
@@ -117,14 +118,18 @@ function CollectPathRow(props: {
   }, [props.autoFocus, props.onFocused]);
   return (
     <div className="flex items-center gap-2 py-1">
-      <input
+      <Input
         ref={inputRef}
+        maxLength={1024}
         value={props.value}
-        disabled={props.disabled}
+        isDisabled={props.disabled}
         aria-label={m.records_collect_plan_paths()}
-        onChange={(event) => props.onChange(event.target.value)}
+        onChange={props.onChange}
         onKeyDown={(event) => {
-          if (props.disabled || event.nativeEvent.isComposing) return;
+          const nativeEvent = "nativeEvent" in event ? event.nativeEvent : undefined;
+          if (props.disabled || (nativeEvent instanceof KeyboardEvent && nativeEvent.isComposing)) {
+            return;
+          }
           if (event.key === "Enter") {
             event.preventDefault();
             props.onAdd();
@@ -135,7 +140,9 @@ function CollectPathRow(props: {
             props.onRemove();
           }
         }}
-        className="min-w-0 flex-1 bg-transparent font-mono text-sm text-tertiary outline-none disabled:opacity-60"
+        className="min-w-0 flex-1"
+        wrapperClassName="rounded-xs bg-transparent shadow-none ring-0 disabled:bg-transparent disabled:opacity-60"
+        inputClassName="px-0 py-0 font-mono text-sm text-tertiary"
       />
       <ButtonUtility
         type="button"

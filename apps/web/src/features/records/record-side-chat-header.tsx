@@ -1,3 +1,4 @@
+import { useHydrated } from "@tanstack/react-router";
 import {
   ChevronDown,
   ChevronRightDouble,
@@ -11,7 +12,11 @@ import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { formatDateForDisplay } from "#src/lib/dates";
+import { useTimeFormat } from "#src/lib/time-format-context";
+import { useTimeZone } from "#src/lib/time-zone-context";
 import { m } from "#src/paraglide/messages";
+import { getLocale } from "#src/paraglide/runtime";
 import { RecordSideRenameDialog } from "./record-side-rename-dialog";
 import type { ChatSessionRow, useRecordSideChatSessions } from "./use-record-side-chat-sessions";
 
@@ -49,6 +54,10 @@ export function RecordSideChatHeader({
     setDeleteOpen,
     onDeleteSession,
   } = actions;
+  const hydrated = useHydrated();
+  const timeZone = useTimeZone();
+  const timeFormat = useTimeFormat();
+  const locale = getLocale();
   return (
     <>
       <div className="flex items-center gap-1 border-b border-secondary px-3 py-2.5">
@@ -89,14 +98,18 @@ export function RecordSideChatHeader({
                     key={row.id}
                     id={row.id}
                     label={row.title.trim() || m.records_side_chat_untitled()}
-                    addon={new Date(row.updatedAt).toLocaleString()}
+                    addon={
+                      hydrated
+                        ? formatDateForDisplay(row.updatedAt, timeZone, locale, timeFormat)
+                        : ""
+                    }
                   />
                 ))
               )}
             </Dropdown.Menu>
           </Dropdown.Popover>
         </Dropdown.Root>
-        <span className="shrink-0 text-xs text-tertiary">
+        <span className="shrink-0 text-xs text-tertiary tabular-nums">
           {m.records_side_chat_count({ count: totalCount })}
         </span>
         <Dropdown.Root>

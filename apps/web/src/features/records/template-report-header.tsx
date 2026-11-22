@@ -4,6 +4,7 @@ import { SideChatIcon } from "./side-chat-icon";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { Input } from "#src/components/base/input/input";
 import { m } from "#src/paraglide/messages";
 import { BackToRecords, RecordsKeyPointReturnBack } from "./records-layout";
 import { WeekBadge } from "./records-sidebar-parts";
@@ -62,15 +63,19 @@ export function TemplateReportHeader({
           <bdi>{title}</bdi>
         </h1>
       ) : (
-        <input
+        <Input
           type="text"
+          maxLength={100}
           aria-label={m.records_template_name()}
-          value={titleDraft}
-          disabled={saving || sending}
-          aria-invalid={titleError !== null}
           aria-describedby={titleError ? "report-title-error" : undefined}
-          onChange={(event) => onTitleDraftChange(event.target.value)}
-          className="min-w-0 flex-1 truncate bg-transparent text-md font-semibold text-primary outline-none placeholder:text-tertiary focus-visible:outline-none disabled:opacity-60"
+          value={titleDraft}
+          isDisabled={saving || sending}
+          isInvalid={titleError !== null}
+          onChange={onTitleDraftChange}
+          className="min-w-0 flex-1"
+          wrapperClassName="rounded-sm bg-transparent shadow-none ring-0 disabled:bg-transparent disabled:opacity-60"
+          inputClassName="truncate px-0 py-0 pr-0 text-md font-semibold text-primary"
+          tooltipClassName="hidden group-invalid/input:hidden"
         />
       )}
       <div className="ms-auto flex shrink-0 items-center gap-1">

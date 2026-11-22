@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { ChevronLeft, ChevronRight, Maximize02 as Maximize, XClose as X } from "@untitledui/icons";
+import { Input as AriaInput } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -232,33 +233,37 @@ export function ReportTabsEditor({
   const tabButtonClass = (active: boolean) =>
     editableTabs
       ? cn(
-          "rounded-lg px-3 py-1.5 text-sm",
+          "rounded-lg px-3 py-1.5 text-sm any-pointer-coarse:min-h-11",
           active
             ? "bg-primary font-medium text-primary shadow-xs ring-1 ring-secondary"
             : "bg-primary text-tertiary ring-1 ring-transparent hover:text-secondary",
           "hover:*:data-text:decoration-transparent",
         )
       : cn(
-          "rounded-none px-1 pb-2.5 pt-1 text-sm hover:*:data-text:decoration-transparent",
+          "rounded-none px-1 pb-2.5 pt-1 text-sm hover:*:data-text:decoration-transparent any-pointer-coarse:min-h-11 any-pointer-coarse:px-2",
           active
             ? "border-b-2 border-brand-solid font-semibold text-primary"
             : "border-b-2 border-transparent font-medium text-tertiary hover:text-secondary hover:*:data-text:font-semibold",
         );
 
-  const chevronClass = cn("size-6 shrink-0 p-1 text-fg-quaternary", editableTabs ? "" : "mb-2");
+  const chevronClass = cn(
+    "size-6 shrink-0 p-1 text-fg-quaternary *:data-icon:rtl:rotate-180 any-pointer-coarse:size-11",
+    editableTabs ? "" : "mb-2 any-pointer-coarse:mb-0",
+  );
 
   const renderTab = (name: string, press?: ReportTabPress) => (
     <>
       {editingTab === name ? (
-        <input
+        <AriaInput
           autoFocus
+          maxLength={200}
           value={editingName}
           aria-label={`${m.records_template_dimension()}: ${name}`}
           onChange={handleEditChange}
           onBlur={commitEditingTab}
           onKeyDown={handleEditKeyDown}
           className={cn(
-            "h-8 w-28 min-w-0 px-0.5 text-sm font-semibold outline-none",
+            "h-8 w-28 min-w-0 rounded-sm px-0.5 text-sm font-semibold outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring",
             editableTabs
               ? cn(FIELD_STATES.frame, FIELD_STATES.frameTyping, FIELD_STATES.text, "px-2")
               : "mb-2 border-b-2 border-brand bg-transparent text-primary",
@@ -291,7 +296,7 @@ export function ReportTabsEditor({
           aria-label={`${m.records_template_delete()}: ${name}`}
           isDisabled={tabNames.length <= 1}
           onClick={() => removeTab(name)}
-          className="size-5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+          className="size-5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 any-pointer-coarse:size-9 any-pointer-coarse:opacity-100"
         />
       ) : null}
     </>
@@ -376,7 +381,7 @@ export function ReportTabsEditor({
           size="sm"
           color="link-color"
           onPress={addTab}
-          className="shrink-0 px-1"
+          className="shrink-0 px-1 any-pointer-coarse:min-h-11 any-pointer-coarse:px-2.5"
         >
           {m.records_template_add_heading_level_one()}
         </Button>
@@ -388,7 +393,10 @@ export function ReportTabsEditor({
           icon={Maximize}
           aria-label={m.records_report_present()}
           onClick={() => setPresenting(true)}
-          className={chevronClass}
+          className={cn(
+            "size-6 shrink-0 p-1 text-fg-quaternary any-pointer-coarse:size-11",
+            editableTabs ? "" : "mb-2 any-pointer-coarse:mb-0",
+          )}
         />
       ) : null}
     </>

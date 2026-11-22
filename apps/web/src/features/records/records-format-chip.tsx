@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { Focusable } from "react-aria-components";
 import { Link } from "@tanstack/react-router";
 
+import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -102,7 +104,7 @@ export function FormatChipSlot({
   );
 
   const chipClassName = cn(
-    "flex min-h-9 w-full items-center gap-2 rounded-xl border px-2 py-2 text-sm font-medium transition-colors",
+    "flex min-h-9 w-full items-center gap-2 rounded-xl border px-2 py-2 text-sm font-medium transition-colors any-pointer-coarse:min-h-11",
     highlighted
       ? "border-transparent bg-brand-primary text-brand-secondary"
       : "border-transparent text-secondary",
@@ -113,31 +115,41 @@ export function FormatChipSlot({
 
   if (!chip.interactive || !chip.id) {
     return (
-      <div
-        role="status"
-        aria-disabled="true"
-        aria-label={m.records_current_week_template_disabled()}
-        className={chipClassName}
+      <Tooltip
+        title={chipTitle}
+        description={m.records_current_week_template_disabled()}
+        placement="right"
       >
-        {label}
-      </div>
+        <TooltipTrigger
+          excludeFromTabOrder
+          aria-disabled="true"
+          aria-label={m.records_current_week_template_disabled()}
+          className={chipClassName}
+        >
+          {label}
+        </TooltipTrigger>
+      </Tooltip>
     );
   }
 
   return (
-    <Link
-      to="/w/$workspaceSlug/records/$recordId"
-      params={{ workspaceSlug, recordId: chip.id }}
-      search={(previous) => ({ tab: recordsTabSearch(previous.tab) })}
-      aria-current={selected ? "page" : undefined}
-      resetScroll={false}
-      onClick={onSelect}
-      className={cn(
-        chipClassName,
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
-      )}
-    >
-      {label}
-    </Link>
+    <Tooltip title={chipTitle} placement="right">
+      <Focusable>
+        <Link
+          to="/w/$workspaceSlug/records/$recordId"
+          params={{ workspaceSlug, recordId: chip.id }}
+          search={(previous) => ({ tab: recordsTabSearch(previous.tab) })}
+          aria-current={selected ? "page" : undefined}
+          resetScroll={false}
+          onClick={onSelect}
+          className={cn(
+            chipClassName,
+            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
+          )}
+        >
+          {label}
+        </Link>
+      </Focusable>
+    </Tooltip>
   );
 }

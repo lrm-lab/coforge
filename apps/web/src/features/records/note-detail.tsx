@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { DotsHorizontal, Trash01 as Trash } from "@untitledui/icons";
@@ -7,6 +7,7 @@ import { PageHeader } from "#src/components/layout/page-header";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { TextArea } from "#src/components/base/textarea/textarea";
 import { useAppToast } from "#src/components/ui/toast";
 import { m } from "#src/paraglide/messages";
 import type { ContentEditorRef } from "#src/features/records/report-editor/content-editor";
@@ -33,7 +34,6 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
   const [body, setBody] = useState(() => readReportDraft(note.id)?.markdown ?? note.body);
   const titleRef = useRef(title);
   const bodyRef = useRef(body);
-  const titleInputRef = useRef<HTMLTextAreaElement>(null);
   titleRef.current = title;
   bodyRef.current = body;
   const noteIdRef = useRef(note.id);
@@ -44,14 +44,6 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const editorRef = useRef<ContentEditorRef>(null);
   const clearedToastRef = useRef<string>(undefined);
-
-  useLayoutEffect(() => {
-    const element = titleInputRef.current;
-    if (!editingTitle || !element) return;
-    if (typeof CSS !== "undefined" && CSS.supports("field-sizing", "content")) return;
-    element.style.height = "auto";
-    element.style.height = `${element.scrollHeight}px`;
-  }, [editingTitle, title]);
 
   async function persist(
     next: { title?: string; body?: string },
@@ -209,20 +201,19 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
         <div className="min-h-0 flex-1 overflow-y-auto">
           <RecordsReadingColumn>
             {editingTitle ? (
-              <textarea
-                ref={titleInputRef}
+              <TextArea
                 autoFocus
                 rows={1}
                 maxLength={200}
                 value={title}
                 aria-label={m.records_note_title()}
-                onChange={(event) => {
-                  const next = event.target.value.replace(/[\r\n]+/g, " ");
+                onChange={(value) => {
+                  const next = value.replace(/[\r\n]+/g, " ");
                   setTitle(next);
                   titleRef.current = next;
                 }}
                 onBlur={() => void commitTitle()}
-                onKeyDown={(event) => {
+                onTextAreaKeyDown={(event) => {
                   if (event.key === "Enter") {
                     event.preventDefault();
                     void commitTitle();
@@ -233,7 +224,8 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
                     setEditingTitle(false);
                   }
                 }}
-                className="mb-6 w-full resize-none overflow-hidden bg-transparent text-display-sm font-semibold tracking-tight wrap-anywhere text-primary outline-none [field-sizing:content] md:text-display-md"
+                className="mb-6"
+                textAreaClassName="ring-0 field-sizing-content resize-none overflow-hidden rounded-sm bg-transparent p-0 text-display-sm font-semibold tracking-tight wrap-anywhere text-primary shadow-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring md:text-display-md"
               />
             ) : (
               <Button

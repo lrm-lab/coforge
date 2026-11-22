@@ -289,6 +289,7 @@ export function CreateWeeklyTemplateDialog({
 
                 <Input
                   size={controlSize}
+                  maxLength={100}
                   label={m.records_template_name()}
                   value={name}
                   hideRequiredIndicator

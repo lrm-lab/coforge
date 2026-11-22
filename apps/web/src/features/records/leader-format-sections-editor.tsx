@@ -3,8 +3,9 @@ import { Minus, Plus } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Input } from "#src/components/base/input/input";
+import { TextArea } from "#src/components/base/textarea/textarea";
 import { m } from "#src/paraglide/messages";
-import { cn } from "#src/lib/utils";
 import {
   parseLevel2Blocks,
   serializeLevel2Blocks,
@@ -64,12 +65,15 @@ export function LeaderFormatSectionsEditor({
         {blocks.map((block, index) => (
           <section key={block.id} className="group relative rounded-xl bg-secondary px-4 py-3">
             <div className="mb-2 flex items-center gap-2">
-              <input
+              <Input
+                maxLength={200}
                 aria-label={m.records_template_heading_level_two()}
                 value={block.title}
-                onChange={(event) => updateAt(index, { title: event.target.value })}
+                onChange={(title) => updateAt(index, { title })}
                 onBlur={onBlur}
-                className="min-w-0 flex-1 bg-transparent px-0 text-md font-semibold text-primary outline-none"
+                className="min-w-0 flex-1"
+                wrapperClassName="rounded-sm bg-transparent shadow-none ring-0"
+                inputClassName="px-0 py-0 text-md font-semibold text-primary"
               />
               <span className="shrink-0 text-xs text-tertiary">
                 {m.records_template_heading_level_two()}
@@ -80,7 +84,7 @@ export function LeaderFormatSectionsEditor({
                 icon={Plus}
                 aria-label={m.records_template_add_heading_level_two()}
                 onClick={() => addAfter(index)}
-                className="size-6 shrink-0 p-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+                className="size-6 shrink-0 p-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 any-pointer-coarse:size-11 any-pointer-coarse:opacity-100"
               />
               <ButtonUtility
                 size="xs"
@@ -88,20 +92,17 @@ export function LeaderFormatSectionsEditor({
                 icon={Minus}
                 aria-label={`${m.records_template_delete_heading()}: ${block.title}`}
                 onClick={() => removeAt(index)}
-                className="size-6 shrink-0 p-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+                className="size-6 shrink-0 p-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 any-pointer-coarse:size-11 any-pointer-coarse:opacity-100"
               />
             </div>
-            <textarea
+            <TextArea
               aria-label={m.records_template_body_label()}
               value={block.body}
               placeholder={m.records_format_section_body_placeholder()}
-              onChange={(event) => updateAt(index, { body: event.target.value })}
+              onChange={(body) => updateAt(index, { body })}
               onBlur={onBlur}
               rows={3}
-              className={cn(
-                "w-full resize-y bg-transparent px-0 text-sm text-primary outline-none",
-                "placeholder:text-placeholder",
-              )}
+              textAreaClassName="ring-0 field-sizing-content resize-y rounded-sm bg-transparent p-0 text-sm text-primary shadow-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
             />
           </section>
         ))}

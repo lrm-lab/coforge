@@ -1,3 +1,4 @@
+import { dateTimeFormat } from "#src/lib/dates";
 import { WEEKLY_REPORT_SCHEDULE_TIME_ZONE } from "./weekly-report-schedule-due";
 
 export type ReportAssignmentMeta = {
@@ -51,20 +52,18 @@ export function memberReportTitle(displayName: string, year: number, week: numbe
   return `${bidiIsolateName(displayName)} ${year} W${week} 工作周报`;
 }
 
-const COMPLETED_AT_FORMATTER = new Intl.DateTimeFormat("en-US", {
-  timeZone: WEEKLY_REPORT_SCHEDULE_TIME_ZONE,
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hour12: false,
-});
-
 export function formatWeeklyReportCompletedAt(value: string | Date): string {
   const date = value instanceof Date ? value : new Date(value);
-  const parts = COMPLETED_AT_FORMATTER.formatToParts(date);
+  const parts = dateTimeFormat("en-US", {
+    timeZone: WEEKLY_REPORT_SCHEDULE_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
   const get = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((part) => part.type === type)?.value ?? "";
   return `${get("year")}.${get("month")}.${get("day")} ${get("hour")}:${get("minute")}:${get("second")}`;
@@ -80,7 +79,9 @@ export function isValidTemplateName(name: string): boolean {
 }
 
 export function hourlySendTimes(): string[] {
-  return Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`);
+  return Array.from({ length: 24 }, (_, hour) =>
+    Temporal.PlainTime.from({ hour }).toString({ smallestUnit: "minute" }),
+  );
 }
 
 export function isHourlySendTime(value: string): boolean {

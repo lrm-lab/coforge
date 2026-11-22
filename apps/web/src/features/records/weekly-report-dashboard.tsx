@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowUpRight, CheckCircle } from "@untitledui/icons";
 
@@ -6,15 +7,20 @@ import { EmptyState } from "#src/components/ui/empty";
 import { RecordsWireframe } from "#src/components/ui/empty-wireframes";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { formatNumber } from "#src/lib/format-number";
 import { m } from "#src/paraglide/messages";
 import type { loadWeeklyReportDashboard } from "./records.functions";
 import { BackToRecords } from "./records-layout";
+import { paginateRecordsMembers, RecordsMemberPagination } from "./records-member-pagination";
 
 type Dashboard = Awaited<ReturnType<typeof loadWeeklyReportDashboard>>;
 
 export function WeeklyReportDashboard({ dashboard }: { dashboard: Dashboard }) {
   const workspaceSlug = useWorkspaceSlug();
+  const [page, setPage] = useState(0);
   const latest = dashboard.weeks[0];
+  const pagination = paginateRecordsMembers(dashboard.members, page);
+
   return (
     <>
       <PageHeader heading={m.records_dashboard()} leading={<BackToRecords />} />
@@ -37,19 +43,19 @@ export function WeeklyReportDashboard({ dashboard }: { dashboard: Dashboard }) {
               <div className="grid gap-3 sm:grid-cols-3">
                 <Metric
                   label={m.records_dashboard_weeks()}
-                  value={String(dashboard.weeks.length)}
+                  value={formatNumber(dashboard.weeks.length)}
                 />
                 <Metric
                   label={m.records_dashboard_members()}
-                  value={String(dashboard.members.length)}
+                  value={formatNumber(pagination.total)}
                 />
                 <Metric
                   label={m.records_dashboard_latest_submitted()}
-                  value={`${latest.submitted}/${latest.total}`}
+                  value={`${formatNumber(latest.submitted)}/${formatNumber(latest.total)}`}
                 />
               </div>
               <div className="space-y-4">
-                {dashboard.members.map((member) => (
+                {pagination.visible.map((member) => (
                   <section
                     key={member.userId}
                     className="overflow-hidden rounded-xl border border-secondary bg-primary"
@@ -76,7 +82,7 @@ export function WeeklyReportDashboard({ dashboard }: { dashboard: Dashboard }) {
                             className="min-w-0 border-secondary p-4 md:border-e md:nth-[3n]:border-e-0 md:nth-[n+4]:border-t"
                           >
                             <div className="flex items-center justify-between gap-2">
-                              <span className="text-xs font-semibold text-tertiary">
+                              <span className="text-xs font-semibold text-tertiary tabular-nums">
                                 {week.year} W{week.week}
                               </span>
                               {report ? (
@@ -94,7 +100,7 @@ export function WeeklyReportDashboard({ dashboard }: { dashboard: Dashboard }) {
                                 to="/w/$workspaceSlug/records/$recordId"
                                 params={{ workspaceSlug, recordId: report.id }}
                                 search={{ tab: "weekly" }}
-                                className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-brand-secondary hover:underline"
+                                className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-brand-secondary hover:underline any-pointer-coarse:min-h-11"
                               >
                                 {m.records_dashboard_open_report()}
                                 <ArrowUpRight aria-hidden="true" className="size-3" />
@@ -107,6 +113,14 @@ export function WeeklyReportDashboard({ dashboard }: { dashboard: Dashboard }) {
                   </section>
                 ))}
               </div>
+              <RecordsMemberPagination
+                total={pagination.total}
+                safePage={pagination.safePage}
+                totalPages={pagination.totalPages}
+                startIndex={pagination.startIndex}
+                onPageChange={setPage}
+                className="pt-4"
+              />
             </>
           )}
         </div>

@@ -80,7 +80,6 @@ export function TemplateReportDetail({
   contentRef.current = content;
   const reportIdRef = useRef(report.id);
   reportIdRef.current = report.id;
-  // Schedule cancel/dismiss keys follow the calendar week (same as the tick), not the document cycle.
   const scheduleWeek = currentScheduledIsoWeek(new Date());
   const formatCancelled = isAutoSendCancelled(content, scheduleWeek.year, scheduleWeek.week);
   const weekDismissed = isWeekSendDismissed(content, scheduleWeek.year, scheduleWeek.week);
@@ -150,8 +149,6 @@ export function TemplateReportDetail({
     contentRef.current = next;
   }
 
-  // The row moved under this editor (another save landed first): reload it, so the retry carries
-  // the fresh version. The draft stays.
   function onConflict(cause: unknown) {
     if (isAppErrorCode(cause, "CONFLICT")) void refresh.record();
   }
@@ -164,7 +161,6 @@ export function TemplateReportDetail({
     const { normalized, saved } = saveDraft(reportId, next, {
       askToSend: options?.askToSend,
     });
-    // The edits stay in the editor and in the browser's draft when the server refuses.
     let result: Awaited<typeof saved> | undefined;
     const ok = await track(
       async () => {
@@ -282,9 +278,7 @@ export function TemplateReportDetail({
       toast.success(m.records_report_shared_toast(), { durationMs: WEEKLY_SEND_TOAST_MS });
       try {
         await refresh.records();
-      } catch {
-        // Assignments already persisted; catalog refresh can retry on navigation.
-      }
+      } catch {}
     } finally {
       setSending(false);
     }
@@ -309,7 +303,6 @@ export function TemplateReportDetail({
   useRecordChangedRefresh(report.id, streamPositions, isOverviewLeader);
 
   async function removeOverviewNode() {
-    // Throwing keeps the confirm open with its refusal; a quiet return would look like a dead button.
     if (!isOverviewLeader || saving || sending) throw new Error("The summary is busy");
     const end = begin();
     try {

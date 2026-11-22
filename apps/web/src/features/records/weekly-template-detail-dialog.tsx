@@ -7,7 +7,7 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { ActorName } from "#src/features/avatars/actor-name";
 import { m } from "#src/paraglide/messages";
 import type { TemplateOutlineSection } from "./template-outline-sections";
-import { memberLabel, type TemplateMemberOption } from "./weekly-template-members";
+import { memberLabel, weekdayLabel, type TemplateMemberOption } from "./weekly-template-members";
 
 export type WeeklyTemplateDetail = {
   name: string;
@@ -18,6 +18,7 @@ export type WeeklyTemplateDetail = {
     username: string;
     displayName: string | null;
   }>;
+  sendWeekday?: number;
   sendTime: string;
   active: boolean;
 };
@@ -37,7 +38,6 @@ export function WeeklyTemplateDetailDialog({
     : template.recipients.map((row) => {
         const member = members.find((item) => item.userId === row.userId);
         const name = memberLabel(member ?? row);
-        // A recipient's face before the name (task #521).
         return {
           key: row.userId,
           name,
@@ -50,6 +50,13 @@ export function WeeklyTemplateDetailDialog({
         };
       });
 
+  const sendScheduleLabel = template.sendWeekday
+    ? m.records_template_send_on({
+        weekday: weekdayLabel(template.sendWeekday),
+        time: template.sendTime,
+      })
+    : template.sendTime;
+
   return (
     <ModalOverlay isOpen onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <Modal className="w-[calc(100vw-2rem)] max-w-lg">
@@ -57,7 +64,7 @@ export function WeeklyTemplateDetailDialog({
           {({ close }) => (
             <>
               <div className="flex items-start justify-between gap-6 px-6 pt-6">
-                <Heading slot="title" className="text-lg font-semibold text-primary">
+                <Heading slot="title" className="text-md font-semibold text-primary">
                   {m.records_template_details()}
                 </Heading>
                 <ButtonUtility
@@ -76,9 +83,9 @@ export function WeeklyTemplateDetailDialog({
                       label={m.records_template_heading_level_one()}
                       value={section.title}
                     />
-                    {section.children.map((child) => (
+                    {section.children.map((child, childIndex) => (
                       <DetailRow
-                        key={child}
+                        key={`${child}-${childIndex}`}
                         label={m.records_template_heading_level_two()}
                         value={child}
                         nested
@@ -102,7 +109,7 @@ export function WeeklyTemplateDetailDialog({
                   label={m.records_template_frequency()}
                   value={m.records_template_frequency_weekly()}
                 />
-                <DetailRow label={m.records_template_send_time()} value={template.sendTime} />
+                <DetailRow label={m.records_template_send_time()} value={sendScheduleLabel} />
                 <DetailRow
                   label={m.records_template_enabled()}
                   value={
@@ -130,9 +137,9 @@ function DetailRow({
   nested?: boolean;
 }) {
   return (
-    <div className={`flex gap-4 ${nested ? "pl-6" : ""}`}>
+    <div className={`flex gap-4 ${nested ? "ps-6" : ""}`}>
       <span className="w-20 shrink-0 text-tertiary">{label}</span>
-      <span className="min-w-0 text-primary">{value}</span>
+      <span className="min-w-0 wrap-anywhere text-primary">{value}</span>
     </div>
   );
 }

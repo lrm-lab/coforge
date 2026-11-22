@@ -205,6 +205,7 @@ export function WeeklyReportSettings({
               size="sm"
               color="link-color"
               iconLeading={ChevronLeft}
+              className="*:data-icon:rtl:rotate-180 any-pointer-coarse:min-h-11"
               onPress={() => {
                 void router.navigate({ href: returnTo });
               }}
@@ -261,7 +262,7 @@ export function WeeklyReportSettings({
               />
             ) : (
               <div className="overflow-x-auto rounded-xl border border-secondary">
-                <table className="w-full min-w-[52rem] border-collapse text-left text-sm text-primary">
+                <table className="w-full min-w-[52rem] border-collapse text-start text-sm text-primary">
                   <thead>
                     <tr className="bg-secondary_subtle text-tertiary">
                       <th className="px-4 py-3 font-medium">{m.records_template_name()}</th>
@@ -316,6 +317,7 @@ export function WeeklyReportSettings({
                             size="sm"
                             color="link-gray"
                             isDisabled={busy}
+                            className="any-pointer-coarse:min-h-11 any-pointer-coarse:min-w-11 any-pointer-coarse:justify-center any-pointer-coarse:px-2"
                             onPress={() => void toggleApplied(template)}
                           >
                             {template.active
@@ -333,6 +335,7 @@ export function WeeklyReportSettings({
                               color="link-color"
                               iconLeading={Edit}
                               isDisabled={busy}
+                              className="any-pointer-coarse:min-h-11 any-pointer-coarse:px-2"
                               onPress={() => openEdit(template)}
                             >
                               {m.records_template_edit()}
@@ -354,6 +357,7 @@ export function WeeklyReportSettings({
                                 color="tertiary-destructive"
                                 iconLeading={Trash}
                                 isDisabled={busy}
+                                className="any-pointer-coarse:min-h-11 any-pointer-coarse:px-2"
                               >
                                 {m.records_template_delete()}
                               </Button>

@@ -1,9 +1,14 @@
 import { memo } from "react";
+import { useHydrated } from "@tanstack/react-router";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { formatDateForDisplay } from "#src/lib/dates";
 import { humanLabel } from "#src/lib/human-label";
+import { useTimeFormat } from "#src/lib/time-format-context";
+import { useTimeZone } from "#src/lib/time-zone-context";
 import { m } from "#src/paraglide/messages";
+import { getLocale } from "#src/paraglide/runtime";
 import type { WeeklyReportAssistantSuggestion } from "#src/server/records/weekly-report-assistant-suggestion.server";
 import type { ReportBodyRestoreView } from "./records-content";
 import {
@@ -74,6 +79,18 @@ export const RecordSideTimeline = memo(function RecordSideTimeline({
   ) => Promise<void>;
   onSwitchBodyVersion: (() => void) | undefined;
 }) {
+  const hydrated = useHydrated();
+  const timeZone = useTimeZone();
+  const timeFormat = useTimeFormat();
+  const locale = getLocale();
+  const renderTimestamp = (value: string | Date) => (
+    <time
+      dateTime={new Date(value).toISOString()}
+      className="ms-auto shrink-0 text-xs whitespace-nowrap text-tertiary tabular-nums"
+    >
+      {hydrated ? formatDateForDisplay(value, timeZone, locale, timeFormat) : "\u00A0"}
+    </time>
+  );
   return (
     <>
       {timeline.map((item) => {
@@ -98,7 +115,7 @@ export const RecordSideTimeline = memo(function RecordSideTimeline({
                   presence={false}
                   size="xs"
                   name={authorName}
-                  alt={authorName}
+                  alt=""
                   src={
                     comment.authorType === "assistant"
                       ? assistantAvatarUrl
@@ -108,9 +125,7 @@ export const RecordSideTimeline = memo(function RecordSideTimeline({
                 <span className="min-w-0 truncate text-sm font-medium text-primary">
                   {authorName}
                 </span>
-                <span className="ml-auto shrink-0 whitespace-nowrap text-xs text-tertiary">
-                  {new Date(comment.createdAt).toLocaleString()}
-                </span>
+                {renderTimestamp(comment.createdAt)}
               </div>
               <p className="whitespace-pre-wrap text-sm text-primary">{comment.body}</p>
               {payload?.kind === "offer-send" ? (
@@ -201,16 +216,14 @@ export const RecordSideTimeline = memo(function RecordSideTimeline({
               <ActorAvatar
                 presence={false}
                 size="xs"
-                alt={authorName}
+                alt=""
                 name={authorName}
                 src={message.author === "assistant" ? assistantAvatarUrl : viewerAvatarUrl}
               />
               <span className="min-w-0 truncate text-sm font-medium text-primary">
                 {authorName}
               </span>
-              <span className="ml-auto shrink-0 whitespace-nowrap text-xs text-tertiary">
-                {new Date(message.createdAt).toLocaleString()}
-              </span>
+              {renderTimestamp(message.createdAt)}
             </div>
             <p className="whitespace-pre-wrap text-sm text-primary">{message.body}</p>
             {suggestion?.type === "collect-plan" ? (

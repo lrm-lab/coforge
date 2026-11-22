@@ -70,14 +70,13 @@ function languageLabel(language: string): string {
   return LANGUAGE_LABELS[normalizeLanguage(language)];
 }
 
-/** Stop ProseMirror from treating toolbar clicks as editor selection. */
 function stopToolbarBubble(event: ReactMouseEvent) {
   event.preventDefault();
   event.stopPropagation();
 }
 
 const iconButtonClass =
-  "size-6 p-1 text-fg-quaternary hover:bg-primary_hover hover:text-fg-quaternary_hover";
+  "size-6 p-1 text-fg-quaternary hover:bg-primary_hover hover:text-fg-quaternary_hover any-pointer-coarse:size-11";
 
 interface CodeBlockToolbarProps {
   language: string;
@@ -129,7 +128,7 @@ function CodeBlockToolbar({
           color="tertiary"
           data-testid="code-block-language"
           aria-label={t(($) => $.code_block.language)}
-          className="h-6 gap-1 rounded-md bg-primary_hover px-2 py-0 text-xs font-normal text-quaternary"
+          className="h-6 gap-1 rounded-md bg-primary_hover px-2 py-0 text-xs font-normal text-quaternary any-pointer-coarse:min-h-11 any-pointer-coarse:px-3"
           iconTrailing={ChevronDown}
         >
           {languageLabel(currentLanguage)}
@@ -260,10 +259,6 @@ function CodeBlockToolbar({
 function CodeBlockView({ node, updateAttributes, deleteNode, editor, getPos }: NodeViewProps) {
   const { t } = useT("editor");
   const [copied, setCopied] = useState(false);
-  // HTML blocks default to "preview"; the user can flip to "source" to
-  // edit the markup directly. Note: the source `<pre>` MUST stay mounted
-  // (just hidden) so ProseMirror keeps its NodeView bindings — unmounting
-  // it would break editing.
   const [view, setView] = useState<"preview" | "source">("preview");
   const [toolbarPinned, setToolbarPinned] = useState(false);
   const mermaidRef = useRef<MermaidDiagramHandle>(null);
@@ -272,9 +267,6 @@ function CodeBlockView({ node, updateAttributes, deleteNode, editor, getPos }: N
   const isMermaid = language === "mermaid";
   const isHtml = language === "html";
   const chart = node.textContent;
-  // Prefer the dedicated attr (updated live). Fall back to a view encoded in
-  // the fence info string, then a client preference so diagram/source choices
-  // survive refresh on read-only surfaces that cannot rewrite the markdown.
   const mermaidView = isMermaid
     ? resolveMermaidViewMode({
         attrView: node.attrs.mermaidView,
@@ -297,8 +289,6 @@ function CodeBlockView({ node, updateAttributes, deleteNode, editor, getPos }: N
   const showHtmlPreview = isHtml && view === "preview";
   const hasMermaidChart = Boolean(debouncedChart.trim());
   const showMermaidDiagram = isMermaid && mermaidView !== "source" && hasMermaidChart;
-  // Empty diagram-only Mermaid fences keep the source editor visible so the
-  // block still has a normal one-line editing footprint instead of collapsing.
   const showMermaidSource = !isMermaid || mermaidView !== "diagram" || !hasMermaidChart;
   const hideSource = showHtmlPreview || !showMermaidSource;
   const mermaidActionsEnabled = Boolean(showMermaidDiagram);
@@ -312,8 +302,6 @@ function CodeBlockView({ node, updateAttributes, deleteNode, editor, getPos }: N
   };
   const setMermaidView = (mode: MermaidViewMode) => {
     writeMermaidViewPreference(chart, mode);
-    // Keep `language` as the bare token so lowlight / ReadonlyContent see
-    // `mermaid`, while the view mode rides in attrs + the fence info string.
     updateAttributes({ language: "mermaid", mermaidView: mode });
   };
 
@@ -341,7 +329,7 @@ function CodeBlockView({ node, updateAttributes, deleteNode, editor, getPos }: N
           data-testid="code-block-select"
           color="tertiary"
           size="xs"
-          className="absolute top-2 left-2 z-10 size-6 p-1 text-fg-quaternary opacity-0 transition-opacity hover:bg-primary hover:text-fg-quaternary_hover group-hover/code:opacity-100 focus-visible:opacity-100"
+          className="absolute start-2 top-2 z-10 size-6 p-1 text-fg-quaternary opacity-0 transition-opacity hover:bg-primary hover:text-fg-quaternary_hover group-hover/code:opacity-100 focus-visible:opacity-100 any-pointer-coarse:size-11 any-pointer-coarse:opacity-100"
           onClick={selectCodeBlock}
           tooltip={t(($) => $.code_block.select_block)}
           icon={GripVertical}
@@ -355,24 +343,20 @@ function CodeBlockView({ node, updateAttributes, deleteNode, editor, getPos }: N
             <MermaidDiagram ref={mermaidRef} chart={debouncedChart} showToolbar={false} />
           </div>
         )}
-        {isHtml &&
-          showHtmlPreview && (
-            // CSS-hidden when toggled off so the `<pre>` below stays mounted —
-            // unmounting either side would either lose ProseMirror bindings
-            // (source) or thrash iframe.srcDoc (preview).
-            <div contentEditable={false} data-anchor-chrome="" className="p-3">
-              <CodeBlockIframe
-                html={debouncedHtml}
-                title="HTML preview"
-                heightClassName={HTML_PREVIEW_HEIGHT}
-              />
-            </div>
-          )}
+        {isHtml && showHtmlPreview && (
+          <div contentEditable={false} data-anchor-chrome="" className="p-3">
+            <CodeBlockIframe
+              html={debouncedHtml}
+              title="HTML preview"
+              heightClassName={HTML_PREVIEW_HEIGHT}
+            />
+          </div>
+        )}
         <div
           contentEditable={false}
           data-anchor-chrome=""
           className={cn(
-            "absolute top-2 right-2 z-10 opacity-0 transition-opacity group-hover/code:opacity-100 focus-within:opacity-100",
+            "absolute end-2 top-2 z-10 opacity-0 transition-opacity group-hover/code:opacity-100 focus-within:opacity-100 any-pointer-coarse:opacity-100",
             toolbarPinned && "opacity-100",
           )}
         >
@@ -394,9 +378,6 @@ function CodeBlockView({ node, updateAttributes, deleteNode, editor, getPos }: N
             onMenuOpenChange={setToolbarPinned}
           />
         </div>
-        {/* `<pre>` + NodeViewContent must remain mounted so the user can keep
-            editing the code block contents. Preview-only modes visually hide
-            it while ProseMirror still tracks it. */}
         <pre
           spellCheck={false}
           className={cn(

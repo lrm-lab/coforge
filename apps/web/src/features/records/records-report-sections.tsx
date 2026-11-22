@@ -39,12 +39,13 @@ export function RecordsFavoritesSection({
               recordId={item.id}
               selected={item.id === selectedRecordId}
               onSelect={onSelect}
+              tooltip={item.title}
             >
               <ActorAvatar
                 presence={false}
                 size="sm"
                 name={item.author.displayName}
-                alt={item.author.displayName}
+                alt=""
                 src={item.author.avatarUrl}
               />
               <span className="truncate">
@@ -98,13 +99,14 @@ export function RecordsMyReportsSection({
                 recordId={item.id}
                 selected={item.id === selectedRecordId}
                 onSelect={onSelect}
+                tooltip={item.title}
                 className={cn(item.unread && "font-semibold")}
               >
                 <ActorAvatar
                   presence={false}
                   size="sm"
                   name={me.displayName}
-                  alt={me.displayName}
+                  alt=""
                   src={me.avatarUrl ?? undefined}
                 />
                 <span className="min-w-0 flex-1 truncate">

@@ -70,7 +70,7 @@ export function ReportDetailHeader({
             presence={false}
             size="sm"
             name={report.author.displayName}
-            alt={report.author.displayName}
+            alt=""
             src={report.author.avatarUrl}
           />
           <h1 className="min-w-0 flex-1 text-md font-semibold wrap-anywhere text-primary">

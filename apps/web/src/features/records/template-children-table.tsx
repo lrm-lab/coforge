@@ -1,11 +1,14 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useHydrated } from "@tanstack/react-router";
 
 import { EmptyState } from "#src/components/ui/empty";
-import { m } from "#src/paraglide/messages";
 import { ActorName } from "#src/features/avatars/actor-name";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { formatDateForDisplay } from "#src/lib/dates";
+import { useTimeFormat } from "#src/lib/time-format-context";
+import { useTimeZone } from "#src/lib/time-zone-context";
+import { m } from "#src/paraglide/messages";
+import { getLocale } from "#src/paraglide/runtime";
 
-/** Child member report hanging under a template weekly-report node. */
 export type TemplateChild = {
   id: string;
   title: string;
@@ -19,7 +22,6 @@ export type TemplateChild = {
   };
 };
 
-/** One row in the template overview table. */
 export type TemplateChildRow = {
   id: string;
   name: string;
@@ -31,7 +33,6 @@ export function isTemplateChildSubmitted(status: string): boolean {
   return status === "submitted";
 }
 
-/** Map template children to overview-table rows. Name comes from the child author. */
 export function templateChildRows(children: readonly TemplateChild[]): TemplateChildRow[] {
   return children.map((child) => ({
     id: child.id,
@@ -41,28 +42,27 @@ export function templateChildRows(children: readonly TemplateChild[]): TemplateC
   }));
 }
 
-function submitTimeLabel(submittedAt: string | null): string {
-  if (!submittedAt) return "-";
-  return new Date(submittedAt).toLocaleString();
-}
-
 export function TemplateChildrenTable({ children }: { children: readonly TemplateChild[] }) {
+  const hydrated = useHydrated();
   const workspaceSlug = useWorkspaceSlug();
+  const timeZone = useTimeZone();
+  const timeFormat = useTimeFormat();
+  const locale = getLocale();
   const rows = templateChildRows(children);
   const authors = new Map(children.map((child) => [child.id, child.author]));
 
   return (
     <div className="overflow-x-auto rounded-lg border border-secondary">
-      <table className="w-full min-w-[36rem] border-collapse text-left text-sm text-primary">
+      <table className="w-full min-w-[36rem] border-collapse text-start text-sm text-primary">
         <thead>
           <tr className="border-b border-secondary">
-            <th className="border-r border-secondary px-3 py-2 font-medium">
+            <th className="border-e border-secondary px-3 py-2 font-medium whitespace-nowrap">
               {m.records_template_col_name()}
             </th>
-            <th className="border-r border-secondary px-3 py-2 font-medium">
+            <th className="border-e border-secondary px-3 py-2 font-medium whitespace-nowrap">
               {m.records_template_col_submitted()}
             </th>
-            <th className="border-r border-secondary px-3 py-2 font-medium">
+            <th className="px-3 py-2 font-medium whitespace-nowrap">
               {m.records_template_col_submit_time()}
             </th>
           </tr>
@@ -77,7 +77,6 @@ export function TemplateChildrenTable({ children }: { children: readonly Templat
           ) : (
             rows.map((row) => {
               const author = authors.get(row.id);
-              // The author's face before the name (task #521).
               const name = (
                 <ActorName
                   actor={{
@@ -90,7 +89,7 @@ export function TemplateChildrenTable({ children }: { children: readonly Templat
               );
               return (
                 <tr key={row.id} className="border-b border-secondary last:border-b-0">
-                  <td className="border-r border-secondary px-3 py-2">
+                  <td className="border-e border-secondary px-3 py-2">
                     {row.submitted ? (
                       <Link
                         to="/w/$workspaceSlug/records/$recordId"
@@ -106,12 +105,22 @@ export function TemplateChildrenTable({ children }: { children: readonly Templat
                       <span className="text-tertiary">{name}</span>
                     )}
                   </td>
-                  <td className="border-r border-secondary px-3 py-2">
+                  <td className="border-e border-secondary px-3 py-2 whitespace-nowrap">
                     {row.submitted
                       ? m.records_template_enabled_yes()
                       : m.records_template_enabled_no()}
                   </td>
-                  <td className="px-3 py-2">{submitTimeLabel(row.submittedAt)}</td>
+                  <td className="px-3 py-2 whitespace-nowrap tabular-nums">
+                    {row.submittedAt ? (
+                      <time dateTime={new Date(row.submittedAt).toISOString()}>
+                        {hydrated
+                          ? formatDateForDisplay(row.submittedAt, timeZone, locale, timeFormat)
+                          : "\u00A0"}
+                      </time>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                 </tr>
               );
             })

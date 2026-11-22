@@ -94,7 +94,7 @@ export function RecordsMemberWeeksSection({
                           )}
                         />
                       }
-                      className="size-7 shrink-0"
+                      className="size-7 shrink-0 any-pointer-coarse:size-11"
                       aria-expanded={expanded}
                       aria-label={
                         expanded
@@ -104,12 +104,16 @@ export function RecordsMemberWeeksSection({
                       onClick={() => onExpandedWeekChange(week.key, !expanded)}
                     />
                   ) : (
-                    <span className="size-7 shrink-0" aria-hidden="true" />
+                    <span
+                      className="size-7 shrink-0 any-pointer-coarse:size-11"
+                      aria-hidden="true"
+                    />
                   )}
                   <RecordLink
                     recordId={week.overviewReportId}
                     selected={weekSelected}
                     onSelect={onSelect}
+                    tooltip={week.title}
                     className="min-w-0 flex-1 font-medium"
                   >
                     <WeekBadge week={week.week} className="size-6" />
@@ -128,12 +132,13 @@ export function RecordsMemberWeeksSection({
                             recordId={submission.id}
                             selected={submission.id === selectedRecordId}
                             onSelect={onSelect}
+                            tooltip={submission.title}
                           >
                             <ActorAvatar
                               presence={false}
                               size="sm"
                               name={author?.displayName}
-                              alt={author?.displayName}
+                              alt=""
                               src={author?.avatarUrl}
                             />
                             <span className="truncate">

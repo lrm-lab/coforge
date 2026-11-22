@@ -1,13 +1,17 @@
 import { useRef, type Ref } from "react";
+import { useHydrated } from "@tanstack/react-router";
 import { RefreshCcw01 as Refresh, Trash01 as Trash } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { Popconfirm } from "#src/components/ui/popconfirm";
+import { formatDateForDisplay } from "#src/lib/dates";
+import { useTimeFormat } from "#src/lib/time-format-context";
+import { useTimeZone } from "#src/lib/time-zone-context";
 import { m } from "#src/paraglide/messages";
+import { getLocale } from "#src/paraglide/runtime";
 import type { KeyPointPromptHistoryEntry, KeyPointPromptState } from "./records-content";
 
-/** Current prompt + history with「重新启用」/「删除」(settings 要点提示词模板). */
 export function KeyPointPromptEditor({
   prompt,
   text,
@@ -25,11 +29,13 @@ export function KeyPointPromptEditor({
   onChange: (text: string) => void;
   onFocus?: () => void;
   onBlur?: () => void;
-  /** Deletes this history entry once the user confirms it; throws when it is refused. */
   onDeleteHistory?: (entry: KeyPointPromptHistoryEntry) => Promise<void>;
 }) {
-  // Where focus lands after a deleted entry's row (and its button) is gone.
   const historyRef = useRef<HTMLElement>(null);
+  const hydrated = useHydrated();
+  const timeZone = useTimeZone();
+  const timeFormat = useTimeFormat();
+  const locale = getLocale();
   return (
     <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-4 sm:px-8 sm:py-6">
       <section className="space-y-3">
@@ -40,8 +46,8 @@ export function KeyPointPromptEditor({
           textAreaRef={textareaRef}
           aria-label={m.records_key_points_prompt_label()}
           value={text}
-          // Keep editable while saving so React does not re-apply a stale `value` via disabled.
           isReadOnly={busy}
+          maxLength={20_000}
           rows={10}
           onChange={onChange}
           onFocus={onFocus}
@@ -64,11 +70,16 @@ export function KeyPointPromptEditor({
             {prompt.history.map((entry, historyIndex) => (
               <li key={`${entry.updatedAt}-${historyIndex}`} className="space-y-2">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs text-tertiary">
-                    {m.records_key_points_prompt_updated({
-                      time: new Date(entry.updatedAt).toLocaleString(),
-                    })}
-                  </p>
+                  <time
+                    dateTime={new Date(entry.updatedAt).toISOString()}
+                    className="text-xs text-tertiary tabular-nums"
+                  >
+                    {hydrated
+                      ? m.records_key_points_prompt_updated({
+                          time: formatDateForDisplay(entry.updatedAt, timeZone, locale, timeFormat),
+                        })
+                      : "\u00A0"}
+                  </time>
                   <div className="flex shrink-0 items-center gap-2">
                     <Button
                       type="button"
@@ -76,6 +87,7 @@ export function KeyPointPromptEditor({
                       color="link-gray"
                       iconLeading={Refresh}
                       isDisabled={busy}
+                      className="any-pointer-coarse:min-h-11 any-pointer-coarse:px-2"
                       onPress={() => onChange(entry.text)}
                     >
                       {m.records_key_points_prompt_reuse()}
@@ -97,6 +109,7 @@ export function KeyPointPromptEditor({
                           color="tertiary-destructive"
                           iconLeading={Trash}
                           isDisabled={busy}
+                          className="any-pointer-coarse:min-h-11 any-pointer-coarse:px-2"
                         >
                           {m.records_key_points_prompt_history_delete()}
                         </Button>

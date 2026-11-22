@@ -1,8 +1,10 @@
 import { useRef, type ReactNode } from "react";
+import { Focusable } from "react-aria-components";
 import { Link } from "@tanstack/react-router";
 import { ChevronDown } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
+import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { Spinner } from "#src/components/ui/spinner";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { useEndOfList } from "#src/lib/use-end-of-list";
@@ -29,7 +31,12 @@ export function SidebarLoadMore({
       {failed ? (
         <>
           <span className="text-error-primary">{m.records_sidebar_load_more_error()}</span>
-          <Button size="xs" color="link-gray" onPress={onLoadMore}>
+          <Button
+            size="xs"
+            color="link-gray"
+            className="any-pointer-coarse:min-h-11 any-pointer-coarse:px-2"
+            onPress={onLoadMore}
+          >
             {m.records_sidebar_retry()}
           </Button>
         </>
@@ -54,7 +61,7 @@ export function SidebarMore({
       size="xs"
       color="tertiary"
       onPress={onExpand}
-      className="mt-0.5 w-full justify-start px-2.5 text-xs text-tertiary"
+      className="mt-0.5 w-full justify-start px-2.5 text-xs text-tertiary any-pointer-coarse:min-h-11"
     >
       {m.records_sidebar_more({ count: hiddenCount })}
     </Button>
@@ -94,7 +101,7 @@ export function CollapsibleSection({
               )}
             />
           }
-          className="min-w-0 flex-1 justify-start px-2 text-start text-sm font-medium text-primary"
+          className="min-w-0 flex-1 justify-start px-2 text-start text-sm font-medium text-primary any-pointer-coarse:min-h-11"
         >
           <span className="truncate">{title}</span>
           {marker ? (
@@ -112,17 +119,19 @@ export function RecordLink({
   recordId,
   selected,
   onSelect,
+  tooltip,
   className,
   children,
 }: {
   recordId: string;
   selected: boolean;
   onSelect: () => void;
+  tooltip?: string;
   className?: string;
   children: ReactNode;
 }) {
   const workspaceSlug = useWorkspaceSlug();
-  return (
+  const link = (
     <Link
       to="/w/$workspaceSlug/records/$recordId"
       params={{ workspaceSlug, recordId }}
@@ -131,7 +140,7 @@ export function RecordLink({
       resetScroll={false}
       onClick={onSelect}
       className={cn(
-        "flex min-w-0 items-center gap-2 rounded-xl border p-2 text-sm transition-colors duration-100 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
+        "flex min-w-0 items-center gap-2 rounded-xl border p-2 text-sm transition-colors duration-100 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand any-pointer-coarse:min-h-11",
         selected
           ? "border-chat-selected-border bg-chat-selected-bg font-medium text-brand-secondary"
           : "border-transparent text-secondary hover:bg-primary_hover",
@@ -140,6 +149,12 @@ export function RecordLink({
     >
       {children}
     </Link>
+  );
+  if (!tooltip) return link;
+  return (
+    <Tooltip title={tooltip} placement="right">
+      <Focusable>{link}</Focusable>
+    </Tooltip>
   );
 }
 

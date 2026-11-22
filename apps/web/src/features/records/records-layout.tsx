@@ -76,9 +76,7 @@ export function RecordsLayout({
 }: {
   catalog: RecordsCatalog;
   selectedRecordId?: string;
-  /** `year-week` key when the week empty route (or landing) is active. */
   selectedWeekKey?: string;
-  /** True only when the URL is a record or panel — keeps the mobile list on `/records`. */
   detailOpen?: boolean;
   selectedPanel?: RecordsPanel | null;
   tab: RecordsTab;
@@ -120,7 +118,6 @@ export function RecordsLayout({
     catalog.myReports,
     memberWeeks.weeks,
   ]);
-  /** One entry section at a time; session storage restores the last operated section. */
   const [activeSection, setActiveSection] = useState<RecordsSidebarSectionId | undefined>(
     undefined,
   );
@@ -183,7 +180,6 @@ export function RecordsLayout({
     [catalog.myReports, query],
   );
   const myReportsUnread = catalog.myReports.some((item) => item.unread);
-  // A group with nothing in it is left out; with every group empty, one sentence says so.
   const membersListed = memberWeeksListed(memberWeeks);
   const weeklyEmpty = weeklyEmptyNote({
     favorites: filteredFavorites.length,
@@ -191,8 +187,6 @@ export function RecordsLayout({
     membersListed,
     query,
   });
-  // A report older than the catalog's page is listed once its week is read: its section opens
-  // then, as `sectionDefaults` opens it at once for one listed already, unless another is open.
   const wasListed = useRef(memberWeeks.selectionListed);
   useEffect(() => {
     const listedNow = memberWeeks.selectionListed && !wasListed.current;
@@ -418,6 +412,7 @@ export function RecordsLayout({
                           <RecordLink
                             recordId={note.id}
                             selected={note.id === selectedRecordId}
+                            tooltip={note.title}
                             onSelect={() => {
                               enterSection("notes");
                               setShowMobileList(false);
@@ -427,7 +422,7 @@ export function RecordsLayout({
                               presence={false}
                               size="sm"
                               name={catalog.actorDisplayName}
-                              alt={catalog.actorDisplayName}
+                              alt=""
                               src={catalog.actorAvatarUrl}
                             />
                             <span className="truncate">
@@ -473,7 +468,7 @@ export function BackToRecords() {
       size="sm"
       color="tertiary"
       icon={ChevronLeft}
-      className="lg:hidden *:data-icon:rtl:rotate-180"
+      className="lg:hidden *:data-icon:rtl:rotate-180 any-pointer-coarse:size-11"
       aria-label={m.controls_back()}
       onClick={back}
     />
@@ -487,7 +482,7 @@ export function RecordsKeyPointReturnBack({ returnTo }: { returnTo: string }) {
       size="sm"
       color="link-color"
       iconLeading={ChevronLeft}
-      className="*:data-icon:rtl:rotate-180"
+      className="*:data-icon:rtl:rotate-180 any-pointer-coarse:min-h-11"
       onPress={() => {
         void router.navigate({ href: returnTo });
       }}
