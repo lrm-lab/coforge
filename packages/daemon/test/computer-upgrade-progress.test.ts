@@ -10,74 +10,22 @@ import {
   upgradeReadyReceiptName,
   type UpgradeActivation,
 } from "../src/platform/computer-upgrade-progress";
-import { LocalDaemonLauncher } from "../src/daemon-host/launcher";
 import { DaemonConfigStore } from "../src/persistence/daemon-config";
 import { MachineSupervisor, type ManagedBinding } from "../src/supervisor/machine-supervisor";
 import { workspaceUpgradeRecovery } from "../src/supervisor/workspace-upgrade-recovery";
 import { UpgradeProgressReporter } from "../src/daemon-runtime/upgrade-progress-reporter";
-import { cleanupFixtures, fixture } from "./computer-upgrade-progress-fixture";
+import {
+  cleanupFixtures,
+  fixture,
+  runWorkspaceActivation,
+  spawnWorkspaceActivation,
+  workspaceActivationResult,
+  workspaceIdentity,
+} from "./computer-upgrade-progress-fixture";
 
 afterEach(cleanupFixtures);
 
 const journalName = "installer-transaction.json";
-
-function spawnWorkspaceActivation(installRoot: string, version: string, stateDirectory: string) {
-  const recovery = import.meta.resolve("../src/supervisor/workspace-upgrade-recovery.ts");
-  const localRpc = import.meta.resolve("../src/local-rpc.ts");
-  return Bun.spawn(
-    [
-      process.execPath,
-      "--eval",
-      `const { readWorkspaceUpgradeActivation } = await import(${JSON.stringify(recovery)});
-       const { startDaemonLocalRpcServer } = await import(${JSON.stringify(localRpc)});
-       const { join } = await import("node:path");
-       const [root, version, state] = Bun.argv.slice(-3);
-       const binding = await Bun.file(join(state, "config.json")).json();
-       const server = await startDaemonLocalRpcServer({
-         socketPath: join(state, "daemon.sock"), version, validateCredential: () => false,
-         runtime: {}, credentials: {},
-       });
-       try {
-         if (await new Response(Bun.stdin.stream()).text() !== "start") throw new Error("missing fixture start");
-         const activation = await readWorkspaceUpgradeActivation(root, state, binding, version, performance.timeOrigin, new AbortController().signal);
-         console.log(JSON.stringify(activation ?? null));
-       } finally {
-         await server.close();
-       }`,
-      installRoot,
-      version,
-      stateDirectory,
-    ],
-    { stdin: "pipe", stdout: "pipe", stderr: "inherit" },
-  );
-}
-
-async function workspaceActivationResult(child: ReturnType<typeof spawnWorkspaceActivation>) {
-  child.stdin.write("start");
-  child.stdin.end();
-  const output = await new Response(child.stdout).json();
-  expect(await child.exited).toBe(0);
-  return output;
-}
-
-async function workspaceIdentity(path: string, processId: number) {
-  const launcher = new LocalDaemonLauncher({
-    executablePath: process.execPath,
-    socketPath: join(path, "daemon.sock"),
-    spawn: () => {},
-  });
-  const until = Date.now() + 3_000;
-  while (Date.now() < until) {
-    const identity = await launcher.identity(100).catch(() => undefined);
-    if (identity?.processId === processId) return identity;
-    await Bun.sleep(25);
-  }
-  throw new Error("fixture Workspace handshake missing");
-}
-
-function runWorkspaceActivation(installRoot: string, version: string, directory: string) {
-  return workspaceActivationResult(spawnWorkspaceActivation(installRoot, version, directory));
-}
 
 test("workspace processes can recover the same activation after a process exits or another binding fails to save", async () => {
   const { installRoot, directory, context, requestId, version, stateDirectory } = await fixture();
