@@ -15,6 +15,7 @@ import {
   type ComputerPlatformInfo,
 } from "./computer-identity";
 import { BackToComputersContext } from "./back-to-computers";
+import { orderComputersOwnFirst } from "./computer-list-order";
 import { ComputerTile } from "./computer-tile";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { Button } from "#src/components/base/buttons/button";
@@ -62,6 +63,7 @@ export function ComputerLayout({
   const workspaceSlug = useWorkspaceSlug();
   const [showMobileList, setShowMobileList] = useState(!selectedComputerId);
   const listHidden = Boolean(selectedComputerId) && !showMobileList;
+  const orderedComputers = orderComputersOwnFirst(computers);
 
   if (!computers.length) {
     return (
@@ -88,7 +90,7 @@ export function ComputerLayout({
         <PageHeader heading={m.computer_page_title()} actions={<AddComputer onAdd={onAdd} />} />
 
         <ul className="flex-1 space-y-1 overflow-y-auto p-3">
-          {computers.map((computer) => {
+          {orderedComputers.map((computer) => {
             const selected = computer.id === selectedComputerId;
             const creatorName = computer.creator ? humanLabel(computer.creator) : "";
             const refusal = activeRefusal(computer);
