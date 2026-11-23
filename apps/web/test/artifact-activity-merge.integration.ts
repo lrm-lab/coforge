@@ -133,8 +133,6 @@ test("all pages put older unreads ahead of read rows and merge ties across sourc
 
   const tied = await conversationItem("tie", -20);
   const tiedId = tied.slice("conversation:".length);
-  // Artifacts use zero as their sequence. Give this conversation that sequence to exercise a
-  // tie across both SQL sources and the merge.
   await f.db.message.updateMany({ where: { conversationId: tiedId }, data: { sequence: 0 } });
   await f.db.conversationMember.updateMany({
     where: { conversationId: tiedId, userId: f.bob },
