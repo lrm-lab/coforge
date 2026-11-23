@@ -7,6 +7,7 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import {
   browserSession,
   devBrowserWorkspace,
+  elementAtRest,
   localBrowserE2e,
   pageHydrated,
 } from "./helpers/browser-e2e";
@@ -205,18 +206,24 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
       (await db.conversationMember.findUniqueOrThrow({ where: { id: viewer.id } }))
         .readThroughSequence,
     ).toBe(0);
-    await browser(
-      "wait",
-      "--fn",
-      `document.getAnimations().every((a) => a.playState !== "running")`,
-    );
-    await browser(
-      "click",
+    const activatePaneControl = async (selector: string) => {
+      const target = `document.querySelector(${JSON.stringify(selector)})`;
+      await browser(
+        "wait",
+        "--fn",
+        `document.querySelectorAll(${JSON.stringify(selector)}).length === 1 && ${elementAtRest(target)}`,
+      );
+      await browser("focus", selector);
+      await browser("press", "Enter");
+    };
+    await activatePaneControl(
       'section[aria-label="Selected conversation"] aside [aria-label="Close"]',
     );
     await browser("wait", "--fn", `${shownInPane(rootId)} && !(${profilePanel})`);
     expect(await evaluate<boolean>(shownInPane(newestId))).toBe(false);
-    await browser("click", '[aria-label="Thread actions"]');
+    await activatePaneControl(
+      'section[aria-label="Selected conversation"] [aria-label="Thread actions"]',
+    );
     await browser("find", "role", "menuitem", "click", "--name", "View in channel");
     await browser("wait", "--fn", `${openParam} === ${JSON.stringify(`channel:${channelId}`)}`);
     expect(await evaluate<boolean>(`location.search.includes("threadRootId")`)).toBe(false);
