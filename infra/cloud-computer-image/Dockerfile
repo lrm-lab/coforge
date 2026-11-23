@@ -197,6 +197,7 @@ RUN if [ "${INSTALL_PI}" != "1" ]; then \
 
 COPY scripts/persist-user-data.sh /usr/local/bin/persist-user-data.sh
 COPY scripts/sync-pi-skills.sh /usr/local/bin/sync-pi-skills.sh
+COPY scripts/provision-workspace-identities.sh /usr/local/bin/provision-workspace-identities.sh
 COPY scripts/bind-pi-skills.sh /usr/local/bin/bind-pi-skills.sh
 COPY scripts/select-computer-binary.sh /usr/local/bin/select-computer-binary.sh
 COPY scripts/activate-computer-release.sh /usr/local/bin/activate-computer-release.sh
@@ -258,6 +259,7 @@ RUN mkdir -p /usr/local/lib/coforge /usr/local/share/coforge \
   && if [ -n "${COMPUTER_VERSION}" ]; then printf '%s\n' "${COMPUTER_VERSION}" > /usr/local/share/coforge/computer-version; fi \
   && chmod 755 /usr/local/bin/persist-user-data.sh \
       /usr/local/bin/sync-pi-skills.sh \
+      /usr/local/bin/provision-workspace-identities.sh \
       /usr/local/bin/bind-pi-skills.sh \
       /usr/local/bin/select-computer-binary.sh \
       /usr/local/bin/activate-computer-release.sh \
@@ -330,6 +332,8 @@ RUN mkdir -p /usr/local/lib/coforge /usr/local/share/coforge \
   && test -x /usr/local/bin/coforge-maximize-chromium \
   && test -x /usr/local/bin/persist-user-data.sh \
   && test -x /usr/local/bin/sync-pi-skills.sh \
+  && test -x /usr/local/bin/provision-workspace-identities.sh \
+  && grep -q 'provision-workspace-identities.sh' /usr/local/bin/entrypoint-foreground.sh \
   && test -x /usr/local/bin/bind-pi-skills.sh \
   && grep -q 'sync-pi-skills.sh' /usr/local/bin/entrypoint-foreground.sh \
   && grep -q 'bind-pi-skills.sh' /usr/local/bin/entrypoint-foreground.sh \
