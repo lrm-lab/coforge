@@ -11,8 +11,9 @@ export type AppHeightReading = {
 export function appHeight(reading: AppHeightReading): number {
   const { measured, installed, safeAreaTotal, onScreenKeyboardMayBeUp, applied, tallestSeen } =
     reading;
+  if (!installed) return measured;
   if (onScreenKeyboardMayBeUp && applied !== undefined && measured < applied) return applied;
-  if (!installed || tallestSeen === undefined) return measured;
+  if (tallestSeen === undefined) return measured;
   if (tallestSeen - measured <= safeAreaTotal) return measured;
   return Math.max(measured, Math.min(tallestSeen, reading.fixedViewportHeight));
 }

@@ -55,11 +55,23 @@ describe("appHeight", () => {
     );
   });
 
-  test("the shell does not shrink when a focus or resize arrives while the on-screen keyboard may be up", () => {
+  test("a browser tab always uses what it measures even while a text field is focused, so shrinking browser toolbars or keyboard resizes never clip the composer", () => {
     expect(
       appHeight({
         ...reading,
         installed: false,
+        onScreenKeyboardMayBeUp: true,
+        applied: PORTRAIT_HEIGHT,
+        measured: 700,
+      }),
+    ).toBe(700);
+  });
+
+  test("an installed standalone app does not shrink when a focus or resize arrives while the on-screen keyboard may be up", () => {
+    expect(
+      appHeight({
+        ...reading,
+        installed: true,
         onScreenKeyboardMayBeUp: true,
         applied: PORTRAIT_HEIGHT,
         measured: 500,
@@ -67,11 +79,11 @@ describe("appHeight", () => {
     ).toBe(PORTRAIT_HEIGHT);
   });
 
-  test("with the on-screen keyboard up, a taller measurement still applies", () => {
+  test("with the on-screen keyboard up, a taller measurement still applies in an installed app", () => {
     expect(
       appHeight({
         ...reading,
-        installed: false,
+        installed: true,
         onScreenKeyboardMayBeUp: true,
         applied: 500,
         measured: PORTRAIT_HEIGHT,

@@ -46,6 +46,11 @@ export function useAppHeight() {
 
     const apply = () => {
       const installed = installedOnHomeScreen();
+      if (!installed) {
+        root.style.removeProperty("--app-height");
+        root.removeAttribute("data-app-taller-than-viewport");
+        return;
+      }
       const probeStyle = getComputedStyle(probe);
       const key = viewportShapeKey(
         window.matchMedia("(orientation: landscape)").matches,
@@ -68,7 +73,7 @@ export function useAppHeight() {
       });
       root.style.setProperty("--app-height", `${height}px`);
       root.toggleAttribute("data-app-taller-than-viewport", height > measured);
-      if (installed && tallest[key] !== tallestHeightSeen(tallest[key], measured))
+      if (tallest[key] !== tallestHeightSeen(tallest[key], measured))
         writeTallestHeights({ ...tallest, [key]: tallestHeightSeen(tallest[key], measured) });
     };
 
@@ -86,11 +91,13 @@ export function useAppHeight() {
     window.addEventListener("pageshow", remeasure);
     window.addEventListener("resize", remeasure);
     window.addEventListener("focus", remeasure);
+    document.addEventListener("focusout", remeasure);
     document.addEventListener("visibilitychange", remeasureWhenVisible);
     return () => {
       window.removeEventListener("pageshow", remeasure);
       window.removeEventListener("resize", remeasure);
       window.removeEventListener("focus", remeasure);
+      document.removeEventListener("focusout", remeasure);
       document.removeEventListener("visibilitychange", remeasureWhenVisible);
       if (frame !== undefined) cancelAnimationFrame(frame);
       clearTimeout(settleTimer);

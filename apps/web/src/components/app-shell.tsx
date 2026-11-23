@@ -191,7 +191,7 @@ export function AppShell(props: AppShellProps) {
         {chromeMounted ? (
           <WorkspaceChrome {...props} standalone={standalone} />
         ) : (
-          <div className="flex h-[var(--app-height,100svh)] flex-col bg-primary pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left font-body antialiased">
+          <div className="flex h-[var(--app-height,100dvh)] flex-col bg-primary pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left font-body antialiased">
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">{props.children}</div>
           </div>
         )}
@@ -298,8 +298,8 @@ function WorkspaceChrome({
           data-phone-page-scroll={tabBar ? "" : undefined}
           className={cx(
             "flex flex-col bg-primary pt-safe-top pr-safe-right pl-safe-left font-body antialiased",
-            tabBar ? "min-h-dvh" : "h-[var(--app-height,100svh)]",
-            !standalone && "lg:h-[var(--app-height,100svh)] lg:bg-sidebar",
+            tabBar ? "min-h-dvh" : "h-[var(--app-height,100dvh)]",
+            !standalone && "lg:h-[var(--app-height,100dvh)] lg:bg-sidebar",
             !tabBar && "pb-safe-bottom",
           )}
         >
