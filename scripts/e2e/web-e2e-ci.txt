@@ -46,7 +46,6 @@ e2e-avatars-everywhere.e2e.ts 13
 e2e-channel-create-agent-entry.e2e.ts 13
 e2e-activity-inbox.e2e.ts 12
 e2e-channel-coordinator-members.e2e.ts 12
-e2e-channel-notify-menu.e2e.ts 12
 e2e-conversation-task-board.e2e.ts 12
 e2e-read-cursor-elsewhere.e2e.ts 11
 e2e-mention-picker.e2e.ts 11
@@ -56,7 +55,7 @@ e2e-sidebar-subscribe-reads.e2e.ts 11
 e2e-artifact-share.e2e.ts 11
 e2e-activity-inbox-phone.e2e.ts 12
 e2e-activity-task-alone.e2e.ts 10
-e2e-channel-settings.e2e.ts 10
+e2e-channel-settings.e2e.ts 18
 e2e-conversation-list-resize.e2e.ts 10
 e2e-cross-task-reference.e2e.ts 10
 e2e-task-popup-phone-bar.e2e.ts 10

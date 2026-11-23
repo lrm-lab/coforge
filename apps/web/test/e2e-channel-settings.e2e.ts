@@ -1,100 +1,58 @@
-import { expect, test } from "bun:test";
-import { createHash } from "node:crypto";
+import { afterAll, expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import {
+  browserSession,
+  devBrowserWorkspace,
+  localBrowserE2e,
+  pageHydrated,
+  seededUuid,
+} from "./helpers/browser-e2e";
 
-/**
- * The channel settings panel in a real browser. The header's gear opens a slideout naming the
- * channel with its Public badge and member summary. A channel admin saves a new description and
- * name from Info. Closing with unsaved edits asks first. Pin and the notification level change
- * only the viewer's membership. Archiving (after a confirmation) replaces the composer with an archived notice
- * whose Unarchive opens the panel to bring it back. Leaving (after a confirmation) turns the channel read-only
- * until the viewer rejoins.
- *
- * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel is seeded
- * deterministically and reset on every run. Screenshots are written under
- * `.artifacts/e2e/channel-settings/`.
- */
-const origin = Bun.env.COFORGE_E2E_WEB_URL;
-if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
-  throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
-const browserPath = Bun.which("agent-browser");
-if (!browserPath) throw new Error("agent-browser is required");
-const databaseUrl = Bun.env.DATABASE_URL;
-if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
-  throw new Error("DATABASE_URL must target local PostgreSQL");
+const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/channel-settings");
+const notifyArtifacts = join(import.meta.dir, "../../../.artifacts/e2e/channel-notify-menu");
 
-/** Deterministic id (seed-dev's sha256→UUID shape), so a rerun updates instead of duplicating. */
-function seededUuid(key: string): string {
-  const hash = createHash("sha256").update(key).digest("hex");
-  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
+const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+const session = `channel-settings-${process.pid}`;
+const { browser, evaluate, waitFor, byText, clickText } = browserSession(browserPath, session);
+
+const channelHeader = `document.querySelector("header h1[data-channel-title]")?.closest("header")`;
+const panelSelector = 'section[aria-label="Channel details and settings"]';
+const panelOpen = `document.querySelector('${panelSelector}') !== null`;
+const animationsSettled = `document.getAnimations().every((a) => a.playState !== "running" || !(a.timeline instanceof DocumentTimeline) || a.effect?.getComputedTiming().iterations === Infinity)`;
+
+async function openPanel() {
+  await waitFor(
+    `document.querySelector('[aria-label="Channel details and settings"]') !== null`,
+    15_000,
+  );
+  for (let attempt = 0; ; attempt += 1) {
+    await browser("click", '[aria-label="Channel details and settings"]');
+    const opened = await waitFor(panelOpen, 5_000).then(
+      () => true,
+      () => false,
+    );
+    if (opened) return;
+    if (attempt === 5) throw new Error("the channel settings panel never opened");
+  }
 }
 
-test("the channel settings panel edits info, preferences, archive and membership", async () => {
-  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-  const session = `channel-settings-${process.pid}`;
-  async function browser(...args: string[]) {
-    const child = Bun.spawn([browserPath!, "--session", session, ...args], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    if (code !== 0) throw new Error(`Browser ${args[0]} failed: ${stderr}`);
-    return stdout;
-  }
-  async function evaluate<T>(expression: string): Promise<T> {
-    return JSON.parse(JSON.parse(await browser("eval", `JSON.stringify(${expression})`))) as T;
-  }
-  /** Waits for `condition`, failing with its text rather than at the test timeout; a first page
-   * load compiles on the dev server, so it gets longer. */
-  const waitFor = (condition: string, ms = 20_000) =>
-    Promise.race([
-      browser("wait", "--fn", condition),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`timed out waiting for ${condition}`)), ms),
-      ),
-    ]);
-  const channelHeader = `document.querySelector("header h1[data-channel-title]")?.closest("header")`;
-  const panelSelector = 'section[aria-label="Channel details and settings"]';
-  const panelOpen = `document.querySelector('${panelSelector}') !== null`;
-  const byText = (selector: string, text: string) =>
-    `[...document.querySelectorAll(${JSON.stringify(selector)})].find((element) => element.textContent.trim() === ${JSON.stringify(text)})`;
-  const clickText = (selector: string, text: string) =>
-    browser("eval", `${byText(selector, text)}.click()`);
-  async function openPanel() {
-    // A click that lands before the page hydrates opens nothing; try again until the panel opens.
-    for (let attempt = 0; ; attempt += 1) {
-      await browser("click", '[aria-label="Channel details and settings"]');
-      const opened = await waitFor(panelOpen, 5_000).then(
-        () => true,
-        () => false,
-      );
-      if (opened) return;
-      if (attempt === 5) throw new Error("the channel settings panel never opened");
-    }
-  }
+afterAll(async () => {
+  await browser("close").catch(() => undefined);
+  await db.$disconnect();
+});
 
+test("the channel settings panel edits info, preferences, archive and membership", async () => {
   const channelId = seededUuid("e2e-channel-settings:channel");
   const channelName = "e2e-settings";
   const renamed = "e2e-settings-renamed";
   try {
-    const membership = await db.workspaceMembership.findFirstOrThrow({
-      where: { userId: DEV_BROWSER_USER.id },
-      orderBy: { createdAt: "asc" },
-      include: { workspace: { select: { slug: true } } },
-    });
-    const workspacePath = `/en/w/${membership.workspace.slug}`;
-    const workspaceId = membership.workspaceId;
-    // Reset: the viewer created the channel (so is its admin), it is live, unpinned and unmuted,
-    // and closed in their sidebar, so it is opened by URL and pinned from the panel alone.
+    const { workspaceId, workspace } = await devBrowserWorkspace(db);
+    const workspacePath = `/en/w/${workspace.slug}`;
     await db.conversation.deleteMany({
       where: { workspaceId, channelName: renamed, NOT: { id: channelId } },
     });
@@ -137,7 +95,6 @@ test("the channel settings panel edits info, preferences, archive and membership
       60_000,
     );
 
-    // The header shows only the gear; the old Members and Bell buttons are gone.
     const headerButtons = await evaluate<string[]>(
       `[...${channelHeader}.querySelectorAll("button")].map((button) => button.getAttribute("aria-label") ?? button.textContent.trim())`,
     );
@@ -222,8 +179,6 @@ test("the channel settings panel edits info, preferences, archive and membership
     expect(preferred.pins.length).toBe(1);
     expect(preferred.channelMuted).toBe(true);
 
-    // Archive: it runs at once (Undo is in its toast, task #7), the panel closes and an archived
-    // notice replaces the composer.
     await clickText("button", "Archive channel");
     await waitFor(`document.body.textContent.includes("This channel is archived.")`);
     await waitFor(
@@ -234,8 +189,7 @@ test("the channel settings panel edits info, preferences, archive and membership
       (await db.conversation.findUniqueOrThrow({ where: { id: channelId } })).archivedAt,
     ).not.toBeNull();
     await browser("screenshot", join(artifacts, "archived.png"));
-    // The notice's Unarchive opens the panel, where an archived channel offers no Leave and a
-    // frozen Info form.
+
     await clickText("button", "Unarchive");
     await waitFor(panelOpen);
     const archivedPanel = await evaluate<{ leave: boolean; editHidden: boolean }>(`(() => {
@@ -254,8 +208,6 @@ test("the channel settings panel edits info, preferences, archive and membership
       (await db.conversation.findUniqueOrThrow({ where: { id: channelId } })).archivedAt,
     ).toBeNull();
 
-    // Leave a public channel: it runs at once, the channel turns read-only with a Join button, and
-    // the toast's Undo joins again (task #7).
     await openPanel();
     await clickText("button", "Leave channel");
     await waitFor(`${byText("button", "Join channel")} !== undefined`);
@@ -265,17 +217,11 @@ test("the channel settings panel edits info, preferences, archive and membership
     await evaluate(
       `([...${leftToast}.querySelectorAll("button")].find((b) => b.textContent.trim() === "Undo").setAttribute("data-e2e-undo", ""), true)`,
     );
-    await browser(
-      "wait",
-      "--fn",
-      `document.getAnimations().every((a) => a.playState !== "running")`,
-    );
+    await browser("wait", "--fn", animationsSettled);
     await browser("click", "[data-e2e-undo]");
-    // The composer returns once the page has read the viewer as a member again.
     await waitFor(`document.querySelector("main textarea") !== null`);
     expect((await viewerRow()).leftAt).toBeNull();
 
-    // Phone: the panel covers the screen and still scrolls to its actions.
     await browser("set", "viewport", "390", "844");
     await browser("open", `${origin}${workspacePath}/channel/${channelId}`);
     await waitFor(
@@ -290,8 +236,122 @@ test("the channel settings panel edits info, preferences, archive and membership
     expect(phone.panelWidth).toBeLessThanOrEqual(phone.viewport);
     await browser("screenshot", join(artifacts, "phone.png"));
   } finally {
-    await browser("close").catch(() => undefined);
-    await db.conversationPin.deleteMany({ where: { conversationId: channelId } }).catch(() => {});
-    await db.$disconnect();
+    await db.conversationPin.deleteMany({ where: { conversationId: channelId } });
+    await db.conversation.deleteMany({ where: { id: channelId } });
   }
 }, 120_000);
+
+test("a channel's notification level is chosen from its row menu and its settings", async () => {
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
+  const tail = `${process.pid}-${Date.now()}`.slice(-5);
+  const name = `a-notify-${tail}`;
+  const channel = await db.conversation.create({
+    data: {
+      workspaceId,
+      channelName: name,
+      description: "",
+      members: { create: [{ userId: DEV_BROWSER_USER.id, channelRole: "admin" }] },
+    },
+  });
+  const level = async () =>
+    await db.conversationMember.findFirstOrThrow({
+      where: { conversationId: channel.id, userId: DEV_BROWSER_USER.id },
+      select: { notificationLevel: true, channelMuted: true },
+    });
+  const settled = () => browser("wait", "--fn", animationsSettled);
+  const shoot = async (shot: string) => {
+    await settled();
+    await browser("screenshot", join(notifyArtifacts, `${shot}.png`));
+    await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
+    try {
+      await browser("screenshot", join(notifyArtifacts, `${shot}-dark.png`));
+    } finally {
+      await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`).catch(
+        () => undefined,
+      );
+    }
+  };
+  const row = `[...document.querySelectorAll("a")].find((a) => a.textContent.includes(${JSON.stringify(name)}))`;
+  const rightClick = `(() => {
+    const link = ${row};
+    link.scrollIntoView({ block: "center" });
+    const box = link.getBoundingClientRect();
+    link.dispatchEvent(new MouseEvent("contextmenu", {
+      bubbles: true, cancelable: true, clientX: box.x + 20, clientY: box.y + 10,
+    }));
+    return true;
+  })()`;
+  const item = (text: string) =>
+    `[...[...document.querySelectorAll('[role="menu"]')].at(-1).querySelectorAll('[role^="menuitem"]')].find((el) => el.textContent.trim().startsWith(${JSON.stringify(text)}))`;
+  const menus = `document.querySelectorAll('[role="menu"]').length`;
+  const openNotificationsSubmenu = async () => {
+    await browser("wait", "--fn", `${item("Notifications")} != null`);
+    await evaluate(`(${item("Notifications")}.focus(), true)`);
+    await browser("press", "ArrowRight");
+    await browser("wait", "--fn", `${menus} === 2`);
+  };
+  try {
+    await mkdir(notifyArtifacts, { recursive: true });
+    await browser("set", "viewport", "1280", "860");
+    await browser("open", `${origin}/en/w/${workspace.slug}`);
+    await browser("wait", "--fn", `${pageHydrated} && ${row} != null`);
+
+    await evaluate(rightClick);
+    await openNotificationsSubmenu();
+    expect(
+      await evaluate<string | null>(`${item("All new messages")}.getAttribute("aria-checked")`),
+    ).toBe("true");
+    await shoot("desktop-1-menu");
+    await evaluate(`(${item("Nothing")}.click(), true)`);
+    await browser("wait", "--fn", `${menus} === 0`);
+    for (let i = 0; i < 50 && (await level()).notificationLevel !== "none"; i++)
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(await level()).toEqual({ notificationLevel: "none", channelMuted: false });
+
+    await evaluate(rightClick);
+    await openNotificationsSubmenu();
+    expect(await evaluate<string | null>(`${item("Nothing")}.getAttribute("aria-checked")`)).toBe(
+      "true",
+    );
+    await evaluate(`(${item("Nothing")}.click(), true)`);
+    await browser("wait", "--fn", `${menus} === 0`);
+
+    await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}`);
+    await browser("wait", "--fn", pageHydrated);
+    await openPanel();
+    const select = `document.querySelector('${panelSelector} button[aria-label^="Notifications"], ${panelSelector} [aria-label="Notifications"] button')`;
+    await browser("wait", "--fn", `${select} != null`);
+    await evaluate(`(${select}.scrollIntoView({ block: "center" }), true)`);
+    expect(await evaluate<string>(`${select}.textContent`)).toContain("Nothing");
+    expect(
+      await evaluate<boolean>(
+        `document.body.textContent.includes("No notifications; unread still counts")`,
+      ),
+    ).toBe(true);
+    await evaluate(`(${select}.click(), true)`);
+    const option = (text: string) =>
+      `[...document.querySelectorAll('[role="option"]')].find((el) => el.textContent.includes(${JSON.stringify(text)}))`;
+    await browser("wait", "--fn", `${option("Mute")} != null`);
+    await shoot("desktop-2-settings");
+    await evaluate(`(${option("Mute")}.click(), true)`);
+    for (let i = 0; i < 50 && (await level()).notificationLevel !== "muted"; i++)
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(await level()).toEqual({ notificationLevel: "muted", channelMuted: true });
+    await shoot("desktop-3-muted");
+
+    await browser("set", "viewport", "390", "844");
+    await browser("open", `${origin}/en/w/${workspace.slug}`);
+    await browser("wait", "--fn", `${pageHydrated} && ${row} != null`);
+    await evaluate(rightClick);
+    await openNotificationsSubmenu();
+    expect(await evaluate<string | null>(`${item("Mute")}.getAttribute("aria-checked")`)).toBe(
+      "true",
+    );
+    await shoot("phone-menu");
+  } finally {
+    await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`).catch(
+      () => undefined,
+    );
+    await db.conversation.deleteMany({ where: { id: channel.id } });
+  }
+}, 180_000);
