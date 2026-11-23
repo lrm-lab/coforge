@@ -11,6 +11,9 @@
   --color-brand-900: #332073;
   --color-brand-950: #21134d;
 
+  --color-bg-login-panel: #eeebfe;
+  --background-color-login-panel: var(--color-bg-login-panel);
+
   --color-sidebar: #f8f7fe;
   --color-sidebar-fg: #101319;
   --color-sidebar-accent: #ebeaf7;
