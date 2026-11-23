@@ -154,12 +154,16 @@ test("an Agent uploads to the task's conversation and attaches the file; nobody 
   await expect(
     agents.reply(principal, agentRef, { body: "again", attachmentIds: [stored.id] }),
   ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
+  const unknownAttachmentId = crypto.randomUUID();
   await expect(
     conversations.reply(as("writer"), ref(), {
       body: "with a file",
-      attachmentIds: [crypto.randomUUID()],
+      attachmentIds: [unknownAttachmentId],
     }),
-  ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
+  ).rejects.toMatchObject({
+    code: "ATTACHMENTS_UNAVAILABLE",
+    details: { attachmentIds: unknownAttachmentId },
+  });
 
   // Off the board, an Agent can neither open the conversation nor reply.
   await db.conversationMember.update({

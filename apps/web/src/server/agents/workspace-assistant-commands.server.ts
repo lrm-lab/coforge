@@ -161,28 +161,37 @@ export class WorkspaceAssistantCommands {
     const centrifugo = this.transport ?? createCentrifugoServerApi();
     const realtime = new CentrifugoConversationRealtime(centrifugo);
     const idempotency = this.idempotency ?? getMessageRequestIdempotency();
-    if (target.isChannel)
-      return new PublicChannels(this.db, idempotency, centrifugo, undefined, realtime).send({
-        workspaceId: principal.workspaceId,
-        userId: target.userId,
-        channelId: target.conversationId,
-        idempotencyKey: input.idempotencyKey,
-        body: input.content,
-        attachmentIds: input.attachmentIds,
-        threadRootId: target.threadRootId,
-      });
-    return new DirectConversations(this.db, realtime).send(
-      principal.workspaceId,
-      target.userId,
-      target.conversationId,
-      {
-        idempotencyKey: input.idempotencyKey,
-        body: input.content,
-        attachmentIds: input.attachmentIds,
-        threadRootId: target.threadRootId,
-      },
-      { idempotency, centrifugo, realtime },
-    );
+    try {
+      if (target.isChannel)
+        return await new PublicChannels(this.db, idempotency, centrifugo, undefined, realtime).send(
+          {
+            workspaceId: principal.workspaceId,
+            userId: target.userId,
+            channelId: target.conversationId,
+            idempotencyKey: input.idempotencyKey,
+            body: input.content,
+            attachmentIds: input.attachmentIds,
+            threadRootId: target.threadRootId,
+          },
+        );
+      return await new DirectConversations(this.db, realtime).send(
+        principal.workspaceId,
+        target.userId,
+        target.conversationId,
+        {
+          idempotencyKey: input.idempotencyKey,
+          body: input.content,
+          attachmentIds: input.attachmentIds,
+          threadRootId: target.threadRootId,
+        },
+        { idempotency, centrifugo, realtime },
+      );
+    } catch (error) {
+      if (error instanceof AppError && error.code === "ATTACHMENTS_UNAVAILABLE") {
+        throw new AppError("ACCESS_DENIED");
+      }
+      throw error;
+    }
   }
 
   async read(

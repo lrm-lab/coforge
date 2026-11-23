@@ -461,7 +461,7 @@ test("assistant uploads can accompany delegated messages, while another member's
       attachmentIds: [uploads[1]!.id],
       idempotencyKey: crypto.randomUUID(),
     }),
-  ).rejects.toThrow("ACCESS_DENIED");
+  ).rejects.toMatchObject({ code: "ACCESS_DENIED", details: undefined });
   const message = await commands.send(principal, {
     target,
     content: "my file",
