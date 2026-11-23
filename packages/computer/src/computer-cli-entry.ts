@@ -141,7 +141,7 @@ export async function runComputer(options: { callerIsAgentHosted?: boolean } = {
             if (bound) {
               const { reportWorkspaceCredentials } =
                 await import("#src/host/workspace-credential-scan");
-              await reportWorkspaceCredentials(CONTAINER_SHARED_WORKSPACE_ROOT);
+              void reportWorkspaceCredentials(CONTAINER_SHARED_WORKSPACE_ROOT);
             }
             await recordExternalSupervisor(stateDirectory, io.stderr);
             await runMachineSupervisor([

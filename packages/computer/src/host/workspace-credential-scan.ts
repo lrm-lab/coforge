@@ -11,10 +11,23 @@ export type WorkspaceCredentialScanOptions = {
   maxDepth?: number;
   maxFiles?: number;
   maxBytes?: number;
+  timeBudgetMs?: number;
+};
+
+export type WorkspaceCredentialScan = {
+  findings: WorkspaceCredentialFinding[];
+  skippedSymlinkDirectories: number;
+  truncated: boolean;
 };
 
 const CREDENTIAL_FILE_NAME =
-  /^(?:\.info|\.netrc|\.pgpass|id_(?:rsa|dsa|ecdsa|ed25519)|.*\.(?:pem|key|p12|pfx|jks|kdbx)|.*(?:secret|credential|passwd|password|token).*)$/i;
+  /^(?:\.info|\.netrc|\.pgpass|\.env|id_(?:rsa|dsa|ecdsa|ed25519)|[^/]*\.(?:pem|key|p12|pfx|jks|kdbx))$/i;
+
+const CREDENTIAL_WORD =
+  /(?:^|[._-])(?:secrets?|credentials?|passwds?|passwords?|tokens?)(?:[._-]|$)/i;
+
+const SOURCE_OR_DOC_EXTENSION =
+  /\.(?:[cm]?[jt]sx?|mdx?|markdown|css|s[ac]ss|less|jsonc?|ya?ml|toml|lock|snap|html?|txt|rst|adoc|svg)$/i;
 
 const SKIPPED_DIRECTORY = new Set([
   ".cache",
@@ -43,17 +56,24 @@ const ASSIGNED_SECRET =
   /[\w.-]*(?:password|passwd|pwd|secret|api[_-]?key|access[_-]?token)[\w.-]*\s*[=:]\s*["']?([\x21-\x7e]{8,})/i;
 const REFERENCE_VALUE = /^(?:[\w$]+\.)+[\w$]+$|^[\w$]+\(.*\)$/;
 
-const DEFAULTS = { maxDepth: 4, maxFiles: 5000, maxBytes: 64 * 1024 };
+const DEFAULTS = { maxDepth: 4, maxFiles: 5000, maxBytes: 64 * 1024, timeBudgetMs: 2000 };
 
 export async function scanWorkspaceCredentials(
   root: string,
   options: WorkspaceCredentialScanOptions = {},
-): Promise<WorkspaceCredentialFinding[]> {
+): Promise<WorkspaceCredentialScan> {
   const limits = { ...DEFAULTS, ...options };
+  const started = Date.now();
   const findings: WorkspaceCredentialFinding[] = [];
   const queue: { directory: string; depth: number }[] = [{ directory: root, depth: 0 }];
   let visited = 0;
+  let skippedSymlinkDirectories = 0;
+  let truncated = false;
   while (queue.length > 0 && visited < limits.maxFiles) {
+    if (Date.now() - started >= limits.timeBudgetMs) {
+      truncated = true;
+      break;
+    }
     const { directory, depth } = queue.shift()!;
     let entries;
     try {
@@ -69,13 +89,21 @@ export async function scanWorkspaceCredentials(
           queue.push({ directory: path, depth: depth + 1 });
         continue;
       }
+      if (entry.isSymbolicLink()) {
+        skippedSymlinkDirectories += 1;
+        continue;
+      }
       if (!entry.isFile()) continue;
       visited += 1;
       const finding = await inspectFile(path, limits.maxBytes);
       if (finding) findings.push(finding);
     }
   }
-  return findings.sort((left, right) => left.path.localeCompare(right.path));
+  return {
+    findings: findings.sort((left, right) => left.path.localeCompare(right.path)),
+    skippedSymlinkDirectories,
+    truncated,
+  };
 }
 
 async function inspectFile(
@@ -89,7 +117,10 @@ async function inspectFile(
     return null;
   }
   if (stats.size > maxBytes * 4) return null;
-  const named = CREDENTIAL_FILE_NAME.test(path.slice(path.lastIndexOf("/") + 1));
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const named =
+    CREDENTIAL_FILE_NAME.test(name) ||
+    (CREDENTIAL_WORD.test(name) && !SOURCE_OR_DOC_EXTENSION.test(name));
   const reasons = named ? ["credential file name"] : [];
   const content = await readHead(path, maxBytes);
   if (content !== null) {
@@ -147,16 +178,27 @@ export async function reportWorkspaceCredentials(
   log: (line: string) => void = console.log,
   options: WorkspaceCredentialScanOptions = {},
 ): Promise<number> {
-  let findings: WorkspaceCredentialFinding[];
+  let scan: WorkspaceCredentialScan;
   try {
-    findings = await scanWorkspaceCredentials(root, options);
+    scan = await scanWorkspaceCredentials(root, options);
   } catch {
     return 0;
   }
-  if (findings.length === 0) return 0;
+  const bounded = [
+    scan.truncated ? "stopped at its time budget" : "",
+    scan.skippedSymlinkDirectories > 0
+      ? `${scan.skippedSymlinkDirectories} symlinked director(ies) skipped`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(", ");
+  if (scan.findings.length === 0) {
+    if (bounded) log(`[workspace-credentials] ${root} clean so far (${bounded})`);
+    return 0;
+  }
   log(
-    `[workspace-credentials] ${findings.length} file(s) under ${root} look like plaintext credentials; anyone with this computer can read them, so keep secrets out of the shared workspace`,
+    `[workspace-credentials] ${scan.findings.length} file(s) under ${root} look like plaintext credentials; anyone with this computer can read them, so keep secrets out of the shared workspace${bounded ? ` (${bounded})` : ""}`,
   );
-  for (const finding of findings) log(describeWorkspaceCredentialFinding(finding));
-  return findings.length;
+  for (const finding of scan.findings) log(describeWorkspaceCredentialFinding(finding));
+  return scan.findings.length;
 }
