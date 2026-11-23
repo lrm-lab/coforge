@@ -8,33 +8,26 @@ const instructions = buildCoforgeAgentInstructions({
 });
 
 test("retains reply instructions and thread addressing without provider tool names", () => {
-  expect(instructions).toContain(
-    "text outside an executed `coforge message send` command is not delivered",
-  );
+  expect(instructions).toContain("Only `coforge message send` delivers chat replies");
   expect(instructions).toContain("without asking");
   expect(instructions).toContain("native UI/question tools");
-  // task #741: a reply goes to the target of the message being answered (thread suffix kept),
-  // while a new topic, a summary or a proactive notice starts at the top level without a suffix.
-  expect(instructions).toContain(
-    "Reply to the target of the message you answer (keep its thread suffix); start new topics, summaries and proactive notices at the top level, without a suffix.",
-  );
+  expect(instructions).toContain("Default reply location: keep the target and thread suffix.");
   expect(instructions).not.toContain("Reuse exact `target=`, including its thread suffix");
-  expect(instructions).toContain(
-    "Send the reply on stdin with `coforge message send --target '<target>'`",
-  );
+  expect(instructions).toContain("Send on stdin with a quoted here-document");
   expect(instructions).not.toContain("Bash tool");
   expect(instructions).not.toContain("ask_question");
 });
 
-test("system notices stay silent except for tasks assigned to this Agent", () => {
-  expect(instructions).toContain(
-    "system notices announce state changes and need no reply or acknowledgement, except a task assigned to you: take it over.",
-  );
+test("status notices need no reply while assignments and reminders still apply", () => {
+  expect(instructions).toContain("System status notices need no reply or acknowledgment.");
+  expect(instructions).toContain("Take over tasks assigned to you.");
+  expect(instructions).toContain("`system.reminder` delivers due reminders as App items.");
+  expect(instructions).toContain("`coforge reminder list` after wake.");
   expect(instructions).not.toContain("take it over and reply in its Task thread");
 });
 
 test("protects full read output, held draft continuation, and sub-agent identity boundaries", () => {
-  expect(instructions).toContain("never pipe, truncate or discard `message check|read` output");
+  expect(instructions).toContain("Never pipe, truncate or discard `message check|read` output");
   expect(instructions).toContain("coforge message continue <id> a|b|c");
   expect(instructions).toContain(
     "Sub-agents have no CoForge identity: instruct them never to send messages, update tasks, react, or schedule reminders.",

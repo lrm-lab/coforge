@@ -7,6 +7,29 @@ import {
 } from "../src/agent/guide";
 
 describe("cli-guide-sections", () => {
+  test("teaches who should answer shared requests before showing how to send", () => {
+    for (const audience of ["managed", "external"] as const) {
+      const { communication, messages } = buildCoforgeCliGuideSections({ audience });
+      const [etiquette, sending] = communication.split("### Send messages");
+      expect(etiquette).toContain("### Conversation etiquette");
+      expect(etiquette).toContain("Leave follow-ups to the person already answering that request");
+      expect(etiquette).toContain(
+        "A new unaddressed request, even on the same topic, goes to the work owner",
+      );
+      expect(etiquette).toContain("If no owner is known, clarify or claim");
+      expect(etiquette).toContain("honor current addressees");
+      expect(etiquette).toContain("Reply separately only when asked");
+      expect(etiquette).toContain(
+        "If someone else should answer, stay quiet unless you have a new fact",
+      );
+      expect(etiquette).toContain(
+        "For a private reply, DM new evidence only to the designated responder",
+      );
+      expect(sending).toContain("coforge message send");
+      expect(messages).toContain("## Read messages and recover sends");
+    }
+  });
+
   test("managed audience preserves daemon standing prompt sections and capability feature guides", () => {
     const sections = buildCoforgeCliGuideSections({
       audience: "managed",
@@ -21,10 +44,10 @@ describe("cli-guide-sections", () => {
     });
     expect(sections.communication).toContain("without asking");
     expect(sections.communication).toContain("native UI/question tools");
-    expect(sections.communication).toContain("Or create a unique file in your Agent workspace;");
-    expect(sections.messages).toContain("never pipe, truncate or discard");
+    expect(sections.communication).toContain("Or create a unique file in your Agent workspace");
+    expect(sections.messages).toContain("Never pipe, truncate or discard");
     expect(sections.messages).toContain("coforge message continue <id> a|b|c");
-    expect(sections.messages).toContain("A `held` count means the daemon has not shown");
+    expect(sections.messages).toContain("A `held` count means messages are not yet shown");
     expect(sections.messages).toContain("`system.reminder` delivers due reminders as App items");
     expect(sections.execution).toContain("Local memory: save decisions/corrections with sources.");
     expect(sections.execution).not.toContain("Persistent skills on this cloud computer");
@@ -67,7 +90,7 @@ describe("cli-guide-sections", () => {
     expect(combined).not.toContain("coforge message continue");
     expect(combined).toContain("without asking");
     expect(combined).toContain("native UI/question tools");
-    expect(combined).toContain("never pipe, truncate or discard");
+    expect(combined).toContain("Never pipe, truncate or discard");
     expect(combined).toContain("Sub-agents have no CoForge identity");
     expect(combined).toContain("coforge message check");
     expect(combined).toContain("coforge task create --target");

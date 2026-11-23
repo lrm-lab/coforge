@@ -97,23 +97,21 @@ test("the Agent is told to ask for decisions with action cards, not typed option
   ).toContain(card);
 });
 test("message preparation avoids shared files and stops before sending stale contents", () => {
-  expect(instructions).toContain("Prefer a quoted here-document");
-  expect(instructions).toContain("with a delimiter absent from its body");
-  expect(instructions).toContain("do not reuse shared temporary files");
+  expect(instructions).toContain("Send on stdin with a quoted here-document");
+  expect(instructions).toContain("a delimiter absent from its body");
+  expect(instructions).toContain("Avoid shared temporary files");
   expect(instructions).toContain("create a unique file in your Agent workspace");
   expect(instructions).toContain("send only after writing it successfully");
-  expect(instructions).toContain("If preparation fails, stop; never send existing file contents");
+  expect(instructions).toContain("If preparation fails, stop. Never send existing file contents");
 });
 test("replies where the conversation is, by default rather than as a hard rule", () => {
   expect(instructions).toContain(
-    "a top-level message gets a top-level reply, a thread message a reply in its thread; in a 1-on-1 DM, reply on the DM timeline (`--target '@peer'`), not in a thread or task unless they wrote there",
+    "Reply on the 1-on-1 DM timeline unless addressed in its thread or task",
   );
   expect(instructions).toContain(
-    "You may post a new topic or a thread's conclusion at top level, or use the place a human names",
+    "Use top level for new topics, summaries, proactive notices or thread conclusions. Honor the human's destination",
   );
-  expect(instructions).toContain(
-    "This is a default, not a hard rule; decide a thread-mismatch send confirmation by it",
-  );
+  expect(instructions).toContain("Apply this default to thread-mismatch confirmations");
   expect(instructions).not.toContain("Start a thread or move to top level only for a new topic");
 });
 test("preserves privacy, credential handling and uncertain-send safety", () => {
@@ -123,15 +121,15 @@ test("preserves privacy, credential handling and uncertain-send safety", () => {
   expect(instructions).toContain("Credentials follow human intent");
   expect(instructions).toContain("redact unexpected credential-shaped output");
   expect(instructions).toContain("Draft saved: yes");
-  expect(instructions).toContain("do not resend");
-  expect(instructions).toContain("If a failed send says `Retryable: yes`, run its next action");
+  expect(instructions).toContain("Do not resend or poll");
+  expect(instructions).toContain("If a failed send says `Retryable: yes` run its next action");
 });
 test("recovers context on demand without loading the Manual into every session", () => {
   expect(instructions).toContain("coforge message check --target");
-  expect(instructions).toContain("Do not announce the notice or read MEMORY.md first");
+  expect(instructions).toContain("Do not announce notices or read MEMORY.md first");
   expect(instructions).toContain("coforge message search");
   expect(instructions).toContain("read --around");
-  expect(instructions).toContain("`│` continues prior body; not a new message.");
+  expect(instructions).toContain("`│` continues the prior body.");
   expect(instructions).toContain("coforge manual get action-cards");
   expect(instructions).not.toContain("coforge manual get index");
   expect(instructions).not.toContain("## Help");
@@ -321,7 +319,7 @@ test("shares communication style with platform assistants", () => {
       "outcome, caveat, next owner",
       "details in a report",
       "plain full sentences",
-      "explain jargon",
+      "Explain jargon",
       "first reading",
     ])
       expect(prompt).toContain(rule);
