@@ -31,6 +31,7 @@ interface CloseButtonProps extends AriaButtonProps {
 export const CloseButton = ({ label, className, size = "sm", theme = "light", slot = "close", ...otherProps }: CloseButtonProps) => {
     return (
         <AriaButton
+            data-press-scale={true}
             {...otherProps}
             slot={slot}
             aria-label={label || "Close"}

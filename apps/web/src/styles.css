@@ -533,19 +533,18 @@ html[data-drag-cursor] [data-drop-blocked] * {
 
 @media (prefers-reduced-motion: no-preference) {
   :where(
-    button:not(
+    [data-press-scale]:not(
+      [data-press-scale="false"],
       :disabled,
       [aria-disabled="true"],
       [data-disabled],
       [data-loading],
+      [data-pending],
       [data-dragging],
       [data-no-press-scale],
-      [role="menuitem"],
-      [role="menuitemcheckbox"],
-      [role="menuitemradio"],
-      [role="option"],
-      [role="switch"],
-      [role="checkbox"]
+      [aria-haspopup="true"],
+      [aria-haspopup="menu"],
+      [aria-haspopup="listbox"]
     )
   ) {
     transition:
@@ -565,20 +564,19 @@ html[data-drag-cursor] [data-drop-blocked] * {
   }
 
   :where(
-    button:not(
+    [data-press-scale]:not(
+        [data-press-scale="false"],
         :disabled,
         [aria-disabled="true"],
         [data-disabled],
         [data-loading],
+        [data-pending],
         [data-dragging],
         [data-no-press-scale],
-        [role="menuitem"],
-        [role="menuitemcheckbox"],
-        [role="menuitemradio"],
-        [role="option"],
-        [role="switch"],
-        [role="checkbox"]
-      ):is(:active, [data-pressed])
+        [aria-haspopup="true"],
+        [aria-haspopup="menu"],
+        [aria-haspopup="listbox"]
+      ):is(:active, [data-pressed]:not([aria-expanded="true"]))
   ) {
     scale: 0.97;
     transition:

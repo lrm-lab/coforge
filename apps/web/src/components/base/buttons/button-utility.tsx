@@ -92,6 +92,7 @@ export const ButtonUtility = ({
         <Component
             aria-label={tooltip}
             aria-keyshortcuts={tooltipShortcut}
+            data-press-scale={isDisabled ? undefined : true}
             {...props}
             className={cx(
                 "group relative inline-flex h-max cursor-pointer items-center justify-center rounded-md p-1.5 outline-focus-ring transition duration-100 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50",

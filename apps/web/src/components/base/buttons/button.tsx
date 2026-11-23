@@ -193,6 +193,7 @@ export const Button: {
     const commonProps = {
         "data-loading": loading ? true : undefined,
         "data-icon-only": isIcon ? true : undefined,
+        "data-press-scale": isLinkType ? undefined : true,
         ...props,
         isDisabled: disabled,
         className: cx(
