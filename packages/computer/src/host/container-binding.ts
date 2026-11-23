@@ -10,6 +10,8 @@ import { CONTAINER_BINDING_ENV_KEYS } from "./container-binding-env";
  * resume the sessions already stored there. */
 export const CONTAINER_WORKSPACE_ROOT = "/root/.coforge/agent-workspaces";
 
+export const CONTAINER_SHARED_WORKSPACE_ROOT = "/workspace";
+
 export type RunningWorkspaceStart = {
   workspaceId: string;
   computerId: string;

@@ -17,3 +17,7 @@ Part of [the documentation index](../../README.md). The Computer's `host/` runti
   production Swarm images live in `infra/cloud-computer-image/` (entrypoint
   still ends at `coforge-computer foreground`). The proxied desktop page keeps
   `window.opener`; clearing it makes that window name unreachable.
+  A cloud Computer's `foreground` start also scans `/workspace` once for files
+  that look like plaintext credentials and logs each hit with its path and mode;
+  it never reads a value into the log, never edits the workspace, and stays
+  silent on a non-cloud start because `prepareContainerBinding` wrote nothing.
