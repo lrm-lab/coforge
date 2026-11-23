@@ -103,20 +103,20 @@ export const WaitingChoiceRow = memo(function WaitingChoiceRow({
             name={card.preparedBy.name}
             src={card.preparedBy.avatarUrl}
           />
-          <span className="flex min-w-0 flex-1 flex-col">
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="flex min-w-0 items-center gap-2">
-              <span className="min-w-0 truncate text-md font-semibold text-primary">
+              <span className="min-w-0 truncate text-sm font-semibold text-primary">
                 {card.prompt}
               </span>
               <RelativeTime
                 value={card.createdAt}
                 plain
-                className="ms-auto shrink-0 ps-2 text-xs text-quaternary tabular-nums transition-opacity group-hover:opacity-0 not-any-pointer-coarse:group-focus-within:opacity-0"
+                className="ms-auto shrink-0 ps-2 text-xs text-quaternary tabular-nums transition-opacity not-any-pointer-coarse:group-hover:opacity-0 not-any-pointer-coarse:group-focus-within:opacity-0"
               />
             </span>
-            <span className="truncate text-sm text-tertiary">
+            <span className="truncate text-xs text-tertiary">
               {place}
-              <span className="font-semibold text-secondary">{card.preparedBy.name}: </span>
+              <span className="font-medium text-secondary">{card.preparedBy.name}: </span>
               {card.options.map((option, index) => (
                 <span key={index} className="me-2 last:me-0">
                   {choiceNumber(index)}. {option.label}
@@ -152,7 +152,7 @@ export const WaitingChoiceRow = memo(function WaitingChoiceRow({
           size="sm"
           color="link-gray"
           aria-label={m.action_card_ignore_row({ prompt: card.prompt })}
-          className="absolute top-1/2 right-[calc(var(--page-gutter)-0.25rem)] -translate-y-1/2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 aria-expanded:opacity-100 any-pointer-coarse:hidden"
+          className="absolute top-1/2 end-2.5 -translate-y-1/2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 aria-expanded:opacity-100 any-pointer-coarse:hidden"
         >
           {m.question_card_decline()}
         </Button>

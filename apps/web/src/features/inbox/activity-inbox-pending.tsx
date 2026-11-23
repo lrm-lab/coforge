@@ -1,47 +1,46 @@
-import { PageHeader } from "#src/components/layout/page-header";
 import { TabHomeHeader } from "#src/components/layout/tab-home-header";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
 
-/** The Activity page while its first page loads (the route's pending fallback). */
 export function ActivityInboxPending() {
+  const desktop = useBreakpoint("lg");
   return (
     <div
       role="status"
       aria-busy="true"
       aria-label={m.activity_inbox_loading()}
-      className="flex h-full min-h-0 flex-col"
+      className="flex h-full min-h-0 min-w-0"
     >
-      {/* The tabs' place, so the list does not move when the page lands: in the page header from
-      `lg` up, in their own row under the tab home's header below it, as the loaded page has them. */}
-      {useBreakpoint("lg") ? (
-        <PageHeader
-          leading={null}
-          heading={m.navigation_activity()}
-          tabs={<Skeleton className="mb-3 h-6 w-64" />}
-          tabsStart
-        />
-      ) : (
-        <>
-          <TabHomeHeader title={m.navigation_activity()} />
-          <div className="flex shrink-0 items-center border-b border-secondary px-page py-2">
-            <Skeleton className="h-8 w-56" />
-          </div>
-        </>
-      )}
-      {/* The list's rows at their final inset and size, full width: nothing is open yet. */}
-      <ol className="flex flex-col py-1">
-        {[0, 1, 2, 3].map((row) => (
-          <li key={row} className="flex items-center gap-3 px-page py-3">
-            <Skeleton className="size-9 shrink-0 rounded-md" />
-            <div className="min-w-0 flex-1">
-              <Skeleton className="h-4 w-1/3" />
-              <Skeleton className="mt-2 h-4 w-3/4" />
+      <div className="flex min-h-0 flex-1 flex-col bg-primary lg:w-list-column lg:flex-none lg:shrink-0">
+        {desktop ? (
+          <header className="flex h-12 shrink-0 items-center gap-2 border-b border-secondary px-4">
+            <h1 className="truncate text-md font-semibold text-primary">
+              {m.navigation_activity()}
+            </h1>
+            <Skeleton className="h-7 w-14 rounded-md" />
+          </header>
+        ) : (
+          <>
+            <TabHomeHeader title={m.navigation_activity()} />
+            <div className="flex shrink-0 items-center border-b border-secondary px-4 py-2">
+              <Skeleton className="h-5 w-52" />
             </div>
-          </li>
-        ))}
-      </ol>
+          </>
+        )}
+        <ol className="flex flex-col gap-0.5 px-1.5 py-2">
+          {[0, 1, 2, 3].map((row) => (
+            <li key={row} className="flex items-center gap-3 rounded-lg px-2.5 py-2.5">
+              <Skeleton className="size-8 shrink-0 rounded-md" />
+              <div className="min-w-0 flex-1">
+                <Skeleton className="h-4 w-2/5" />
+                <Skeleton className="mt-1.5 h-3.5 w-4/5" />
+              </div>
+            </li>
+          ))}
+        </ol>
+      </div>
+      {desktop && <div className="min-h-0 min-w-0 flex-1 border-s border-secondary bg-primary" />}
     </div>
   );
 }

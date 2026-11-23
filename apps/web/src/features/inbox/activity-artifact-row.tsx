@@ -17,10 +17,11 @@ import { ACTIVITY_ROW_ITEM_CLASS, ACTIVITY_ROW_LINK_CLASS } from "./activity-inb
 import {
   ActivityDoneCheck,
   ActivityMentionBadge,
+  activityRowMetaFadeClass,
   ActivityRowTime,
   ActivityRowTitle,
   ActivityUnreadCount,
-  UNREAD_ROW_CLASS,
+  ActivityUnreadDot,
   useActivityRowShortcuts,
 } from "./activity-row-parts";
 import type { ActivityItemActions } from "./use-activity-item-actions";
@@ -44,6 +45,7 @@ export const ActivityArtifactRow = memo(function ActivityArtifactRow({
   const { read: readShortcut, done: doneShortcut } = useActivityRowShortcuts();
   const { event, target } = item;
   const unread = item.unreadCount > 0;
+  const showMention = filter !== "mentions" && item.unreadMention;
   const link = artifactPageRoute(workspaceSlug, item.artifact.id);
   const search = {
     version: target.version ?? undefined,
@@ -70,24 +72,40 @@ export const ActivityArtifactRow = memo(function ActivityArtifactRow({
           }
           className={cn(
             ACTIVITY_ROW_LINK_CLASS,
-            unread && UNREAD_ROW_CLASS,
             "group-hover:bg-primary_hover focus-visible:bg-primary_hover",
           )}
         >
-          <ArtifactIcon entryPath={item.artifact.entryPath} />
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span className="flex min-w-0 items-center gap-2">
-              <ActivityRowTitle unread={unread}>{item.artifact.title}</ActivityRowTitle>
-            </span>
-            <span className="truncate text-sm text-secondary">
-              <ActorName inline actor={event.actor} /> {artifactEventLine(item)}
-            </span>
+          <span className="relative flex shrink-0">
+            <ArtifactIcon entryPath={item.artifact.entryPath} />
+            {unread && <ActivityUnreadDot />}
           </span>
-          <span className="flex shrink-0 flex-col items-end gap-1">
-            <ActivityRowTime value={item.at} clock={clock} current={false} />
-            <span className="flex shrink-0 items-center gap-1.5">
-              {filter !== "mentions" && item.unreadMention && <ActivityMentionBadge />}
-              {unread && <ActivityUnreadCount count={item.unreadCount} />}
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className="flex min-w-0 flex-1">
+                <ActivityRowTitle unread={unread}>{item.artifact.title}</ActivityRowTitle>
+              </span>
+              <ActivityRowTime value={item.at} clock={clock} current={false} />
+            </span>
+            <span className="flex min-w-0 items-center gap-2">
+              <span
+                className={cn(
+                  "min-w-0 flex-1 truncate text-xs",
+                  unread ? "text-tertiary" : "text-quaternary",
+                )}
+              >
+                <ActorName inline actor={event.actor} /> {artifactEventLine(item)}
+              </span>
+              {(showMention || unread) && (
+                <span
+                  className={cn(
+                    "flex shrink-0 items-center gap-1.5",
+                    activityRowMetaFadeClass(false),
+                  )}
+                >
+                  {showMention && <ActivityMentionBadge />}
+                  {unread && <ActivityUnreadCount count={item.unreadCount} />}
+                </span>
+              )}
             </span>
           </span>
         </AriaLink>

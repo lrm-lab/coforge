@@ -39,7 +39,7 @@ export function ActivityInboxSections({ sections }: { sections: ActivitySection[
           <ol
             aria-label={section.label}
             data-undated={section.dated === false ? "" : undefined}
-            className="relative flex flex-col"
+            className="relative flex flex-col gap-0.5 px-1.5"
           >
             {section.rows}
           </ol>
@@ -64,7 +64,7 @@ function ActivityInboxSectionHeading({
   return (
     <h2
       className={cn(
-        "flex items-center gap-1.5 px-page pt-2 pb-1 text-sm font-medium text-tertiary",
+        "flex items-center gap-1.5 px-4 pt-2 pb-1 text-xs font-medium text-quaternary",
         className,
       )}
     >

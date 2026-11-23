@@ -115,9 +115,9 @@ test("the Activity list resizes beside the open conversation and keeps its own w
     );
     await browser("reload");
     await waitFor(`document.querySelector('[data-activity-list] ol a') !== null`);
-    expect(await evaluate<number>(`document.querySelectorAll('${HANDLE}').length`)).toBe(0);
+    expect(await evaluate<number>(`document.querySelectorAll('${HANDLE}').length`)).toBe(1);
+    await waitForWidth(380);
     await browser("click", "[data-activity-list] ol a");
-    await waitFor(`document.querySelector('${HANDLE}') !== null`);
     await waitForWidth(380);
     await browser("screenshot", join(artifacts, "default.png"));
 

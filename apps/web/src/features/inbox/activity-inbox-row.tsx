@@ -1,24 +1,13 @@
-import { channelGlyph, ChannelTitle } from "#src/features/conversations/channel-name";
-import { ActorAvatar } from "#src/features/avatars/actor-avatar";
-import { ActorName } from "#src/features/avatars/actor-name";
-import {
-  ActivityDoneCheck,
-  ActivityMentionBadge,
-  ActivityRowTime,
-  ActivityRowTitle,
-  ActivityUnreadCount,
-  UNREAD_ROW_CLASS,
-  NARROW_HIDDEN,
-  useActivityRowShortcuts,
-} from "./activity-row-parts";
 import { memo, useRef, type Ref } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { BellOff01, Check, Hash01, Mail01 } from "@untitledui/icons";
 import { Link as AriaLink } from "react-aria-components";
 
-import { Badge } from "#src/components/base/badges/badges";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { rememberSharedRect } from "#src/lib/shared-element-rect";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { ActorName } from "#src/features/avatars/actor-name";
+import { channelGlyph, ChannelTitle } from "#src/features/conversations/channel-name";
 import { collageLayout } from "#src/features/conversations/collage-layout";
 import { GroupAvatar } from "#src/features/conversations/group-avatar";
 import { MessagePreview } from "#src/features/conversations/message-preview";
@@ -32,13 +21,23 @@ import type { ActivityConversationItem } from "#src/server/inbox/activity-inbox.
 import type { ActivityInboxFilter } from "./activity-inbox.schemas";
 import { activityChatLink, activityOpenTarget } from "./activity-open-target";
 import { activityRowPlace } from "./activity-row-place";
+import {
+  ActivityDoneCheck,
+  ActivityMentionBadge,
+  activityRowMetaFadeClass,
+  ActivityRowTime,
+  ActivityRowTitle,
+  ActivityUnreadCount,
+  ActivityUnreadDot,
+  NARROW_HIDDEN,
+  useActivityRowShortcuts,
+} from "./activity-row-parts";
 import type { ActivityItemActions } from "./use-activity-item-actions";
 
-export const ACTIVITY_ROW_ITEM_CLASS =
-  "group relative before:pointer-events-none before:absolute before:top-0 before:right-0 before:left-[calc(var(--page-gutter)+3.125rem)] before:border-t before:border-secondary first:before:hidden";
+export const ACTIVITY_ROW_ITEM_CLASS = "group relative";
 
 export const ACTIVITY_ROW_LINK_CLASS =
-  "flex items-center gap-3 px-page py-3 outline-focus-ring transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2";
+  "relative flex items-center gap-3 rounded-lg px-2.5 py-2.5 outline-focus-ring transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2";
 
 function Preview({ message }: { message: ActivityConversationItem["latest"] }) {
   if (message.system) return <>{systemNoticeText(message)}</>;
@@ -82,6 +81,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
   const unread = item.unreadCount > 0;
   const time = <ActivityRowTime value={item.latest.createdAt} clock={clock} current={current} />;
   const { place, thread, task } = item;
+  const taskMeta = task ?? thread?.task;
   const title =
     place.kind === "channel"
       ? place.channelName
@@ -163,18 +163,35 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
           }
           className={cn(
             ACTIVITY_ROW_LINK_CLASS,
-            unread && UNREAD_ROW_CLASS,
-            current
-              ? "bg-chat-selected-bg"
-              : "group-hover:bg-primary_hover focus-visible:bg-primary_hover",
+            current ? "bg-active" : "group-hover:bg-primary_hover focus-visible:bg-primary_hover",
           )}
         >
-          <span ref={iconRef} className="flex shrink-0">
+          <span ref={iconRef} className="relative flex shrink-0">
             <ActivityItemIcon item={item} />
+            {unread && <ActivityUnreadDot current={current} />}
           </span>
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span className="flex min-w-0 items-center gap-2">
-              <span ref={titleRef} className="flex min-w-0">
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="flex min-w-0 items-center gap-1.5">
+              {taskMeta && (
+                <span className="shrink-0 text-xs text-quaternary tabular-nums">
+                  #{taskMeta.number}
+                  {thread?.task?.ownerName ? (
+                    <span className={cn(NARROW_HIDDEN, "ms-1")}>
+                      <ActorName
+                        inline
+                        actor={{
+                          kind: thread.task.ownerFace?.kind ?? "user",
+                          id: thread.task.ownerFace?.id,
+                          name: thread.task.ownerName,
+                          avatarUrl: thread.task.ownerFace?.avatarUrl,
+                          deleted: thread.task.ownerDeleted,
+                        }}
+                      />
+                    </span>
+                  ) : null}
+                </span>
+              )}
+              <span ref={titleRef} className="flex min-w-0 flex-1">
                 <ActivityRowTitle unread={unread}>
                   {task ? (
                     task.title
@@ -187,22 +204,20 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
                   )}
                 </ActivityRowTitle>
               </span>
+              {time}
             </span>
-            <span
-              className={cn(
-                "truncate text-sm",
-                unread
-                  ? "text-secondary"
-                  : "text-quaternary [&_[data-mention-label]]:bg-transparent",
-              )}
-            >
-              {placeLabel && <span className="me-1.5 text-tertiary">{placeLabel}</span>}
-              {sender}: <Preview message={item.latest} />
+            <span className="flex min-w-0 items-center gap-2">
+              <span
+                className={cn(
+                  "min-w-0 flex-1 truncate text-xs [&_[data-mention-label]]:bg-transparent [&_[data-mention-label]]:px-0 [&_code]:bg-transparent [&_code]:p-0 [&_code]:text-inherit",
+                  unread ? "text-tertiary" : "text-quaternary",
+                )}
+              >
+                {placeLabel && <span className="me-1.5 text-quaternary">{placeLabel}</span>}
+                {sender}: <Preview message={item.latest} />
+              </span>
+              <ActivityItemStatus item={item} filter={filter} current={current} />
             </span>
-          </span>
-          <span className="flex shrink-0 flex-col items-end gap-1">
-            {time}
-            <ActivityItemBadges item={item} filter={filter} />
           </span>
         </AriaLink>
         <Dropdown.Popover placement="bottom start">
@@ -277,47 +292,25 @@ export function ActivityItemIcon({ item }: { item: ActivityConversationItem }) {
     );
   const Glyph = place.kind === "channel" ? channelGlyph(place) : Hash01;
   return (
-    <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-tertiary">
-      <Glyph aria-hidden="true" className="size-4.5 text-fg-quaternary" />
+    <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-tertiary">
+      <Glyph aria-hidden="true" className="size-4 text-fg-quaternary" />
     </span>
   );
 }
 
-function ActivityItemBadges({
+function ActivityItemStatus({
   item,
   filter,
+  current,
 }: {
   item: ActivityConversationItem;
   filter: ActivityInboxFilter;
+  current: boolean;
 }) {
-  const task = item.thread?.task;
   const showMention = filter !== "mentions" && item.unreadMention;
-  if (!task && !item.task && !showMention && item.unreadCount === 0) return null;
+  if (!showMention && item.unreadCount === 0) return null;
   return (
-    <span className="flex shrink-0 items-center gap-1.5">
-      {item.task && (
-        <Badge type="color" size="sm" color="gray">
-          #{item.task.number}
-        </Badge>
-      )}
-      {task && (
-        <Badge type="color" size="sm" color="gray">
-          #{task.number}
-          {task.ownerName ? (
-            <span className={cn(NARROW_HIDDEN, "ml-1")}>
-              <ActorName
-                actor={{
-                  kind: task.ownerFace?.kind ?? "user",
-                  id: task.ownerFace?.id,
-                  name: task.ownerName,
-                  avatarUrl: task.ownerFace?.avatarUrl,
-                  deleted: task.ownerDeleted,
-                }}
-              />
-            </span>
-          ) : null}
-        </Badge>
-      )}
+    <span className={cn("flex shrink-0 items-center gap-1.5", activityRowMetaFadeClass(current))}>
       {showMention && <ActivityMentionBadge />}
       {item.unreadCount > 0 && <ActivityUnreadCount count={item.unreadCount} />}
     </span>

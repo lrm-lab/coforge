@@ -70,8 +70,8 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     const times = await evaluate<string[]>(todayTimes);
     expect(times[0]).toMatch(/^\d{1,2}:\d{2}(\s?[AP]M)?$/i);
     expect(await evaluate<boolean>(`${pane} === null`)).toBe(true);
-    const fullWidth = await evaluate<number>(listColumnWidth);
-    expect(fullWidth / (await evaluate<number>("innerWidth"))).toBeGreaterThan(0.6);
+    const splitWidth = await evaluate<number>(listColumnWidth);
+    expect(splitWidth / (await evaluate<number>("innerWidth"))).toBeLessThan(0.5);
     const active = await evaluate<number | null>(activeCount);
     expect(active).toBeGreaterThanOrEqual(2);
     const preview = await evaluate<{ strong: string | null; code: string | null }>(`(() => {
@@ -83,20 +83,43 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
       };
     })()`);
     expect(preview).toEqual({ strong: "reply", code: "code" });
-    const tabCounts = `Object.fromEntries([...document.querySelectorAll('[role="tablist"][aria-label="Filter activity"] [role="tab"]')].map((tab) => [tab.textContent.replace(/[\\d+]/g, "").trim(), Number(tab.textContent.replace(/\\D/g, "")) || 0]))`;
-    const counts = await evaluate<Record<string, number>>(tabCounts);
+    const filterTrigger = `document.querySelector('[data-activity-list] header button[aria-label="Filter activity"]')`;
+    const filterMenuItems = `document.querySelectorAll('[role="menu"][aria-label="Filter activity"] [role="menuitemradio"]')`;
+    const unreadToggleCount = `Number(document.querySelector('[data-activity-list] header button[aria-pressed]')?.textContent?.replace(/\\D/g, "") ?? 0)`;
+    const openFilterMenu = async () => {
+      await evaluate(`(${filterTrigger}.click(), true)`);
+      await browser("wait", "--fn", `${filterMenuItems}.length === 4`);
+    };
+    const readFilterCounts = async () => {
+      await openFilterMenu();
+      const result = await evaluate<Record<string, number>>(
+        `Object.fromEntries([...${filterMenuItems}].map((item) => [item.textContent.replace(/[\\d+]/g, "").trim(), Number(item.textContent.replace(/\\D/g, "")) || 0]))`,
+      );
+      await browser("press", "Escape");
+      await browser("wait", "--fn", `document.querySelectorAll('[role="menu"]').length === 0`);
+      return result;
+    };
+    const selectFilter = async (name: string) => {
+      await openFilterMenu();
+      await evaluate(`[...${filterMenuItems}]
+        .find((item) => item.textContent.replace(/[\\d+]/g, "").trim() === ${JSON.stringify(name)})
+        .click() ?? true`);
+      await browser("wait", "--fn", `document.querySelectorAll('[role="menu"]').length === 0`);
+    };
+    const counts = await readFilterCounts();
     expect(Object.keys(counts)).toEqual(["All", "Unread", "Mentions", "Artifacts"]);
     expect(counts.All).toBe(0);
     expect(counts.Unread).toBeGreaterThanOrEqual(2);
     expect(counts.Mentions).toBeGreaterThanOrEqual(1);
+    expect(await evaluate<number>(unreadToggleCount)).toBe(counts.Unread);
     await browser("screenshot", join(artifacts, "wide.png"));
 
-    await browser("find", "role", "tab", "click", "--name", "Mentions");
+    await selectFilter("Mentions");
     await browser("wait", "--fn", `location.search.includes("filter=mentions")`);
     await browser("wait", "--fn", `${seededRows}.length === 1`);
     expect((await evaluate<string[]>(seededRows))[0]).toContain("E2E activity root");
-    expect(await evaluate<Record<string, number>>(tabCounts)).toEqual(counts);
-    await browser("find", "role", "tab", "click", "--name", "All");
+    expect(await readFilterCounts()).toEqual(counts);
+    await selectFilter("All");
     await browser("wait", "--fn", `${seededRows}.length === 2`);
 
     await evaluate(rightClickRow("E2E activity root"));
@@ -128,10 +151,10 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     const channelRow = `([...document.querySelectorAll(${rowItems})].find((item) => item.textContent.includes("E2E activity unread"))?.textContent ?? "")`;
     await channelMenu("Mark as read");
     await browser("wait", "--fn", `!${channelRow}.includes("1 new")`);
-    await browser("wait", "--fn", `${tabCounts}.Unread === ${counts.Unread - 1}`);
+    await browser("wait", "--fn", `${unreadToggleCount} === ${counts.Unread - 1}`);
     await channelMenu("Mark as unread");
     await browser("wait", "--fn", `${channelRow}.includes("1 new")`);
-    await browser("wait", "--fn", `${tabCounts}.Unread === ${counts.Unread}`);
+    await browser("wait", "--fn", `${unreadToggleCount} === ${counts.Unread}`);
     expect(await evaluate<boolean>(`!document.querySelector('[role="alert"]')`)).toBe(true);
 
     await evaluate(`(() => {
@@ -141,7 +164,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
       return true;
     })()`);
     await browser("wait", "--fn", `${seededRows}.length === 1`);
-    await browser("wait", "--fn", `${tabCounts}.Unread === ${counts.Unread - 1}`);
+    await browser("wait", "--fn", `${unreadToggleCount} === ${counts.Unread - 1}`);
     await browser("wait", "--fn", `${activeCount} === ${active! - 1}`);
     await browser("reload");
     await browser("wait", "--fn", `${seededRows}.length === 1 && ${pageHydrated}`);
@@ -164,7 +187,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     expect(await evaluate<boolean>(shownInPane(newestId))).toBe(false);
     expect(await evaluate<boolean>(paneTabsShown)).toBe(false);
     expect(await evaluate<boolean>(`${pane} !== null`)).toBe(true);
-    expect(await evaluate<number>(listColumnWidth)).toBeLessThan(fullWidth);
+    expect(await evaluate<number>(listColumnWidth)).toBe(splitWidth);
     await browser("screenshot", join(artifacts, "wide-open.png"));
     await waitFor(async () => {
       const read = await db.threadRead.findUnique({
@@ -176,15 +199,11 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
       (await db.conversationMember.findUniqueOrThrow({ where: { id: viewer.id } }))
         .readThroughSequence,
     ).toBe(0);
-    const filterTab = (name: string) =>
-      evaluate(`[...document.querySelectorAll('[role="tablist"][aria-label="Filter activity"] [role="tab"]')]
-        .find((tab) => tab.textContent.replace(/[\\d+]/g, "").trim() === ${JSON.stringify(name)})
-        .click() ?? true`);
-    await filterTab("Mentions");
+    await selectFilter("Mentions");
     await browser("wait", "--fn", `location.search.includes("filter=mentions")`);
     expect(await evaluate<string | null>(openParam)).toBe(`thread:channel:${channelId}`);
     expect(await evaluate<boolean>(inPane(replyId))).toBe(true);
-    await filterTab("All");
+    await selectFilter("All");
     await browser("wait", "--fn", `!location.search.includes("filter=")`);
     expect(await evaluate<string | null>(openParam)).toBe(`thread:channel:${channelId}`);
     await browser("reload");

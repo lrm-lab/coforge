@@ -32,6 +32,8 @@
   "empty_activity_artifacts_title": "No unread artifacts",
   "empty_activity_artifacts_description": "Artifact updates and comments will appear here.",
   "empty_activity_load_failed_title": "Couldn't load Activity",
+  "empty_activity_none_selected_title": "No activity selected",
+  "empty_activity_none_selected_description": "Choose a conversation from the list to read or reply here.",
   "empty_activity_task_load_failed_title": "Couldn't load this task",
   "empty_conversation_none_selected_title": "No conversation selected",
   "empty_conversation_none_selected_description": "Pick a channel or direct message from the sidebar, or start a new one.",

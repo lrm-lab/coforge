@@ -19,8 +19,6 @@ import { MessageQuestionCircle, Pin01 } from "@untitledui/icons";
 import { AnimatePresence, motion } from "motion/react";
 
 import { Button } from "#src/components/base/buttons/button";
-import { PageHeader } from "#src/components/layout/page-header";
-import { TabHomeHeader } from "#src/components/layout/tab-home-header";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useEdgeSwipeBack } from "#src/hooks/use-edge-swipe-back";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
@@ -45,7 +43,11 @@ import {
 } from "./activity-inbox-queries";
 import { createActivityDoneCoordinator, useActivityDoneProjection } from "./activity-inbox-done";
 import type { ActivityInboxFilter } from "./activity-inbox.schemas";
-import { ActivityInboxEmpty, ActivityInboxLoadError } from "./activity-inbox-states";
+import {
+  ActivityInboxEmpty,
+  ActivityInboxIdlePane,
+  ActivityInboxLoadError,
+} from "./activity-inbox-states";
 import {
   ACTIVITY_LIST_BESIDE_FROM,
   ActivityConversationPane,
@@ -60,7 +62,7 @@ import { ActivityInboxRow } from "./activity-inbox-row";
 import { ActivityArtifactRow } from "./activity-artifact-row";
 import { useActivityInboxGroups } from "./use-activity-inbox-groups";
 import { daySectionKey } from "./activity-inbox-days";
-import { ActivityInboxTabs } from "./activity-inbox-tabs";
+import { ActivityInboxHeader } from "./activity-inbox-header";
 import { ActivityInboxMoreMenu } from "./activity-inbox-more-menu";
 import {
   ActivityInboxActionError,
@@ -294,7 +296,7 @@ export function ActivityInboxView({
         />
       )),
       footer: waiting.length > WAITING_SHOWN && (
-        <div className="py-1.5 pl-[calc(var(--page-gutter)+3.125rem)]">
+        <div className="py-1.5 ps-15">
           <Button
             size="sm"
             color="link-gray"
@@ -330,26 +332,11 @@ export function ActivityInboxView({
   ].filter((section) => section.rows.length > 0);
 
   const activeCount = firstPage?.activeItemCount;
-  const activeCountMeta = activeCount !== undefined && (
-    <span
-      data-activity-active-count
-      className="min-w-0 truncate text-sm text-tertiary tabular-nums"
-    >
-      {m.activity_inbox_active_count({ count: activeCount })}
-    </span>
-  );
-  const filterTabs = (
-    <ActivityInboxTabs
-      filter={filter}
-      onFilterChange={onFilterChange}
-      onFilterIntent={prefetchFilter}
-      counts={{
-        unread: query.isPlaceholderData ? undefined : firstPage?.unreadItemCount,
-        mentions: query.isPlaceholderData ? undefined : firstPage?.unreadMentionItemCount,
-        artifacts: query.isPlaceholderData ? undefined : firstPage?.unreadArtifactItemCount,
-      }}
-    />
-  );
+  const filterCounts = {
+    unread: query.isPlaceholderData ? undefined : firstPage?.unreadItemCount,
+    mentions: query.isPlaceholderData ? undefined : firstPage?.unreadMentionItemCount,
+    artifacts: query.isPlaceholderData ? undefined : firstPage?.unreadArtifactItemCount,
+  };
   const moreActions = !query.isPlaceholderData &&
     firstPage &&
     filter !== "mentions" &&
@@ -415,35 +402,20 @@ export function ActivityInboxView({
       aria-hidden={phone && pane ? true : undefined}
       style={phoneListStyle}
       className={cn(
-        "relative flex min-h-0 flex-col bg-primary max-lg:absolute max-lg:inset-0 max-lg:z-10 max-lg:will-change-transform",
+        "relative flex min-h-0 flex-col bg-primary max-lg:absolute max-lg:inset-0 max-lg:z-10 max-lg:will-change-transform lg:relative lg:w-list-column lg:shrink-0",
         phone && pane && "pointer-events-none",
-        pane
-          ? cn(
-              "lg:relative lg:w-list-column lg:shrink-0",
-              desktop && LIST_BESIDE_CLASSES[ACTIVITY_LIST_BESIDE_FROM].list,
-            )
-          : "min-w-0 flex-1",
+        pane && desktop && LIST_BESIDE_CLASSES[ACTIVITY_LIST_BESIDE_FROM].list,
       )}
     >
-      {desktop ? (
-        <PageHeader
-          heading={m.navigation_activity()}
-          meta={activeCountMeta}
-          tabsStart
-          tabs={filterTabs}
-          actions={moreActions}
-        />
-      ) : (
-        <>
-          <TabHomeHeader title={m.navigation_activity()} meta={activeCountMeta} />
-          <div className="flex shrink-0 items-center gap-2 border-b border-secondary px-page py-2">
-            <div className="flex min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {filterTabs}
-            </div>
-            {moreActions}
-          </div>
-        </>
-      )}
+      <ActivityInboxHeader
+        desktop={desktop}
+        activeCount={activeCount}
+        filter={filter}
+        onFilterChange={onFilterChange}
+        onFilterIntent={prefetchFilter}
+        counts={filterCounts}
+        moreActions={moreActions}
+      />
       {failure && (
         <ActivityInboxActionError onRetry={failure.retry} onDismiss={() => setFailure(null)} />
       )}
@@ -466,7 +438,7 @@ export function ActivityInboxView({
           fetchNextPage={() => query.fetchNextPage({ cancelRefetch: false })}
         />
       </div>
-      {pane && (
+      {desktop && (
         <ConversationListResizeHandle
           column={LIST_COLUMN}
           visibleFrom={ACTIVITY_LIST_BESIDE_FROM}
@@ -490,7 +462,7 @@ export function ActivityInboxView({
     <div className="relative flex h-full min-h-0 min-w-0 overflow-hidden lg:overflow-visible">
       {list}
       {desktop ? (
-        pane && (
+        pane ? (
           <ActivityConversationPane
             key={`${pane.kind}:${pane.id}`}
             target={pane}
@@ -498,6 +470,8 @@ export function ActivityInboxView({
             onClose={onClose}
             flow={paneFlow}
           />
+        ) : (
+          <ActivityInboxIdlePane empty={empty} />
         )
       ) : (
         <AnimatePresence initial={false}>

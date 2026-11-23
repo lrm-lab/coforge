@@ -169,9 +169,9 @@ test("an unread pin lists once under Unread, moves to Pinned on read and returns
       const titles = [...document.querySelectorAll(${allRows})]
         .filter((item) => /E2E pinned|e2e-activity-pinned/.test(item.textContent))
         .map((item) => Math.round(item.querySelector("a .truncate")?.getBoundingClientRect().width ?? 0));
-      const tabs = document.querySelector('[role="tablist"][aria-label="Filter activity"]');
+      const header = document.querySelector('[data-activity-list] > header');
       const edge = document.querySelector('[data-activity-list] > [role="separator"]').getBoundingClientRect().left;
-      const tabsPastEdge = Math.round(Math.max(...[...tabs.querySelectorAll('[role="tab"]')].map((tab) => tab.getBoundingClientRect().right)) - edge);
+      const tabsPastEdge = Math.round(Math.max(...[...header.querySelectorAll("button")].map((btn) => btn.getBoundingClientRect().right)) - edge);
       return { overflow: list.scrollWidth - list.clientWidth, titles, tabsPastEdge };
     })()`);
     expect(narrowList.overflow).toBeLessThanOrEqual(0);

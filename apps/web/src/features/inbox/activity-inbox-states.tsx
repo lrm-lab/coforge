@@ -2,7 +2,7 @@ import { CircleAlert } from "kubai-icons/duotone";
 
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
-import { InboxDoneWireframe } from "#src/components/ui/empty-wireframes";
+import { ChatWireframe, InboxDoneWireframe } from "#src/components/ui/empty-wireframes";
 import { m } from "#src/paraglide/messages";
 import type { ActivityInboxFilter } from "./activity-inbox.schemas";
 
@@ -36,6 +36,25 @@ export function ActivityInboxEmpty({
       title={title}
       description={description}
     />
+  );
+}
+
+export function ActivityInboxIdlePane({ empty }: { empty: boolean }) {
+  return (
+    <div
+      data-activity-idle-pane
+      className="hidden min-h-0 min-w-0 flex-1 flex-col border-s border-secondary bg-primary lg:flex"
+    >
+      {!empty && (
+        <EmptyState
+          size="page"
+          className="h-full"
+          picture={<ChatWireframe />}
+          title={m.empty_activity_none_selected_title()}
+          description={m.empty_activity_none_selected_description()}
+        />
+      )}
+    </div>
   );
 }
 

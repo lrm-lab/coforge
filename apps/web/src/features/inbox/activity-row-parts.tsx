@@ -1,10 +1,8 @@
 import { createContext, useContext } from "react";
 import { Check } from "@untitledui/icons";
 
-import { Badge } from "#src/components/base/badges/badges";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { ClockTime, RelativeTime } from "#src/components/ui/relative-time";
-import { UnreadBadge } from "#src/components/ui/unread-marker";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 
@@ -20,8 +18,17 @@ export function useActivityRowShortcuts() {
 export const NARROW_SR_ONLY = "@max-[22rem]/activity-list:sr-only";
 export const NARROW_HIDDEN = "@max-[22rem]/activity-list:hidden";
 
-export const UNREAD_ROW_CLASS =
-  "bg-brand-solid/5 after:pointer-events-none after:absolute after:inset-y-1 after:start-0 after:w-0.75 after:rounded-full after:bg-brand-solid";
+export function ActivityUnreadDot({ current = false }: { current?: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "pointer-events-none absolute -top-0.5 -start-0.5 z-10 size-2 rounded-full bg-brand-solid ring-2 transition-shadow",
+        current ? "ring-bg-active" : "ring-bg-primary group-hover:ring-bg-primary_hover",
+      )}
+    />
+  );
+}
 
 export function ActivityRowTitle({
   unread,
@@ -33,7 +40,7 @@ export function ActivityRowTitle({
   return (
     <span
       className={cn(
-        "block min-w-0 truncate text-md",
+        "block min-w-0 truncate text-sm",
         unread ? "font-semibold text-primary" : "text-tertiary",
       )}
     >
@@ -44,18 +51,25 @@ export function ActivityRowTitle({
 
 export function ActivityMentionBadge() {
   return (
-    <Badge type="color" size="sm" color="brand">
+    <span className="shrink-0 text-xs font-medium text-(--color-reference-text)">
       @<span className={NARROW_SR_ONLY}>{m.activity_inbox_mention_badge()}</span>
-    </Badge>
+    </span>
   );
 }
 
 export function ActivityUnreadCount({ count }: { count: number }) {
   return (
-    <span dir="ltr" className="inline-flex">
+    <span dir="ltr" className="shrink-0 text-xs font-medium text-tertiary tabular-nums">
       <span className="sr-only">{m.activity_inbox_new({ count })}</span>
-      <UnreadBadge count={count} />
+      <span aria-hidden="true">{count > 99 ? "99+" : count}</span>
     </span>
+  );
+}
+
+export function activityRowMetaFadeClass(current: boolean) {
+  return cn(
+    "transition-opacity not-any-pointer-coarse:group-hover:opacity-0 not-any-pointer-coarse:group-focus-within:opacity-0",
+    current && "not-any-pointer-coarse:opacity-0",
   );
 }
 
@@ -69,8 +83,8 @@ export function ActivityRowTime({
   current: boolean;
 }) {
   const className = cn(
-    "ms-auto shrink-0 ps-2 text-xs text-quaternary tabular-nums transition-opacity group-hover:opacity-0 not-any-pointer-coarse:group-focus-within:opacity-0",
-    current && "not-any-pointer-coarse:opacity-0",
+    "ms-auto shrink-0 ps-2 text-xs text-quaternary tabular-nums",
+    activityRowMetaFadeClass(current),
   );
   return clock ? (
     <ClockTime value={value} plain seconds={false} className={className} />
@@ -100,7 +114,7 @@ export function ActivityDoneCheck({
       tabIndex={tabStop ? 0 : -1}
       onClick={onDone}
       className={cn(
-        "absolute top-1/2 end-[calc(var(--page-gutter)-0.25rem)] -translate-y-1/2 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 any-pointer-coarse:hidden",
+        "absolute top-1/2 end-2.5 -translate-y-1/2 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 any-pointer-coarse:hidden",
         current ? "opacity-100" : "opacity-0",
       )}
     />

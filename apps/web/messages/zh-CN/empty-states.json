@@ -32,6 +32,8 @@
   "empty_activity_artifacts_title": "暂无未读产物",
   "empty_activity_artifacts_description": "产物的更新和评论会出现在这里。",
   "empty_activity_load_failed_title": "无法加载动态",
+  "empty_activity_none_selected_title": "未选择动态",
+  "empty_activity_none_selected_description": "从左侧选择一条会话以查看或回复。",
   "empty_activity_task_load_failed_title": "无法加载此任务",
   "empty_conversation_none_selected_title": "未选择会话",
   "empty_conversation_none_selected_description": "从左侧选择一个频道或私聊，或发起新会话。",
