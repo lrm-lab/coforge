@@ -83,6 +83,7 @@
   "conversation_unsent_edit": "Edit",
   "conversation_unsent_discard": "Discard",
   "conversation_add_reaction": "Add reaction",
+  "conversation_more_reactions": "More emoji",
   "conversation_reaction_error": "The reaction could not be updated. Try again.",
   "conversation_one_new_message": "1 new message",
   "conversation_new_messages": "{count} new messages",
