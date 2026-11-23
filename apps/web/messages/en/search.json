@@ -40,6 +40,8 @@
   ],
   "search_filters": "Search filters",
   "search_tasks": "Tasks",
+  "search_tasks_failed": "Could not search tasks.",
+  "search_artifacts_failed": "Could not search Artifacts.",
   "search_task_direct": "Direct message",
   "search_chip_sender": "Sent by {name}",
   "search_chip_remove": "Remove filter {name}",

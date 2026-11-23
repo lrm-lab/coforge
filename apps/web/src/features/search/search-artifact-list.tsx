@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 
 import { ArtifactIcon, kindLabel } from "#src/features/artifacts/artifact-parts";
@@ -17,10 +18,12 @@ export function SearchArtifactList({
   artifacts,
   terms,
   onOpen,
+  notice,
 }: {
   artifacts: FoundArtifact[];
   terms: string[];
   onOpen: () => void;
+  notice?: ReactNode;
 }) {
   const workspaceSlug = useWorkspaceSlug();
   return (
@@ -28,29 +31,32 @@ export function SearchArtifactList({
       <h2 id="search-artifacts-heading" className={SEARCH_HEADING_CLASS}>
         {m.navigation_artifacts()}
       </h2>
-      <ul className="flex flex-col">
-        {artifacts.map((artifact) => (
-          <li key={artifact.id}>
-            <Link
-              to="/w/$workspaceSlug/artifacts/$artifactId"
-              params={{ workspaceSlug, artifactId: artifact.id }}
-              data-search-option=""
-              data-search-artifact={artifact.id}
-              onClick={onOpen}
-              className={SEARCH_ROW_CLASS}
-            >
-              <ArtifactIcon entryPath={artifact.entryPath} size="sm" />
-              <span className="min-w-0 flex-1 truncate text-sm text-primary">
-                <SearchMatches text={artifact.title} terms={terms} lead={Infinity} />
-              </span>
-              <span className="flex shrink-0 items-center gap-2 text-xs text-tertiary tabular-nums">
-                <span>{kindLabel(artifact.entryPath)}</span>
-                <span className="text-quaternary">v{artifact.currentVersion}</span>
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ul>
+      {notice}
+      {artifacts.length > 0 && (
+        <ul className="flex flex-col">
+          {artifacts.map((artifact) => (
+            <li key={artifact.id}>
+              <Link
+                to="/w/$workspaceSlug/artifacts/$artifactId"
+                params={{ workspaceSlug, artifactId: artifact.id }}
+                data-search-option=""
+                data-search-artifact={artifact.id}
+                onClick={onOpen}
+                className={SEARCH_ROW_CLASS}
+              >
+                <ArtifactIcon entryPath={artifact.entryPath} size="sm" />
+                <span className="min-w-0 flex-1 truncate text-sm text-primary">
+                  <SearchMatches text={artifact.title} terms={terms} lead={Infinity} />
+                </span>
+                <span className="flex shrink-0 items-center gap-2 text-xs text-tertiary tabular-nums">
+                  <span>{kindLabel(artifact.entryPath)}</span>
+                  <span className="text-quaternary">v{artifact.currentVersion}</span>
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

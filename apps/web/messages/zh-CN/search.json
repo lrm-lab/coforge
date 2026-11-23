@@ -38,6 +38,8 @@
   ],
   "search_filters": "搜索筛选",
   "search_tasks": "任务",
+  "search_tasks_failed": "无法搜索任务。",
+  "search_artifacts_failed": "无法搜索 Artifacts。",
   "search_task_direct": "私聊",
   "search_chip_sender": "{name} 发送",
   "search_chip_remove": "去掉筛选 {name}",

@@ -1,7 +1,12 @@
 import { ChannelPlace } from "#src/features/conversations/channel-name";
 import { actionCardPreviewText } from "#src/features/conversations/action-card-preview";
-import { useMemo } from "react";
-import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  keepPreviousData,
+  type UseQueryOptions,
+  useInfiniteQuery,
+  useQuery,
+} from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
 
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
@@ -58,26 +63,26 @@ export function SearchResults({
 }) {
   const search = useMessageSearch(workspaceId, query, filters, timeZone);
   const { entities, pending: entitiesPending } = useSearchEntities(workspaceId, query);
-  const { tasks, pending: tasksPending } = useSearchTasks(workspaceId, query, filters.channelId);
-  const { artifacts, pending: artifactsPending } = useSearchArtifacts(
-    workspaceId,
-    query,
-    filters.channelId,
-  );
+  const tasks = useSearchTasks(workspaceId, query, filters.channelId);
+  const artifacts = useSearchArtifacts(workspaceId, query, filters.channelId);
   const refreshing = search.isFetching && !search.isFetchingNextPage;
   const hits = search.data?.pages.flatMap((page) => page.results) ?? [];
   const terms = searchTerms(query);
 
   const nothingMatched =
-    hits.length === 0 && !search.isPending && !search.isError && !entitiesPending;
-  if (
-    nothingMatched &&
+    hits.length === 0 &&
+    !search.isPending &&
+    !search.isPlaceholderData &&
+    !search.isError &&
+    !entitiesPending &&
     entities.length === 0 &&
-    tasks.length === 0 &&
-    !tasksPending &&
-    artifacts.length === 0 &&
-    !artifactsPending
-  ) {
+    !tasks.pending &&
+    !tasks.failed &&
+    tasks.items.length === 0 &&
+    !artifacts.pending &&
+    !artifacts.failed &&
+    artifacts.items.length === 0;
+  if (nothingMatched) {
     return (
       <EmptyState
         size="page"
@@ -100,11 +105,37 @@ export function SearchResults({
       {entities.length > 0 && (
         <SearchEntityList entities={entities} onOpen={(entity) => onOpen(rememberedKey(entity))} />
       )}
-      {tasks.length > 0 && (
-        <SearchTaskList tasks={tasks} terms={terms} onOpen={() => onOpen(undefined)} />
+      {(tasks.failed || tasks.items.length > 0) && (
+        <SearchTaskList
+          tasks={tasks.items}
+          terms={terms}
+          onOpen={() => onOpen(undefined)}
+          notice={
+            tasks.failed ? (
+              <SearchGroupError
+                message={m.search_tasks_failed()}
+                retrying={tasks.retrying}
+                onRetry={tasks.retry}
+              />
+            ) : undefined
+          }
+        />
       )}
-      {artifacts.length > 0 && (
-        <SearchArtifactList artifacts={artifacts} terms={terms} onOpen={() => onOpen(undefined)} />
+      {(artifacts.failed || artifacts.items.length > 0) && (
+        <SearchArtifactList
+          artifacts={artifacts.items}
+          terms={terms}
+          onOpen={() => onOpen(undefined)}
+          notice={
+            artifacts.failed ? (
+              <SearchGroupError
+                message={m.search_artifacts_failed()}
+                retrying={artifacts.retrying}
+                onRetry={artifacts.retry}
+              />
+            ) : undefined
+          }
+        />
       )}
       <MessageResults
         workspaceId={workspaceId}
@@ -116,6 +147,26 @@ export function SearchResults({
         onOpen={onOpen}
       />
     </div>
+  );
+}
+
+function SearchGroupError({
+  message,
+  retrying,
+  onRetry,
+}: {
+  message: string;
+  retrying: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <EmptyState
+      size="row"
+      role="alert"
+      className="px-2"
+      title={message}
+      primaryAction={<RetryButton size="row" isRetrying={retrying} onPress={onRetry} />}
+    />
   );
 }
 
@@ -138,16 +189,51 @@ function rememberedKey(entity: SearchEntity): SearchEntityKey | undefined {
   return entity.dmId ? searchEntityKey({ kind: "dm", id: entity.dmId }) : undefined;
 }
 
+function useSearchGroup<TItem, TQueryKey extends readonly unknown[]>(
+  active: boolean,
+  options: UseQueryOptions<TItem[], Error, TItem[], TQueryKey>,
+) {
+  const queryHash = JSON.stringify(options.queryKey);
+  const [retryingHash, setRetryingHash] = useState<string | null>(null);
+  const retryingRef = useRef<string | null>(null);
+  const { data, isPending, isPlaceholderData, isError, isFetching, refetch } = useQuery({
+    ...options,
+    placeholderData: keepPreviousData,
+  });
+
+  const isRetryingCurrent = retryingHash === queryHash;
+
+  useEffect(() => {
+    if (retryingHash !== null && (retryingHash !== queryHash || !isFetching)) {
+      retryingRef.current = null;
+      setRetryingHash(null);
+    }
+  }, [retryingHash, queryHash, isFetching]);
+
+  const items = active && !isPlaceholderData ? (data ?? []) : [];
+  const failed = active && (isError || isRetryingCurrent);
+  const retrying = active && (isRetryingCurrent || (isError && isFetching));
+  const pending = active && !failed && (isPending || isPlaceholderData);
+
+  const retry = () => {
+    if (!active || isFetching || retryingRef.current === queryHash) return;
+    retryingRef.current = queryHash;
+    setRetryingHash(queryHash);
+    void refetch();
+  };
+
+  return { items, pending, failed, retrying, retry };
+}
+
 function useSearchTasks(workspaceId: string, query: string, conversationId: string | undefined) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const here = conversationAt(pathname);
   const currentConversationId =
     here && "channelId" in here ? here.channelId : here && "dmId" in here ? here.dmId : undefined;
-  const { data, isPending } = useQuery({
-    ...taskSearchQuery(workspaceId, query, conversationId, currentConversationId),
-    placeholderData: keepPreviousData,
-  });
-  return { tasks: query ? (data ?? []) : [], pending: Boolean(query) && isPending };
+  return useSearchGroup(
+    Boolean(query),
+    taskSearchQuery(workspaceId, query, conversationId, currentConversationId),
+  );
 }
 
 function useSearchArtifacts(
@@ -155,11 +241,7 @@ function useSearchArtifacts(
   query: string,
   conversationId: string | undefined,
 ) {
-  const { data, isPending } = useQuery({
-    ...artifactSearchQuery(workspaceId, query, conversationId),
-    placeholderData: keepPreviousData,
-  });
-  return { artifacts: query ? (data ?? []) : [], pending: Boolean(query) && isPending };
+  return useSearchGroup(Boolean(query), artifactSearchQuery(workspaceId, query, conversationId));
 }
 
 /** The people (but the viewer), Agents, channels and Computers the query names; none without a
