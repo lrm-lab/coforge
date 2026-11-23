@@ -45,7 +45,7 @@
         "@lrm/coforge-sdk": "workspace:*",
         "@openfeature/core": "1.12.0",
         "@openfeature/flagd-core": "5.0.0",
-        "@openfeature/flagd-provider": "0.17.0",
+        "@openfeature/flagd-provider": "0.18.0",
         "@openfeature/server-sdk": "1.23.0",
         "@opentelemetry/api": "^1.10.0",
         "@opentelemetry/exporter-trace-otlp-proto": "^0.301.2",
@@ -733,7 +733,7 @@
 
     "@openfeature/flagd-core": ["@openfeature/flagd-core@5.0.0", "", { "dependencies": { "imurmurhash": "^0.1.4", "json-logic-engine": "5.0.7", "object-hash": "^3.0.0", "semver": "^7.6.3" }, "peerDependencies": { "@openfeature/core": ">=1.6.0" } }, "sha512-efrtGMK3CO66/GAzGaRV2PnRkCgI4LtISrEg3WbT9PcNM0Dl73QHUOrzzI05dXE4Jf//ex0uh11KdNE1HHkgPw=="],
 
-    "@openfeature/flagd-provider": ["@openfeature/flagd-provider@0.17.0", "", { "dependencies": { "@openfeature/flagd-core": "^5.0.0", "lru-cache": "^11.0.0" }, "peerDependencies": { "@grpc/grpc-js": "~1.8.0 || ~1.9.0 || ~1.10.0 || ~1.11.0 || ~1.12.0 || ~1.13.0 || ~1.14.0", "@openfeature/server-sdk": "^1.17.0" } }, "sha512-SdtL5wizb7fka5IR1jUnTJYGL4yT0rOGc+TSS2VAtPcDwkOSba1Zx0GsizkFuWwUy6RDzqB3g6NLHC2zAL/a7w=="],
+    "@openfeature/flagd-provider": ["@openfeature/flagd-provider@0.18.0", "", { "dependencies": { "@openfeature/flagd-core": "^5.0.0", "lru-cache": "^11.0.0" }, "peerDependencies": { "@grpc/grpc-js": "~1.8.0 || ~1.9.0 || ~1.10.0 || ~1.11.0 || ~1.12.0 || ~1.13.0 || ~1.14.0", "@openfeature/server-sdk": "^1.17.0" } }, "sha512-/pm1EJnjR3f6drEf1tkElj8u85YKxF8F+ksnjrLdEewWlQxpOA81inDWQXK1n2v4AQrs8qn8trKLDcif0CZGIA=="],
 
     "@openfeature/server-sdk": ["@openfeature/server-sdk@1.23.0", "", { "peerDependencies": { "@openfeature/core": "^1.12.0" } }, "sha512-JWeLvltJIV0AFgOfbw7hK9b9Rw/5wWq+RMhCIU9sJtAqarxr8hSPglG+JAGGhYdElAz3Qwe9W3ApWyPNkQEyqg=="],
 
