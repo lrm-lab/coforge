@@ -150,10 +150,10 @@ pub(crate) fn drain_before_stop_with_progress(
                 return Some(guard);
             }
             if last_busy != Some(state.busy_count) {
-                if last_busy.is_none() {
-                    if let Some(progress) = progress {
-                        progress.phase("waiting");
-                    }
+                if last_busy.is_none()
+                    && let Some(progress) = progress
+                {
+                    progress.phase("waiting");
                 }
                 say(&format!(
                     "Draining ({} busy Agent{})",
