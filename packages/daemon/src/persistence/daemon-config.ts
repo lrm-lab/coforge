@@ -6,16 +6,21 @@ import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 export class DaemonConfigStore {
   readonly #path: string;
   readonly #serverHttpUrl: string | undefined;
-  constructor(stateDirectory: string, defaults: { serverHttpUrl?: string } = {}) {
+  readonly #volumeRoot: string | undefined;
+  constructor(
+    stateDirectory: string,
+    defaults: { serverHttpUrl?: string; volumeRoot?: string } = {},
+  ) {
     this.#path = join(stateDirectory, "config.json");
     this.#serverHttpUrl = defaults.serverHttpUrl;
+    this.#volumeRoot = defaults.volumeRoot ?? process.env.COFORGE_WORKSPACE_VOLUME_ROOT;
   }
   async load(): Promise<DaemonConfig | null> {
     try {
       const persisted = JSON.parse(await Bun.file(this.#path).text()) as DaemonConfig;
       const config = {
         ...persisted,
-        workspaceRoot: reachableWorkspaceRoot(persisted.workspaceRoot),
+        workspaceRoot: reachableWorkspaceRoot(persisted.workspaceRoot, this.#volumeRoot),
       };
       if (!this.#serverHttpUrl) return config;
       if (!config.serverHttpUrl) {
@@ -28,7 +33,14 @@ export class DaemonConfigStore {
     }
   }
   async save(config: DaemonConfig): Promise<void> {
-    await this.#write(this.bindToServer(config));
+    // The alias is a property of *this* container, not of the binding: persisting it would leave a
+    // workspace pointing at a path that disappears when the extra mount is rolled back.
+    await this.#write(
+      this.bindToServer({
+        ...config,
+        workspaceRoot: bindingWorkspaceRoot(config.workspaceRoot, this.#volumeRoot),
+      }),
+    );
   }
   assertExpectedServer(expectedServerUrl: string): void {
     if (
@@ -75,5 +87,18 @@ export function reachableWorkspaceRoot(
   if (workspaceRoot === legacy) return volumeRoot;
   return workspaceRoot.startsWith(`${legacy}/`)
     ? `${volumeRoot}${workspaceRoot.slice(legacy.length)}`
+    : workspaceRoot;
+}
+
+/** Inverse of {@link reachableWorkspaceRoot}: the file always keeps the launcher's form. */
+export function bindingWorkspaceRoot(
+  workspaceRoot: string,
+  volumeRoot: string | undefined = process.env.COFORGE_WORKSPACE_VOLUME_ROOT,
+): string {
+  const legacy = "/root/.coforge";
+  if (!volumeRoot || volumeRoot === legacy) return workspaceRoot;
+  if (workspaceRoot === volumeRoot) return legacy;
+  return workspaceRoot.startsWith(`${volumeRoot}/`)
+    ? `${legacy}${workspaceRoot.slice(volumeRoot.length)}`
     : workspaceRoot;
 }
