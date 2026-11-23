@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { getRouteApi, useRouter } from "@tanstack/react-router";
+import { getRouteApi } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import {
   keepPreviousData,
@@ -27,7 +27,7 @@ import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { LIST_BESIDE_CLASSES } from "#src/features/conversations/conversation-list-button";
 import { ConversationListResizeHandle } from "#src/features/conversations/conversation-list-resize-handle";
 import { LIST_COLUMN } from "#src/features/conversations/conversation-list-width";
-import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { useActivityFilterPrefetch } from "./use-activity-filter-prefetch";
 import { animateFlipFromRect, consumeSharedRect } from "#src/lib/shared-element-rect";
 import { DURATION_S, EASE_IN, EASE_OUT } from "#src/utils/motion-tokens";
 import { cn } from "#src/lib/utils";
@@ -89,9 +89,7 @@ export function ActivityInboxView({
 }) {
   const { user, currentWorkspace } = appRoute.useLoaderData();
   const workspaceId = currentWorkspace?.id ?? "";
-  const workspaceSlug = useWorkspaceSlug();
   const desktop = useBreakpoint("lg");
-  const router = useRouter();
   const queryClient = useQueryClient();
   const markAllRead = useServerFn(markActivityInboxRead);
   const {
@@ -108,20 +106,7 @@ export function ActivityInboxView({
     ...activityInboxQuery(workspaceId, filter),
     placeholderData: keepPreviousData,
   });
-  const prefetchFilter = useCallback(
-    (next: ActivityInboxFilter) => {
-      if (next === filter) return;
-      void router.preloadRoute({
-        to: "/w/$workspaceSlug/activity",
-        params: { workspaceSlug },
-        search: (previous) => ({
-          ...previous,
-          filter: next === "all" ? undefined : next,
-        }),
-      });
-    },
-    [filter, router, workspaceSlug],
-  );
+  const prefetchFilter = useActivityFilterPrefetch(filter);
   const projectedData = useMemo(
     () => (query.data ? projectDone(query.data) : undefined),
     [query.data, projectDone],
