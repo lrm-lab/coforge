@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 export type WorkspaceIdentity = { uid: number; gid: number };
@@ -47,4 +47,29 @@ export function canDropPrivileges(
   getuid: () => number | undefined = () => process.getuid?.(),
 ): boolean {
   return getuid() === 0;
+}
+
+export type SpawnIdentity = { identity: WorkspaceIdentity; directory: string };
+
+export async function resolveSpawnIdentity(input: {
+  stateRoot: string;
+  workspaceId: string;
+  volumeRoot?: string;
+  getuid?: () => number | undefined;
+  statOwner?: (path: string) => Promise<number | undefined>;
+}): Promise<SpawnIdentity | undefined> {
+  if (!canDropPrivileges(input.getuid ?? (() => process.getuid?.()))) return undefined;
+  const identity = await resolveWorkspaceIdentity(input.stateRoot, input.workspaceId);
+  if (!identity || !input.volumeRoot) return undefined;
+  const directory = workspaceDirectory(input.volumeRoot, input.workspaceId);
+  const owner = await (input.statOwner ?? ownerOf)(directory);
+  return owner === identity.uid ? { identity, directory } : undefined;
+}
+
+async function ownerOf(path: string): Promise<number | undefined> {
+  try {
+    return (await stat(path)).uid;
+  } catch {
+    return undefined;
+  }
 }
