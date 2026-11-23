@@ -2,7 +2,11 @@ import { expect, test } from "bun:test";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DaemonConfigStore, reachableWorkspaceRoot } from "#src/persistence/daemon-config";
+import {
+  DaemonConfigStore,
+  bindingWorkspaceRoot,
+  reachableWorkspaceRoot,
+} from "#src/persistence/daemon-config";
 
 test("the workspace root is addressed through the volume root the uid can reach", () => {
   expect(reachableWorkspaceRoot("/root/.coforge/agent-workspaces", "/srv/coforge")).toBe(
@@ -30,15 +34,28 @@ test("a loaded binding names the reachable workspace root, the file is left alon
       upgradeOperations: [],
     }),
   );
-  const previous = process.env.COFORGE_WORKSPACE_VOLUME_ROOT;
-  process.env.COFORGE_WORKSPACE_VOLUME_ROOT = "/srv/coforge";
-  try {
-    const config = await new DaemonConfigStore(state).load();
-    expect(config?.workspaceRoot).toBe("/srv/coforge/agent-workspaces");
-    const onDisk = JSON.parse(await readFile(path, "utf8"));
-    expect(onDisk.workspaceRoot).toBe("/root/.coforge/agent-workspaces");
-  } finally {
-    if (previous === undefined) delete process.env.COFORGE_WORKSPACE_VOLUME_ROOT;
-    else process.env.COFORGE_WORKSPACE_VOLUME_ROOT = previous;
-  }
+  const store = new DaemonConfigStore(state, { volumeRoot: "/srv/coforge" });
+  const config = await store.load();
+  expect(config?.workspaceRoot).toBe("/srv/coforge/agent-workspaces");
+  const onDisk = JSON.parse(await readFile(path, "utf8"));
+  expect(onDisk.workspaceRoot).toBe("/root/.coforge/agent-workspaces");
+});
+
+test("saving never persists the container-specific alias", async () => {
+  const state = await mkdtemp(join(tmpdir(), "coforge-config-save-"));
+  const store = new DaemonConfigStore(state, { volumeRoot: "/srv/coforge" });
+  await store.save({
+    workspaceId: "workspace",
+    computerId: "computer",
+    workspaceRoot: "/srv/coforge/agent-workspaces",
+    restartRequestIds: [],
+    upgradeRequestIds: [],
+    upgradeExpectedVersions: {},
+    upgradeOperations: [],
+  } as Parameters<DaemonConfigStore["save"]>[0]);
+  const onDisk = JSON.parse(await readFile(join(state, "config.json"), "utf8"));
+  expect(onDisk.workspaceRoot).toBe("/root/.coforge/agent-workspaces");
+  expect(bindingWorkspaceRoot("/srv/coforge/agent-workspaces", "/srv/coforge")).toBe(
+    "/root/.coforge/agent-workspaces",
+  );
 });
