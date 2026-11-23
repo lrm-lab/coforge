@@ -1,4 +1,4 @@
-import { chmod, chown, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { chmod, chown, mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export type WorkspaceIdentity = { uid: number; gid: number };
@@ -100,6 +100,9 @@ export type IdentityProvisioning = {
   directories: string[];
   getuid?: () => number | undefined;
   allocateUid?: (taken: number[]) => number;
+  listEntries?: (directory: string) => Promise<string[]>;
+  changeOwner?: (path: string, identity: WorkspaceIdentity) => Promise<void>;
+  withLock?: <T>(key: string, run: () => Promise<T>) => Promise<T>;
   writeProfile?: (path: string, contents: string) => Promise<void>;
   ownDirectory?: (path: string, identity: WorkspaceIdentity) => Promise<void>;
 };
@@ -131,32 +134,54 @@ export async function ensureWorkspaceIdentity(
 ): Promise<WorkspaceIdentity | undefined> {
   if (!canDropPrivileges(input.getuid ?? (() => process.getuid?.()))) return undefined;
   const profilePath = join(profileRoot(input.stateRoot, input.volumeRoot), WORKSPACE_IDENTITY_FILE);
-  const profile = await readProfileFile(profilePath);
-  const known = profile[input.workspaceId];
-  const identity = isUsableIdentity(known)
-    ? { uid: known.uid, gid: known.gid }
-    : (() => {
-        const taken = Object.values(profile)
-          .filter(isUsableIdentity)
-          .map((entry) => entry.uid);
-        const uid = (input.allocateUid ?? nextAgentUid)(taken);
-        return { uid, gid: uid };
-      })();
-  if (!isUsableIdentity(known)) {
-    profile[input.workspaceId] = identity;
-    const ordered = Object.fromEntries(
-      Object.keys(profile)
-        .sort()
-        .map((key) => [key, profile[key]]),
-    );
-    await (input.writeProfile ?? writeProfileFile)(
-      profilePath,
-      `${JSON.stringify(ordered, null, 2)}\n`,
-    );
+  const lock = input.withLock ?? withProfileLock;
+  return lock(profilePath, async () => {
+    const profile = await readProfileFile(profilePath);
+    const known = profile[input.workspaceId];
+    const identity = isUsableIdentity(known)
+      ? { uid: known.uid, gid: known.gid }
+      : (() => {
+          const taken = Object.values(profile)
+            .filter(isUsableIdentity)
+            .map((entry) => entry.uid);
+          const uid = (input.allocateUid ?? nextAgentUid)(taken);
+          return { uid, gid: uid };
+        })();
+    if (!isUsableIdentity(known)) {
+      profile[input.workspaceId] = identity;
+      const ordered = Object.fromEntries(
+        Object.keys(profile)
+          .sort()
+          .map((key) => [key, profile[key]]),
+      );
+      await (input.writeProfile ?? writeProfileFile)(
+        profilePath,
+        `${JSON.stringify(ordered, null, 2)}\n`,
+      );
+    }
+    const own = input.ownDirectory ?? (await ownDirectory(input.listEntries, input.changeOwner));
+    for (const directory of input.directories) await own(directory, identity);
+    return identity;
+  });
+}
+
+const profileLocks = new Map<string, Promise<unknown>>();
+
+/** Two Workspaces can start at the same time and would otherwise read the same
+ * profile, pick the same uid and hand it to both. The map serialises the ones in
+ * this process; the lock file covers a second Coordinator on the same volume. */
+export async function withProfileLock<T>(key: string, run: () => Promise<T>): Promise<T> {
+  const previous = profileLocks.get(key) ?? Promise.resolve();
+  const next = previous.then(run, run);
+  profileLocks.set(
+    key,
+    next.catch(() => undefined),
+  );
+  try {
+    return await next;
+  } finally {
+    if (profileLocks.get(key) === next) profileLocks.delete(key);
   }
-  const own = input.ownDirectory ?? ownDirectory;
-  for (const directory of input.directories) await own(directory, identity);
-  return identity;
 }
 
 async function writeProfileFile(path: string, contents: string): Promise<void> {
@@ -165,14 +190,55 @@ async function writeProfileFile(path: string, contents: string): Promise<void> {
   await rename(temporary, path);
 }
 
-async function ownDirectory(path: string, identity: WorkspaceIdentity): Promise<void> {
-  for (const target of [path, join(path, "work"), join(path, "home"), join(path, "cache")]) {
+async function ownDirectory(
+  listEntries: ((directory: string) => Promise<string[]>) | undefined,
+  changeOwner: ((path: string, identity: WorkspaceIdentity) => Promise<void>) | undefined,
+): Promise<(path: string, identity: WorkspaceIdentity) => Promise<void>> {
+  const list = listEntries ?? listTree;
+  const own = changeOwner ?? changeOwnerOf;
+  return async (path: string, identity: WorkspaceIdentity): Promise<void> => {
+    for (const target of [path, join(path, "work"), join(path, "home"), join(path, "cache")]) {
+      try {
+        await mkdir(target, { recursive: true, mode: 0o700 });
+        await chmod(target, 0o700);
+        await own(target, identity);
+      } catch {
+        continue;
+      }
+    }
+    for (const entry of await list(path)) {
+      try {
+        await own(entry, identity);
+      } catch {
+        continue;
+      }
+    }
+  };
+}
+
+/** Files left by an earlier run are still root's: the socket, the instance record,
+ * the logs. A directory owner alone would let the dropped child fail to write and
+ * quietly fall back to the launcher identity. */
+async function listTree(directory: string): Promise<string[]> {
+  const found: string[] = [];
+  const queue = [directory];
+  while (queue.length > 0 && found.length < 5000) {
+    const current = queue.shift()!;
+    let entries;
     try {
-      await mkdir(target, { recursive: true, mode: 0o700 });
-      await chmod(target, 0o700);
-      await chown(target, identity.uid, identity.gid);
+      entries = await readdir(current, { withFileTypes: true });
     } catch {
       continue;
     }
+    for (const entry of entries) {
+      const path = join(current, entry.name);
+      found.push(path);
+      if (entry.isDirectory()) queue.push(path);
+    }
   }
+  return found;
+}
+
+async function changeOwnerOf(path: string, identity: WorkspaceIdentity): Promise<void> {
+  await chown(path, identity.uid, identity.gid);
 }
