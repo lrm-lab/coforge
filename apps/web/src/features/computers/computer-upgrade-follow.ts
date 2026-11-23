@@ -44,29 +44,19 @@ export function upgradeFollowActive(
   );
 }
 
-/**
- * What the watcher currently sees of one followed upgrade. A recovery fetch keeps the previous
- * error until it returns, so `isError` and `isFetching` are true together and `data` is still the
- * last accepted status.
- */
 export type UpgradeFollowObservation = {
   isError: boolean;
   isFetching: boolean;
-  data: ComputerUpgradeStatus | undefined;
+  data: ComputerUpgradeStatus | null | undefined;
 };
 
-/**
- * Whether the watcher should stop following. `undefined` means keep the follow.
- * A read that failed and is idle settles with no status: nothing on the server changed.
- * An in-flight read is not settled, even while it still reports that error.
- */
 export function settledUpgradeFollow(
   observation: UpgradeFollowObservation | undefined,
   now = Date.now(),
-): { status: ComputerUpgradeStatus | undefined } | undefined {
+): { status: ComputerUpgradeStatus | null | undefined } | undefined {
   if (!observation || observation.isFetching) return undefined;
   if (observation.isError) return { status: undefined };
-  if (observation.data && !upgradeFollowActive(observation.data, now))
+  if (observation.data !== undefined && !upgradeFollowActive(observation.data, now))
     return { status: observation.data };
   return undefined;
 }

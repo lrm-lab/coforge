@@ -1,4 +1,5 @@
 import {
+  getComputerUpgradeProgressStore,
   latestComputerUpgradeProgressIds,
   readVisibleComputerUpgradeProgress,
 } from "#src/server/computers/computer-upgrade-progress-wire.server";
@@ -175,6 +176,20 @@ export const listComputers = createServerFn({ method: "GET" })
           .map(({ id }) => id),
       ).catch(() => new Map<string, string>()),
     ]);
+    const progressWithoutStatus = connections.flatMap(({ id: bindingId, computer }, index) => {
+      const requestId = progressIds.get(bindingId);
+      return requestId && !upgrades[index]
+        ? [{ bindingId, computerId: computer.id, requestId }]
+        : [];
+    });
+    if (progressWithoutStatus.length) {
+      const recoverableProgress = await getComputerUpgradeProgressStore()
+        .hasEvidenceMany(progressWithoutStatus)
+        .catch(() => []);
+      progressWithoutStatus.forEach(({ bindingId }, index) => {
+        if (!recoverableProgress[index]) progressIds.delete(bindingId);
+      });
+    }
     const agentDisplayById = new Map(
       agentScopes.map((scope, index) => [scope.agentId, agentDisplays[index]] as const),
     );
@@ -258,8 +273,6 @@ export const scanAgentWorkspaceStats = createServerFn({ method: "POST" })
     );
   });
 
-/** Computer owners may remove an Agent workspace's local contents. The Agent row is retained;
- * deleted Agents remain eligible so their retained workspaces can be cleaned up. */
 export const readComputerUpgradeStatus = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(readRestartStatusInputSchema)
@@ -268,13 +281,20 @@ export const readComputerUpgradeStatus = createServerFn({ method: "GET" })
     if (!(await isWorkspaceMemberComputer(db, { userId: user.id, ...scope })))
       throw new Error("Computer is not available");
     const status = await getComputerUpgradeStore().status(scope, data.requestId);
-    const progress = await readVisibleComputerUpgradeProgress(
+    const terminalStatus =
+      status?.status === "completed" || status?.status === "failed"
+        ? status.status
+        : status
+          ? undefined
+          : null;
+    const progressRead = readVisibleComputerUpgradeProgress(
       db,
       { ...scope, userId: user.id },
       data.requestId,
-      status?.status === "completed",
-    ).catch(() => undefined);
-    if (!status && !progress) throw new Error("Upgrade request is not available");
+      terminalStatus,
+    );
+    const progress = status ? await progressRead.catch(() => undefined) : await progressRead;
+    if (!status && !progress) return { requestId: data.requestId, status: "not_found" } as const;
     return {
       ...(status ?? ({ requestId: data.requestId, status: "unknown", reason: "corrupt" } as const)),
       ...(progress ? { progress } : {}),

@@ -257,3 +257,18 @@ test("read error unfollows without marking settled so revisiting Computers recov
     client.clear();
   }
 });
+
+test("an expired status settles without leaving a recoverable read error", () => {
+  const client = new QueryClient();
+  try {
+    const upgrade = { computerId: "c1", requestId: "req-expired", startedHere: false };
+    followComputerUpgrade(client, upgrade);
+    const result = settledUpgradeFollow({ isError: false, isFetching: false, data: null });
+    expect(result).toEqual({ status: null });
+    expect(settleComputerUpgradeFollow(client, upgrade.requestId, result?.status)).toBe(true);
+    followComputerUpgrade(client, upgrade);
+    expect(client.getQueryData(followedComputerUpgradesQuery.queryKey)).toEqual([]);
+  } finally {
+    client.clear();
+  }
+});

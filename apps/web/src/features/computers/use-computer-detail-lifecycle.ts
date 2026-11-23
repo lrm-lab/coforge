@@ -68,17 +68,16 @@ export function useComputerDetailLifecycle(input: {
     })),
   });
   const storedOutcome = storedUpgrade ? upgradeOutcome(storedUpgrade) : undefined;
-  // A recovery fetch keeps the last error until it returns. The status it already holds is
-  // what the slot shows while that read is in flight.
-  const liveUpgrade: ComputerUpgradeOutcome | undefined = !liveStatus
-    ? undefined
-    : liveStatus.isError && !liveStatus.isFetching
-      ? { state: "failed", failure: describeUpgradeRequestError(liveStatus.error) }
-      : liveStatus.data
-        ? upgradeOutcome(liveStatus.data)
-        : upgradeRequest.state === "accepted"
-          ? { state: "running" }
-          : (storedOutcome ?? { state: "running" });
+  const liveUpgrade: ComputerUpgradeOutcome | undefined =
+    !liveStatus || liveStatus.data === null
+      ? undefined
+      : liveStatus.isError && !liveStatus.isFetching
+        ? { state: "failed", failure: describeUpgradeRequestError(liveStatus.error) }
+        : liveStatus.data
+          ? upgradeOutcome(liveStatus.data)
+          : upgradeRequest.state === "accepted"
+            ? { state: "running" }
+            : (storedOutcome ?? { state: "running" });
   // A stored success is history: the loader's version already includes it.
   const upgrade: ComputerUpgradeOutcome | { state: "idle" } =
     upgradeRequest.state === "requesting"
@@ -90,7 +89,7 @@ export function useComputerDetailLifecycle(input: {
             ? storedOutcome
             : { state: "idle" }));
   const activeLiveStatus =
-    liveStatus?.isError && !liveStatus.isFetching ? undefined : liveStatus?.data;
+    liveStatus?.isError && !liveStatus.isFetching ? undefined : (liveStatus?.data ?? undefined);
   const slots = computerDetailUpgradeSlotsFor(
     {
       kind: input.kind,

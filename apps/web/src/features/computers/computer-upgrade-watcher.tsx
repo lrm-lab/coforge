@@ -30,13 +30,11 @@ export function ComputerUpgradeWatcher() {
       computerUpgradeStatusQuery(computerId, requestId),
     ),
   });
-  // A finished read that failed settles too, with nothing changed on the server. A recovery
-  // fetch still reports that error while it is in flight, and that must not drop the follow.
   const settled = followed.flatMap(
     (
       upgrade,
       index,
-    ): { upgrade: FollowedComputerUpgrade; status: ComputerUpgradeStatus | undefined }[] => {
+    ): { upgrade: FollowedComputerUpgrade; status: ComputerUpgradeStatus | null | undefined }[] => {
       const decision = settledUpgradeFollow(statuses[index]);
       return decision ? [{ upgrade, status: decision.status }] : [];
     },
@@ -45,17 +43,16 @@ export function ComputerUpgradeWatcher() {
   useEffect(() => {
     let changed = false;
     for (const { upgrade, status } of settled) {
-      if (!settleComputerUpgradeFollow(queryClient, upgrade.requestId, status) || !status) continue;
+      if (!settleComputerUpgradeFollow(queryClient, upgrade.requestId, status)) continue;
       changed = true;
       if (
         upgrade.startedHere &&
-        status.status === "completed" &&
+        status?.status === "completed" &&
         computerUpgradeSettledToastable(status) &&
         status.computerVersion
       )
         toast.success(describeComputerUpgradeSuccess(status.computerVersion));
     }
-    // Only the Computers routes show an upgrade; the shell and other pages keep their data.
     if (changed)
       void router.invalidate({
         filter: (match) => match.routeId.startsWith("/w/$workspaceSlug/_computers"),

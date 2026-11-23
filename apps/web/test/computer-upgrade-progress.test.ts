@@ -27,6 +27,9 @@ async function fixture() {
     async read(key) {
       return rows.get(key) ?? null;
     },
+    async readMany(keys) {
+      return keys.map((key) => rows.get(key) ?? null);
+    },
     async replace(key, previous, next) {
       if (failWrite) throw new Error("detail storage unavailable");
       if ((rows.get(key) ?? null) !== previous) return false;
@@ -232,7 +235,7 @@ for (const order of ["original-first", "recovery-first"] as const) {
       switchState: "rolled_back",
       restoredVersion: "1.0.0",
     });
-    expect((await store.read(origin, [], true))?.switchState).toBe("conflict");
+    expect((await store.read(origin, [], "completed"))?.switchState).toBe("conflict");
     await store.recordMachine(origin, { ...recovery, restoredVersion: "1.1.0" });
     const conflict = await store.read(origin, []);
     expect(conflict?.switchState).toBe("conflict");
@@ -251,5 +254,98 @@ test("a recovered promotion can settle journal uncertainty with target online", 
     at: 3_000,
   });
   expect((await store.read(origin, []))?.switchState).toBe("pending");
-  expect((await store.read(origin, [], true))?.switchState).toBe("confirmed");
+  expect((await store.read(origin, [], "completed"))?.switchState).toBe("confirmed");
+});
+
+test("a legacy terminal result does not use an empty progress registration", async () => {
+  const { store, advance } = await fixture();
+  const read = (status?: "failed" | "completed") => store.read(origin, ["binding-a"], status);
+
+  expect(await read()).toMatchObject({ switchState: "pending", workspaces: [] });
+  expect(await read("failed")).toBeUndefined();
+  expect(await read("completed")).toBeUndefined();
+
+  advance(deadline);
+  expect(await read()).toMatchObject({ switchState: "uncertain", workspaces: [] });
+  expect(await read("failed")).toBeUndefined();
+  expect(await read("completed")).toBeUndefined();
+});
+
+test("a terminal failure overrides an intermediate phase while a rollback stays visible", async () => {
+  const { store } = await fixture();
+  const read = () => store.read(origin, ["binding-a"], "failed");
+  const evidence = { generation, version: "2.0.0", at: 1_100 };
+  await store.recordMachine(origin, { ...evidence, kind: "phase", phase: "downloading" });
+  expect((await store.read(origin, ["binding-a"]))?.phase).toBe("downloading");
+  expect(await read()).toBeUndefined();
+
+  await store.recordMachine(origin, {
+    ...evidence,
+    kind: "receipt",
+    outcome: "rolled_back",
+    restoredVersion: "1.0.0",
+    oldProcesses: "verified",
+  });
+  expect(await read()).toMatchObject({ switchState: "rolled_back", restoredVersion: "1.0.0" });
+});
+
+test("a target on the expected version keeps progress when the new Installer reported a phase", async () => {
+  const { store } = await fixture();
+  await store.recordMachine(origin, {
+    kind: "phase",
+    phase: "switching",
+    generation,
+    version: "2.0.0",
+    at: 1_100,
+  });
+  expect(await store.read(origin, ["binding-a"], "completed")).toMatchObject({
+    switchState: "target_online",
+    phase: "switching",
+  });
+});
+
+test("only evidence-backed progress can outlive a legacy status record", async () => {
+  const { store, advance, snapshot } = await fixture();
+  const phaseOnly = { ...origin, requestId: "phase-only" };
+  const receiptOnly = { ...origin, requestId: "receipt-only" };
+  for (const reporter of [phaseOnly, receiptOnly]) {
+    await store.begin(reporter, "2.0.0", deadline, [reporter]);
+  }
+  await store.recordMachine(phaseOnly, {
+    kind: "phase",
+    phase: "waiting",
+    generation,
+    version: "2.0.0",
+    at: 1_100,
+  });
+  await store.recordMachine(receiptOnly, {
+    kind: "receipt",
+    outcome: "rolled_back",
+    restoredVersion: "1.0.0",
+    oldProcesses: "verified",
+    generation,
+    version: "2.0.0",
+    at: 1_100,
+  });
+  const empty = { ...origin, requestId: "empty" };
+  await store.begin(empty, "2.0.0", deadline, [empty]);
+  await store.recordMachine(origin, snapshot);
+  await store.recordReady(other, confirmed);
+  const missing = { ...origin, requestId: "missing" };
+  advance(deadline);
+
+  expect(await store.hasEvidenceMany([empty, phaseOnly, receiptOnly, missing, origin])).toEqual([
+    false,
+    true,
+    true,
+    false,
+    true,
+  ]);
+  expect(await store.read(empty, [], null)).toBeUndefined();
+  expect(await store.read(phaseOnly, [], null)).toMatchObject({ phase: "waiting" });
+  expect(await store.read(receiptOnly, [], null)).toMatchObject({ switchState: "rolled_back" });
+  expect(await store.read(origin, ["binding-b"], null)).toMatchObject({
+    switchState: "target_online",
+    workspaces: [{ state: "restored" }],
+  });
 });

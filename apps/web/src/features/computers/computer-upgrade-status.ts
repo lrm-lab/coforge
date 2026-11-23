@@ -27,7 +27,7 @@ function upgradeStatusSettled({
   data,
   status,
 }: {
-  data: ComputerUpgradeStatus | undefined;
+  data: ComputerUpgradeStatus | null | undefined;
   status: "pending" | "error" | "success";
 }) {
   return status === "error" || (data !== undefined && !upgradeFollowActive(data));
@@ -40,11 +40,12 @@ function upgradeStatusSettled({
 export function computerUpgradeStatusQuery(computerId: string, requestId: string) {
   return queryOptions({
     queryKey: ["computers", "upgrade", computerId, requestId],
-    queryFn: () => readComputerUpgradeStatus({ data: { computerId, requestId } }),
+    queryFn: async () => {
+      const status = await readComputerUpgradeStatus({ data: { computerId, requestId } });
+      return status.status === "not_found" ? null : status;
+    },
     refetchInterval: (query) =>
       upgradeStatusSettled(query.state) ? false : UPGRADE_POLL_INTERVAL_MS,
-    // An error stops the timer. The query stays invalidated, so opening Computers fetches
-    // once more; the watcher keeps that in-flight read followed (`settledUpgradeFollow`).
     staleTime: (query) => (upgradeStatusSettled(query.state) ? Infinity : 0),
     gcTime: 15 * 60_000,
   });
@@ -124,9 +125,9 @@ export function unfollowComputerUpgrade(queryClient: QueryClient, requestId: str
 export function settleComputerUpgradeFollow(
   queryClient: QueryClient,
   requestId: string,
-  status: ComputerUpgradeStatus | undefined,
+  status: ComputerUpgradeStatus | null | undefined,
 ): boolean {
-  if (!unfollowComputerUpgrade(queryClient, requestId) || !status) return false;
+  if (!unfollowComputerUpgrade(queryClient, requestId) || status === undefined) return false;
   markComputerUpgradeSettled(queryClient, requestId);
   return true;
 }

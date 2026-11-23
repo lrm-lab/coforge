@@ -139,6 +139,7 @@ export function getComputerUpgradeProgressStore() {
   const redis = progressRedis();
   return (store = new ComputerUpgradeProgressStore({
     read: (key) => redis.get(key),
+    readMany: (keys) => redis.mget(...keys),
     replace: async (key, previous, next, retainUntil) =>
       (await redis.send("EVAL", [
         REPLACE_PROGRESS,
@@ -228,7 +229,7 @@ export async function readVisibleComputerUpgradeProgress(
   db: Pick<PrismaClient, "workspaceComputer">,
   scope: { workspaceId: string; computerId: string; userId: string },
   requestId: string,
-  targetVersionOnline: boolean,
+  terminalStatus?: "completed" | "failed" | null,
 ) {
   const rows = await db.workspaceComputer.findMany({
     where: {
@@ -242,7 +243,7 @@ export async function readVisibleComputerUpgradeProgress(
   const progress = await getComputerUpgradeProgressStore().read(
     { computerId: scope.computerId, requestId },
     rows.map((row) => row.id),
-    targetVersionOnline,
+    terminalStatus,
   );
   if (!progress) return;
   const names = new Map(rows.map((row) => [row.workspaceId, row.workspace.name]));

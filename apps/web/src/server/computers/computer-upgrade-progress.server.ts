@@ -71,12 +71,23 @@ export type ComputerUpgradeProgress = {
 
 export interface UpgradeProgressPersistence {
   read(key: string): Promise<string | null>;
+  readMany(keys: string[]): Promise<Array<string | null>>;
   replace(
     key: string,
     previous: string | null,
     next: string,
     retainUntil: number,
   ): Promise<boolean>;
+}
+
+function hasProgressEvidence(record: Record) {
+  return Boolean(
+    record.phase ||
+    record.snapshot ||
+    record.healthy ||
+    record.receipts.length ||
+    record.ready.length,
+  );
 }
 
 const RECONNECT_MS = 120_000;
@@ -277,10 +288,12 @@ export class ComputerUpgradeProgressStore {
   async read(
     attempt: UpgradeAttempt,
     visibleBindingIds: readonly string[],
-    targetVersionOnline = false,
+    terminalStatus?: "completed" | "failed" | null,
   ): Promise<ComputerUpgradeProgress | undefined> {
     const { record } = await this.load(attempt);
     if (!record) return;
+    if ((terminalStatus === "completed" || terminalStatus === null) && !hasProgressEvidence(record))
+      return;
     const now = this.now();
     const restoredVersions = rolledBackVersions(record);
     const restoredVersion = restoredVersions.size === 1 ? [...restoredVersions][0] : undefined;
@@ -290,12 +303,14 @@ export class ComputerUpgradeProgressStore {
           .filter((row) => visible.has(row.bindingId))
           .map((row) => workspaceState(record, row, now))
       : [];
-    const targetOnline = targetVersionOnline || workspaces.some((row) => row.state === "restored");
+    const targetOnline =
+      terminalStatus === "completed" || workspaces.some((row) => row.state === "restored");
+    const state = switchState(record, targetOnline);
+    if (terminalStatus === "failed" && state === "pending") return;
     const reconnectUntil =
       workspaces.some((row) => row.state === "waiting") && record.healthy
         ? reconnectDeadline(record)
         : undefined;
-    const state = switchState(record, targetOnline);
     return {
       expectedVersion: record.expectedVersion,
       expiresAt: record.expiresAt,
@@ -305,6 +320,19 @@ export class ComputerUpgradeProgressStore {
       workspaces,
       ...(reconnectUntil === undefined ? {} : { reconnectUntil }),
     };
+  }
+
+  async hasEvidenceMany(attempts: readonly UpgradeAttempt[]) {
+    if (!attempts.length) return [];
+    const records = await this.persistence.readMany(attempts.map((attempt) => this.key(attempt)));
+    return records.map((raw) => {
+      if (raw === null) return false;
+      try {
+        return hasProgressEvidence(JSON.parse(raw) as Record);
+      } catch {
+        return false;
+      }
+    });
   }
 
   private async update(attempt: UpgradeAttempt, apply: (record: Record, now: number) => Mutation) {
