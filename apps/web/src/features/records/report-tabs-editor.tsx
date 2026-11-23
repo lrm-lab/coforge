@@ -418,6 +418,7 @@ export function ReportTabsEditor({
               placeholder={placeholder}
               className="report-sections min-h-[55vh] pb-[45vh]"
               editable={editable}
+              debounceMs={editableTabs ? 0 : undefined}
               onUploadFile={onUploadFile}
               onUpdate={updateMarkdown}
               onBlur={onBlur}

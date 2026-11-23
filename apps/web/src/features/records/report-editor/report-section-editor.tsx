@@ -11,6 +11,7 @@ export type ReportSectionEditorProps = {
   placeholder?: string;
   className?: string;
   editable?: boolean;
+  debounceMs?: number;
   onUploadFile?: (file: File) => Promise<UploadResult | null>;
   editorRef?: Ref<ContentEditorRef>;
 };
@@ -22,6 +23,7 @@ export function ReportSectionEditor({
   placeholder,
   className,
   editable = true,
+  debounceMs = 150,
   onUploadFile,
   editorRef,
 }: ReportSectionEditorProps) {
@@ -34,7 +36,7 @@ export function ReportSectionEditor({
     onUploadFile,
     editable,
     showBubbleMenu: editable,
-    debounceMs: 150,
+    debounceMs,
     sectionGaps: true,
     sectionGapPlaceholder: m.records_section_placeholder(),
   };
