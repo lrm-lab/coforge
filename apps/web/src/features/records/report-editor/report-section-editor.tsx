@@ -12,14 +12,9 @@ export type ReportSectionEditorProps = {
   className?: string;
   editable?: boolean;
   onUploadFile?: (file: File) => Promise<UploadResult | null>;
-  /** Lets the owner replace the text after the user has typed, which `defaultValue` cannot. */
   editorRef?: Ref<ContentEditorRef>;
 };
 
-/**
- * Weekly-report TipTap body. Statically imported from `/records/$recordId`
- * (`ssr: "data-only"`), matching a client-only eager mount.
- */
 export function ReportSectionEditor({
   defaultValue,
   onUpdate,
