@@ -1,11 +1,16 @@
-import { SpanStatusCode, context, trace, type Attributes, type Span } from "@opentelemetry/api";
+import { SpanStatusCode, context, trace, type Attributes } from "@opentelemetry/api";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { BasicTracerProvider, BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 
 type MessageSendTrace = {
-  measure<T>(name: string, operation: (span: Span) => Promise<T>): Promise<T>;
+  measure<T>(name: string, operation: () => Promise<T>): Promise<T>;
   event(name: string, attributes?: Attributes): void;
+};
+
+const disabledTrace: MessageSendTrace = {
+  measure: async (_name, operation) => operation(),
+  event: () => {},
 };
 
 let initialization: Promise<boolean> | undefined;
@@ -42,18 +47,7 @@ export async function withMessageSendTrace<T>(
   attributes: Attributes,
   operation: (trace: MessageSendTrace) => Promise<T>,
 ): Promise<T> {
-  if (!(await initializeTracing()))
-    return operation({
-      measure: async (_name, nestedOperation) => {
-        const span = trace.getTracer("coforge-web").startSpan("disabled");
-        try {
-          return await nestedOperation(span);
-        } finally {
-          span.end();
-        }
-      },
-      event: () => {},
-    });
+  if (!(await initializeTracing())) return operation(disabledTrace);
 
   const tracer = trace.getTracer("coforge-web", "1.0.0");
   const root = tracer.startSpan("message.send", {
@@ -64,7 +58,7 @@ export async function withMessageSendTrace<T>(
     async measure(name, nestedOperation) {
       const child = tracer.startSpan(name, undefined, rootContext);
       try {
-        return await nestedOperation(child);
+        return await nestedOperation();
       } finally {
         child.end();
       }
