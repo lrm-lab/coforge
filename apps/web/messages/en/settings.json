@@ -221,7 +221,7 @@
   "settings_password_save": "Save",
   "settings_password_updated": "Password updated",
   "settings_password_updated_unverified": "Password set. Sign in again if asked.",
-  "settings_password_need_contact": "Add an email or a phone number first; you'll use it to receive codes.",
+  "settings_password_need_contact": "You need a verified email or phone number to receive verification codes.",
   "settings_password_verify_github": "Verify with GitHub",
   "settings_password_bind_destination": "Email or phone number",
   "settings_password_bind_confirm": "Confirm",

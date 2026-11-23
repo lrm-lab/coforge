@@ -221,7 +221,7 @@
   "settings_password_save": "保存",
   "settings_password_updated": "密码已更新",
   "settings_password_updated_unverified": "密码已设置，如果要求重新登录请重新登录",
-  "settings_password_need_contact": "请先绑定邮箱或手机号，用来接收验证码",
+  "settings_password_need_contact": "需要已验证的邮箱或手机号来接收验证码",
   "settings_password_verify_github": "通过 GitHub 验证",
   "settings_password_bind_destination": "邮箱或手机号",
   "settings_password_bind_confirm": "确认",
