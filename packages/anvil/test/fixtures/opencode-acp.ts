@@ -181,7 +181,7 @@ for await (const line of console) {
         lines.push(
           JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { stopReason: "end_turn" } }),
         );
-        process.stdout.write(`${lines.join("\n")}\n`);
+        await Bun.write(Bun.stdout, `${lines.join("\n")}\n`);
         process.exit(0);
       }
       if (text === "crash") {
