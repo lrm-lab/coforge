@@ -1,3 +1,4 @@
+import { InstallerRecoveryAdvice } from "./installer-recovery-advice";
 import { useState, type ReactNode } from "react";
 import {
   AlertTriangle,
@@ -49,6 +50,7 @@ export function ComputerUpgradeSlot({
   canUpgrade,
   computerName,
   cloud,
+  localComputerId,
   online,
   upgradeInFlight = false,
   onUpgrade,
@@ -57,6 +59,7 @@ export function ComputerUpgradeSlot({
   canUpgrade: boolean;
   computerName: string;
   cloud: boolean;
+  localComputerId?: string;
   online: boolean;
   /** Any upgrade already running on this Computer, on either row: one runs at a time. */
   upgradeInFlight?: boolean;
@@ -65,6 +68,12 @@ export function ComputerUpgradeSlot({
   const release = useComputerRelease(slotRelease(slot));
   const retry = canUpgrade && slot.state === "failed" && slot.offer !== undefined;
   const whatsNew = release && <ComputerReleaseNotesLink release={release} />;
+  const recoveryAdvice = canUpgrade && localComputerId && online && !upgradeInFlight && (
+    <InstallerRecoveryAdvice
+      computerId={localComputerId}
+      command={<UpgradeCommand command="coforge-computer repair" />}
+    />
+  );
 
   if (slot.state === "progress") {
     return (
@@ -77,6 +86,7 @@ export function ComputerUpgradeSlot({
         online={online}
         upgradeInFlight={upgradeInFlight}
         whatsNew={whatsNew}
+        recoveryAdvice={recoveryAdvice}
         onUpgrade={onUpgrade}
       />
     );
@@ -153,6 +163,7 @@ export function ComputerUpgradeSlot({
             {failure.errorId && (
               <p className="mt-2 text-xs">{m.error_reference({ errorId: failure.errorId })}</p>
             )}
+            {retry && recoveryAdvice}
           </>
         }
         actions={
@@ -216,11 +227,16 @@ export function ComputerUpgradeSlot({
         </span>
       }
       description={
-        !online
-          ? m.computer_upgrade_offline()
-          : cloud
-            ? m.computer_cloud_image_update_available_body()
-            : m.computer_upgrade_available_body({ name: computerName })
+        !online ? (
+          m.computer_upgrade_offline()
+        ) : cloud ? (
+          m.computer_cloud_image_update_available_body()
+        ) : (
+          <>
+            {m.computer_upgrade_available_body({ name: computerName })}
+            {recoveryAdvice}
+          </>
+        )
       }
       actions={
         <>

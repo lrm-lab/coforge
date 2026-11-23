@@ -5,6 +5,7 @@ import type { DaemonConnectionTiming } from "./daemon-connection-timing";
 import type { InboundQuietness } from "./connection-liveness";
 import type { ListenerSlot } from "./listener-slot";
 import { encodeDaemonConnectionStatus } from "./connection-status-payload";
+import { InstallerRecoveryReporter } from "./installer-recovery-reporter";
 import { readStatusLatestVersion } from "./daemon-ready-send";
 
 const AGENT_STATUS_REFRESH_MS = 30_000;
@@ -31,10 +32,14 @@ export type DaemonStatusRefreshDeps = {
 export class DaemonStatusRefresh {
   #agentTimer: ReturnType<typeof setInterval> | undefined;
   #computerTimer: unknown;
+  #installerRecovery: InstallerRecoveryReporter | undefined;
 
   constructor(private readonly deps: DaemonStatusRefreshDeps) {}
 
   start(config: DaemonConnectionConfig): void {
+    this.#installerRecovery = config.readInstallerRecovery
+      ? new InstallerRecoveryReporter(config.readInstallerRecovery)
+      : undefined;
     if (!this.#agentTimer) {
       this.#agentTimer = setInterval(() => {
         const client = this.deps.client();
@@ -54,12 +59,18 @@ export class DaemonStatusRefresh {
       if (!client) return this.deps.reconnect();
       if (!this.deps.connected()) return;
       this.deps.inboundQuiet.check(client, config);
+      const recovery = this.#installerRecovery;
       void client
-        .rpc(DAEMON_CONNECTION_STATUS_METHOD, encodeDaemonConnectionStatus(config))
+        .rpc(
+          DAEMON_CONNECTION_STATUS_METHOD,
+          encodeDaemonConnectionStatus(config, recovery?.observation()),
+        )
         .then((reply) => {
           // An answered round trip is the only inbound traffic a Workspace with nothing to say
           // produces, so it is what keeps a legitimately quiet connection alive.
           if (client === this.deps.client()) this.deps.inboundQuiet.markInbound();
+          if (client === this.deps.client() && recovery === this.#installerRecovery)
+            void recovery?.accept(reply);
           const version = readStatusLatestVersion(reply);
           if (version) this.deps.latestComputerVersion.current?.(version);
         })
@@ -75,6 +86,7 @@ export class DaemonStatusRefresh {
   }
 
   stop(): void {
+    this.#installerRecovery = undefined;
     if (this.#agentTimer) clearInterval(this.#agentTimer);
     this.#agentTimer = undefined;
     if (this.#computerTimer !== undefined) {

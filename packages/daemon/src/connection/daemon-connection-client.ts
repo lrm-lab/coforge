@@ -116,6 +116,7 @@ export interface DaemonConnectionConfig {
   workerInstanceId?: string;
   startedAt?: number;
   serverHttpUrl?: string;
+  readInstallerRecovery?(): Promise<boolean>;
   requestRestart?(requestId: string): Promise<void>;
   requestUpgrade?(
     requestId: string,

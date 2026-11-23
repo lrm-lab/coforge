@@ -199,6 +199,7 @@
   "computer_upgrade_succeeded_toast": "已升级到 {version}",
   "computer_upgrade_available_title": "可升级到 {version}",
   "computer_upgrade_available_body": "{name} 会重启连接服务，上面的 Agent 会短暂断开。",
+  "computer_upgrade_installer_recovery": "上次升级尚未恢复。请在这台设备的普通终端运行",
   "computer_upgrade_available_notice": "有新版本 v{version}",
   "computer_upgrade_whats_new": "更新内容",
   "computer_upgrade_whats_new_title": "v{version} 更新内容",

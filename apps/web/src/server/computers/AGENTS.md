@@ -59,6 +59,10 @@ These rules apply to `src/server/computers/`.
   `confirm-key`) authenticate through `authenticateLinkedDaemon` and accept
   only `kind: "computer"`; the daemon's other routes accept either key during
   the transition.
+- `computer-installer-recovery.server.ts` keeps advisory installer observations on the
+  authenticated ready identity with a connection sequence and a short, single-use challenge.
+  Only the linked local Computer owner can read its current advice. The advice never gates
+  an upgrade or substitutes for an installer result.
 - `computer-lifecycle-memory.server.ts` is the only store of a shutdown
   reason and of the last daemon instance whose return was announced.
 - `computer-workspace-files.server.ts` requests one local Daemon workspace scan

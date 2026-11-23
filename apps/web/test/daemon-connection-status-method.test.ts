@@ -86,3 +86,39 @@ test("a status reply with no latest version answers an empty body", async () => 
   );
   expect(JSON.parse(new TextDecoder().decode(reply as Uint8Array))).toEqual({});
 });
+
+test("a failed recovery lookup runs alongside the version lookup and preserves the reply", async () => {
+  const version = Promise.withResolvers<string>();
+  const started = Promise.withResolvers<void>();
+  let observed = false;
+  const method = createDaemonConnectionStatusMethod(
+    { put: async () => {}, get: async () => true, getMany: async () => [] },
+    undefined,
+    undefined,
+    () => {
+      started.resolve();
+      return version.promise;
+    },
+    undefined,
+    {
+      observe: async () => {
+        observed = true;
+        throw new Error("recovery store unavailable");
+      },
+    },
+  );
+  const principal = { userId: "user-1", workspaceId: "workspace-1", computerId: "computer-1" };
+  const reply = method(new TextEncoder().encode(JSON.stringify({ ...principal, online: true })), {
+    principal,
+    client: "client-current",
+  });
+  try {
+    await started.promise;
+    expect(observed).toBe(true);
+  } finally {
+    version.resolve("0.1.26");
+  }
+  expect(JSON.parse(new TextDecoder().decode((await reply) as Uint8Array))).toEqual({
+    latestComputerVersion: "0.1.26",
+  });
+});

@@ -111,6 +111,7 @@ export function ComputerDetailStats({
           canUpgrade={canUpgrade}
           computerName={label}
           cloud={false}
+          localComputerId={isCloud ? undefined : computer.id}
           online={computer.online}
           upgradeInFlight={upgradeInFlight}
           onUpgrade={onRuntimeUpgrade}

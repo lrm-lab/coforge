@@ -1,6 +1,7 @@
 import { utf8Decoder, utf8Encoder } from "@lrm/coforge-sdk/internal";
 import type { RedisComputerUpgradeStore } from "#src/server/computers/computer-upgrade-store.server";
 import { getComputerStatusCache, type ComputerStatusCache } from "./computer-status.server";
+import type { installerRecoveryRpc } from "./installer-recovery-rpc.server";
 import type { CentrifugoRpcMethod } from "./rpc-handler.server";
 
 export function createDaemonConnectionStatusMethod(
@@ -23,6 +24,7 @@ export function createDaemonConnectionStatusMethod(
       identity?: { workerInstanceId: string; startedAt: number },
     ): Promise<void>;
   },
+  installerRecovery?: Pick<ReturnType<typeof installerRecoveryRpc>, "observe">,
 ): CentrifugoRpcMethod {
   return async (payload, metadata) => {
     const request = JSON.parse(utf8Decoder.decode(payload)) as {
@@ -31,6 +33,7 @@ export function createDaemonConnectionStatusMethod(
       online?: boolean;
       workerInstanceId?: string;
       startedAt?: number;
+      installerRecoveryObservation?: unknown;
     };
     if (
       request.workspaceId !== metadata.principal.workspaceId ||
@@ -57,6 +60,9 @@ export function createDaemonConnectionStatusMethod(
         computerId: request.computerId,
       });
     }
+    const recovery = installerRecovery
+      ?.observe({ ...request, online: request.online }, metadata)
+      .catch(() => undefined);
     const version = await latestComputerVersion?.().catch(() => null);
     if (request.online)
       await releaseState
@@ -68,6 +74,11 @@ export function createDaemonConnectionStatusMethod(
             : undefined,
         )
         .catch(() => {});
-    return utf8Encoder.encode(JSON.stringify(version ? { latestComputerVersion: version } : {}));
+    return utf8Encoder.encode(
+      JSON.stringify({
+        ...(version ? { latestComputerVersion: version } : {}),
+        installerRecoveryChallenge: await recovery,
+      }),
+    );
   };
 }

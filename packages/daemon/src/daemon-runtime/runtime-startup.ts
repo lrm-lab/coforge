@@ -110,6 +110,7 @@ export type RuntimeStartupPorts = {
   ): Promise<Pick<AgentWorkspaceDeleteResult, "status">>;
   sendPiChatFrame?(frame: PiChatFrame): Promise<void>;
   lifecycle: {
+    readInstallerRecovery?(): Promise<boolean>;
     requestRestart?(requestId: string): Promise<void>;
     requestUpgrade?(
       requestId: string,
@@ -367,6 +368,7 @@ export class RuntimeStartup {
         startedAt: ports.startedAtMs,
         serverHttpUrl: connection.serverHttpUrl,
         requestRestart: ports.lifecycle.requestRestart,
+        readInstallerRecovery: ports.lifecycle.readInstallerRecovery,
         requestUpgrade: upgradeProgress?.requestUpgrade ?? ports.lifecycle.requestUpgrade,
         signal,
       });

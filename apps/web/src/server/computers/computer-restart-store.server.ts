@@ -61,14 +61,14 @@ export class RedisComputerRestartStore implements ComputerRestartStore {
   ) {}
 
   async identity(scope: Scope): Promise<ComputerProcessIdentity | undefined> {
-    return this.parseIdentity(await this.redis.get(this.identityKey(scope)));
+    return this.parseIdentity(await this.redis.get(computerRestartIdentityKey(scope)));
   }
 
   async begin(scope: Scope, requestId: string) {
     const key = this.requestKey(scope, requestId);
     const existing = this.parseRestart(await this.redis.get(key));
     if (existing) return { status: this.publicStatus(existing), created: false };
-    const current = this.parseIdentity(await this.redis.get(this.identityKey(scope)));
+    const current = this.parseIdentity(await this.redis.get(computerRestartIdentityKey(scope)));
     // No process has reported in: nothing is running there to restart.
     if (!current) throw new AppError("COMPUTER_OFFLINE");
     const record: StoredRestart = {
@@ -143,7 +143,7 @@ export class RedisComputerRestartStore implements ComputerRestartStore {
     await this.redis.send("EVAL", [
       STORE_NEWER_IDENTITY,
       "1",
-      this.identityKey(scope),
+      computerRestartIdentityKey(scope),
       JSON.stringify(identity),
     ]);
   }
@@ -188,9 +188,6 @@ export class RedisComputerRestartStore implements ComputerRestartStore {
     }
   }
 
-  private identityKey(scope: Scope) {
-    return `${this.scopeKey(scope)}:identity`;
-  }
   private requestKey(scope: Scope, requestId: string) {
     return `${this.scopeKey(scope)}:request:${encodeURIComponent(requestId)}`;
   }
@@ -202,6 +199,10 @@ export class RedisComputerRestartStore implements ComputerRestartStore {
       version: "v1",
     });
   }
+}
+
+export function computerRestartIdentityKey(scope: Scope) {
+  return `${workspaceRedisKey({ ...scope, name: "restart", version: "v1" })}:identity`;
 }
 
 let singleton: ComputerRestartStore | undefined;

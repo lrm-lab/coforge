@@ -1,4 +1,5 @@
 import { errorType } from "#src/server/errors/error-type.server";
+import type { installerRecoveryRpc } from "./installer-recovery-rpc.server";
 import { decodeDaemonRuntimeShutdown, type DaemonRuntimeShutdown } from "@lrm/coforge-sdk/internal";
 import type { ComputerLifecycleActivity } from "#src/server/agents/computer-lifecycle-activity.server";
 import { requireDaemonPrincipal } from "./daemon-rpc-principal.server";
@@ -15,6 +16,7 @@ export function createDaemonRuntimeShutdownMethod(
     workspaceId: string;
     computerId: string;
   }) => Promise<string | undefined>,
+  closeInstallerRecovery?: ReturnType<typeof installerRecoveryRpc>["close"],
 ): CentrifugoRpcMethod {
   const refuse = (
     error: CentrifugoRpcError,
@@ -56,6 +58,7 @@ export function createDaemonRuntimeShutdownMethod(
           notice,
         );
       await lifecycle.shutdown(scope, { requestId: notice.requestId, reason: notice.reason });
+      await closeInstallerRecovery?.(notice, metadata).catch(() => {});
       return new Uint8Array();
     } catch (error) {
       console.error(

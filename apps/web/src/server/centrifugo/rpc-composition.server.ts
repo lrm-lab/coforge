@@ -1,3 +1,4 @@
+import { installerRecoveryRpc } from "./installer-recovery-rpc.server";
 import { daemonCapabilityLeases } from "./capability-composition.server";
 import { readLatestComputerVersion } from "#src/server/computers/latest-computer-version.server";
 import { resolveReleaseFeedUrl } from "#src/server/install/install-script.server";
@@ -181,6 +182,7 @@ async function requireAuthenticatedCentrifugoUser(
   const workspaceId = request.meta?.workspace_id;
   const computerId = request.meta?.computer_id;
   const workerInstanceId = request.meta?.worker_instance_id;
+  const sequence = request.meta?.installer_recovery_connection_sequence;
   if (
     request.user &&
     typeof workspaceId === "string" &&
@@ -193,6 +195,9 @@ async function requireAuthenticatedCentrifugoUser(
       workspaceId,
       computerId,
       ...(typeof workerInstanceId === "string" && workerInstanceId && { workerInstanceId }),
+      ...(typeof sequence === "number" && Number.isSafeInteger(sequence) && sequence > 0
+        ? { connectionSequence: sequence }
+        : {}),
     };
   // User-facing calls use Centrifugo's verified user subject. Daemon-scoped
   // methods still fail closed because their required claims are empty.
@@ -302,6 +307,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
         [DAEMON_RUNTIME_SHUTDOWN_METHOD]: createDaemonRuntimeShutdownMethod(
           computerLifecycle,
           async (scope) => (await getComputerRestartStore().identity?.(scope))?.workerInstanceId,
+          installerRecoveryRpc().close,
         ),
         ...reminderCallbackMethods(
           createReminderFireMethod(reminders),
@@ -320,6 +326,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
             return feedUrl ? readLatestComputerVersion(feedUrl) : Promise.resolve(null);
           },
           getComputerReleaseState(),
+          installerRecoveryRpc(),
         ),
         ...computerRuntimeMethods(db),
         [DAEMON_RUNTIME_USAGE_SCAN_RESULT_METHOD]: createDaemonRuntimeUsageScanResultMethod(),

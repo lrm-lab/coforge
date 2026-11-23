@@ -215,6 +215,7 @@
   "computer_upgrade_succeeded_toast": "Upgraded to {version}",
   "computer_upgrade_available_title": "{version} is available",
   "computer_upgrade_available_body": "{name} restarts its daemon, so its Agents disconnect for a moment.",
+  "computer_upgrade_installer_recovery": "An earlier update still needs recovery. In a terminal on this Computer, run",
   "computer_upgrade_available_notice": "v{version} available",
   "computer_upgrade_whats_new": "What's new",
   "computer_upgrade_whats_new_title": "What's new in v{version}",

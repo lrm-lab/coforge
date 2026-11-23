@@ -18,6 +18,7 @@ import { DaemonConnectionStoppedError } from "#src/connection/daemon-connection-
 import { COFORGE_DAEMON_VERSION } from "#src/version";
 import { LocalDaemonLauncher } from "#src/daemon-host/launcher";
 import { configureDaemonLogging } from "#src/platform/daemon-logging";
+import { installerRecoveryRequired } from "#src/platform/installer-recovery-observation";
 import { installerJournalExists } from "#src/platform/installer-journal";
 import { stopLaunchdAgents } from "#src/platform/launchd-process";
 import { captureStopSignal } from "#src/platform/stop-signal";
@@ -240,6 +241,7 @@ export async function runDaemon(
                 : undefined,
               connectionRefused: (reason) => void parking.park(reason),
               installerJournalExists: () => installerJournalExists(),
+              readInstallerRecovery: () => installerRecoveryRequired(),
               requestUpgrade: (requestId, expectedVersion, releaseChannel) =>
                 requestWorkspaceUpgrade(
                   config,

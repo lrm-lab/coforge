@@ -14,6 +14,7 @@ import type { ComputerRestartStore } from "#src/server/computers/computer-restar
 import type { RedisComputerUpgradeStore } from "#src/server/computers/computer-upgrade-store.server";
 import { errorType } from "#src/server/errors/error-type.server";
 import { requireDaemonPrincipal } from "./daemon-rpc-principal.server";
+import type { installerRecoveryRpc } from "./installer-recovery-rpc.server";
 import type { CentrifugoRpcMethod } from "./rpc-handler.server";
 
 /** What a daemon's ready updates, each optional so a test composes only the step it covers. */
@@ -27,6 +28,7 @@ export type DaemonRuntimeReadyPorts = {
     ): Promise<void>;
   };
   restarts?: ComputerRestartStore;
+  installerRecovery?: Pick<ReturnType<typeof installerRecoveryRpc>, "ready">;
   capabilities?: {
     record(
       workspaceId: string,
@@ -80,6 +82,7 @@ export const createDaemonRuntimeReadyMethod =
   ({
     recovery,
     restarts,
+    installerRecovery,
     capabilities,
     reminderRecovery,
     reminderDue,
@@ -236,6 +239,7 @@ export const createDaemonRuntimeReadyMethod =
               issueUpgradeReadyReceipt?.(request, metadata.principal.workerInstanceId),
             )
           : undefined,
+        installerRecovery?.ready(request, metadata).catch(() => {}),
       ]);
       // This server takes the `accepted` Agent control phase; only a daemon that advertised
       // `agent-control-accepted:v1` is told so — an older one ignores the field anyway, and a

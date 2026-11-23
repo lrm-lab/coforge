@@ -427,6 +427,41 @@ describe("Centrifugo Connect Proxy", () => {
     });
   });
 
+  test("assigns observation ordinals after authentication and connects normally if allocation fails", async () => {
+    const keys = repository();
+    const token = await createDaemonApiKeyFactory(keys).create({
+      principal: { userId: "user-1" },
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+    });
+    const connect = (nextInstallerRecoveryConnection: () => Promise<number>) =>
+      authenticateCentrifugoConnect(
+        new Request("http://backend", {
+          method: "POST",
+          headers: { "x-coforge-daemon-instance-id": "worker" },
+          body: JSON.stringify({ data: { daemonApiKey: token } }),
+        }),
+        {
+          daemonApiKeys: keys,
+          computerBelongsToWorkspace: async () => true,
+          revocationReason: async () => undefined,
+          nextInstallerRecoveryConnection,
+        },
+      );
+    const numbered = await connect(async () => 12);
+    expect(await numbered.json()).toMatchObject({
+      result: { meta: { installer_recovery_connection_sequence: 12 } },
+    });
+    const available = await connect(() => Promise.reject(new Error("Redis unavailable")));
+    expect(available.status).toBe(200);
+    expect(await available.json()).toMatchObject({
+      result: {
+        meta: { workspace_id: "workspace-1", computer_id: "computer-1" },
+        subs: { "daemon:workspace-1:computer-1": {} },
+      },
+    });
+  });
+
   test("connects when presence cannot be read, so duplicate protection never takes a Daemon offline", async () => {
     const keys = repository();
     keys.token = await createDaemonApiKeyFactory(keys).create({

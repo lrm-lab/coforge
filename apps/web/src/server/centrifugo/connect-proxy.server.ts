@@ -1,3 +1,4 @@
+import { nextInstallerRecoveryConnection } from "#src/server/computers/computer-installer-recovery.server";
 import {
   DAEMON_CONNECT_REJECTION_CODES,
   DAEMON_DUPLICATE_CONNECTION_DISCONNECT,
@@ -111,6 +112,7 @@ export type CentrifugoConnectDependencies = {
    * tests; production always wires it. A failed read answers `undefined` and the connect
    * proceeds: duplicate protection must never take a working Daemon offline. */
   connectedDaemons?(channel: string): Promise<(string | undefined)[] | undefined>;
+  nextInstallerRecoveryConnection?(): Promise<number>;
 };
 
 let centrifugoApi: ReturnType<typeof createCentrifugoServerApi> | undefined;
@@ -128,6 +130,7 @@ export function centrifugoConnectDependencies(db: PrismaClient): CentrifugoConne
       ),
     revocationReason: (apiKeyHash) => revocations.reasonFor(apiKeyHash),
     connectRefusals: getComputerConnectRefusals(),
+    nextInstallerRecoveryConnection,
     connectedDaemons: async (channel) => {
       try {
         centrifugoApi ??= createCentrifugoServerApi();
@@ -196,6 +199,9 @@ export async function authenticateCentrifugoConnect(
     const connected = await dependencies.connectedDaemons?.(channel).catch(() => undefined);
     if (connected !== undefined && connected.some((other) => other !== instanceId))
       return Response.json({ disconnect: DAEMON_DUPLICATE_CONNECTION_DISCONNECT });
+    const sequence = instanceId
+      ? await dependencies.nextInstallerRecoveryConnection?.().catch(() => undefined)
+      : undefined;
     return Response.json({
       result: {
         user: principal.userId,
@@ -206,6 +212,7 @@ export async function authenticateCentrifugoConnect(
           workspace_id: principal.workspaceId,
           computer_id: principal.computerId,
           ...(instanceId && { worker_instance_id: instanceId }),
+          ...(sequence !== undefined && { installer_recovery_connection_sequence: sequence }),
         },
         subs: {
           [`daemon:${principal.workspaceId}:${principal.computerId}`]: {},

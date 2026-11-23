@@ -25,4 +25,5 @@ export type DaemonRuntimeLifecycle = {
   connectionRefused?(reason: DaemonConnectRejectionReason): void;
   /** Whether an installer upgrade is in flight. */
   installerJournalExists?(): boolean;
+  readInstallerRecovery?(): Promise<boolean>;
 };

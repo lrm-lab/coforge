@@ -1,3 +1,4 @@
+import { installerRecoveryRpc } from "./installer-recovery-rpc.server";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { WorkspaceAgentRecovery } from "#src/server/agents/agent-runtime-control.server";
@@ -61,6 +62,7 @@ export function daemonRuntimeReadyPorts(input: {
       createAgentConfigPush(centrifugo),
     ),
     restarts: getComputerRestartStore(),
+    installerRecovery: installerRecoveryRpc(),
     capabilities: input.capabilityLeases,
     reminderDue: {
       ready: async (workspaceId, computerId, capabilities, identity) => {

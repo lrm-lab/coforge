@@ -22,6 +22,7 @@ export function ComputerUpgradeProgressSlot({
   online,
   upgradeInFlight,
   whatsNew,
+  recoveryAdvice,
   onUpgrade,
 }: {
   progress: ComputerUpgradeProgress;
@@ -32,6 +33,7 @@ export function ComputerUpgradeProgressSlot({
   online: boolean;
   upgradeInFlight: boolean;
   whatsNew?: ReactNode;
+  recoveryAdvice?: ReactNode;
   onUpgrade: () => void;
 }) {
   const [now, setNow] = useState(() => Date.now());
@@ -85,6 +87,7 @@ export function ComputerUpgradeProgressSlot({
         <div>
           <p className="font-medium text-primary">{view.headline}</p>
           <p className="mt-0.5 text-tertiary">{view.detail}</p>
+          {showRetry && recoveryAdvice}
           <ol className="mt-3 flex flex-col gap-2 text-sm">
             {view.steps.map((step) => (
               <ProgressStepRow key={step.id} step={step} />
