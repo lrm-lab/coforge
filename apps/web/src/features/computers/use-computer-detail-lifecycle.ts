@@ -4,9 +4,14 @@ import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useAppToast } from "#src/components/ui/toast";
 import { m } from "#src/paraglide/messages";
 import { runComputerRestart, type ComputerRestartState } from "./computer-restart-run";
+import { computerKind } from "./computer-identity";
 import { computerDetailUpgradeSlotsFor } from "./computer-detail-upgrade-slots";
 import { submitComputerDetailUpgrade } from "./computer-detail-submit-upgrade";
-import { computerUpgradeStatusQuery, upgradeRunning } from "./computer-upgrade-status";
+import {
+  computerUpgradeStatusQuery,
+  upgradeProgressActive,
+  upgradeRunning,
+} from "./computer-upgrade-status";
 import type { ComputerUpgradeRequest } from "./computer-upgrade-slot";
 import type { ComputerRestartStatus, ComputerUpgradeStatus } from "./computer.schemas";
 import {
@@ -19,10 +24,12 @@ import {
 export function useComputerDetailLifecycle(input: {
   computerId: string;
   kind: string;
+  ownedByCurrentUser?: boolean;
   computerVersion?: string | null;
   imageVersion?: string | null;
   imageUpdate?: { version: string } | null;
   upgrade?: ComputerUpgradeStatus | null;
+  upgradeProgressRequestId?: string;
   latestComputerVersion?: string | null;
   onUpgrade?: (requestId: string, target?: "runtime" | "image") => Promise<ComputerUpgradeStatus>;
   onRestart?: (requestId: string) => Promise<ComputerRestartStatus>;
@@ -43,12 +50,17 @@ export function useComputerDetailLifecycle(input: {
   const [restartState, setRestartState] = useState<ComputerRestartState>("idle");
   const [upgradeRequest, setUpgradeRequest] = useState<ComputerUpgradeRequest>({ state: "idle" });
   const storedUpgrade = input.upgrade ?? undefined;
+  const isLocalOwner = computerKind(input.kind) === "local" && Boolean(input.ownedByCurrentUser);
   const followedUpgradeId =
     upgradeRequest.state === "accepted"
       ? upgradeRequest.requestId
       : storedUpgrade && upgradeRunning(storedUpgrade)
         ? storedUpgrade.requestId
-        : null;
+        : isLocalOwner &&
+            input.upgradeProgressRequestId &&
+            (!storedUpgrade || storedUpgrade.requestId === input.upgradeProgressRequestId)
+          ? input.upgradeProgressRequestId
+          : null;
   const [liveStatus] = useQueries({
     queries: (followedUpgradeId ? [followedUpgradeId] : []).map((requestId) => ({
       ...computerUpgradeStatusQuery(input.computerId, requestId),
@@ -77,6 +89,8 @@ export function useComputerDetailLifecycle(input: {
           (storedOutcome && storedOutcome.state !== "succeeded"
             ? storedOutcome
             : { state: "idle" }));
+  const activeLiveStatus =
+    liveStatus?.isError && !liveStatus.isFetching ? undefined : liveStatus?.data;
   const slots = computerDetailUpgradeSlotsFor(
     {
       kind: input.kind,
@@ -87,7 +101,7 @@ export function useComputerDetailLifecycle(input: {
     {
       upgrade,
       request: upgradeRequest,
-      liveStatus: liveStatus?.data,
+      liveStatus: activeLiveStatus,
       storedUpgrade,
       latestComputerVersion: input.latestComputerVersion,
     },
@@ -142,7 +156,10 @@ export function useComputerDetailLifecycle(input: {
   };
   return {
     ...slots,
-    upgrading: upgrade.state === "running",
+    upgrading:
+      upgrade.state === "running" ||
+      (isLocalOwner &&
+        upgradeProgressActive(activeLiveStatus?.progress, Date.now(), activeLiveStatus?.status)),
     restartState,
     runUpgrade,
     runRestart,

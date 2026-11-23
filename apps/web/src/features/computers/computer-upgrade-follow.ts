@@ -1,4 +1,4 @@
-import type { ComputerUpgradeStatus } from "./computer.schemas";
+import type { ComputerUpgradeProgress, ComputerUpgradeStatus } from "./computer.schemas";
 
 /**
  * How long past the server's deadline an `accepted` status is still taken at its word. The server
@@ -15,6 +15,32 @@ export function upgradeRunning(
   return (
     status?.status === "accepted" &&
     Date.parse(status.expiresAt) + UPGRADE_DEADLINE_MARGIN_MS >= now
+  );
+}
+
+export function upgradeProgressActive(
+  progress: ComputerUpgradeProgress | undefined,
+  now = Date.now(),
+  statusKind?: ComputerUpgradeStatus["status"],
+): boolean {
+  if (!progress) return false;
+  if (progress.switchState === "pending")
+    return statusKind !== "failed" && now < progress.expiresAt;
+  if (progress.switchState === "target_online") return now < progress.expiresAt;
+  if (progress.switchState === "confirmed") {
+    const hasWaiting = progress.workspaces.some((row) => row.state === "waiting");
+    if (!hasWaiting) return false;
+    return progress.reconnectUntil === undefined || now < progress.reconnectUntil;
+  }
+  return false;
+}
+
+export function upgradeFollowActive(
+  status: ComputerUpgradeStatus | null | undefined,
+  now = Date.now(),
+): boolean {
+  return (
+    upgradeRunning(status, now) || upgradeProgressActive(status?.progress, now, status?.status)
   );
 }
 
@@ -36,9 +62,11 @@ export type UpgradeFollowObservation = {
  */
 export function settledUpgradeFollow(
   observation: UpgradeFollowObservation | undefined,
+  now = Date.now(),
 ): { status: ComputerUpgradeStatus | undefined } | undefined {
   if (!observation || observation.isFetching) return undefined;
   if (observation.isError) return { status: undefined };
-  if (observation.data && !upgradeRunning(observation.data)) return { status: observation.data };
+  if (observation.data && !upgradeFollowActive(observation.data, now))
+    return { status: observation.data };
   return undefined;
 }

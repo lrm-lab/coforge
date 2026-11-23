@@ -4,12 +4,20 @@ import { m } from "#src/paraglide/messages";
 import {
   UPGRADE_DEADLINE_MARGIN_MS,
   settledUpgradeFollow,
+  upgradeFollowActive,
+  upgradeProgressActive,
   upgradeRunning,
 } from "./computer-upgrade-follow";
 import type { ComputerUpgradeStatus } from "./computer.schemas";
 import { readComputerUpgradeStatus } from "./computers.functions";
 
-export { UPGRADE_DEADLINE_MARGIN_MS, settledUpgradeFollow, upgradeRunning };
+export {
+  UPGRADE_DEADLINE_MARGIN_MS,
+  settledUpgradeFollow,
+  upgradeFollowActive,
+  upgradeProgressActive,
+  upgradeRunning,
+};
 export type { UpgradeFollowObservation } from "./computer-upgrade-follow";
 
 const UPGRADE_POLL_INTERVAL_MS = 2_000;
@@ -22,7 +30,7 @@ function upgradeStatusSettled({
   data: ComputerUpgradeStatus | undefined;
   status: "pending" | "error" | "success";
 }) {
-  return status === "error" || (data !== undefined && !upgradeRunning(data));
+  return status === "error" || (data !== undefined && !upgradeFollowActive(data));
 }
 
 /**
@@ -38,6 +46,7 @@ export function computerUpgradeStatusQuery(computerId: string, requestId: string
     // An error stops the timer. The query stays invalidated, so opening Computers fetches
     // once more; the watcher keeps that in-flight read followed (`settledUpgradeFollow`).
     staleTime: (query) => (upgradeStatusSettled(query.state) ? Infinity : 0),
+    gcTime: 15 * 60_000,
   });
 }
 
@@ -59,8 +68,37 @@ export const followedComputerUpgradesQuery = queryOptions<FollowedComputerUpgrad
   gcTime: Infinity,
 });
 
+export const settledComputerUpgradesQuery = queryOptions<string[]>({
+  queryKey: ["computers", "upgrades", "settled"],
+  queryFn: skipToken,
+  staleTime: Infinity,
+  gcTime: Infinity,
+});
+
+export function isComputerUpgradeSettled(queryClient: QueryClient, requestId: string): boolean {
+  return (queryClient.getQueryData(settledComputerUpgradesQuery.queryKey) ?? []).includes(
+    requestId,
+  );
+}
+
+export function markComputerUpgradeSettled(queryClient: QueryClient, requestId: string): void {
+  const current = queryClient.getQueryData(settledComputerUpgradesQuery.queryKey) ?? [];
+  if (current.includes(requestId)) return;
+  queryClient.setQueryData(settledComputerUpgradesQuery.queryKey, [...current, requestId]);
+}
+
+export function computerUpgradeSettledToastable(status: ComputerUpgradeStatus): boolean {
+  if (status.status !== "completed" || !status.computerVersion) return false;
+  if (!status.progress) return true;
+  if (status.progress.switchState !== "confirmed") return false;
+  return status.progress.workspaces.every(
+    (row) => row.state === "restored" || row.state === "not_running",
+  );
+}
+
 /** Starts following an upgrade, or marks one already followed as started here. */
 export function followComputerUpgrade(queryClient: QueryClient, upgrade: FollowedComputerUpgrade) {
+  if (!upgrade.startedHere && isComputerUpgradeSettled(queryClient, upgrade.requestId)) return;
   const current = queryClient.getQueryData(followedComputerUpgradesQuery.queryKey) ?? [];
   const known = current.find(({ requestId }) => requestId === upgrade.requestId);
   if (known && (known.startedHere || !upgrade.startedHere)) return;
@@ -80,6 +118,16 @@ export function unfollowComputerUpgrade(queryClient: QueryClient, requestId: str
     followedComputerUpgradesQuery.queryKey,
     current.filter((followed) => followed.requestId !== requestId),
   );
+  return true;
+}
+
+export function settleComputerUpgradeFollow(
+  queryClient: QueryClient,
+  requestId: string,
+  status: ComputerUpgradeStatus | undefined,
+): boolean {
+  if (!unfollowComputerUpgrade(queryClient, requestId) || !status) return false;
+  markComputerUpgradeSettled(queryClient, requestId);
   return true;
 }
 

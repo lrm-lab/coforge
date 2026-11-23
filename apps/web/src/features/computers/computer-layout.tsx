@@ -36,6 +36,7 @@ export type ComputerListItem = ComputerIdentity &
     imageVersion?: string | null;
     imageUpdate?: { version: string } | null;
     upgrade?: ComputerUpgradeStatus | null;
+    upgradeProgressRequestId?: string;
     creator?: {
       username: string;
       displayName: string | null;
@@ -48,12 +49,14 @@ export function ComputerLayout({
   selectedComputerId,
   onAdd,
   latestComputerVersions,
+  upgradingComputerIds,
   children,
 }: {
   computers: ComputerListItem[];
   selectedComputerId?: string;
   onAdd: () => void;
   latestComputerVersions?: ReadonlyMap<string, string | null>;
+  upgradingComputerIds?: ReadonlySet<string>;
   children: ReactNode;
 }) {
   const workspaceSlug = useWorkspaceSlug();
@@ -119,7 +122,11 @@ export function ComputerLayout({
                         computer,
                         latestComputerVersions?.get(computer.releaseChannel ?? "latest"),
                       )}
-                      upgrading={computer.ownedByCurrentUser && upgradeRunning(computer.upgrade)}
+                      upgrading={
+                        computer.ownedByCurrentUser &&
+                        (upgradeRunning(computer.upgrade) ||
+                          Boolean(upgradingComputerIds?.has(computer.id)))
+                      }
                     />
                     <span className="flex min-w-0 flex-1 flex-col gap-1">
                       <span className="truncate text-sm font-semibold">

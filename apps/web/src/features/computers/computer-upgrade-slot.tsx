@@ -22,6 +22,7 @@ import { m } from "#src/paraglide/messages";
 import { cloudImageUpdateConsequences } from "./cloud-image-update";
 import { ComputerReleaseNotesLink, useComputerRelease } from "./computer-release-notes";
 import { isPrereleaseVersion } from "./computer-identity";
+import { ComputerUpgradeProgressSlot } from "./computer-upgrade-progress-slot";
 import {
   upgradeSlotState,
   type ComputerUpgradeRequest,
@@ -36,6 +37,7 @@ export { upgradeSlotState };
 function slotRelease(slot: ComputerUpgradeSlotState): string | undefined {
   if (slot.state === "available") return slot.offer;
   if (slot.state === "upgrading") return slot.version;
+  if (slot.state === "progress") return slot.offer ?? slot.version;
   return slot.offer ?? slot.version;
 }
 
@@ -63,6 +65,22 @@ export function ComputerUpgradeSlot({
   const release = useComputerRelease(slotRelease(slot));
   const retry = canUpgrade && slot.state === "failed" && slot.offer !== undefined;
   const whatsNew = release && <ComputerReleaseNotesLink release={release} />;
+
+  if (slot.state === "progress") {
+    return (
+      <ComputerUpgradeProgressSlot
+        progress={slot.progress}
+        status={slot.status}
+        failure={slot.failure}
+        canUpgrade={canUpgrade}
+        canRetryOffer={slot.offer !== undefined}
+        online={online}
+        upgradeInFlight={upgradeInFlight}
+        whatsNew={whatsNew}
+        onUpgrade={onUpgrade}
+      />
+    );
+  }
 
   if (slot.state === "upgrading")
     return (

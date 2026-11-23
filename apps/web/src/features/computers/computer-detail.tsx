@@ -127,10 +127,12 @@ export function ComputerDetail({
   } = useComputerDetailLifecycle({
     computerId: computer.id,
     kind: computer.kind,
+    ownedByCurrentUser: computer.ownedByCurrentUser,
     computerVersion: computer.computerVersion,
     imageVersion: computer.imageVersion,
     imageUpdate: computer.imageUpdate,
     upgrade: computer.upgrade,
+    upgradeProgressRequestId: computer.upgradeProgressRequestId,
     latestComputerVersion,
     onUpgrade,
     onRestart,

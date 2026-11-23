@@ -1,5 +1,6 @@
 import { computerKind } from "./computer-identity";
 import type { ComputerUpgradeStatus, ComputerUpgradeTarget } from "./computer.schemas";
+import { resolveProgressComputerVersion } from "./computer-upgrade-progress-view";
 import { upgradeSlotState, type ComputerUpgradeRequest } from "./computer-upgrade-slot-state";
 import { computerUpgradeTarget } from "./computer-upgrade-target";
 import type { ComputerUpgradeOutcome } from "./upgrade-failure";
@@ -12,6 +13,7 @@ export function computerDetailUpgradeSlots(input: {
   imageUpdate?: { version: string } | null;
   upgrade: ComputerUpgradeOutcome | { state: "idle" };
   request: ComputerUpgradeRequest;
+  liveStatus?: ComputerUpgradeStatus;
   /**
    * From the server status when this panel has no local request (reload / another viewer).
    * A cloud runtime upgrade must not paint the Image row.
@@ -25,14 +27,23 @@ export function computerDetailUpgradeSlots(input: {
     (input.request.state !== "idle" ? input.request.target : undefined) ?? input.upgradeTarget;
   const runtimeSucceeded = owner === "runtime" && upgrade.state === "succeeded";
   const imageSucceeded = owner === "image" && upgrade.state === "succeeded";
+  const progressVersion = !isCloud
+    ? resolveProgressComputerVersion({
+        computerVersion: input.computerVersion,
+        liveStatus: input.liveStatus,
+      })
+    : undefined;
   const currentVersion =
-    upgrade.state === "succeeded" && (!isCloud || runtimeSucceeded)
-      ? upgrade.version
-      : input.computerVersion;
+    progressVersion !== undefined
+      ? progressVersion
+      : upgrade.state === "succeeded" && (!isCloud || runtimeSucceeded)
+        ? upgrade.version
+        : input.computerVersion;
   const currentImageVersion = isCloud && imageSucceeded ? upgrade.version : input.imageVersion;
   const runtimeSlot = upgradeSlotState({
     upgrade,
     request: input.request,
+    liveStatus: isCloud ? undefined : input.liveStatus,
     slot: "runtime",
     owner,
     computer: input,
@@ -82,6 +93,7 @@ export function computerDetailUpgradeSlotsFor(
     ...computer,
     upgrade: input.upgrade,
     request: input.request,
+    liveStatus: input.liveStatus,
     upgradeTarget:
       computerUpgradeTarget(input.liveStatus) ?? computerUpgradeTarget(input.storedUpgrade),
     latestComputerVersion: input.latestComputerVersion,

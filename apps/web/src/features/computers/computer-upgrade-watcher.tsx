@@ -4,11 +4,12 @@ import { useRouter } from "@tanstack/react-router";
 
 import { useAppToast } from "#src/components/ui/toast";
 import {
+  computerUpgradeSettledToastable,
   computerUpgradeStatusQuery,
   describeComputerUpgradeSuccess,
   followedComputerUpgradesQuery,
+  settleComputerUpgradeFollow,
   settledUpgradeFollow,
-  unfollowComputerUpgrade,
   type FollowedComputerUpgrade,
 } from "./computer-upgrade-status";
 import type { ComputerUpgradeStatus } from "./computer.schemas";
@@ -44,9 +45,14 @@ export function ComputerUpgradeWatcher() {
   useEffect(() => {
     let changed = false;
     for (const { upgrade, status } of settled) {
-      if (!unfollowComputerUpgrade(queryClient, upgrade.requestId) || !status) continue;
+      if (!settleComputerUpgradeFollow(queryClient, upgrade.requestId, status) || !status) continue;
       changed = true;
-      if (upgrade.startedHere && status.status === "completed" && status.computerVersion)
+      if (
+        upgrade.startedHere &&
+        status.status === "completed" &&
+        computerUpgradeSettledToastable(status) &&
+        status.computerVersion
+      )
         toast.success(describeComputerUpgradeSuccess(status.computerVersion));
     }
     // Only the Computers routes show an upgrade; the shell and other pages keep their data.

@@ -18,6 +18,8 @@ import { getCloudDesktopOrigin } from "#src/features/computers/cloud-desktop-ori
 import { listComputers } from "#src/features/computers/computers.functions";
 import {
   followComputerUpgrade,
+  followedComputerUpgradesQuery,
+  isComputerUpgradeSettled,
   upgradeRunning,
 } from "#src/features/computers/computer-upgrade-status";
 import { PageLoadError } from "#src/features/errors/page-load-error";
@@ -40,13 +42,27 @@ export const Route = createFileRoute("/w/$workspaceSlug/_computers")({
       getCloudDesktopOrigin(),
     ]);
     // An upgrade still running is followed by the Workspace shell (`computer-upgrade-watcher.tsx`).
-    for (const computer of computers)
-      if (computer.upgrade && upgradeRunning(computer.upgrade))
+    for (const computer of computers) {
+      const activeId =
+        computer.upgrade && upgradeRunning(computer.upgrade)
+          ? computer.upgrade.requestId
+          : undefined;
+      const recoveredId =
+        !activeId &&
+        computer.ownedByCurrentUser &&
+        computer.kind === "local" &&
+        computer.upgradeProgressRequestId &&
+        (!computer.upgrade || computer.upgrade.requestId === computer.upgradeProgressRequestId)
+          ? computer.upgradeProgressRequestId
+          : undefined;
+      const requestId = activeId ?? recoveredId;
+      if (requestId && !isComputerUpgradeSettled(context.queryClient, requestId))
         followComputerUpgrade(context.queryClient, {
           computerId: computer.id,
-          requestId: computer.upgrade.requestId,
+          requestId,
           startedHere: false,
         });
+    }
     return {
       computers,
       timeZone: preferences.timeZone,
@@ -61,6 +77,8 @@ export const Route = createFileRoute("/w/$workspaceSlug/_computers")({
 
 function ComputersPage() {
   const { computers, installOrigin } = Route.useLoaderData();
+  const followedUpgrades = useQuery(followedComputerUpgradesQuery).data ?? [];
+  const upgradingComputerIds = new Set(followedUpgrades.map((item) => item.computerId));
   const router = useRouter();
   const releaseChannels = [
     ...new Set(computers.map((computer) => computer.releaseChannel ?? "latest")),
@@ -134,6 +152,7 @@ function ComputersPage() {
         selectedComputerId={params?.computerId}
         onAdd={() => setAddComputerOpen(true)}
         latestComputerVersions={latestByChannel}
+        upgradingComputerIds={upgradingComputerIds}
       >
         <Outlet />
       </ComputerLayout>

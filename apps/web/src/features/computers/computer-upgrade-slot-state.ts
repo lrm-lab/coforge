@@ -1,4 +1,5 @@
 import { availableUpdateVersion } from "./computer-identity";
+import type { ComputerUpgradeProgress, ComputerUpgradeStatus } from "./computer.schemas";
 import type { ComputerUpgradeOutcome, UpgradeRequestErrorCopy } from "./upgrade-failure";
 
 /** An upgrade this panel asked for, with the release it asked for: in flight, held by the server,
@@ -19,6 +20,14 @@ export type ComputerUpgradeRequest =
 export type ComputerUpgradeSlotState =
   | { state: "available"; offer: string }
   | { state: "upgrading"; version?: string; delivered: boolean }
+  | {
+      state: "progress";
+      version: string;
+      progress: ComputerUpgradeProgress;
+      status?: ComputerUpgradeStatus;
+      failure?: UpgradeRequestErrorCopy;
+      offer?: string;
+    }
   | { state: "failed"; version?: string; failure: UpgradeRequestErrorCopy; offer?: string };
 
 /**
@@ -30,6 +39,7 @@ export type ComputerUpgradeSlotState =
 export function upgradeSlotState({
   upgrade,
   request,
+  liveStatus,
   slot,
   owner,
   computer,
@@ -39,6 +49,7 @@ export function upgradeSlotState({
 }: {
   upgrade: ComputerUpgradeOutcome | { state: "idle" };
   request: ComputerUpgradeRequest;
+  liveStatus?: ComputerUpgradeStatus;
   /** Which row this slot is. A request aimed at the other row does not paint this one. */
   slot?: "runtime" | "image";
   /**
@@ -63,6 +74,21 @@ export function upgradeSlotState({
   const requested = request.state === "idle" ? undefined : request.version;
   const foreign = owner !== undefined && slot !== undefined && owner !== slot;
   if (foreign) return offer ? { state: "available", offer } : null;
+  if (
+    slot !== "image" &&
+    liveStatus?.progress &&
+    request.state !== "requesting" &&
+    request.state !== "refused"
+  ) {
+    return {
+      state: "progress",
+      version: liveStatus.progress.expectedVersion,
+      progress: liveStatus.progress,
+      status: liveStatus,
+      failure: upgrade.state === "failed" ? upgrade.failure : undefined,
+      offer,
+    };
+  }
   if (upgrade.state === "running")
     return {
       state: "upgrading",

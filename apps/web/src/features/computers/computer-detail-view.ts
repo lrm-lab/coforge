@@ -37,6 +37,7 @@ export type ComputerDetailView = ComputerIdentity & {
   imageUpdate?: { version: string } | null;
   /** This Computer's latest upgrade while the server keeps its record; `null` when none. */
   upgrade?: ComputerUpgradeStatus | null;
+  upgradeProgressRequestId?: string;
   platform?: string | null;
   osVersion?: string | null;
   /** What the Computer last reported about its disk and memory; `null` per kind when unknown. */

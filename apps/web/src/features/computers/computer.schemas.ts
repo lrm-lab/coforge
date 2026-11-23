@@ -20,8 +20,41 @@ export type ComputerRestartStatus =
 /** Which detail row owns a cloud upgrade: Version (runtime) or Image. */
 export type ComputerUpgradeTarget = "runtime" | "image";
 
+export type UpgradeWorkspaceProgressState =
+  | "waiting"
+  | "unconfirmed"
+  | "not_running"
+  | "unknown"
+  | "restored";
+
+export type UpgradeWorkspaceProgress = {
+  workspaceId: string;
+  name: string;
+} & (
+  | { state: "waiting" | "unconfirmed" | "not_running" | "unknown" }
+  | { state: "restored"; confirmedAt: number }
+);
+
+export type ComputerUpgradeProgress = {
+  expectedVersion: string;
+  expiresAt: number;
+  phase?: "downloading" | "verifying" | "waiting" | "switching" | "uncertain";
+  phaseAt?: number;
+  switchState:
+    | "pending"
+    | "target_online"
+    | "confirmed"
+    | "rolled_back"
+    | "failed"
+    | "conflict"
+    | "uncertain";
+  workspaces: UpgradeWorkspaceProgress[];
+  restoredVersion?: string;
+  reconnectUntil?: number;
+};
+
 /** One upgrade operation's status, as `computer-upgrade-store.server.ts` stores and returns it. */
-export type ComputerUpgradeStatus =
+export type ComputerUpgradeStatus = (
   | {
       requestId: string;
       status: "accepted";
@@ -52,7 +85,10 @@ export type ComputerUpgradeStatus =
       errorCode?: string;
       target?: ComputerUpgradeTarget;
     }
-  | { requestId: string; status: "unknown"; reason: "corrupt" };
+  | { requestId: string; status: "unknown"; reason: "corrupt" }
+) & {
+  progress?: ComputerUpgradeProgress;
+};
 
 export type ComputerAgentWorkspaceScan = {
   agentId: string;
