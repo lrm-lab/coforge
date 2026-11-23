@@ -15,7 +15,10 @@ import { createComputerUpgradeAdmission } from "#src/daemon-client/index";
 import { createDaemonLauncher } from "#src/daemon-service/daemon-host";
 import { runDoctorCleanup } from "#src/doctor/doctor-cleanup";
 import { createDoctorCommand } from "#src/doctor/doctor-command";
-import { prepareContainerBinding } from "#src/host/container-binding";
+import {
+  CONTAINER_SHARED_WORKSPACE_ROOT,
+  prepareContainerBinding,
+} from "#src/host/container-binding";
 import { runHostProcess } from "#src/host/run-host";
 import { configureComputerLogger } from "#src/logging/computer-logger";
 import { createRunnerCommand } from "#src/runners/runner-command";
@@ -129,9 +132,17 @@ export async function runComputer(options: { callerIsAgentHosted?: boolean } = {
         ),
         foreground: {
           run: async () => {
-            await prepareContainerBinding(process.env, stateDirectory, COFORGE_DAEMON_SERVER_URL, {
-              seedOnly: true,
-            });
+            const bound = await prepareContainerBinding(
+              process.env,
+              stateDirectory,
+              COFORGE_DAEMON_SERVER_URL,
+              { seedOnly: true },
+            );
+            if (bound) {
+              const { reportWorkspaceCredentials } =
+                await import("#src/host/workspace-credential-scan");
+              await reportWorkspaceCredentials(CONTAINER_SHARED_WORKSPACE_ROOT);
+            }
             await recordExternalSupervisor(stateDirectory, io.stderr);
             await runMachineSupervisor([
               "--socket",
