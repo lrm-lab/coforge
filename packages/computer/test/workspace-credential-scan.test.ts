@@ -128,3 +128,16 @@ test("stops at its time budget and says so", async () => {
 
   expect(truncated).toBe(true);
 });
+
+test("follows a symlinked file but counts a symlinked directory separately", async () => {
+  const root = await workspace();
+  const secrets = await workspace();
+  await writeFile(join(secrets, "netrc"), "machine github.com login me password hunter22\n");
+  await symlink(join(secrets, "netrc"), join(root, ".netrc"), "file");
+  await symlink(secrets, join(root, "linked"), "dir");
+
+  const scan = await scanWorkspaceCredentials(root);
+
+  expect(scan.findings.map((finding) => finding.reasons)).toEqual([["credential file name"]]);
+  expect(scan.skippedSymlinkDirectories).toBe(1);
+});
