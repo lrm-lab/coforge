@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "bun:test";
@@ -26,7 +26,7 @@ test("reports an account file holding a plaintext password", async () => {
   const root = await workspace();
   await writeFile(join(root, ".info"), "username=lijian40\npassword=Sup3rSecretValue\n");
 
-  const findings = await scanWorkspaceCredentials(root);
+  const { findings } = await scanWorkspaceCredentials(root);
 
   expect(findings).toHaveLength(1);
   expect(findings[0]?.path).toBe(join(root, ".info"));
@@ -55,7 +55,7 @@ test("reports a provider key assigned inside a configuration file", async () => 
     JSON.stringify({ apiKey: "sk-proj-abcdefghijklmnopqrstuvwx" }),
   );
 
-  const findings = await scanWorkspaceCredentials(root);
+  const { findings } = await scanWorkspaceCredentials(root);
 
   expect(findings.map((finding) => finding.reasons)).toEqual([["provider key"]]);
 });
@@ -67,7 +67,7 @@ test("ignores code that only references an environment variable", async () => {
     'TEAM_API_KEY="${TEAM_API_KEY:-}"\napiKey: process.env.TEAM_API_KEY,\n',
   );
 
-  expect(await scanWorkspaceCredentials(root)).toEqual([]);
+  expect((await scanWorkspaceCredentials(root)).findings).toEqual([]);
 });
 
 test("ignores installed dependencies and ordinary project files", async () => {
@@ -76,7 +76,7 @@ test("ignores installed dependencies and ordinary project files", async () => {
   await writeFile(join(root, "node_modules", "pkg", "id_rsa"), "-----BEGIN PRIVATE KEY-----\n");
   await writeFile(join(root, "README.md"), "Notes about the project.\n");
 
-  expect(await scanWorkspaceCredentials(root)).toEqual([]);
+  expect((await scanWorkspaceCredentials(root)).findings).toEqual([]);
 });
 
 test("stops before directories nested below the scan depth", async () => {
@@ -85,14 +85,46 @@ test("stops before directories nested below the scan depth", async () => {
   await mkdir(deep, { recursive: true });
   await writeFile(join(deep, "id_rsa"), "-----BEGIN PRIVATE KEY-----\n");
 
-  expect(await scanWorkspaceCredentials(root)).toEqual([]);
+  expect((await scanWorkspaceCredentials(root)).findings).toEqual([]);
 });
 
 test("reports the file mode so a reader can tell who could open it", async () => {
   const root = await workspace();
   await writeFile(join(root, ".netrc"), "machine github.com login me password hunter22\n");
 
-  const findings = await scanWorkspaceCredentials(root);
+  const { findings } = await scanWorkspaceCredentials(root);
 
   expect(findings[0]?.mode).toMatch(/^-rw/);
+});
+
+test("ignores documents and sources whose name merely mentions tokens or credentials", async () => {
+  const root = await workspace();
+  await mkdir(join(root, "docs"));
+  await writeFile(join(root, "docs", "design-tokens.md"), "Colour tokens, spacing tokens.\n");
+  await writeFile(join(root, "credential-store.ts"), "export const store = new Map();\n");
+  await writeFile(join(root, "tokens.css"), ":root { --gap: 4px; }\n");
+
+  expect((await scanWorkspaceCredentials(root)).findings).toEqual([]);
+});
+
+test("counts symlinked directories it does not follow", async () => {
+  const root = await workspace();
+  const outside = await workspace();
+  await writeFile(join(outside, ".netrc"), "machine github.com login me password hunter22\n");
+  await symlink(outside, join(root, "linked"), "dir");
+  const lines: string[] = [];
+
+  const found = await reportWorkspaceCredentials(root, (line) => lines.push(line));
+
+  expect(found).toBe(0);
+  expect(lines.join("\n")).toContain("symlinked director");
+});
+
+test("stops at its time budget and says so", async () => {
+  const root = await workspace();
+  await writeFile(join(root, ".netrc"), "machine github.com login me password hunter22\n");
+
+  const { truncated } = await scanWorkspaceCredentials(root, { timeBudgetMs: 0 });
+
+  expect(truncated).toBe(true);
 });
