@@ -24,7 +24,7 @@
     "@lrm/coforge": "workspace:*",
     "@lrm/coforge-daemon": "workspace:*",
     "@lrm/coforge-sdk": "workspace:*",
-    "commander": "15.0.0",
+    "commander": "15.1.0",
     "picocolors": "1.1.1",
     "zod": "4.5.4"
   },
