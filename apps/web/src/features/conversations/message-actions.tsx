@@ -218,7 +218,7 @@ export function MessageActionSheet({
           )
         }
       >
-        <SheetGrabber className="sm:flex" />
+        <SheetGrabber className={cn("sm:flex", moreEmojiOpen && "inset-x-14")} />
         <Dialog
           aria-label={
             moreEmojiOpen ? m.conversation_more_reactions() : m.conversation_message_actions()
