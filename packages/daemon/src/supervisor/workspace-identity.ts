@@ -243,6 +243,73 @@ async function changeOwnerOf(path: string, identity: WorkspaceIdentity): Promise
   await chown(path, identity.uid, identity.gid);
 }
 
+type Entry = { mode: number; directory: boolean };
+type Inspect = (path: string) => Promise<Entry>;
+type Grant = (path: string, mode: number) => Promise<void>;
+
+const traversable = (entry: Entry): boolean => (entry.mode & 0o001) !== 0;
+
+/** Traversal needs `o+x`, not `o+r`: a version or daemon directory stays unlistable. */
+async function openEntry(
+  path: string,
+  entry: Entry,
+  inspect: Inspect,
+  grant: Grant,
+): Promise<boolean> {
+  if (traversable(entry)) return true;
+  try {
+    await grant(path, entry.directory ? entry.mode | 0o111 : entry.mode | 0o001);
+    return traversable(await inspect(path));
+  } catch {
+    return false;
+  }
+}
+
+async function openChain(
+  target: string,
+  inspect: Inspect,
+  grant: Grant,
+  includeSelf: boolean,
+): Promise<boolean> {
+  const levels = target.split("/").filter(Boolean);
+  const from = levels.length - 1;
+  try {
+    if (includeSelf) {
+      const self = await inspect(target);
+      if (!(await openEntry(target, self, inspect, grant))) return false;
+    }
+    for (let depth = 1; depth <= from; depth += 1) {
+      const parent = `/${levels.slice(0, depth).join("/")}`;
+      const entry = await inspect(parent);
+      if (!entry.directory || !(await openEntry(parent, entry, inspect, grant))) return false;
+    }
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Every path the child is handed has to be reachable for its uid. On staging the state root was
+ * `0700 root`, so the daemon could not even `lstat` its own parent directory and the Workspace
+ * never became ready - after the executable itself had already been fixed.
+ */
+export async function openTraversalForIdentity(input: {
+  paths: (string | undefined)[];
+  identity: WorkspaceIdentity;
+  volumeRoot: string;
+  inspect?: Inspect;
+  grantTraverse?: Grant;
+}): Promise<void> {
+  if (input.identity.uid <= 0) return;
+  const inspect = input.inspect ?? inspectPath;
+  const grant = input.grantTraverse ?? grantTraverse;
+  for (const path of input.paths) {
+    if (!path) continue;
+    await openChain(aliasPath(path, input.volumeRoot), inspect, grant, false);
+  }
+}
+
 /** The child runs the same binary as the Coordinator, but from the traversable copy:
  * `/root/...` is unreachable for an agent uid, and the version directories under it are
  * `0700 root`, so the spawn dies with EACCES unless the path is opened up for traversal. */
@@ -250,45 +317,21 @@ export async function executableForIdentity(input: {
   executablePath: string;
   identity: WorkspaceIdentity;
   volumeRoot: string;
-  inspect?: (path: string) => Promise<{ mode: number; directory: boolean }>;
-  grantTraverse?: (path: string, mode: number) => Promise<void>;
+  inspect?: Inspect;
+  grantTraverse?: Grant;
 }): Promise<string | undefined> {
   if (input.identity.uid <= 0) return undefined;
-  const inspect = input.inspect ?? inspectPath;
-  const grant = input.grantTraverse ?? grantTraverse;
   const candidate = aliasPath(input.executablePath, input.volumeRoot);
-  const traversable = (mode: number): boolean => (mode & 0o001) !== 0;
-  /** Traversal needs `o+x`, not `o+r`: the version directory stays unlistable for the agent. */
-  const open = async (
-    path: string,
-    entry: { mode: number; directory: boolean },
-  ): Promise<boolean> => {
-    if (traversable(entry.mode)) return true;
-    try {
-      await grant(path, entry.directory ? entry.mode | 0o111 : entry.mode | 0o001);
-      const after = await inspect(path);
-      return traversable(after.mode);
-    } catch {
-      return false;
-    }
-  };
-  try {
-    const file = await inspect(candidate);
-    if (file.directory) return undefined;
-    if (!(await open(candidate, file))) return undefined;
-    const levels = candidate.split("/").filter(Boolean);
-    for (let depth = 1; depth < levels.length; depth += 1) {
-      const parent = `/${levels.slice(0, depth).join("/")}`;
-      const entry = await inspect(parent);
-      if (!entry.directory || !(await open(parent, entry))) return undefined;
-    }
-  } catch {
-    return undefined;
-  }
-  return candidate;
+  const opened = await openChain(
+    candidate,
+    input.inspect ?? inspectPath,
+    input.grantTraverse ?? grantTraverse,
+    true,
+  );
+  return opened ? candidate : undefined;
 }
 
-async function inspectPath(path: string): Promise<{ mode: number; directory: boolean }> {
+async function inspectPath(path: string): Promise<Entry> {
   const info = await stat(path);
   return { mode: info.mode, directory: info.isDirectory() };
 }
