@@ -1,9 +1,10 @@
 import type { DateTimePreferenceUpdate } from "#src/features/settings/settings.schemas";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
+import { Link } from "@tanstack/react-router";
 import { useEffect, useId, useState } from "react";
 import { ChevronLeft, Share01 } from "@untitledui/icons";
 import { PageHeader } from "#src/components/layout/page-header";
-import { Button } from "#src/components/base/buttons/button";
+import { Button, styles as buttonStyles } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { Checkbox } from "#src/components/base/checkbox/checkbox";
@@ -44,6 +45,7 @@ import type { TestDelivery } from "#src/server/notifications/web-push-notificati
 
 export type Locale = "en" | "zh-CN";
 type Theme = "system" | "light" | "dark";
+const navigationRowClass = "h-9 w-full min-w-0 justify-start rounded-lg px-3 text-sm font-medium";
 
 export interface SettingsContentProps {
   /** Controlled section; falls back to internal state when omitted (tests, previews). */
@@ -138,13 +140,42 @@ export function SettingsContent(props: SettingsContentProps) {
           {SETTINGS_SECTION_GROUPS.map((group) => (
             <SettingsNavigationGroup key={group.label()} label={group.label()}>
               {group.sections.map((item) => (
-                <SettingsNavigationButton
-                  key={item.id}
-                  active={section === item.id}
-                  icon={item.icon}
-                  label={item.label()}
-                  onClick={() => selectSection(item.id)}
-                />
+                <li key={item.id}>
+                  {"to" in item ? (
+                    <Link
+                      to={item.to}
+                      params={{ workspaceSlug: props.workspace.slug }}
+                      search={{ q: "", archived: false, offset: 0 }}
+                      className={cn(
+                        buttonStyles.common.root,
+                        buttonStyles.sizes.sm.root,
+                        buttonStyles.colors.tertiary.root,
+                        navigationRowClass,
+                      )}
+                    >
+                      <item.icon
+                        aria-hidden="true"
+                        data-icon="leading"
+                        className={buttonStyles.common.icon}
+                      />
+                      <span className="truncate px-0.5">{item.label()}</span>
+                    </Link>
+                  ) : (
+                    <Button
+                      type="button"
+                      color="tertiary"
+                      iconLeading={item.icon}
+                      aria-current={section === item.id ? "page" : undefined}
+                      onPress={() => selectSection(item.id)}
+                      className={cn(
+                        navigationRowClass,
+                        section === item.id && "bg-active text-brand-secondary",
+                      )}
+                    >
+                      <span className="truncate">{item.label()}</span>
+                    </Button>
+                  )}
+                </li>
               ))}
             </SettingsNavigationGroup>
           ))}
@@ -231,36 +262,6 @@ export function SettingsContent(props: SettingsContentProps) {
         </section>
       </section>
     </main>
-  );
-}
-
-function SettingsNavigationButton({
-  active,
-  icon,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  icon: React.FC<{ className?: string }>;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <li>
-      <Button
-        type="button"
-        color="tertiary"
-        iconLeading={icon}
-        aria-current={active ? "page" : undefined}
-        onPress={onClick}
-        className={cn(
-          "h-9 w-full min-w-0 justify-start rounded-lg px-3 text-sm font-medium",
-          active && "bg-active text-brand-secondary",
-        )}
-      >
-        <span className="truncate">{label}</span>
-      </Button>
-    </li>
   );
 }
 

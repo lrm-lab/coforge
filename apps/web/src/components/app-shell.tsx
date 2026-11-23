@@ -3,7 +3,6 @@ import { useRouterState } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
-  BookOpen01,
   CodeBrowser,
   File02 as FileText,
   Folder,
@@ -133,7 +132,6 @@ function useNavItems(
         tab: "activity" as const,
       },
       ...(aiWorkbench ? [{ label: m.pi_chat_title(), ...item("pi-chat"), icon: Stars01 }] : []),
-      { label: m.memory_title(), ...item("memory"), icon: BookOpen01 },
       { label: m.projects_title(), ...item("projects"), icon: Folder },
       {
         label: m.navigation_artifacts(),
