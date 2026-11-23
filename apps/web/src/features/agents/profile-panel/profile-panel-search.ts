@@ -50,9 +50,15 @@ export function personIdFromProfileParam(profile: string | undefined): string | 
 }
 
 export function agentProfileSearchWithoutThread<
-  T extends { threadRootId?: string; details?: unknown },
->(previous: T): Omit<T, "threadRootId" | "details"> {
-  const { threadRootId: _threadRootId, details: _details, ...rest } = previous;
+  T extends { threadRootId?: string; details?: unknown; doc?: string; docFull?: boolean },
+>(previous: T): Omit<T, "threadRootId" | "details" | "doc" | "docFull"> {
+  const {
+    threadRootId: _threadRootId,
+    details: _details,
+    doc: _doc,
+    docFull: _docFull,
+    ...rest
+  } = previous;
   return rest;
 }
 

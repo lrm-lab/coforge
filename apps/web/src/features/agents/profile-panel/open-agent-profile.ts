@@ -11,14 +11,12 @@ import {
   type AgentProfileTab,
 } from "./profile-panel-search";
 
-/** The subset of either conversation route's search this hook reads/writes. A narrow local type
- * (not `Record<string, unknown>`) so `router.navigate({ to: "." })`'s search updater still
- * type-checks without pinning to one specific route — the same pattern
- * `use-conversation-view.ts`'s `update()` uses for `view`/`layout`. */
 type AgentProfileSearch = {
   profile?: string;
   agentTab?: AgentProfileTab;
   threadRootId?: string;
+  doc?: string;
+  docFull?: boolean;
 };
 
 /** Opens the Agent profile panel, on `tab` when one is named. */

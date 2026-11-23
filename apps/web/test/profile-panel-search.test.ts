@@ -65,12 +65,14 @@ describe("agentIdFromProfileParam", () => {
 });
 
 describe("agentProfileSearchWithoutThread", () => {
-  test("removes the active thread and details while preserving unrelated search state", () => {
+  test("removes the active thread, details and open document while preserving unrelated search state", () => {
     expect(
       agentProfileSearchWithoutThread({
         view: "chat",
         threadRootId: "thread-1",
         details: "panel",
+        doc: "doc-1",
+        docFull: true,
         profile: "agent:agent-1",
       }),
     ).toEqual({ view: "chat", profile: "agent:agent-1" });

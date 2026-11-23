@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Group, Panel, Separator, useDefaultLayout } from "react-resizable-panels";
+import { Group, Panel, Separator, useDefaultLayout, useGroupRef } from "react-resizable-panels";
 import { AnimatePresence, motion } from "motion/react";
 
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
@@ -16,10 +16,61 @@ import { localLayoutStorage } from "./local-layout-storage";
 
 const MAIN_PANE_MIN_REM = 24;
 const SIDE_PANE_MIN_REM = 22;
+const SIDE_PANE_DEFAULT_PCT = 35;
 const LIST_COLUMN_DEFAULT_REM = 18;
 
-const SIDE_PANE_ENTER =
+export const SIDE_PANE_ENTER =
   "animate-in fade-in slide-in-from-right-3 motion-enter-sm motion-reduce:animate-none";
+
+export function useResponsiveSplitLayout({
+  active,
+  mainMinRem = MAIN_PANE_MIN_REM,
+  sideMinRem = SIDE_PANE_MIN_REM,
+}: {
+  active: boolean;
+  mainMinRem?: number;
+  sideMinRem?: number;
+}) {
+  const wideViewport = useBreakpoint("md");
+  const splitRef = useRef<HTMLDivElement>(null);
+  const [splitFits, setSplitFits] = useState(true);
+  const [listCrowds, setListCrowds] = useState(false);
+  useReportChatListCrowd(active && listCrowds);
+  const measureSplit = useCallback(() => {
+    const element = splitRef.current;
+    if (!element) return;
+    const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+    const cards = element.closest<HTMLElement>("[data-chat-cards]");
+    const listBeside = cards !== null && getComputedStyle(cards).flexDirection === "row";
+    const layout = splitLayout({
+      rem,
+      pane: element.clientWidth,
+      mainMinRem,
+      sideMinRem,
+      beside: listBeside
+        ? {
+            area: cards.clientWidth,
+            list: listColumnWidth(rem),
+            gap: Number.parseFloat(getComputedStyle(cards).columnGap) || 0,
+          }
+        : undefined,
+    });
+    setSplitFits(layout.splitFits);
+    setListCrowds(layout.listCrowds);
+  }, [mainMinRem, sideMinRem]);
+  const splitShown = wideViewport && splitFits;
+  useLayoutEffect(() => {
+    const element = splitRef.current;
+    if (!element) return;
+    measureSplit();
+    const observer = new ResizeObserver(measureSplit);
+    observer.observe(element);
+    const cards = element.closest("[data-chat-cards]");
+    if (cards) observer.observe(cards);
+    return () => observer.disconnect();
+  }, [measureSplit, splitShown]);
+  return { splitRef, splitShown };
+}
 
 export function ConversationSplit({
   main,
@@ -34,49 +85,17 @@ export function ConversationSplit({
   threadAlone: boolean;
   focused?: FocusedPanel;
 }) {
+  const groupRef = useGroupRef();
   const threadLayout = useDefaultLayout({
     id: "coforge-conversation",
     panelIds: visibleSlot ? ["main", visibleSlot] : ["main"],
     onlySaveAfterUserInteractions: true,
     storage: localLayoutStorage,
   });
-  const wideViewport = useBreakpoint("md");
   const reduced = usePrefersReducedMotion();
-  const splitRef = useRef<HTMLDivElement>(null);
-  const [splitFits, setSplitFits] = useState(true);
-  const [listCrowds, setListCrowds] = useState(false);
-  useReportChatListCrowd(Boolean(visibleSlot) && listCrowds && !threadAlone);
-  const measureSplit = useCallback(() => {
-    const element = splitRef.current;
-    if (!element) return;
-    const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
-    const cards = element.closest<HTMLElement>("[data-chat-cards]");
-    const listBeside = cards !== null && getComputedStyle(cards).flexDirection === "row";
-    const layout = splitLayout({
-      rem,
-      pane: element.clientWidth,
-      beside: listBeside
-        ? {
-            area: cards.clientWidth,
-            list: listColumnWidth(rem),
-            gap: Number.parseFloat(getComputedStyle(cards).columnGap) || 0,
-          }
-        : undefined,
-    });
-    setSplitFits(layout.splitFits);
-    setListCrowds(layout.listCrowds);
-  }, []);
-  const splitShown = wideViewport && splitFits;
-  useLayoutEffect(() => {
-    const element = splitRef.current;
-    if (!element) return;
-    measureSplit();
-    const observer = new ResizeObserver(measureSplit);
-    observer.observe(element);
-    const cards = element.closest("[data-chat-cards]");
-    if (cards) observer.observe(cards);
-    return () => observer.disconnect();
-  }, [measureSplit, splitShown]);
+  const { splitRef, splitShown } = useResponsiveSplitLayout({
+    active: Boolean(visibleSlot) && !threadAlone,
+  });
 
   if (!splitShown || threadAlone) {
     return (
@@ -118,6 +137,7 @@ export function ConversationSplit({
   return (
     <div ref={splitRef} className="flex min-h-0 min-w-0 flex-1">
       <Group
+        groupRef={groupRef}
         id="conversation"
         orientation="horizontal"
         defaultLayout={threadLayout.defaultLayout}
@@ -143,12 +163,23 @@ export function ConversationSplit({
                       ? m.channel_settings_resize()
                       : m.agent_profile_resize()
                 }
-                className="hidden w-px shrink-0 bg-border-secondary transition-colors hover:bg-brand-solid data-[separator=active]:bg-brand-solid md:block"
-              />
+                onDoubleClick={() =>
+                  groupRef.current?.setLayout({
+                    main: 100 - SIDE_PANE_DEFAULT_PCT,
+                    [visibleSlot]: SIDE_PANE_DEFAULT_PCT,
+                  })
+                }
+                className="group/sep relative flex w-px shrink-0 cursor-col-resize items-center justify-center bg-border-secondary outline-focus-ring transition-colors hover:bg-brand-solid focus-visible:bg-brand-solid focus-visible:outline-2 data-[separator=active]:bg-brand-solid after:absolute after:inset-y-0 after:-inset-x-1.5"
+              >
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none h-7 w-1 rounded-full bg-fg-quaternary/60 opacity-0 transition-opacity group-hover/sep:opacity-100 group-data-[separator=active]/sep:bg-brand-solid group-data-[separator=active]/sep:opacity-100"
+                />
+              </Separator>
             )}
             <Panel
               id={visibleSlot}
-              defaultSize="35"
+              defaultSize={`${SIDE_PANE_DEFAULT_PCT}`}
               minSize={`${SIDE_PANE_MIN_REM}rem`}
               maxSize="60"
               hidden={focused === "chat"}
@@ -171,12 +202,16 @@ export function splitLayout({
   rem,
   pane,
   beside,
+  mainMinRem = MAIN_PANE_MIN_REM,
+  sideMinRem = SIDE_PANE_MIN_REM,
 }: {
   rem: number;
   pane: number;
   beside?: { area: number; list: number; gap: number };
+  mainMinRem?: number;
+  sideMinRem?: number;
 }): { splitFits: boolean; listCrowds: boolean } {
-  const needed = (MAIN_PANE_MIN_REM + SIDE_PANE_MIN_REM) * rem;
+  const needed = (mainMinRem + sideMinRem) * rem;
   if (!beside) return { splitFits: pane >= needed, listCrowds: false };
   const besideList = beside.area - beside.list - beside.gap;
   const listCrowds = besideList < needed;

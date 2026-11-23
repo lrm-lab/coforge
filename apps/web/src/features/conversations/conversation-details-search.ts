@@ -11,23 +11,20 @@ export function detailsMembersView(
   return details === "members" || details === "add" ? details : null;
 }
 
-export function conversationSearchWithDetails<T extends object>(
+export function conversationSearchWithDetails<T extends Record<string, unknown>>(
   previous: T,
   details: ConversationDetailsParam = "panel",
-): Omit<T, "threadRootId" | "profile" | "agentTab"> & { details: ConversationDetailsParam } {
+) {
   const {
     threadRootId: _t,
     profile: _p,
     agentTab: _a,
+    doc: _d,
+    docFull: _df,
+    details: _prevDetails,
     ...rest
-  } = previous as T & {
-    threadRootId?: string;
-    profile?: string;
-    agentTab?: unknown;
-  };
-  return { ...rest, details } as Omit<T, "threadRootId" | "profile" | "agentTab"> & {
-    details: ConversationDetailsParam;
-  };
+  } = previous;
+  return { ...rest, details };
 }
 
 export function conversationSearchWithoutDetails<T extends object>(

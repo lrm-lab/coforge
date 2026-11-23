@@ -8,6 +8,40 @@ export const artifactSearchShape = {
 
 export type ArtifactSearch = z.output<z.ZodObject<typeof artifactSearchShape>>;
 
+export function conversationSearchWithArtifact<
+  T extends {
+    threadRootId?: string;
+    profile?: string;
+    agentTab?: unknown;
+    details?: unknown;
+    doc?: string;
+    docFull?: boolean;
+  },
+>(previous: T, patch: ArtifactSearch) {
+  if (patch.doc === undefined) {
+    const { doc: _doc, docFull: _docFull, ...rest } = previous;
+    return {
+      ...rest,
+      doc: "doc" in patch ? patch.doc : _doc,
+      docFull: "docFull" in patch ? patch.docFull : _docFull,
+    };
+  }
+  const {
+    threadRootId: _threadRootId,
+    profile: _profile,
+    agentTab: _agentTab,
+    details: _details,
+    doc: _doc,
+    docFull: _docFull,
+    ...rest
+  } = previous;
+  return {
+    ...rest,
+    doc: patch.doc,
+    docFull: "docFull" in patch ? patch.docFull : _docFull,
+  };
+}
+
 export function useArtifactNavigation() {
   const router = useRouter();
   return (patch: ArtifactSearch, options: { replace?: boolean } = {}) =>
@@ -15,12 +49,13 @@ export function useArtifactNavigation() {
       to: ".",
       replace: options.replace,
       resetScroll: false,
-      search: (previous: ArtifactSearch) => ({ ...previous, ...patch }),
+      search: (previous) => conversationSearchWithArtifact(previous, patch),
     });
 }
 
 export const openArtifactSearch = (artifactId: string): ArtifactSearch => ({
   doc: artifactId,
+  docFull: undefined,
 });
 
 export const closedArtifactSearch: ArtifactSearch = {

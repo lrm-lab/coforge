@@ -4,7 +4,9 @@ export function resolveVisibleConversationSlot(input: {
   threadOpen: boolean;
   profileOpen: boolean;
   detailsOpen?: boolean;
+  docOpen?: boolean;
 }): ConversationSlot | undefined {
+  if (input.docOpen) return undefined;
   if (input.detailsOpen) return "details";
   if (input.threadOpen && input.profileOpen) {
     return "thread";

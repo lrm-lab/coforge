@@ -37,4 +37,15 @@ describe("resolveVisibleConversationSlot", () => {
       resolveVisibleConversationSlot({ threadOpen: false, profileOpen: true, detailsOpen: true }),
     ).toBe("details");
   });
+
+  test("suppresses the inner side slot when a document occupies the right slot", () => {
+    expect(
+      resolveVisibleConversationSlot({
+        threadOpen: true,
+        profileOpen: true,
+        detailsOpen: true,
+        docOpen: true,
+      }),
+    ).toBeUndefined();
+  });
 });

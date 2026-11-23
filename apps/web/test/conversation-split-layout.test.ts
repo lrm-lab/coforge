@@ -47,3 +47,30 @@ test("without a list beside (below lg) only the pane's own width counts", () => 
   expect(splitLayout({ rem, pane: 736 })).toEqual({ splitFits: true, listCrowds: false });
   expect(splitLayout({ rem, pane: 735 })).toEqual({ splitFits: false, listCrowds: false });
 });
+
+test("artifact split uses wider minimums and hides the list sooner so chat and document stay readable", () => {
+  expect(
+    splitLayout({
+      rem,
+      pane: 760,
+      beside: { area: 1056, ...list },
+      mainMinRem: 24,
+      sideMinRem: 26,
+    }),
+  ).toEqual({
+    splitFits: true,
+    listCrowds: true,
+  });
+  expect(
+    splitLayout({
+      rem,
+      pane: 840,
+      beside: { area: 1136, ...list },
+      mainMinRem: 24,
+      sideMinRem: 26,
+    }),
+  ).toEqual({
+    splitFits: true,
+    listCrowds: false,
+  });
+});

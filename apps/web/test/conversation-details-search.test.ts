@@ -29,7 +29,7 @@ describe("detailsMembersView", () => {
 });
 
 describe("conversationSearchWithDetails", () => {
-  test("strips thread and profile params while preserving view and task filters", () => {
+  test("strips thread, profile and open document params while preserving view and task filters", () => {
     expect(
       conversationSearchWithDetails(
         {
@@ -38,6 +38,8 @@ describe("conversationSearchWithDetails", () => {
           threadRootId: "root-1",
           profile: "agent:a1",
           agentTab: "activity",
+          doc: "doc-1",
+          docFull: true,
         },
         "members",
       ),

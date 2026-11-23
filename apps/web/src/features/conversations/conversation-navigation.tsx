@@ -9,7 +9,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { useParams, useRouter, useRouterState } from "@tanstack/react-router";
+import { useParams, useRouter, useRouterState, useSearch } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { BadgeWithIcon } from "#src/components/base/badges/badges";
@@ -24,7 +24,7 @@ import { useEdgeSwipeBack } from "#src/hooks/use-edge-swipe-back";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { animateFlipFromRect, consumeSharedRect } from "#src/lib/shared-element-rect";
 import { ChatHeaderBusyAgents } from "./chat-header-busy-agents";
-import { ChatListCrowdContext } from "./chat-list-crowd";
+import { ChatListCrowdContext, useChatListCrowdState } from "./chat-list-crowd";
 import { ConversationFocusContext, useConversationFocusState } from "./conversation-focus";
 import { ConversationListContext } from "./conversation-list-button";
 import { ConversationListResizeHandle } from "./conversation-list-resize-handle";
@@ -85,10 +85,11 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [browsing, setBrowsing] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [listCrowded, setListCrowded] = useState(false);
-  const slot = useRouterState({
-    select: ({ location: { search } }) =>
-      `${"threadRootId" in search ? search.threadRootId : ""}|${"profile" in search ? JSON.stringify(search.profile) : ""}`,
+  const { listCrowded, reportListCrowd } = useChatListCrowdState();
+  const slot = useSearch({
+    strict: false,
+    select: (search) =>
+      `${search.threadRootId ?? ""}|${search.profile ?? ""}|${search.details ?? ""}|${search.doc ?? ""}`,
   });
   const focus = useConversationFocusState(`${pathname}|${slot}`, desktop);
   const create = useServerFn(createPublicChannel);
@@ -288,7 +289,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   return (
     <ConversationListContext value={listControls}>
       <ConversationFocusContext value={focus}>
-        <ChatListCrowdContext value={setListCrowded}>
+        <ChatListCrowdContext value={reportListCrowd}>
           <ConversationHostProvider channels={channelNames}>
             <UnreadStoreContext value={unread.store}>
               <main

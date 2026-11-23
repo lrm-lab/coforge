@@ -17,6 +17,8 @@ type DetailsSearch = {
   threadRootId?: string;
   profile?: string;
   agentTab?: AgentProfileTab;
+  doc?: string;
+  docFull?: boolean;
 };
 
 export function useConversationDetailsState({ enabled = true }: { enabled?: boolean } = {}) {
@@ -24,9 +26,13 @@ export function useConversationDetailsState({ enabled = true }: { enabled?: bool
   const focus = useConversationFocus();
   const rawDetails = useSearch({
     strict: false,
-    select: (search) => detailsParamSchema.parse((search as { details?: unknown }).details),
+    select: (search) => detailsParamSchema.parse(search.details),
   });
-  const details = enabled ? rawDetails : undefined;
+  const docOpen = useSearch({
+    strict: false,
+    select: (search) => typeof search.doc === "string",
+  });
+  const details = enabled && !docOpen ? rawDetails : undefined;
   const open = details !== undefined;
   const membersView = detailsMembersView(details);
 

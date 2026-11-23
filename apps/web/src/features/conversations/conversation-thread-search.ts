@@ -75,9 +75,22 @@ export function conversationSearchWithoutTask<T extends { task?: unknown }>(
 }
 
 export function conversationSearchWithoutAgentProfile<
-  T extends { profile?: string; agentTab?: unknown; details?: unknown },
->(previous: T): Omit<T, "profile" | "agentTab" | "details"> {
-  const { profile: _profile, agentTab: _agentTab, details: _details, ...rest } = previous;
+  T extends {
+    profile?: string;
+    agentTab?: unknown;
+    details?: unknown;
+    doc?: string;
+    docFull?: boolean;
+  },
+>(previous: T): Omit<T, "profile" | "agentTab" | "details" | "doc" | "docFull"> {
+  const {
+    profile: _profile,
+    agentTab: _agentTab,
+    details: _details,
+    doc: _doc,
+    docFull: _docFull,
+    ...rest
+  } = previous;
   return rest;
 }
 

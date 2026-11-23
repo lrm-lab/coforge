@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearch } from "@tanstack/react-router";
 import { MessageSquare01 as MessageSquare } from "@untitledui/icons";
 
 import { cn } from "#src/lib/utils";
@@ -237,10 +238,15 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     messages: conversation.messages,
   });
 
+  const docOpen = useSearch({
+    strict: false,
+    select: (search) => typeof search.doc === "string",
+  });
   const visibleSlot = resolveVisibleConversationSlot({
     threadOpen: Boolean(selected),
     profileOpen,
     detailsOpen: Boolean(detailsOpen && detailsPane),
+    docOpen: docOpen && standaloneThread === null,
   });
   const threadPaneVisible = (rootId: string) => visibleSlot === "thread" && selected === rootId;
   const focus = useConversationFocus();

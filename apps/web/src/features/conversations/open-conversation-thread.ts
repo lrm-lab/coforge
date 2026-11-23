@@ -16,6 +16,8 @@ type ConversationThreadSearch = {
   message?: string;
   profile?: string;
   agentTab?: AgentProfileTab;
+  doc?: string;
+  docFull?: boolean;
 };
 
 export function useOpenConversationThread() {
@@ -24,9 +26,13 @@ export function useOpenConversationThread() {
     strict: false,
     select: (search) => (typeof search.threadRootId === "string" ? search.threadRootId : undefined),
   });
+  const docOpen = useSearch({
+    strict: false,
+    select: (search) => typeof search.doc === "string",
+  });
   const openThread = useCallback(
     (threadRootId: string, options?: { replace?: boolean }) => {
-      if (!options?.replace && searchThreadRootId === threadRootId) return;
+      if (!options?.replace && !docOpen && searchThreadRootId === threadRootId) return;
       void router.navigate({
         to: ".",
         replace: options?.replace,
@@ -39,7 +45,7 @@ export function useOpenConversationThread() {
           ),
       });
     },
-    [router, searchThreadRootId],
+    [docOpen, router, searchThreadRootId],
   );
   const openThreadFromHash = useCallback(
     (threadRootId: string) => {
