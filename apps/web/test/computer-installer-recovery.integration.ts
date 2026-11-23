@@ -127,3 +127,38 @@ test("late ready, shutdown and samples cannot regain a newer or disconnected con
   expect(await f.store.observe(f.scope, next, { requestChallenge: true })).toBeUndefined();
   expect(await f.store.read(f.scope)).toBeNull();
 });
+
+test("a ready connection can recover from a presence timeout without letting its predecessor reopen", async () => {
+  const f = await fixture();
+  await f.store.observe(f.scope, f.current, {
+    challenge: f.challenge.token,
+    required: true,
+    sampleSequence: 1,
+  });
+  expect(await f.store.read(f.scope)).not.toBeNull();
+
+  const current = { ...f.current, client: "connection-b", connectionSequence: 2 };
+  let presenceReads = 0;
+  const store = new RedisComputerInstallerRecovery(redis, async (_scope, identity) => {
+    if (identity.client === current.client && ++presenceReads === 1)
+      throw new Error("presence timed out once during ready");
+    return f.live.has(identity.client);
+  });
+  expect(await store.ready(f.scope, current)).toBe(true);
+  expect(presenceReads).toBe(1);
+  expect(await store.read(f.scope)).toBeNull();
+  expect(await store.observe(f.scope, current, { requestChallenge: true })).toBeUndefined();
+
+  f.live.add(current.client);
+  expect(await store.ready(f.scope, f.current)).toBe(false);
+  expect(await store.observe(f.scope, f.current, { requestChallenge: true })).toBeUndefined();
+  const challenge = await store.observe(f.scope, current, { requestChallenge: true });
+  expect(challenge?.generation).toBe(1);
+  expect(await store.read(f.scope)).toBeNull();
+  await store.observe(f.scope, current, {
+    challenge: challenge!.token,
+    required: true,
+    sampleSequence: 1,
+  });
+  expect(await store.read(f.scope)).not.toBeNull();
+});

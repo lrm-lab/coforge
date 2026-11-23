@@ -24,7 +24,7 @@ type Advice = InstallerRecoveryConnection & { remainingMs: number };
 
 type Update =
   | { kind: "read" }
-  | ({ kind: "ready"; nextToken: string } & InstallerRecoveryConnection)
+  | ({ kind: "ready"; nextToken: string; live: boolean } & InstallerRecoveryConnection)
   | ({ kind: "close" } & InstallerRecoveryClient)
   | ({
       kind: "observe";
@@ -40,10 +40,16 @@ export class RedisComputerInstallerRecovery {
   ) {}
 
   async ready(scope: Scope, client: InstallerRecoveryConnection): Promise<boolean> {
-    if (!(await this.live(scope, client))) return false;
+    // Remember the accepted connection even if presence is briefly unavailable.
+    // Its heartbeat can retry presence before receiving a challenge.
+    const live = await this.live(scope, client).catch(() => false);
     return (
-      (await this.update(scope, { ...client, kind: "ready", nextToken: crypto.randomUUID() })) ===
-      "ready"
+      (await this.update(scope, {
+        ...client,
+        kind: "ready",
+        nextToken: crypto.randomUUID(),
+        live,
+      })) === "ready"
     );
   }
 

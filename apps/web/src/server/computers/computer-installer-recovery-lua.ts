@@ -34,9 +34,9 @@ if update.kind == "ready" then
     client = update.client,
     connectionSequence = update.connectionSequence,
     sampleSequence = 0,
-    generation = 1,
-    challenge = update.nextToken,
-    challengeIssuedAtMs = now_ms,
+    generation = update.live and 1 or 0,
+    challenge = update.live and update.nextToken or nil,
+    challengeIssuedAtMs = update.live and now_ms or nil,
     required = false,
     visibleUntilMs = 0
   }
@@ -61,7 +61,7 @@ local function rotate()
   save()
   return reply()
 end
-if now_ms >= state.challengeIssuedAtMs + lease_ms then
+if not state.challenge or now_ms >= state.challengeIssuedAtMs + lease_ms then
   if not update.live then return "presence" end
   return rotate()
 end
