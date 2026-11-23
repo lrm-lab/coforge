@@ -161,6 +161,29 @@ for await (const line of console) {
         reply({ stopReason: "end_turn" });
         process.exit(0);
       }
+      if (text === "reply-burst-and-exit") {
+        const lines: string[] = [];
+        for (let i = 0; i < 2000; i++) {
+          lines.push(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              method: "session/update",
+              params: {
+                sessionId: currentSessionId,
+                update: {
+                  sessionUpdate: "agent_message_chunk",
+                  content: { type: "text", text: "final " },
+                },
+              },
+            }),
+          );
+        }
+        lines.push(
+          JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { stopReason: "end_turn" } }),
+        );
+        process.stdout.write(`${lines.join("\n")}\n`);
+        process.exit(0);
+      }
       if (text === "crash") {
         // A mid-turn process death: stderr explains the exit before the child dies without a
         // prompt reply.

@@ -121,9 +121,7 @@ export class AcpSession implements AgentSession {
       transport.process.onClose((exit) => {
         this.#processExit = exit;
         this.#failed = true;
-        // A deliberate interrupt owns the live turn's settlement and its `completed`: let the
-        // turn's finally report before the process's exit disposes the session.
-        const settle = this.#interrupting && this.#turn ? this.#turn : Promise.resolve();
+        const settle = this.#turn ?? Promise.resolve();
         void settle.finally(() => this.#terminate().then(() => this.#exitedNow()));
       });
       const initialized = await transport.initialize(this.timeoutMs);
