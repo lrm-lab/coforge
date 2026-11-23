@@ -418,6 +418,30 @@ test("a mid-turn crash fails the turn with the process's stderr tail", async () 
   }
 });
 
+test("peer EOF settles a live turn with an unanswered steer", async () => {
+  const f = await fixture({ CURSOR_ACP_FIXTURE_HANG: "1" });
+  try {
+    const session = await f.provider.createAgentSession(options(f.cwd) as never);
+    const events: AgentRuntimeEvent[] = [];
+    const exited = Promise.withResolvers<void>();
+    session.subscribe((event) => events.push(event));
+    session.onExit(() => exited.resolve());
+    await session.sendMessage("held");
+    const steer = session.sendMessage("crash").catch((error) => error);
+    await exited.promise;
+    expect(await steer).toMatchObject({
+      message: expect.stringContaining("delivery outcome is unknown"),
+    });
+    expect(events.filter((e) => e.type === "completed")).toEqual([
+      { type: "completed", status: "failed" },
+    ]);
+    await expect(session.sendMessage("late")).rejects.toThrow("before submission");
+    expect((await f.requests()).filter((r) => r.method === "session/prompt")).toHaveLength(2);
+  } finally {
+    await f.cleanup();
+  }
+});
+
 test("standing instructions become a private .cursor/rules file that cleanup removes", async () => {
   const f = await fixture();
   try {

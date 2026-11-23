@@ -82,7 +82,9 @@ export class AcpSession implements AgentSession {
                   this.#requireTransport().connection.agent.request(method, params),
                   this.timeoutMs,
                 ),
-          dispose: () => this.dispose(),
+          dispose: async () => {
+            if (this.#transport?.process.exitCode === undefined) await this.dispose();
+          },
           emit: (event, options) => this.#emit(event, options),
           markResumable: (options) => this.#markResumable(options),
           turnFailure: (response) =>
@@ -108,8 +110,8 @@ export class AcpSession implements AgentSession {
         // request left to settle it. The stderr tail rides the surfaced message too, not just
         // the daemon's log.
         attachStderrExcerpt(transport.process, error);
-        if (!this.#native) return;
         this.#failed = true;
+        if (!this.#native) return;
         this.#finishNative({
           promptId: this.#native.promptId,
           end: {

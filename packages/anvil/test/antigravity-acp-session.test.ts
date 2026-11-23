@@ -309,6 +309,15 @@ test("an interrupt cancels the turn and keeps the same agy process for the next 
   });
 });
 
+test("EOF settles a pending steer", () =>
+  withSession(async ({ session, events }) => {
+    const exited = new Promise<void>((resolve) => session.onExit(() => resolve()));
+    void session.sendMessage("held-silent").catch(() => {});
+    await expect(session.sendMessage("crash")).rejects.toThrow("outcome is unknown");
+    await exited;
+    expect(completed(events)).toMatchObject([{ status: "failed" }]);
+  }));
+
 test("a relaunch after the process is gone resumes the stored session", async () => {
   const f = await fixture();
   try {

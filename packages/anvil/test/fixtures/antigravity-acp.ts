@@ -322,6 +322,7 @@ for await (const line of console) {
     case "session/prompt": {
       const text = request.params.prompt[0].text;
       prompts++;
+      if (text === "crash") process.exit(1);
       if (text.startsWith("run:")) {
         const commandLine = text.slice("run:".length);
         const rawInput = { CommandLine: commandLine, toolSummary: "Run a command" };
