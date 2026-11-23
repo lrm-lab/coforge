@@ -263,6 +263,7 @@ export function createComposerOutbox(storage: OutboxStorage | null): ComposerOut
   const listeners = new Set<() => void>();
   const snapshots = new Map<string, readonly OutboxEntry[]>();
   const queues = new Map<string, Promise<unknown>>();
+  const activeAttemptReleases = new Map<string, () => void>();
   let submitted = 0;
 
   // Whatever an earlier page left behind. A message that was still on its way then may or may
@@ -343,20 +344,50 @@ export function createComposerOutbox(storage: OutboxStorage | null): ComposerOut
     };
     save({ ...value, entry: { ...message, state: "sending" } });
     const previous = queues.get(entry.draftKey) ?? Promise.resolve();
-    const result = previous.then(async () => {
+    let releaseQueue!: () => void;
+    const queueStep = new Promise<void>((resolve) => {
+      releaseQueue = resolve;
+    });
+    queues.set(entry.draftKey, queueStep);
+
+    return previous.then(async () => {
+      const beforeSend = stored.get(message.localId);
+      if (!beforeSend || beforeSend.entry.state === "delivered") {
+        releaseQueue();
+        return undefined;
+      }
+      let released = false;
+      let acknowledged = false;
+      const release = () => {
+        if (released) return;
+        released = true;
+        if (activeAttemptReleases.get(message.localId) === releaseByAck)
+          activeAttemptReleases.delete(message.localId);
+        releaseQueue();
+      };
+      const releaseByAck = () => {
+        acknowledged = true;
+        release();
+      };
+      activeAttemptReleases.set(message.localId, releaseByAck);
+
       try {
         const delivered = await transport(message);
-        const messageId = deliveredMessageId?.(delivered);
-        const current = stored.get(message.localId);
-        if (messageId && current && current.entry.state !== "delivered")
-          save({ ...current, entry: { ...message, state: "delivered", messageId } });
-        else if (!messageId) forget(message.localId);
+        release();
+        if (!acknowledged) {
+          const messageId = deliveredMessageId?.(delivered);
+          const current = stored.get(message.localId);
+          if (messageId && current && current.entry.state !== "delivered")
+            save({ ...current, entry: { ...message, state: "delivered", messageId } });
+          else if (!messageId) forget(message.localId);
+        }
         return delivered;
       } catch (cause) {
+        release();
         // Deleted (here or in another tab) while this attempt was out: nothing to keep. Already
         // acknowledged by its signal: the message exists whatever this response says.
         const current = stored.get(message.localId);
-        if (!current || current.entry.state === "delivered") return undefined;
+        if (acknowledged || !current || current.entry.state === "delivered") return undefined;
         const errorId = isAppError(cause) ? cause.errorId : undefined;
         const unavailableAttachmentIds = unavailableAttachmentIdsOf(cause, message.attachments);
         save({
@@ -372,8 +403,6 @@ export function createComposerOutbox(storage: OutboxStorage | null): ComposerOut
         return undefined;
       }
     });
-    queues.set(entry.draftKey, result);
-    return result;
   }
 
   return {
@@ -425,6 +454,7 @@ export function createComposerOutbox(storage: OutboxStorage | null): ComposerOut
             messageId,
           },
         });
+        activeAttemptReleases.get(localId)?.();
       }
     },
     discard: forget,
