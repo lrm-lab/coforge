@@ -5,7 +5,7 @@
   "empty_load_failed_safe": "The connection dropped. Nothing was lost.",
   "empty_details_toggle": "Details",
   "empty_page_load_failed_title": "Couldn't load this page",
-  "empty_page_load_failed_description": "The connection was interrupted or the service is briefly unavailable. Nothing was lost.",
+  "empty_page_load_failed_description": "The connection was interrupted or the service is briefly unavailable. Please try again.",
   "empty_not_found_description": "This link may be broken, removed, or belong to a Workspace you don't have access to.",
   "empty_notifications_all_done": "You're all caught up",
   "empty_notifications_load_failed": "Couldn't load notifications",

@@ -5,7 +5,7 @@
   "empty_load_failed_safe": "连接已中断，内容没有丢失。",
   "empty_details_toggle": "详情",
   "empty_page_load_failed_title": "无法加载此页面",
-  "empty_page_load_failed_description": "连接已中断或服务暂时不可用，内容没有丢失。",
+  "empty_page_load_failed_description": "连接已中断或服务暂时不可用，请重试。",
   "empty_not_found_description": "此链接可能已失效、被删除，或属于你无权访问的 Workspace。",
   "empty_notifications_all_done": "全部已处理",
   "empty_notifications_load_failed": "无法加载通知",

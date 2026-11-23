@@ -8,19 +8,29 @@ import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { WorkspaceWireframe } from "#src/components/ui/empty-wireframes";
 import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
-import {
-  isChunkLoadError,
-  showBuildUpdateNotice,
-} from "#src/features/updates/build-update-watcher";
+import { isChunkLoadError, reportChunkLoadError } from "#src/features/updates/build-update-watcher";
 import { ErrorPageFrame } from "./error-page-frame";
 
-export function PageLoadError({ error, embedded = false }: { error: unknown; embedded?: boolean }) {
+export function PageLoadError({
+  error,
+  reset,
+  embedded = false,
+}: {
+  error: unknown;
+  reset?: () => void;
+  embedded?: boolean;
+}) {
   const router = useRouter();
   const navigate = useNavigate();
   const [retrying, setRetrying] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const chunkLoadError = isChunkLoadError(error);
   const Container = embedded ? "div" : "main";
   const headingLevel = embedded ? 2 : 1;
+
+  useEffect(() => {
+    if (chunkLoadError) reportChunkLoadError();
+  }, [chunkLoadError]);
 
   if (isAppErrorCode(error, "WORKSPACE_REQUIRED")) {
     return (
@@ -49,6 +59,7 @@ export function PageLoadError({ error, embedded = false }: { error: unknown; emb
     setRetrying(true);
     try {
       await router.invalidate();
+      reset?.();
     } finally {
       setRetrying(false);
     }
@@ -90,16 +101,11 @@ export function PageLoadError({ error, embedded = false }: { error: unknown; emb
   );
 }
 
-export function GlobalError({ error }: { error: unknown }) {
-  const chunkLoadError = isChunkLoadError(error);
-  useEffect(() => {
-    if (chunkLoadError) showBuildUpdateNotice();
-  }, [chunkLoadError]);
-  if (chunkLoadError) return <ErrorPageFrame />;
+export function GlobalError({ error, reset }: { error: unknown; reset?: () => void }) {
   return (
     <ErrorPageFrame>
       <div className="flex w-full max-w-lg flex-col">
-        <PageLoadError error={error} />
+        <PageLoadError error={error} reset={reset} />
       </div>
     </ErrorPageFrame>
   );

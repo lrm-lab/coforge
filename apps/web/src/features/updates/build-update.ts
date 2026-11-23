@@ -5,6 +5,67 @@ export type BuildUpdateState = {
   updateDetected: boolean;
 };
 
+export type BuildUpdateProbeOutcome = "same" | "updated" | "unavailable" | "skipped";
+
+export type BuildUpdateController = {
+  probe: () => Promise<BuildUpdateProbeOutcome>;
+  handleChunkLoadError: () => Promise<BuildUpdateProbeOutcome>;
+  isUpdateDetected: () => boolean;
+};
+
+export function createBuildUpdateController(options: {
+  clientBuildId: string;
+  fetchBuildId: () => Promise<string | undefined>;
+  isOffline?: () => boolean;
+  onUpdateDetected: () => void;
+}): BuildUpdateController {
+  let state: BuildUpdateState = { updateDetected: false };
+  let inFlight: Promise<BuildUpdateProbeOutcome> | null = null;
+  let noticeShown = false;
+
+  const notifyOnce = () => {
+    if (noticeShown) return;
+    noticeShown = true;
+    options.onUpdateDetected();
+  };
+
+  const probe = (): Promise<BuildUpdateProbeOutcome> => {
+    if (options.clientBuildId === "development") return Promise.resolve("skipped");
+    if (state.updateDetected) {
+      notifyOnce();
+      return Promise.resolve("updated");
+    }
+    if (options.isOffline?.()) return Promise.resolve("unavailable");
+    if (inFlight) return inFlight;
+
+    inFlight = (async () => {
+      let serverBuildId: string | undefined;
+      try {
+        serverBuildId = await options.fetchBuildId();
+      } catch {
+        serverBuildId = undefined;
+      }
+      if (serverBuildId === undefined) return "unavailable";
+      state = buildUpdateStateAfterProbe(state, options.clientBuildId, serverBuildId);
+      if (state.updateDetected) {
+        notifyOnce();
+        return "updated";
+      }
+      return "same";
+    })().finally(() => {
+      inFlight = null;
+    });
+
+    return inFlight;
+  };
+
+  return {
+    probe,
+    handleChunkLoadError: () => probe(),
+    isUpdateDetected: () => state.updateDetected,
+  };
+}
+
 let unsavedTemporaryStateCount = 0;
 
 export function registerUnsavedTemporaryState(active: boolean): () => void {

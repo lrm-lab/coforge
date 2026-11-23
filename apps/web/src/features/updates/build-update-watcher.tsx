@@ -1,14 +1,13 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 
 import { appNotice } from "#src/components/ui/notice-card";
 import { m } from "#src/paraglide/messages";
 
 import {
-  buildUpdateStateAfterProbe,
   CLIENT_BUILD_ID,
+  createBuildUpdateController,
   hasUnsavedTemporaryState,
   isChunkLoadError,
-  type BuildUpdateState,
 } from "./build-update";
 
 export { isChunkLoadError } from "./build-update";
@@ -44,28 +43,30 @@ async function fetchBuildId(): Promise<string | undefined> {
   }
 }
 
-export function BuildUpdateWatcher() {
-  const state = useRef<BuildUpdateState>({ updateDetected: false });
-  const inFlight = useRef(false);
+const buildUpdateController = createBuildUpdateController({
+  clientBuildId: CLIENT_BUILD_ID,
+  fetchBuildId,
+  isOffline: () => typeof navigator !== "undefined" && navigator.onLine === false,
+  onUpdateDetected: showBuildUpdateNotice,
+});
 
+export function reportChunkLoadError(): void {
+  void buildUpdateController.handleChunkLoadError();
+}
+
+export function BuildUpdateWatcher() {
   useEffect(() => {
     let disposed = false;
-    const probe = async () => {
-      if (disposed || inFlight.current || CLIENT_BUILD_ID === "development") return;
-      if (document.visibilityState !== "visible") return;
-      inFlight.current = true;
-      const serverBuildId = await fetchBuildId();
-      inFlight.current = false;
-      if (disposed || serverBuildId === undefined) return;
-      state.current = buildUpdateStateAfterProbe(state.current, CLIENT_BUILD_ID, serverBuildId);
-      if (state.current.updateDetected) showBuildUpdateNotice();
+    const probe = () => {
+      if (disposed || document.visibilityState !== "visible") return;
+      void buildUpdateController.probe();
     };
     const onVisible = () => {
-      if (document.visibilityState === "visible") void probe();
+      if (document.visibilityState === "visible") probe();
     };
-    const onOnline = () => void probe();
-    const interval = window.setInterval(() => void probe(), BUILD_ID_POLL_MS);
-    void probe();
+    const onOnline = () => probe();
+    const interval = window.setInterval(probe, BUILD_ID_POLL_MS);
+    probe();
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("online", onOnline);
     return () => {
@@ -79,10 +80,10 @@ export function BuildUpdateWatcher() {
   useEffect(() => {
     if (CLIENT_BUILD_ID === "development") return;
     const onError = (event: ErrorEvent) => {
-      if (isChunkLoadError(event.error ?? event.message)) showBuildUpdateNotice();
+      if (isChunkLoadError(event.error ?? event.message)) reportChunkLoadError();
     };
     const onUnhandledRejection = (event: PromiseRejectionEvent) => {
-      if (isChunkLoadError(event.reason)) showBuildUpdateNotice();
+      if (isChunkLoadError(event.reason)) reportChunkLoadError();
     };
     window.addEventListener("error", onError);
     window.addEventListener("unhandledrejection", onUnhandledRejection);
