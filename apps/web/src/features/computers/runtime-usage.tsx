@@ -30,8 +30,6 @@ export { RuntimeUsagePopoverContent };
 
 export type Runtime = {
   provider: RuntimeProvider;
-  /** The CLI's own reported version, when known — e.g. absent for the Agent profile panel until
-   * its Computer has reported one. */
   version?: string;
   displayName: string;
 };
@@ -53,8 +51,6 @@ function RuntimeIdentity({ runtime, health }: { runtime: Runtime; health?: Runti
   );
 }
 
-/** A small health indicator for a Runtime trigger — reuses the same dot styling the Agent
- * profile panel already draws for a Computer's connected/offline state. */
 export function UsageHealthDot({
   health,
   className,
@@ -79,15 +75,6 @@ export function UsageHealthDot({
 const DEFAULT_TRIGGER_CLASS_NAME =
   "-m-1 min-w-0 rounded-lg p-1 text-left outline-none hover:bg-primary_hover data-focus-visible:ring-2 data-focus-visible:ring-brand";
 
-/**
- * One Code Agent runtime on a Computer, and the shared provider-usage popover, opened on a press
- * with a close button as on Raft (this replaces the hover peek task #116 chose): reads the cached
- * usage on mount, refreshes it with at most one automatic scan when that read is stale or missing
- * and the Computer isn't known offline, and offers a manual Refresh for everything else. A
- * caller without the default `RuntimeIdentity` row (the Agent profile panel's Runtime badge)
- * supplies its own `trigger`, which receives the same health signal `RuntimeIdentity` draws as a
- * dot so both triggers can show it.
- */
 export function RuntimeUsage({
   computerId,
   agentUsage,
@@ -109,32 +96,18 @@ export function RuntimeUsage({
   computerId: string;
   agentUsage?: AgentUsageQueryScope;
   runtime: Runtime;
-  /** `undefined` means "not known", treated like online for the purpose of auto-scanning. */
   computerOnline?: boolean;
   timeZone?: string | null;
-  /** Receives the one status the chip draws: a login state that needs saying, else the usage. */
   trigger?: (status: RuntimeStatus | undefined) => ReactNode;
   triggerClassName?: string;
-  /** A band under the usage (the Agent profile's context). With a footer, a runtime that reports
-   * no usage still opens a popover, holding only the footer. */
   footer?: ReactNode;
-  /** Names what the footer holds in the trigger's accessible name. */
   footerLabel?: string;
-  /** Bands held under everything else (the Computer page's Public switch and account): only the
-   * usage between the header and them scrolls, so a short screen never hides an action. */
   actions?: ReactNode;
-  /** False when the viewer may not see this runtime's account usage: the usage is neither read nor
-   * drawn, and only the runtime band, the footer and the actions remain. */
   showUsage?: boolean;
   canResetCredit?: boolean;
-  /** The runtime's login state on the Computer page, account fields only for those allowed them
-   * (`runtimeAuthView`). With it, the popover opens even without usage, to show that account. */
   auth?: RuntimeAuthStatus;
-  /** The login state to name: `auth`'s, or `unreported` when the Computer is too old to send one. */
   account?: AccountState;
-  /** Signs the runtime in or out for the login state the popover shows, if the viewer may. */
   accountAction?: (shown: AccountState | undefined) => ReactNode;
-  /** A line under the version: why this runtime cannot be used, when it cannot. */
   notice?: ReactNode;
 }) {
   const [resetCreditDialog, setResetCreditDialog] = useState<
@@ -154,9 +127,6 @@ export function RuntimeUsage({
     signedIn: account === "logged_in",
     agent: agentUsage,
   });
-  // Opening the popover asks the Computer to read this runtime's login status again: it may have
-  // been signed in or out on the Computer itself, which nothing else tells us. The Computer's
-  // report reaches this page on the caller's channel, like any other.
   const requestStatus = useServerFn(requestRuntimeAuthStatus);
   const rereadLogin = () => {
     if (agentUsage || !isSignableRuntimeProvider(runtime.provider)) return;
@@ -173,8 +143,6 @@ export function RuntimeUsage({
     <RuntimeIdentity runtime={runtime} health={health} />
   );
 
-  // A runtime that reports no usage still opens for its footer, an action, its login state, or the
-  // reason it cannot be used at all.
   if (!supportsUsage && !footer && !actions && !account && !notice) return resolvedTrigger;
 
   const snapshot = usageRead?.result?.snapshot;

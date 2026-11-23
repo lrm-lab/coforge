@@ -32,13 +32,6 @@ type AuthDialog = {
   name: string;
 };
 
-/**
- * A Computer's runtimes as Raft lays them out: one chip each, opening that runtime's popover on a
- * press. Those who may sign a runtime in or out (the server's rule: the Computer's owner, or a
- * Workspace owner or admin) get its usage, the account and Sign in or Sign out; only the owner also
- * gets the Public switch. Anyone else's popover opens only for a runtime with a login state, to
- * show that state alone.
- */
 export function ComputerRuntimeList({
   computer,
   timeZone,
@@ -123,8 +116,6 @@ export function ComputerRuntimeList({
               </div>
             );
           };
-          // A runtime that cannot start has nothing to sign in to, no usage to read and nothing to
-          // share: the popover keeps its name, version, reason and Refresh.
           const unusableReason = runtime.unavailableCode
             ? runtimeUnavailableReason(runtime.unavailableCode, runtime.diagnostic)
             : undefined;
@@ -139,10 +130,6 @@ export function ComputerRuntimeList({
                 <span className="text-sm font-medium text-secondary">
                   {m.computer_runtime_public()}
                 </span>
-                {/* A disabled toggle drops focus to the page mid-press (task #116; the
-                    refresh bug #179 went down this exact path). Repeat edits are ignored
-                    in the handler instead; the error text below still reports a failed
-                    change. */}
                 <Toggle
                   size="sm"
                   aria-label={m.computer_runtime_public()}
@@ -175,8 +162,6 @@ export function ComputerRuntimeList({
                 notice={unusableReason}
                 triggerClassName={RUNTIME_CHIP_TRIGGER_CLASS_NAME}
                 trigger={(status) => (
-                  // A runtime that cannot start keeps its warning dot: it is the one thing that
-                  // shows the problem without opening the popover.
                   <RuntimeChip
                     runtime={runtime}
                     status={unusableReason ? { ok: false, label: unusableReason } : status}
@@ -216,8 +201,6 @@ export function ComputerRuntimeList({
   );
 }
 
-/** An action inside the runtime popover that opens a dialog: the popover closes first, so the
- * dialog is the only thing over the page. */
 function PopoverAction({
   onPress,
   children,
