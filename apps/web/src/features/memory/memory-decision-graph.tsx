@@ -39,7 +39,7 @@ function GraphNodeLink({ node }: { node: Node }) {
   if (node.type === "memory")
     return (
       <Link
-        to="/w/$workspaceSlug/memory"
+        to="/w/$workspaceSlug/settings/memory"
         params={{ workspaceSlug }}
         search={{ q: "", offset: 0, archived: false, id: node.id, revision: node.revision }}
         className={className}

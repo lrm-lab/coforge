@@ -14,19 +14,21 @@ import {
 } from "#src/features/updates/build-update-watcher";
 import { ErrorPageFrame } from "./error-page-frame";
 
-export function PageLoadError({ error }: { error: unknown }) {
+export function PageLoadError({ error, embedded = false }: { error: unknown; embedded?: boolean }) {
   const router = useRouter();
   const navigate = useNavigate();
   const [retrying, setRetrying] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const Container = embedded ? "div" : "main";
+  const headingLevel = embedded ? 2 : 1;
 
   if (isAppErrorCode(error, "WORKSPACE_REQUIRED")) {
     return (
-      <main className="flex flex-1 flex-col p-6">
+      <Container className="flex flex-1 flex-col p-6">
         <EmptyState
           size="page"
           role="status"
-          headingLevel={1}
+          headingLevel={headingLevel}
           picture={<WorkspaceWireframe />}
           title={m.workspace_unavailable_title()}
           description={m.workspace_unavailable_description()}
@@ -36,7 +38,7 @@ export function PageLoadError({ error }: { error: unknown }) {
             </Button>
           }
         />
-      </main>
+      </Container>
     );
   }
 
@@ -53,11 +55,11 @@ export function PageLoadError({ error }: { error: unknown }) {
   }
 
   return (
-    <main className="flex flex-1 flex-col p-6">
+    <Container className="flex flex-1 flex-col p-6">
       <EmptyState
         size="page"
         role="alert"
-        headingLevel={1}
+        headingLevel={headingLevel}
         picture={<EmptyIcon icon={offline ? Plug : CircleAlert} />}
         title={offline ? m.empty_offline_title() : m.empty_page_load_failed_title()}
         description={
@@ -84,7 +86,7 @@ export function PageLoadError({ error }: { error: unknown }) {
           {m.error_reference({ errorId })}
         </p>
       )}
-    </main>
+    </Container>
   );
 }
 

@@ -136,6 +136,7 @@ import { Route as WWorkspaceSlugRecordsRecordIdRouteImport } from './routes/w.$w
 import { Route as WWorkspaceSlugRecordsDashboardRouteImport } from './routes/w.$workspaceSlug/records.dashboard'
 import { Route as WWorkspaceSlugRecordsSettingsRouteImport } from './routes/w.$workspaceSlug/records.settings'
 import { Route as WWorkspaceSlugRecordsStatsRouteImport } from './routes/w.$workspaceSlug/records.stats'
+import { Route as WWorkspaceSlugSettingsMemoryRouteImport } from './routes/w.$workspaceSlug/settings.memory'
 import { Route as ApiAgentV1ActionsPrepareRouteImport } from './routes/api/agent/v1/actions/prepare'
 import { Route as ApiAgentV1ActionsWithdrawRouteImport } from './routes/api/agent/v1/actions/withdraw'
 import { Route as ApiAgentV1AppsIndexRouteImport } from './routes/api/agent/v1/apps/index'
@@ -169,6 +170,7 @@ import { Route as WWorkspaceSlugChatChannelChannelIdRouteImport } from './routes
 import { Route as WWorkspaceSlugChatDmDmIdRouteImport } from './routes/w.$workspaceSlug/_chat.dm.$dmId'
 import { Route as WWorkspaceSlugComputersComputerComputerIdRouteImport } from './routes/w.$workspaceSlug/_computers.computer.$computerId'
 import { Route as WWorkspaceSlugProjectsProjectSlugSettingsRouteImport } from './routes/w.$workspaceSlug/projects.$projectSlug_.settings'
+import { Route as WWorkspaceSlugSettingsMemoryPersonalRouteImport } from './routes/w.$workspaceSlug/settings.memory_.personal'
 import { Route as ApiAgentV1AppsAppIdConfigRouteImport } from './routes/api/agent/v1/apps/$appId/config'
 import { Route as ApiAgentV1AppsAppIdTokenRouteImport } from './routes/api/agent/v1/apps/$appId/token'
 import { Route as ApiAgentV1AppsOwnedIndexRouteImport } from './routes/api/agent/v1/apps/owned/index'
@@ -889,6 +891,12 @@ const WWorkspaceSlugRecordsStatsRoute =
     path: '/stats',
     getParentRoute: () => WWorkspaceSlugRecordsRoute,
   } as any)
+const WWorkspaceSlugSettingsMemoryRoute =
+  WWorkspaceSlugSettingsMemoryRouteImport.update({
+    id: '/memory',
+    path: '/memory',
+    getParentRoute: () => WWorkspaceSlugSettingsRoute,
+  } as any)
 const ApiAgentV1ActionsPrepareRoute =
   ApiAgentV1ActionsPrepareRouteImport.update({
     id: '/api/agent/v1/actions/prepare',
@@ -1074,6 +1082,12 @@ const WWorkspaceSlugProjectsProjectSlugSettingsRoute =
     id: '/projects/$projectSlug_/settings',
     path: '/projects/$projectSlug/settings',
     getParentRoute: () => WWorkspaceSlugRoute,
+  } as any)
+const WWorkspaceSlugSettingsMemoryPersonalRoute =
+  WWorkspaceSlugSettingsMemoryPersonalRouteImport.update({
+    id: '/memory_/personal',
+    path: '/memory/personal',
+    getParentRoute: () => WWorkspaceSlugSettingsRoute,
   } as any)
 const ApiAgentV1AppsAppIdConfigRoute =
   ApiAgentV1AppsAppIdConfigRouteImport.update({
@@ -1392,7 +1406,7 @@ export interface FileRoutesByFullPath {
   '/w/$workspaceSlug/pi-chat': typeof WWorkspaceSlugPiChatRoute
   '/w/$workspaceSlug/records': typeof WWorkspaceSlugRecordsRouteWithChildren
   '/w/$workspaceSlug/search': typeof WWorkspaceSlugSearchRoute
-  '/w/$workspaceSlug/settings': typeof WWorkspaceSlugSettingsRoute
+  '/w/$workspaceSlug/settings': typeof WWorkspaceSlugSettingsRouteWithChildren
   '/w/$workspaceSlug/tasks': typeof WWorkspaceSlugTasksRoute
   '/w/$workspaceSlug/workspace': typeof WWorkspaceSlugWorkspaceRoute
   '/api/agent/v1/activity': typeof ApiAgentV1ActivityRoute
@@ -1445,6 +1459,7 @@ export interface FileRoutesByFullPath {
   '/w/$workspaceSlug/records/dashboard': typeof WWorkspaceSlugRecordsDashboardRoute
   '/w/$workspaceSlug/records/settings': typeof WWorkspaceSlugRecordsSettingsRoute
   '/w/$workspaceSlug/records/stats': typeof WWorkspaceSlugRecordsStatsRoute
+  '/w/$workspaceSlug/settings/memory': typeof WWorkspaceSlugSettingsMemoryRoute
   '/w/$workspaceSlug/': typeof WWorkspaceSlugChatIndexRoute
   '/w/$workspaceSlug/artifacts/': typeof WWorkspaceSlugArtifactsIndexRoute
   '/w/$workspaceSlug/projects/': typeof WWorkspaceSlugProjectsIndexRoute
@@ -1479,6 +1494,7 @@ export interface FileRoutesByFullPath {
   '/w/$workspaceSlug/dm/$dmId': typeof WWorkspaceSlugChatDmDmIdRoute
   '/w/$workspaceSlug/computer/$computerId': typeof WWorkspaceSlugComputersComputerComputerIdRoute
   '/w/$workspaceSlug/projects/$projectSlug/settings': typeof WWorkspaceSlugProjectsProjectSlugSettingsRoute
+  '/w/$workspaceSlug/settings/memory/personal': typeof WWorkspaceSlugSettingsMemoryPersonalRoute
   '/api/agent/v1/apps/': typeof ApiAgentV1AppsIndexRoute
   '/api/agent/v1/attachment-upload-sessions/': typeof ApiAgentV1AttachmentUploadSessionsIndexRoute
   '/api/agent/v1/attachments/': typeof ApiAgentV1AttachmentsIndexRoute
@@ -1591,7 +1607,7 @@ export interface FileRoutesByTo {
   '/w/$workspaceSlug/memory': typeof WWorkspaceSlugMemoryRoute
   '/w/$workspaceSlug/pi-chat': typeof WWorkspaceSlugPiChatRoute
   '/w/$workspaceSlug/search': typeof WWorkspaceSlugSearchRoute
-  '/w/$workspaceSlug/settings': typeof WWorkspaceSlugSettingsRoute
+  '/w/$workspaceSlug/settings': typeof WWorkspaceSlugSettingsRouteWithChildren
   '/w/$workspaceSlug/tasks': typeof WWorkspaceSlugTasksRoute
   '/w/$workspaceSlug/workspace': typeof WWorkspaceSlugWorkspaceRoute
   '/api/agent/v1/activity': typeof ApiAgentV1ActivityRoute
@@ -1644,6 +1660,7 @@ export interface FileRoutesByTo {
   '/w/$workspaceSlug/records/dashboard': typeof WWorkspaceSlugRecordsDashboardRoute
   '/w/$workspaceSlug/records/settings': typeof WWorkspaceSlugRecordsSettingsRoute
   '/w/$workspaceSlug/records/stats': typeof WWorkspaceSlugRecordsStatsRoute
+  '/w/$workspaceSlug/settings/memory': typeof WWorkspaceSlugSettingsMemoryRoute
   '/w/$workspaceSlug/artifacts': typeof WWorkspaceSlugArtifactsIndexRoute
   '/w/$workspaceSlug/projects': typeof WWorkspaceSlugProjectsIndexRoute
   '/w/$workspaceSlug/records': typeof WWorkspaceSlugRecordsIndexRoute
@@ -1677,6 +1694,7 @@ export interface FileRoutesByTo {
   '/w/$workspaceSlug/dm/$dmId': typeof WWorkspaceSlugChatDmDmIdRoute
   '/w/$workspaceSlug/computer/$computerId': typeof WWorkspaceSlugComputersComputerComputerIdRoute
   '/w/$workspaceSlug/projects/$projectSlug/settings': typeof WWorkspaceSlugProjectsProjectSlugSettingsRoute
+  '/w/$workspaceSlug/settings/memory/personal': typeof WWorkspaceSlugSettingsMemoryPersonalRoute
   '/api/agent/v1/apps': typeof ApiAgentV1AppsIndexRoute
   '/api/agent/v1/attachment-upload-sessions': typeof ApiAgentV1AttachmentUploadSessionsIndexRoute
   '/api/agent/v1/attachments': typeof ApiAgentV1AttachmentsIndexRoute
@@ -1793,7 +1811,7 @@ export interface FileRoutesById {
   '/w/$workspaceSlug/pi-chat': typeof WWorkspaceSlugPiChatRoute
   '/w/$workspaceSlug/records': typeof WWorkspaceSlugRecordsRouteWithChildren
   '/w/$workspaceSlug/search': typeof WWorkspaceSlugSearchRoute
-  '/w/$workspaceSlug/settings': typeof WWorkspaceSlugSettingsRoute
+  '/w/$workspaceSlug/settings': typeof WWorkspaceSlugSettingsRouteWithChildren
   '/w/$workspaceSlug/tasks': typeof WWorkspaceSlugTasksRoute
   '/w/$workspaceSlug/workspace': typeof WWorkspaceSlugWorkspaceRoute
   '/api/agent/v1/activity': typeof ApiAgentV1ActivityRoute
@@ -1846,6 +1864,7 @@ export interface FileRoutesById {
   '/w/$workspaceSlug/records/dashboard': typeof WWorkspaceSlugRecordsDashboardRoute
   '/w/$workspaceSlug/records/settings': typeof WWorkspaceSlugRecordsSettingsRoute
   '/w/$workspaceSlug/records/stats': typeof WWorkspaceSlugRecordsStatsRoute
+  '/w/$workspaceSlug/settings/memory': typeof WWorkspaceSlugSettingsMemoryRoute
   '/w/$workspaceSlug/_chat/': typeof WWorkspaceSlugChatIndexRoute
   '/w/$workspaceSlug/artifacts/': typeof WWorkspaceSlugArtifactsIndexRoute
   '/w/$workspaceSlug/projects/': typeof WWorkspaceSlugProjectsIndexRoute
@@ -1880,6 +1899,7 @@ export interface FileRoutesById {
   '/w/$workspaceSlug/_chat/dm/$dmId': typeof WWorkspaceSlugChatDmDmIdRoute
   '/w/$workspaceSlug/_computers/computer/$computerId': typeof WWorkspaceSlugComputersComputerComputerIdRoute
   '/w/$workspaceSlug/projects/$projectSlug_/settings': typeof WWorkspaceSlugProjectsProjectSlugSettingsRoute
+  '/w/$workspaceSlug/settings/memory_/personal': typeof WWorkspaceSlugSettingsMemoryPersonalRoute
   '/api/agent/v1/apps/': typeof ApiAgentV1AppsIndexRoute
   '/api/agent/v1/attachment-upload-sessions/': typeof ApiAgentV1AttachmentUploadSessionsIndexRoute
   '/api/agent/v1/attachments/': typeof ApiAgentV1AttachmentsIndexRoute
@@ -2048,6 +2068,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/records/dashboard'
     | '/w/$workspaceSlug/records/settings'
     | '/w/$workspaceSlug/records/stats'
+    | '/w/$workspaceSlug/settings/memory'
     | '/w/$workspaceSlug/'
     | '/w/$workspaceSlug/artifacts/'
     | '/w/$workspaceSlug/projects/'
@@ -2082,6 +2103,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/dm/$dmId'
     | '/w/$workspaceSlug/computer/$computerId'
     | '/w/$workspaceSlug/projects/$projectSlug/settings'
+    | '/w/$workspaceSlug/settings/memory/personal'
     | '/api/agent/v1/apps/'
     | '/api/agent/v1/attachment-upload-sessions/'
     | '/api/agent/v1/attachments/'
@@ -2247,6 +2269,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/records/dashboard'
     | '/w/$workspaceSlug/records/settings'
     | '/w/$workspaceSlug/records/stats'
+    | '/w/$workspaceSlug/settings/memory'
     | '/w/$workspaceSlug/artifacts'
     | '/w/$workspaceSlug/projects'
     | '/w/$workspaceSlug/records'
@@ -2280,6 +2303,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/dm/$dmId'
     | '/w/$workspaceSlug/computer/$computerId'
     | '/w/$workspaceSlug/projects/$projectSlug/settings'
+    | '/w/$workspaceSlug/settings/memory/personal'
     | '/api/agent/v1/apps'
     | '/api/agent/v1/attachment-upload-sessions'
     | '/api/agent/v1/attachments'
@@ -2448,6 +2472,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/records/dashboard'
     | '/w/$workspaceSlug/records/settings'
     | '/w/$workspaceSlug/records/stats'
+    | '/w/$workspaceSlug/settings/memory'
     | '/w/$workspaceSlug/_chat/'
     | '/w/$workspaceSlug/artifacts/'
     | '/w/$workspaceSlug/projects/'
@@ -2482,6 +2507,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/_chat/dm/$dmId'
     | '/w/$workspaceSlug/_computers/computer/$computerId'
     | '/w/$workspaceSlug/projects/$projectSlug_/settings'
+    | '/w/$workspaceSlug/settings/memory_/personal'
     | '/api/agent/v1/apps/'
     | '/api/agent/v1/attachment-upload-sessions/'
     | '/api/agent/v1/attachments/'
@@ -3571,6 +3597,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WWorkspaceSlugRecordsStatsRouteImport
       parentRoute: typeof WWorkspaceSlugRecordsRoute
     }
+    '/w/$workspaceSlug/settings/memory': {
+      id: '/w/$workspaceSlug/settings/memory'
+      path: '/memory'
+      fullPath: '/w/$workspaceSlug/settings/memory'
+      preLoaderRoute: typeof WWorkspaceSlugSettingsMemoryRouteImport
+      parentRoute: typeof WWorkspaceSlugSettingsRoute
+    }
     '/api/agent/v1/actions/prepare': {
       id: '/api/agent/v1/actions/prepare'
       path: '/api/agent/v1/actions/prepare'
@@ -3801,6 +3834,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/w/$workspaceSlug/projects/$projectSlug/settings'
       preLoaderRoute: typeof WWorkspaceSlugProjectsProjectSlugSettingsRouteImport
       parentRoute: typeof WWorkspaceSlugRoute
+    }
+    '/w/$workspaceSlug/settings/memory_/personal': {
+      id: '/w/$workspaceSlug/settings/memory_/personal'
+      path: '/memory/personal'
+      fullPath: '/w/$workspaceSlug/settings/memory/personal'
+      preLoaderRoute: typeof WWorkspaceSlugSettingsMemoryPersonalRouteImport
+      parentRoute: typeof WWorkspaceSlugSettingsRoute
     }
     '/api/agent/v1/apps/$appId/config': {
       id: '/api/agent/v1/apps/$appId/config'
@@ -4192,6 +4232,23 @@ const WWorkspaceSlugRecordsRouteWithChildren =
     WWorkspaceSlugRecordsRouteChildren,
   )
 
+interface WWorkspaceSlugSettingsRouteChildren {
+  WWorkspaceSlugSettingsMemoryRoute: typeof WWorkspaceSlugSettingsMemoryRoute
+  WWorkspaceSlugSettingsMemoryPersonalRoute: typeof WWorkspaceSlugSettingsMemoryPersonalRoute
+}
+
+const WWorkspaceSlugSettingsRouteChildren: WWorkspaceSlugSettingsRouteChildren =
+  {
+    WWorkspaceSlugSettingsMemoryRoute: WWorkspaceSlugSettingsMemoryRoute,
+    WWorkspaceSlugSettingsMemoryPersonalRoute:
+      WWorkspaceSlugSettingsMemoryPersonalRoute,
+  }
+
+const WWorkspaceSlugSettingsRouteWithChildren =
+  WWorkspaceSlugSettingsRoute._addFileChildren(
+    WWorkspaceSlugSettingsRouteChildren,
+  )
+
 interface WWorkspaceSlugRouteChildren {
   WWorkspaceSlugChatRoute: typeof WWorkspaceSlugChatRouteWithChildren
   WWorkspaceSlugComputersRoute: typeof WWorkspaceSlugComputersRouteWithChildren
@@ -4203,7 +4260,7 @@ interface WWorkspaceSlugRouteChildren {
   WWorkspaceSlugPiChatRoute: typeof WWorkspaceSlugPiChatRoute
   WWorkspaceSlugRecordsRoute: typeof WWorkspaceSlugRecordsRouteWithChildren
   WWorkspaceSlugSearchRoute: typeof WWorkspaceSlugSearchRoute
-  WWorkspaceSlugSettingsRoute: typeof WWorkspaceSlugSettingsRoute
+  WWorkspaceSlugSettingsRoute: typeof WWorkspaceSlugSettingsRouteWithChildren
   WWorkspaceSlugTasksRoute: typeof WWorkspaceSlugTasksRoute
   WWorkspaceSlugWorkspaceRoute: typeof WWorkspaceSlugWorkspaceRoute
   WWorkspaceSlugAgentAgentIdRoute: typeof WWorkspaceSlugAgentAgentIdRoute
@@ -4227,7 +4284,7 @@ const WWorkspaceSlugRouteChildren: WWorkspaceSlugRouteChildren = {
   WWorkspaceSlugPiChatRoute: WWorkspaceSlugPiChatRoute,
   WWorkspaceSlugRecordsRoute: WWorkspaceSlugRecordsRouteWithChildren,
   WWorkspaceSlugSearchRoute: WWorkspaceSlugSearchRoute,
-  WWorkspaceSlugSettingsRoute: WWorkspaceSlugSettingsRoute,
+  WWorkspaceSlugSettingsRoute: WWorkspaceSlugSettingsRouteWithChildren,
   WWorkspaceSlugTasksRoute: WWorkspaceSlugTasksRoute,
   WWorkspaceSlugWorkspaceRoute: WWorkspaceSlugWorkspaceRoute,
   WWorkspaceSlugAgentAgentIdRoute: WWorkspaceSlugAgentAgentIdRoute,

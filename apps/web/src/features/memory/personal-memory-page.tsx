@@ -47,7 +47,7 @@ export function PersonalMemoryPage({
   detail?: Response;
 }) {
   const workspaceSlug = useWorkspaceSlug();
-  const navigate = useNavigate({ from: "/w/$workspaceSlug/memory/personal" });
+  const navigate = useNavigate({ from: "/w/$workspaceSlug/settings/memory/personal" });
   const router = useRouter();
   const [agentQuery, setAgentQuery] = useState(search.agentQuery);
   const [query, setQuery] = useState(search.q);
@@ -136,25 +136,25 @@ export function PersonalMemoryPage({
     }
   };
   return (
-    <main className="flex h-full min-h-0 flex-col bg-primary">
-      <header className="flex items-center justify-between gap-4 border-b border-secondary px-5 py-4 lg:px-8">
-        <h1 className="text-lg font-semibold text-primary">{m.memory_personal()}</h1>
-        <Button
-          size="sm"
-          iconLeading={Plus}
-          isDisabled={!search.agent || busy || !!(list && responseError(list))}
-          onPress={() => {
-            setEditing(false);
-            void update({ key: undefined, create: true });
-          }}
-        >
-          {m.memory_new()}
-        </Button>
-      </header>
-      <MemoryScopeLinks />
-      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]">
+    <div className="flex h-full min-h-0 flex-col bg-primary">
+      <MemoryScopeLinks
+        actions={
+          <Button
+            size="sm"
+            iconLeading={Plus}
+            isDisabled={!search.agent || busy || !!(list && responseError(list))}
+            onPress={() => {
+              setEditing(false);
+              void update({ key: undefined, create: true });
+            }}
+          >
+            {m.memory_new()}
+          </Button>
+        }
+      />
+      <div className="grid min-h-0 flex-1 @3xl/settings:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]">
         <section
-          className={`${selected ? "hidden lg:flex" : "flex"} min-h-0 flex-col border-secondary lg:border-r`}
+          className={`${selected ? "hidden @3xl/settings:flex" : "flex"} min-h-0 flex-col border-secondary @3xl/settings:border-r`}
         >
           <div className="flex flex-col gap-3 border-b border-secondary px-5 py-4">
             <form
@@ -279,7 +279,7 @@ export function PersonalMemoryPage({
                 <li key={item.key}>
                   {/^[a-z0-9][a-z0-9_-]*$/.test(item.key) ? (
                     <Link
-                      to="/w/$workspaceSlug/memory/personal"
+                      to="/w/$workspaceSlug/settings/memory/personal"
                       params={{ workspaceSlug }}
                       search={{ ...search, key: item.key, create: false }}
                       className="block cursor-pointer px-5 py-4 hover:bg-primary_hover"
@@ -320,10 +320,10 @@ export function PersonalMemoryPage({
           </div>
         </section>
         <section
-          className={`${selected ? "flex" : "hidden lg:flex"} min-h-0 min-w-0 flex-col gap-5 overflow-y-auto px-5 py-5 lg:px-8`}
+          className={`${selected ? "flex" : "hidden @3xl/settings:flex"} min-h-0 min-w-0 flex-col gap-5 overflow-y-auto px-5 py-5 lg:px-8`}
         >
           {selected && (
-            <div className="lg:hidden">
+            <div className="@3xl/settings:hidden">
               <Button
                 color="link-gray"
                 size="sm"
@@ -471,6 +471,6 @@ export function PersonalMemoryPage({
           )}
         </section>
       </div>
-    </main>
+    </div>
   );
 }
