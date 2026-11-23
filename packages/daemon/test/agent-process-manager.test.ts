@@ -342,7 +342,7 @@ describe("AgentProcessManager", () => {
       assignedSkillPacks: [],
       identity: { name: "scout", runtimeContext: { computerName: "Builder Box" } },
     });
-    expect(options?.instructions).toContain('- Display name: "scout"');
+    expect(options?.instructions).toStartWith('You are "scout", an AI agent in CoForge.');
     expect(options?.instructions).toContain("- Computer: Builder Box");
   });
   test("does not retain a runtime when provider startup fails", async () => {

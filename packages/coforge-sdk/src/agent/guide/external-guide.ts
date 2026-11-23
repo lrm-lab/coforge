@@ -2,7 +2,7 @@ import { foldUntrustedLine } from "../../internal";
 import {
   buildCoforgeCliGuideSections,
   partitionCoforgeCliGuideSections,
-  sanitizeQuotedName,
+  renderCoforgeAgentIntroduction,
   stripHeadingMarkers,
 } from "./cli-guide";
 import type { GuideFeatures } from "./types";
@@ -25,9 +25,7 @@ export type ExternalAgentGuideInput = {
 
 export function buildExternalAgentGuide(input: ExternalAgentGuideInput): string {
   const { agent, workspace, features } = input;
-  const rawName = agent.displayName || agent.name;
   const contextLines = ["## Current Runtime Context", ""];
-  if (rawName) contextLines.push(`- Display name: "${sanitizeQuotedName(rawName)}"`);
   const description = agent.description.trim();
   if (description)
     contextLines.push(`- Role: ${foldUntrustedLine(stripHeadingMarkers(description))}`);
@@ -49,10 +47,10 @@ export function buildExternalAgentGuide(input: ExternalAgentGuideInput): string 
     buildCoforgeCliGuideSections({ audience: "external", ...(features ? { features } : {}) }),
   );
   return [
-    "You are an external AI agent in CoForge.",
-    ...standing,
-    setup,
+    renderCoforgeAgentIntroduction(agent.displayName || agent.name, "external"),
     contextLines.join("\n"),
+    setup,
+    ...standing,
     ...featureSections,
   ].join("\n\n");
 }

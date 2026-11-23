@@ -1,6 +1,6 @@
 import { foldUntrustedLine, MESSAGE_LINE_SEPARATOR } from "../../internal";
 import { resolveFeatureGuides } from "./registry";
-import type { CoforgeCliGuideOptions, CoforgeCliGuideSections } from "./types";
+import type { CoforgeCliGuideOptions, CoforgeCliGuideSections, GuideAudience } from "./types";
 
 export const CLI_CHANNEL_MESSAGE_EXAMPLE = `coforge message check --target '#channel'
 coforge message send --target '#channel' <<'COFORGE_MESSAGE'
@@ -12,6 +12,16 @@ Be brief for decisions/actions. Skip logs, command transcripts, task status, che
 
 export function sanitizeQuotedName(name: string): string {
   return foldUntrustedLine(name).replace(/"/g, "");
+}
+
+export function renderCoforgeAgentIntroduction(
+  name: string | undefined,
+  audience: GuideAudience,
+): string {
+  const displayName = sanitizeQuotedName(name ?? "");
+  const agentType = audience === "external" ? "external AI agent" : "AI agent";
+  const identity = displayName ? `"${displayName}", an ${agentType}` : `an ${agentType}`;
+  return `You are ${identity} in CoForge.`;
 }
 
 export function stripHeadingMarkers(text: string): string {
@@ -27,13 +37,13 @@ export function buildCoforgeCliGuideSections(
   const audience = options.audience ?? "managed";
   const isExternal = audience === "external";
 
-  const communication = `## CoForge communication
-### Conversation etiquette
+  const etiquette = `### Conversation etiquette
 In shared channels and threads, honor current addressees. Leave follow-ups to the person already answering that request. A new unaddressed request, even on the same topic, goes to the work owner (assignee or person doing it). If no owner is known, clarify or claim. Reply separately only when asked.
 If someone else should answer, stay quiet unless you have a new fact they lack. A shared fact is not new. Respect the requested audience. For a private reply, DM new evidence only to the designated responder, who replies once.
 
-Default reply location: keep the target and thread suffix. Reply on the 1-on-1 DM timeline unless addressed in its thread or task. Use top level for new topics, summaries, proactive notices or thread conclusions. Honor the human's destination. Apply this default to thread-mismatch confirmations.
+Default reply location: keep the target and thread suffix. Reply on the 1-on-1 DM timeline unless addressed in its thread or task. Use top level for new topics, summaries, proactive notices or thread conclusions. Honor the human's destination. Apply this default to thread-mismatch confirmations.`;
 
+  const communication = `## CoForge communication
 ### Send messages
 Send via shell without asking. Only \`coforge message send\` delivers chat replies. No native UI/question tools. Send on stdin with a quoted here-document and a delimiter absent from its body. Avoid shared temporary files.${isExternal ? "" : " Or create a unique file in your Agent workspace and send only after writing it successfully."} If preparation fails, stop. Never send existing file contents.
 ${CLI_CHANNEL_MESSAGE_EXAMPLE}
@@ -72,6 +82,7 @@ ${(options.extraCriticalRules ?? []).join("\n")}`.trim();
     execution,
     queue,
     safety,
+    etiquette,
   };
   const featureGuides = resolveFeatureGuides({
     audience,
@@ -83,9 +94,19 @@ ${(options.extraCriticalRules ?? []).join("\n")}`.trim();
 }
 
 export function partitionCoforgeCliGuideSections(sections: CoforgeCliGuideSections) {
-  const { safety, communication, messages, execution, tasks, queue, ...features } = sections;
+  const { safety, communication, messages, execution, tasks, queue, etiquette, ...features } =
+    sections;
   return {
-    standing: [safety, COMMUNICATION_STYLE, communication, messages, execution, tasks, queue],
+    standing: [
+      safety,
+      communication,
+      messages,
+      execution,
+      tasks,
+      queue,
+      COMMUNICATION_STYLE,
+      etiquette,
+    ],
     features: Object.values(features),
   };
 }

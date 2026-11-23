@@ -137,7 +137,7 @@ test("recovers context on demand without loading the Manual into every session",
   expect(instructions).not.toContain("Use channel mute");
 });
 test("managed standing guidance is identical across identities and launch environments", () => {
-  const runtimeHeading = "\n\n## Current Runtime Context\n";
+  const boundariesHeading = "\n\n## Boundaries\n";
   const changed = buildCoforgeAgentInstructions({
     agentWorkspaceDirectory: "/isolated/work/changed",
     agentId: "changed-agent",
@@ -153,16 +153,18 @@ test("managed standing guidance is identical across identities and launch enviro
     environment: { COFORGE_CLOUD_COMPUTER: "1", WORKSPACE: "/isolated/work" },
     extraCriticalRules: ["Use the changed provider command."],
   });
-  const [standing = "", runtime = ""] = changed.split(runtimeHeading);
-  expect(standing).toBe(instructions.split(runtimeHeading)[0] ?? "");
+  const [runtime = "", changedGuidance = ""] = changed.split(boundariesHeading);
+  const [, baselineGuidance = ""] = instructions.split(boundariesHeading);
+  const [standing = "", features = ""] = changedGuidance.split("\n\n## Provider rules\n");
+  const [baselineStanding = ""] = baselineGuidance.split("\n\n## Artifacts\n");
+  expect(standing).toBe(baselineStanding);
   const headings = [
-    "## Boundaries",
-    "## Communication style",
-    "### Conversation etiquette",
     "### Send messages",
     "## Read messages and recover sends",
     "## Work",
     "## Tasks",
+    "## Communication style",
+    "### Conversation etiquette",
   ];
   expect(standing.match(/^#{2,3} .+$/gm)?.filter((heading) => headings.includes(heading))).toEqual(
     headings,
@@ -173,14 +175,17 @@ test("managed standing guidance is identical across identities and launch enviro
     "Other Workspace",
     "Other Computer",
     "/isolated/work/changed",
+  ])
+    expect(runtime).toContain(detail);
+  for (const detail of [
     "page:fill",
     "Changed App",
     "Other notes.",
     "Use the changed provider command.",
   ])
-    expect(runtime).toContain(detail);
-  expect(runtime).not.toContain("## Artifacts");
-  expect(instructions.split(runtimeHeading)[1]).toContain("## Artifacts");
+    expect(features).toContain(detail);
+  expect(features).not.toContain("## Artifacts");
+  expect(baselineGuidance).toContain("## Artifacts");
 });
 test("identity is optional and the configured directory appears exactly once", () => {
   expect(instructions.startsWith("You are an AI agent in CoForge.")).toBe(true);
@@ -208,8 +213,11 @@ test("known runtime identity remains available without repeating the role", () =
       },
     },
   });
-  expect(rendered).toContain('- Display name: "Scout the Builder"');
-  expect(rendered).toContain("- Role: Reviews pull requests.");
+  expect(rendered).toStartWith('You are "Scout the Builder", an AI agent in CoForge.');
+  expect(rendered).toContain("## Current Runtime Context\n\n- Role: Reviews pull requests.");
+  expect(rendered.indexOf("## Current Runtime Context")).toBeLessThan(
+    rendered.indexOf("## Boundaries"),
+  );
   expect(rendered.split("Reviews pull requests.")).toHaveLength(2);
   expect(rendered).not.toContain("## Reviews");
   for (const line of [
@@ -227,7 +235,7 @@ test("runtime labels work without IDs and IDs work without labels", () => {
     agentWorkspaceDirectory: directory,
     identity: { name: "scout", runtimeContext: { computerName: "Builder", workspaceSlug: "acme" } },
   });
-  expect(rendered).toContain('- Display name: "scout"');
+  expect(rendered).toStartWith('You are "scout", an AI agent in CoForge.');
   expect(rendered).toContain("- Computer: Builder\n");
   expect(rendered).toContain("- Workspace: acme\n");
 });
@@ -355,8 +363,9 @@ test("shares communication style with platform assistants", () => {
   for (const identity of [undefined, { systemKind: "workspace-assistant" as const }]) {
     const prompt = buildCoforgeAgentInstructions({ agentWorkspaceDirectory: directory, identity });
     const style = prompt.indexOf("## Communication style\n");
-    expect(style).toBeLessThan(prompt.indexOf("## Current Runtime Context\n"));
-    expect(style).toBeLessThan(prompt.indexOf("## CoForge communication\n"));
+    expect(style).toBeGreaterThan(prompt.indexOf("## Current Runtime Context\n"));
+    expect(style).toBeGreaterThan(prompt.indexOf("## CoForge communication\n"));
+    expect(style).toBeLessThan(prompt.indexOf("### Conversation etiquette\n"));
     expect(prompt.match(/## Communication style\n/gu)).toHaveLength(1);
     for (const rule of [
       "decisions/actions",

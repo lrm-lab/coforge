@@ -1,7 +1,7 @@
 import { collapseWhitespace } from "@lrm/coforge-anvil";
 import {
   partitionCoforgeCliGuideSections,
-  sanitizeQuotedName,
+  renderCoforgeAgentIntroduction,
   stripHeadingMarkers,
 } from "@lrm/coforge-sdk/agent";
 import {
@@ -82,8 +82,6 @@ function buildRuntimeContextSection(context: CoforgeAgentPromptContext): string 
   const identity = context.identity;
   const runtimeContext = identity?.runtimeContext;
   const lines = ["## Current Runtime Context", ""];
-  const rawName = identity?.displayName || identity?.name;
-  if (rawName) lines.push(`- Display name: "${sanitizeQuotedName(rawName)}"`);
   const description = identity?.description?.trim();
   if (description) lines.push(`- Role: ${collapseWhitespace(stripHeadingMarkers(description))}`);
   if (identity?.name) lines.push(`- Username: @${collapseWhitespace(identity.name)}`);
@@ -104,9 +102,12 @@ export function buildCoforgeAgentInstructions(context: CoforgeAgentPromptContext
     }),
   );
   const sections = [
-    "You are an AI agent in CoForge.",
-    ...standing,
+    renderCoforgeAgentIntroduction(
+      launch.identity?.displayName || launch.identity?.name,
+      "managed",
+    ),
     buildRuntimeContextSection(launch),
+    ...standing,
   ];
   if (extraCriticalRules?.length)
     sections.push(["## Provider rules", ...extraCriticalRules].join("\n"));

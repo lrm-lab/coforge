@@ -7,10 +7,9 @@ import {
 } from "../src/agent/guide";
 
 describe("cli-guide-sections", () => {
-  test("teaches who should answer shared requests before showing how to send", () => {
+  test("teaches who should answer shared requests and how to send", () => {
     for (const audience of ["managed", "external"] as const) {
-      const { communication, messages } = buildCoforgeCliGuideSections({ audience });
-      const [etiquette, sending] = communication.split("### Send messages");
+      const { communication, etiquette, messages } = buildCoforgeCliGuideSections({ audience });
       expect(etiquette).toContain("### Conversation etiquette");
       expect(etiquette).toContain("Leave follow-ups to the person already answering that request");
       expect(etiquette).toContain(
@@ -25,7 +24,7 @@ describe("cli-guide-sections", () => {
       expect(etiquette).toContain(
         "For a private reply, DM new evidence only to the designated responder",
       );
-      expect(sending).toContain("coforge message send");
+      expect(communication).toContain("coforge message send");
       expect(messages).toContain("## Read messages and recover sends");
     }
   });
@@ -151,7 +150,7 @@ describe("cli-guide-sections", () => {
   });
 
   test("external standing guidance is identical across profiles and feature settings", () => {
-    const runtimeHeading = "\n\n## Current Runtime Context\n";
+    const cliHeading = "\n\n## External Agent CLI\n";
     const input = {
       agent: {
         id: "a1",
@@ -162,32 +161,33 @@ describe("cli-guide-sections", () => {
       },
       workspace: { id: "w1", slug: "blue", name: "Blue" },
     };
-    const [standing = "", runtime = ""] = buildExternalAgentGuide(input).split(runtimeHeading);
-    const [changedStanding = "", changedRuntime = ""] = buildExternalAgentGuide({
+    const [runtime = "", guidance = ""] = buildExternalAgentGuide(input).split(cliHeading);
+    const [changedRuntime = "", changedGuidance = ""] = buildExternalAgentGuide({
       agent: { ...input.agent, name: "bob", displayName: "Bob", description: "Reviews." },
       workspace: { ...input.workspace, slug: "green", name: "Green" },
       features: { artifacts: false, taskConversations: false },
-    }).split(runtimeHeading);
-    expect(changedStanding).toBe(standing);
+    }).split(cliHeading);
+    const [standing = "", features = ""] = guidance.split("\n\n## Artifacts\n");
+    expect(changedGuidance).toBe(standing);
     const headings = [
       "## Boundaries",
-      "## Communication style",
-      "### Conversation etiquette",
       "### Send messages",
       "## Read messages and recover sends",
       "## Work",
       "## Tasks",
+      "## Communication style",
+      "### Conversation etiquette",
     ];
     expect(
       standing.match(/^#{2,3} .+$/gm)?.filter((heading) => headings.includes(heading)),
     ).toEqual(headings);
     expect(standing).toContain("COFORGE_PROFILE=<slug>");
     expect(runtime).toContain("blue-alice");
-    expect(runtime).toContain("## Artifacts");
+    expect(features).toContain("coforge artifact push");
     expect(changedRuntime).toContain("green-bob");
     expect(changedRuntime).toContain("Bob");
     expect(changedRuntime).toContain("Reviews.");
-    expect(changedRuntime).not.toContain("## Artifacts");
+    expect(changedGuidance).not.toContain("## Artifacts");
   });
 
   test("buildExternalAgentGuide renders identity, context, CLI setup and shared sections", () => {
@@ -201,9 +201,11 @@ describe("cli-guide-sections", () => {
       },
       workspace: { id: "ws-1", slug: "lrm-lab", name: "LRM Lab" },
     });
-    expect(guide).toContain("You are an external AI agent in CoForge.");
-    expect(guide).toContain('- Display name: "Alice"');
-    expect(guide).toContain("- Role: Heading Helps with builds.");
+    expect(guide).toStartWith('You are "Alice", an external AI agent in CoForge.');
+    expect(guide).toContain("## Current Runtime Context\n\n- Role: Heading Helps with builds.");
+    expect(guide.indexOf("## Current Runtime Context")).toBeLessThan(
+      guide.indexOf("## Boundaries"),
+    );
     expect(guide).toContain("- Username: @alice");
     expect(guide).toContain("- Workspace: LRM Lab (lrm-lab)");
     expect(guide).toContain("- Mode: external (no Computer or daemon)");

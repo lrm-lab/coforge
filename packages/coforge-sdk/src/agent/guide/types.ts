@@ -49,4 +49,5 @@ export type CoforgeCliGuideSections = {
   execution: string;
   queue: string;
   safety: string;
+  etiquette: string;
 } & Record<string, string>;
