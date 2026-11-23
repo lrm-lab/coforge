@@ -1,4 +1,3 @@
-/** Next report-page tab for Tab, or the previous one for Shift+Tab. Null at either end so focus can leave the strip. */
 export function adjacentReportTabId(
   ids: readonly string[],
   current: string,
