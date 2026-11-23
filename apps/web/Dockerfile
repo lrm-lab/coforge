@@ -14,6 +14,7 @@ COPY packages/coforge/package.json packages/coforge/package.json
 COPY packages/computer/package.json packages/computer/package.json
 COPY packages/daemon/package.json packages/daemon/package.json
 COPY packages/coforge-sdk/package.json packages/coforge-sdk/package.json
+COPY patches patches
 RUN bun install --frozen-lockfile
 
 COPY apps/web apps/web

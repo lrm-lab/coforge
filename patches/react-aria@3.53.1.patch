@@ -1,0 +1,111 @@
+diff --git a/dist/private/utils/animation.cjs b/dist/private/utils/animation.cjs
+index d1d39f1..bd14ceb 100644
+--- a/dist/private/utils/animation.cjs
++++ b/dist/private/utils/animation.cjs
+@@ -81,7 +81,9 @@ function $f77f64616fa97613$export$45fda7c47f93fd48(ref, isOpen, onExit) {
+ function $f77f64616fa97613$var$useAnimation(ref, isActive, onStart, onEnd) {
+-    let isActiveRef = (0, $9Rk9E$react.useRef)(null);
++    let activeRunRef = (0, $9Rk9E$react.useRef)(null);
+     let start = (0, $d6e22460ce4d6b26$exports.useEffectEvent)(onStart);
+     (0, $429333cab433657c$exports.useLayoutEffect)(()=>{
+-        if (isActive && ref.current && isActiveRef.current !== isActive) {
+-            isActiveRef.current = isActive;
++        if (isActive && ref.current && activeRunRef.current?.element !== ref.current) {
++            let element = ref.current;
++            let run = {element: element};
++            activeRunRef.current = run;
+             if (!('getAnimations' in ref.current)) {
+@@ -99,4 +101,7 @@ function $f77f64616fa97613$var$useAnimation(ref, isActive, onStart, onEnd) {
+                 startPromise,
+-                ...animations.map((a)=>a.finished)
++                ...animations.map((a)=>a.finished.catch((error)=>{
++                    if (error?.name !== 'AbortError') throw error;
++                }))
+             ]).then(()=>{
++                if (activeRunRef.current !== run || ref.current !== element) return;
+                 (0, $9Rk9E$reactdom.flushSync)(()=>{
+@@ -106,8 +111,4 @@ function $f77f64616fa97613$var$useAnimation(ref, isActive, onStart, onEnd) {
+         }
+-        isActiveRef.current = isActive;
+-    }, [
+-        ref,
+-        isActive,
+-        onEnd
+-    ]);
++        if (!isActive || !ref.current) activeRunRef.current = null;
++    });
+ }
+diff --git a/dist/private/utils/animation.js b/dist/private/utils/animation.js
+index fd68f6e..795ef0f 100644
+--- a/dist/private/utils/animation.js
++++ b/dist/private/utils/animation.js
+@@ -74,7 +74,9 @@ function $3c19e3d939575a21$export$45fda7c47f93fd48(ref, isOpen, onExit) {
+ function $3c19e3d939575a21$var$useAnimation(ref, isActive, onStart, onEnd) {
+-    let isActiveRef = (0, $7ueWv$useRef)(null);
++    let activeRunRef = (0, $7ueWv$useRef)(null);
+     let start = (0, $85567ef950781b7d$export$7f54fc3180508a52)(onStart);
+     (0, $53fed047b798be36$export$e5c5a5f917a5871c)(()=>{
+-        if (isActive && ref.current && isActiveRef.current !== isActive) {
+-            isActiveRef.current = isActive;
++        if (isActive && ref.current && activeRunRef.current?.element !== ref.current) {
++            let element = ref.current;
++            let run = {element: element};
++            activeRunRef.current = run;
+             if (!('getAnimations' in ref.current)) {
+@@ -92,4 +94,7 @@ function $3c19e3d939575a21$var$useAnimation(ref, isActive, onStart, onEnd) {
+                 startPromise,
+-                ...animations.map((a)=>a.finished)
++                ...animations.map((a)=>a.finished.catch((error)=>{
++                    if (error?.name !== 'AbortError') throw error;
++                }))
+             ]).then(()=>{
++                if (activeRunRef.current !== run || ref.current !== element) return;
+                 (0, $7ueWv$flushSync)(()=>{
+@@ -99,8 +104,4 @@ function $3c19e3d939575a21$var$useAnimation(ref, isActive, onStart, onEnd) {
+         }
+-        isActiveRef.current = isActive;
+-    }, [
+-        ref,
+-        isActive,
+-        onEnd
+-    ]);
++        if (!isActive || !ref.current) activeRunRef.current = null;
++    });
+ }
+diff --git a/dist/private/utils/animation.mjs b/dist/private/utils/animation.mjs
+index 19ec347..58a11ea 100644
+--- a/dist/private/utils/animation.mjs
++++ b/dist/private/utils/animation.mjs
+@@ -74,7 +74,9 @@ function $fcc7165e876206c6$export$45fda7c47f93fd48(ref, isOpen, onExit) {
+ function $fcc7165e876206c6$var$useAnimation(ref, isActive, onStart, onEnd) {
+-    let isActiveRef = (0, $5MIG0$useRef)(null);
++    let activeRunRef = (0, $5MIG0$useRef)(null);
+     let start = (0, $fe16bffc7a557bf0$export$7f54fc3180508a52)(onStart);
+     (0, $c4867b2f328c2698$export$e5c5a5f917a5871c)(()=>{
+-        if (isActive && ref.current && isActiveRef.current !== isActive) {
+-            isActiveRef.current = isActive;
++        if (isActive && ref.current && activeRunRef.current?.element !== ref.current) {
++            let element = ref.current;
++            let run = {element: element};
++            activeRunRef.current = run;
+             if (!('getAnimations' in ref.current)) {
+@@ -92,4 +94,7 @@ function $fcc7165e876206c6$var$useAnimation(ref, isActive, onStart, onEnd) {
+                 startPromise,
+-                ...animations.map((a)=>a.finished)
++                ...animations.map((a)=>a.finished.catch((error)=>{
++                    if (error?.name !== 'AbortError') throw error;
++                }))
+             ]).then(()=>{
++                if (activeRunRef.current !== run || ref.current !== element) return;
+                 (0, $5MIG0$flushSync)(()=>{
+@@ -99,8 +104,4 @@ function $fcc7165e876206c6$var$useAnimation(ref, isActive, onStart, onEnd) {
+         }
+-        isActiveRef.current = isActive;
+-    }, [
+-        ref,
+-        isActive,
+-        onEnd
+-    ]);
++        if (!isActive || !ref.current) activeRunRef.current = null;
++    });
+ }
