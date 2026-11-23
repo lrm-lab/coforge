@@ -171,6 +171,8 @@ import { Route as WWorkspaceSlugChatDmDmIdRouteImport } from './routes/w.$worksp
 import { Route as WWorkspaceSlugComputersComputerComputerIdRouteImport } from './routes/w.$workspaceSlug/_computers.computer.$computerId'
 import { Route as WWorkspaceSlugProjectsProjectSlugSettingsRouteImport } from './routes/w.$workspaceSlug/projects.$projectSlug_.settings'
 import { Route as WWorkspaceSlugSettingsMemoryPersonalRouteImport } from './routes/w.$workspaceSlug/settings.memory_.personal'
+import { Route as WWorkspaceSlugSettingsAppsAppKeyRouteImport } from './routes/w.$workspaceSlug/settings_.apps.$appKey'
+import { Route as WWorkspaceSlugSettingsAppsNewRouteImport } from './routes/w.$workspaceSlug/settings_.apps.new'
 import { Route as ApiAgentV1AppsAppIdConfigRouteImport } from './routes/api/agent/v1/apps/$appId/config'
 import { Route as ApiAgentV1AppsAppIdTokenRouteImport } from './routes/api/agent/v1/apps/$appId/token'
 import { Route as ApiAgentV1AppsOwnedIndexRouteImport } from './routes/api/agent/v1/apps/owned/index'
@@ -1089,6 +1091,18 @@ const WWorkspaceSlugSettingsMemoryPersonalRoute =
     path: '/memory/personal',
     getParentRoute: () => WWorkspaceSlugSettingsRoute,
   } as any)
+const WWorkspaceSlugSettingsAppsAppKeyRoute =
+  WWorkspaceSlugSettingsAppsAppKeyRouteImport.update({
+    id: '/settings_/apps/$appKey',
+    path: '/settings/apps/$appKey',
+    getParentRoute: () => WWorkspaceSlugRoute,
+  } as any)
+const WWorkspaceSlugSettingsAppsNewRoute =
+  WWorkspaceSlugSettingsAppsNewRouteImport.update({
+    id: '/settings_/apps/new',
+    path: '/settings/apps/new',
+    getParentRoute: () => WWorkspaceSlugRoute,
+  } as any)
 const ApiAgentV1AppsAppIdConfigRoute =
   ApiAgentV1AppsAppIdConfigRouteImport.update({
     id: '/api/agent/v1/apps/$appId/config',
@@ -1495,6 +1509,8 @@ export interface FileRoutesByFullPath {
   '/w/$workspaceSlug/computer/$computerId': typeof WWorkspaceSlugComputersComputerComputerIdRoute
   '/w/$workspaceSlug/projects/$projectSlug/settings': typeof WWorkspaceSlugProjectsProjectSlugSettingsRoute
   '/w/$workspaceSlug/settings/memory/personal': typeof WWorkspaceSlugSettingsMemoryPersonalRoute
+  '/w/$workspaceSlug/settings/apps/$appKey': typeof WWorkspaceSlugSettingsAppsAppKeyRoute
+  '/w/$workspaceSlug/settings/apps/new': typeof WWorkspaceSlugSettingsAppsNewRoute
   '/api/agent/v1/apps/': typeof ApiAgentV1AppsIndexRoute
   '/api/agent/v1/attachment-upload-sessions/': typeof ApiAgentV1AttachmentUploadSessionsIndexRoute
   '/api/agent/v1/attachments/': typeof ApiAgentV1AttachmentsIndexRoute
@@ -1695,6 +1711,8 @@ export interface FileRoutesByTo {
   '/w/$workspaceSlug/computer/$computerId': typeof WWorkspaceSlugComputersComputerComputerIdRoute
   '/w/$workspaceSlug/projects/$projectSlug/settings': typeof WWorkspaceSlugProjectsProjectSlugSettingsRoute
   '/w/$workspaceSlug/settings/memory/personal': typeof WWorkspaceSlugSettingsMemoryPersonalRoute
+  '/w/$workspaceSlug/settings/apps/$appKey': typeof WWorkspaceSlugSettingsAppsAppKeyRoute
+  '/w/$workspaceSlug/settings/apps/new': typeof WWorkspaceSlugSettingsAppsNewRoute
   '/api/agent/v1/apps': typeof ApiAgentV1AppsIndexRoute
   '/api/agent/v1/attachment-upload-sessions': typeof ApiAgentV1AttachmentUploadSessionsIndexRoute
   '/api/agent/v1/attachments': typeof ApiAgentV1AttachmentsIndexRoute
@@ -1900,6 +1918,8 @@ export interface FileRoutesById {
   '/w/$workspaceSlug/_computers/computer/$computerId': typeof WWorkspaceSlugComputersComputerComputerIdRoute
   '/w/$workspaceSlug/projects/$projectSlug_/settings': typeof WWorkspaceSlugProjectsProjectSlugSettingsRoute
   '/w/$workspaceSlug/settings/memory_/personal': typeof WWorkspaceSlugSettingsMemoryPersonalRoute
+  '/w/$workspaceSlug/settings_/apps/$appKey': typeof WWorkspaceSlugSettingsAppsAppKeyRoute
+  '/w/$workspaceSlug/settings_/apps/new': typeof WWorkspaceSlugSettingsAppsNewRoute
   '/api/agent/v1/apps/': typeof ApiAgentV1AppsIndexRoute
   '/api/agent/v1/attachment-upload-sessions/': typeof ApiAgentV1AttachmentUploadSessionsIndexRoute
   '/api/agent/v1/attachments/': typeof ApiAgentV1AttachmentsIndexRoute
@@ -2104,6 +2124,8 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/computer/$computerId'
     | '/w/$workspaceSlug/projects/$projectSlug/settings'
     | '/w/$workspaceSlug/settings/memory/personal'
+    | '/w/$workspaceSlug/settings/apps/$appKey'
+    | '/w/$workspaceSlug/settings/apps/new'
     | '/api/agent/v1/apps/'
     | '/api/agent/v1/attachment-upload-sessions/'
     | '/api/agent/v1/attachments/'
@@ -2304,6 +2326,8 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/computer/$computerId'
     | '/w/$workspaceSlug/projects/$projectSlug/settings'
     | '/w/$workspaceSlug/settings/memory/personal'
+    | '/w/$workspaceSlug/settings/apps/$appKey'
+    | '/w/$workspaceSlug/settings/apps/new'
     | '/api/agent/v1/apps'
     | '/api/agent/v1/attachment-upload-sessions'
     | '/api/agent/v1/attachments'
@@ -2508,6 +2532,8 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/_computers/computer/$computerId'
     | '/w/$workspaceSlug/projects/$projectSlug_/settings'
     | '/w/$workspaceSlug/settings/memory_/personal'
+    | '/w/$workspaceSlug/settings_/apps/$appKey'
+    | '/w/$workspaceSlug/settings_/apps/new'
     | '/api/agent/v1/apps/'
     | '/api/agent/v1/attachment-upload-sessions/'
     | '/api/agent/v1/attachments/'
@@ -3842,6 +3868,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WWorkspaceSlugSettingsMemoryPersonalRouteImport
       parentRoute: typeof WWorkspaceSlugSettingsRoute
     }
+    '/w/$workspaceSlug/settings_/apps/$appKey': {
+      id: '/w/$workspaceSlug/settings_/apps/$appKey'
+      path: '/settings/apps/$appKey'
+      fullPath: '/w/$workspaceSlug/settings/apps/$appKey'
+      preLoaderRoute: typeof WWorkspaceSlugSettingsAppsAppKeyRouteImport
+      parentRoute: typeof WWorkspaceSlugRoute
+    }
+    '/w/$workspaceSlug/settings_/apps/new': {
+      id: '/w/$workspaceSlug/settings_/apps/new'
+      path: '/settings/apps/new'
+      fullPath: '/w/$workspaceSlug/settings/apps/new'
+      preLoaderRoute: typeof WWorkspaceSlugSettingsAppsNewRouteImport
+      parentRoute: typeof WWorkspaceSlugRoute
+    }
     '/api/agent/v1/apps/$appId/config': {
       id: '/api/agent/v1/apps/$appId/config'
       path: '/api/agent/v1/apps/$appId/config'
@@ -4270,6 +4310,8 @@ interface WWorkspaceSlugRouteChildren {
   WWorkspaceSlugArtifactsIndexRoute: typeof WWorkspaceSlugArtifactsIndexRoute
   WWorkspaceSlugProjectsIndexRoute: typeof WWorkspaceSlugProjectsIndexRoute
   WWorkspaceSlugProjectsProjectSlugSettingsRoute: typeof WWorkspaceSlugProjectsProjectSlugSettingsRoute
+  WWorkspaceSlugSettingsAppsAppKeyRoute: typeof WWorkspaceSlugSettingsAppsAppKeyRoute
+  WWorkspaceSlugSettingsAppsNewRoute: typeof WWorkspaceSlugSettingsAppsNewRoute
   WWorkspaceSlugProjectsProjectSlugTreeSplatRoute: typeof WWorkspaceSlugProjectsProjectSlugTreeSplatRoute
 }
 
@@ -4297,6 +4339,8 @@ const WWorkspaceSlugRouteChildren: WWorkspaceSlugRouteChildren = {
   WWorkspaceSlugProjectsIndexRoute: WWorkspaceSlugProjectsIndexRoute,
   WWorkspaceSlugProjectsProjectSlugSettingsRoute:
     WWorkspaceSlugProjectsProjectSlugSettingsRoute,
+  WWorkspaceSlugSettingsAppsAppKeyRoute: WWorkspaceSlugSettingsAppsAppKeyRoute,
+  WWorkspaceSlugSettingsAppsNewRoute: WWorkspaceSlugSettingsAppsNewRoute,
   WWorkspaceSlugProjectsProjectSlugTreeSplatRoute:
     WWorkspaceSlugProjectsProjectSlugTreeSplatRoute,
 }

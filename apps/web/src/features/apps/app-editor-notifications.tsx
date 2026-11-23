@@ -6,6 +6,9 @@ import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { Alert } from "#src/components/ui/alert";
+import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
+import { Popconfirm } from "#src/components/ui/popconfirm";
+import { useReportDirty } from "#src/components/ui/unsaved-changes-dialog";
 import { m } from "#src/paraglide/messages";
 import { webhookProblem } from "./app-notification-copy";
 import { NotificationEventsField } from "./app-notification-events-field";
@@ -80,6 +83,7 @@ export function NotificationsSection({
   events,
   isDisabled,
   onEventsChange,
+  onEndpointDirtyChange,
 }: {
   id: string;
   appKey: string | undefined;
@@ -87,6 +91,7 @@ export function NotificationsSection({
   events: readonly AppNotificationEventName[];
   isDisabled: boolean;
   onEventsChange: (events: AppNotificationEventName[]) => void;
+  onEndpointDirtyChange?: (dirty: boolean) => void;
 }) {
   const load = useServerFn(loadAppWebhook);
   const enable = useServerFn(enableAppWebhook);
@@ -96,6 +101,7 @@ export function NotificationsSection({
   const [webhook, setWebhook] = useState<AppWebhookSummary | null>();
   const [endpoint, setEndpoint] = useState("");
   const [pending, setPending] = useState<Pending>(null);
+  const [confirmDisable, setConfirmDisable] = useState(false);
   const [problem, setProblem] = useState("");
   const [secret, setSecret] = useState<string | null>(null);
 
@@ -118,6 +124,9 @@ export function NotificationsSection({
   const state: SectionState =
     appKey !== undefined && webhook === undefined ? "loading" : (webhook?.status ?? "off");
   const on = state === "setup" || state === "enabled";
+  const endpointDirty =
+    on && webhook !== undefined && endpoint.trim() !== (webhook?.endpointUrl ?? "").trim();
+  useReportDirty(endpointDirty, onEndpointDirtyChange);
 
   /** Runs a change that acts at once; a refusal shows inline. */
   async function act(
@@ -178,7 +187,11 @@ export function NotificationsSection({
             }
             isSelected={on}
             isDisabled={busy || appKey === undefined || state === "loading"}
-            onChange={(next) => appKey !== undefined && toggle(appKey, next)}
+            onChange={(next) => {
+              if (appKey === undefined) return;
+              if (!next && state === "enabled") setConfirmDisable(true);
+              else toggle(appKey, next);
+            }}
           />
           {on && appKey !== undefined && (
             <>
@@ -222,25 +235,35 @@ export function NotificationsSection({
                   <p className="text-sm text-tertiary">{m.apps_notifications_enter_endpoint()}</p>
                 )}
                 {state === "enabled" && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    color="secondary"
-                    isDisabled={busy}
-                    isLoading={pending === "rotate"}
-                    showTextWhileLoading
-                    onPress={() =>
-                      void act("rotate", m.apps_notifications_error_rotate, async () => {
-                        const changed = await rotate({ data: { key: appKey } });
-                        setWebhook(changed.webhook);
-                        if (changed.signingSecret) setSecret(changed.signingSecret);
-                      })
+                  <Popconfirm
+                    title={m.apps_notifications_rotate_secret()}
+                    description={m.apps_notifications_rotate_hint()}
+                    confirmLabel={m.apps_notifications_rotate_secret()}
+                    pendingLabel={m.apps_notifications_rotating()}
+                    errorMessage={(cause) =>
+                      webhookProblem(cause, m.apps_notifications_error_rotate)
                     }
+                    placement="bottom start"
+                    isDisabled={busy}
+                    onConfirm={async () => {
+                      const changed = await rotate({ data: { key: appKey } });
+                      setWebhook(changed.webhook);
+                      if (changed.signingSecret) setSecret(changed.signingSecret);
+                    }}
                   >
-                    {pending === "rotate"
-                      ? m.apps_notifications_rotating()
-                      : m.apps_notifications_rotate_secret()}
-                  </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      color="secondary"
+                      isDisabled={busy}
+                      isLoading={pending === "rotate"}
+                      showTextWhileLoading
+                    >
+                      {pending === "rotate"
+                        ? m.apps_notifications_rotating()
+                        : m.apps_notifications_rotate_secret()}
+                    </Button>
+                  </Popconfirm>
                 )}
               </div>
               {state === "enabled" && (
@@ -272,6 +295,22 @@ export function NotificationsSection({
           onChange={onEventsChange}
         />
       </div>
+      <ConfirmDialog
+        open={confirmDisable}
+        onOpenChange={setConfirmDisable}
+        title={m.apps_notifications_enable_title()}
+        description={m.apps_notifications_enable_description()}
+        confirmLabel={m.apps_notifications_status_off()}
+        errorMessage={(cause) => webhookProblem(cause, m.apps_notifications_error_toggle)}
+        onConfirm={async () => {
+          if (appKey === undefined) return;
+          const changed = await disable({ data: { key: appKey } });
+          setWebhook(changed.webhook);
+          setEndpoint("");
+          setSecret(null);
+          setConfirmDisable(false);
+        }}
+      />
     </EditorSection>
   );
 }
