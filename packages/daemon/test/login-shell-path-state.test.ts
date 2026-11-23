@@ -38,10 +38,11 @@ const failure: LoginShellPathResult = {
 };
 
 describe("login-shell-path.json", () => {
-  test("is written owner-only, atomically, and read back", async () => {
+  test("is written readable for the Workspace daemons, atomically, and read back", async () => {
     const dir = newStateDirectory();
     await writeLoginShellPath(dir, success, new Date("2026-01-01T00:00:00Z"));
-    expect(statSync(path.join(dir, LOGIN_SHELL_PATH_FILE)).mode & 0o777).toBe(0o600);
+    // A Workspace daemon on its own uid reads this one; it carries a PATH, not a secret.
+    expect(statSync(path.join(dir, LOGIN_SHELL_PATH_FILE)).mode & 0o777).toBe(0o644);
     expect(await readdir(dir)).toEqual([LOGIN_SHELL_PATH_FILE]);
     expect(readLoginShellPath(dir)).toEqual({ ...success, at: "2026-01-01T00:00:00.000Z" });
   });
