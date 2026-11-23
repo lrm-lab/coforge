@@ -68,7 +68,7 @@ test("an unread pin lists once under Unread, moves to Pinned on read and returns
     expect(pinnedRow).toContain("1 new");
     const threadRow = unread.find((row) => row.includes("E2E pinned root"));
     expect(threadRow).toContain("E2E pinned root");
-    expect(threadRow).toContain("e2e-activity-pinned · ");
+    expect(threadRow).toMatch(/e2e-activity-pinned\s*Activity Peer: /);
     expect(threadRow).not.toContain("#e2e-activity-pinned");
     expect(threadRow).not.toContain("E2E pinned hello");
     await browser("screenshot", join(artifacts, "pinned.png"));

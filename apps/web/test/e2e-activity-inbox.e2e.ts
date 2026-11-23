@@ -63,7 +63,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     expect(rows[1]).toContain("E2E activity root");
     expect(rows[1]).toContain("@you");
     expect(rows[1]).toContain("1 new");
-    expect(rows[1]).toContain("e2e-activity-inbox · Activity Peer: ");
+    expect(rows[1]).toMatch(/e2e-activity-inbox\s*Activity Peer: /);
     expect(rows[1]).not.toContain("#e2e-activity-inbox");
     const todayTimes = `[...document.querySelectorAll('ol[aria-label="Today"] > li')].filter((row) => row.textContent.includes("E2E quiet root")).map((row) => row.querySelector("time")?.textContent.trim() ?? "")`;
     await browser("wait", "--fn", `${todayTimes}.length === 1`);
