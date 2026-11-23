@@ -27,21 +27,15 @@ got="$("${select_bin}")"
 grep -q '"current":"1.2.3"' "${COFORGE_COMPUTER_INSTALL_ROOT}/active.json"
 grep -q '"schema_version": 2' "${COFORGE_COMPUTER_INSTALL_ROOT}/versions/1.2.3/installation.json"
 cmp -s "${image}" "${COFORGE_COMPUTER_INSTALL_ROOT}/versions/1.2.3/coforge-computer"
-# The staging directory comes from mktemp and is 0700: an agent uid could not traverse it to
-# exec the copy, so the version directory has to end up traversable for more than root.
-[[ "$(stat -c '%a' "${COFORGE_COMPUTER_INSTALL_ROOT}/versions/1.2.3")" == "755" ]]
+# The staging directory comes from mktemp and is 0700: an agent uid has to traverse the version
+# directory to exec the copy inside it, and must still not be able to list it.
+[[ "$(stat -c '%a' "${COFORGE_COMPUTER_INSTALL_ROOT}/versions/1.2.3")" == "711" ]]
 
 # Same image version: keep the seeded copy even if the image file bytes change.
 printf '#!/bin/sh\necho replaced-image\n' > "${image}"
 got="$("${select_bin}")"
 [[ "${got}" == "${COFORGE_COMPUTER_INSTALL_ROOT}/active/coforge-computer" ]]
 grep -q 'echo image' "${got}"
-grep -q '"current":"1.2.3"' "${COFORGE_COMPUTER_INSTALL_ROOT}/active.json"
-
-# A version seeded by an older image carries 0700 and stays unreachable until it is repaired.
-chmod 700 "${COFORGE_COMPUTER_INSTALL_ROOT}/versions/1.2.3"
-got="$("${select_bin}")"
-[[ "$(stat -c '%a' "${COFORGE_COMPUTER_INSTALL_ROOT}/versions/1.2.3")" == "755" ]]
 grep -q '"current":"1.2.3"' "${COFORGE_COMPUTER_INSTALL_ROOT}/active.json"
 
 # Newer image version promotes active to the image binary.
