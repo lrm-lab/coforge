@@ -317,7 +317,7 @@ export function TemplateReportDetail({
 
   return (
     <div className="@container/record-split relative flex min-h-0 flex-1 overflow-hidden">
-      <div className="relative flex min-w-[min(100%,20rem)] flex-1 flex-col overflow-hidden">
+      <div className="relative flex min-w-[min(100%,20rem)] flex-1 flex-col overflow-hidden bg-primary">
         <TemplateReportHeader
           week={report.cycle.week}
           title={report.title}
@@ -375,6 +375,7 @@ export function TemplateReportDetail({
         ) : (
           <ReportTabsEditor
             content={content}
+            editable={report.editable !== false}
             editableTabs
             contentRevision={editorRevision}
             placeholder={m.records_report_body_placeholder()}

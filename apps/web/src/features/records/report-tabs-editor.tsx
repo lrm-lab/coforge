@@ -14,20 +14,18 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { edgeFadeStyle, TAB_BAR_END_FADE_WIDTH } from "#src/hooks/use-scroll-edges";
 import { m } from "#src/paraglide/messages";
-import { LeaderFormatSectionsEditor } from "./leader-format-sections-editor";
 import { ReportSectionEditor } from "#src/features/records/report-editor/report-section-editor";
 import { orderedReportTabNames, type ReportContent, type ReportTab } from "./records-content";
 import { cn } from "#src/lib/utils";
 import type { UploadResult } from "#src/features/records/report-editor/types";
 import { ReportPresentMode } from "./report-present-mode";
 import { ReportTabDrag, ReportTabDragItem, type ReportTabPress } from "./report-tab-drag";
-import { adjacentReportTabId } from "./report-tab-keyboard";
+import { nextReportTabIdFromKey } from "./report-tab-keyboard";
 import { RecordsReadingColumn } from "./records-reading-column";
 import {
   useReportTabsReadingTurn,
   type ReportTabsReadingTurn,
 } from "./use-report-tabs-reading-turn";
-import { FIELD_STATES } from "#src/components/base/input/field-states";
 
 export function ReportTabsEditor({
   content,
@@ -102,7 +100,7 @@ export function ReportTabsEditor({
   useLayoutEffect(() => {
     const scroller = scrollerRef.current;
     if (!scroller || !activeTab) return;
-    const selected = scroller.querySelector('[aria-selected="true"]');
+    const selected = scroller.querySelector('[data-selected="true"]');
     if (!(selected instanceof HTMLElement)) return;
     selected.scrollIntoView({ inline: "nearest", block: "nearest" });
     updateTabOverflow();
@@ -178,8 +176,7 @@ export function ReportTabsEditor({
   }
 
   function onTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, id: string) {
-    if (event.key !== "Tab") return;
-    const next = adjacentReportTabId(allTabIds, id, event.shiftKey);
+    const next = nextReportTabIdFromKey(allTabIds, id, event.key, event.shiftKey);
     if (!next) return;
     event.preventDefault();
     setSelectedTab(next);
@@ -228,28 +225,17 @@ export function ReportTabsEditor({
   }
 
   const activeContent = pages[activeTab]?.markdown ?? "";
-  const readingTabs = !editableTabs;
 
   const tabButtonClass = (active: boolean) =>
-    editableTabs
-      ? cn(
-          "rounded-lg px-3 py-1.5 text-sm any-pointer-coarse:min-h-11",
-          active
-            ? "bg-primary font-medium text-primary shadow-xs ring-1 ring-secondary"
-            : "bg-primary text-tertiary ring-1 ring-transparent hover:text-secondary",
-          "hover:*:data-text:decoration-transparent",
-        )
-      : cn(
-          "rounded-none px-1 pb-2.5 pt-1 text-sm hover:*:data-text:decoration-transparent any-pointer-coarse:min-h-11 any-pointer-coarse:px-2",
-          active
-            ? "border-b-2 border-brand-solid font-semibold text-primary"
-            : "border-b-2 border-transparent font-medium text-tertiary hover:text-secondary hover:*:data-text:font-semibold",
-        );
+    cn(
+      "rounded-none px-1 pb-2.5 pt-1 text-sm hover:*:data-text:decoration-transparent any-pointer-coarse:min-h-11 any-pointer-coarse:px-2",
+      active
+        ? "border-b-2 border-brand-solid font-semibold text-primary"
+        : "border-b-2 border-transparent font-medium text-tertiary hover:text-secondary hover:*:data-text:font-semibold",
+    );
 
-  const chevronClass = cn(
-    "size-6 shrink-0 p-1 text-fg-quaternary *:data-icon:rtl:rotate-180 any-pointer-coarse:size-11",
-    editableTabs ? "" : "mb-2 any-pointer-coarse:mb-0",
-  );
+  const chevronClass =
+    "mb-2 size-6 shrink-0 p-1 text-fg-quaternary *:data-icon:rtl:rotate-180 any-pointer-coarse:mb-0 any-pointer-coarse:size-11";
 
   const renderTab = (name: string, press?: ReportTabPress) => (
     <>
@@ -262,12 +248,7 @@ export function ReportTabsEditor({
           onChange={handleEditChange}
           onBlur={commitEditingTab}
           onKeyDown={handleEditKeyDown}
-          className={cn(
-            "h-8 w-28 min-w-0 rounded-sm px-0.5 text-sm font-semibold outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring",
-            editableTabs
-              ? cn(FIELD_STATES.frame, FIELD_STATES.frameTyping, FIELD_STATES.text, "px-2")
-              : "mb-2 border-b-2 border-brand bg-transparent text-primary",
-          )}
+          className="w-28 min-w-0 rounded-none border-b-2 border-brand-solid bg-transparent px-1 pb-2.5 pt-1 text-sm font-semibold text-primary outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring any-pointer-coarse:min-h-11"
         />
       ) : (
         <Button
@@ -275,6 +256,7 @@ export function ReportTabsEditor({
           size="sm"
           color="link-gray"
           data-report-tab={name}
+          data-selected={name === activeTab ? "true" : undefined}
           aria-selected={name === activeTab}
           onFocus={() => setSelectedTab(name)}
           onKeyDown={(event) => onTabKeyDown(event, name)}
@@ -296,7 +278,7 @@ export function ReportTabsEditor({
           aria-label={`${m.records_template_delete()}: ${name}`}
           isDisabled={tabNames.length <= 1}
           onClick={() => removeTab(name)}
-          className="size-5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 any-pointer-coarse:size-9 any-pointer-coarse:opacity-100"
+          className="pointer-events-none absolute -end-6 top-1 size-5 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 any-pointer-coarse:pointer-events-auto any-pointer-coarse:static any-pointer-coarse:size-9 any-pointer-coarse:opacity-100"
         />
       ) : null}
     </>
@@ -322,19 +304,16 @@ export function ReportTabsEditor({
           { start: false, end: tabOverflow.right },
           { end: TAB_BAR_END_FADE_WIDTH },
         )}
-        className={cn(
-          "scrollbar-hide flex min-w-0 flex-1 items-center overflow-x-auto overflow-y-hidden overscroll-x-contain pt-0 scroll-pe-14",
-          readingTabs ? "gap-8 sm:gap-10" : "gap-2",
-        )}
+        className="scrollbar-hide flex min-w-0 flex-1 items-center gap-8 overflow-x-auto overflow-y-hidden overscroll-x-contain pt-0 scroll-pe-14 sm:gap-10"
       >
         {editableTabs ? (
-          <ReportTabDrag order={tabNames} onMove={moveTab} className="gap-2">
+          <ReportTabDrag order={tabNames} onMove={moveTab} className="gap-8 pe-6 sm:gap-10">
             {tabNames.map((name) => (
               <ReportTabDragItem
                 key={name}
                 name={name}
                 disabled={editingTab === name}
-                className="group flex shrink-0 items-center gap-0.5"
+                className="group relative flex shrink-0 items-center gap-0.5"
               >
                 {(press) => renderTab(name, press)}
               </ReportTabDragItem>
@@ -354,6 +333,7 @@ export function ReportTabsEditor({
               size="sm"
               color="link-gray"
               data-report-tab={tab.id}
+              data-selected={tab.id === activeTab ? "true" : undefined}
               aria-selected={tab.id === activeTab}
               onFocus={() => setSelectedTab(tab.id)}
               onKeyDown={(event) => onTabKeyDown(event, tab.id)}
@@ -381,7 +361,7 @@ export function ReportTabsEditor({
           size="sm"
           color="link-color"
           onPress={addTab}
-          className="shrink-0 px-1 any-pointer-coarse:min-h-11 any-pointer-coarse:px-2.5"
+          className="mb-2 shrink-0 px-1 any-pointer-coarse:mb-0 any-pointer-coarse:min-h-11 any-pointer-coarse:px-2.5"
         >
           {m.records_template_add_heading_level_one()}
         </Button>
@@ -393,10 +373,7 @@ export function ReportTabsEditor({
           icon={Maximize}
           aria-label={m.records_report_present()}
           onClick={() => setPresenting(true)}
-          className={cn(
-            "size-6 shrink-0 p-1 text-fg-quaternary any-pointer-coarse:size-11",
-            editableTabs ? "" : "mb-2 any-pointer-coarse:mb-0",
-          )}
+          className="mb-2 size-6 shrink-0 p-1 text-fg-quaternary any-pointer-coarse:mb-0 any-pointer-coarse:size-11"
         />
       ) : null}
     </>
@@ -405,17 +382,8 @@ export function ReportTabsEditor({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="relative shrink-0">
-        <RecordsReadingColumn className={cn("pb-0", readingTabs ? "pt-2" : "pt-3")}>
-          <div
-            className={cn(
-              "flex items-center gap-1",
-              readingTabs
-                ? "items-end border-b border-secondary/40"
-                : "border-b border-transparent",
-            )}
-          >
-            {tabBar}
-          </div>
+        <RecordsReadingColumn className="pb-0 pt-2">
+          <div className="flex items-end gap-1 border-b border-secondary/40">{tabBar}</div>
         </RecordsReadingColumn>
       </div>
 
@@ -441,14 +409,7 @@ export function ReportTabsEditor({
         </div>
       ) : trailingActive ? (
         (renderTrailingTab?.(activeTab) ?? null)
-      ) : editableTabs && activeTab ? (
-        <LeaderFormatSectionsEditor
-          key={`${activeTab}:${contentRevision}`}
-          defaultValue={activeContent}
-          onUpdate={updateMarkdown}
-          onBlur={onBlur}
-        />
-      ) : editableTabs ? null : (
+      ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
           <RecordsReadingColumn className="pt-5">
             <ReportSectionEditor
