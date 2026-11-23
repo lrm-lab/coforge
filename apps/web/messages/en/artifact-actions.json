@@ -3,14 +3,44 @@
   "av_hide_annotation_button": "Hide annotation button",
   "av_show_annotation_button": "Show annotation button",
   "$schema": "https://inlang.com/schema/inlang-message-format",
+  "av_share": "Share",
+  "av_version_initial": "Initial version",
+  "av_version_updated": "Updated to v{version}",
+  "av_version_files_changed": "{count} files changed",
   "av_menu_ai": "Ask AI",
   "av_menu_copy_for_ai": "Copy for AI",
   "av_menu_open_chatgpt": "Open in ChatGPT",
   "av_menu_open_claude": "Open in Claude",
   "av_ai_copied": "Copied for AI",
   "av_cm_annotate": "Annotate",
+  "av_cm_annotate_short": "Annotate",
   "av_cm_annotating": "Annotating",
-  "av_cm_pick_hint": "Click elements on the page to reference them",
+  "av_cm_exit_annotate": "Exit annotating",
+  "av_cm_exit_short": "Exit",
+  "av_cm_pick_prompt": "Click anywhere on the page to comment",
+  "av_cm_pick_prompt_short": "Tap page to comment",
+  "av_cm_pick_hint": "Click anywhere on the page to reference it",
+  "av_dr_pending_pill": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} pending draft",
+        "countPlural=other": "{count} pending drafts"
+      }
+    }
+  ],
+  "av_dr_pending_pill_short": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} draft",
+        "countPlural=other": "{count} drafts"
+      }
+    }
+  ],
+  "av_dr_collapse": "Collapse",
   "av_dr_add": "Add",
   "av_dr_add_tip": "Add comment",
   "av_dr_add_and_send_tip": "Add and send all comments",

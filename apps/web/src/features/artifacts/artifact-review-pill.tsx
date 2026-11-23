@@ -2,9 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Cursor02 } from "@untitledui/icons";
 
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
-import { FLOATING_SURFACE_CLASS } from "#src/features/conversations/review-chrome";
 import { isRecordingShortcut } from "#src/features/shortcuts/shortcut-bindings";
-import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { useCommentDraftActions, useCommentDrafts } from "./artifact-comment-drafts-context";
 import { hasImages, type CommentDraftView } from "./artifact-comment-drafts-queries";
@@ -61,6 +59,7 @@ export function ArtifactReviewPill({
   const drafts = useCommentDrafts();
   const actions = useCommentDraftActions();
   const [cardOpen, setCardOpen] = useState(false);
+  const [cardView, setCardView] = useState<"list" | "compose">("list");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [segments, setSegments] = useState<InlineSegment[]>([]);
   const [saving, setSaving] = useState(false);
@@ -79,9 +78,10 @@ export function ArtifactReviewPill({
   const editingDraft = editingId
     ? (drafts.drafts.find((item) => item.id === editingId) ?? null)
     : null;
-  const isCompose = editingDraft !== null || annotating;
   const active = annotating || count > 0 || editingDraft !== null;
-  const showCard = cardOpen && active;
+  const showCard =
+    cardOpen && active && (cardView === "compose" || editingDraft !== null || count > 0);
+  const isCompose = editingDraft !== null || (showCard && cardView === "compose");
 
   useEffect(() => {
     if (!showCard || !isCompose) {
@@ -135,15 +135,29 @@ export function ArtifactReviewPill({
     pickBus.setHighlightedAnchors([]);
   }, [pickBus]);
 
+  const openQueue = useCallback(() => {
+    resetCompose();
+    setCardView("list");
+    setCardOpen(true);
+    if (annotating) onExitAnnotate();
+  }, [resetCompose, annotating, onExitAnnotate]);
+
+  const collapseQueue = useCallback(() => {
+    setFocusedIdx(-1);
+    setCardOpen(false);
+  }, []);
+
   const enterCompose = useCallback(() => {
     resetCompose();
     setFocusedIdx(-1);
+    setCardView("compose");
     setCardOpen(true);
     if (!annotating) onToggleAnnotate();
   }, [resetCompose, annotating, onToggleAnnotate]);
 
   const exitComposeToList = useCallback(() => {
     resetCompose();
+    setCardView("list");
     if (annotating) onExitAnnotate();
     if (count === 0) setCardOpen(false);
   }, [resetCompose, annotating, onExitAnnotate, count]);
@@ -151,11 +165,16 @@ export function ArtifactReviewPill({
   useEffect(() => {
     const prev = prevAnnotatingRef.current;
     prevAnnotatingRef.current = annotating;
-    if (prev && !annotating && !editingDraft) {
+    if (!prev && annotating && cardOpen && cardView === "list" && !editingDraft) {
+      setCardOpen(false);
+      return;
+    }
+    if (prev && !annotating && !editingDraft && cardView === "compose") {
       resetCompose();
+      setCardView("list");
       if (count === 0) setCardOpen(false);
     }
-  }, [annotating, editingDraft, count, resetCompose]);
+  }, [annotating, cardOpen, cardView, editingDraft, count, resetCompose]);
 
   const startEdit = useCallback(
     (draft: CommentDraftView) => {
@@ -163,6 +182,7 @@ export function ArtifactReviewPill({
       hydratedEditRef.current = null;
       setEditingId(draft.id);
       setSaveError(null);
+      setCardView("compose");
       setCardOpen(true);
       const canPickElements = draft.anchor === null || draft.anchor.type === "element";
       if (canPickElements && !annotating) onToggleAnnotate();
@@ -200,6 +220,7 @@ export function ArtifactReviewPill({
               : undefined,
           );
           resetCompose();
+          setCardView("list");
           if (annotating) onExitAnnotate();
           saved = true;
         } catch (error) {
@@ -218,6 +239,7 @@ export function ArtifactReviewPill({
       if (!serialized) {
         if (sendAfter && count > 0) {
           resetCompose();
+          setCardView("list");
           if (annotating) onExitAnnotate();
           setCardOpen(false);
           await actions.submit();
@@ -238,6 +260,7 @@ export function ArtifactReviewPill({
           ...(primaryElement ? { anchor: primaryElement } : {}),
         });
         resetCompose();
+        setCardView("list");
         if (annotating) onExitAnnotate();
         saved = true;
       } catch (error) {
@@ -285,6 +308,7 @@ export function ArtifactReviewPill({
     onError: setSaveError,
     onDone: useCallback(() => {
       resetCompose();
+      setCardView("list");
       if (annotating) onExitAnnotate();
       if (count === 0) setCardOpen(false);
     }, [resetCompose, annotating, onExitAnnotate, count]),
@@ -322,8 +346,10 @@ export function ArtifactReviewPill({
         exitComposeToList();
       } else if (showCard) {
         event.preventDefault();
-        setFocusedIdx(-1);
-        setCardOpen(false);
+        collapseQueue();
+      } else if (annotating) {
+        event.preventDefault();
+        onExitAnnotate();
       }
       return;
     }
@@ -378,13 +404,10 @@ export function ArtifactReviewPill({
       data-artifact-review-pill=""
       className="pointer-events-none absolute inset-x-4 bottom-4 z-20 mx-auto flex max-w-[calc(100vw-2rem)] flex-col items-center gap-2"
     >
-      {showCard && (
+      {showCard ? (
         <div
           data-review-card=""
-          className={cn(
-            "artifact-review-card pointer-events-auto w-[23.5rem] max-w-[calc(100vw-2rem)] overflow-hidden",
-            FLOATING_SURFACE_CLASS,
-          )}
+          className="artifact-review-card pointer-events-auto w-[23.5rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-[1.125rem] bg-primary"
         >
           {isCompose ? (
             <>
@@ -444,22 +467,23 @@ export function ArtifactReviewPill({
               atLimit={drafts.atLimit}
               onOpenDraft={actions.openDraft}
               onEditDraft={startEdit}
-              onRemoveDraft={(draft) => void actions.remove(draft)}
+              onRemoveDraft={(draft) => actions.remove(draft)}
+              onCollapse={collapseQueue}
               onNewComment={enterCompose}
               onSubmit={() => void actions.submit()}
             />
           )}
         </div>
+      ) : (
+        <ArtifactReviewBar
+          annotating={annotating}
+          count={count}
+          locked={locked}
+          onExitAnnotate={onExitAnnotate}
+          onOpenQueue={openQueue}
+          onSubmit={() => void actions.submit()}
+        />
       )}
-      <ArtifactReviewBar
-        annotating={annotating}
-        count={count}
-        cardOpen={showCard}
-        locked={locked}
-        onToggleAnnotate={onToggleAnnotate}
-        onToggleCard={() => setCardOpen((open) => !open)}
-        onSubmit={() => void actions.submit()}
-      />
       <ConfirmDialog
         open={confirmDeleteDraft !== null}
         onOpenChange={(open) => {

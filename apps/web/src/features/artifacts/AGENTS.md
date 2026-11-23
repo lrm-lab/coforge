@@ -46,12 +46,18 @@ These rules apply to `src/features/artifacts/`. They extend
   artifacts in an in-workspace overlay via `?artifact=<id>` (with `Open full page` and `Close`).
   The beside-chat pane (`ConversationArtifactSplit`) uses `react-resizable-panels` persisted in
   `localLayoutStorage` with `Expand / Restore` and `Shift+←/→` resizing. The header consolidates
-  visibility, version history, home/origin links, and the live presence roster into
-  `ArtifactDetailsPopover` on the title (or via `Details` in `⋯` anchored to the title container in
-  chat split beside `RecentArtifactsMenu`), stacks mobile (`< sm`) visibility + presence quietly
-  inside the title column, and shows a combined HTML element-picker + `Comments` dropdown (`Show all
-comments` / `Doesn't display well here`, which prefills the whole-artifact composer via
-  `useDisplayReportPrefill`). Scoped `Mod+F` opens
+  version info (single-line when `latestVersion <= 1`, expandable history when multi-version),
+  home/origin links, and the live presence roster into `ArtifactDetailsPopover` on the title (or
+  via `Details` in `⋯` anchored to the title container in chat split beside `RecentArtifactsMenu`),
+  shows the standalone `vN ▾` version switcher (timeline layout `VersionTimelineRow` with
+  publisher `ActorAvatar` `presence={false}` from `actorDirectory`, widened to `21rem` via
+  `--cascade-menu-width`) only when multi-version or viewing a pinned older version, stacks mobile
+  (`< sm`) visibility + presence quietly inside the title column, and shows flat borderless
+  controls: an HTML `Annotate` toggle, a one-click `Comments` panel toggle, a unified `Share` popover (`ArtifactSharePopover`: `Who can see`, `Send to…`, `Copy embed`, and
+  `Copy link`), and `⋯` (`Doesn't display well here`, `Find`, and overlay `Open full page` live in
+  `⋯`; `Doesn't display well here` prefills the whole-artifact composer via
+  `useDisplayReportPrefill`), separated from overlay/pane window controls by a subtle divider.
+  Scoped `Mod+F` opens
   find-in-page on HTML and Markdown artifacts (`ArtifactMarkdown` also renders a wide-container
   sticky outline TOC via `ArtifactMarkdownOutline` and highlights matches via CSS Custom Highlights);
   `ArtifactFileView` syntax-highlights code lines and renders native `<video controls>` previews.
@@ -105,8 +111,9 @@ comments` / `Doesn't display well here`, which prefills the whole-artifact compo
   the HTML header `Comment` picker button toggles element-pick mode (`Escape` exits). Text selections in Markdown and HTML offer the floating `Comment` pill
   immediately without entering annotate mode (`Mod+Alt+M` opens the composer directly). All comment
   composers offer hybrid `Save draft` + immediate `Send` (primary swaps to `Save draft` once 1+
-  drafts exist). The comments sidebar supports search (`Search comments`), sort (`Page order` /
-  `Last updated`), `Your drafts`, and a bottom whole-artifact composer. The panel docks beside the
+  drafts exist). The comments sidebar supports search (`Search comments`, collapsed to a header
+  search button when fewer than 5 published threads exist), sort (`Page order` / `Last updated`),
+  `Your drafts`, and a bottom whole-artifact composer. The panel docks beside the
   page with a persisted drag-resize handle (`18rem`–`32rem`) when the artifact area is `>= 48rem`,
   floats over the right edge under `48rem` (beside chat), and uses a draggable bottom sheet
   (`ArtifactMobileSheet`) on `< sm`. A thread link opens the panel alone; closing the panel keeps
@@ -161,9 +168,11 @@ comments` / `Doesn't display well here`, which prefills the whole-artifact compo
   `use-submit-drafts.ts` owns send; both run under the store's one `exclusive` lock and busy state,
   so a send blocks draft edits and the reverse). The provider `artifact-drafts-provider.tsx` splits a
   state context (`useCommentDrafts`) from a stable actions context (`useCommentDraftActions`). The
-  contextual centered `ArtifactReviewPill` (`ArtifactReviewBar`) appears only while element picking is
-  active or unsent drafts exist (picking/composing inline rich editor with `<tag>` chips → queued
-  draft list with edit/delete, `+ New comment`, and `Send →` batch submit; no idle floating orb). Undo and redo (a 60-step
+  contextual centered `ArtifactReviewPill` appears only while element picking is
+  active or unsent drafts exist: a single-layer exitable prompt when picking with 0 drafts, a
+  compact `{count} pending drafts ⌃ | Send →` pill when collapsed, and the Amp-style card when
+  expanded (queued draft list with edit/delete, `Collapse`, `+ New comment`, and `Send →` batch
+  submit, or inline rich editor with `<tag>` chips; no stacked bottom bar while the card is open). Undo and redo (a 60-step
   reducer, `artifact-draft-history.ts`, replaying server operations including edited anchor/path;
   drafts with images are not recorded; a step the server refuses for good is dropped with its toast,
   a transient failure keeps it; a restored draft keeps its creation time) run via Mod+Z, Shift+Mod+Z

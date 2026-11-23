@@ -1,8 +1,8 @@
 import { useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus } from "@untitledui/icons";
+import { Button as AriaButton } from "react-aria-components";
 
-import { Button } from "#src/components/base/buttons/button";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
 import { TooltipShortcutLabel, TooltipShortcutRows } from "#src/components/ui/kbd";
@@ -15,6 +15,11 @@ import {
   serializeInlineSegments,
   type InlineSegment,
 } from "./artifact-inline-refs";
+import {
+  PRIMARY_PILL_CLASS,
+  SECONDARY_PILL_CLASS,
+  TERTIARY_PILL_CLASS,
+} from "./artifact-review-chrome";
 
 export function useImmediateReviewSend({
   artifactId,
@@ -117,9 +122,9 @@ export function ArtifactReviewComposeFooter({
       <CoForgeMark className="h-3.5 shrink-0 opacity-60 transition-opacity duration-150 hover:opacity-90" />
       <div className="flex items-center gap-1.5">
         <Tooltip title={<TooltipShortcutLabel label={m.controls_cancel()} shortcut="Escape" />}>
-          <Button size="sm" color="tertiary" isDisabled={saving} onPress={onCancel}>
+          <AriaButton isDisabled={saving} onPress={onCancel} className={TERTIARY_PILL_CLASS}>
             {m.controls_cancel()}
-          </Button>
+          </AriaButton>
         </Tooltip>
         {editing ? (
           <Tooltip
@@ -132,15 +137,14 @@ export function ArtifactReviewComposeFooter({
               />
             }
           >
-            <Button
-              size="sm"
-              color="primary"
+            <AriaButton
               isDisabled={!canSave}
               data-save-draft=""
               onPress={onSaveDraft}
+              className={PRIMARY_PILL_CLASS}
             >
               {m.av_dr_save()}
-            </Button>
+            </AriaButton>
           </Tooltip>
         ) : (
           <>
@@ -152,16 +156,15 @@ export function ArtifactReviewComposeFooter({
                 />
               }
             >
-              <Button
-                size="sm"
-                color={preferDraft ? "primary" : "secondary"}
-                iconLeading={Plus}
+              <AriaButton
                 isDisabled={!canSave}
                 data-save-draft=""
                 onPress={onSaveDraft}
+                className={preferDraft ? PRIMARY_PILL_CLASS : SECONDARY_PILL_CLASS}
               >
-                {m.av_cm_save_draft()}
-              </Button>
+                <Plus aria-hidden="true" className="size-3.5 shrink-0" />
+                <span>{m.av_cm_save_draft()}</span>
+              </AriaButton>
             </Tooltip>
             <Tooltip
               title={
@@ -171,15 +174,14 @@ export function ArtifactReviewComposeFooter({
                 />
               }
             >
-              <Button
-                size="sm"
-                color={preferDraft ? "secondary" : "primary"}
+              <AriaButton
                 isDisabled={!canSend}
                 data-send-comment=""
                 onPress={onSend}
+                className={preferDraft ? SECONDARY_PILL_CLASS : PRIMARY_PILL_CLASS}
               >
                 {m.av_cm_send()}
-              </Button>
+              </AriaButton>
             </Tooltip>
           </>
         )}

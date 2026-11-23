@@ -36,7 +36,7 @@ export function useArtifactActions({
   files: readonly { path: string; sizeBytes: number }[];
   link: ArtifactLinkSharing;
   loaded: boolean;
-  actions: Record<"find" | "copy-link" | "send" | "comments" | "files" | "delete", () => void>;
+  actions: Record<"find" | "send" | "files" | "delete", () => void>;
 }) {
   const toast = useAppToast();
   const queryClient = useQueryClient();

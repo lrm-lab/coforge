@@ -197,6 +197,14 @@ export function useArtifactVisibility({
   };
 }
 
+export function visibilityChoiceLabel(
+  visibility: ArtifactVisibility,
+  choice: VisibilityChoice,
+): string {
+  const raw = visibility.label[choice];
+  return choice === "conversation" ? raw.replace(/^#/, "") : raw;
+}
+
 export function VisibilityMenu({ visibility }: { visibility: ArtifactVisibility }) {
   const { current, canChange, narrowable, linkAvailable } = visibility;
   const choices = (["conversation", "workspace", "link"] as const).filter(
@@ -219,7 +227,7 @@ export function VisibilityMenu({ visibility }: { visibility: ArtifactVisibility 
           id={choice}
           isDisabled={!canChange}
           icon={visibilityIcon[choice]}
-          label={visibility.label[choice]}
+          label={visibilityChoiceLabel(visibility, choice)}
         />
       ))}
     </Dropdown.Menu>

@@ -5,12 +5,16 @@ import { CHIP_CLASS, PRESSABLE_CHIP_CLASS } from "#src/features/conversations/re
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { visibilityIcon } from "./artifact-scope";
-import { VisibilityMenu, type ArtifactVisibility } from "./use-artifact-visibility";
+import {
+  VisibilityMenu,
+  visibilityChoiceLabel,
+  type ArtifactVisibility,
+} from "./use-artifact-visibility";
 
 export function VisibilityPill({ visibility }: { visibility: ArtifactVisibility }) {
   const visibleScope = visibility.legacyLinkActive ? "link" : visibility.current;
   const Icon = visibilityIcon[visibleScope];
-  const scope = visibility.label[visibleScope];
+  const scope = visibilityChoiceLabel(visibility, visibleScope);
   const inner = (
     <>
       <Icon aria-hidden="true" className="size-3.5 shrink-0" />

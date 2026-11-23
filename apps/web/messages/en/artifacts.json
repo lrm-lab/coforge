@@ -97,7 +97,7 @@
   "navigation_artifacts": "Artifacts",
   "av_version_switch": "v{version}, switch version",
   "av_version_latest": "Latest",
-  "av_version_by": "{name}, {time}",
+  "av_version_by": "{name} · {time}",
   "av_versions": "Version history",
   "av_viewing_version": "Viewing v{version}",
   "av_back_to_latest": "Back to latest",

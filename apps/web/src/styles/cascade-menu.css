@@ -3,7 +3,7 @@
   --cascade-menu-surface: var(--color-bg-primary_alt);
   --cascade-menu-border: var(--color-border-secondary);
   --cascade-menu-ink: var(--color-text-primary);
-  --cascade-menu-row-hover: var(--color-bg-active);
+  --cascade-menu-row-hover: var(--color-bg-tertiary);
   --cascade-menu-quiet: var(--color-text-tertiary);
   --cascade-menu-chevron: var(--color-fg-quaternary);
   --cascade-menu-shadow: 0 12px 24px -4px rgb(15 23 42 / 0.12), 0 4px 8px -2px rgb(15 23 42 / 0.06);
@@ -74,8 +74,8 @@
 
 .cascade-menu-level {
   min-width: 13rem;
-  max-width: min(18rem, calc(100vw - 1rem));
-  width: max-content;
+  max-width: var(--cascade-menu-max-width, min(18rem, calc(100vw - 1rem)));
+  width: var(--cascade-menu-width, max-content);
   max-height: min(26rem, calc(100dvh - 1.5rem));
   overflow-x: hidden;
   overflow-y: auto;
@@ -128,7 +128,7 @@
 }
 
 .cascade-menu-level[popover][data-cascade-level="submenu"] {
-  left: calc(anchor(right) - 8px);
+  left: calc(anchor(right) + 10px);
   top: calc(anchor(top) - var(--cascade-submenu-top-offset, 28px));
   position-try-fallbacks:
     flip-inline,

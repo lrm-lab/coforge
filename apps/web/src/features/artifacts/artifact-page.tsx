@@ -338,9 +338,7 @@ function ArtifactPageFor({
     loaded: current !== undefined,
     actions: {
       find: shell.openFind,
-      "copy-link": () => void copyLink(),
       send: () => setSendingTo(true),
-      comments: () => setPanel("comments"),
       files: () => setPanel("files"),
       delete: () => setDeleting(true),
     },
@@ -397,7 +395,6 @@ function ArtifactPageFor({
                   pane={pane}
                   overlay={overlay}
                   onChooseVersion={choose}
-                  onFind={shell.openFind}
                   onCopyLink={() => void copyLink()}
                   onToggleAnnotate={commentMode.toggleMode}
                   onToggleCommentsPanel={commentMode.togglePanel}

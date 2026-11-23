@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useRouter } from "@tanstack/react-router";
 import { useHotkey } from "@tanstack/react-hotkeys";
 
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { OPEN_OVERLAY_SELECTOR } from "#src/lib/open-overlay";
 import { m } from "#src/paraglide/messages";
 import type { DisplayReportRequest } from "./artifact-commenting";
@@ -18,6 +20,9 @@ import {
 import { PaneFrame } from "./artifact-parts";
 import { ArtifactPresenceChip } from "./artifact-presence-chip";
 import type { ArtifactDocument } from "./artifact-queries";
+import { artifactPageRoute, galleryEntryState } from "./artifact-search";
+import { ArtifactSharePopover } from "./artifact-share-popover";
+import { encodeArtifactShortId } from "./artifact-short-id";
 import { VisibilityPill } from "./artifact-visibility-pill";
 import type { ArtifactVisibility } from "./use-artifact-visibility";
 
@@ -175,7 +180,6 @@ export function ArtifactViewerHeader({
   pane,
   overlay,
   onChooseVersion,
-  onFind,
   onCopyLink,
   onToggleAnnotate,
   onToggleCommentsPanel,
@@ -208,17 +212,25 @@ export function ArtifactViewerHeader({
   pane?: ArtifactPaneControls;
   overlay?: ArtifactOverlayControls;
   onChooseVersion: (version: number) => void;
-  onFind: () => void;
   onCopyLink: () => void;
   onToggleAnnotate: () => void;
   onToggleCommentsPanel: () => void;
   onDisplayReport: () => void;
   onMoreAction: (action: MoreAction) => void;
 }) {
+  const router = useRouter();
+  const workspaceSlug = useWorkspaceSlug();
   const standalone = !pane && !overlay;
   const hasRecentSwitcher = Boolean(pane?.conversationId && pane.onSwitchArtifact);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const titleContainerRef = useRef<HTMLDivElement>(null);
+  const openFullPage = useCallback(() => {
+    void router.navigate({
+      ...artifactPageRoute(workspaceSlug, encodeArtifactShortId(artifactId)),
+      state: galleryEntryState,
+    });
+  }, [router, workspaceSlug, artifactId]);
+  const hasMultipleVersions = latestVersion > 1 || shownVersion !== latestVersion;
   const detailsProps = loaded
     ? {
         artifactId,
@@ -228,7 +240,7 @@ export function ArtifactViewerHeader({
         titleAs: (standalone ? "h1" : "h2") as "h1" | "h2",
         shownVersion,
         latestVersion,
-        visibility,
+        scope: visibility.current,
         home,
         homeName,
         origin,
@@ -244,16 +256,13 @@ export function ArtifactViewerHeader({
         artifactId={artifactId}
         entryPath={entryPath}
         title={title}
-        shownVersion={loaded ? shownVersion : undefined}
+        shownVersion={loaded && hasMultipleVersions ? shownVersion : undefined}
         home={home}
         homeName={homeName}
         pane={pane}
         overlay={overlay}
         titleContainerRef={titleContainerRef}
         onChooseVersion={onChooseVersion}
-        onFind={loaded && canFind ? onFind : undefined}
-        findShortcut={findShortcut}
-        onCopyLink={loaded && standalone ? onCopyLink : undefined}
         detailsTrigger={detailsProps && <ArtifactDetailsPopover {...detailsProps} />}
         comments={
           loaded && (
@@ -264,7 +273,16 @@ export function ArtifactViewerHeader({
               panelActive={commentsPanelActive}
               onToggleAnnotate={onToggleAnnotate}
               onTogglePanel={onToggleCommentsPanel}
-              onDisplayReport={onDisplayReport}
+            />
+          )
+        }
+        share={
+          loaded && (
+            <ArtifactSharePopover
+              visibility={visibility}
+              onCopyLink={onCopyLink}
+              onSend={() => onMoreAction("send")}
+              onEmbed={() => onMoreAction("embed")}
             />
           )
         }
@@ -285,9 +303,9 @@ export function ArtifactViewerHeader({
             <ArtifactMoreMenu
               artifactId={artifactId}
               shownVersion={shownVersion}
+              hasMultipleVersions={hasMultipleVersions}
               phone={phone}
-              showCopyLink={phone || !standalone}
-              showDisplayReport={!framesPage}
+              findShortcut={findShortcut}
               fileCount={fileCount}
               canDelete={canDelete}
               canFind={canFind}
@@ -295,6 +313,7 @@ export function ArtifactViewerHeader({
               visibility={visibility}
               onChooseVersion={onChooseVersion}
               onOpenDetails={hasRecentSwitcher ? () => setDetailsOpen(true) : undefined}
+              onOpenFullPage={overlay ? openFullPage : undefined}
               onDisplayReport={onDisplayReport}
               onAction={onMoreAction}
             />

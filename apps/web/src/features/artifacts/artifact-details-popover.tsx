@@ -1,13 +1,7 @@
 import { Fragment, useState, type ReactNode, type RefObject } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import {
-  Check,
-  ChevronDown,
-  ChevronRight,
-  ClockRewind,
-  MessageTextSquare01,
-} from "@untitledui/icons";
+import { ChevronDown, ChevronRight, ClockRewind, MessageTextSquare01 } from "@untitledui/icons";
 import {
   Button as AriaButton,
   Dialog,
@@ -19,6 +13,7 @@ import {
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { ChannelPlace } from "#src/features/conversations/channel-name";
 import { conversationRoute } from "#src/features/conversations/last-conversation";
 import {
   FLOATING_SURFACE_CLASS,
@@ -42,8 +37,7 @@ import {
   type ArtifactDocument,
 } from "./artifact-queries";
 import type { VisibilityChoice } from "./artifact-scope";
-import { VisibilitySection } from "./artifact-share-popover";
-import type { ArtifactVisibility } from "./use-artifact-visibility";
+import { VersionPublisherAvatar, VersionTimelineRow } from "./artifact-version-menu";
 
 const DETAIL_CHANGED_PATHS_SHOWN = 2;
 
@@ -60,7 +54,7 @@ export function ArtifactDetailsPopover({
   triggerRef,
   shownVersion,
   latestVersion,
-  visibility,
+  scope,
   home,
   homeName,
   origin,
@@ -78,7 +72,7 @@ export function ArtifactDetailsPopover({
   triggerRef?: RefObject<HTMLElement | null>;
   shownVersion: number;
   latestVersion: number;
-  visibility: ArtifactVisibility;
+  scope: VisibilityChoice;
   home: ArtifactHome | undefined;
   homeName: string | undefined;
   origin: ArtifactOrigin | undefined;
@@ -106,7 +100,6 @@ export function ArtifactDetailsPopover({
         aria-label={m.av_details_label()}
         className="flex min-h-0 flex-col divide-y divide-border-secondary overflow-y-auto outline-hidden"
       >
-        <VisibilitySection visibility={visibility} onClose={() => setOpen(false)} />
         <VersionSection
           artifactId={artifactId}
           shownVersion={shownVersion}
@@ -119,7 +112,7 @@ export function ArtifactDetailsPopover({
         <LinksSection
           home={home}
           homeName={homeName}
-          scope={visibility.current}
+          scope={scope}
           origin={origin}
           nameOf={nameOf}
           onNavigate={() => setOpen(false)}
@@ -162,36 +155,54 @@ function VersionSection({
   onChooseVersion: (version: number) => void;
 }) {
   const [historyOpen, setHistoryOpen] = useState(false);
-  const { data } = useQuery({ ...artifactVersionsQuery(artifactId), enabled: historyOpen });
+  const hasMultipleVersions = latestVersion > 1 || shownVersion !== latestVersion;
+  const { data } = useQuery({
+    ...artifactVersionsQuery(artifactId),
+    enabled: historyOpen || !hasMultipleVersions,
+  });
   const time = useArtifactTime();
+  const singleVersion = !hasMultipleVersions ? data?.[0] : undefined;
   return (
     <section className="p-3">
       <div className="flex items-center justify-between gap-2 px-1">
-        <div className="flex items-center gap-1.5">
-          <span className="rounded-md bg-secondary px-1.5 py-0.5 text-xs font-medium text-primary tabular-nums">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="shrink-0 rounded-md bg-secondary px-1.5 py-0.5 text-xs font-medium text-primary tabular-nums">
             v{shownVersion}
           </span>
           {shownVersion === latestVersion && (
-            <span className="text-xs text-tertiary">{m.av_version_latest()}</span>
+            <span className="shrink-0 text-xs text-tertiary">{m.av_version_latest()}</span>
+          )}
+          {singleVersion && (
+            <span className="inline-flex min-w-0 items-center gap-1.5 text-xs text-quaternary">
+              <VersionPublisherAvatar publisher={singleVersion.publisher} />
+              <span className="truncate">
+                {m.av_version_by({
+                  name: singleVersion.publisher.name,
+                  time: time(singleVersion.createdAt),
+                })}
+              </span>
+            </span>
           )}
         </div>
-        <AriaButton
-          aria-expanded={historyOpen}
-          onPress={() => setHistoryOpen((current) => !current)}
-          className="flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-tertiary outline-focus-ring transition-colors duration-150 hover:bg-primary_hover hover:text-secondary focus-visible:outline-2"
-        >
-          <ClockRewind aria-hidden="true" className="size-3.5 shrink-0" />
-          <span>{m.av_versions()}</span>
-          {historyOpen ? (
-            <ChevronDown aria-hidden="true" className="size-3.5 shrink-0" />
-          ) : (
-            <ChevronRight aria-hidden="true" className="size-3.5 shrink-0" />
-          )}
-        </AriaButton>
+        {hasMultipleVersions && (
+          <AriaButton
+            aria-expanded={historyOpen}
+            onPress={() => setHistoryOpen((current) => !current)}
+            className="flex shrink-0 cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-tertiary outline-focus-ring transition-colors duration-150 hover:bg-primary_hover hover:text-secondary focus-visible:outline-2"
+          >
+            <ClockRewind aria-hidden="true" className="size-3.5 shrink-0" />
+            <span>{m.av_versions()}</span>
+            {historyOpen ? (
+              <ChevronDown aria-hidden="true" className="size-3.5 shrink-0" />
+            ) : (
+              <ChevronRight aria-hidden="true" className="size-3.5 shrink-0" />
+            )}
+          </AriaButton>
+        )}
       </div>
-      {historyOpen && (
-        <ul className="mt-2 flex max-h-48 flex-col gap-0.5 overflow-y-auto">
-          {(data ?? []).map((version) => {
+      {hasMultipleVersions && historyOpen && (
+        <ul className="mt-2 flex max-h-56 flex-col gap-0.5 overflow-y-auto">
+          {(data ?? []).map((version, index, all) => {
             const changed = formatChangedPaths(
               version.changedPaths,
               version.changedCount,
@@ -216,33 +227,15 @@ function VersionSection({
                   <AriaButton
                     onPress={() => onChooseVersion(version.number)}
                     className={cn(
-                      "flex w-full cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-left outline-focus-ring transition-colors duration-150 hover:bg-primary_hover focus-visible:outline-2",
-                      active && "bg-active",
+                      "flex w-full cursor-pointer rounded-md px-2 py-1 text-left outline-focus-ring transition-colors duration-150 hover:bg-primary_hover focus-visible:outline-2",
+                      active && "bg-tertiary",
                     )}
                   >
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="flex items-center gap-1.5">
-                        <span className="text-sm font-medium text-primary tabular-nums">
-                          v{version.number}
-                        </span>
-                        {version.latest && (
-                          <span className="text-xs text-tertiary">{m.av_version_latest()}</span>
-                        )}
-                      </span>
-                      <span className="truncate text-xs text-tertiary">{byLine}</span>
-                      {version.note && (
-                        <span className="truncate text-xs text-tertiary">{version.note}</span>
-                      )}
-                      {changed && (
-                        <span className="truncate text-xs text-quaternary">{changed}</span>
-                      )}
-                    </span>
-                    {active && (
-                      <Check
-                        aria-hidden="true"
-                        className="mt-0.5 size-4 shrink-0 text-fg-brand-primary"
-                      />
-                    )}
+                    <VersionTimelineRow
+                      version={version}
+                      selected={active}
+                      isLast={index === all.length - 1}
+                    />
                   </AriaButton>
                 </Tooltip>
               </li>
@@ -270,26 +263,35 @@ function LinksSection({
   onNavigate: () => void;
 }) {
   const workspaceSlug = useWorkspaceSlug();
-  const showHome = Boolean(
-    home && scope !== "conversation" && homeConversationOf(home) && homeName,
-  );
+  const homeConversation = homeConversationOf(home);
+  const showHome = Boolean(home && scope !== "conversation" && homeConversation && homeName);
   const showOrigin = Boolean(origin);
   if (!showHome && !showOrigin) return null;
+  const resolvedOriginName =
+    origin && !("hidden" in origin)
+      ? origin.homeKind === "channel"
+        ? nameOf(origin.conversationId)?.replace(/^#/, "")
+        : nameOf(origin.conversationId)
+      : undefined;
   const resolvedOriginLabel =
-    origin && !("hidden" in origin) ? originLabel(origin, nameOf(origin.conversationId)) : "";
+    origin && !("hidden" in origin) ? originLabel(origin, resolvedOriginName) : "";
   return (
     <section className="flex flex-col gap-1.5 p-3">
       {showHome && home && homeName && (
         <div className="flex items-center justify-between gap-2 px-1">
           <span className={SECTION_LABEL_CLASS}>{m.av_details_home()}</span>
-          <Tooltip title={homeName} placement="top end">
+          <Tooltip title={homeName.replace(/^#/, "")} placement="top end">
             <Focusable>
               <Link
                 {...homeLinkProps(home, workspaceSlug)}
                 onClick={onNavigate}
                 className="min-w-0 truncate rounded-md px-1.5 py-0.5 text-xs font-medium text-secondary outline-focus-ring transition-colors duration-150 hover:bg-primary_hover hover:text-primary focus-visible:outline-2"
               >
-                {homeName}
+                {home.kind === "channel" && homeConversation ? (
+                  <ChannelPlace id={homeConversation} name={homeName.replace(/^#/, "")} />
+                ) : (
+                  homeName
+                )}
               </Link>
             </Focusable>
           </Tooltip>

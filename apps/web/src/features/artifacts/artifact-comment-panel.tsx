@@ -11,7 +11,10 @@ import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { plainMentionsByHandle } from "#src/features/conversations/message-markdown";
-import { SECTION_LABEL_CLASS } from "#src/features/conversations/review-chrome";
+import {
+  SECTION_LABEL_CLASS,
+  TOOLBAR_BUTTON_ON_CLASS,
+} from "#src/features/conversations/review-chrome";
 import { ReviewPanelHeader } from "#src/features/conversations/review-panel-header";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -41,6 +44,8 @@ import { ArtifactPendingReview } from "./artifact-pending-review";
 import { ReviewChip, ReviewComments, ReviewFilterMenu } from "./artifact-review-view";
 import type { ReviewFilter } from "./use-review-filter";
 
+const COMPACT_SEARCH_THRESHOLD = 5;
+
 export function ArtifactCommentPanel({
   artifactId,
   shownVersion,
@@ -67,10 +72,12 @@ export function ArtifactCommentPanel({
   const plainMentions = useMemo(() => plainMentionsByHandle(known), [known]);
   const [replyTo, setReplyTo] = useState<CommentReplyTarget | null>(null);
   const [resolvedOpen, setResolvedOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortOrder, setSortOrder] = useState<CommentSortOrder>("page");
   const [flashId, flashThread] = useFlash<string>();
   const listElement = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (activePrefill) setReplyTo(null);
@@ -107,8 +114,11 @@ export function ArtifactCommentPanel({
 
   const titled = sections.some((section) => section.version !== shownVersion);
   const context: CommentContext = { artifactId, plainMentions, flashId, onReply: setReplyTo };
-  const hasAnyPublished =
-    groups.whole.length > 0 || groups.anchored.length > 0 || groups.resolved.length > 0;
+  const publishedThreadCount =
+    groups.whole.length + groups.anchored.length + groups.resolved.length;
+  const hasAnyPublished = publishedThreadCount > 0;
+  const compactSearch = publishedThreadCount < COMPACT_SEARCH_THRESHOLD;
+  const showSearchBar = !review.active && (!compactSearch || searchOpen || searching);
   const filteredEmpty = sections.length === 0 && resolvedThreads.length === 0;
   const showResolved = resolvedOpen || searching;
 
@@ -150,12 +160,32 @@ export function ArtifactCommentPanel({
         title={m.av_cm_title()}
         close={{ label: m.av_cm_close(), onPress: onClose }}
       >
+        {!review.active && compactSearch && (
+          <ButtonUtility
+            icon={SearchLg}
+            size="xs"
+            color="tertiary"
+            tooltip={m.av_cm_search_placeholder()}
+            aria-pressed={searchOpen || searching}
+            data-comment-search-toggle=""
+            className={cn((searchOpen || searching) && TOOLBAR_BUTTON_ON_CLASS)}
+            onClick={() => {
+              if (searchOpen && !searching) {
+                setSearchOpen(false);
+              } else {
+                setSearchOpen(true);
+                requestAnimationFrame(() => searchInputRef.current?.focus());
+              }
+            }}
+          />
+        )}
         {!review.active && <CommentSortMenu sortOrder={sortOrder} onChange={setSortOrder} />}
         <ReviewFilterMenu filter={review} />
       </ReviewPanelHeader>
-      {!review.active && (
+      {showSearchBar && (
         <div className="shrink-0 border-b border-secondary px-3 py-2">
           <Input
+            ref={searchInputRef}
             size="sm"
             icon={SearchLg}
             placeholder={m.av_cm_search_placeholder()}
@@ -163,10 +193,15 @@ export function ArtifactCommentPanel({
             value={searchQuery}
             onChange={setSearchQuery}
             onKeyDown={(event) => {
-              if (event.key === "Escape" && searchQuery) {
+              if (event.key !== "Escape") return;
+              if (searchQuery) {
                 event.preventDefault();
                 event.stopPropagation();
                 setSearchQuery("");
+              } else if (searchOpen) {
+                event.preventDefault();
+                event.stopPropagation();
+                setSearchOpen(false);
               }
             }}
           />

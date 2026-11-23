@@ -1,14 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import {
-  ArrowLeft,
-  ChevronDown,
-  Link01,
-  LinkExternal01,
-  Maximize01,
-  Minimize01,
-  SearchLg,
-  XClose,
-} from "@untitledui/icons";
+import { ArrowLeft, ChevronDown, Maximize01, Minimize01, XClose } from "@untitledui/icons";
 import { Button as AriaButton, Focusable } from "react-aria-components";
 import type { ReactNode, RefObject } from "react";
 
@@ -23,8 +14,7 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { homeConversationOf, homeLinkProps, type ArtifactHome } from "./artifact-home";
 import { RecentArtifactsMenu } from "./artifact-recent-menu";
-import { artifactPageRoute, galleryEntryState, useArrivedFromGallery } from "./artifact-search";
-import { encodeArtifactShortId } from "./artifact-short-id";
+import { useArrivedFromGallery } from "./artifact-search";
 import { VersionMenu } from "./artifact-version-menu";
 
 export const ARTIFACT_TITLE_ID = "artifact-page-title";
@@ -52,10 +42,8 @@ export function ArtifactPageHeader({
   mobileMeta,
   titleContainerRef,
   onChooseVersion,
-  onFind,
-  findShortcut,
-  onCopyLink,
   comments,
+  share,
   menu,
   pane,
   overlay,
@@ -70,15 +58,12 @@ export function ArtifactPageHeader({
   mobileMeta?: ReactNode;
   titleContainerRef?: RefObject<HTMLDivElement | null>;
   onChooseVersion: (version: number) => void;
-  onFind?: () => void;
-  findShortcut?: string;
-  onCopyLink?: () => void;
   comments?: ReactNode;
+  share?: ReactNode;
   menu?: ReactNode;
   pane?: ArtifactPaneControls;
   overlay?: ArtifactOverlayControls;
 }) {
-  const workspaceSlug = useWorkspaceSlug();
   const Title = pane || overlay ? "h2" : "h1";
   const hasRecentSwitcher = Boolean(pane?.conversationId && pane.onSwitchArtifact);
 
@@ -135,7 +120,11 @@ export function ArtifactPageHeader({
                   v{shownVersion}
                   <ChevronDown aria-hidden="true" className="size-3.5" />
                 </AriaButton>
-                <Dropdown.Popover placement="bottom start" className="w-72">
+                <Dropdown.Popover
+                  title={m.av_versions()}
+                  placement="bottom start"
+                  className="[--cascade-menu-max-width:min(21rem,calc(100vw-1.5rem))] [--cascade-menu-width:min(21rem,calc(100vw-1.5rem))]"
+                >
                   <VersionMenu
                     artifactId={artifactId}
                     shown={shownVersion}
@@ -153,51 +142,20 @@ export function ArtifactPageHeader({
       <span className="hidden flex-1 sm:block" />
       <div className="flex shrink-0 items-center gap-1">
         {comments}
-        {onFind && (
-          <ButtonUtility
-            icon={SearchLg}
-            size="xs"
-            color="tertiary"
-            tooltip={m.doc_page_find()}
-            tooltipShortcut={findShortcut}
-            className="size-8 max-sm:hidden"
-            onClick={onFind}
-          />
-        )}
-        {onCopyLink && (
-          <ButtonUtility
-            icon={Link01}
-            size="xs"
-            color="tertiary"
-            tooltip={m.doc_copy_link()}
-            className="size-8 max-sm:hidden"
-            onClick={onCopyLink}
-          />
-        )}
+        {share}
         {menu}
+        {(comments || share || menu) && (overlay || pane) && (
+          <span aria-hidden="true" className="mx-0.5 h-4 w-px shrink-0 bg-border-secondary" />
+        )}
         {overlay && (
-          <>
-            <Tooltip title={m.av_open_full_page()}>
-              <Focusable>
-                <Link
-                  {...artifactPageRoute(workspaceSlug, encodeArtifactShortId(artifactId))}
-                  state={galleryEntryState}
-                  aria-label={m.av_open_full_page()}
-                  className="relative inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-fg-quaternary outline-focus-ring transition duration-100 ease-out hover:bg-primary_hover hover:text-fg-quaternary_hover focus-visible:outline-2 focus-visible:outline-offset-2 any-pointer-coarse:after:absolute any-pointer-coarse:after:-inset-2.5"
-                >
-                  <LinkExternal01 aria-hidden="true" className="size-4" />
-                </Link>
-              </Focusable>
-            </Tooltip>
-            <ButtonUtility
-              icon={XClose}
-              size="xs"
-              color="tertiary"
-              tooltip={m.doc_close()}
-              className="size-8"
-              onClick={overlay.onClose}
-            />
-          </>
+          <ButtonUtility
+            icon={XClose}
+            size="xs"
+            color="tertiary"
+            tooltip={m.doc_close()}
+            className="size-8"
+            onClick={overlay.onClose}
+          />
         )}
         {pane && (
           <>

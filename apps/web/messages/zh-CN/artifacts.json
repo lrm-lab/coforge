@@ -61,7 +61,7 @@
   "navigation_artifacts": "Artifacts",
   "av_version_switch": "当前 v{version}，点击切换版本",
   "av_version_latest": "最新",
-  "av_version_by": "{name}，{time}",
+  "av_version_by": "{name} · {time}",
   "av_versions": "版本历史",
   "av_viewing_version": "当前查看的是 v{version}",
   "av_back_to_latest": "回到最新",

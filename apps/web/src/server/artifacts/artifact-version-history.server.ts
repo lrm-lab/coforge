@@ -1,5 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { actorNames, actorOf } from "./artifact-actor-names.server";
+import { actorDirectory, actorOf } from "./artifact-actor-names.server";
 import { changedPathsOf } from "./artifact-read-positions.server";
 import type { ArtifactReads } from "./artifact-reads.server";
 
@@ -30,16 +30,21 @@ export class ArtifactVersionHistory {
         publisherUserId: true,
       },
     });
-    const names = await actorNames(this.db, input.workspaceId, {
+    const directory = await actorDirectory(this.db, input.workspaceId, {
       userIds: rows.flatMap((row) => row.publisherUserId ?? []),
       agentIds: rows.flatMap((row) => row.publisherAgentId ?? []),
     });
     return rows.map(({ publisherAgentId, publisherUserId, changedPaths, ...version }) => {
       const paths = changedPathsOf(changedPaths);
+      const actorId = publisherAgentId ?? publisherUserId ?? null;
       return {
         ...version,
         latest: version.number === artifact.currentVersion,
-        publisher: actorOf(names, { userId: publisherUserId, agentId: publisherAgentId }),
+        publisher: {
+          ...actorOf(directory.names, { userId: publisherUserId, agentId: publisherAgentId }),
+          id: actorId,
+          avatarUrl: (actorId && directory.faces.get(actorId)) || null,
+        },
         changedPaths: paths.slice(0, CHANGED_PATHS_SHOWN),
         changedCount: paths.length,
       };
