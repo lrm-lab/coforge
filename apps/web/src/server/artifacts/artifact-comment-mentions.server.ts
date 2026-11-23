@@ -1,4 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { humanLabel } from "#src/lib/human-label";
 import {
@@ -9,7 +10,7 @@ import {
 
 type Db = Pick<PrismaClient, "agent" | "workspaceMembership" | "conversation">;
 
-export type MentionCandidate = { id: string; handle: string; name: string };
+export type MentionCandidate = { id: string; handle: string; name: string; unmentionable?: true };
 
 export type MentionCandidates = { people: MentionCandidate[]; agents: MentionCandidate[] };
 
@@ -25,7 +26,7 @@ export async function mentionCandidates(
     }),
     db.agent.findMany({
       where: { workspaceId, ...ACTIVE_AGENT_WHERE },
-      select: { id: true, name: true, displayName: true },
+      select: { id: true, name: true, displayName: true, visibility: true },
     }),
   ]);
   const [peopleReading, agentsReading] = await Promise.all([
@@ -52,6 +53,7 @@ export async function mentionCandidates(
         id: agent.id,
         handle: agent.name,
         name: agent.displayName || agent.name,
+        ...(agent.visibility === AGENT_VISIBILITY.PRIVATE ? { unmentionable: true as const } : {}),
       })),
   };
 }

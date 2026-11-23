@@ -2,7 +2,6 @@ import { channelGlyph } from "#src/features/conversations/channel-name";
 import { GroupAvatar } from "#src/features/conversations/group-avatar";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Link } from "@tanstack/react-router";
-import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { AnimatePresence, motion } from "motion/react";
 
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
@@ -11,7 +10,7 @@ import {
   formatAgentProfileParam,
   formatPersonProfileParam,
 } from "#src/features/agents/profile-panel/profile-panel-search";
-import { useAgentDisplays } from "#src/features/agents/workspace-agents-realtime";
+import { useLiveAgentDisplay } from "#src/features/agents/workspace-agents-realtime";
 import { Badge } from "#src/components/base/badges/badges";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { computerIcon } from "#src/features/computers/computer-identity";
@@ -26,15 +25,7 @@ export const SEARCH_HEADING_CLASS = "px-2 py-1 text-xs text-tertiary";
 export const SEARCH_ROW_CLASS =
   "flex w-full min-w-0 items-center gap-3 rounded-lg px-2 py-1.5 text-left outline-hidden transition-colors hover:bg-secondary_hover focus-visible:bg-chat-selected-bg group-data-[input-focused]/search:data-[search-first]:bg-chat-selected-bg";
 
-export function SearchEntityRow({
-  entity,
-  display,
-  onOpen,
-}: {
-  entity: SearchEntity;
-  display: AgentDisplaySnapshot | undefined;
-  onOpen: () => void;
-}) {
+export function SearchEntityRow({ entity, onOpen }: { entity: SearchEntity; onOpen: () => void }) {
   const workspaceSlug = useWorkspaceSlug();
   const dmId =
     entity.kind === "dm"
@@ -48,7 +39,7 @@ export function SearchEntityRow({
     onAuxClick: (event: { button: number }) => event.button === 1 && onOpen(),
     "data-search-option": "",
     "data-search-entity": `${entity.kind}:${entity.id}`,
-    children: <EntityContent entity={entity} display={display} />,
+    children: <EntityContent entity={entity} />,
   };
   switch (entity.kind) {
     case "channel":
@@ -88,17 +79,11 @@ export function SearchEntityRow({
   }
 }
 
-function EntityContent({
-  entity,
-  display,
-}: {
-  entity: SearchEntity;
-  display: AgentDisplaySnapshot | undefined;
-}) {
+function EntityContent({ entity }: { entity: SearchEntity }) {
   const subtitle = entitySubtitle(entity);
   return (
     <>
-      <EntityMark entity={entity} display={display} />
+      <EntityMark entity={entity} />
       <span className="min-w-0 truncate text-sm text-primary">{entity.name}</span>
       {entity.kind === "channel" && entity.archived && (
         <Badge size="sm" color="gray" type="modern" className="shrink-0">
@@ -124,7 +109,6 @@ export function SearchEntityList({
   entities: readonly SearchEntity[];
   onOpen: (entity: SearchEntity) => void;
 }) {
-  const displays = useAgentDisplays();
   const reduced = usePrefersReducedMotion();
   return GROUPS.map(({ kind, heading }) => {
     const rows = entities.filter((entity) => entity.kind === kind);
@@ -150,11 +134,7 @@ export function SearchEntityList({
                   layout: { duration: DURATION_S.sm, ease: EASE_IN_OUT },
                 }}
               >
-                <SearchEntityRow
-                  entity={entity}
-                  display={displays.get(entity.id)}
-                  onOpen={() => onOpen(entity)}
-                />
+                <SearchEntityRow entity={entity} onOpen={() => onOpen(entity)} />
               </motion.li>
             ))}
           </AnimatePresence>
@@ -175,29 +155,26 @@ function entitySubtitle(entity: SearchEntity): string | undefined {
   }
 }
 
-function EntityMark({
-  entity,
-  display,
-}: {
-  entity: SearchEntity;
-  display: AgentDisplaySnapshot | undefined;
-}) {
-  if (entity.kind === "agent") {
-    return (
-      <>
-        <span aria-hidden="true" className="shrink-0">
-          <AgentDisplayAvatar
-            agentId={entity.id}
-            name={entity.name}
-            src={entity.avatarUrl}
-            display={display}
-            size="xs"
-          />
-        </span>
-        <span className="sr-only">{agentDisplay(display).label}</span>
-      </>
-    );
-  }
+function AgentEntityMark({ entity }: { entity: Extract<SearchEntity, { kind: "agent" }> }) {
+  const display = useLiveAgentDisplay(entity.id);
+  return (
+    <>
+      <span aria-hidden="true" className="shrink-0">
+        <AgentDisplayAvatar
+          agentId={entity.id}
+          name={entity.name}
+          src={entity.avatarUrl}
+          display={display}
+          size="xs"
+        />
+      </span>
+      <span className="sr-only">{agentDisplay(display).label}</span>
+    </>
+  );
+}
+
+function EntityMark({ entity }: { entity: SearchEntity }) {
+  if (entity.kind === "agent") return <AgentEntityMark entity={entity} />;
   if (entity.kind === "dm" || entity.kind === "person")
     return (
       <span aria-hidden="true" className="shrink-0">

@@ -7,8 +7,7 @@ import { AgentMascotAvatar } from "#src/features/agents/agent-mascot-avatar";
 import { agentDisplay } from "#src/features/agents/agent-status-display";
 import { AgentStatusMarker, AgentStatusText } from "#src/features/agents/agent-status-marker";
 import { DELETED_AGENT_NAME_CLASS, DeletedAgentLabel } from "#src/features/agents/deleted-agent";
-import { useLiveAgent } from "#src/features/agents/workspace-agents-realtime";
-import { useWatchAgentDisplay } from "#src/features/agents/watched-agent-displays";
+import { useLiveAgent, useLiveAgentDisplay } from "#src/features/agents/workspace-agents-realtime";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { TabbedHeader } from "#src/components/layout/tabbed-header";
@@ -37,10 +36,8 @@ export function DirectConversationHeader({
   settingsOpen?: boolean;
   onToggleSettings?: () => void;
 }) {
-  // Another member's Agent is an extra, whose idle display the shell reads only when asked.
-  useWatchAgentDisplay(conversation.agent.id);
   const live = useLiveAgent(conversation.agent.id);
-  const display = live?.display;
+  const display = useLiveAgentDisplay(conversation.agent.id);
   const status = agentDisplay(display);
   // A deleted Agent's DM stays readable, with its read-only profile, but takes no new messages.
   const deleted = Boolean(conversation.agent.deletedAt);

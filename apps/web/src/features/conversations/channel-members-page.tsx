@@ -14,8 +14,7 @@ import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { AgentHoverCard } from "#src/features/agents/agent-hover-card";
 import { agentDisplay } from "#src/features/agents/agent-status-display";
 import { AgentStatusLine } from "#src/features/agents/agent-status-marker";
-import { useAgentDisplays } from "#src/features/agents/workspace-agents-realtime";
-import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
+import { useLiveAgentDisplay } from "#src/features/agents/workspace-agents-realtime";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useCoarsePointer } from "#src/hooks/use-coarse-pointer";
 import { cn } from "#src/lib/utils";
@@ -136,7 +135,6 @@ function MembersRoster({
 }) {
   const queryClient = useQueryClient();
   const setRole = useServerFn(setPublicChannelMemberRole);
-  const displays = useAgentDisplays();
   const [roleTarget, setRoleTarget] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [removing, setRemoving] = useState<RosterMember | null>(null);
@@ -206,7 +204,6 @@ function MembersRoster({
       <MemberRow
         key={mentionKey(member)}
         member={member}
-        display={member.kind === "agent" ? displays.get(member.id) : undefined}
         canChangeRole={canManageRoles && !self}
         roleBusy={roleTarget === member.id}
         canRemove={data.canRemoveMembers}
@@ -291,7 +288,6 @@ function MembersRoster({
  * `actionsInMenu`. */
 const MemberRow = memo(function MemberRow({
   member,
-  display,
   canChangeRole,
   roleBusy,
   canRemove,
@@ -302,7 +298,6 @@ const MemberRow = memo(function MemberRow({
   autoFocus,
 }: {
   member: RosterMember;
-  display: AgentDisplaySnapshot | undefined;
   canChangeRole: boolean;
   roleBusy: boolean;
   canRemove: boolean;
@@ -314,6 +309,7 @@ const MemberRow = memo(function MemberRow({
   onOpenProfile: (profile: RosterProfile, tab?: AgentProfileTabId) => void;
   autoFocus: boolean;
 }) {
+  const display = useLiveAgentDisplay(member.kind === "agent" ? member.id : "");
   const hasActions = canChangeRole || canRemove;
   const role = roleLabel(member);
   const demotes = member.channelRole === "admin" || isServerAdmin(member);

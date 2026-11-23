@@ -6,7 +6,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import {
+  useCurrentWorkspaceId,
   useLiveAgent,
+  useLiveAgentDisplay,
   usePrefetchAgentActivityFeed,
 } from "#src/features/agents/workspace-agents-realtime";
 import { agentDisplay } from "#src/features/agents/agent-status-display";
@@ -45,7 +47,6 @@ import {
 import { AgentProfileConfirmationDialogs } from "./agent-profile-confirmation-dialogs";
 import type { AgentVisibility } from "#src/features/agents/agent-visibility";
 import { agentModelsQueryKey } from "#src/features/agents/agent-models";
-import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { OPEN_OVERLAY_SELECTOR } from "#src/lib/open-overlay";
 import { AgentProfileHeader } from "./agent-profile-header";
 import { AgentProfileUnavailable } from "./agent-profile-unavailable";
@@ -118,7 +119,7 @@ export function AgentProfilePanel({
     visible && present,
   );
   const invalidate = useInvalidateAgentProfile(agentId);
-  const display = liveAgent?.display ?? profile?.display;
+  const display = useLiveAgentDisplay(agentId) ?? profile?.display;
 
   const knownName = profile?.displayName ?? liveAgent?.displayName ?? "";
   const deleted = Boolean(profile?.deletedAt);

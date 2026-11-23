@@ -12,18 +12,22 @@ export type ReferenceSuggestion =
   | { kind: "mention"; mention: Mentionable }
   | { kind: "channel"; channel: ChannelSuggestion };
 
-function mentionCandidates(
+export function mentionCandidates(
   mentionables: readonly Mentionable[] | undefined,
   outsiders: readonly Mentionable[] | undefined,
   query: string,
   recentHandles: readonly string[] | undefined,
 ): Mentionable[] {
-  const members = filterMentionables(mentionables ?? [], query, { recentHandles });
   const memberKeys = new Set((mentionables ?? []).map(mentionKey));
+  const members = filterMentionables(
+    (mentionables ?? []).filter((item) => !item.unmentionable),
+    query,
+    { recentHandles },
+  );
   return [
     ...members,
     ...filterMentionables(
-      (outsiders ?? []).filter((item) => !memberKeys.has(mentionKey(item))),
+      (outsiders ?? []).filter((item) => !item.unmentionable && !memberKeys.has(mentionKey(item))),
       query,
       { recentHandles },
     ),

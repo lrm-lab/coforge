@@ -13,8 +13,7 @@ import {
   AgentListRow,
   AgentListRows,
 } from "#src/features/agents/agent-list-popover";
-import { useLiveAgent } from "#src/features/agents/workspace-agents-realtime";
-import { useWatchAgentDisplay } from "#src/features/agents/watched-agent-displays";
+import { useLiveAgent, useLiveAgentDisplay } from "#src/features/agents/workspace-agents-realtime";
 import { m } from "#src/paraglide/messages";
 import {
   loadPublicChannelThreadFollowingAgents,
@@ -53,15 +52,15 @@ function FollowingAgentRow({
   listFocus: () => HTMLElement | null;
 }) {
   const toast = useAppToast();
-  useWatchAgentDisplay(agent.id);
   const live = useLiveAgent(agent.id);
+  const display = useLiveAgentDisplay(agent.id);
   return (
     <AgentListRow
       agentId={agent.id}
       name={agent.displayName}
       src={agent.avatarUrl}
       mascot={live?.mascot}
-      display={live?.display}
+      display={display}
       onOpenProfile={onOpenProfile ? () => onOpenProfile(agent.id) : undefined}
       action={
         canUnfollow && (

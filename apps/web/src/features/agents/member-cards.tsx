@@ -19,8 +19,7 @@ import {
   formatPersonProfileParam,
 } from "./profile-panel/profile-panel-search";
 import { AgentDisplayAvatar, AgentStackFace } from "./agent-display-avatar";
-import { useWatchAgentDisplay } from "./watched-agent-displays";
-import { useLiveAgent } from "./workspace-agents-realtime";
+import { useLiveAgentDisplay } from "./workspace-agents-realtime";
 
 type DirectoryAgent = MemberAgent;
 type DirectoryPerson = MemberPerson;
@@ -118,8 +117,7 @@ export function AgentCard({
   canEdit: boolean;
   onDelete?: () => void;
 }) {
-  useWatchAgentDisplay(member.id);
-  const display = useLiveAgent(member.id)?.display;
+  const display = useLiveAgentDisplay(member.id);
   const navigate = useNavigate();
   const openDirectConversation = useOpenDirectConversation();
   const workspaceSlug = useWorkspaceSlug();

@@ -78,6 +78,7 @@ export type Mentionable = {
   /** Not a member of the channel: offered in its own group, and a mention of them notifies no one
    * until the sender acts on it. */
   outsider?: true;
+  unmentionable?: true;
 };
 
 /** One candidate's identity across the person and Agent lists: ids are unique per table, not across

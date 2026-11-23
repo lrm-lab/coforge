@@ -81,3 +81,13 @@ test("a watch registry holds an Agent while any view watches it, and reads it on
   registry.watch("x");
   expect(first).toEqual(["x", "x"]);
 });
+
+test("keeps a watched idle extra held across reconnects and stops holding it once released", () => {
+  const first: string[] = [];
+  const registry = createDisplayWatchRegistry((id) => first.push(id));
+  const release = registry.watch("extra-idle");
+  const idleExtra = [agent("extra-idle", display("online", 90_000))];
+  expect(heldDisplayAgentIds(idleExtra, 10_000, registry.ids())).toEqual(["extra-idle"]);
+  release();
+  expect(heldDisplayAgentIds(idleExtra, 10_000, registry.ids())).toEqual([]);
+});

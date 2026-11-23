@@ -9,7 +9,6 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { Skeleton } from "#src/components/ui/skeleton";
-import { useAgentDisplays } from "#src/features/agents/workspace-agents-realtime";
 import { m } from "#src/paraglide/messages";
 import type { SearchEntity } from "./search-entities";
 import { SEARCH_HEADING_CLASS, SEARCH_ROW_CLASS, SearchEntityRow } from "./search-entity-list";
@@ -36,7 +35,6 @@ export function SearchHome({
   onOpen: (entity: SearchEntity) => void;
 }) {
   const frequent = useFrequentEntities(workspaceId, usage);
-  const displays = useAgentDisplays();
 
   if (frequent.pending) {
     return (
@@ -114,11 +112,7 @@ export function SearchHome({
           <ul className="flex flex-col">
             {frequent.entities.map((entity) => (
               <li key={`${entity.kind}:${entity.id}`}>
-                <SearchEntityRow
-                  entity={entity}
-                  display={displays.get(entity.id)}
-                  onOpen={() => onOpen(entity)}
-                />
+                <SearchEntityRow entity={entity} onOpen={() => onOpen(entity)} />
               </li>
             ))}
           </ul>

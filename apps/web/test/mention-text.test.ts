@@ -338,3 +338,142 @@ test("a person and an Agent that read alike do not make each other ambiguous", (
   expect(shown.has(mentionKey(human))).toBe(false);
   expect(shown.has(mentionKey(bot))).toBe(true);
 });
+
+test("private Agents stay resolvable in history while excluded from @ mention candidates", async () => {
+  const { mentionables } = await import("#src/server/conversations/channel-mentionables.server");
+  const { conversationMentionables } =
+    await import("#src/server/db/repositories/user-direct-reads.repositories.server");
+  const { mentionCandidates } =
+    await import("#src/features/conversations/use-reference-completion");
+  const { mentionCandidates: artifactMentionCandidates } =
+    await import("#src/server/artifacts/artifact-comment-mentions.server");
+
+  const privateAgentId = "44444444-4444-4444-8444-444444444444";
+  const publicAgentId = "55555555-5555-4555-8555-555555555555";
+  const channelDirectory = mentionables(
+    "ws-1",
+    [
+      {
+        id: "m-priv",
+        user: null,
+        agent: {
+          id: privateAgentId,
+          name: "priv-bot",
+          displayName: "Private Bot",
+          description: "",
+          avatarMascot: null,
+          visibility: "private",
+          appBot: null,
+        },
+      },
+      {
+        id: "m-pub",
+        user: null,
+        agent: {
+          id: publicAgentId,
+          name: "pub-bot",
+          displayName: "Public Bot",
+          description: "",
+          avatarMascot: null,
+          visibility: "public",
+          appBot: null,
+        },
+      },
+    ],
+    new Map(),
+  );
+  expect(channelDirectory.find((entry) => entry.id === privateAgentId)?.unmentionable).toBe(true);
+  expect(
+    channelDirectory.find((entry) => entry.id === publicAgentId)?.unmentionable,
+  ).toBeUndefined();
+  expect(makeReferenceBodyFormatter(channelDirectory)(`hi <@agent:${privateAgentId}>`)).toBe(
+    "hi @Private Bot",
+  );
+  expect(mentionCandidates(channelDirectory, [], "", undefined).map((entry) => entry.id)).toEqual([
+    publicAgentId,
+  ]);
+  const staleOutsiders = [
+    {
+      kind: "agent" as const,
+      id: privateAgentId,
+      handle: "priv-bot",
+      label: "Private Bot",
+      description: "",
+      mentionScore: 0,
+      outsider: true as const,
+    },
+  ];
+  expect(
+    mentionCandidates(channelDirectory, staleOutsiders, "", undefined).map((entry) => entry.id),
+  ).toEqual([publicAgentId]);
+
+  const directDirectory = conversationMentionables("ws-1", [
+    {
+      user: null,
+      agent: {
+        id: privateAgentId,
+        name: "priv-bot",
+        displayName: "Private Bot",
+        description: "",
+        avatarMascot: null,
+        visibility: "private",
+      },
+    },
+  ]);
+  expect(directDirectory[0]?.unmentionable).toBe(true);
+  expect(makeReferenceBodyFormatter(directDirectory)(`hi <@agent:${privateAgentId}>`)).toBe(
+    "hi @Private Bot",
+  );
+  expect(mentionCandidates(directDirectory, [], "", undefined)).toEqual([]);
+
+  const artifactResult = await artifactMentionCandidates(
+    {
+      workspaceMembership: { findMany: async () => [] },
+      agent: {
+        findMany: async () => [
+          {
+            id: privateAgentId,
+            name: "priv-bot",
+            displayName: "Private Bot",
+            visibility: "private",
+          },
+          {
+            id: publicAgentId,
+            name: "pub-bot",
+            displayName: "Public Bot",
+            visibility: "public",
+          },
+        ],
+      },
+      conversation: { findUnique: async () => null },
+    } as never,
+    "ws-1",
+    {
+      id: "art-1",
+      homeKey: "workspace",
+      visibility: "workspace",
+      ownerUserId: "u-1",
+    } as never,
+  );
+  expect(artifactResult.agents.find((entry) => entry.id === privateAgentId)?.unmentionable).toBe(
+    true,
+  );
+  expect(
+    artifactResult.agents.find((entry) => entry.id === publicAgentId)?.unmentionable,
+  ).toBeUndefined();
+  const artifactKnown = artifactResult.agents.map((entry) => ({
+    kind: "agent" as const,
+    id: entry.id,
+    handle: entry.handle,
+    label: entry.name,
+    description: "",
+    mentionScore: 0,
+    ...(entry.unmentionable ? { unmentionable: true as const } : {}),
+  }));
+  expect(makeReferenceBodyFormatter(artifactKnown)(`hi <@agent:${privateAgentId}>`)).toBe(
+    "hi @Private Bot",
+  );
+  expect(mentionCandidates([], artifactKnown, "", undefined).map((entry) => entry.id)).toEqual([
+    publicAgentId,
+  ]);
+});

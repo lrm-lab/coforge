@@ -42,20 +42,26 @@ export function useArtifactMentionables(artifactId: string) {
     if (!data) return { offered: undefined, known: undefined };
     const toMentionable =
       (kind: Mentionable["kind"]) =>
-      (candidate: { id: string; handle: string; name: string }): Mentionable => ({
+      (candidate: {
+        id: string;
+        handle: string;
+        name: string;
+        unmentionable?: true;
+      }): Mentionable => ({
         kind,
         id: candidate.id,
         handle: candidate.handle,
         label: candidate.name,
         description: "",
         mentionScore: 0,
+        ...(candidate.unmentionable ? { unmentionable: true as const } : {}),
       });
     const people = data.people.map(toMentionable("user"));
     const agents = data.agents.map(toMentionable("agent"));
     return {
       offered: {
         people: people.filter((person) => person.id !== data.viewerId),
-        agents,
+        agents: agents.filter((agent) => !agent.unmentionable),
       },
       known: [...people, ...agents],
     };

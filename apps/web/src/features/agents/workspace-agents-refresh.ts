@@ -90,6 +90,14 @@ export function useAgentDirectoryInvalidator() {
           queryKey: ["conversation", "mentionables"],
           refetchType: "active",
         });
+        void queryClient.invalidateQueries({
+          queryKey: ["artifacts", "mentionable"],
+          refetchType: "active",
+        });
+        void queryClient.invalidateQueries({
+          queryKey: ["attachment-comments"],
+          refetchType: "active",
+        });
         // The message headers' model and description lines.
         void queryClient.invalidateQueries({ queryKey: AGENT_MODELS_KEY, refetchType: "active" });
         void queryClient.invalidateQueries({

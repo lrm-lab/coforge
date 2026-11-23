@@ -7,6 +7,8 @@ import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { Prisma } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { humanLabel } from "#src/lib/human-label";
+import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
+import type { Mentionable } from "#src/features/conversations/mention-text";
 import { canDirectMessageAgent } from "#src/server/agents/agent-visibility.server";
 import { browserSenderName } from "#src/server/conversations/sender-display.server";
 import { APP_BOT_LOGO_SELECT, agentFaceUrl } from "#src/server/apps/app-logo.server";
@@ -130,6 +132,7 @@ export type ConversationMentionableMember = {
     displayName: string | null;
     description: string | null;
     avatarMascot: string | null;
+    visibility?: string;
   } | null;
 };
 
@@ -141,7 +144,7 @@ export type ConversationMentionableMember = {
 export function conversationMentionables(
   workspaceId: string,
   members: readonly ConversationMentionableMember[],
-) {
+): Mentionable[] {
   return members
     .map((member) =>
       member.user
@@ -167,6 +170,9 @@ export function conversationMentionables(
               description: member.agent.description?.trim() ?? "",
               avatarUrl: agentFaceUrl(member.agent),
               mentionScore: 0,
+              ...(member.agent.visibility === AGENT_VISIBILITY.PRIVATE
+                ? { unmentionable: true as const }
+                : {}),
             }
           : undefined,
     )

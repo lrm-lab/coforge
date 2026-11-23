@@ -45,10 +45,15 @@ let workspaceId: string;
 let workspaceSlug: string;
 let channelId: string;
 let computerId: string;
+let ownComputerId: string;
 let ownerUserId: string;
 const agents = {
   public: { id: "", name: "", displayName: "" },
+  publicOffline: { id: "", name: "", displayName: "" },
+  publicOutsider: { id: "", name: "", displayName: "" },
   private: { id: "", name: "", displayName: "" },
+  privateOutsider: { id: "", name: "", displayName: "" },
+  own: { id: "", name: "", displayName: "" },
 };
 
 let lastRevision = 0;
@@ -57,17 +62,22 @@ function revision() {
   return lastRevision;
 }
 
-const snapshot = (agentId: string, statusOnly: boolean): AgentDisplaySnapshot => ({
+const snapshot = (
+  agentId: string,
+  statusOnly: boolean,
+  activityKind: AgentDisplaySnapshot["activityKind"] = "online",
+  cid = computerId,
+): AgentDisplaySnapshot => ({
   protocolMajor: 1,
   workspaceId,
-  computerId,
+  computerId: cid,
   agentId,
   revision: revision(),
-  activityKind: "online",
-  detailKind: "",
-  detail: "",
+  activityKind,
+  detailKind: activityKind === "working" ? "running_command" : "",
+  detail: activityKind === "working" ? "Running command" : "",
   entries: [],
-  expiresAt: Date.now() + 120_000,
+  expiresAt: activityKind === "offline" ? null : Date.now() + 120_000,
   ...(statusOnly ? { statusOnly: true as const } : {}),
 });
 
@@ -141,6 +151,17 @@ beforeAll(async () => {
     },
   });
   computerId = computer.id;
+  const ownComputer = await db.computer.create({
+    data: {
+      ownerId: DEV_BROWSER_USER.id,
+      machineId: `members-status-own-${process.pid}`,
+      name: `members-status-own-${process.pid}.local`,
+      displayName: "Observer Studio",
+      kind: "local",
+      workspaces: { create: { workspaceId } },
+    },
+  });
+  ownComputerId = ownComputer.id;
   const runtimeConfig = {
     runtime: "pi",
     provider: { kind: "default" },
@@ -148,17 +169,21 @@ beforeAll(async () => {
     modelProvider: "",
     reasoning: "",
   };
-  for (const [key, visibility] of [
-    ["public", "public"],
-    ["private", "private"],
+  for (const [key, visibility, ownerId, compId, label] of [
+    ["public", "public", owner.id, computer.id, "Public"],
+    ["publicOffline", "public", owner.id, computer.id, "Public Offline"],
+    ["publicOutsider", "public", owner.id, computer.id, "Public Outsider"],
+    ["private", "private", owner.id, computer.id, "Private"],
+    ["privateOutsider", "private", owner.id, computer.id, "Private Hidden"],
+    ["own", "public", DEV_BROWSER_USER.id, ownComputer.id, "Own"],
   ] as const) {
     const agent = await db.agent.create({
       data: {
         workspaceId,
-        ownerId: owner.id,
-        computerId: computer.id,
-        name: `members-status-${key}-${process.pid}`,
-        displayName: `Status ${key === "public" ? "Public" : "Private"} Agent ${process.pid}`,
+        ownerId,
+        computerId: compId,
+        name: `members-status-${key.toLowerCase()}-${process.pid}`,
+        displayName: `Status ${label} Agent ${process.pid}`,
         visibility,
         runtimeConfig,
       },
@@ -177,8 +202,16 @@ beforeAll(async () => {
         userId: DEV_BROWSER_USER.id,
         channelRole: "member",
       },
+      {
+        conversationId: channel.id,
+        workspaceId,
+        userId: owner.id,
+        channelRole: "admin",
+      },
       { conversationId: channel.id, workspaceId, agentId: agents.public.id },
+      { conversationId: channel.id, workspaceId, agentId: agents.publicOffline.id },
       { conversationId: channel.id, workspaceId, agentId: agents.private.id },
+      { conversationId: channel.id, workspaceId, agentId: agents.own.id },
     ],
   });
   // One message the public Agent wrote, so the stream shows its sender avatar beside the
@@ -202,6 +235,7 @@ afterAll(async () => {
   proxy.stop();
   if (workspaceId) await db.workspace.delete({ where: { id: workspaceId } });
   if (computerId) await db.computer.delete({ where: { id: computerId } });
+  if (ownComputerId) await db.computer.delete({ where: { id: ownComputerId } });
   if (ownerUserId) await db.user.delete({ where: { id: ownerUserId } });
   await db.$disconnect();
 });
@@ -215,8 +249,8 @@ test("a plain member's channel roster reads another member's Agent status, publi
     `document.querySelector('[aria-label="Channel details and settings"]') !== null`,
     60_000,
   );
-  // The settings' Members row: this channel's one human and two Agents.
-  const membersRow = `[...document.querySelectorAll('${panelSelector} button')].find((button) => button.textContent.includes("1 human · 2 agents"))`;
+  // The settings' Members row: this channel's two humans and four Agents.
+  const membersRow = `[...document.querySelectorAll('${panelSelector} button')].find((button) => button.textContent.includes("2 humans · 4 agents"))`;
   await browser("click", '[aria-label="Channel details and settings"]');
   await waitFor(`${panel} !== null`, 15_000);
   await waitFor(`${membersRow} !== undefined`, 15_000);
@@ -266,4 +300,60 @@ test("a plain member's channel roster reads another member's Agent status, publi
   const withProfile = await evaluate<string[]>(avatarLabels);
   expect(withProfile.length).toBeGreaterThanOrEqual(2);
   for (const label of withProfile) expect(label).toContain(", Online");
+
+  await centrifugo.publishJson(agentStatusChannel(workspaceId), {
+    type: "agent:display",
+    ...snapshot(agents.publicOutsider.id, false, "online", computerId),
+  });
+  await centrifugo.publishJson(agentStatusChannel(workspaceId), {
+    type: "agent:display",
+    ...snapshot(agents.own.id, false, "online", ownComputerId),
+  });
+  await evaluate(`(() => {
+    const el = document.querySelector('textarea');
+    el?.focus();
+    return Boolean(el);
+  })()`);
+  await browser("type", "textarea", "@");
+  await waitFor(`document.querySelector('[role="listbox"] [role="option"]') !== null`, 15_000);
+  const mentionLabels = `(() => [...document.querySelectorAll('[role="listbox"] [role="option"]')].map((opt) => ({
+    text: (opt.textContent ?? '').replace(/\\s+/g, ' ').trim(),
+    label: opt.querySelector('[role="img"]')?.getAttribute('aria-label') ?? null,
+  })))()`;
+  const hasLabel = (name: string, status: string) =>
+    `[...document.querySelectorAll('[role="listbox"] [role="option"] [role="img"]')].some((el) => el.getAttribute('aria-label') === ${JSON.stringify(`${name}, ${status}`)})`;
+  await waitFor(hasLabel(agents.public.displayName, "Online"), 15_000);
+  await waitFor(hasLabel(agents.publicOffline.displayName, "Offline"), 15_000);
+  await waitFor(hasLabel(agents.publicOutsider.displayName, "Online"), 15_000);
+  await waitFor(hasLabel(agents.own.displayName, "Online"), 15_000);
+  const menuRows = await evaluate<Array<{ text: string; label: string | null }>>(mentionLabels);
+  expect(menuRows.some((row) => row.text.includes("Members status owner"))).toBe(true);
+  expect(menuRows.some((row) => row.text.includes(agents.private.displayName))).toBe(false);
+  expect(menuRows.some((row) => row.text.includes(agents.privateOutsider.displayName))).toBe(false);
+
+  await centrifugo.publishJson(agentStatusChannel(workspaceId), {
+    type: "agent:display",
+    ...snapshot(agents.public.id, false, "working", computerId),
+  });
+  await waitFor(hasLabel(agents.public.displayName, "Running command"), 15_000);
+  await centrifugo.publishJson(agentStatusChannel(workspaceId), {
+    type: "agent:display",
+    ...snapshot(agents.public.id, false, "offline", computerId),
+  });
+  await waitFor(hasLabel(agents.public.displayName, "Offline"), 15_000);
+
+  await db.agent.update({
+    where: { id: agents.publicOutsider.id },
+    data: { visibility: "private" },
+  });
+  await centrifugo.publishJson(agentStatusChannel(workspaceId), {
+    type: "agent:visibility_changed",
+    workspaceId,
+    agentId: agents.publicOutsider.id,
+    visibility: "private",
+  });
+  await waitFor(
+    `![...document.querySelectorAll('[role="listbox"] [role="option"]')].some((opt) => (opt.textContent ?? '').includes(${JSON.stringify(agents.publicOutsider.displayName)}))`,
+    15_000,
+  );
 }, 120_000);

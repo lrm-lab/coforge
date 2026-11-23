@@ -1,8 +1,9 @@
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext } from "react";
 import { createStore, useSelector, type Store } from "@tanstack/react-store";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
 import type { LiveAgent } from "./workspace-agents-realtime";
+import { useWatchAgentDisplay } from "./watched-agent-displays";
 
 /**
  * The status floors (`statusOnly` snapshots) by Agent id. A floor is never a display: it answers
@@ -46,49 +47,42 @@ export const StatusOnlyDisplaysContext = createContext<Store<StatusOnlyDisplays>
   createStore<StatusOnlyDisplays>(new Map<string, AgentDisplaySnapshot>()),
 );
 
-/** One live Agent's display for an avatar's status dot, or nothing for an Agent not in the
- * viewer's roster (an `isExtra` Agent, which `useLiveAgents` leaves out too) or not live here. */
-export function liveAgentDisplay(
-  agents: readonly { id: string; display?: AgentDisplaySnapshot; isExtra?: true }[],
+export function selectLiveAgentDisplay(
+  agents: readonly { id: string; display?: AgentDisplaySnapshot }[],
   agentId: string,
 ): AgentDisplaySnapshot | undefined {
-  return agents.find((agent) => agent.id === agentId && !agent.isExtra)?.display;
+  return agentId ? agents.find((agent) => agent.id === agentId)?.display : undefined;
 }
 
-/** One Agent's status floor — the reduced display a private Agent publishes on the shared
- * status channel — or nothing. A fallback only: a full display always wins over it. */
+export function selectExtraWatchId(
+  agents: readonly { id: string; isExtra?: true }[],
+  agentId: string,
+): string {
+  return agentId && agents.some((agent) => agent.id === agentId && Boolean(agent.isExtra))
+    ? agentId
+    : "";
+}
+
+export function resolveAgentDisplay(
+  liveDisplay: AgentDisplaySnapshot | undefined,
+  floorDisplay: AgentDisplaySnapshot | undefined,
+): AgentDisplaySnapshot | undefined {
+  return liveDisplay ?? floorDisplay;
+}
+
 function useStatusOnlyAgentDisplay(agentId: string): AgentDisplaySnapshot | undefined {
-  return useSelector(useContext(StatusOnlyDisplaysContext), (displays) => displays.get(agentId));
-}
-
-/** Each live Agent's latest display by id — the viewer's roster and the others' (`isExtra`)
- * alike, for avatars' status dots and member lists. An Agent with no full display falls back to
- * its status floor, so a private Agent the viewer cannot otherwise see still answers
- * online/working/offline where its name already renders. */
-export function useAgentDisplays(): Map<string, AgentDisplaySnapshot | undefined> {
-  const agents = useSelector(useContext(LiveAgentStoreContext), (state) => state);
-  const statusOnly = useSelector(useContext(StatusOnlyDisplaysContext), (displays) => displays);
-  return useMemo(() => {
-    const displays = new Map(agents.map((agent) => [agent.id, agent.display]));
-    for (const [agentId, display] of statusOnly)
-      if (displays.get(agentId) === undefined) displays.set(agentId, display);
-    return displays;
-  }, [agents, statusOnly]);
-}
-
-/**
- * One visible Agent's display, another member's (`isExtra`) included, for the sidebar's DM face:
- * a DM with another member's public Agent is listed there too. An Agent with no full display
- * falls back to its status floor, so a private Agent the viewer cannot otherwise see still
- * answers where its name already renders. Repaints like `useLiveAgentDisplay`.
- */
-export function useVisibleAgentDisplay(agentId: string): AgentDisplaySnapshot | undefined {
-  const display = useSelector(
-    useContext(LiveAgentStoreContext),
-    (agents) => agents.find((agent) => agent.id === agentId)?.display,
+  return useSelector(useContext(StatusOnlyDisplaysContext), (displays) =>
+    agentId ? displays.get(agentId) : undefined,
   );
+}
+
+export function useVisibleAgentDisplay(agentId: string): AgentDisplaySnapshot | undefined {
+  const liveStore = useContext(LiveAgentStoreContext);
+  const watchExtraId = useSelector(liveStore, (agents) => selectExtraWatchId(agents, agentId));
+  useWatchAgentDisplay(watchExtraId);
+  const display = useSelector(liveStore, (agents) => selectLiveAgentDisplay(agents, agentId));
   const floor = useStatusOnlyAgentDisplay(agentId);
-  return display ?? floor;
+  return resolveAgentDisplay(display, floor);
 }
 
 /**

@@ -17,7 +17,10 @@ export function useMentionCandidates(
   return useMemo(
     () =>
       enabled
-        ? mentionables?.filter((mention) => !(mention.kind === "user" && mention.id === viewerId))
+        ? mentionables?.filter(
+            (mention) =>
+              !(mention.kind === "user" && mention.id === viewerId) && !mention.unmentionable,
+          )
         : undefined,
     [enabled, mentionables, viewerId],
   );

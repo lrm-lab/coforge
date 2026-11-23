@@ -1,11 +1,8 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Badge } from "#src/components/base/badges/badges";
-import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
-import { useLiveAgents } from "#src/features/agents/workspace-agents-realtime";
 import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
-import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { channelGlyph } from "./channel-name";
 import { GroupAvatar } from "./group-avatar";
 import { mentionKey, mentionKeysShowingHandle, type Mentionable } from "./mention-text";
@@ -34,11 +31,6 @@ export function ReferenceSuggestionList({
   placement?: "above" | "inline";
 }) {
   const activeOptionRef = useRef<HTMLLIElement>(null);
-  const liveAgents = useLiveAgents();
-  const displayByAgentId = useMemo(
-    () => new Map(liveAgents.map((agent) => [agent.id, agent.display])),
-    [liveAgents],
-  );
 
   useEffect(() => {
     const option = activeOptionRef.current;
@@ -84,7 +76,6 @@ export function ReferenceSuggestionList({
         {item.kind === "mention" ? (
           <MentionRow
             mention={item.mention}
-            display={displayByAgentId.get(item.mention.id)}
             showHandle={handleShown.has(mentionKey(item.mention))}
           />
         ) : (
@@ -162,35 +153,18 @@ export function ReferenceSuggestionList({
   );
 }
 
-function MentionRow({
-  mention,
-  display,
-  showHandle,
-}: {
-  mention: Mentionable;
-  display: AgentDisplaySnapshot | undefined;
-  showHandle: boolean;
-}) {
+function MentionRow({ mention, showHandle }: { mention: Mentionable; showHandle: boolean }) {
   return (
     <>
-      {mention.kind === "agent" ? (
-        <AgentDisplayAvatar
-          agentId={mention.id}
-          name={mention.label}
-          src={mention.avatarUrl}
-          display={display}
-          size="xs"
-        />
-      ) : (
-        <ActorAvatar
-          presence
-          userId={mention.id}
-          size="xs"
-          alt=""
-          src={mention.avatarUrl}
-          name={mention.label}
-        />
-      )}
+      <ActorAvatar
+        presence
+        agentId={mention.kind === "agent" ? mention.id : undefined}
+        userId={mention.kind === "user" ? mention.id : undefined}
+        size="xs"
+        alt=""
+        src={mention.avatarUrl}
+        name={mention.label}
+      />
       <span className="grid min-w-0 flex-1 grid-cols-[minmax(0,auto)_auto_minmax(0,1fr)] items-center gap-1.5">
         <span
           className={cx(

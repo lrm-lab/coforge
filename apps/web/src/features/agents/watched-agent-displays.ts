@@ -33,5 +33,5 @@ export const DisplayWatcherContext = createContext<DisplayWatcher | null>(null);
  * a no-op outside `WorkspaceAgentsProvider`. */
 export function useWatchAgentDisplay(agentId: string): void {
   const watch = useContext(DisplayWatcherContext);
-  useEffect(() => watch?.(agentId), [watch, agentId]);
+  useEffect(() => (agentId ? watch?.(agentId) : undefined), [watch, agentId]);
 }

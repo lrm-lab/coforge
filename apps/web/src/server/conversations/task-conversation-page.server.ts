@@ -97,6 +97,7 @@ export class TaskConversationPages {
               displayName: true,
               description: true,
               avatarMascot: true,
+              visibility: true,
             },
           },
         },

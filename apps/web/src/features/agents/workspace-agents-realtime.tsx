@@ -53,8 +53,9 @@ import { useUserChannelReplyIntents } from "./reply-intents-realtime";
 // The display-resolution hooks and the two stores they read live in `agent-status-floor`;
 // re-exported here so callers keep one import site for Agent state.
 export {
-  liveAgentDisplay,
-  useAgentDisplays,
+  resolveAgentDisplay,
+  selectExtraWatchId,
+  selectLiveAgentDisplay,
   useLiveAgentDisplay,
   useVisibleAgentDisplay,
 } from "./agent-status-floor";
@@ -226,6 +227,7 @@ export function WorkspaceAgentsProvider({
       ? () => {
           // A model label follows the Agent's visibility too (`agent-models.ts`).
           void queryClient.invalidateQueries({ queryKey: agentModelsQueryKey(workspaceId) });
+          directoryInvalidator.schedule();
         }
       : undefined,
     onDirectoryChangedEvent: directoryInvalidator.schedule,

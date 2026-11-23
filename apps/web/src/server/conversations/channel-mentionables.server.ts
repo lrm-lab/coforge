@@ -31,6 +31,7 @@ export const MENTIONABLE_MEMBER_SELECT = {
       displayName: true,
       description: true,
       avatarMascot: true,
+      visibility: true,
       // An app's bot wears its app's logo, never the mascot its id chooses.
       appBot: APP_BOT_LOGO_SELECT,
     },
@@ -71,6 +72,9 @@ export function mentionables(
             description: row.agent!.description.trim(),
             avatarUrl: agentFaceUrl(row.agent!),
             mentionScore: mentionScores.get(`agent:${row.agent!.id}`) ?? 0,
+            ...(row.agent!.visibility === AGENT_VISIBILITY.PRIVATE
+              ? { unmentionable: true as const }
+              : {}),
           },
     )
     .sort((left, right) => left.handle.localeCompare(right.handle));
