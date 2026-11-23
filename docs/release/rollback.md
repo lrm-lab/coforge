@@ -14,9 +14,8 @@ For a verified first deployment, rollback restores the recorded pre-deployment
 empty state by stopping and removing the failed candidate. Never treat a
 missing release record on a non-empty environment as bootstrap.
 
-An unrelated later rollback request must identify its target digest and follow
-the production authorization gate unless a separately approved incident policy
-explicitly says otherwise.
+An unrelated later production rollback requires explicit human approval of
+the exact target digest unless a separately approved incident policy says otherwise.
 
 Rollback means redeploying a known healthy image digest. It is not a Git
 revert, rebuild, or mutable retag. Database changes must be backward compatible

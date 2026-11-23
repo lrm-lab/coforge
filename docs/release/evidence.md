@@ -12,10 +12,14 @@ Every deployment or local-distribution publication record must identify:
 | `workflow_run`                | GitHub Actions run URL or stable run ID; host-initiated rollback uses the explicit `manual` sentinel                                                |
 | `previous_identity`           | Last known healthy digest/manifest, or an explicit bootstrap marker; cloud JSONL names this `previous_digest`                                       |
 | `verification_result`         | Track-specific internal, public, shared-ingress, running-identity, install, upgrade, and integrity evidence; cloud JSONL names this `health_result` |
-| `approval`                    | Production-only human approval bound to the exact artifact identity                                                                                 |
-| `executor`                    | Agent or human that executed the deployment                                                                                                         |
+| `approval`                    | Separate approval reference and scope when required, otherwise unset or null                                                                                 |
+| `executor`                    | Agent or human that executed the deployment or publication                                                                                                         |
 | `started_at` / `completed_at` | UTC transaction boundaries                                                                                                                          |
 | `outcome`                     | Healthy, failed, rolled back, or failed rollback                                                                                                    |
+
+For routine production, the release thread records the coordinator's candidate
+verification, the workflow run and the observed result. Dispatch identifies the
+execution event.
 
 Tags, versions, filenames, and channel names are useful labels, but they do not
 replace immutable identity. Compose must ultimately resolve a cloud service as

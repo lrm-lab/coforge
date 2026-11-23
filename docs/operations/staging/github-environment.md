@@ -107,5 +107,6 @@ VAPID pair 必须跨发布、重启和 Web 副本保持稳定。轮换会使已�
 需要重新订阅，因此必须作为受控维护操作执行；更新 GitHub Environment 中匹配的两个
 值并重新部署，不能只更新一半。
 
-Production stays disabled: it needs its own environment, an enforceable human
-approval gate, and promotion of the exact digest that passed staging.
+Production uses its own GitHub Environment. The release coordinator promotes
+the exact digest that passed staging after checking the candidate and its
+same-commit integration run. See [Staging to production](../../release/staging-to-production.md).

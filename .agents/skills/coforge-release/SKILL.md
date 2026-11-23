@@ -1,6 +1,6 @@
 ---
 name: coforge-release
-description: "Inspect, publish, promote, verify, install or roll back CoForge cloud images and local Computer release sets across test and production. Use for any CoForge release step. Production promotion only after human approval."
+description: "Inspect, publish, promote, verify, install or roll back CoForge cloud images and local Computer release sets across test and production. Use for any CoForge release step. Routine production promotion follows the release coordinator’s verification and dispatch."
 when_to_use: "test candidate from Computer and Daemon packages, production promotion, promote immutable artifact, release evidence, install local Computer distribution, rollback"
 ---
 
@@ -24,10 +24,9 @@ follow [`AGENTS.md`](../../../AGENTS.md) for Issue, branch, review, and decision
   production approval.
 - **Install local**: install the selected Computer installation bundle through
   the reviewed per-user installer and version store.
-- **Prepare production**: assemble the exact-artifact approval packet, then
-  stop before deployment or publication.
-- **Promote production**: verify human approval for the cloud digest or exact
-  local source commit and version, then execute the canonical promotion path.
+- **Prepare production**: assemble the exact candidate and its release evidence.
+- **Promote production**: the release coordinator verifies the exact candidate,
+  announces it and dispatches the canonical production workflow.
 - **Rollback**: restore the recorded previous healthy digest under the
   canonical authorization rules.
 
@@ -65,14 +64,13 @@ follow [`AGENTS.md`](../../../AGENTS.md) for Issue, branch, review, and decision
   [Per-user installation](../../../docs/release/per-user-installation.md), then apply the
   local [Health verification](../../../docs/release/health-verification.md#local-computer-distribution)
   checks.
-- **Prepare production**: assemble the packet in
-  [Staging to production](../../../docs/release/staging-to-production.md), ask a human to
-  approve the track's exact identity, and stop.
-- **Promote production**: re-read the durable approval, require an exact cloud
-  digest or local source commit and version match, then execute the matching
-  path in [Staging to production](../../../docs/release/staging-to-production.md) through
-  the implemented interface. The Agent may execute and monitor; it cannot
-  supply the human approval.
+- **Prepare production**: assemble the exact digest or local source commit and
+  version and the evidence in
+  [Staging to production](../../../docs/release/staging-to-production.md).
+- **Promote production**: the release coordinator verifies the candidate,
+  announces it in `#release`, dispatches from `main`, verifies the result and
+  reports it in the same release thread. Record any separately required approval
+  before dispatch, following the routine release boundary.
 - **Rollback**: follow [Rollback](../../../docs/release/rollback.md) for authorization and
   target selection, then verify and audit the result through the same
   implemented interface.

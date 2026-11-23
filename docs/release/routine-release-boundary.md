@@ -14,8 +14,15 @@ Before any mutating deployment, verify all of the following:
 - the previous healthy identity is recorded, or the target is verified and
   recorded as empty for a first deployment;
 - no secret will enter workflow input, command arguments, logs, or artifacts;
-- production has durable human approval for the exact image digest or, for a
-  local distribution, the exact version string.
+- for routine production, the release coordinator has verified the exact
+  candidate and announced it in `#release`: Web uses the staging-healthy
+  digest and same-commit CI and Web integration; Computer and Installer use
+  same-commit CI and the tested staging version, source commit and manifest.
+
+The coordinator dispatches routine production from `main`, verifies the
+result and reports it in the announcement thread. Releases without staging,
+red or incomplete CI, data operations and infrastructure changes each follow
+their separate approval rules.
 
 Routine releases may update application containers only. Shared Caddy routes,
 host firewall rules, registry credentials, deployment-user permissions,

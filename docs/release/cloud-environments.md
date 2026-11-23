@@ -2,8 +2,8 @@
 
 | Concern            | `staging`                                        | `production`                                        |
 | ------------------ | ------------------------------------------------ | --------------------------------------------------- |
-| Trigger            | Operator dispatch from `main`                    | Promotion request for a tested digest               |
-| Authorization      | The dispatch; no approval gate                   | Human reviews and dispatches the exact digest       |
+| Trigger            | Operator dispatch from `main`                    | Coordinator dispatch from `main` with a tested digest               |
+| Authorization      | Operator dispatch under staging release checks                   | Coordinator verifies the exact digest, CI and Web integration       |
 | Artifact           | Newly built immutable digest                     | Same digest already healthy in `staging`            |
 | GitHub Environment | `staging`                                        | `production`                                        |
 | Compose project    | `coforge-staging`                                | `coforge-production`                                |
@@ -23,6 +23,6 @@ records.
 
 Neither GitHub Environment enforces a required reviewer: `production` is
 protected only by its branch policy, so deployments come from `main`, and
-`staging` carries no protection rules. The human check on production is the
-operator's decision to dispatch, not a platform gate; an Agent must not start
-a production run on its own judgment.
+`staging` carries no protection rules. The release coordinator follows the
+[routine release boundary](routine-release-boundary.md) before dispatch and
+records the verification in `#release`.

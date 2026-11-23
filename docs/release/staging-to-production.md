@@ -2,29 +2,26 @@
 
 ## Cloud application
 
-Cloud production promotion is a two-party operation:
+The release coordinator verifies the exact candidate, announces it in
+`#release`, dispatches production from `main`, and verifies and reports the
+result in the same thread. Follow the [routine release boundary](routine-release-boundary.md)
+for exception approvals.
 
-1. An Agent prepares a promotion request containing the exact digest, source
-   commit, staging deployment run, staging health result, change summary, known
-   risks, migration compatibility, production configuration revision, and
-   previous healthy production digest.
-2. A human reviews the request and approves or rejects that exact digest.
-   Approval is the human's dispatch of the production workflow; the
-   `production` GitHub Environment restricts the run to `main` but has no
-   required reviewer. The Agent that prepared or triggered the promotion
-   cannot substitute for the human's review.
-3. The dispatched run verifies that its digest input matches the approved
-   digest and that the same digest is still recorded healthy in `staging`.
-4. The workflow deploys the digest with the production Compose project. It
-   does not rebuild the image, and it pulls it with the same bounded attempts
-   as staging ([Main to staging](main-to-staging.md#cloud-application), step 5).
-5. The Agent monitors internal and external health, records the result, and
-   reports the final production digest.
+1. Select the actual latest commit on `main` when preparing the release.
+   Record its full source commit, same-commit CI and Web integration results,
+   and exact staging-healthy image digest. Also record the staging deployment,
+   previous healthy production digest, change summary, risks, migration
+   compatibility, and production configuration revision.
+2. Dispatch the production workflow with that digest. The workflow verifies
+   the exact digest is recorded healthy in staging. The `production` GitHub
+   Environment restricts the run to `main` and has no required reviewer.
+3. Deploy the same digest with the production Compose project, using the
+   bounded pulls documented in [Main to staging](main-to-staging.md#cloud-application).
+4. Verify the running digest, public build, internal and public health and
+   ingress, then record the result.
 
-Changing the digest invalidates the approval. A failed or cancelled attempt
-does not authorize a different candidate. An approval of `latest`, a branch,
-an unspecified future release, or a commit without its full `sha256:...` digest
-is invalid.
+A different digest requires fresh evidence and a new announcement. Pin the
+full `registry/repository@sha256:...` reference for each run.
 
 ### Reminder Due compatibility
 
@@ -39,64 +36,50 @@ is invalid.
 
 ## Local Computer distribution
 
-The local Computer distribution uses the same two-party boundary, but what
-crosses it is the **source commit and its evidence, not the artifact**. Staging
-and production binaries cannot be the same bytes: the feed a build trusts is
-compiled into it, so a staging binary copied into the production feed would keep
-updating itself from staging. Promotion therefore rebuilds:
+Computer and Installer promotion carries the exact source commit and its test
+evidence. Production builds compile in the production feed and matching server.
+The release coordinator follows the same announcement, dispatch and verification
+sequence as for Web:
 
-1. An Agent verifies the staging feed's `latest` resolves the explicitly selected
-   development candidate, such as `0.1.5-dev.3`. It prepares that candidate's
-   source commit, staging version and test evidence, and the production version,
-   which is the staging version without its `-dev.<N>` suffix (`0.1.5`), as
-   the [version rule](github-actions.md) that `release-production.yml` checks
-   requires. Do not overwrite an existing immutable
-   version to align the channel labels, or use `without_staging` to bypass this
-   comparison. The Agent also reads that candidate's
-   [release notes](release-notes.md) from the staging catalog and passes the same
-   English and Chinese text to production.
-2. A human reviews the evidence and approves or rejects that exact commit and
-   production version; approval is the human's dispatch of the production
-   workflow with those inputs. A filename, branch, channel name, or
-   unspecified "latest build" approval is invalid.
-3. The dispatched run builds the approved commit against the production
-   feed configuration, producing a distinct set of binaries whose intended
-   differences from the staging set are the approved release version and the
-   compiled-in environment (feed and matching business server addresses).
-4. The Agent publishes the new manifest, checksum sidecars and binaries beneath
-   the production feed's `<version>/` path, then checks every object's stored
-   length and CRC-64 through an authenticated OSS `HEAD` and verifies the
-   unsigned-origin 403 guard for each object.
-5. Only after that confirmation does the Agent write the production feed's
-   `latest` pointer to the approved version.
-6. The Agent re-reads the production feed's `latest` through authenticated OSS
-   access, verifies its exact bytes and unsigned-origin 403 guard, runs the
-   production local-distribution checks, and records the result.
-7. The workflow registers the release notes for the production version in the
-   production release catalog and verifies the read-back. Notes are text, not
+1. Verify same-commit CI and the published staging manifest's source commit,
+   version and integrity. For Computer, confirm staging's `latest` names the
+   selected numbered development build. Pin the stable production version using
+   the [version rule](computer-versions.md) and read both languages of the
+   [release notes](release-notes.md) from the staging catalog. For Installer,
+   pin the published staging version and match it to the crate version at that
+   source commit. Published version paths are immutable.
+2. Record the evidence and announce the exact commit and versions in
+   `#release`, then dispatch the matching production workflow from `main`.
+3. Build that exact commit against the production feed configuration.
+4. The workflow publishes the manifest, checksum sidecars and binaries under
+   `<version>/` for Computer or `installer/<version>/` for Installer. It checks
+   each object's stored length and CRC-64 through authenticated OSS `HEAD`
+   and verifies each unsigned-origin 403 guard.
+5. After those checks, the workflow advances `latest` for Computer or
+   `installer/latest` for Installer to the verified version.
+6. Read the pointer back through authenticated OSS, verify its exact bytes
+   and unsigned-origin 403 guard, run the production local-distribution
+   checks, and record the result.
+7. For Computer, the workflow registers the production version's release notes
+   in the production release catalog and verifies the read-back. Notes are text, not
    an artifact: they are checked before the build, and changing them
    later with `release-notes.yml` needs no new release decision.
 
 `release-installer-production.yml` and `release-production.yml` implement
-steps 1 and 3-6 for the installer and the Computer, and `release-production.yml`
-also step 7; step 2 is the operator's manual dispatch, which the `production`
-GitHub Environment restricts to `main` (it has no required reviewer). The
-installer goes first, because `install.sh` reads `installer/latest` from the
-same feed. The runbook is
-[`operations/production/computer-release.md`](../operations/production/computer-release.md).
+the respective staging comparison, build and publication gates.
+`release-production.yml` also registers Computer release notes. The installer
+goes first when a compatible production installer is needed, because
+`install.sh` reads `installer/latest` from the same feed. See the
+[production Computer and Installer runbook](../operations/production/computer-release.md).
 
-Their `without_staging` input skips the staging comparison and checks the
-commit's and version's shape, that a Computer version is newer than
-production's `latest`, and the commit's own `ci.yml` verdict — a red or
-still-running run refuses the release unless `allow_red_main` and a
-`ci_override_reason` bypass it (the reason lands in the run summary). It
-exists for a release Frank runs without a
-staging publication (the first production release, `0.1.0` from `main`, on
-2026-10-12); the run title names it, so the operator sees it.
+Publication without staging and release with red or incomplete CI require
+Frank's separate explicit approval. The `without_staging` path checks the commit and
+version, verifies that a Computer version is newer than production's
+`latest`, and checks the commit's CI verdict. Its existing
+`allow_red_main` and `ci_override_reason` inputs record an approved CI
+exception in the run summary. Record each applicable approval with its exact
+scope before dispatch.
 
-Building a commit other than the approved one, or altering the source between
-approval and build, invalidates the approval. Because the artifacts are rebuilt
-rather than copied, the production checks in
-[Health verification](health-verification.md#local-computer-distribution) are the evidence
-that the production binaries work — the staging evidence attests to the commit,
-not to those bytes.
+A source or version change requires fresh candidate verification. The
+[production health checks](health-verification.md#local-computer-distribution)
+verify the binaries actually published to the production feed.

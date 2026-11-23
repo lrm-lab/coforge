@@ -92,8 +92,9 @@ curl -sI http://releases.coforge.cn/latest         # 301 to https://
 
 Production publishes only what staging already published, rebuilt from the same
 commit ([Staging to production](../../release/staging-to-production.md#local-computer-distribution)).
-The `production` GitHub Environment's required reviewer approves the run, whose
-title names the exact version and commit.
+The release coordinator verifies same-commit CI, the staging version and
+manifest, and the exact source commit. Announce the candidate in `#release`
+before dispatch from `main`. The production run title names the commit and version.
 
 1. Publish a numbered development version to staging, with its
    [release notes](../../release/release-notes.md), and test it there:
@@ -119,10 +120,10 @@ title names the exact version and commit.
 
    ```sh
    gh workflow run release-installer-production.yml --repo lrm-lab/coforge \
-     -f commit=<installer commit> -f version=<installer version>
+     --ref main -f commit=<installer commit> -f version=<installer version>
    ```
 
-4. Publish the Computer with the approved stable version (the staging version
+4. Publish the Computer with the verified stable version (the staging version
    without its `-dev.<N>` suffix), that staging version, and the staging
    candidate's release notes (read
    from the staging catalog as
@@ -131,22 +132,23 @@ title names the exact version and commit.
 
    ```sh
    gh workflow run release-production.yml --repo lrm-lab/coforge \
-     -f commit=<commit> -f version=0.1.5 -f staging_version=0.1.5-dev.3 \
+     --ref main -f commit=<commit> -f version=0.1.5 -f staging_version=0.1.5-dev.3 \
      -f notes_en="$(cat notes.en.md)" -f notes_zh_cn="$(cat notes.zh-CN.md)"
    ```
 
 Each workflow first checks, without credentials, that the commit is on `main`,
 that staging published that version from it, and (for the Computer) that the
 versions follow the [version rule](../../release/github-actions.md). A failed
-check stops the run before the approval gate.
+check stops the run before publication. Verify the production version, manifest,
+object integrity and selector read-back, and record the result in `#release`.
 
-A release Frank approves without a staging publication adds
+A release with Frank's explicit approval to proceed without staging adds
 `-f without_staging=true` to both commands and omits `staging_version`; the
 version must still be stable and in order, and the commit on `main`. That
 path also checks the commit's own `ci.yml` run: a red or still-running
-verdict refuses the release unless `-f allow_red_main=true` and
-`-f ci_override_reason=<why>` are passed, and the reason is recorded in the
-run summary.
+verdict requires separate explicit approval before passing
+`-f allow_red_main=true` and `-f ci_override_reason=<why>`. The reason is
+recorded in the run summary.
 
 Roll a bad installer back with
 `gh workflow run release-installer-production.yml -f pointer_only=<version>`.

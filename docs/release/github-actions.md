@@ -6,8 +6,9 @@
 | **Deploy Web (staging)**       | Manually started from `main`        | Validate → build and push Docker image → deploy and verify Web                           |
 | **Publish Computer (staging)** | Manually started from `main` with release notes | Check the notes and validate → build all six platforms → upload and verify release → update staging `latest` → register the notes |
 | **Publish installer (staging)** | Manually started from `main`       | Validate → plan → build each target natively → package, upload, and verify, write the manifest, and update `installer/latest`; or with `pointer_only` move that pointer alone |
-| **Publish installer (production)** | Manually started from `main` with an approved commit and version | Verify staging published it → plan → build that commit natively against the production feed → package, upload, and verify, and update `installer/latest`; or with `pointer_only` move that pointer alone |
-| **Publish Computer (production)** | Manually started from `main` with an approved commit, stable version, and release notes | Check the notes and verify the selected staging version's `latest` and manifest identify that commit and that the version follows the version rule below → build that commit against the production feed → upload and verify → update production `latest` → register the notes |
+| **Deploy Web (production)** | Coordinator dispatches from `main` with the verified staging image digest | Verify staging health for the digest → deploy the same image → verify Web and update the production tag |
+| **Publish installer (production)** | Coordinator dispatches from `main` with the verified source commit and installer version | Verify staging published it → plan → build that commit natively against the production feed → package, upload, and verify, and update `installer/latest`; or with `pointer_only` move that pointer alone |
+| **Publish Computer (production)** | Coordinator dispatches from `main` with the verified source commit, staging and stable versions, and release notes | Check the notes and verify the selected staging version's `latest` and manifest identify that commit and that the version follows the version rule below → build that commit against the production feed → upload and verify → update production `latest` → register the notes |
 | **Edit Computer release notes** | Manually started from `main` with an environment, a published version, and notes; also called by both Computer publications | Replace that version's notes in the environment's release catalog and verify the read-back |
 | **Web integration**            | Daily at 19:17 UTC, or manually started | Prepare the checkout and a scratch database → run `mise run test:integration:web` against PostgreSQL, Redis and Centrifugo service containers |
 | **Web browser e2e**            | Daily at 19:47 UTC, or manually started | Two shards, each: install agent-browser and Chrome → build, seed and serve the Web with a Centrifugo container → run its share of `scripts/e2e/web-e2e-ci.txt` |
@@ -165,10 +166,9 @@ is recreated on restore; other tools stay uncached; Windows verifies
 `mise-shim` too. Jobs checking out `inputs.commit`/`workflow_run` head_sha
 inline the same steps.
 
-Publishing a local-distribution release is **manual**. The workflow exposes only
-`workflow_dispatch`; it is not triggered by merging to `main`. A client release
-leaves a persistent artifact set behind, and at the current user count a build
-per merge is waste.
+Local-distribution publication uses `workflow_dispatch` from `main`. For
+routine production, the release coordinator records the same-commit CI and
+verified staging manifest before dispatch, following [Staging to production](staging-to-production.md).
 
 Computer version numbering, staging and production alike, is in
 [Computer versions](computer-versions.md).
@@ -180,9 +180,9 @@ instead checks the commit's own `ci.yml` verdict — the earliest `main` push
 run whose head descends from it — and refuses a red or still-running one;
 `allow_red_main` with a `ci_override_reason` bypasses that check and records
 the reason. Every production release also writes the latest completed
-`web-e2e` and `web-integration` conclusions to its step summary. Those two
-scheduled suites never block anything: they run after the fact, and a red
-nightly run is a signal to fix `main`, not a gate on releasing it. How to run
+`web-e2e` and `web-integration` conclusions to its step summary for context.
+For Web, the coordinator separately verifies integration for the exact
+candidate commit before routine production promotion. How to run
 the production workflows is in
 [the production release runbook](../operations/production/computer-release.md).
 

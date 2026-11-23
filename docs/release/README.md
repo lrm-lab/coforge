@@ -1,8 +1,6 @@
 # CoForge release contract
 
-Status: approved workflow contract; the cloud staging and production deployment workflows and the local Computer and installer staging and production publish workflows are implemented; every production run waits for a human's dispatch
-
-Updated: 2026-10-19
+Updated: 2026-11-23
 
 This document is the canonical release specification for CoForge. It defines
 which artifact may move between environments, who authorizes that movement,
@@ -27,12 +25,11 @@ implements this contract without duplicating it.
   manifest's per-platform SHA-256 checksums for the local Computer distribution.
 - Publish `main` candidates to the track's isolated `staging` environment or
   release feed. A pre-production target never pretends to be production.
-- When production is introduced, promote the exact artifact that passed
-  staging.
-  Do not rebuild, repackage, or substitute a mutable tag or channel alias.
-- A human authorizes the exact production artifact identity. An Agent may
-  prepare, trigger, monitor, verify, and report the promotion, but must stop if
-  approval is missing, ambiguous, or names a different identity.
+- Promote the exact staging-healthy Web image digest. Rebuild Computer and
+  Installer from the exact tested source commit against the production feed.
+- The release coordinator verifies the candidate, announces it in `#release`,
+  dispatches the production workflow and verifies the result. Follow the
+  [routine release boundary](routine-release-boundary.md) for exceptions.
 - Run cloud applications as Docker images in an independent Docker Compose
   project. Do not release a host binary or add an application systemd unit.
 - Keep application ports private. Caddy owns the public HTTPS/WSS entry point;
@@ -67,7 +64,7 @@ Read this overview first, then the topic files the task needs.
 | [Reading GitHub Actions](github-actions.md)                         | The CI, Web deploy, and Computer publish workflows, and check selection                                    |
 | [Computer versions](computer-versions.md)                           | The staging dev-build and stable production version rule, and the publication lock that numbers them |
 | [Main to staging](main-to-staging.md)                               | The operator-dispatched cloud deployment and local publication paths to staging                            |
-| [Staging to production](staging-to-production.md)                   | The two-party production promotion for each track                                                          |
+| [Staging to production](staging-to-production.md)                   | Coordinator-led production promotion for each track                                                          |
 | [Health verification](health-verification.md)                       | Cloud health checks, diagnostics, local readiness gates, and upgrade health checks                         |
 | [Post-deploy performance check](perf-regression-check.md)           | The 30-minute Server Function latency/error comparison after each Web deploy, its thresholds, and coverage |
 | [Upgrade operations](upgrade-operations.md)                         | Installer-run upgrades and downgrades, receipts, recovery, and the restart runner hold                     |

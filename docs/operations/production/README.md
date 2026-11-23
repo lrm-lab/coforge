@@ -108,16 +108,17 @@ not exist or may hold other permissions. Use the instance-scoped username
 
 ## Deploy
 
-Run **Deploy Web (production)** (`.github/workflows/deploy-production.yml`)
-with the full digest of a Web image that is already healthy in staging:
+The release coordinator verifies the exact staging-healthy image digest and
+same-commit Web integration, announces the candidate in `#release`, and
+dispatches **Deploy Web (production)** from `main`. Follow
+[Staging to production](../../release/staging-to-production.md#cloud-application):
 
 ```
-gh workflow run deploy-production.yml -f image=ghcr.io/lrm-lab/coforge/coforge-web@sha256:...
+gh workflow run deploy-production.yml --ref main -f image=ghcr.io/lrm-lab/coforge/coforge-web@sha256:...
 ```
 
 The first job finds a successful staging deployment record of that exact
-digest and fails otherwise. The deploy job waits for a required reviewer of
-the `production` Environment to approve, then ships the Compose assets, logs
+digest and fails otherwise. The deploy job ships the Compose assets, logs
 the host in to GHCR with the run's short-lived token, runs
 `scripts/deploy/remote-deploy.sh --project coforge-production` (which sources
 `deploy-secrets.sh` to read the secret files), logs out, and
@@ -125,6 +126,8 @@ checks `https://coforge.cn/health`, the WebSocket endpoint, and that port 80
 redirects to HTTPS and HTTPS sends HSTS. The script validates the Compose file, the Centrifugo config,
 and the Caddyfile with their pinned images before recreating anything, runs
 the Prisma migration, and rolls back to the last healthy release on failure.
+The coordinator verifies the actual digest, public build, health and ingress,
+then records the result in the release thread.
 
 Most secrets stay on the host (backed up in 1Password). Cloud-computer secrets
 `COFORGE_CLOUD_CLUSTER_TOKEN` and `COFORGE_CLOUD_SERVICE_PASSWORD` also live in
@@ -136,7 +139,7 @@ are refreshed the same way ([wildcard certificate](../usercontent-certificate/RE
 
 | Kind | Name | Value |
 | --- | --- | --- |
-| Protection | Required reviewers | Frank |
+| Protection | Deployment branch | `main` |
 | Variable | `DEPLOY_SSH_HOST` | Production ECS public address |
 | Variable | `DEPLOY_SSH_USER` | `deploy` |
 | Secret | `DEPLOY_SSH_KEY` | Private half of an ed25519 key used only for this deploy; its public half is in `~deploy/.ssh/authorized_keys` |

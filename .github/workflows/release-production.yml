@@ -3,12 +3,12 @@ run-name: Publish Computer ${{ inputs.version }} from ${{ inputs.commit }} to pr
 
 # Production promotion of the local Computer distribution (docs/release/staging-to-production.md).
 # The feed a build trusts is compiled into it, so production never copies staging's binaries: it
-# builds the approved commit again against https://releases.coforge.cn. The `candidate` job checks
+# builds the verified source commit again against https://releases.coforge.cn. The `candidate` job checks
 # that staging published staging_version from this commit and that version follows the version rule
 # (docs/release/github-actions.md); the run title names version because a run-name expression cannot
 # strip -dev.N. Staging publishes only from `main` and only after the release gates. The
-# `production` GitHub Environment restricts the run to `main` and has no required reviewer; the
-# operator's dispatch, which names this exact commit and version, is the human approval.
+# `production` GitHub Environment restricts the run to `main`. The release coordinator verifies
+# the exact commit, staging manifest and versions before dispatch.
 # Publish the production installer (release-installer-production.yml) first: install.sh reads
 # `installer/latest` from the same feed.
 on:
@@ -302,7 +302,7 @@ jobs:
 
   # Registered once `latest` has moved, by the reusable notes workflow: it changes notes text, never
   # artifacts, so it holds the catalog token without the `production` environment or the
-  # publisher role, and it runs main's script, not the approved commit's, which may predate it.
+  # publisher role, and it runs main's script so it is available even for older source commits.
   # `gh run rerun --failed` repeats only this job if the catalog was unreachable.
   notes:
     name: Register release notes
