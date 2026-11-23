@@ -9,12 +9,7 @@ import { Input } from "#src/components/base/input/input";
 import { SettingsCard, SettingsGroup, SettingsPage } from "#src/components/settings-layout";
 import { EmptyState } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
-import { SEARCH_KEY } from "#src/features/search/search-key-hints";
-import {
-  hotkeyKeycaps,
-  recordHotkeyFromEvent,
-  type ConfigurableShortcutId,
-} from "#src/lib/hotkeys";
+import { recordHotkeyFromEvent, type ConfigurableShortcutId } from "#src/lib/hotkeys";
 import { isApplePlatform } from "#src/lib/platform";
 import { m } from "#src/paraglide/messages";
 import {
@@ -171,13 +166,7 @@ export function ShortcutsSettings() {
             <span className="inline-flex items-center gap-2">
               <span>{m.shortcuts_show_all()}</span>
               {openKeymapPrimary && (
-                <kbd className="inline-flex items-center gap-0.5">
-                  {hotkeyKeycaps(openKeymapPrimary, apple).map((cap, index) => (
-                    <span key={index} className={SEARCH_KEY}>
-                      {cap}
-                    </span>
-                  ))}
-                </kbd>
+                <ShortcutKeycapGroup hotkey={openKeymapPrimary} apple={apple} />
               )}
             </span>
           </Button>

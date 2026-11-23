@@ -1,10 +1,12 @@
-import { Fragment, type ReactNode, useRef } from "react";
+import { Fragment, type ReactNode, useMemo, useRef } from "react";
 import type { Pin01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
+import { useAllShortcutBindings } from "#src/features/shortcuts/shortcut-bindings";
 import { useEndOfList } from "#src/lib/use-end-of-list";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { ActivityRowShortcutsContext } from "./activity-row-parts";
 
 export type ActivitySection = {
   key: string;
@@ -18,8 +20,12 @@ export type ActivitySection = {
 };
 
 export function ActivityInboxSections({ sections }: { sections: ActivitySection[] }) {
+  const bindings = useAllShortcutBindings();
+  const read = bindings.activityRead[0];
+  const done = bindings.activityDone[0];
+  const rowShortcuts = useMemo(() => ({ read, done }), [read, done]);
   return (
-    <>
+    <ActivityRowShortcutsContext value={rowShortcuts}>
       {sections.map((section, index) => (
         <Fragment key={section.key}>
           {(section.icon || section.count !== undefined || index > 0 || section.dated) && (
@@ -40,7 +46,7 @@ export function ActivityInboxSections({ sections }: { sections: ActivitySection[
           {section.footer}
         </Fragment>
       ))}
-    </>
+    </ActivityRowShortcutsContext>
   );
 }
 

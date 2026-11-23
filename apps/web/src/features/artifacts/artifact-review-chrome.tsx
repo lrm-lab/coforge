@@ -15,6 +15,7 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { Popconfirm } from "#src/components/ui/popconfirm";
 import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
+import { TooltipShortcutLabel } from "#src/components/ui/kbd";
 import { FLOATING_SURFACE_CLASS } from "#src/features/conversations/review-chrome";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -88,42 +89,11 @@ export function AnchorChip({
   );
 }
 
-export function TooltipWithKey({ label, shortcut }: { label: string; shortcut: string }) {
-  return (
-    <span className="inline-flex items-center gap-2">
-      <span>{label}</span>
-      <kbd className="rounded-sm px-1.5 py-0.5 font-sans text-xs leading-none font-medium text-tooltip-supporting-text ring-1 ring-current/40 ring-inset">
-        {shortcut}
-      </kbd>
-    </span>
-  );
-}
-
-export function TooltipShortcutRows({
-  rows,
-}: {
-  rows: ReadonlyArray<{ label: string; shortcut: string }>;
-}) {
-  return (
-    <span className="flex flex-col gap-1.5">
-      {rows.map((row) => (
-        <span key={row.label} className="flex items-center justify-between gap-4">
-          <span className="font-medium">{row.label}</span>
-          <kbd className="rounded-sm px-1.5 py-0.5 font-sans text-xs leading-none font-medium text-tooltip-supporting-text ring-1 ring-current/40 ring-inset">
-            {row.shortcut}
-          </kbd>
-        </span>
-      ))}
-    </span>
-  );
-}
-
 export function ArtifactReviewQueue({
   drafts,
   focusedIdx,
   locked,
   atLimit,
-  modEnter,
   onOpenDraft,
   onEditDraft,
   onRemoveDraft,
@@ -134,7 +104,6 @@ export function ArtifactReviewQueue({
   focusedIdx: number;
   locked: boolean;
   atLimit: boolean;
-  modEnter: string;
   onOpenDraft: (draft: CommentDraftView) => void;
   onEditDraft: (draft: CommentDraftView) => void;
   onRemoveDraft: (draft: CommentDraftView) => void;
@@ -184,7 +153,7 @@ export function ArtifactReviewQueue({
                   size="xs"
                   color="tertiary"
                   tooltip={m.av_cm_delete()}
-                  tooltipShortcut="⌫"
+                  tooltipShortcut="Backspace"
                   isDisabled={locked}
                   onClick={() => {
                     if (!hasImages(draft)) onRemoveDraft(draft);
@@ -198,7 +167,7 @@ export function ArtifactReviewQueue({
       <div className="flex items-center justify-between gap-2 border-t border-secondary/70 px-3.5 py-2.5">
         <CoForgeMark className="h-3.5 shrink-0 opacity-60 transition-opacity duration-150 hover:opacity-90" />
         <div className="flex items-center gap-2">
-          <Tooltip title={<TooltipWithKey label={m.av_dr_new_comment()} shortcut="N" />}>
+          <Tooltip title={<TooltipShortcutLabel label={m.av_dr_new_comment()} shortcut="N" />}>
             <Button
               size="sm"
               color="secondary"
@@ -209,7 +178,9 @@ export function ArtifactReviewQueue({
               {m.av_dr_new_comment()}
             </Button>
           </Tooltip>
-          <Tooltip title={<TooltipWithKey label={m.av_dr_send_all_tip()} shortcut={modEnter} />}>
+          <Tooltip
+            title={<TooltipShortcutLabel label={m.av_dr_send_all_tip()} shortcut="Mod+Enter" />}
+          >
             <Button
               size="sm"
               color="primary"
@@ -233,7 +204,6 @@ export function ArtifactReviewBar({
   count,
   cardOpen,
   locked,
-  modEnter,
   onToggleAnnotate,
   onToggleCard,
   onSubmit,
@@ -242,7 +212,6 @@ export function ArtifactReviewBar({
   count: number;
   cardOpen: boolean;
   locked: boolean;
-  modEnter: string;
   onToggleAnnotate: () => void;
   onToggleCard: () => void;
   onSubmit: () => void;
@@ -259,7 +228,7 @@ export function ArtifactReviewBar({
       <Tooltip
         title={
           annotating ? (
-            <TooltipWithKey label={m.av_cm_annotating()} shortcut="Esc" />
+            <TooltipShortcutLabel label={m.av_cm_annotating()} shortcut="Escape" />
           ) : (
             m.av_cm_annotate()
           )
@@ -312,7 +281,9 @@ export function ArtifactReviewBar({
               {count}
             </span>
           </Button>
-          <Tooltip title={<TooltipWithKey label={m.av_dr_send_all_tip()} shortcut={modEnter} />}>
+          <Tooltip
+            title={<TooltipShortcutLabel label={m.av_dr_send_all_tip()} shortcut="Mod+Enter" />}
+          >
             <Button
               size="sm"
               color="primary"

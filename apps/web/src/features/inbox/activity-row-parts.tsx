@@ -1,3 +1,4 @@
+import { createContext, useContext } from "react";
 import { Check } from "@untitledui/icons";
 
 import { Badge } from "#src/components/base/badges/badges";
@@ -6,6 +7,15 @@ import { ClockTime, RelativeTime } from "#src/components/ui/relative-time";
 import { UnreadBadge } from "#src/components/ui/unread-marker";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+
+export const ActivityRowShortcutsContext = createContext<{
+  read?: string;
+  done?: string;
+}>({});
+
+export function useActivityRowShortcuts() {
+  return useContext(ActivityRowShortcutsContext);
+}
 
 export const NARROW_SR_ONLY = "@max-[22rem]/activity-list:sr-only";
 export const NARROW_HIDDEN = "@max-[22rem]/activity-list:hidden";
@@ -78,13 +88,14 @@ export function ActivityDoneCheck({
   current: boolean;
   onDone: () => void;
 }) {
+  const { done: doneShortcut } = useActivityRowShortcuts();
   return (
     <ButtonUtility
       icon={Check}
       size="xs"
       color="secondary"
       tooltip={m.activity_inbox_done()}
-      tooltipShortcut="E"
+      tooltipShortcut={doneShortcut}
       aria-label={m.activity_inbox_done()}
       tabIndex={tabStop ? 0 : -1}
       onClick={onDone}

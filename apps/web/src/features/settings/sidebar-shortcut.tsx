@@ -1,35 +1,19 @@
-import { useEffect, useState } from "react";
 import { useHotkeys, type HotkeyChord } from "@tanstack/react-hotkeys";
 
+import { TooltipShortcutLabel } from "#src/components/ui/kbd";
 import {
   useIsRecordingShortcut,
   useShortcutBindings,
 } from "#src/features/shortcuts/shortcut-bindings";
 import { useMediaQuery } from "#src/hooks/use-media-query";
-import { hasPrimaryModifier, hotkeyLabel } from "#src/lib/hotkeys";
-import { isApplePlatform } from "#src/lib/platform";
+import { hasPrimaryModifier } from "#src/lib/hotkeys";
 import { isSidebarExpanded, writeSidebarExpanded } from "./sidebar-expanded";
 
 const DESKTOP_QUERY = "(min-width: 64rem)";
 
-export function useSidebarShortcutLabel(): string | undefined {
-  const bindings = useShortcutBindings("sidebar");
-  const primary = bindings[0];
-  const [label, setLabel] = useState<string>();
-  useEffect(() => {
-    setLabel(primary ? hotkeyLabel(primary, isApplePlatform()) : undefined);
-  }, [primary]);
-  return label;
-}
-
 export function SidebarToggleTooltip({ label }: { label: string }) {
-  const shortcut = useSidebarShortcutLabel();
-  return (
-    <>
-      {label}
-      {shortcut && <span className="ml-2 text-tooltip-supporting-text">{shortcut}</span>}
-    </>
-  );
+  const shortcut = useShortcutBindings("sidebar")[0];
+  return <TooltipShortcutLabel label={label} shortcut={shortcut} />;
 }
 
 export function useSidebarShortcut() {

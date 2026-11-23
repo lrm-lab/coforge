@@ -4,7 +4,8 @@ import { CHOICE_OTHER_TEXT_MAX_LENGTH } from "@lrm/coforge-sdk/agent";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { CardQuestion, Draft } from "./question-card-model";
-import { Key, Mark, OPTION_ROW, OPTION_ROW_LIVE } from "./question-card-parts";
+import { Keycap } from "#src/components/ui/kbd";
+import { Mark, OPTION_ROW, OPTION_ROW_LIVE } from "./question-card-parts";
 
 type OptionsMode = "live" | "view" | "answered" | "off";
 
@@ -116,14 +117,15 @@ export function QuestionOptions({
               )}
             </span>
             {interactiveMode && row < 9 && (
-              <Key
+              <Keycap
+                size="xs"
                 className={cn(
-                  "ml-auto shrink-0 self-center pointer-coarse:hidden",
+                  "ml-auto self-center any-pointer-coarse:hidden",
                   live && kbd && row === hi ? "visible" : "invisible group-hover/row:visible",
                 )}
               >
                 {row + 1}
-              </Key>
+              </Keycap>
             )}
           </div>
         );

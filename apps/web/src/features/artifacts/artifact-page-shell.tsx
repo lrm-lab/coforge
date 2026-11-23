@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useHotkey } from "@tanstack/react-hotkeys";
 
-import { hotkeyLabel } from "#src/lib/hotkeys";
 import { OPEN_OVERLAY_SELECTOR } from "#src/lib/open-overlay";
-import { isApplePlatform } from "#src/lib/platform";
 import { m } from "#src/paraglide/messages";
 import type { DisplayReportRequest } from "./artifact-commenting";
 import { ArtifactDetailsPopover } from "./artifact-details-popover";
@@ -90,11 +88,6 @@ export function useArtifactShellHotkeys({
   overlay?: ArtifactOverlayControls;
 }) {
   const [markdownFindOpen, setMarkdownFindOpen] = useState(false);
-  const [apple, setApple] = useState(false);
-
-  useEffect(() => {
-    setApple(isApplePlatform());
-  }, []);
 
   useEffect(() => {
     setMarkdownFindOpen(false);
@@ -151,7 +144,7 @@ export function useArtifactShellHotkeys({
     openFind,
     markdownFindOpen,
     closeMarkdownFind,
-    findShortcut: hotkeyLabel("Mod+F", apple),
+    findShortcut: "Mod+F",
   };
 }
 

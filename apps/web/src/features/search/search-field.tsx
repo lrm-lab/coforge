@@ -3,11 +3,11 @@ import { SearchLg } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
 
 import { RailButton } from "#src/components/layout/sidebar/sidebar-rail";
+import { HotkeyKeycaps, TooltipShortcutLabel } from "#src/components/ui/kbd";
 import { captureElementRect } from "#src/lib/shared-element-rect";
 import { m } from "#src/paraglide/messages";
 import { useOpenSearch } from "./search-dialog-context";
 import { preloadSearchDialog } from "./search-dialog-host";
-import { SEARCH_KEY } from "./search-key-hints";
 import { useSearchShortcutLabel } from "./search-shortcut";
 
 export function SearchField() {
@@ -27,11 +27,7 @@ export function SearchField() {
     >
       <SearchLg aria-hidden="true" className="size-5 shrink-0 text-fg-quaternary" />
       <span className="min-w-0 flex-1 truncate text-left">{m.search_title()}</span>
-      {shortcut && (
-        <kbd aria-hidden className={SEARCH_KEY}>
-          {shortcut.label}
-        </kbd>
-      )}
+      {shortcut && <HotkeyKeycaps hotkey={shortcut.hotkey} hideOnTouch ariaHidden />}
     </AriaButton>
   );
 }
@@ -45,14 +41,7 @@ export function SearchRailButton() {
       <RailButton
         icon={SearchLg}
         label={m.search_title()}
-        tooltip={
-          <>
-            {m.search_title()}
-            {shortcut && (
-              <span className="ml-2 text-tooltip-supporting-text">{shortcut.label}</span>
-            )}
-          </>
-        }
+        tooltip={<TooltipShortcutLabel label={m.search_title()} shortcut={shortcut?.hotkey} />}
         aria-haspopup="dialog"
         aria-keyshortcuts={shortcut?.keys}
         onPress={() =>

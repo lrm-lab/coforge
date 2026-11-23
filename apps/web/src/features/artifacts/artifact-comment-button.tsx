@@ -1,10 +1,8 @@
-import { useEffect, useState } from "react";
 import { MessageSquare01 } from "@untitledui/icons";
 
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
+import { TooltipShortcutLabel } from "#src/components/ui/kbd";
 import { TOOLBAR_BUTTON_ON_CLASS } from "#src/features/conversations/review-chrome";
-import { hotkeyKeycaps } from "#src/lib/hotkeys";
-import { isApplePlatform } from "#src/lib/platform";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { commentsCap } from "./artifact-comment-threads";
@@ -18,24 +16,10 @@ export function ArtifactCommentButton({
   active: boolean;
   onToggle: () => void;
 }) {
-  const [apple, setApple] = useState(false);
-  useEffect(() => {
-    setApple(isApplePlatform());
-  }, []);
   const label = m.av_cm_toggle();
   const count = total ? commentsCap(total) : undefined;
-  const shortcut = hotkeyKeycaps("Shift+C", apple).join(apple ? "" : "+");
   return (
-    <Tooltip
-      title={
-        <>
-          {label}
-          <kbd className="ml-2 rounded-xs px-1 font-sans text-xs font-medium text-tooltip-supporting-text ring-1 ring-current ring-inset">
-            {shortcut}
-          </kbd>
-        </>
-      }
-    >
+    <Tooltip title={<TooltipShortcutLabel label={label} shortcut="Shift+C" />}>
       <TooltipTrigger
         aria-label={count ? `${label} (${count})` : label}
         aria-pressed={active}

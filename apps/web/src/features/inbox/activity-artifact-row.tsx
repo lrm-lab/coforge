@@ -21,6 +21,7 @@ import {
   ActivityRowTitle,
   ActivityUnreadCount,
   UNREAD_ROW_CLASS,
+  useActivityRowShortcuts,
 } from "./activity-row-parts";
 import type { ActivityItemActions } from "./use-activity-item-actions";
 
@@ -40,6 +41,7 @@ export const ActivityArtifactRow = memo(function ActivityArtifactRow({
   ref?: Ref<HTMLLIElement>;
 }) {
   const workspaceSlug = useWorkspaceSlug();
+  const { read: readShortcut, done: doneShortcut } = useActivityRowShortcuts();
   const { event, target } = item;
   const unread = item.unreadCount > 0;
   const link = artifactPageRoute(workspaceSlug, item.artifact.id);
@@ -99,6 +101,7 @@ export const ActivityArtifactRow = memo(function ActivityArtifactRow({
                 id="read"
                 icon={Mail01}
                 label={m.activity_inbox_mark_read()}
+                shortcut={readShortcut}
                 selectionIndicator="none"
               />
             )}
@@ -106,6 +109,7 @@ export const ActivityArtifactRow = memo(function ActivityArtifactRow({
               id="done"
               icon={Check}
               label={m.activity_inbox_menu_done()}
+              shortcut={doneShortcut}
               selectionIndicator="none"
             />
           </Dropdown.Menu>

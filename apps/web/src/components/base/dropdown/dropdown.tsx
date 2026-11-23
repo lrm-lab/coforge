@@ -51,6 +51,7 @@ import {
   useCascadeMenu,
   useCascadeSubmenuItem,
 } from "#src/components/ui/cascade-menu-controller";
+import { HotkeyKeycaps, useHotkeyAria } from "#src/components/ui/kbd";
 import { cx } from "#src/utils/cx";
 
 interface DropdownRootProps extends AriaMenuTriggerProps {
@@ -122,6 +123,7 @@ const DropdownRoot = ({
 interface DropdownItemProps extends AriaMenuItemProps {
   label?: string;
   addon?: string;
+  shortcut?: string;
   count?: number;
   unstyled?: boolean;
   icon?: FC<{ className?: string }>;
@@ -137,6 +139,7 @@ const DropdownItem = ({
   label,
   children,
   addon,
+  shortcut,
   count,
   icon: Icon,
   folderIcon,
@@ -149,6 +152,7 @@ const DropdownItem = ({
   onAction,
   ...props
 }: DropdownItemProps) => {
+  const keyShortcuts = useHotkeyAria(shortcut);
   const cascade = useCascadeMenu();
   const depth = useCascadeDepth();
   const submenuItem = useCascadeSubmenuItem();
@@ -305,6 +309,7 @@ const DropdownItem = ({
 
   return (
     <AriaMenuItem
+      aria-keyshortcuts={keyShortcuts}
       {...props}
       ref={setItemRef}
       onAction={handleAction}
@@ -380,6 +385,15 @@ const DropdownItem = ({
                 <span className="max-w-1/2 shrink-0 truncate text-xs font-medium text-[var(--cascade-menu-quiet)]">
                   {addon}
                 </span>
+              )}
+
+              {shortcut && (
+                <HotkeyKeycaps
+                  hotkey={shortcut}
+                  hideOnTouch
+                  ariaHidden
+                  className="ms-2"
+                />
               )}
 
               {count !== undefined && (

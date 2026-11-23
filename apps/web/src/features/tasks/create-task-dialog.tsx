@@ -13,6 +13,7 @@ import { Heading, TextArea } from "react-aria-components";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { DialogAction } from "#src/components/ui/dialog-actions";
+import { HotkeyKeycaps } from "#src/components/ui/kbd";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import {
   UnsavedChangesDialog,
@@ -21,7 +22,6 @@ import {
 import type { Mentionable } from "#src/features/conversations/mention-text";
 import { isAppError } from "#src/lib/app-error";
 import { isImeComposing } from "#src/lib/ime";
-import { isApplePlatform } from "#src/lib/platform";
 import { m } from "#src/paraglide/messages";
 import { TASK_ASSIGNMENT_MANAGER_REQUIRED } from "./task-assignment";
 import { CreateTaskProperties } from "./create-task-properties";
@@ -318,12 +318,14 @@ export function CreateTaskDialog({
                   />
                   <DialogAction type="submit" isLoading={saving} isDisabled={!draft.priority}>
                     {m.tasks_new_submit()}
-                    <kbd
-                      aria-hidden="true"
-                      className="ms-1.5 inline-flex items-center rounded-xs px-1 py-0.5 font-body text-xs leading-none font-medium ring-1 ring-current/35 ring-inset any-pointer-coarse:hidden"
-                    >
-                      {isApplePlatform() ? "⌘↵" : "Ctrl ↵"}
-                    </kbd>
+                    <HotkeyKeycaps
+                      hotkey="Mod+Enter"
+                      size="xs"
+                      tone="current"
+                      hideOnTouch
+                      ariaHidden
+                      className="ms-1.5"
+                    />
                   </DialogAction>
                 </div>
               </form>

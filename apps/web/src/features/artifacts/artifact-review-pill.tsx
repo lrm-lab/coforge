@@ -4,8 +4,6 @@ import { Cursor02 } from "@untitledui/icons";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { FLOATING_SURFACE_CLASS } from "#src/features/conversations/review-chrome";
 import { isRecordingShortcut } from "#src/features/shortcuts/shortcut-bindings";
-import { hotkeyKeycaps } from "#src/lib/hotkeys";
-import { isApplePlatform } from "#src/lib/platform";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { useCommentDraftActions, useCommentDrafts } from "./artifact-comment-drafts-context";
@@ -69,18 +67,12 @@ export function ArtifactReviewPill({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [focusedIdx, setFocusedIdx] = useState(-1);
   const [confirmDeleteDraft, setConfirmDeleteDraft] = useState<CommentDraftView | null>(null);
-  const [apple, setApple] = useState(false);
   const editorRef = useRef<ArtifactInlineEditorHandle>(null);
   const pickedPathRef = useRef<string | undefined>(undefined);
   const hydratedEditRef = useRef<string | null>(null);
   const savingRef = useRef(false);
   const prevAnnotatingRef = useRef(annotating);
 
-  useEffect(() => {
-    setApple(isApplePlatform());
-  }, []);
-
-  const modEnter = hotkeyKeycaps("Mod+Enter", apple).join(apple ? " " : "+");
   const count = drafts.drafts.length;
   const preferDraft = count > 0;
   const locked = drafts.busy;
@@ -439,7 +431,6 @@ export function ArtifactReviewPill({
                 saving={saving}
                 canSave={canSave}
                 canSend={canSend}
-                modEnter={modEnter}
                 onCancel={exitComposeToList}
                 onSaveDraft={() => void saveForm(false)}
                 onSend={() => void sendImmediate()}
@@ -451,7 +442,6 @@ export function ArtifactReviewPill({
               focusedIdx={focusedIdx}
               locked={locked}
               atLimit={drafts.atLimit}
-              modEnter={modEnter}
               onOpenDraft={actions.openDraft}
               onEditDraft={startEdit}
               onRemoveDraft={(draft) => void actions.remove(draft)}
@@ -466,7 +456,6 @@ export function ArtifactReviewPill({
         count={count}
         cardOpen={showCard}
         locked={locked}
-        modEnter={modEnter}
         onToggleAnnotate={onToggleAnnotate}
         onToggleCard={() => setCardOpen((open) => !open)}
         onSubmit={() => void actions.submit()}

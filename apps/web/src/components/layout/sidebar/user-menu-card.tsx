@@ -3,7 +3,6 @@ import { Keyboard01, LogOut01 as LogOut, Settings01 } from "@untitledui/icons";
 import {
   Button as AriaButton,
   Header as AriaHeader,
-  Keyboard as AriaKeyboard,
   Menu as AriaMenu,
   MenuItem as AriaMenuItem,
   MenuSection as AriaMenuSection,
@@ -13,12 +12,11 @@ import {
 } from "react-aria-components";
 
 import type { AppUser } from "#src/components/app-shell";
+import { HotkeyKeycaps, useHotkeyAria } from "#src/components/ui/kbd";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { useOpenKeyboardShortcuts } from "#src/features/shortcuts/keyboard-shortcuts-host";
 import { useShortcutBindings } from "#src/features/shortcuts/shortcut-bindings";
 import { NotificationBell } from "#src/features/usage-limits/notification-bell";
-import { hotkeyLabel } from "#src/lib/hotkeys";
-import { isApplePlatform } from "#src/lib/platform";
 import { m } from "#src/paraglide/messages";
 import { localizeHref } from "#src/paraglide/runtime";
 import { cx } from "#src/utils/cx";
@@ -128,9 +126,7 @@ export function UserMenuCard({
             <AccountMenuItem
               id="shortcuts"
               label={m.shortcuts_title()}
-              shortcut={
-                shortcutsBinding ? hotkeyLabel(shortcutsBinding, isApplePlatform()) : undefined
-              }
+              shortcut={shortcutsBinding}
               icon={Keyboard01}
             />
           </AriaMenuSection>
@@ -158,11 +154,13 @@ function AccountMenuItem({
   icon: FC<{ className?: string }>;
   tray?: boolean;
 }) {
+  const keyShortcuts = useHotkeyAria(shortcut);
   return (
     <AriaMenuItem
       id={id}
       href={href}
       textValue={label}
+      aria-keyshortcuts={keyShortcuts}
       className="group/item block cursor-pointer px-1.5 py-px outline-hidden"
     >
       <div
@@ -182,11 +180,7 @@ function AccountMenuItem({
             {label}
           </AriaText>
         </span>
-        {shortcut && (
-          <AriaKeyboard className="flex shrink-0 rounded px-1.5 py-px font-sans text-xs font-medium text-tertiary ring-1 ring-secondary ring-inset">
-            {shortcut}
-          </AriaKeyboard>
-        )}
+        {shortcut && <HotkeyKeycaps hotkey={shortcut} hideOnTouch ariaHidden />}
       </div>
     </AriaMenuItem>
   );

@@ -1,19 +1,10 @@
 import { Fragment } from "react";
 
-import { SEARCH_KEY } from "#src/features/search/search-key-hints";
-import { hotkeyKeycaps } from "#src/lib/hotkeys";
+import { HotkeyKeycaps } from "#src/components/ui/kbd";
 import { m } from "#src/paraglide/messages";
 
 export function ShortcutKeycapGroup({ hotkey, apple }: { hotkey: string; apple: boolean }) {
-  return (
-    <kbd data-hotkey={hotkey} className="inline-flex shrink-0 items-center gap-0.5">
-      {hotkeyKeycaps(hotkey, apple).map((cap, capIndex) => (
-        <span key={capIndex} className={SEARCH_KEY}>
-          {cap}
-        </span>
-      ))}
-    </kbd>
-  );
+  return <HotkeyKeycaps hotkey={hotkey} apple={apple} />;
 }
 
 export function ShortcutKeycaps({
@@ -27,7 +18,7 @@ export function ShortcutKeycaps({
     return <span className="shrink-0 text-xs text-quaternary">{m.shortcuts_unassigned()}</span>;
   }
   return (
-    <span className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+    <span className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
       {hotkeys.map((hotkey, index) => (
         <Fragment key={hotkey}>
           {index > 0 && <span className="px-0.5 text-xs text-quaternary">{m.shortcuts_or()}</span>}

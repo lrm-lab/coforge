@@ -3,20 +3,6 @@ import { Check } from "@untitledui/icons";
 
 import { cn } from "#src/lib/utils";
 
-export function Key({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <kbd
-      aria-hidden="true"
-      className={cn(
-        "inline-grid h-4.5 min-w-4.5 place-items-center rounded-sm bg-primary px-1 font-body text-xs/4 text-secondary shadow-[inset_0_0_0_1px_var(--color-border-secondary),0_1px_0_var(--color-border-secondary)]",
-        className,
-      )}
-    >
-      {children}
-    </kbd>
-  );
-}
-
 export function Mark({ on, many, dim }: { on: boolean; many: boolean; dim?: boolean }) {
   return (
     <span

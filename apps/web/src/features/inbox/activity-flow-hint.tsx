@@ -1,11 +1,8 @@
 import { createContext, type RefObject, useContext, useEffect, useState } from "react";
-import { useHydrated } from "@tanstack/react-router";
 
+import { HotkeyKeycaps, Keycap } from "#src/components/ui/kbd";
 import { COMPOSER_EDGE_PILL_CLASS } from "#src/features/conversations/composer-edge-pill";
-import { SEARCH_KEY } from "#src/features/search/search-key-hints";
 import { useShortcutBindings } from "#src/features/shortcuts/shortcut-bindings";
-import { hotkeyKeycaps } from "#src/lib/hotkeys";
-import { isApplePlatform } from "#src/lib/platform";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 
@@ -20,7 +17,6 @@ export function ActivityFlowHint() {
   const nextKeys = useShortcutBindings("activityNext");
   const prevKeys = useShortcutBindings("activityPrev");
   const doneKeys = useShortcutBindings("activityDone");
-  const hydrated = useHydrated();
   const [typing, setTyping] = useState(false);
   useEffect(() => {
     if (!composerRef) return;
@@ -36,11 +32,8 @@ export function ActivityFlowHint() {
       document.removeEventListener("focusout", onFocusOut);
     };
   }, [composerRef]);
-  const apple = hydrated && isApplePlatform();
-  const switchKeycaps = [nextKeys[0], prevKeys[0]]
-    .filter((key): key is string => Boolean(key))
-    .map((key) => hotkeyKeycaps(key, apple).join(apple ? "" : "+"));
-  const doneKeycap = doneKeys[0] ? hotkeyKeycaps(doneKeys[0], apple).join(apple ? "" : "+") : null;
+  const switchHotkeys = [nextKeys[0], prevKeys[0]].filter((key): key is string => Boolean(key));
+  const doneHotkey = doneKeys[0];
   return (
     <div
       aria-hidden
@@ -51,14 +44,17 @@ export function ActivityFlowHint() {
       )}
     >
       {typing ? (
-        <Keys keys={["Esc"]} label={m.activity_flow_back()} />
+        <span className="flex items-center gap-1 whitespace-nowrap">
+          <Keycap>Esc</Keycap>
+          {m.activity_flow_back()}
+        </span>
       ) : (
         <>
-          {switchKeycaps.length > 0 && (
-            <Keys keys={switchKeycaps} label={m.activity_flow_switch()} />
+          {switchHotkeys.length > 0 && (
+            <HotkeyHint hotkeys={switchHotkeys} label={m.activity_flow_switch()} />
           )}
-          {flow?.done && doneKeycap && (
-            <Keys keys={[doneKeycap]} label={m.activity_inbox_menu_done()} />
+          {flow?.done && doneHotkey && (
+            <HotkeyHint hotkeys={[doneHotkey]} label={m.activity_inbox_menu_done()} />
           )}
         </>
       )}
@@ -66,13 +62,11 @@ export function ActivityFlowHint() {
   );
 }
 
-function Keys({ keys, label }: { keys: string[]; label: string }) {
+function HotkeyHint({ hotkeys, label }: { hotkeys: readonly string[]; label: string }) {
   return (
     <span className="flex items-center gap-1 whitespace-nowrap">
-      {keys.map((key) => (
-        <kbd key={key} className={SEARCH_KEY}>
-          {key}
-        </kbd>
+      {hotkeys.map((hotkey) => (
+        <HotkeyKeycaps key={hotkey} hotkey={hotkey} ariaHidden />
       ))}
       {label}
     </span>

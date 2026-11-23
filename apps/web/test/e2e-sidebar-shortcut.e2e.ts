@@ -107,9 +107,8 @@ test("Cmd/Ctrl+B toggles the sidebar, except in a rich-text editor", async () =>
     await wait(`document.querySelector('${COLLAPSE}') !== null`);
     expect(await collapsed()).toBe(false);
     const mac = await apple();
-    const [press, label] = mac ? ["Meta+b", "⌘B"] : ["Control+b", "Ctrl+B"];
+    const [press, label] = mac ? ["Meta+b", "⌘B"] : ["Control+b", "CtrlB"];
 
-    // The collapse button's tooltip names the shortcut.
     expect(await tooltipAfterHover(COLLAPSE, "Collapse sidebar")).toBe(`Collapse sidebar${label}`);
     await browser("screenshot", join(artifacts, "collapse-tooltip.png"));
 

@@ -5,6 +5,7 @@ import { Plus } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
+import { TooltipShortcutLabel, TooltipShortcutRows } from "#src/components/ui/kbd";
 import { m } from "#src/paraglide/messages";
 import { commentWriteFailure } from "./artifact-comment-composer";
 import { syncOwnComments } from "./artifact-comment-queries";
@@ -14,7 +15,6 @@ import {
   serializeInlineSegments,
   type InlineSegment,
 } from "./artifact-inline-refs";
-import { TooltipShortcutRows, TooltipWithKey } from "./artifact-review-chrome";
 
 export function useImmediateReviewSend({
   artifactId,
@@ -99,7 +99,6 @@ export function ArtifactReviewComposeFooter({
   saving,
   canSave,
   canSend,
-  modEnter,
   onCancel,
   onSaveDraft,
   onSend,
@@ -109,7 +108,6 @@ export function ArtifactReviewComposeFooter({
   saving: boolean;
   canSave: boolean;
   canSend: boolean;
-  modEnter: string;
   onCancel: () => void;
   onSaveDraft: () => void;
   onSend: () => void;
@@ -118,7 +116,7 @@ export function ArtifactReviewComposeFooter({
     <div className="flex items-center justify-between gap-2 border-t border-secondary/70 px-3.5 py-2.5">
       <CoForgeMark className="h-3.5 shrink-0 opacity-60 transition-opacity duration-150 hover:opacity-90" />
       <div className="flex items-center gap-1.5">
-        <Tooltip title={<TooltipWithKey label={m.controls_cancel()} shortcut="Esc" />}>
+        <Tooltip title={<TooltipShortcutLabel label={m.controls_cancel()} shortcut="Escape" />}>
           <Button size="sm" color="tertiary" isDisabled={saving} onPress={onCancel}>
             {m.controls_cancel()}
           </Button>
@@ -129,7 +127,7 @@ export function ArtifactReviewComposeFooter({
               <TooltipShortcutRows
                 rows={[
                   { label: m.av_dr_save(), shortcut: "Enter" },
-                  { label: m.av_dr_add_and_send_tip(), shortcut: modEnter },
+                  { label: m.av_dr_add_and_send_tip(), shortcut: "Mod+Enter" },
                 ]}
               />
             }
@@ -148,9 +146,9 @@ export function ArtifactReviewComposeFooter({
           <>
             <Tooltip
               title={
-                <TooltipWithKey
+                <TooltipShortcutLabel
                   label={m.av_cm_save_draft_tip()}
-                  shortcut={preferDraft ? "Enter" : modEnter}
+                  shortcut={preferDraft ? "Enter" : "Mod+Enter"}
                 />
               }
             >
@@ -167,9 +165,9 @@ export function ArtifactReviewComposeFooter({
             </Tooltip>
             <Tooltip
               title={
-                <TooltipWithKey
+                <TooltipShortcutLabel
                   label={m.av_cm_send_tip()}
-                  shortcut={preferDraft ? modEnter : "Enter"}
+                  shortcut={preferDraft ? "Mod+Enter" : "Enter"}
                 />
               }
             >

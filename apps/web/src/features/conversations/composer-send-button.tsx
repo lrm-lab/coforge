@@ -3,9 +3,8 @@ import { CheckSquare, ChevronDown, Send01 } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
+import { HotkeyKeycaps, useHotkeyAria } from "#src/components/ui/kbd";
 import { useShortcutBindings } from "#src/features/shortcuts/shortcut-bindings";
-import { hotkeyLabel } from "#src/lib/hotkeys";
-import { isApplePlatform } from "#src/lib/platform";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 
@@ -40,10 +39,9 @@ export function ComposerSendButton({
     : {
         label: m.conversation_send_as_task(),
         description: m.conversation_send_as_task_description(),
-        shortcut: sendAsTaskShortcut
-          ? hotkeyLabel(sendAsTaskShortcut, isApplePlatform())
-          : undefined,
+        shortcut: sendAsTaskShortcut,
       };
+  const keyShortcuts = useHotkeyAria(other.shortcut);
   const look = isDisabled
     ? ({ color: "secondary" } as const)
     : ({ color: "primary", className: NEAR_BLACK_NOT_BRAND_VIOLET_SEND_CLASS } as const);
@@ -90,11 +88,15 @@ export function ComposerSendButton({
               aria-label={m.conversation_send_options()}
               onAction={() => onChoose(!asTask)}
             >
-              <Dropdown.Item id={asTask ? "send" : "task"} textValue={other.label}>
-                <span className="flex items-baseline justify-between gap-3">
-                  {other.label}
+              <Dropdown.Item
+                id={asTask ? "send" : "task"}
+                textValue={other.label}
+                aria-keyshortcuts={keyShortcuts}
+              >
+                <span className="flex items-center justify-between gap-3">
+                  <span>{other.label}</span>
                   {other.shortcut && (
-                    <span className="text-xs font-medium text-quaternary">{other.shortcut}</span>
+                    <HotkeyKeycaps hotkey={other.shortcut} hideOnTouch ariaHidden />
                   )}
                 </span>
                 <span className="block text-xs font-normal whitespace-normal text-tertiary">

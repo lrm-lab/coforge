@@ -9,6 +9,7 @@ import {
   ActivityUnreadCount,
   UNREAD_ROW_CLASS,
   NARROW_HIDDEN,
+  useActivityRowShortcuts,
 } from "./activity-row-parts";
 import { memo, useRef, type Ref } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
@@ -74,6 +75,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
   const workspaceSlug = useWorkspaceSlug();
   const iconRef = useRef<HTMLSpanElement>(null);
   const titleRef = useRef<HTMLSpanElement>(null);
+  const { read: readShortcut, done: doneShortcut } = useActivityRowShortcuts();
   const target = activityOpenTarget(item);
   const link = activityChatLink(workspaceSlug, target);
   const href = router.buildLocation(link).publicHref;
@@ -211,6 +213,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
                 id="read"
                 icon={Mail01}
                 label={m.activity_inbox_mark_read()}
+                shortcut={readShortcut}
                 selectionIndicator="none"
               />
             ) : thread || task ? null : (
@@ -219,6 +222,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
                 id="unread"
                 icon={Mail01}
                 label={m.conversation_menu_mark_unread()}
+                shortcut={readShortcut}
                 selectionIndicator="none"
               />
             )}
@@ -226,6 +230,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
               id="done"
               icon={Check}
               label={m.activity_inbox_menu_done()}
+              shortcut={doneShortcut}
               selectionIndicator="none"
             />
             {(task || (thread && place.kind === "channel")) && (
