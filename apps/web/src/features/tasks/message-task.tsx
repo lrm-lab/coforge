@@ -11,7 +11,7 @@ import { m } from "#src/paraglide/messages";
 import type { ConversationTask } from "./conversation-task-subset";
 import { priorityLabel } from "./task-history-more";
 import { TaskPriorityIcon } from "./task-priority-icon";
-import { TaskStatusBadge, TaskStatusIcon } from "./task-status-icon";
+import { statusLabel, TaskStatusBadge, TaskStatusIcon } from "./task-status-icon";
 import { useMessageTasks } from "./use-conversation-tasks";
 
 type MessageTaskProps = {
@@ -38,7 +38,7 @@ function ConversationMessageTasks({
   const tasks = useMessageTasks(conversationId, messageId);
   if (!tasks?.length) return null;
   return (
-    <div className="mt-1.5 w-full overflow-hidden rounded-lg border border-secondary bg-primary divide-y divide-secondary">
+    <div className="@container mt-1.5 w-full overflow-hidden rounded-lg border border-secondary bg-primary divide-y divide-secondary">
       {tasks.map((task) => (
         <MessageTaskRow key={task.id} task={task} onOpenTask={onOpenTask} />
       ))}
@@ -57,21 +57,28 @@ function MessageTaskRow({
   const titleRef = useRef<HTMLSpanElement>(null);
   const owner = task.owner;
   const replyCount = task.replyCount ?? 0;
-  const showPriority = Boolean(task.priority && task.priority !== "none");
+  const priority = task.priority && task.priority !== "none" ? task.priority : null;
   const content = (
     <>
-      <span className="flex min-w-0 flex-1 items-center gap-2 sm:gap-2.5">
-        {showPriority && (
-          <span className="hidden size-3.5 shrink-0 items-center sm:flex">
+      <span className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden @md:gap-2.5">
+        {priority && (
+          <span className="hidden size-3.5 shrink-0 items-center @md:flex">
             <TaskPriorityIcon
-              priority={task.priority!}
-              label={m.tasks_priority_mark({ priority: priorityLabel(task.priority!) })}
+              priority={priority}
+              label={m.tasks_priority_mark({ priority: priorityLabel(priority) })}
               className="size-3.5"
             />
           </span>
         )}
-        <span className="shrink-0 text-xs text-tertiary tabular-nums sm:w-9">#{task.number}</span>
-        <span className="inline-flex shrink-0 sm:hidden" data-task-status={task.status}>
+        <span className="shrink-0 text-xs text-tertiary tabular-nums @md:min-w-9">
+          #{task.number}
+        </span>
+        <span
+          role="img"
+          aria-label={statusLabel(task.status)}
+          className="inline-flex shrink-0 @md:hidden"
+          data-task-status={task.status}
+        >
           <TaskStatusIcon status={task.status} />
         </span>
         <span ref={titleRef} className="min-w-0 truncate text-sm font-medium text-primary">
@@ -79,6 +86,7 @@ function MessageTaskRow({
         </span>
         {replyCount > 0 && (
           <span
+            role="img"
             aria-label={m.task_card_replies({ count: replyCount })}
             className="inline-flex shrink-0 items-center gap-1 text-xs text-tertiary tabular-nums"
           >
@@ -87,7 +95,9 @@ function MessageTaskRow({
           </span>
         )}
       </span>
-      <span className="flex shrink-0 items-center gap-2 sm:gap-2.5">
+      <span
+        className={cn("flex shrink-0 items-center gap-2 @md:gap-2.5", !owner && "hidden @md:flex")}
+      >
         {owner && (
           <span className="flex shrink-0 items-center gap-1.5">
             <ActorAvatar
@@ -99,9 +109,11 @@ function MessageTaskRow({
               deleted={owner.deleted}
               {...(owner.kind === "agent" ? { agentId: owner.id } : { userId: owner.id })}
             />
+            <span className="sr-only">{owner.name}</span>
             <span
+              aria-hidden="true"
               className={cn(
-                "hidden max-w-28 truncate text-xs sm:inline",
+                "hidden max-w-28 truncate text-xs @xl:block",
                 owner.deleted ? DELETED_AGENT_NAME_CLASS : "text-secondary",
               )}
             >
@@ -109,7 +121,7 @@ function MessageTaskRow({
             </span>
           </span>
         )}
-        <span className="hidden sm:inline-flex">
+        <span className="hidden @md:inline-flex">
           <TaskStatusBadge status={task.status} />
         </span>
       </span>
@@ -120,7 +132,7 @@ function MessageTaskRow({
     return (
       <div
         data-message-task={task.number}
-        className="flex min-h-10 w-full items-center justify-between gap-2 px-3 py-1.5 sm:gap-3 sm:px-3.5"
+        className="flex min-h-10 w-full items-center justify-between gap-2 px-3 py-1.5 @md:gap-3 @md:px-3.5"
       >
         {content}
       </div>
@@ -137,7 +149,7 @@ function MessageTaskRow({
         onOpenTask(task.number);
       }}
       className={cn(
-        "flex min-h-10 w-full cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-left transition-colors any-pointer-coarse:min-h-11 sm:gap-3 sm:px-3.5",
+        "flex min-h-10 w-full cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-start transition-colors any-pointer-coarse:min-h-11 first:rounded-t-md last:rounded-b-md @md:gap-3 @md:px-3.5",
         "hover:bg-primary_hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus-ring",
       )}
     >
