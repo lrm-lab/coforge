@@ -3,6 +3,7 @@ import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-quer
 
 import { Button } from "#src/components/base/buttons/button";
 import { Alert } from "#src/components/ui/alert";
+import { Popconfirm } from "#src/components/ui/popconfirm";
 import { m } from "#src/paraglide/messages";
 import {
   agentMigrationStatusLine,
@@ -31,12 +32,14 @@ export function AgentMigrationStatus({
   targetName,
   sourceName,
   onCancel,
+  cancelErrorMessage,
   canceling,
 }: {
   migration: { state: string; errorCode: string | null };
   targetName: string;
   sourceName: string;
-  onCancel?: () => void;
+  onCancel?: () => Promise<void>;
+  cancelErrorMessage?: (cause: unknown) => string;
   canceling?: boolean;
 }) {
   const inProgress = isAgentMigrationInProgress(migration.state);
@@ -84,16 +87,30 @@ export function AgentMigrationStatus({
         </ol>
       )}
       {inProgress && onCancel && (
-        <Button
-          color="secondary"
-          size="sm"
-          className="justify-self-start"
-          isDisabled={canceling}
-          isLoading={canceling}
-          onPress={onCancel}
+        <Popconfirm
+          title={m.agent_migration_cancel_title()}
+          description={
+            migration.state === "switched"
+              ? m.agent_migration_cancel_after_switch()
+              : m.agent_migration_cancel_before_switch()
+          }
+          cancelLabel={m.agent_migration_cancel_keep()}
+          confirmLabel={m.agent_migration_cancel_confirm()}
+          errorMessage={cancelErrorMessage ?? m.agent_migration_cancel_title()}
+          tone="final"
+          placement="top start"
+          onConfirm={onCancel}
         >
-          {m.agent_migration_cancel()}
-        </Button>
+          <Button
+            color="secondary"
+            size="sm"
+            className="justify-self-start"
+            isDisabled={canceling}
+            isLoading={canceling}
+          >
+            {m.agent_migration_cancel()}
+          </Button>
+        </Popconfirm>
       )}
     </div>
   );

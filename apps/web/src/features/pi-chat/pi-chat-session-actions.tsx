@@ -120,7 +120,7 @@ export function PiChatSessionActions({
                 </p>
               )}
               <DialogActions>
-                <DialogCancel isDisabled={pending} onClick={() => setRenaming(false)}>
+                <DialogCancel isDisabled={pending} onPress={() => setRenaming(false)}>
                   {m.pi_chat_cancel()}
                 </DialogCancel>
                 <DialogAction
@@ -138,6 +138,7 @@ export function PiChatSessionActions({
       <ConfirmDialog
         open={deleting}
         onOpenChange={setDeleting}
+        tone={session.runtime === RUNTIME_PROVIDER.CODEX ? "default" : "destructive"}
         title={running ? m.pi_chat_stop_delete() : m.pi_chat_delete()}
         description={
           session.runtime === RUNTIME_PROVIDER.CODEX

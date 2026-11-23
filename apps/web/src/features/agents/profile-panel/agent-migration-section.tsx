@@ -37,7 +37,6 @@ import {
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { useInvalidateAgentProfile } from "./agent-profile-queries";
 import {
-  AgentMigrationCancelBody,
   AgentMigrationNotStarted,
   AgentMigrationRefusalNotice,
   AgentMigrationStatus,
@@ -256,14 +255,12 @@ export function AgentMigrationSection({
   const cancelMove = useServerFn(cancelAgentMigration);
   const loadTargets = useServerFn(listAgentMigrationTargets);
   const [open, setOpen] = useState(false);
-  const [confirmCancel, setConfirmCancel] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [refusal, setRefusal] = useState<{
     message: string;
     fixAt: AgentMigrationFixAt;
     targetComputerId: string;
   } | null>(null);
-  const [cancelError, setCancelError] = useState("");
   const { notStarted: notStartedOn, setNotStarted: setNotStartedOn } =
     useAgentMigrationNotStarted(agentId);
   const [submitting, guardSubmit] = useSubmitGuard();
@@ -351,17 +348,15 @@ export function AgentMigrationSection({
         };
   }
 
-  function cancel() {
+  async function cancel() {
     if (!migration || canceling) return;
-    setCancelError("");
-    void guardCancel(async () => {
+    await guardCancel(async () => {
       try {
         await cancelMove({ data: { agentId, migrationId: migration.id } });
-        setConfirmCancel(false);
         await refresh();
       } catch (cause) {
-        setCancelError(agentMigrationErrorMessage(cause));
         await refresh().catch(() => undefined);
+        throw cause;
       }
     });
   }
@@ -379,14 +374,8 @@ export function AgentMigrationSection({
           migration={migration}
           targetName={migration.targetComputerName || m.agent_computer_unnamed()}
           sourceName={migration.sourceComputerName || m.agent_computer_unnamed()}
-          onCancel={
-            canMove
-              ? () => {
-                  setCancelError("");
-                  setConfirmCancel(true);
-                }
-              : undefined
-          }
+          onCancel={canMove ? cancel : undefined}
+          cancelErrorMessage={agentMigrationErrorMessage}
           canceling={canceling}
         />
       )}
@@ -410,47 +399,6 @@ export function AgentMigrationSection({
                 : m.agent_migration_action()}
         </Button>
       )}
-      <ModalOverlay
-        confirmation
-        isOpen={confirmCancel}
-        onOpenChange={(next: boolean) => {
-          if (canceling) return;
-          setConfirmCancel(next);
-        }}
-      >
-        <Modal className="w-[calc(100vw-2rem)] max-w-md">
-          <Dialog className="text-left">
-            {({ close }) => (
-              <>
-                <DialogHeader
-                  title={m.agent_migration_cancel_title()}
-                  onClose={canceling ? undefined : close}
-                />
-                <AgentMigrationCancelBody switched={migration?.state === "switched"} />
-                {cancelError && (
-                  <p role="alert" className="px-6 pt-4 text-sm text-error-primary">
-                    {cancelError}
-                  </p>
-                )}
-                <DialogActions className="mt-6 shrink-0 px-6 pb-6">
-                  <DialogCancel isDisabled={canceling} onPress={close}>
-                    {m.agent_migration_cancel_keep()}
-                  </DialogCancel>
-                  <DialogAction
-                    autoFocus
-                    isDisabled={canceling}
-                    isLoading={canceling}
-                    showTextWhileLoading
-                    onPress={cancel}
-                  >
-                    {m.agent_migration_cancel_confirm()}
-                  </DialogAction>
-                </DialogActions>
-              </>
-            )}
-          </Dialog>
-        </Modal>
-      </ModalOverlay>
       <ModalOverlay
         confirmation
         isOpen={open}

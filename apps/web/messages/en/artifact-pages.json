@@ -24,7 +24,7 @@
   "doc_page_upload_body": "“{title}” wants to add {name} ({size}). Anyone who can see this page can load it.",
   "doc_page_upload_add": "Add",
   "doc_page_delete_title": "Remove this file from the page's library?",
-  "doc_page_delete_body": "“{title}” wants to remove {name} from its library.",
+  "doc_page_delete_body": "“{title}” wants to remove {name} from its library for everyone viewing this page. This can't be undone.",
   "doc_page_delete_remove": "Remove",
   "doc_page_confirm_failed": "Something went wrong.",
   "doc_page_comment_unavailable": "Can't open a comment right now",

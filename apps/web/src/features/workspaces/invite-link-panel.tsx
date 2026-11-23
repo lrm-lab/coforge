@@ -6,6 +6,7 @@ import { Check, Copy01 as Copy } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
+import { Popconfirm } from "#src/components/ui/popconfirm";
 import { formatMonthDay } from "#src/lib/dates";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
@@ -280,18 +281,28 @@ function InviteLinkForm({
               {m.workspace_join_link_create()}
             </Button>
           ) : (
-            <Button
-              color="secondary"
-              size="sm"
+            <Popconfirm
+              title={m.workspace_join_link_update()}
+              description={m.workspace_join_link_update_hint()}
+              confirmLabel={m.workspace_join_link_update()}
+              errorMessage={m.workspace_join_link_update_failed()}
+              tone="final"
+              placement="top start"
               isDisabled={controlsDisabled}
-              isLoading={busy === "update"}
-              showTextWhileLoading
-              onPress={() => {
-                if (link) void run("update", () => inviteLink.update(link.id, options()));
+              onConfirm={async () => {
+                if (link) await run("update", () => inviteLink.update(link.id, options()));
               }}
             >
-              {m.workspace_join_link_update()}
-            </Button>
+              <Button
+                color="secondary"
+                size="sm"
+                isDisabled={controlsDisabled}
+                isLoading={busy === "update"}
+                showTextWhileLoading
+              >
+                {m.workspace_join_link_update()}
+              </Button>
+            </Popconfirm>
           )}
           {failed === "update" || failed === "create" ? (
             <p role="alert" className="text-sm text-error-primary">
@@ -309,16 +320,27 @@ function InviteLinkForm({
       <div className="flex items-center justify-between gap-3 border-t border-secondary px-6 py-4">
         <div className="grid justify-items-start gap-1.5">
           {link && (
-            <Button
-              color="link-destructive"
-              size="sm"
+            <Popconfirm
+              title={m.workspace_join_link_revoke()}
+              description={m.workspace_join_link_update_hint()}
+              confirmLabel={m.workspace_join_link_revoke()}
+              errorMessage={m.workspace_join_link_revoke_failed()}
+              placement="top start"
               isDisabled={busy !== null}
-              isLoading={busy === "revoke"}
-              showTextWhileLoading
-              onPress={() => void run("revoke", () => inviteLink.revoke(link.id))}
+              onConfirm={async () => {
+                await run("revoke", () => inviteLink.revoke(link.id));
+              }}
             >
-              {m.workspace_join_link_revoke()}
-            </Button>
+              <Button
+                color="link-destructive"
+                size="sm"
+                isDisabled={busy !== null}
+                isLoading={busy === "revoke"}
+                showTextWhileLoading
+              >
+                {m.workspace_join_link_revoke()}
+              </Button>
+            </Popconfirm>
           )}
           {failed === "revoke" && (
             <p role="alert" className="text-sm text-error-primary">

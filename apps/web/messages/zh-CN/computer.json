@@ -73,7 +73,7 @@
   "computer_memory": "内存",
   "computer_delete_dialog_title": "删除 {name}？",
   "computer_format_action": "格式化磁盘",
-  "computer_format_description": "清掉这台云电脑上的文件和会话，再按原来的电脑重新启动。Agent、消息和工作区都会保留。默认云电脑是各工作区共用的，格式化会同时清掉挂在上面的每个工作区的本机文件。",
+  "computer_format_description": "清掉这台云电脑上的文件和会话，再按原来的电脑重新启动。Agent、消息和工作区都会保留。默认云电脑是各工作区共用的，格式化会同时清掉挂在上面的每个工作区的本机文件，且无法撤销。",
   "computer_format_dialog_title": "格式化 {name}？",
   "computer_format_confirm": "输入 {name} 以确认格式化。",
   "computer_format_placeholder": "电脑名称",

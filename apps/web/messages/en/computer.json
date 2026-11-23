@@ -73,7 +73,7 @@
   "computer_memory": "Memory",
   "computer_delete_dialog_title": "Delete {name}?",
   "computer_format_action": "Format disk",
-  "computer_format_description": "Removes this cloud computer's files and sessions, then starts the same computer again. Agents, messages, and workspaces stay. A default cloud computer is shared, so every workspace on it loses its local files.",
+  "computer_format_description": "Removes this cloud computer's files and sessions, then starts the same computer again. Agents, messages, and workspaces stay. A default cloud computer is shared, so every workspace on it loses its local files. This cannot be undone.",
   "computer_format_dialog_title": "Format {name}?",
   "computer_format_confirm": "Type {name} to format this disk.",
   "computer_format_placeholder": "Computer name",

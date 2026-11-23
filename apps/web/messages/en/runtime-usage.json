@@ -18,7 +18,7 @@
   "runtime_reset_credit_none": "No resets left",
   "runtime_reset_credit_callout": "{runtime} hit a usage limit. Use a reset to restore your quota.",
   "runtime_reset_credit_title": "Use a reset?",
-  "runtime_reset_credit_body": "{runtime} usage on {account} will be reset. {left} left afterwards.",
+  "runtime_reset_credit_body": "{runtime} usage on {account} will be reset. {left} left afterwards. This can't be undone.",
   "runtime_reset_credit_body_last": "{runtime} usage on {account} will be reset. This is the last one.",
   "runtime_reset_credit_confirm": "Use reset",
   "runtime_reset_credit_retry": "Retry",

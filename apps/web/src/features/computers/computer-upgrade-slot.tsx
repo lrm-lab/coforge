@@ -5,6 +5,7 @@ import {
   Check,
   Copy01 as Copy,
   RefreshCw01 as RotateCw,
+  XClose,
 } from "@untitledui/icons";
 import { Heading, ProgressBar, Text } from "react-aria-components";
 
@@ -261,18 +262,36 @@ function UpgradeConfirmFrame({
 }) {
   const [confirming, guard] = useSubmitGuard();
   return (
-    <ModalOverlay isOpen={open} onOpenChange={onOpenChange}>
+    <ModalOverlay
+      confirmation
+      isOpen={open}
+      onOpenChange={(next) => {
+        if (confirming) return;
+        onOpenChange(next);
+      }}
+    >
       <Modal className="w-[calc(100vw-2rem)] max-w-lg">
         <Dialog className="text-left">
           {({ close }) => (
             <>
               <div className="px-6 pt-6">
-                <Heading
-                  slot="title"
-                  className="text-xl font-semibold text-primary wrap-anywhere sm:text-display-xs"
-                >
-                  {title}
-                </Heading>
+                <div className="flex items-start justify-between gap-4">
+                  <Heading
+                    slot="title"
+                    className="min-w-0 text-xl font-semibold text-primary wrap-anywhere sm:text-display-xs"
+                  >
+                    {title}
+                  </Heading>
+                  <ButtonUtility
+                    data-dialog-close
+                    aria-label={m.controls_close()}
+                    icon={XClose}
+                    size="sm"
+                    color="tertiary"
+                    isDisabled={confirming}
+                    onClick={close}
+                  />
+                </div>
                 {children}
               </div>
               <DialogActions className="px-6 py-4">

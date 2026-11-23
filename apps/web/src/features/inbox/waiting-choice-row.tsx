@@ -1,4 +1,4 @@
-import { memo, type Ref } from "react";
+import { memo, useState, type Ref } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Link, useRouter } from "@tanstack/react-router";
 import { XClose } from "@untitledui/icons";
@@ -7,8 +7,8 @@ import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { RelativeTime } from "#src/components/ui/relative-time";
-import { useAppToast } from "#src/components/ui/toast";
 import { cancelActionCard } from "#src/features/conversations/action-cards.functions";
 import { choiceNumber } from "#src/features/conversations/choice-number";
 import { ChannelPlace } from "#src/features/conversations/channel-name";
@@ -38,7 +38,7 @@ export const WaitingChoiceRow = memo(function WaitingChoiceRow({
   ref?: Ref<HTMLLIElement>;
 }) {
   const router = useRouter();
-  const toast = useAppToast();
+  const [confirmingDecline, setConfirmingDecline] = useState(false);
   const cancel = useServerFn(cancelActionCard);
   const workspaceSlug = useWorkspaceSlug();
   const target = waitingChoiceTarget(card);
@@ -129,9 +129,7 @@ export const WaitingChoiceRow = memo(function WaitingChoiceRow({
           <Dropdown.Menu
             aria-label={m.activity_inbox_menu_label()}
             onAction={(key) => {
-              if (key === "decline") {
-                void decline().catch(() => toast.error(m.question_card_send_failed()));
-              }
+              if (key === "decline") setConfirmingDecline(true);
             }}
           >
             <Dropdown.Item
@@ -159,6 +157,25 @@ export const WaitingChoiceRow = memo(function WaitingChoiceRow({
           {m.question_card_decline()}
         </Button>
       </DeclineQuestion>
+      <ConfirmDialog
+        open={confirmingDecline}
+        onOpenChange={setConfirmingDecline}
+        title={
+          (card.questions?.length ?? 1) > 1
+            ? m.question_card_decline_title_many({ count: card.questions?.length ?? 1 })
+            : m.question_card_decline_title_one()
+        }
+        description={m.question_card_decline_body({ name: card.preparedBy.name })}
+        cancelLabel={m.question_card_keep_answering()}
+        confirmLabel={m.question_card_decline()}
+        pendingLabel={m.question_card_sending()}
+        errorMessage={m.question_card_send_failed()}
+        tone="default"
+        onConfirm={async () => {
+          await decline();
+          setConfirmingDecline(false);
+        }}
+      />
     </li>
   );
 });

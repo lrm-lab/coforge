@@ -20,7 +20,7 @@ export function AgentRestartDialog({
   control: AgentRuntimeControls;
 }) {
   return (
-    <ModalOverlay isOpen={control.restartOpen} onOpenChange={control.closeRestart}>
+    <ModalOverlay confirmation isOpen={control.restartOpen} onOpenChange={control.closeRestart}>
       <Modal className="w-[calc(100vw-2rem)] max-w-lg">
         <Dialog className="p-6 text-left">
           {({ close }) => (
@@ -33,6 +33,7 @@ export function AgentRestartDialog({
                   {m.agent_control_dialog_title({ name: agentName })}
                 </Heading>
                 <ButtonUtility
+                  data-dialog-close
                   aria-label={m.controls_close()}
                   icon={X}
                   size="sm"

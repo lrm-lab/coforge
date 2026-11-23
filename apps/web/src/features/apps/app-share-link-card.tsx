@@ -3,6 +3,7 @@ import { useHydrated } from "@tanstack/react-router";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Alert } from "#src/components/ui/alert";
+import { Popconfirm } from "#src/components/ui/popconfirm";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { formatDateForDisplay } from "#src/lib/dates";
 import { m } from "#src/paraglide/messages";
@@ -105,30 +106,57 @@ export function ShareLinkCard({ appKey, canShare }: { appKey: string; canShare: 
       {status !== undefined && (
         <div className="flex flex-wrap gap-2">
           {canShare && (
-            <Button
-              type="button"
-              size="sm"
-              color={status ? "secondary" : "primary"}
-              isDisabled={busy}
-              isLoading={running === "create"}
-              showTextWhileLoading
-              onPress={() => void run("create")}
+            <Popconfirm
+              isDisabled={!status || busy}
+              title={m.apps_share_regenerate()}
+              description={m.apps_share_description()}
+              confirmLabel={m.apps_share_regenerate()}
+              pendingLabel={m.apps_share_regenerating()}
+              errorMessage={m.apps_share_error_create()}
+              placement="top start"
+              onConfirm={async () => {
+                await run("create");
+              }}
             >
-              {createLabel(status !== null, running === "create")}
-            </Button>
+              <Button
+                type="button"
+                size="sm"
+                color={status ? "secondary" : "primary"}
+                isDisabled={busy}
+                isLoading={running === "create"}
+                showTextWhileLoading
+                onPress={() => {
+                  if (!status) void run("create");
+                }}
+              >
+                {createLabel(status !== null, running === "create")}
+              </Button>
+            </Popconfirm>
           )}
           {status && (
-            <Button
-              type="button"
-              size="sm"
-              color="secondary-destructive"
+            <Popconfirm
               isDisabled={busy}
-              isLoading={running === "revoke"}
-              showTextWhileLoading
-              onPress={() => void run("revoke")}
+              title={m.apps_share_revoke()}
+              description={m.apps_share_description()}
+              confirmLabel={m.apps_share_revoke()}
+              pendingLabel={m.apps_share_revoking()}
+              errorMessage={m.apps_share_error_revoke()}
+              placement="top start"
+              onConfirm={async () => {
+                await run("revoke");
+              }}
             >
-              {running === "revoke" ? m.apps_share_revoking() : m.apps_share_revoke()}
-            </Button>
+              <Button
+                type="button"
+                size="sm"
+                color="secondary-destructive"
+                isDisabled={busy}
+                isLoading={running === "revoke"}
+                showTextWhileLoading
+              >
+                {running === "revoke" ? m.apps_share_revoking() : m.apps_share_revoke()}
+              </Button>
+            </Popconfirm>
           )}
         </div>
       )}

@@ -69,7 +69,7 @@ export function PageConfirmDialog({
     <ConfirmDialog
       open={confirmation !== null}
       onOpenChange={(open) => !open && confirmation?.settle(false)}
-      tone="default"
+      tone={shown.current?.request.kind === "delete" ? "destructive" : "default"}
       title={copy?.title ?? ""}
       description={copy?.body ?? ""}
       detail={

@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { Alert } from "#src/components/ui/alert";
+import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { m } from "#src/paraglide/messages";
 import { botProblem } from "./app-bot-copy";
 import { setAppBotDeclared } from "./app-bots.functions";
@@ -33,6 +34,7 @@ export function BotSection({
   const declare = useServerFn(setAppBotDeclared);
   const [on, setOn] = useState(declared);
   const [pending, setPending] = useState(false);
+  const [confirmDisable, setConfirmDisable] = useState(false);
   const [problem, setProblem] = useState("");
 
   async function toggle(key: string, next: boolean) {
@@ -72,10 +74,29 @@ export function BotSection({
             }
             isSelected={on}
             isDisabled={isDisabled || pending || appKey === undefined}
-            onChange={(next) => appKey !== undefined && void toggle(appKey, next)}
+            onChange={(next) => {
+              if (appKey === undefined) return;
+              if (!next) setConfirmDisable(true);
+              else void toggle(appKey, true);
+            }}
           />
         </div>
       </div>
+      <ConfirmDialog
+        open={confirmDisable}
+        onOpenChange={setConfirmDisable}
+        title={m.apps_bot_enable_title()}
+        description={m.apps_bot_enable_off_hint()}
+        confirmLabel={m.apps_bot_status_off()}
+        errorMessage={(cause) => botProblem(cause, m.apps_bot_error_toggle)}
+        onConfirm={async () => {
+          if (appKey === undefined) return;
+          await declare({ data: { key: appKey, enabled: false } });
+          setOn(false);
+          await onChanged();
+          setConfirmDisable(false);
+        }}
+      />
     </EditorSection>
   );
 }

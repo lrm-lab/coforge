@@ -1,11 +1,5 @@
-import { AlertCircle, XClose as X } from "@untitledui/icons";
-import { Heading, Text } from "react-aria-components";
-
-import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
+import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { m } from "#src/paraglide/messages";
-import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 
 export const WEEKLY_SEND_TOAST_MS = 3000;
 
@@ -21,56 +15,22 @@ export function WeeklySendConfirmDialog({
   onConfirm: () => void | Promise<void>;
 }) {
   return (
-    <ModalOverlay
-      confirmation
-      isOpen={open}
+    <ConfirmDialog
+      open={open}
       onOpenChange={(value) => {
         if (busy) return;
         onOpenChange(value);
       }}
-    >
-      <Modal className="w-[calc(100vw-2rem)] max-w-md">
-        <Dialog className="p-6">
-          {({ close }) => (
-            <>
-              <ButtonUtility
-                data-dialog-close
-                aria-label={m.controls_close()}
-                icon={X}
-                size="sm"
-                color="tertiary"
-                isDisabled={busy}
-                className="absolute end-4 top-4"
-                onClick={close}
-              />
-              <div className="flex items-start gap-3 pe-8">
-                <FeaturedIcon color="warning" theme="light" size="sm" icon={AlertCircle} />
-                <div className="min-w-0 space-y-2">
-                  <Heading slot="title" className="text-md font-semibold text-primary">
-                    {m.records_report_confirm_send_title()}
-                  </Heading>
-                  <Text slot="description" className="text-sm text-secondary">
-                    {m.records_report_confirm_send_body()}
-                  </Text>
-                </div>
-              </div>
-              <DialogActions className="mt-6">
-                <DialogCancel type="button" isDisabled={busy} onPress={close}>
-                  {m.records_template_cancel()}
-                </DialogCancel>
-                <DialogAction
-                  autoFocus
-                  type="button"
-                  isDisabled={busy}
-                  onPress={() => void onConfirm()}
-                >
-                  {m.records_report_send()}
-                </DialogAction>
-              </DialogActions>
-            </>
-          )}
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
+      tone="default"
+      title={m.records_report_confirm_send_title()}
+      description={m.records_report_confirm_send_body()}
+      cancelLabel={m.records_template_cancel()}
+      confirmLabel={m.records_report_send()}
+      confirmDisabled={busy}
+      errorMessage={m.records_delete_error()}
+      onConfirm={async () => {
+        await onConfirm();
+      }}
+    />
   );
 }

@@ -9,7 +9,7 @@
   "runtime_reset_credit_none": "无剩余重置次数",
   "runtime_reset_credit_callout": "{runtime} 已达到用量上限，可使用一次重置恢复额度。",
   "runtime_reset_credit_title": "使用一次重置？",
-  "runtime_reset_credit_body": "{account} 的 {runtime} 用量会重置，之后还剩 {left} 次。",
+  "runtime_reset_credit_body": "{account} 的 {runtime} 用量会重置，之后还剩 {left} 次，且无法撤销。",
   "runtime_reset_credit_body_last": "{account} 的 {runtime} 用量会重置，这是最后一次。",
   "runtime_reset_credit_confirm": "使用重置",
   "runtime_reset_credit_retry": "重试",

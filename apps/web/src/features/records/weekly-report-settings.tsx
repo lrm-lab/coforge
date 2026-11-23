@@ -11,7 +11,7 @@ import { edgeFadeStyle, TAB_BAR_END_FADE_WIDTH, useScrollEdges } from "#src/hook
 import { m } from "#src/paraglide/messages";
 import { CreateWeeklyTemplateDialog } from "./create-weekly-template-dialog";
 import { KeyPointPromptEditor } from "./key-point-prompt-editor";
-import { Popconfirm } from "#src/components/ui/popconfirm";
+import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import {
   emptyKeyPointPrompts,
   formatRecipientSummary,
@@ -86,6 +86,7 @@ export function WeeklyReportSettings({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<WeeklyTemplateList[number] | null>(null);
   const [detail, setDetail] = useState<WeeklyTemplateList[number] | null>(null);
+  const [deletingTemplate, setDeletingTemplate] = useState<WeeklyTemplateList[number] | null>(null);
   const [busy, setBusy] = useState(false);
   const topTabsFade = useScrollEdges("x", { observe: '[role="tab"]' });
 
@@ -340,28 +341,16 @@ export function WeeklyReportSettings({
                             >
                               {m.records_template_edit()}
                             </Button>
-                            <Popconfirm
-                              title={m.records_template_delete_confirm_title({
-                                name: template.name,
-                              })}
-                              description={m.records_template_delete_confirm_body()}
-                              confirmLabel={m.records_template_delete_action()}
-                              pendingLabel={m.records_delete_pending()}
-                              errorMessage={m.records_delete_error()}
-                              placement="bottom end"
-                              fallbackFocus={() => templatesRef.current}
-                              onConfirm={() => deleteTemplate(template)}
+                            <Button
+                              size="sm"
+                              color="tertiary-destructive"
+                              iconLeading={Trash}
+                              isDisabled={busy}
+                              className="any-pointer-coarse:min-h-11 any-pointer-coarse:px-2"
+                              onPress={() => setDeletingTemplate(template)}
                             >
-                              <Button
-                                size="sm"
-                                color="tertiary-destructive"
-                                iconLeading={Trash}
-                                isDisabled={busy}
-                                className="any-pointer-coarse:min-h-11 any-pointer-coarse:px-2"
-                              >
-                                {m.records_template_delete()}
-                              </Button>
-                            </Popconfirm>
+                              {m.records_template_delete()}
+                            </Button>
                           </div>
                         </td>
                       </tr>
@@ -411,6 +400,26 @@ export function WeeklyReportSettings({
           </Tabs>
         </TabPanel>
       </Tabs>
+
+      <ConfirmDialog
+        open={deletingTemplate !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeletingTemplate(null);
+        }}
+        title={m.records_template_delete_confirm_title({
+          name: deletingTemplate?.name ?? "",
+        })}
+        description={m.records_template_delete_confirm_body()}
+        confirmLabel={m.records_template_delete_action()}
+        pendingLabel={m.records_delete_pending()}
+        errorMessage={m.records_delete_error()}
+        onConfirm={async () => {
+          if (!deletingTemplate) return;
+          await deleteTemplate(deletingTemplate);
+          setDeletingTemplate(null);
+          templatesRef.current?.focus({ preventScroll: true });
+        }}
+      />
 
       <WeeklyTemplateDetailDialog
         template={detail}

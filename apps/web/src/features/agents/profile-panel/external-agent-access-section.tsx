@@ -260,7 +260,10 @@ function CredentialMenu({
         description={m.external_agent_credential_replace_body({ name: displayName })}
         confirmLabel={m.external_agent_credential_replace()}
         errorMessage={externalCredentialErrorMessage}
-        onConfirm={onReplace}
+        onConfirm={async () => {
+          await onReplace();
+          setConfirming(null);
+        }}
       />
       <ConfirmDialog
         open={confirming === "revoke"}
@@ -269,7 +272,10 @@ function CredentialMenu({
         description={m.external_agent_credential_revoke_body()}
         confirmLabel={m.external_agent_credential_revoke()}
         errorMessage={m.external_agent_credential_failed()}
-        onConfirm={onRevoke}
+        onConfirm={async () => {
+          await onRevoke();
+          setConfirming(null);
+        }}
       />
     </>
   );

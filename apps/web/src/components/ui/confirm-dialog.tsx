@@ -21,6 +21,7 @@ export function ConfirmDialog({
   description,
   detail,
   confirmDisabled = false,
+  cancelLabel,
   confirmLabel,
   pendingLabel,
   errorMessage,
@@ -30,9 +31,10 @@ export function ConfirmDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
-  description: string;
+  description: ReactNode;
   detail?: ReactNode;
   confirmDisabled?: boolean;
+  cancelLabel?: string;
   confirmLabel: string;
   pendingLabel?: string;
   errorMessage: string | ((cause: unknown) => string);
@@ -92,7 +94,7 @@ export function ConfirmDialog({
               )}
               <DialogActions className="mt-6 shrink-0 px-6 pb-6">
                 <DialogCancel isDisabled={pending} onPress={close}>
-                  {m.controls_cancel()}
+                  {cancelLabel ?? m.controls_cancel()}
                 </DialogCancel>
                 <DialogAction
                   autoFocus

@@ -24,7 +24,7 @@
   "doc_page_upload_body": "“{title}”想加入 {name}（{size}）。能看到这个页面的人都能加载它。",
   "doc_page_upload_add": "加入",
   "doc_page_delete_title": "从页面的文件库移除这个文件？",
-  "doc_page_delete_body": "“{title}”想从文件库移除 {name}。",
+  "doc_page_delete_body": "“{title}”想为所有查看此页的人从文件库移除 {name}，且无法撤销。",
   "doc_page_delete_remove": "移除",
   "doc_page_confirm_failed": "出了点问题。",
   "doc_page_comment_unavailable": "现在无法打开评论框",

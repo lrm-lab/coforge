@@ -1,11 +1,11 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useHydrated } from "@tanstack/react-router";
 import { FolderSearch, Trash01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
-import { Popconfirm } from "#src/components/ui/popconfirm";
+import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { formatDisplayPath } from "#src/features/agents/display-path";
 import { m } from "#src/paraglide/messages";
 import { isAppErrorCode } from "#src/lib/app-error";
@@ -34,8 +34,8 @@ export function ComputerDetailWorkspaceInventory({
   timeZone: string | null;
 }) {
   const hydrated = useHydrated();
-  // Where focus lands after a deleted workspace's row (and its button) is gone.
   const listRef = useRef<HTMLDivElement>(null);
+  const [deleting, setDeleting] = useState<ComputerAgentWorkspaceScan | null>(null);
   // The Computer did not answer: every Agent keeps a row without a directory, said once above.
   const unanswered = snapshot?.workspaces.some((item) => item.status === "unavailable") ?? false;
   // Only a directory the Computer listed is known to remain on disk.
@@ -148,23 +148,12 @@ export function ComputerDetailWorkspaceInventory({
                         )}
                       </div>
                       {canDelete && (
-                        <Popconfirm
-                          title={m.computer_agent_workspace_delete_title({
-                            name: workspace.displayName,
-                          })}
-                          description={m.computer_agent_workspace_delete_description()}
-                          confirmLabel={m.computer_agent_workspace_delete()}
-                          errorMessage={deleteErrorMessage}
-                          placement="bottom end"
-                          fallbackFocus={() => listRef.current}
-                          onConfirm={() => onDelete(workspace.agentId)}
-                        >
-                          <ButtonUtility
-                            color="secondary"
-                            icon={Trash01}
-                            tooltip={m.computer_agent_workspace_delete()}
-                          />
-                        </Popconfirm>
+                        <ButtonUtility
+                          color="secondary"
+                          icon={Trash01}
+                          tooltip={m.computer_agent_workspace_delete()}
+                          onClick={() => setDeleting(workspace)}
+                        />
                       )}
                     </li>
                   );
@@ -175,6 +164,24 @@ export function ComputerDetailWorkspaceInventory({
             <p className="py-2 text-sm text-tertiary">{m.computer_agent_workspaces_none()}</p>
           ))}
       </div>
+      <ConfirmDialog
+        open={deleting !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleting(null);
+        }}
+        title={m.computer_agent_workspace_delete_title({
+          name: deleting?.displayName ?? "",
+        })}
+        description={m.computer_agent_workspace_delete_description()}
+        confirmLabel={m.computer_agent_workspace_delete()}
+        errorMessage={deleteErrorMessage}
+        onConfirm={async () => {
+          if (!deleting) return;
+          await onDelete(deleting.agentId);
+          setDeleting(null);
+          listRef.current?.focus({ preventScroll: true });
+        }}
+      />
     </DetailGroup>
   );
 }

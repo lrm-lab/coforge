@@ -1,7 +1,8 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
+import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import {
   ConversationShareDialog,
   type ShareDialogCopy,
@@ -54,6 +55,7 @@ export function ArtifactSendDialog({
   const queryClient = useQueryClient();
   const { data: card } = useQuery(artifactCardQuery(artifactId));
   const anyway = useRef(false);
+  const [confirmLink, setConfirmLink] = useState<((confirmed: boolean) => void) | null>(null);
   const widen = useMutation({
     mutationFn: () => setArtifactAccess({ data: { artifactId, access: "workspace" } }),
   });
@@ -69,6 +71,10 @@ export function ArtifactSendDialog({
       return false;
     }
   };
+  const confirmOpenLink = () =>
+    new Promise<boolean>((resolve) => {
+      setConfirmLink(() => resolve);
+    });
   const heldNotice = (count: number): ShareNotice => ({
     text: m.av_send_held({ count }),
     actions: [
@@ -76,7 +82,7 @@ export function ArtifactSendDialog({
         ? [{ label: m.av_send_make_visible(), run: fix(() => widen.mutateAsync()) }]
         : []),
       ...(canChange && linkAvailable && tier !== "link"
-        ? [{ label: m.av_send_turn_on_link(), run: fix(() => openLink.mutateAsync()) }]
+        ? [{ label: m.av_send_turn_on_link(), run: confirmOpenLink }]
         : []),
       {
         label: m.av_send_anyway(),
@@ -88,39 +94,65 @@ export function ArtifactSendDialog({
     ],
   });
   return (
-    <ConversationShareDialog
-      copy={sendCopy(title || m.doc_untitled())}
-      preview={card ? <ArtifactCardFace card={card} showsWhoCanSee /> : null}
-      layout={artifactSendLayout}
-      noteMaxLength={ARTIFACT_SHARE_NOTE_MAX_LENGTH}
-      deliver={async ({ requestId, destinations, note }): Promise<ForwardMessageResult> => {
-        const result = await share({
-          data: {
-            artifactId,
-            destinations,
-            note,
-            requestId,
-            unseen: anyway.current ? "send" : "hold",
-          },
-        });
-        if (result.outcome === "held")
-          throw new UnseenRecipients(result.held.reduce((sum, h) => sum + h.people + h.agents, 0));
-        return {
-          outcome: result.outcome,
-          results: result.results.map(({ target, ...entry }) => ({
-            destination: target,
-            ...entry,
-          })),
-        };
-      }}
-      errorNotice={(error) =>
-        error instanceof UnseenRecipients
-          ? heldNotice(error.count)
-          : isAppErrorCode(error, "NOT_FOUND")
-            ? { text: m.doc_send_gone() }
-            : { retry: true, text: m.doc_send_uncertain() }
-      }
-      onClose={onClose}
-    />
+    <>
+      <ConversationShareDialog
+        copy={sendCopy(title || m.doc_untitled())}
+        preview={card ? <ArtifactCardFace card={card} showsWhoCanSee /> : null}
+        layout={artifactSendLayout}
+        noteMaxLength={ARTIFACT_SHARE_NOTE_MAX_LENGTH}
+        deliver={async ({ requestId, destinations, note }): Promise<ForwardMessageResult> => {
+          const result = await share({
+            data: {
+              artifactId,
+              destinations,
+              note,
+              requestId,
+              unseen: anyway.current ? "send" : "hold",
+            },
+          });
+          if (result.outcome === "held")
+            throw new UnseenRecipients(
+              result.held.reduce((sum, h) => sum + h.people + h.agents, 0),
+            );
+          return {
+            outcome: result.outcome,
+            results: result.results.map(({ target, ...entry }) => ({
+              destination: target,
+              ...entry,
+            })),
+          };
+        }}
+        errorNotice={(error) =>
+          error instanceof UnseenRecipients
+            ? heldNotice(error.count)
+            : isAppErrorCode(error, "NOT_FOUND")
+              ? { text: m.doc_send_gone() }
+              : { retry: true, text: m.doc_send_uncertain() }
+        }
+        onClose={onClose}
+      />
+      <ConfirmDialog
+        open={confirmLink !== null}
+        onOpenChange={(open) => {
+          if (!open && confirmLink) {
+            const resolve = confirmLink;
+            setConfirmLink(null);
+            resolve(false);
+          }
+        }}
+        tone="default"
+        title={m.av_vis_link_on_title()}
+        description={m.av_vis_link_on_body()}
+        confirmLabel={m.av_vis_link_on_confirm()}
+        errorMessage={m.av_vis_failed()}
+        onConfirm={async () => {
+          await openLink.mutateAsync();
+          void queryClient.invalidateQueries({ queryKey: ARTIFACTS_KEY });
+          const resolve = confirmLink;
+          setConfirmLink(null);
+          resolve?.(true);
+        }}
+      />
+    </>
   );
 }

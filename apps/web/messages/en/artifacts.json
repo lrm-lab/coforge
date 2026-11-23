@@ -270,7 +270,7 @@
   "av_cm_resolved_by": "Resolved by {name}",
   "av_cm_deleted": "This comment was deleted",
   "av_cm_delete_title": "Delete this comment?",
-  "av_cm_delete_body": "Nobody will be able to see it afterwards.",
+  "av_cm_delete_body": "Nobody will be able to see it afterwards. This can't be undone.",
   "av_cm_delete_confirm": "Delete comment",
   "av_cm_delete_failed": "Couldn't delete the comment",
   "av_cm_resolved_toast": "Thread resolved",

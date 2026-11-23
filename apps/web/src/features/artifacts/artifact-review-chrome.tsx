@@ -13,11 +13,12 @@ import {
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
+import { Popconfirm } from "#src/components/ui/popconfirm";
 import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
 import { FLOATING_SURFACE_CLASS } from "#src/features/conversations/review-chrome";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import type { CommentDraftView } from "./artifact-comment-drafts-queries";
+import { hasImages, type CommentDraftView } from "./artifact-comment-drafts-queries";
 import type { CommentAnchor } from "./artifact-comment-inputs";
 import { InlineRefText } from "./artifact-inline-editor";
 import { extractElementTag } from "./artifact-inline-refs";
@@ -167,15 +168,29 @@ export function ArtifactReviewQueue({
                 isDisabled={locked}
                 onClick={() => onEditDraft(draft)}
               />
-              <ButtonUtility
-                icon={Trash01}
-                size="xs"
-                color="tertiary"
-                tooltip={m.av_cm_delete()}
-                tooltipShortcut="⌫"
-                isDisabled={locked}
-                onClick={() => onRemoveDraft(draft)}
-              />
+              <Popconfirm
+                isDisabled={!hasImages(draft)}
+                title={m.av_dr_delete_title()}
+                description={m.av_dr_delete_body()}
+                confirmLabel={m.av_dr_delete_confirm()}
+                errorMessage={m.av_dr_delete_failed()}
+                placement="top end"
+                onConfirm={async () => {
+                  await onRemoveDraft(draft);
+                }}
+              >
+                <ButtonUtility
+                  icon={Trash01}
+                  size="xs"
+                  color="tertiary"
+                  tooltip={m.av_cm_delete()}
+                  tooltipShortcut="⌫"
+                  isDisabled={locked}
+                  onClick={() => {
+                    if (!hasImages(draft)) onRemoveDraft(draft);
+                  }}
+                />
+              </Popconfirm>
             </div>
           </li>
         ))}

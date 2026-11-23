@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Edit03, Trash01 } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
+import { Popconfirm } from "#src/components/ui/popconfirm";
 import { MessageBody } from "#src/features/conversations/message-body";
 import { COMMENT_BODY_CLASS } from "#src/features/conversations/review-chrome";
 import type { ChipMention } from "#src/features/conversations/message-reference-chips";
@@ -63,7 +63,6 @@ export function DraftCard({
   const actions = useCommentDraftActions();
   const workspaceSlug = useWorkspaceSlug();
   const [editing, setEditing] = useState(false);
-  const [confirming, setConfirming] = useState(false);
   const card = useRef<HTMLLIElement>(null);
   const { focus } = drafts;
   const { consumeFocus } = actions;
@@ -120,15 +119,29 @@ export function DraftCard({
               data-draft-edit=""
               onClick={() => setEditing(true)}
             />
-            <ButtonUtility
-              icon={Trash01}
-              size="xs"
-              color="tertiary"
-              tooltip={m.av_cm_delete()}
-              isDisabled={quiet}
-              data-draft-delete=""
-              onClick={() => (hasImages(draft) ? setConfirming(true) : void actions.remove(draft))}
-            />
+            <Popconfirm
+              isDisabled={!hasImages(draft)}
+              title={m.av_dr_delete_title()}
+              description={m.av_dr_delete_body()}
+              confirmLabel={m.av_dr_delete_confirm()}
+              errorMessage={m.av_dr_delete_failed()}
+              placement="bottom end"
+              onConfirm={async () => {
+                await actions.remove(draft);
+              }}
+            >
+              <ButtonUtility
+                icon={Trash01}
+                size="xs"
+                color="tertiary"
+                tooltip={m.av_cm_delete()}
+                isDisabled={quiet}
+                data-draft-delete=""
+                onClick={() => {
+                  if (!hasImages(draft)) void actions.remove(draft);
+                }}
+              />
+            </Popconfirm>
           </div>
         )}
       </div>
@@ -185,18 +198,6 @@ export function DraftCard({
           {daysLeft === 0 ? m.av_dr_expires_today() : m.av_dr_expires({ count: daysLeft })}
         </p>
       )}
-      <ConfirmDialog
-        open={confirming}
-        onOpenChange={setConfirming}
-        title={m.av_dr_delete_title()}
-        description={m.av_dr_delete_body()}
-        confirmLabel={m.av_dr_delete_confirm()}
-        errorMessage={m.av_dr_delete_failed()}
-        onConfirm={async () => {
-          await actions.remove(draft);
-          setConfirming(false);
-        }}
-      />
     </li>
   );
 }

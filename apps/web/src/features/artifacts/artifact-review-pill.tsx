@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Cursor02 } from "@untitledui/icons";
 
+import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { FLOATING_SURFACE_CLASS } from "#src/features/conversations/review-chrome";
 import { isRecordingShortcut } from "#src/features/shortcuts/shortcut-bindings";
 import { hotkeyKeycaps } from "#src/lib/hotkeys";
@@ -8,7 +9,7 @@ import { isApplePlatform } from "#src/lib/platform";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { useCommentDraftActions, useCommentDrafts } from "./artifact-comment-drafts-context";
-import type { CommentDraftView } from "./artifact-comment-drafts-queries";
+import { hasImages, type CommentDraftView } from "./artifact-comment-drafts-queries";
 import { useArtifactCommenting } from "./artifact-commenting";
 import {
   ArtifactInlineEditor,
@@ -67,6 +68,7 @@ export function ArtifactReviewPill({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [focusedIdx, setFocusedIdx] = useState(-1);
+  const [confirmDeleteDraft, setConfirmDeleteDraft] = useState<CommentDraftView | null>(null);
   const [apple, setApple] = useState(false);
   const editorRef = useRef<ArtifactInlineEditorHandle>(null);
   const pickedPathRef = useRef<string | undefined>(undefined);
@@ -355,8 +357,12 @@ export function ArtifactReviewPill({
       event.preventDefault();
       const target = drafts.drafts[focusedIdx];
       if (target) {
-        void actions.remove(target);
-        setFocusedIdx((index) => Math.min(index, count - 2));
+        if (hasImages(target)) {
+          setConfirmDeleteDraft(target);
+        } else {
+          void actions.remove(target);
+          setFocusedIdx((index) => Math.min(index, count - 2));
+        }
       }
     }
   };
@@ -464,6 +470,22 @@ export function ArtifactReviewPill({
         onToggleAnnotate={onToggleAnnotate}
         onToggleCard={() => setCardOpen((open) => !open)}
         onSubmit={() => void actions.submit()}
+      />
+      <ConfirmDialog
+        open={confirmDeleteDraft !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmDeleteDraft(null);
+        }}
+        title={m.av_dr_delete_title()}
+        description={m.av_dr_delete_body()}
+        confirmLabel={m.av_dr_delete_confirm()}
+        errorMessage={m.av_dr_delete_failed()}
+        onConfirm={async () => {
+          if (!confirmDeleteDraft) return;
+          await actions.remove(confirmDeleteDraft);
+          setConfirmDeleteDraft(null);
+          setFocusedIdx((index) => Math.min(index, count - 2));
+        }}
       />
     </div>
   );

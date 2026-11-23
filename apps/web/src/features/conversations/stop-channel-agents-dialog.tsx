@@ -12,6 +12,10 @@ import {
 } from "#src/components/ui/dialog-actions";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { submitOnModEnter } from "#src/components/ui/dialog-form-keys";
+import {
+  UnsavedChangesDialog,
+  useUnsavedChangesGuard,
+} from "#src/components/ui/unsaved-changes-dialog";
 import { isAppError } from "#src/lib/app-error";
 import { CHANNEL_AGENT_GUIDANCE_MAX_LENGTH } from "#src/lib/channel-agent-guidance";
 import { m } from "#src/paraglide/messages";
@@ -92,6 +96,11 @@ export function StopChannelAgentsDialog({
     }, RESUME_REFUSALS);
 
   const allStopped = step.kind === "stopped" && step.failed === 0;
+  const guard = useUnsavedChangesGuard({
+    overlayOpen: true,
+    dirty: allStopped && guidance.trim() !== "",
+    close: onClose,
+  });
   const title =
     step.kind === "confirm"
       ? m.channel_stop_agents_title()
@@ -120,110 +129,113 @@ export function StopChannelAgentsDialog({
             });
 
   return (
-    <ModalOverlay
-      confirmation
-      isOpen
-      isDismissable={!busy}
-      onOpenChange={(next) => {
-        if (next || busy) return;
-        onClose();
-      }}
-    >
-      <Modal className="w-[calc(100vw-2rem)] max-w-md">
-        <Dialog className="text-left">
-          {({ close }) => (
-            // Enter runs the step's action, and ⌘/Ctrl+Enter from the guidance, where Enter starts
-            // a new line (task #101).
-            <form
-              className="contents"
-              onKeyDown={submitOnModEnter}
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (step.kind === "confirm") void stopAll();
-                else if (allStopped) void resumeAll();
-                else if (step.kind === "stopped") void stopAll();
-              }}
-            >
-              <DialogHeader title={title} onClose={busy ? undefined : close} />
-              <Text slot="description" className="mx-6 mt-4 block text-sm text-secondary">
-                {description}
-              </Text>
-              {allStopped && (
-                <div className="mx-6 mt-4 flex flex-col gap-2">
-                  <p className="text-sm text-secondary">
-                    {m.channel_resume_agents_guidance_hint()}
-                  </p>
-                  <TextArea
-                    size={controlSize}
-                    aria-label={m.channel_resume_agents_guidance_hint()}
-                    placeholder={m.channel_resume_agents_guidance_placeholder()}
-                    value={guidance}
-                    onChange={setGuidance}
-                    maxLength={CHANNEL_AGENT_GUIDANCE_MAX_LENGTH}
-                    autoFocus
-                    isDisabled={busy}
-                    rows={4}
-                  />
-                </div>
-              )}
-              {error && (
-                <p role="alert" className="px-6 pt-4 text-sm text-error-primary">
-                  {error}
-                </p>
-              )}
-              <DialogActions className="mt-6 px-6 pb-6">
-                {step.kind === "confirm" ? (
-                  <>
-                    <DialogCancel isDisabled={busy} onPress={close}>
-                      {m.channel_settings_cancel()}
-                    </DialogCancel>
-                    <DialogAction
-                      type="submit"
+    <>
+      <ModalOverlay
+        confirmation={!allStopped}
+        isOpen
+        isDismissable={!busy}
+        onOpenChange={(next) => {
+          if (next || busy) return;
+          guard.requestClose();
+        }}
+      >
+        <Modal className="w-[calc(100vw-2rem)] max-w-md">
+          <Dialog className="text-left">
+            {() => (
+              <form
+                className="contents"
+                onKeyDown={submitOnModEnter}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (step.kind === "confirm") void stopAll();
+                  else if (allStopped) void resumeAll();
+                  else if (step.kind === "stopped") void stopAll();
+                }}
+              >
+                <DialogHeader title={title} onClose={busy ? undefined : guard.requestClose} />
+                <Text slot="description" className="mx-6 mt-4 block text-sm text-secondary">
+                  {description}
+                </Text>
+                {allStopped && (
+                  <div className="mx-6 mt-4 flex flex-col gap-2">
+                    <p className="text-sm text-secondary">
+                      {m.channel_resume_agents_guidance_hint()}
+                    </p>
+                    <TextArea
+                      size={controlSize}
+                      aria-label={m.channel_resume_agents_guidance_hint()}
+                      placeholder={m.channel_resume_agents_guidance_placeholder()}
+                      value={guidance}
+                      onChange={setGuidance}
+                      maxLength={CHANNEL_AGENT_GUIDANCE_MAX_LENGTH}
                       autoFocus
                       isDisabled={busy}
-                      isLoading={busy}
-                      showTextWhileLoading
-                    >
-                      {busy ? m.channel_stop_agents_stopping() : m.channel_stop_agents_action()}
-                    </DialogAction>
-                  </>
-                ) : allStopped ? (
-                  <>
-                    <DialogCancel isDisabled={busy} onPress={close}>
-                      {m.channel_stop_agents_keep_stopped()}
-                    </DialogCancel>
-                    <DialogAction
-                      type="submit"
-                      isDisabled={busy || !guidance.trim()}
-                      isLoading={busy}
-                      showTextWhileLoading
-                    >
-                      {busy ? m.channel_resume_agents_resuming() : m.channel_resume_agents_action()}
-                    </DialogAction>
-                  </>
-                ) : step.kind === "stopped" ? (
-                  <>
-                    <DialogCancel isDisabled={busy} onPress={close}>
-                      {m.controls_close()}
-                    </DialogCancel>
-                    <DialogAction
-                      type="submit"
-                      autoFocus
-                      isDisabled={busy}
-                      isLoading={busy}
-                      showTextWhileLoading
-                    >
-                      {busy ? m.channel_stop_agents_stopping() : m.channel_stop_agents_retry()}
-                    </DialogAction>
-                  </>
-                ) : (
-                  <DialogCancel onPress={close}>{m.controls_close()}</DialogCancel>
+                      rows={4}
+                    />
+                  </div>
                 )}
-              </DialogActions>
-            </form>
-          )}
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
+                {error && (
+                  <p role="alert" className="px-6 pt-4 text-sm text-error-primary">
+                    {error}
+                  </p>
+                )}
+                <DialogActions className="mt-6 px-6 pb-6">
+                  {step.kind === "confirm" ? (
+                    <>
+                      <DialogCancel isDisabled={busy} onPress={guard.requestClose}>
+                        {m.channel_settings_cancel()}
+                      </DialogCancel>
+                      <DialogAction
+                        type="submit"
+                        autoFocus
+                        isDisabled={busy}
+                        isLoading={busy}
+                        showTextWhileLoading
+                      >
+                        {busy ? m.channel_stop_agents_stopping() : m.channel_stop_agents_action()}
+                      </DialogAction>
+                    </>
+                  ) : allStopped ? (
+                    <>
+                      <DialogCancel isDisabled={busy} onPress={guard.requestClose}>
+                        {m.channel_stop_agents_keep_stopped()}
+                      </DialogCancel>
+                      <DialogAction
+                        type="submit"
+                        isDisabled={busy || !guidance.trim()}
+                        isLoading={busy}
+                        showTextWhileLoading
+                      >
+                        {busy
+                          ? m.channel_resume_agents_resuming()
+                          : m.channel_resume_agents_action()}
+                      </DialogAction>
+                    </>
+                  ) : step.kind === "stopped" ? (
+                    <>
+                      <DialogCancel isDisabled={busy} onPress={guard.requestClose}>
+                        {m.controls_close()}
+                      </DialogCancel>
+                      <DialogAction
+                        type="submit"
+                        autoFocus
+                        isDisabled={busy}
+                        isLoading={busy}
+                        showTextWhileLoading
+                      >
+                        {busy ? m.channel_stop_agents_stopping() : m.channel_stop_agents_retry()}
+                      </DialogAction>
+                    </>
+                  ) : (
+                    <DialogCancel onPress={guard.requestClose}>{m.controls_close()}</DialogCancel>
+                  )}
+                </DialogActions>
+              </form>
+            )}
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
+      <UnsavedChangesDialog {...guard.promptProps} />
+    </>
   );
 }

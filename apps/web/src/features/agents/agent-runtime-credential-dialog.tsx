@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import type { FormEvent } from "react";
 
 import { Button } from "#src/components/base/buttons/button";
 import {
@@ -9,6 +9,7 @@ import {
 } from "#src/components/ui/dialog-actions";
 import { Input } from "#src/components/base/input/input";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { Popconfirm } from "#src/components/ui/popconfirm";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { m } from "#src/paraglide/messages";
 
@@ -57,10 +58,6 @@ export function AgentRuntimeCredentialDialog({
   onDelete?: () => Promise<void>;
   modelFields: { label: string; value: string }[];
 }) {
-  /** Deleting the key is a two-step flow: the entry button swaps the footer for this confirm row. */
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
-  /** Set when the confirm row is cancelled, so focus lands back on the entry button it replaced. */
-  const [returnFocusToDeleteEntry, setReturnFocusToDeleteEntry] = useState(false);
   const controlSize = useDialogControlSize();
   return (
     <ModalOverlay
@@ -76,8 +73,6 @@ export function AgentRuntimeCredentialDialog({
             <form
               onSubmit={async (event: FormEvent<HTMLFormElement>) => {
                 event.preventDefault();
-                // Enter in the key field must not save while the delete confirm is showing.
-                if (confirmingDelete) return;
                 const apiKey = String(new FormData(event.currentTarget).get("apiKey") ?? "");
                 await onSave(apiKey);
               }}
@@ -85,7 +80,7 @@ export function AgentRuntimeCredentialDialog({
               <DialogHeader
                 title={m.agent_runtime_edit_title()}
                 description={m.agent_runtime_edit_description()}
-                onClose={close}
+                onClose={saving ? undefined : close}
               />
               <div className="grid gap-4 px-6 py-6 sm:grid-cols-2">
                 <RuntimeField label={m.agent_runtime_field()} value={runtimeLabel} />
@@ -118,65 +113,42 @@ export function AgentRuntimeCredentialDialog({
                   <RuntimeField key={field.label} {...field} />
                 ))}
               </div>
-              {confirmingDelete && credentialHint && onDelete ? (
-                <div className="flex flex-col gap-3 border-t border-secondary px-6 py-4">
-                  <p className="text-sm text-secondary">
-                    {m.agent_runtime_delete_key_confirm({ provider: providerId })}
-                  </p>
-                  <DialogActions>
-                    <DialogCancel
-                      type="button"
-                      autoFocus
-                      isDisabled={saving}
-                      onPress={() => {
-                        setReturnFocusToDeleteEntry(true);
-                        setConfirmingDelete(false);
-                      }}
+              <div className="flex justify-between gap-3 border-t border-secondary px-6 py-4">
+                <div>
+                  {credentialHint && onDelete && (
+                    <Popconfirm
+                      title={m.agent_runtime_delete_key()}
+                      description={m.agent_runtime_delete_key_confirm({ provider: providerId })}
+                      confirmLabel={m.agent_runtime_delete_key()}
+                      pendingLabel={m.agent_runtime_deleting()}
+                      errorMessage={m.agent_runtime_delete_error()}
+                      placement="top start"
+                      onConfirm={onDelete}
                     >
-                      {m.controls_cancel()}
-                    </DialogCancel>
-                    <DialogAction
-                      type="button"
-                      color="secondary-destructive"
-                      isDisabled={saving}
-                      isLoading={saving}
-                      showTextWhileLoading
-                      onPress={() => void onDelete()}
-                    >
-                      {saving ? m.agent_runtime_deleting() : m.agent_runtime_delete_key()}
-                    </DialogAction>
-                  </DialogActions>
-                </div>
-              ) : (
-                <div className="flex justify-between gap-3 border-t border-secondary px-6 py-4">
-                  <div>
-                    {credentialHint && onDelete && (
                       <Button
                         type="button"
                         size={controlSize}
                         color="secondary-destructive"
-                        autoFocus={returnFocusToDeleteEntry}
                         isDisabled={saving}
-                        onPress={() => setConfirmingDelete(true)}
                       >
                         {m.agent_runtime_delete_key()}
                       </Button>
-                    )}
-                  </div>
-                  <DialogActions>
-                    <DialogCancel
-                      type="button"
-                      isDisabled={saving}
-                      onPress={() => onOpenChange(false)}
-                    >
-                      {m.controls_cancel()}
-                    </DialogCancel>
-                    <DialogAction type="submit" isDisabled={saving}>
-                      {saving ? m.agent_runtime_saving() : m.agent_runtime_save()}
-                    </DialogAction>
-                  </DialogActions>
+                    </Popconfirm>
+                  )}
                 </div>
-              )}
+                <DialogActions>
+                  <DialogCancel
+                    type="button"
+                    isDisabled={saving}
+                    onPress={() => onOpenChange(false)}
+                  >
+                    {m.controls_cancel()}
+                  </DialogCancel>
+                  <DialogAction type="submit" isDisabled={saving}>
+                    {saving ? m.agent_runtime_saving() : m.agent_runtime_save()}
+                  </DialogAction>
+                </DialogActions>
+              </div>
             </form>
           )}
         </Dialog>

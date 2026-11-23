@@ -120,8 +120,33 @@ export function ConversationDirectory({
     </p>
   );
   const [editingSection, setEditingSection] = useState<ChatSection | "new" | null>(null);
-  const [deletingSection, setDeletingSection] = useState<ChatSection | null>(null);
   const newSection = () => setEditingSection("new");
+  const deleteSection = (section: ChatSection) => {
+    const channelById = new Map(channels.map((ch) => [ch.id, ch]));
+    const restoredTargets = section.conversationIds.map((id) =>
+      channelById.has(id)
+        ? ({ kind: "channel", channelId: id } as const)
+        : ({ kind: "direct", conversationId: id } as const),
+    );
+    void actions
+      .removeSection(section.id)
+      .then(() => {
+        toast.undoable(m.chat_section_delete_description({ name: section.name }), {
+          key: section.id,
+          failed: m.chat_section_save_error(),
+          onUndo: async () => {
+            const created = await actions.createSection({
+              name: section.name,
+              emoji: section.emoji,
+            });
+            for (const target of restoredTargets) {
+              await actions.moveToSection(target, created.id);
+            }
+          },
+        });
+      })
+      .catch(() => toast.error(m.chat_section_save_error()));
+  };
   const sectionOrder = useMemo(
     () =>
       directorySectionOrder(
@@ -277,7 +302,7 @@ export function ConversationDirectory({
         onHideEmptyChange={changeHideEmpty}
         onEditSection={setEditingSection}
         onCreateSection={newSection}
-        onDeleteSection={setDeletingSection}
+        onDeleteSection={deleteSection}
         renderList={list}
       />
       <div className="pb-3" />
@@ -291,13 +316,6 @@ export function ConversationDirectory({
         <ChatSectionDialog
           section={editingSection === "new" ? undefined : editingSection}
           onClose={() => setEditingSection(null)}
-        />
-      )}
-      {deletingSection && (
-        <ChatSectionDialog
-          section={deletingSection}
-          deleting
-          onClose={() => setDeletingSection(null)}
         />
       )}
       <DirectoryDragOverlay ripple={drag.ripple} active={drag.active}>
