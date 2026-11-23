@@ -20,7 +20,11 @@ export function InlineEmbedPoolProvider({
   const pool = useMemo(() => createInlineEmbedPool(maxActive), [scopeKey, maxActive]);
   const parkingRef = useCallback(
     (node: HTMLDivElement | null) => {
+      if (!node) return;
       pool.setParkingContainer(node);
+      return () => {
+        pool.setParkingContainer(null);
+      };
     },
     [pool],
   );
@@ -31,10 +35,11 @@ export function InlineEmbedPoolProvider({
       <div
         key={scopeKey}
         ref={parkingRef}
-        aria-hidden="true"
+        hidden
         inert
+        aria-hidden="true"
         data-inline-embed-parking=""
-        style={{ display: "none" }}
+        className="hidden"
       />
       {children}
     </InlineEmbedPoolContext>

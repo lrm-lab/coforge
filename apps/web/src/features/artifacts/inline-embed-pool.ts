@@ -37,6 +37,8 @@ function moveElementPreservingState(parent: Element, node: Element): boolean {
   const atomicParent = parent as AtomicMoveParent;
   if (typeof atomicParent.moveBefore !== "function") return false;
   if (!parent.isConnected || !node.isConnected) return false;
+  if (parent.ownerDocument && node.ownerDocument && parent.ownerDocument !== node.ownerDocument)
+    return false;
   if (node.parentElement === parent) return true;
   try {
     atomicParent.moveBefore(node, null);

@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useId,
   useLayoutEffect,
   useMemo,
@@ -73,8 +74,6 @@ export function ArtifactInlineEmbed({
   const coarse = useCoarsePointer();
   const resolvedVersion = version ?? card.currentVersion;
   const heightKey = `${card.id}:${resolvedVersion}`;
-  const heightKeyRef = useRef(heightKey);
-  heightKeyRef.current = heightKey;
   const title = card.title || m.doc_untitled();
 
   const initialHeightState = (): InlineHeightState => {
@@ -104,14 +103,18 @@ export function ArtifactInlineEmbed({
   const inViewRef = useRef(false);
   const mountedRef = useRef(true);
 
+  const reportVisibility = useEffectEvent((visible: boolean) => {
+    pool.setVisible(slotId, visible, heightKey);
+  });
+
   const handleExpandedChange = useCallback(
     (nextExpanded: boolean) => {
       if (expandedRef.current === nextExpanded) return;
       expandedRef.current = nextExpanded;
       if (!mountedRef.current) return;
-      pool.setVisible(slotId, nextExpanded || inViewRef.current, heightKeyRef.current);
+      pool.setVisible(slotId, nextExpanded || inViewRef.current, heightKey);
     },
-    [pool, slotId],
+    [pool, slotId, heightKey],
   );
 
   useLayoutEffect(() => {
@@ -129,7 +132,7 @@ export function ArtifactInlineEmbed({
     if (!node) return;
     if (typeof IntersectionObserver !== "function") {
       inViewRef.current = true;
-      pool.setVisible(slotId, true, heightKeyRef.current);
+      reportVisibility(true);
       return;
     }
     const observer = new IntersectionObserver(
@@ -137,7 +140,7 @@ export function ArtifactInlineEmbed({
         const entry = entries[0];
         if (!entry || !mountedRef.current) return;
         inViewRef.current = entry.isIntersecting;
-        pool.setVisible(slotId, entry.isIntersecting || expandedRef.current, heightKeyRef.current);
+        reportVisibility(entry.isIntersecting || expandedRef.current);
       },
       { rootMargin: "200px 0px" },
     );
@@ -516,9 +519,11 @@ function InlineEmbedFrame({
   }, [reveal]);
 
   const frameUnavailable = blocked || phase === "timeout";
-  if (blocked && pooledEntryRef.current) {
-    pooledEntryRef.current.blocked = true;
-  }
+  useLayoutEffect(() => {
+    if (blocked && pooledEntryRef.current) {
+      pooledEntryRef.current.blocked = true;
+    }
+  }, [blocked]);
   const frameSlotRef = useManagedInlineFrame({
     enabled: useManagedFrame,
     unavailable: frameUnavailable,

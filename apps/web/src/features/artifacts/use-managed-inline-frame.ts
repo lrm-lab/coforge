@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, type RefObject } from "react";
 
 import type { InlineEmbedPool, InlineSandboxLink, PooledInlineFrame } from "./inline-embed-pool";
 
@@ -32,21 +32,19 @@ export function useManagedInlineFrame({
   shouldDiscard?: () => boolean;
 }) {
   const frameSlotRef = useRef<HTMLDivElement>(null);
-  const titleRef = useRef(title);
-  titleRef.current = title;
-  const onReloadRef = useRef(onReload);
-  onReloadRef.current = onReload;
-  const shouldDiscardRef = useRef(shouldDiscard);
-  shouldDiscardRef.current = shouldDiscard;
+  const readTitle = useEffectEvent(() => title);
+  const triggerReload = useEffectEvent(() => onReload());
+  const checkDiscard = useEffectEvent(() => shouldDiscard?.() ?? false);
 
   useLayoutEffect(() => {
     if (!enabled || unavailable) return;
     const host = frameSlotRef.current;
     if (!host) return;
+    const currentTitle = readTitle();
     let entry = pooledEntryRef.current;
     if (!entry) {
       const iframe = document.createElement("iframe");
-      iframe.setAttribute("aria-label", titleRef.current);
+      iframe.setAttribute("aria-label", currentTitle);
       iframe.setAttribute("sandbox", "allow-scripts allow-same-origin");
       iframe.setAttribute("allow", "clipboard-read 'none'; clipboard-write 'none'");
       iframe.referrerPolicy = "no-referrer";
@@ -65,7 +63,7 @@ export function useManagedInlineFrame({
       iframe.addEventListener("load", onLoad);
       iframe.src = link.url;
     } else {
-      entry.iframe.setAttribute("aria-label", titleRef.current);
+      entry.iframe.setAttribute("aria-label", currentTitle);
       if (!entry.ready) {
         entry.iframe.addEventListener("load", onLoad);
       }
@@ -75,14 +73,14 @@ export function useManagedInlineFrame({
       pool.discardFrame(entry);
       pooledEntryRef.current = null;
       frameRef.current = null;
-      onReloadRef.current();
+      triggerReload();
       return;
     }
     const attachedEntry = entry;
     return () => {
       attachedEntry.iframe.removeEventListener("load", onLoad);
       frameRef.current = null;
-      if (shouldDiscardRef.current?.()) {
+      if (checkDiscard()) {
         pool.discardFrame(attachedEntry);
       } else {
         pool.parkFrame(attachedEntry);
