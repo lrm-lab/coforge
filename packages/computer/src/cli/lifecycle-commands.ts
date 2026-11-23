@@ -74,11 +74,13 @@ export function registerLifecycleCommands(
     .command("restart")
     .description("Restart the Daemon and all configured Daemon Runtimes.")
     .option("--workspace <slug-or-id>", "Affect only this local Workspace binding")
+    .option("--json", "write one stable JSON result to stdout")
     .option(
       "--supervisor",
       "Restart the Computer supervisor process itself (not a Workspace runtime), through the platform's process manager",
     )
-    .action((options: { workspace?: string; supervisor?: boolean }) => {
+    .action((options: { workspace?: string; supervisor?: boolean; json?: boolean }) => {
+      setJson(options.json ?? false);
       if (options.supervisor && options.workspace)
         throw new CliError(
           "RESTART_CONFLICTING_TARGET",
@@ -89,9 +91,12 @@ export function registerLifecycleCommands(
         const daemon = requireDaemon(dependencies);
         if (!daemon.restartSupervisor)
           throw new Error("Supervisor restart is unavailable in this build");
-        return daemon.restartSupervisor();
+        return options.json ? daemon.restartSupervisor({ json: true }) : daemon.restartSupervisor();
       }
-      return requireDaemon(dependencies).restart(options.workspace);
+      const daemon = requireDaemon(dependencies);
+      return options.json
+        ? daemon.restart(options.workspace, { json: true })
+        : daemon.restart(options.workspace);
     });
   program
     .command("foreground")

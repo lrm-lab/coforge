@@ -32,6 +32,7 @@ export function createCommand(input: {
   config?: Pick<ComputerConfig, "loadRegistration" | "discardRegistration"> &
     Partial<Pick<ComputerConfig, "loadCurrentProfile">>;
   hostingWorkspaceId?: string;
+  assertRestartTarget?: (workspaceId: string | undefined) => Promise<void>;
   logger?: Logger;
   resolveWorkspace?: (selector: string) => Promise<LocalWorkspace>;
   /** Progress lines for the user's terminal, mirroring what `upgrade` already prints. Omit to
@@ -67,8 +68,8 @@ export function createCommand(input: {
   const run = async (
     operation: "start" | "stop" | "restart",
     workspace: string | undefined,
+    local: LocalWorkspace | undefined,
   ): Promise<{ runtimes: ManagedRuntimeIdentity[]; target: string | undefined }> => {
-    const local = await resolve(workspace);
     const target = local?.id ?? workspace;
     try {
       return { runtimes: await input.daemon.command(operation, target), target };
@@ -141,7 +142,7 @@ export function createCommand(input: {
       await warnLogindRisk();
       write("Starting CoForge...");
       await input.daemon.ensureRunning();
-      const { runtimes, target } = await run("start", workspace);
+      const { runtimes, target } = await run("start", workspace, await resolve(workspace));
       input.logger?.info("Computer start completed", { event: "computer:started" });
       await report(
         "start",
@@ -155,7 +156,7 @@ export function createCommand(input: {
       // Always scoped: `target` is the one Workspace this stop may report on.
       input.logger?.info("Computer stop requested", { event: "computer:stopping" });
       await input.daemon.ensureRunning();
-      const { runtimes, target } = await run("stop", workspace);
+      const { runtimes, target } = await run("stop", workspace, await resolve(workspace));
       input.logger?.info("Computer stop completed", { event: "computer:stopped" });
       // The stop answers by its deadline; a Workspace it has not reached yet still has its process.
       const stopping = runtimes.filter(
@@ -167,11 +168,13 @@ export function createCommand(input: {
         write(`  ${name}: still stopping. Run 'coforge-computer status' to follow it.`);
     },
     async restart(workspace) {
+      const local = await resolve(workspace);
+      await input.assertRestartTarget?.(local?.id ?? workspace);
       input.logger?.info("Computer restart requested", { event: "computer:restarting" });
       await warnLogindRisk();
       write(workspace ? `Restarting Workspace ${workspace}...` : "Restarting CoForge...");
       await input.daemon.ensureRunning();
-      const { runtimes, target } = await run("restart", workspace);
+      const { runtimes, target } = await run("restart", workspace, local);
       input.logger?.info("Computer restart completed", { event: "computer:restarted" });
       await report(
         "restart",

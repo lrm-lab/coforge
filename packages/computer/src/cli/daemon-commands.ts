@@ -24,6 +24,10 @@ import {
 } from "#src/logging/computer-logs";
 import type { DaemonCommand, LogsCommand } from "#src/cli";
 import { detectLogindSessionRisk } from "#src/logind-session-risk";
+import {
+  assertSupervisorRestartTarget,
+  assertWorkspaceRestartTarget,
+} from "./restart-target-guard";
 
 export function createCommand(
   platform: "darwin" | "linux" | "win32",
@@ -52,13 +56,25 @@ export function createCommand(
       if (!binding) throw new Error(`Workspace '${selector}' is not registered locally`);
       return { id: binding.id, slug: binding.slug };
     });
+  const caller = seams?.callerIsAgentHosted
+    ? {
+        workspaceId: Bun.env.COFORGE_CURRENT_WORKSPACE_ID?.trim(),
+        computerId: Bun.env.COFORGE_CURRENT_COMPUTER_ID?.trim(),
+      }
+    : undefined;
+  const supervisorTarget = () =>
+    createRestartSupervisorHost(platform, installDirectory, stateDirectory, serverUrl);
   let suppressClientWrite = false;
   const command = createClientCommand({
     daemon: launcher,
     config,
     logger,
-    hostingWorkspaceId: seams?.callerIsAgentHosted
-      ? Bun.env.COFORGE_CURRENT_WORKSPACE_ID?.trim()
+    hostingWorkspaceId: caller?.workspaceId,
+    assertRestartTarget: caller
+      ? (target) =>
+          assertWorkspaceRestartTarget(caller, target, () =>
+            supervisorTarget().local.control("snapshot"),
+          )
       : undefined,
     resolveWorkspace,
     write: (line) => {
@@ -141,24 +157,25 @@ export function createCommand(
       }
       return outcome;
     },
-    async restart(workspace) {
+    async restart(workspace, options) {
       await launcher.preflight?.();
       await loadBuildProfile(config, serverUrl, "daemon");
-      const runtimes = await command.restart(workspace);
-      // The supervisor skips disabled bindings on an unscoped restart; a scoped restart always
-      // acts on its one target, so there is nothing to report there.
-      if (!workspace) reportSkippedRestarts(io, runtimes);
+      suppressClientWrite = Boolean(options?.json);
+      try {
+        const runtimes = await command.restart(workspace);
+        if (options?.json) io.stdout(JSON.stringify({ ok: true, runtimes }));
+        else if (!workspace) reportSkippedRestarts(io, runtimes);
+      } finally {
+        suppressClientWrite = false;
+      }
     },
-    restartSupervisor: () => {
-      const { host, local } = createRestartSupervisorHost(
-        platform,
-        installDirectory,
-        stateDirectory,
-        serverUrl,
-      );
-      return restartSupervisor(host, local, io, {
+    restartSupervisor: async (options) => {
+      const { host, local, snapshotTarget, verifyServiceTarget } = supervisorTarget();
+      if (caller) await assertSupervisorRestartTarget(caller, snapshotTarget, verifyServiceTarget);
+      await restartSupervisor(host, local, options?.json ? { stdout: () => {} } : io, {
         callerIsAgentHosted: seams?.callerIsAgentHosted,
       });
+      if (options?.json) io.stdout(JSON.stringify({ ok: true, supervisor: true }));
     },
   };
 }

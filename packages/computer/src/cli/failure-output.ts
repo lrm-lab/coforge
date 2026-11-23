@@ -79,7 +79,12 @@ function failureMessage(error: unknown): string {
 }
 
 function nextCommand(code: string, text: string): string {
-  if (code === "DETACH_HOSTING_AGENT_SESSION") return text;
+  if (
+    code === "DETACH_HOSTING_AGENT_SESSION" ||
+    code === "RESTART_HOSTING_AGENT_SESSION" ||
+    code === "RESTART_TARGET_UNVERIFIED"
+  )
+    return text;
   const command = text.match(/`(coforge-computer\s+[^`]+)`/)?.[1];
   if (command) return command.replace(/[.!?]+$/, "");
   if (code.startsWith("UPGRADE_") || code.startsWith("UPDATE_")) return "coforge-computer upgrade";

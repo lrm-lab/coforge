@@ -185,13 +185,13 @@ supervisor up. A Computer the platform manager does not run (a `foreground` proc
 under someone else's supervisor) is refused with `STOP_OUTSIDE_SERVICE_MANAGER` rather
 than reported as stopped.
 
-`coforge-computer restart --supervisor` restarts the Computer supervisor process
-itself, through the platform's process manager (`launchctl kickstart -k` on macOS;
-`systemctl --user reset-failed` then `restart` on Linux; ending and re-running the
-scheduled task on Windows). It is mutually exclusive with `--workspace`. It engages
-the same hold first, unless the supervisor cannot be reached at all, in which case
-it restarts anyway. It refuses that same `foreground` Computer with
-`RESTART_OUTSIDE_SERVICE_MANAGER`.
+`coforge-computer restart --supervisor` restarts the Computer supervisor through
+the platform's process manager and is mutually exclusive with `--workspace`.
+It holds runners for ordinary terminal callers when reachable and refuses a
+`foreground` Computer with `RESTART_OUTSIDE_SERVICE_MANAGER`.
+An Agent cannot restart its hosting Workspace or its supervisor. To use `--supervisor`,
+the Agent must target a confirmed different installation. Run a refused restart from
+a normal terminal. With `--json`, a refusal writes one object with `ok: false` and `error`.
 
 `coforge-computer detach` refuses the binding that hosts the calling Agent. Use the Computer's regular terminal to detach it.
 With `--json`, completion writes one object with `ok`, `detached`, `kind` and, except for `not_attached`, `workspaceSlug`.

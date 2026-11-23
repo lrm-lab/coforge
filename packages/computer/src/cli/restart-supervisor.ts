@@ -5,6 +5,7 @@ import { holdRunnersUntilQuiescent, LocalDaemonLauncher } from "@lrm/coforge-dae
 import { createDaemonLauncher, daemonExecutablePathFor } from "#src/daemon-service/daemon-host";
 import { CliError } from "#src/errors";
 import { resolveDaemonSocketPath } from "#src/paths";
+import { verifyRestartServiceTarget } from "./restart-service-target";
 
 /** Platform and local control seams used by `restartSupervisor`. */
 export type RestartSupervisorHost = {
@@ -89,15 +90,23 @@ export function createRestartSupervisorHost(
   installDirectory: string,
   stateDirectory: string,
   serverUrl: string,
-): { host: RestartSupervisorHost; local: RestartSupervisorLocal } {
+) {
+  const executablePath = daemonExecutablePathFor(platform, installDirectory);
+  const socketPath = resolveDaemonSocketPath({ platform, stateDirectory });
+  const local = new LocalDaemonLauncher({ executablePath, socketPath, stateDirectory, serverUrl });
   return {
     host: createDaemonLauncher(platform, installDirectory, stateDirectory, serverUrl),
-    local: new LocalDaemonLauncher({
-      executablePath: daemonExecutablePathFor(platform, installDirectory),
-      socketPath: resolveDaemonSocketPath({ platform, stateDirectory }),
-      stateDirectory,
-      serverUrl,
-    }),
+    local,
+    async snapshotTarget() {
+      const identity = await local.identity();
+      const bindings = await local.control("snapshot");
+      const after = await local.identity();
+      if (identity.daemonId !== after.daemonId || identity.processId !== after.processId)
+        throw new Error("The Coordinator changed while reading its Workspace bindings");
+      return { bindings, coordinatorPid: after.processId };
+    },
+    verifyServiceTarget: (coordinatorPid: number | undefined) =>
+      verifyRestartServiceTarget({ platform, stateDirectory, coordinatorPid }),
   };
 }
 

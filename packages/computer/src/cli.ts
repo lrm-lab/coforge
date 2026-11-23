@@ -65,10 +65,10 @@ export interface DaemonCommand {
   /** `daemon:detach` (task #417): removes this Workspace's registration once the server
    * confirms the detach; an unconfirmed server answer keeps it and reports so. */
   detach(workspace?: string): Promise<DetachOutcome>;
-  restart(workspace?: string): Promise<void>;
+  restart(workspace?: string, options?: { json?: boolean }): Promise<void>;
   /** Restarts the Coordinator process itself (not a Workspace runtime) through the platform
    * host, holding runners first. See `coforge-computer restart --supervisor`. */
-  restartSupervisor?(): Promise<void>;
+  restartSupervisor?(options?: { json?: boolean }): Promise<void>;
 }
 
 import type { LogSource } from "#src/logging/computer-logs";
