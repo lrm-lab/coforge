@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -103,3 +103,61 @@ test("a failing start of the recorded unit says which unit and why", async () =>
   const { host } = await setup({ ...LOADED, "start mine.service": { code: 5 } });
   await expect(host.ensureRunning()).rejects.toThrow("mine.service");
 });
+
+test.each(["matched", "unit changed", "invocation changed"] as const)(
+  "verified systemd restart keeps its exact target when %s",
+  async (scenario) => {
+    const stateDirectory = await mkdtemp(join(tmpdir(), "verified-systemd-restart-"));
+    const registrar = recordingRegistrar();
+    const original = { ...record, scope: "system" as const };
+    const calls: Array<{ scope: string; args: string[] }> = [];
+    let invocation = "1".repeat(32);
+    await writeSupervisorRecord(stateDirectory, original);
+    const host = new SystemdUserDaemonHost({
+      stateDirectory,
+      homeDirectory: "/fixture",
+      executablePath: "/fixture/coforge-computer",
+      socketPath: "/fixture/daemon.sock",
+      serverUrl: "https://coforge.test",
+      connect: risingConnect("https://coforge.test"),
+      registrar,
+      async run() {
+        throw new Error("The ordinary manager fallback must not run");
+      },
+      async supervisorSystemctl(scope, args) {
+        calls.push({ scope, args });
+        return {
+          code: 0,
+          stdout: `LoadState=loaded\nMainPID=7\nInvocationID=${invocation}\n`,
+          stderr: "",
+        };
+      },
+    });
+    try {
+      const execute = await host.prepareRestart(7);
+      expect(execute).toBeDefined();
+      if (scenario === "unit changed")
+        await writeSupervisorRecord(stateDirectory, { ...record, unit: "hosting.service" });
+      if (scenario === "invocation changed") invocation = "2".repeat(32);
+      expect(await execute?.()).toBe(scenario === "matched");
+      const show = {
+        scope: "system",
+        args: [
+          "show",
+          "--property=LoadState",
+          "--property=MainPID",
+          "--property=InvocationID",
+          "mine.service",
+        ],
+      };
+      expect(calls).toEqual(
+        scenario === "matched"
+          ? [show, show, { scope: "system", args: ["restart", "mine.service"] }]
+          : [show, show],
+      );
+      expect(registrar.calls).toBe(0);
+    } finally {
+      await rm(stateDirectory, { recursive: true, force: true });
+    }
+  },
+);

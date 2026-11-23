@@ -5,6 +5,44 @@ import { LaunchdDaemonHost, launchdPlist } from "@lrm/coforge-daemon";
 
 const target = "gui/501/cn.coforge.computer.daemon";
 
+test.each(["matched", "PID changed", "PID reused", "job disappeared"] as const)(
+  "verified launchd restart does not replace its checked target when %s",
+  async (scenario) => {
+    const calls: string[][] = [];
+    const registrar = recordingRegistrar();
+    let pid = "44";
+    let startedAt = "first start";
+    const host = new LaunchdDaemonHost({
+      label: "cn.coforge.computer.daemon",
+      homeDirectory: "/fixture",
+      uid: 501,
+      executablePath: "/fixture/coforge-computer",
+      socketPath: "/fixture/daemon.sock",
+      serverUrl: "https://coforge.test",
+      connect: acceptingConnect("https://coforge.test"),
+      registrar,
+      async run(command) {
+        calls.push(command);
+        if (command[0] === "/bin/ps") return { code: 0, stdout: startedAt, stderr: "" };
+        return { code: pid ? 0 : 3, stdout: `\tpid = ${pid}\n`, stderr: "" };
+      },
+    });
+    const execute = await host.prepareRestart(44);
+    expect(execute).toBeDefined();
+    if (scenario === "PID changed") pid = "50";
+    if (scenario === "PID reused") startedAt = "next start";
+    if (scenario === "job disappeared") pid = "";
+    expect(await execute?.()).toBe(scenario === "matched");
+    const print = ["launchctl", "print", target];
+    const started = ["/bin/ps", "-p", "44", "-o", "lstart="];
+    const expected = [print, started, print];
+    if (scenario === "matched" || scenario === "PID reused") expected.push(started);
+    if (scenario === "matched") expected.push(["launchctl", "kickstart", "-k", target]);
+    expect(calls).toEqual(expected);
+    expect(registrar.calls).toBe(0);
+  },
+);
+
 test("launchd service dispatches the daemon through the unified executable", () => {
   const plist = launchdPlist({
     label: "cn.coforge.computer.daemon",

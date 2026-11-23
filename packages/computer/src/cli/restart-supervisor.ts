@@ -5,7 +5,6 @@ import { holdRunnersUntilQuiescent, LocalDaemonLauncher } from "@lrm/coforge-dae
 import { createDaemonLauncher, daemonExecutablePathFor } from "#src/daemon-service/daemon-host";
 import { CliError } from "#src/errors";
 import { resolveDaemonSocketPath } from "#src/paths";
-import { verifyRestartServiceTarget } from "./restart-service-target";
 
 /** Platform and local control seams used by `restartSupervisor`. */
 export type RestartSupervisorHost = {
@@ -26,7 +25,7 @@ export async function restartSupervisor(
   host: RestartSupervisorHost,
   local: RestartSupervisorLocal,
   io: { stdout: (line: string) => void },
-  options?: { callerIsAgentHosted?: boolean },
+  options?: { callerIsAgentHosted?: boolean; preparedRestart?: () => Promise<void> },
 ): Promise<void> {
   // A Computer no service manager runs answers under its own code, the way `stop` answers
   // STOP_OUTSIDE_SERVICE_MANAGER for the same situation: an unexplained fallback code reads as
@@ -41,7 +40,7 @@ export async function restartSupervisor(
   // Refuse outright rather than let `restart()`'s recovery branch register a second Coordinator
   // for a Computer whose platform manager never installed one.
   try {
-    await host.assertRestartable();
+    if (!options?.preparedRestart) await host.assertRestartable();
   } catch (error) {
     throw foregroundRefusal(error);
   }
@@ -78,7 +77,8 @@ export async function restartSupervisor(
     // The platform host already knows why its own restart failed and says so; rewriting that
     // into a fixed sentence about foreground supervision is how a `systemctl --user` refusal
     // came to read as a problem it was not. Only `assertRestartable` above can establish that.
-    await host.restart();
+    if (options?.preparedRestart) await options.preparedRestart();
+    else await host.restart();
     io.stdout("Computer supervisor restarted and answered its local handshake.");
   } finally {
     if (held) await local.hold("release", RUNNER_HOLD_REASONS.COMPUTER_RESTART).catch(() => {});
@@ -94,8 +94,9 @@ export function createRestartSupervisorHost(
   const executablePath = daemonExecutablePathFor(platform, installDirectory);
   const socketPath = resolveDaemonSocketPath({ platform, stateDirectory });
   const local = new LocalDaemonLauncher({ executablePath, socketPath, stateDirectory, serverUrl });
+  const host = createDaemonLauncher(platform, installDirectory, stateDirectory, serverUrl);
   return {
-    host: createDaemonLauncher(platform, installDirectory, stateDirectory, serverUrl),
+    host,
     local,
     async snapshotTarget() {
       const identity = await local.identity();
@@ -105,8 +106,8 @@ export function createRestartSupervisorHost(
         throw new Error("The Coordinator changed while reading its Workspace bindings");
       return { bindings, coordinatorPid: after.processId };
     },
-    verifyServiceTarget: (coordinatorPid: number | undefined) =>
-      verifyRestartServiceTarget({ platform, stateDirectory, coordinatorPid }),
+    prepareServiceRestart: async (coordinatorPid: number) =>
+      "prepareRestart" in host ? host.prepareRestart(coordinatorPid) : undefined,
   };
 }
 

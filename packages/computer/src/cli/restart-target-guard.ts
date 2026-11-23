@@ -54,15 +54,20 @@ export async function assertSupervisorRestartTarget(
     bindings: ManagedRuntimeIdentity[];
     coordinatorPid: number | undefined;
   }>,
-  verifyServiceTarget: (coordinatorPid: number | undefined) => Promise<boolean>,
-): Promise<void> {
+  prepareServiceRestart: (coordinatorPid: number) => Promise<(() => Promise<boolean>) | undefined>,
+): Promise<() => Promise<void>> {
   const { bindings, coordinatorPid } = await readTarget().catch(unverifiedTarget);
   if (bindings.some((binding) => mayHostCaller(binding, caller))) hostingSession();
   if (
     !caller.computerId ||
     !bindings.length ||
     bindings.some((binding) => !binding.computerId || binding.computerId === caller.computerId) ||
-    !(await verifyServiceTarget(coordinatorPid).catch(() => false))
+    !coordinatorPid
   )
     unverifiedTarget();
+  const restart = await prepareServiceRestart(coordinatorPid).catch(() => undefined);
+  if (!restart) unverifiedTarget();
+  return async () => {
+    if (!(await restart())) unverifiedTarget();
+  };
 }

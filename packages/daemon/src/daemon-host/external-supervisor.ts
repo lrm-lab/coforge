@@ -261,7 +261,10 @@ export async function readSupervisorOomPolicy(
   return { unit: record.unit, scope: record.scope, oomPolicy };
 }
 
-export function describeSupervisorUnreachable(record: SupervisorRecord, detail: string): string {
+export function describeSupervisorUnreachable(
+  record: Pick<SupervisorRecord, "scope" | "unit">,
+  detail: string,
+): string {
   const hint =
     record.scope === "user"
       ? " A `systemctl --user` call needs the user's session bus: run it from a session of that user with XDG_RUNTIME_DIR set (for example after `loginctl enable-linger`)."

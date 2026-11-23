@@ -4,7 +4,6 @@ import {
   assertSupervisorRestartTarget,
   assertWorkspaceRestartTarget,
 } from "#src/cli/restart-target-guard";
-import { verifyRestartServiceTarget } from "#src/cli/restart-service-target";
 import { createCommand } from "#src/daemon-client/index";
 import { runCli } from "#src/cli";
 
@@ -59,14 +58,14 @@ test("a supervisor hosting another binding of the same Computer remains protecte
   });
 });
 
-test("Windows cannot verify the running task from a foreign socket's PID alone", async () => {
+test("a foreign socket without native restart proof is refused", async () => {
   await expect(
-    verifyRestartServiceTarget({
-      platform: "win32",
-      stateDirectory: "/unused",
-      coordinatorPid: 200,
-    }),
-  ).resolves.toBe(false);
+    assertSupervisorRestartTarget(
+      caller,
+      async () => ({ bindings: [{ ...binding, computerId: "foreign" }], coordinatorPid: 200 }),
+      async () => undefined,
+    ),
+  ).rejects.toMatchObject({ code: "RESTART_TARGET_UNVERIFIED" });
 });
 
 test("restart reports the guarded resolved binding before ensuring or restarting the daemon", async () => {

@@ -13,7 +13,7 @@ import type {
   LocalDaemonConnection,
 } from "./launcher";
 
-type CommandRunner = (command: string[]) => Promise<NativeCommandResult>;
+type CommandRunner = (command: string[], captureStdout?: boolean) => Promise<NativeCommandResult>;
 
 export type LaunchdDaemonHostOptions = {
   label: string;
@@ -173,12 +173,39 @@ export class LaunchdDaemonHost implements DaemonLauncher {
    */
   async restart(): Promise<void> {
     if (await this.#loaded()) {
-      const result = await this.#run(["launchctl", "kickstart", "-k", this.#target]);
-      if (result.code !== 0) throw launchctlFailure("kickstart", result);
+      await this.#kickstart();
     } else {
       await this.#options.registrar.registerAndStart();
     }
     await this.#local.ensureRunning();
+  }
+
+  async prepareRestart(coordinatorPid: number): Promise<(() => Promise<boolean>) | undefined> {
+    const startedAt = await this.#runningSince(coordinatorPid);
+    if (!startedAt) return undefined;
+    return async () => {
+      if ((await this.#runningSince(coordinatorPid)) !== startedAt) return false;
+      await this.#kickstart();
+      await this.#local.ensureRunning();
+      return true;
+    };
+  }
+
+  async #kickstart(): Promise<void> {
+    const result = await this.#run(["launchctl", "kickstart", "-k", this.#target]);
+    if (result.code !== 0) throw launchctlFailure("kickstart", result);
+  }
+
+  async #runningSince(coordinatorPid: number): Promise<string | undefined> {
+    const result = await this.#run(["launchctl", "print", this.#target], true);
+    const pid = /^\tpid = (\d+)\s*$/mu.exec(result.stdout)?.[1];
+    if (result.code !== 0 || Number(pid) !== coordinatorPid) return undefined;
+    const process = await this.#run(
+      ["/bin/ps", "-p", String(coordinatorPid), "-o", "lstart="],
+      true,
+    );
+    const startedAt = process.stdout.trim();
+    return process.code === 0 && startedAt ? startedAt : undefined;
   }
 
   async #loaded(): Promise<boolean> {
@@ -219,16 +246,20 @@ export function launchdPlist(input: {
 `;
 }
 
-async function runCommand(command: string[]): Promise<NativeCommandResult> {
+async function runCommand(command: string[], captureStdout = false): Promise<NativeCommandResult> {
   const process = Bun.spawn(command, {
     stdin: "ignore",
-    stdout: "ignore",
+    stdout: captureStdout ? "pipe" : "ignore",
     stderr: "pipe",
     // Generous: a `kickstart -k` against a job that respawned inside launchd's throttle window
     // can legitimately block for several seconds (measured up to ~9 s), and this must not be
     // mistaken for a hung command.
     timeout: 30_000,
   });
-  const [code, stderr] = await Promise.all([process.exited, new Response(process.stderr).text()]);
-  return { code, stdout: "", stderr };
+  const [code, stdout, stderr] = await Promise.all([
+    process.exited,
+    process.stdout ? new Response(process.stdout).text() : "",
+    new Response(process.stderr).text(),
+  ]);
+  return { code, stdout, stderr };
 }

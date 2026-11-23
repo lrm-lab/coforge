@@ -14,6 +14,7 @@ import {
   clearSupervisorRecord,
   describeSupervisorUnreachable,
   inspectSupervisor,
+  readSupervisorRecord,
   runSystemctl,
   type SupervisorRecord,
   type SystemctlRunner,
@@ -21,6 +22,7 @@ import {
 import { COORDINATOR_SERVICE } from "./service-identity";
 
 type CommandRunner = (command: string[]) => Promise<NativeCommandResult>;
+type RestartUnit = Pick<SupervisorRecord, "scope" | "unit">;
 
 export class SystemdUserDaemonHost implements DaemonLauncher {
   readonly #unitPath: string;
@@ -162,6 +164,50 @@ export class SystemdUserDaemonHost implements DaemonLauncher {
     await this.#local.ensureRunning();
   }
 
+  async prepareRestart(coordinatorPid: number): Promise<(() => Promise<boolean>) | undefined> {
+    const target = await this.#restartUnit();
+    const invocation = await this.#restartInvocation(target, coordinatorPid);
+    if (!invocation) return undefined;
+    return async () => {
+      if ((await this.#restartInvocation(target, coordinatorPid)) !== invocation) return false;
+      const current = await this.#restartUnit();
+      if (current.scope !== target.scope || current.unit !== target.unit) return false;
+      await this.#supervisorVerb(target, "restart");
+      await this.#local.ensureRunning();
+      return true;
+    };
+  }
+
+  async #restartUnit(): Promise<RestartUnit> {
+    const external = await readSupervisorRecord(this.#stateDirectory);
+    return external
+      ? { scope: external.scope, unit: external.unit }
+      : { scope: "user", unit: this.#serviceName };
+  }
+
+  async #restartInvocation(
+    target: RestartUnit,
+    coordinatorPid: number,
+  ): Promise<string | undefined> {
+    const result = await this.#supervisorSystemctl(target.scope, [
+      "show",
+      "--property=LoadState",
+      "--property=MainPID",
+      "--property=InvocationID",
+      target.unit,
+    ]);
+    if (result.code !== 0) return undefined;
+    const lines = result.stdout.split("\n");
+    const field = (name: string) =>
+      lines.find((line) => line.startsWith(name + "="))?.slice(name.length + 1);
+    if (field("LoadState") !== "loaded" || Number(field("MainPID")) !== coordinatorPid)
+      return undefined;
+    const invocation = field("InvocationID");
+    return invocation && /^[0-9a-f]{32}$/i.test(invocation) && /[1-9a-f]/i.test(invocation)
+      ? invocation
+      : undefined;
+  }
+
   /** The externally supervised unit recorded by a `foreground` Computer, when systemd still
    * knows it: its start and restart go to that unit and never to a second service beside it.
    * A recorded unit systemd has forgotten is cleared and the Computer manages itself again; one
@@ -179,7 +225,7 @@ export class SystemdUserDaemonHost implements DaemonLauncher {
   }
 
   async #supervisorVerb(
-    record: SupervisorRecord,
+    record: RestartUnit,
     verb: "start" | "restart" | "reset-failed",
   ): Promise<void> {
     const result = await this.#supervisorSystemctl(record.scope, [verb, record.unit]);

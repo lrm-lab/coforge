@@ -170,10 +170,13 @@ export function createCommand(
       }
     },
     restartSupervisor: async (options) => {
-      const { host, local, snapshotTarget, verifyServiceTarget } = supervisorTarget();
-      if (caller) await assertSupervisorRestartTarget(caller, snapshotTarget, verifyServiceTarget);
+      const { host, local, snapshotTarget, prepareServiceRestart } = supervisorTarget();
+      const preparedRestart = caller
+        ? await assertSupervisorRestartTarget(caller, snapshotTarget, prepareServiceRestart)
+        : undefined;
       await restartSupervisor(host, local, options?.json ? { stdout: () => {} } : io, {
         callerIsAgentHosted: seams?.callerIsAgentHosted,
+        preparedRestart,
       });
       if (options?.json) io.stdout(JSON.stringify({ ok: true, supervisor: true }));
     },
