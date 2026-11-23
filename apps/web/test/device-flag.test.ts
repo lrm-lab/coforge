@@ -104,19 +104,10 @@ function classAddedBy(fragment: string, seed: Record<string, string>): string[] 
  *  layout, not as a failed read. */
 const PRE_PAINTING_SETTINGS = [
   {
-    name: "expanded sidebar",
-    fragment: SIDEBAR_EXPANDED_BOOT,
-    key: "coforge-sidebar-expanded",
-    className: "sidebar-collapsed",
-    // the class collapses the sidebar to its rail, so it applies when the reader says "not expanded"
-    classApplies: () => !readSidebarExpanded(),
-  },
-  {
     name: "hidden empty sidebar sections",
     fragment: HIDE_EMPTY_SIDEBAR_SECTIONS_BOOT,
     key: "coforge-hide-empty-sidebar-sections",
     className: "sidebar-hide-empty",
-    // this one is named after hiding, so the reader's true is the class being on
     classApplies: () => readHideEmptySidebarSections(),
   },
   {
@@ -127,6 +118,23 @@ const PRE_PAINTING_SETTINGS = [
     classApplies: () => readMessageFullWidth(),
   },
 ] as const;
+
+test("sidebar boot fragment distinguishes explicit hide, explicit show, and unset default", () => {
+  expect(classAddedBy(SIDEBAR_EXPANDED_BOOT, {})).toEqual([]);
+  expect(classAddedBy(SIDEBAR_EXPANDED_BOOT, { "coforge-sidebar-expanded": "hide" })).toEqual([
+    "sidebar-collapsed",
+  ]);
+  expect(classAddedBy(SIDEBAR_EXPANDED_BOOT, { "coforge-sidebar-expanded": "show" })).toEqual([
+    "sidebar-expanded",
+  ]);
+  expect(
+    classAddedBy(SIDEBAR_EXPANDED_BOOT, { "coforge-sidebar-expanded": "something-else" }),
+  ).toEqual([]);
+  stubLocalStorage(memoryStorage({ "coforge-sidebar-expanded": "hide" }));
+  expect(readSidebarExpanded()).toBe(false);
+  stubLocalStorage(memoryStorage({ "coforge-sidebar-expanded": "show" }));
+  expect(readSidebarExpanded()).toBe(true);
+});
 
 test("each pre-paint fragment applies its class exactly when its reader says the setting is on", () => {
   for (const setting of PRE_PAINTING_SETTINGS) {

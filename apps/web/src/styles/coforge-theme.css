@@ -141,8 +141,8 @@
 
     --color-nav-fg: #a4a9b8;
 
-    --color-chat-selected-bg: var(--color-sidebar-accent);
-    --color-chat-selected-border: #4c4081;
+    --color-chat-selected-bg: var(--color-bg-active);
+    --color-chat-selected-border: var(--color-border-secondary);
 
     --color-message-hover: var(--color-bg-primary_hover);
 

@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { SearchLg, Settings01 as Settings } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { cn } from "#src/lib/utils";
 import { ChannelFace, ChannelTitle, channelGlyph } from "./channel-name";
 import { ChannelSettingsPanel } from "./channel-settings-panel";
@@ -84,24 +85,35 @@ export function ChannelConversationHeader({
           <ConversationListButton />
           <h1 data-channel-title className="flex min-w-0 flex-1 items-center text-md font-semibold">
             {onOpenSettings ? (
-              <AriaButton
-                onPress={toggleSettings}
-                aria-expanded={settingsOpen}
-                className="flex min-w-0 max-w-full cursor-pointer items-center gap-2 rounded-sm text-left outline-focus-ring hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2"
-              >
-                <ChannelFace
-                  channelId={conversation.conversationId}
-                  className="avatar-group-header"
-                  fallback={null}
-                />
-                <span data-channel-name className="min-w-0 truncate">
-                  <ChannelTitle
-                    name={conversation.name}
-                    visibility={conversation.visibility}
-                    hash={false}
-                  />
-                </span>
-              </AriaButton>
+              (() => {
+                const trigger = (
+                  <AriaButton
+                    onPress={toggleSettings}
+                    aria-expanded={settingsOpen}
+                    className="flex min-w-0 max-w-full cursor-pointer items-center gap-2 rounded-sm text-left outline-focus-ring hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2"
+                  >
+                    <ChannelFace
+                      channelId={conversation.conversationId}
+                      className="avatar-group-header"
+                      fallback={null}
+                    />
+                    <span data-channel-name className="min-w-0 truncate">
+                      <ChannelTitle
+                        name={conversation.name}
+                        visibility={conversation.visibility}
+                        hash={false}
+                      />
+                    </span>
+                  </AriaButton>
+                );
+                return conversation.description ? (
+                  <Tooltip title={conversation.description} placement="bottom start">
+                    {trigger}
+                  </Tooltip>
+                ) : (
+                  trigger
+                );
+              })()
             ) : (
               <span className="flex min-w-0 items-center gap-2">
                 <ChannelFace
@@ -319,11 +331,13 @@ export function ChannelConversation({
       }
       emptyState={{
         title: conversation.name,
-        description: !conversation.senderMemberId
-          ? m.channel_empty_preview()
-          : priv
-            ? m.channel_empty_private()
-            : m.channel_empty(),
+        description:
+          conversation.description ||
+          (!conversation.senderMemberId
+            ? m.channel_empty_preview()
+            : priv
+              ? m.channel_empty_private()
+              : m.channel_empty()),
         media: (
           <ChannelFace
             channelId={conversation.conversationId}

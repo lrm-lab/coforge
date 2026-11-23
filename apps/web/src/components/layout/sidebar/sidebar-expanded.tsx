@@ -36,15 +36,12 @@ function ExpandedItem({ href, icon: Icon, label, current, badge }: ExpandedItemT
 interface SidebarExpandedProps {
   activeUrl?: string;
   items: ExpandedItemType[];
-  /** The top row: the Workspace switcher and the collapse toggle. */
   header: ReactNode;
-  /** Under the top row: the search entry. */
   search: ReactNode;
-  /** What sits at the bottom: What's new and the user's own row. */
   footer: ReactNode;
+  defaultRail?: boolean;
 }
 
-/** Global destinations only; the Chat page owns conversation selection. */
 function SidebarExpandedPanel({ activeUrl, items, header, search, footer }: SidebarExpandedProps) {
   return (
     <aside data-sidebar className="flex h-full w-full max-w-full flex-col bg-transparent">
@@ -64,11 +61,15 @@ function SidebarExpandedPanel({ activeUrl, items, header, search, footer }: Side
   );
 }
 
-/** The desktop sidebar. Both this and the rail are always rendered; the `sidebar-collapsed` class
- * on <html> (see `features/settings/sidebar-expanded.ts`) decides which one shows, so the markup
- * never depends on the stored preference. */
-export const SidebarExpanded = (props: SidebarExpandedProps) => (
-  <div className="hidden shrink-0 lg:flex lg:[.sidebar-collapsed_&]:hidden">
+export const SidebarExpanded = ({ defaultRail = false, ...props }: SidebarExpandedProps) => (
+  <div
+    className={cx(
+      "hidden shrink-0 lg:flex",
+      defaultRail
+        ? "lg:[html:not(.sidebar-expanded)_&]:hidden"
+        : "lg:[.sidebar-collapsed_&]:hidden",
+    )}
+  >
     <div className={cx("relative h-full", SIDEBAR_WIDTH_CLASS)}>
       <SidebarExpandedPanel {...props} />
       <ConversationListResizeHandle column={SIDEBAR_COLUMN} />

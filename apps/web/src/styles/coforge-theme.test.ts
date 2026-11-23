@@ -72,7 +72,7 @@ test("the sidebar's rows do not paint a resting fill over its gradient", () => {
   // The rail and the expanded rows share one highlight, so the current item cannot look like two
   // different things depending on which sidebar is showing.
   expect(dark).toMatch(/--color-sidebar-item-active:\s*var\(--color-sidebar-accent\);/);
-  expect(dark).toMatch(/--color-chat-selected-bg:\s*var\(--color-sidebar-accent\);/);
+  expect(dark).toMatch(/--color-chat-selected-bg:\s*var\(--color-bg-active\);/);
 });
 
 /** WCAG relative luminance of a `#rrggbb` colour. */

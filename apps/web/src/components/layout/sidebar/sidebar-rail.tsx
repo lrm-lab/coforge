@@ -103,16 +103,19 @@ export function RailButton({
 interface SidebarRailProps {
   activeUrl?: string;
   items: RailItemType[];
-  /** What sits above the nav: the expand toggle, the Workspace mark and search. */
   header: ReactNode;
-  /** What sits at the bottom: What's new, the bell and the user's avatar. */
   footer: ReactNode;
+  defaultRail?: boolean;
 }
 
-export const SidebarRail = ({ activeUrl, items, header, footer }: SidebarRailProps) => {
+export const SidebarRail = ({
+  activeUrl,
+  items,
+  header,
+  footer,
+  defaultRail = false,
+}: SidebarRailProps) => {
   const rail = (
-    // [data-sidebar] retints official components' bg-primary/bg-secondary/etc
-    // via src/styles/coforge-theme.css.
     <aside
       data-sidebar
       style={{ width: SIDEBAR_RAIL_WIDTH }}
@@ -133,6 +136,15 @@ export const SidebarRail = ({ activeUrl, items, header, footer }: SidebarRailPro
   );
 
   return (
-    <div className="hidden shrink-0 lg:flex lg:[html:not(.sidebar-collapsed)_&]:hidden">{rail}</div>
+    <div
+      className={cx(
+        "hidden shrink-0 lg:flex",
+        defaultRail
+          ? "lg:[.sidebar-expanded_&]:hidden"
+          : "lg:[html:not(.sidebar-collapsed)_&]:hidden",
+      )}
+    >
+      {rail}
+    </div>
   );
 };

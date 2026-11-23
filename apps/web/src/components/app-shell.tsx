@@ -233,6 +233,7 @@ function WorkspaceChrome({
   useReportActivityUnread(activityAttention.hasUnread, activityAttention.unreadCount);
   const navItems = useNavItems(base, recordsPreview, workspaceId, aiWorkbench, activityAttention);
   const section = sectionOf(pathname);
+  const defaultRail = CHAT_SECTIONS.includes(section);
   const [chatListOpen, setChatListOpen] = useState(false);
   const tabHome = tabHomeOf({ section, itemOpen, chatListOpen });
   const phone = !useBreakpoint("lg");
@@ -292,6 +293,7 @@ function WorkspaceChrome({
     <PhoneShellContext value={phoneShell}>
       <ChatListOpenContext value={setChatListOpen}>
         <div
+          data-sidebar-default-rail={defaultRail ? "" : undefined}
           className={cx(
             "flex h-[var(--app-height,100svh)] flex-col bg-primary pt-safe-top pr-safe-right pl-safe-left font-body antialiased",
             !standalone && "lg:bg-sidebar",
@@ -302,6 +304,7 @@ function WorkspaceChrome({
             <div className={standalone ? "hidden" : "contents"}>
               <ShellLinks>
                 <SidebarExpanded
+                  defaultRail={defaultRail}
                   activeUrl={activeUrl}
                   items={navItems}
                   header={
@@ -324,6 +327,7 @@ function WorkspaceChrome({
                   }
                 />
                 <SidebarRail
+                  defaultRail={defaultRail}
                   activeUrl={activeUrl}
                   items={navItems}
                   header={

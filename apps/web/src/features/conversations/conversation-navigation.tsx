@@ -293,18 +293,17 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
           <ConversationHostProvider channels={channelNames}>
             <UnreadStoreContext value={unread.store}>
               <main
-                data-panel-cards
                 data-chat-cards
                 data-focus={focus.focused}
                 data-crowd-list={listCrowded ? "" : undefined}
-                className="group/chat relative flex h-full min-w-0 flex-col overflow-hidden bg-primary lg:flex-row lg:gap-2 lg:overflow-visible lg:bg-transparent"
+                className="group/chat relative flex h-full min-w-0 flex-col overflow-hidden bg-primary lg:flex-row lg:overflow-visible"
               >
                 <section
                   inert={phone && !showList ? true : undefined}
                   aria-hidden={phone && !showList ? true : undefined}
                   style={listStyle}
                   className={cx(
-                    "relative flex min-h-0 flex-1 flex-col bg-primary max-lg:absolute max-lg:inset-0 max-lg:z-10 max-lg:will-change-transform lg:flex lg:flex-none lg:overflow-hidden lg:rounded-xl",
+                    "relative flex min-h-0 flex-1 flex-col bg-primary max-lg:absolute max-lg:inset-0 max-lg:z-10 max-lg:will-change-transform lg:flex lg:flex-none lg:border-e lg:border-secondary",
                     LIST_COLUMN_CLASS,
                     phone && !showList && "pointer-events-none",
                     "lg:group-data-[crowd-list]/chat:hidden",
@@ -378,7 +377,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
                   aria-hidden={phone && showList ? true : undefined}
                   style={detailStyle}
                   className={cx(
-                    "flex min-h-0 min-w-0 flex-1 flex-col bg-primary max-lg:absolute max-lg:inset-0 max-lg:z-20 max-lg:touch-pan-y max-lg:will-change-transform lg:flex lg:overflow-hidden lg:rounded-xl",
+                    "flex min-h-0 min-w-0 flex-1 flex-col bg-primary max-lg:absolute max-lg:inset-0 max-lg:z-20 max-lg:touch-pan-y max-lg:will-change-transform lg:flex",
                     phone && (animatingStack || swipe.dragging) && "shadow-2xl",
                     phone && showList && "pointer-events-none",
                   )}

@@ -19,12 +19,12 @@ export function TabbedHeader({
     <div className="@container/tabbed-header shrink-0">
       <header
         className={cx(
-          "relative grid grid-cols-[minmax(0,1fr)_auto] border-b border-secondary px-4 md:px-6 @lg/tabbed-header:gap-x-4 @2xl/tabbed-header:gap-x-6",
+          "relative grid grid-cols-[minmax(0,1fr)_auto] border-b border-secondary px-4 md:px-6 @lg/tabbed-header:gap-x-5",
           tabs &&
             "before:pointer-events-none before:absolute before:inset-x-0 before:top-[calc(--spacing(12)-1px)] before:border-t before:border-secondary @lg/tabbed-header:before:hidden",
           tabsStart
             ? "@lg/tabbed-header:grid-cols-[auto_minmax(0,1fr)_auto]"
-            : "@lg/tabbed-header:grid-cols-[minmax(0,1fr)_auto_auto] @2xl/tabbed-header:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]",
+            : "@lg/tabbed-header:grid-cols-[minmax(0,auto)_auto_minmax(max-content,1fr)]",
           className,
         )}
       >

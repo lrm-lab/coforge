@@ -104,30 +104,29 @@ test("Cmd/Ctrl+B toggles the sidebar, except in a rich-text editor", async () =>
     await browser("open", `${origin}/en/w/${membership.workspace.slug}`);
     await browser("eval", `localStorage.removeItem("coforge-sidebar-expanded")`);
     await browser("reload");
-    await wait(`document.querySelector('${COLLAPSE}') !== null`);
+    await wait(`document.querySelector('${EXPAND}') !== null`);
     expect(await collapsed()).toBe(false);
     const mac = await apple();
     const [press, label] = mac ? ["Meta+b", "⌘B"] : ["Control+b", "CtrlB"];
 
+    expect(await tooltipAfterHover(EXPAND, "Expand sidebar")).toBe(`Expand sidebar${label}`);
+    await browser("screenshot", join(artifacts, "expand-tooltip.png"));
+
+    await browser("press", press);
+    await wait(`document.documentElement.classList.contains("sidebar-expanded") === true`);
+    expect(await evaluate<string | null>(`localStorage.getItem("coforge-sidebar-expanded")`)).toBe(
+      "show",
+    );
+    await wait(`document.getAnimations().every((a) => a.playState !== "running")`);
     expect(await tooltipAfterHover(COLLAPSE, "Collapse sidebar")).toBe(`Collapse sidebar${label}`);
     await browser("screenshot", join(artifacts, "collapse-tooltip.png"));
-
-    // From the page, and from the message composer while typing, the key collapses and expands.
+    await browser("focus", "textarea");
     await browser("press", press);
     await waitCollapsed(true);
     expect(await evaluate<string | null>(`localStorage.getItem("coforge-sidebar-expanded")`)).toBe(
       "hide",
     );
-    // The collapse animates the rail's width; measuring the expand button mid-transition
-    // puts the pointer where the button was, and no tooltip ever opens.
-    await wait(`document.getAnimations().every((a) => a.playState !== "running")`);
-    expect(await tooltipAfterHover(EXPAND, "Expand sidebar")).toBe(`Expand sidebar${label}`);
-    await browser("screenshot", join(artifacts, "expand-tooltip.png"));
-    await browser("focus", "textarea");
-    await browser("press", press);
-    await waitCollapsed(false);
 
-    // In a rich-text editor the key is left to it.
     await browser(
       "eval",
       `(() => { const editor = document.createElement("div"); editor.contentEditable = "true"; editor.id = "e2e-editor"; document.body.append(editor); })()`,
@@ -135,7 +134,7 @@ test("Cmd/Ctrl+B toggles the sidebar, except in a rich-text editor", async () =>
     await browser("focus", "#e2e-editor");
     await browser("press", press);
     await browser("wait", "300");
-    expect(await collapsed()).toBe(false);
+    expect(await collapsed()).toBe(true);
   } finally {
     await browser("eval", `localStorage.removeItem("coforge-sidebar-expanded")`).catch(
       () => undefined,

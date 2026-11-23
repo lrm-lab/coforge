@@ -1,31 +1,40 @@
 import { bootFragment } from "./boot-fragment";
-import { DEVICE_FLAG_HIDDEN, readDeviceFlag, writeDeviceFlag } from "./device-flag";
+import {
+  DEVICE_FLAG_HIDDEN,
+  DEVICE_FLAG_SHOWN,
+  readDeviceFlag,
+  writeDeviceFlag,
+} from "./device-flag";
 
 const STORAGE_KEY = "coforge-sidebar-expanded";
 const COLLAPSED_CLASS = "sidebar-collapsed";
+const EXPANDED_CLASS = "sidebar-expanded";
 
-/** The boot half of the same rule: `__root.tsx` runs this before paint so SSR markup never depends
- * on the class. Built by `bootFragment` from the key, the hidden value and the class above, so the
- * script and `readSidebarExpanded` cannot disagree about what "collapsed" is stored as. */
-export const SIDEBAR_EXPANDED_BOOT = bootFragment({
-  key: STORAGE_KEY,
-  token: DEVICE_FLAG_HIDDEN,
-  className: COLLAPSED_CLASS,
-});
+export const SIDEBAR_EXPANDED_BOOT =
+  bootFragment({
+    key: STORAGE_KEY,
+    token: DEVICE_FLAG_HIDDEN,
+    className: COLLAPSED_CLASS,
+  }) +
+  bootFragment({
+    key: STORAGE_KEY,
+    token: DEVICE_FLAG_SHOWN,
+    className: EXPANDED_CLASS,
+  });
 
-/** Per-device preference: the desktop sidebar is the full one, or collapsed to its icon rail.
- *  Expanded unless this device stored the hidden value. Applied as a class on <html> (also by the
- *  boot script), and both sidebars are always rendered, so the markup never depends on it. */
 export function readSidebarExpanded(): boolean {
   return readDeviceFlag(STORAGE_KEY);
 }
 
-/** Whether the page shows the full sidebar now: the class, which the boot script set from storage. */
 export function isSidebarExpanded(): boolean {
-  return !document.documentElement.classList.contains(COLLAPSED_CLASS);
+  const { classList } = document.documentElement;
+  if (classList.contains(COLLAPSED_CLASS)) return false;
+  if (classList.contains(EXPANDED_CLASS)) return true;
+  return document.querySelector("[data-sidebar-default-rail]") === null;
 }
 
 export function writeSidebarExpanded(expanded: boolean) {
   writeDeviceFlag(STORAGE_KEY, expanded);
   document.documentElement.classList.toggle(COLLAPSED_CLASS, !expanded);
+  document.documentElement.classList.toggle(EXPANDED_CLASS, expanded);
 }

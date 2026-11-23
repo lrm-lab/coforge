@@ -8,21 +8,12 @@ import { ConversationBackHeader } from "./conversation-list-button";
 import { LIST_COLUMN_CLASS } from "./conversation-list-width";
 import { cx } from "#src/utils/cx";
 
-/**
- * The loading screen Chat shows until its lists and the open conversation have been read in the
- * browser: the frame `ConversationNavigation` draws (the list column from a desktop width, the
- * conversation beside it), with skeletons where the rows will be. It is also what the server
- * sends for a Chat page.
- */
 export function MessagesPending() {
   return (
-    <main
-      data-panel-cards
-      className="flex h-full min-w-0 flex-col bg-primary lg:flex-row lg:gap-2 lg:bg-transparent"
-    >
+    <main className="flex h-full min-w-0 flex-col bg-primary lg:flex-row">
       <section
         className={cx(
-          "hidden min-h-0 flex-col lg:flex lg:flex-none lg:overflow-hidden lg:rounded-xl lg:bg-primary",
+          "hidden min-h-0 flex-col bg-primary lg:flex lg:flex-none lg:border-e lg:border-secondary",
           LIST_COLUMN_CLASS,
         )}
       >
@@ -47,7 +38,7 @@ export function MessagesPending() {
           ))}
         </div>
       </section>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:overflow-hidden lg:rounded-xl lg:bg-primary">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-primary">
         <ConversationPending />
       </div>
     </main>

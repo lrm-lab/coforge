@@ -200,11 +200,7 @@ export function ConversationRow({
                       ? "font-semibold text-primary"
                       : cx(
                           "font-medium",
-                          current
-                            ? "text-brand-secondary"
-                            : pinned
-                              ? "text-sidebar-fg"
-                              : "text-secondary",
+                          current ? "text-primary" : pinned ? "text-sidebar-fg" : "text-secondary",
                         ),
                 )}
               >
