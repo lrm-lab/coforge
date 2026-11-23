@@ -298,7 +298,12 @@ export function createCompactionGuardExtension(
       pi.on("session_before_compact", (event, ctx) => {
         const windowTokens = ctx.model?.contextWindow ?? resolveContextWindow();
         if (windowTokens && Number.isFinite(windowTokens) && windowTokens > 0) {
-          trimCompactionPreparation(event.preparation, windowTokens);
+          const { tokensBefore } = event.preparation;
+          const summaryWindow =
+            event.reason === "overflow" && Number.isSafeInteger(tokensBefore) && tokensBefore > 0
+              ? Math.min(windowTokens, tokensBefore)
+              : windowTokens;
+          trimCompactionPreparation(event.preparation, summaryWindow);
         }
       });
     },

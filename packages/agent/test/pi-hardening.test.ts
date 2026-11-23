@@ -2,13 +2,20 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+  SessionBeforeCompactEvent,
+} from "@earendil-works/pi-coding-agent";
 import {
   createHardenedBashOperations,
   DEFAULT_PI_BASH_TIMEOUT_SECONDS,
   MAX_PI_BASH_TIMEOUT_SECONDS,
 } from "#src/pi-bash-guard";
 import {
+  createCompactionGuardExtension,
   estimateCjkAwareTokens,
+  estimateMessageTokens,
   trimCompactionPreparation,
   type CompactionMessage,
   type CompactionPreparation,
@@ -119,6 +126,66 @@ describe("pre-compaction CJK-aware adaptive trimming", () => {
       liveToolCall as unknown as { content: Array<{ arguments: { content: string } }> }
     ).content[0]!;
     expect(originalBlock.arguments.content).toBe(originalArg);
+  });
+
+  function prepareForSummary(
+    reason: SessionBeforeCompactEvent["reason"],
+    preparation: CompactionPreparation,
+  ) {
+    const event: SessionBeforeCompactEvent = {
+      type: "session_before_compact",
+      reason,
+      preparation,
+      branchEntries: [],
+      willRetry: reason === "overflow",
+      signal: new AbortController().signal,
+    };
+    const guard = createCompactionGuardExtension(() => 200_000);
+    const factory = typeof guard === "function" ? guard : guard.factory;
+    return factory({
+      on: (
+        _event: string,
+        handle: (event: SessionBeforeCompactEvent, ctx: ExtensionContext) => void,
+      ) => handle(event, { model: undefined } as ExtensionContext),
+    } as ExtensionAPI);
+  }
+
+  test.each([
+    ["manual", 42_000],
+    ["threshold", 42_000],
+    ["overflow", 0],
+    ["overflow", -1],
+    ["overflow", NaN],
+    ["overflow", Infinity],
+    ["overflow", 250_000],
+  ] as const)(
+    "keeps the declared window for %s with an estimate of %d",
+    async (reason, tokensBefore) => {
+      const messages = [userTextMessage("old ".repeat(36_000))];
+      const preparation = { ...makePreparation([...messages]), tokensBefore };
+      await prepareForSummary(reason, preparation);
+      expect(preparation.messagesToSummarize).toEqual(messages);
+    },
+  );
+
+  test("budgets for the prior summary, retaining it and the recent turn prefix", async () => {
+    const messages = ["first", "second", "third"].map((text) =>
+      userTextMessage((text + " ").repeat(4_000)),
+    );
+    const recent = userTextMessage("Keep the latest request whole.");
+    const previousSummary = "past ".repeat(8_000);
+    const preparation = {
+      ...makePreparation([...messages], previousSummary),
+      turnPrefixMessages: [recent],
+      tokensBefore: 42_000,
+    };
+    await prepareForSummary("overflow", preparation);
+    expect(
+      preparation.messagesToSummarize.map(estimateMessageTokens).reduce((a, b) => a + b),
+    ).toBeLessThan(9_300);
+    expect(preparation.turnPrefixMessages).toEqual([recent]);
+    expect(preparation.previousSummary).toBe(previousSummary);
+    expect(preparation.firstKeptEntryId).toBe("entry-keep");
   });
 });
 
