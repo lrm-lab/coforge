@@ -130,7 +130,7 @@ export type PickerMultipleProps = MenuBase & MultipleChoice;
 export const PICKER_SEARCH_INPUT =
   "h-10 w-full border-b border-secondary bg-transparent px-3.5 text-sm text-primary outline-hidden placeholder:text-placeholder max-sm:h-12 max-sm:text-md";
 export const PICKER_LIST =
-  "max-h-72 overflow-y-auto p-1 outline-hidden select-none max-sm:max-h-[50dvh]";
+  "scroll-fade-y max-h-72 overflow-y-auto p-1 scroll-py-6 outline-hidden select-none max-sm:max-h-[50dvh]";
 const PICKER_SECTION_HEADING =
   "px-2.5 pt-2 pb-1 text-xs font-medium text-quaternary max-sm:pt-2.5 max-sm:text-sm";
 

@@ -137,7 +137,7 @@ export function ReferenceSuggestionList({
     >
       <ul
         role="presentation"
-        className="max-h-[min(16rem,40svh)] overscroll-contain overflow-y-auto py-1 [touch-action:pan-y]"
+        className="scroll-fade-y max-h-[min(16rem,40svh)] overscroll-contain overflow-y-auto py-1 scroll-py-6 [touch-action:pan-y]"
       >
         {groups.map((group) =>
           group.label ? (

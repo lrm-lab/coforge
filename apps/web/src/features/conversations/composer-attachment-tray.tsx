@@ -13,7 +13,7 @@ export function ComposerAttachmentTray({
   return (
     <ul
       aria-label={m.conversation_attachment_tray()}
-      className="col-span-full row-start-2 flex min-w-0 gap-2 overflow-x-auto overflow-y-hidden px-3 pt-2.5 pb-1.5"
+      className="scroll-fade-x col-span-full row-start-2 flex min-w-0 gap-2 overflow-x-auto overflow-y-hidden px-3 pt-2.5 pb-1.5 scroll-px-5"
     >
       {attachments.map((item) => (
         <AttachmentTile

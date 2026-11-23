@@ -1,0 +1,78 @@
+@property --scroll-fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --scroll-fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes scroll-fade-start {
+  from {
+    --scroll-fade-start: 0px;
+  }
+  to {
+    --scroll-fade-start: var(--scroll-fade-start-size, var(--_scroll-fade-size));
+  }
+}
+
+@keyframes scroll-fade-end {
+  from {
+    --scroll-fade-end: var(--scroll-fade-end-size, var(--_scroll-fade-size));
+  }
+  to {
+    --scroll-fade-end: 0px;
+  }
+}
+
+@utility scroll-fade-y {
+  @supports (animation-timeline: scroll()) {
+    --_scroll-fade-size: var(--scroll-fade-size, 1.5rem);
+    --_scroll-fade-range: var(--scroll-fade-range, 2rem);
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0px,
+      black var(--scroll-fade-start),
+      black calc(100% - var(--scroll-fade-end)),
+      transparent 100%
+    );
+    animation-name: scroll-fade-start, scroll-fade-end;
+    animation-duration: auto, auto;
+    animation-timing-function: linear, linear;
+    animation-fill-mode: both, both;
+    animation-timeline: scroll(self block), scroll(self block);
+    animation-range:
+      0px var(--_scroll-fade-range),
+      calc(100% - var(--_scroll-fade-range)) 100%;
+  }
+}
+
+@utility scroll-fade-x {
+  @supports (animation-timeline: scroll()) {
+    --_scroll-fade-size: var(--scroll-fade-size, 1.25rem);
+    --_scroll-fade-range: var(--scroll-fade-range, 1.75rem);
+    --_scroll-fade-dir: to right;
+    mask-image: linear-gradient(
+      var(--_scroll-fade-dir),
+      transparent 0px,
+      black var(--scroll-fade-start),
+      black calc(100% - var(--scroll-fade-end)),
+      transparent 100%
+    );
+    animation-name: scroll-fade-start, scroll-fade-end;
+    animation-duration: auto, auto;
+    animation-timing-function: linear, linear;
+    animation-fill-mode: both, both;
+    animation-timeline: scroll(self inline), scroll(self inline);
+    animation-range:
+      0px var(--_scroll-fade-range),
+      calc(100% - var(--_scroll-fade-range)) 100%;
+
+    &:where([dir="rtl"], [dir="rtl"] *) {
+      --_scroll-fade-dir: to left;
+    }
+  }
+}

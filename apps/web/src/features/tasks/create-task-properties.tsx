@@ -56,7 +56,7 @@ export function CreateTaskProperties({
   return (
     <div
       data-layout="create"
-      className="flex shrink-0 flex-wrap gap-2 px-4 pt-1 pb-5 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:overscroll-x-contain max-sm:border-t max-sm:border-secondary max-sm:py-2 max-sm:pe-6 max-sm:[mask-image:linear-gradient(to_right,black_calc(100%-1.25rem),transparent)] max-sm:[scrollbar-width:none] sm:px-6 rtl:max-sm:[mask-image:linear-gradient(to_left,black_calc(100%-1.25rem),transparent)]"
+      className="flex shrink-0 flex-wrap gap-2 px-4 pt-1 pb-5 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:overscroll-x-contain max-sm:border-t max-sm:border-secondary max-sm:py-2 max-sm:pe-6 max-sm:scroll-px-5 max-sm:scroll-fade-x max-sm:[scrollbar-width:none] sm:px-6"
     >
       {board && (
         <TaskProperty label={m.tasks_overview_status()}>

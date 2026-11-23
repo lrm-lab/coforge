@@ -158,7 +158,7 @@ export const SearchFilterBar = memo(function SearchFilterBar({
     <div
       role="group"
       aria-label={m.search_filters()}
-      className="flex flex-wrap items-center gap-1.5 max-sm:-mx-4 max-sm:-my-1 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:px-4 max-sm:py-1 max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden"
+      className="flex flex-wrap items-center gap-1.5 max-sm:-mx-4 max-sm:-my-1 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:px-4 max-sm:py-1 max-sm:scroll-px-5 max-sm:scroll-fade-x max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden"
     >
       <FilterChipShell
         active={senderActive}

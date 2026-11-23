@@ -93,30 +93,32 @@ export const SlashCommandList = forwardRef<SlashCommandListRef, SlashCommandList
     }
 
     return (
-      <div className="max-h-[18.75rem] w-72 overflow-y-auto rounded-md border border-secondary bg-primary py-1 shadow-md">
-        {items.map((item, index) => (
-          <div
-            key={item.id}
-            ref={(el) => {
-              itemRefs.current[index] = el;
-            }}
-          >
-            <Button
-              color="tertiary"
-              size="sm"
-              type="button"
-              className={`flex w-full items-start justify-start gap-2 px-3 py-1.5 text-start text-sm transition-colors ${
-                selectedIndex === index ? "bg-primary_hover" : "hover:bg-primary_hover"
-              }`}
-              onClick={() => selectItem(index)}
+      <div className="w-72 overflow-hidden rounded-md border border-secondary bg-primary shadow-md">
+        <div className="scroll-fade-y max-h-[18.75rem] overflow-y-auto py-1 scroll-py-6">
+          {items.map((item, index) => (
+            <div
+              key={item.id}
+              ref={(el) => {
+                itemRefs.current[index] = el;
+              }}
             >
-              {slashCommandIcon(item)}
-              <span className="flex min-w-0 flex-col gap-0.5">
-                <span className="font-medium">{item.label}</span>
-              </span>
-            </Button>
-          </div>
-        ))}
+              <Button
+                color="tertiary"
+                size="sm"
+                type="button"
+                className={`flex w-full items-start justify-start gap-2 px-3 py-1.5 text-start text-sm transition-colors ${
+                  selectedIndex === index ? "bg-primary_hover" : "hover:bg-primary_hover"
+                }`}
+                onClick={() => selectItem(index)}
+              >
+                {slashCommandIcon(item)}
+                <span className="flex min-w-0 flex-col gap-0.5">
+                  <span className="font-medium">{item.label}</span>
+                </span>
+              </Button>
+            </div>
+          ))}
+        </div>
       </div>
     );
   },

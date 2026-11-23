@@ -277,7 +277,7 @@ export function MessageSeenBySheetEntry({
       {listed && expanded ? (
         <ul
           aria-label={m.conversation_seen_by()}
-          className="flex max-h-60 flex-col overflow-y-auto"
+          className="scroll-fade-y flex max-h-60 flex-col overflow-y-auto scroll-py-6"
         >
           {readers.map((reader) => (
             <li key={mentionKey(reader)} className="rounded-lg px-1 py-2 text-md text-secondary">

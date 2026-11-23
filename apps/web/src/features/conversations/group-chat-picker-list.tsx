@@ -38,56 +38,60 @@ export function GroupChatPicker({
       />
       <div
         className={cx(
-          "min-h-0 flex-1 overflow-y-auto",
-          framed && "rounded-lg border border-secondary p-1",
+          "flex min-h-0 flex-1 flex-col",
+          framed && "overflow-hidden rounded-lg border border-secondary",
         )}
       >
-        {directory.isPending && (
-          <p className="px-2 py-2 text-sm text-tertiary">{m.channel_members_loading()}</p>
-        )}
-        {directory.isError && (
-          <div className="flex flex-col items-start gap-3 px-2 py-2">
-            <p role="alert" className="text-sm text-error-primary">
-              {m.channel_members_load_error()}
+        <div
+          className={cx(
+            "scroll-fade-y min-h-0 flex-1 overflow-y-auto scroll-py-6",
+            framed && "p-1",
+          )}
+        >
+          {directory.isPending && (
+            <p className="px-2 py-2 text-sm text-tertiary">{m.channel_members_loading()}</p>
+          )}
+          {directory.isError && (
+            <div className="flex flex-col items-start gap-3 px-2 py-2">
+              <p role="alert" className="text-sm text-error-primary">
+                {m.channel_members_load_error()}
+              </p>
+              <Button color="secondary" size="sm" onPress={() => void directory.refetch()}>
+                {m.controls_retry()}
+              </Button>
+            </div>
+          )}
+          {!directory.isPending && !directory.isError && shown.length === 0 && (
+            <p className="px-2 py-2 text-sm text-tertiary">
+              {search.trim()
+                ? m.channel_members_no_matches({ query: search.trim() })
+                : m.channel_members_none()}
             </p>
-            <Button color="secondary" size="sm" onPress={() => void directory.refetch()}>
-              {m.controls_retry()}
-            </Button>
-          </div>
-        )}
-        {!directory.isPending && !directory.isError && shown.length === 0 && (
-          <p className="px-2 py-2 text-sm text-tertiary">
-            {search.trim()
-              ? m.channel_members_no_matches({ query: search.trim() })
-              : m.channel_members_none()}
-          </p>
-        )}
-        <ul className="flex flex-col">
-          {shown.map((entry) => (
-            <PickerListRow
-              key={entry.key}
-              label={entry.name}
-              description={entry.description}
-              // The id gives an Agent its mascot and a person their status dot (task #521).
-              leading={
-                <Face
-                  face={{
-                    kind: "identity",
-                    name: entry.name,
-                    src: entry.avatarUrl,
-                    ...(entry.kind === "agent" ? { agentId: entry.id } : { userId: entry.id }),
-                  }}
-                />
-              }
-              // A person is named by their display name alone; an Agent adds the handle it is
-              // mentioned by.
-              addon={entry.search.kind === "agent" ? `@${entry.search.name}` : undefined}
-              isSelected={selectedKeys.has(entry.key)}
-              isDisabled={disabled}
-              onChange={(on) => onToggle(entry.key, on)}
-            />
-          ))}
-        </ul>
+          )}
+          <ul className="flex flex-col">
+            {shown.map((entry) => (
+              <PickerListRow
+                key={entry.key}
+                label={entry.name}
+                description={entry.description}
+                leading={
+                  <Face
+                    face={{
+                      kind: "identity",
+                      name: entry.name,
+                      src: entry.avatarUrl,
+                      ...(entry.kind === "agent" ? { agentId: entry.id } : { userId: entry.id }),
+                    }}
+                  />
+                }
+                addon={entry.search.kind === "agent" ? `@${entry.search.name}` : undefined}
+                isSelected={selectedKeys.has(entry.key)}
+                isDisabled={disabled}
+                onChange={(on) => onToggle(entry.key, on)}
+              />
+            ))}
+          </ul>
+        </div>
       </div>
     </>
   );

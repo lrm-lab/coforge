@@ -50,7 +50,7 @@ function SidebarExpandedPanel({ activeUrl, items, header, search, footer }: Side
     <aside data-sidebar className="flex h-full w-full max-w-full flex-col bg-transparent">
       <div className="mt-2 flex h-12 shrink-0 items-center gap-2 pe-3 ps-4.5">{header}</div>
       <div className="shrink-0 px-3 pt-1">{search}</div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="scroll-fade-y min-h-0 flex-1 overflow-y-auto scroll-py-6">
         <ul className="mt-3 flex flex-col gap-0.5 px-3">
           {items.map((item) => (
             <li key={item.label}>

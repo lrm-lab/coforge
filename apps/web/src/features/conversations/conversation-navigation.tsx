@@ -342,7 +342,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
                       </div>
                     </>
                   )}
-                  <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pt-3 pb-4">
+                  <div className="scroll-fade-y flex min-h-0 flex-1 flex-col overflow-y-auto pt-3 pb-4 scroll-py-6">
                     <ConversationDirectory
                       channels={visibleChannels}
                       agents={agents}

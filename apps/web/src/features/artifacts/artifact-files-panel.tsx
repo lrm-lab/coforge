@@ -52,7 +52,7 @@ export function ArtifactFilesPanel({
         }
         close={{ label: m.av_files_close(), onPress: onClose }}
       />
-      <ul className="min-h-0 flex-1 overflow-y-auto p-2">
+      <ul className="scroll-fade-y min-h-0 flex-1 overflow-y-auto p-2 scroll-py-6">
         {files.map((file) => {
           const displayPath = middleTruncatePath(file.path, 28);
           return (

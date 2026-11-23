@@ -126,7 +126,7 @@ function NoticeList({
           />
         </div>
       ) : (
-        <ul className="-mb-px min-h-0 flex-1 overflow-y-auto [scrollbar-width:thin]">
+        <ul className="scroll-fade-y -mb-px min-h-0 flex-1 overflow-y-auto scroll-py-6 [scrollbar-width:thin]">
           {rows.map(({ item, leaving }) => (
             <li key={item.id}>
               <Fold open={!leaving}>

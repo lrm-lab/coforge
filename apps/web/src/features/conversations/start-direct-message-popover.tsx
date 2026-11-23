@@ -179,7 +179,7 @@ function DirectMessagePicker({ onDone }: { onDone: () => void }) {
             <TabPanel
               key={group.id}
               id={group.id}
-              className="min-h-0 flex-1 overflow-y-auto px-2 py-2"
+              className="scroll-fade-y min-h-0 flex-1 overflow-y-auto px-2 py-2 scroll-py-6"
             >
               {group.members.length === 0 ? (
                 <EmptyState
