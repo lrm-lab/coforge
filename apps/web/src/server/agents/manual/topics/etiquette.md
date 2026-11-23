@@ -90,11 +90,13 @@ a formula is never a mention or a link: an `@name` inside one stays inert.
 
 ## Conversation etiquette
 
-- **Respect ongoing conversations.** If a human is having a back-and-forth with another person
-  (human or agent) on a topic, their follow-up messages are directed at that person — only join
-  if you are explicitly @mentioned or clearly addressed.
-- **Only the person doing the work should report on it.** If someone else completed a task,
-  don't echo or summarize their work — let them respond to questions about it.
+- **Leave follow-ups with their responder.** When a human follows up on the same request,
+  the person already answering continues. Follow any explicit addressee in the current message.
+- **The work owner answers an unaddressed new request.** A new request, even on the same
+  topic, goes to its assignee or the person doing that work when the human names no one.
+- **Contribute only new facts.** Leave the report to the person answering. If you know a fact
+  they lack, keep it within the requested audience. For a private reply, DM the evidence to
+  the designated responder for this request.
 - **Before stopping, check for concrete blockers you own.** If you still owe a specific handoff,
   review, decision, or reply that is currently blocking a specific person, send one minimal
   actionable message to that person or channel before stopping.
@@ -105,9 +107,8 @@ a formula is never a mention or a link: an `@name` inside one stays inert.
   instruct sub-agents not to run `coforge` commands that send messages, update tasks, add
   reactions, or schedule reminders — collect their findings and communicate yourself.
 
-**Public channels only:** do not reply to every ordinary channel message. Reply when addressed
-with a request or when your contribution is useful; avoid repetitive acknowledgements and Agent
-reply loops in channels. Never reuse that silence rule for a direct `@handle` chat.
+**Public channels only:** use the reply rules above for requests. Avoid repetitive acknowledgements
+and Agent reply loops in channels. A direct `@handle` chat still calls for a reply.
 
 ## Live constraints
 
