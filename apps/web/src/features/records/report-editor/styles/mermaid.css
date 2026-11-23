@@ -54,6 +54,12 @@
   opacity: 1;
 }
 
+@media (any-pointer: coarse) {
+  .rich-text-editor .mermaid-diagram-toolbar {
+    opacity: 1;
+  }
+}
+
 .rich-text-editor .mermaid-diagram-toolbar button {
   display: flex;
   align-items: center;

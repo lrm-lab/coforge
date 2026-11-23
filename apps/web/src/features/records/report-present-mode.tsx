@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { HotkeysProvider, useHotkeys } from "@tanstack/react-hotkeys";
 import { ChevronLeft, ChevronRight, XClose as X } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { m } from "#src/paraglide/messages";
 import { ReportSectionEditor } from "./report-editor/report-section-editor";
 import { isReportImageZoomOpen } from "./report-image-zoom";
@@ -102,78 +102,83 @@ export function ReportPresentMode({
 
   if (!page) return null;
 
-  return createPortal(
-    <HotkeysProvider scope="report-present">
-      <PresentKeys onClose={() => onClose(indexRef.current)} onTurn={turnPage} />
-      <div
-        className="fixed inset-0 z-50 flex flex-col bg-primary safe-area-padding"
-        role="dialog"
-        aria-modal="true"
-        aria-label={page.name}
-      >
-        <header className="flex shrink-0 items-center gap-3 border-b border-secondary px-4 py-3">
-          <h2 className="min-w-0 flex-1 truncate text-md font-semibold text-primary">
-            {page.name}
-          </h2>
-          <span className="text-sm text-tertiary">
-            {index + 1} / {pages.length}
-          </span>
-          <ButtonUtility
-            size="sm"
-            color="tertiary"
-            icon={X}
-            aria-label={m.records_report_present_close()}
-            onClick={() => onClose(index)}
-          />
-        </header>
-        <div className="relative min-h-0 flex-1">
-          <div ref={scrollerRef} className="h-full overflow-y-auto overscroll-y-contain">
-            <RecordsReadingColumn className="py-8">
-              <ReportSectionEditor
-                key={page.name}
-                defaultValue={page.markdown}
-                placeholder={placeholder}
-                editable={false}
-                onUpdate={() => {}}
+  return (
+    <ModalOverlay
+      isOpen
+      isDismissable={false}
+      instant
+      onOpenChange={(open) => {
+        if (!open) onClose(indexRef.current);
+      }}
+      className="items-stretch p-0 sm:items-stretch sm:p-0 [--modal-pb:0px] [--modal-pt:0px] sm:[--modal-pb:0px] sm:[--modal-pt:0px]"
+    >
+      <Modal className="h-dvh max-h-none w-full max-w-none rounded-none shadow-none ring-0 sm:rounded-none">
+        <Dialog
+          aria-label={page.name}
+          className="flex h-full flex-col overflow-hidden bg-primary safe-area-padding"
+        >
+          <HotkeysProvider scope="report-present">
+            <PresentKeys onTurn={turnPage} />
+            <header className="flex shrink-0 items-center gap-3 border-b border-secondary px-4 py-3">
+              <h2 className="min-w-0 flex-1 truncate text-md font-semibold text-primary">
+                {page.name}
+              </h2>
+              <span className="text-sm text-tertiary">
+                {index + 1} / {pages.length}
+              </span>
+              <ButtonUtility
+                size="sm"
+                color="tertiary"
+                icon={X}
+                tooltip={m.records_report_present_close()}
+                aria-label={m.records_report_present_close()}
+                onClick={() => onClose(index)}
               />
-            </RecordsReadingColumn>
-            <div ref={contentEndRef} className="h-px" aria-hidden="true" />
-          </div>
-          <ButtonUtility
-            size="sm"
-            color="tertiary"
-            icon={ChevronLeft}
-            aria-label={m.records_report_present_prev()}
-            isDisabled={index === 0}
-            onClick={() => turnPage(-1)}
-            className="absolute top-1/2 left-3 -translate-y-1/2"
-          />
-          <ButtonUtility
-            size="sm"
-            color="tertiary"
-            icon={ChevronRight}
-            aria-label={m.records_report_present_next()}
-            isDisabled={index === pages.length - 1}
-            onClick={() => turnPage(1)}
-            className="absolute top-1/2 right-3 -translate-y-1/2"
-          />
-        </div>
-      </div>
-    </HotkeysProvider>,
-    document.body,
+            </header>
+            <div className="relative min-h-0 flex-1">
+              <div ref={scrollerRef} className="h-full overflow-y-auto overscroll-y-contain">
+                <RecordsReadingColumn className="py-8">
+                  <ReportSectionEditor
+                    key={page.name}
+                    defaultValue={page.markdown}
+                    placeholder={placeholder}
+                    editable={false}
+                    onUpdate={() => {}}
+                  />
+                </RecordsReadingColumn>
+                <div ref={contentEndRef} className="h-px" aria-hidden="true" />
+              </div>
+              <ButtonUtility
+                size="sm"
+                color="tertiary"
+                icon={ChevronLeft}
+                tooltip={m.records_report_present_prev()}
+                aria-label={m.records_report_present_prev()}
+                isDisabled={index === 0}
+                onClick={() => turnPage(-1)}
+                className="absolute top-1/2 start-3 -translate-y-1/2"
+              />
+              <ButtonUtility
+                size="sm"
+                color="tertiary"
+                icon={ChevronRight}
+                tooltip={m.records_report_present_next()}
+                aria-label={m.records_report_present_next()}
+                isDisabled={index === pages.length - 1}
+                onClick={() => turnPage(1)}
+                className="absolute top-1/2 end-3 -translate-y-1/2"
+              />
+            </div>
+          </HotkeysProvider>
+        </Dialog>
+      </Modal>
+    </ModalOverlay>
   );
 }
 
-function PresentKeys({
-  onClose,
-  onTurn,
-}: {
-  onClose: () => void;
-  onTurn: (direction: -1 | 1) => void;
-}) {
+function PresentKeys({ onTurn }: { onTurn: (direction: -1 | 1) => void }) {
   useHotkeys(
     [
-      { hotkey: "Escape", callback: onClose },
       { hotkey: "ArrowLeft", callback: () => onTurn(-1) },
       { hotkey: "ArrowRight", callback: () => onTurn(1) },
     ],

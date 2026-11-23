@@ -175,7 +175,7 @@ export function ArtifactPresenceChip({
       <Popover
         placement="bottom start"
         className={cn(
-          "flex w-64 origin-(--trigger-anchor-point) flex-col",
+          "flex max-h-[min(24rem,calc(100dvh-5rem))] w-64 origin-(--trigger-anchor-point) flex-col overflow-hidden",
           FLOATING_SURFACE_CLASS,
           POPOVER_MOTION,
         )}

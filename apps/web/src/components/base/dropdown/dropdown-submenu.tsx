@@ -233,7 +233,12 @@ export const DropdownSubmenuPopover = ({
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLElement>) => {
-      if (event.key === "ArrowLeft") {
+      const target = event.target as HTMLElement | null;
+      const inEditable =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        Boolean(target?.isContentEditable);
+      if (event.key === "ArrowLeft" && !inEditable) {
         event.preventDefault();
         event.stopPropagation();
         submenuPopover?.onCloseSubmenu();

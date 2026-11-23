@@ -45,7 +45,7 @@ export function SaveAttachmentAsArtifactButton({
       isDisabled={save.isPending}
       tooltip={m.doc_filter_artifacts()}
       aria-label={m.doc_filter_artifacts()}
-      className="opacity-0 transition-opacity duration-150 group-hover/att:opacity-100 focus-visible:opacity-100"
+      className="opacity-0 transition-opacity duration-150 group-hover/att:opacity-100 focus-visible:opacity-100 any-pointer-coarse:opacity-100"
       onClick={() => {
         if (!save.isPending) save.mutate();
       }}

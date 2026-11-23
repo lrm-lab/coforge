@@ -7,9 +7,10 @@ import {
   Heading,
   SearchField as AriaSearchField,
 } from "react-aria-components";
-import { Plus, SearchLg } from "@untitledui/icons";
+import { Plus, SearchLg, XClose } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
+import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { EmptyState } from "#src/components/ui/empty";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
@@ -136,17 +137,29 @@ export function TaskPickerDialog({
     <ModalOverlay isOpen={open} onOpenChange={onOpenChange} isDismissable>
       <Modal className="w-[calc(100vw-2rem)] max-w-md">
         <Dialog className="max-h-[inherit]">
-          {/* Opened from the menu, the dialog says what is being picked. */}
-          <Heading slot="title" className="px-4 pt-4 pb-1 text-md font-semibold text-primary">
-            {picker.label}
-          </Heading>
-          <TaskPickerList
-            {...picker}
-            onPick={(picked) => {
-              onOpenChange(false);
-              picker.onPick(picked);
-            }}
-          />
+          {({ close }) => (
+            <>
+              <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-1">
+                <Heading slot="title" className="text-md font-semibold text-primary">
+                  {picker.label}
+                </Heading>
+                <ButtonUtility
+                  icon={XClose}
+                  size="xs"
+                  color="tertiary"
+                  aria-label={m.controls_close()}
+                  onClick={close}
+                />
+              </div>
+              <TaskPickerList
+                {...picker}
+                onPick={(picked) => {
+                  onOpenChange(false);
+                  picker.onPick(picked);
+                }}
+              />
+            </>
+          )}
         </Dialog>
       </Modal>
     </ModalOverlay>

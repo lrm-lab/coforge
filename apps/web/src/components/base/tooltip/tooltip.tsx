@@ -61,12 +61,12 @@ export const Tooltip = ({
                 offset={offset}
                 placement={placement}
                 crossOffset={crossOffset ?? calculatedCrossOffset}
-                className={({ isEntering, isExiting }) => cx(isEntering && "motion-enter-sm animate-in", isExiting && "motion-leave-sm animate-out")}
+                className={({ isEntering, isExiting }) => cx("pointer-events-none", isEntering && "motion-enter-sm animate-in", isExiting && "motion-leave-sm animate-out")}
             >
                 {({ isEntering, isExiting }) => (
                     <div
                         className={cx(
-                            "z-50 flex max-w-xs origin-(--trigger-anchor-point) flex-col items-start gap-1 rounded-lg bg-primary-solid px-3 shadow-lg will-change-transform",
+                            "pointer-events-none z-50 flex max-w-xs origin-(--trigger-anchor-point) flex-col items-start gap-1 rounded-lg bg-primary-solid px-3 shadow-lg will-change-transform",
                             description ? "py-3" : "py-2",
 
                             isEntering &&

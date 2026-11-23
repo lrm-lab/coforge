@@ -78,15 +78,9 @@ const MAX_TASK_INDENT_DEPTH = 3;
 export function ProjectTaskRow({ task, depth }: { task: ProjectTask; depth: number }) {
   const visualDepth = Math.min(depth, MAX_TASK_INDENT_DEPTH);
   return (
-    <Link
-      to="."
-      search={(previous: Record<string, unknown>) => ({
-        ...previous,
-        task: overviewTaskParam(task),
-      })}
-      resetScroll={false}
+    <div
       className={cn(
-        "flex min-w-0 items-center gap-3 py-3 pr-4 outline-focus-ring hover:bg-primary_hover focus-visible:outline-2 focus-visible:-outline-offset-2",
+        "relative flex min-w-0 items-center gap-3 py-3 pr-4 hover:bg-primary_hover",
         depth > 0 && "border-t border-secondary",
       )}
       style={{ paddingLeft: `${1 + visualDepth * 1.5}rem` }}
@@ -99,7 +93,17 @@ export function ProjectTaskRow({ task, depth }: { task: ProjectTask; depth: numb
       )}
       <TaskStatusIcon status={task.status} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium text-primary">{task.title}</span>
+        <Link
+          to="."
+          search={(previous: Record<string, unknown>) => ({
+            ...previous,
+            task: overviewTaskParam(task),
+          })}
+          resetScroll={false}
+          className="block truncate rounded-xs text-sm font-medium text-primary outline-focus-ring after:absolute after:inset-0 focus-visible:outline-2 focus-visible:-outline-offset-2"
+        >
+          {task.title}
+        </Link>
         <span className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-tertiary">
           {task.source.channelName ? (
             <ChannelPlace id={task.conversationId} name={task.source.channelName} />
@@ -107,10 +111,14 @@ export function ProjectTaskRow({ task, depth }: { task: ProjectTask; depth: numb
             <span className="truncate">{task.source.label}</span>
           )}
           <span className="shrink-0 tabular-nums">#{task.number}</span>
-          {depth > MAX_TASK_INDENT_DEPTH && task.parent && <TaskParentMark parent={task.parent} />}
+          {depth > MAX_TASK_INDENT_DEPTH && task.parent && (
+            <span className="relative z-10">
+              <TaskParentMark parent={task.parent} />
+            </span>
+          )}
         </span>
       </span>
       <TaskOwnerAvatar owner={task.owner} />
-    </Link>
+    </div>
   );
 }

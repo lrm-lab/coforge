@@ -122,6 +122,7 @@ export function RecordSidePanel({
       ref={asideRef}
       style={{ width: displayWidth }}
       aria-hidden={!open}
+      inert={!open}
       className={cx(
         "flex flex-col overflow-hidden bg-primary",
         docked

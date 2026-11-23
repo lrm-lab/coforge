@@ -31,6 +31,7 @@ export function RecentArtifactsMenu({
   const workspaceSlug = useWorkspaceSlug();
   const formatTime = useArtifactTime();
   const [recentIds, setRecentIds] = useState<string[]>(() => [artifactId]);
+  const [open, setOpen] = useState(false);
   const list = useQuery(artifactListQuery(conversationId));
 
   useEffect(() => {
@@ -59,11 +60,11 @@ export function RecentArtifactsMenu({
   }
 
   return (
-    <Dropdown.Root>
-      <Tooltip title={title} placement="bottom start">
+    <Dropdown.Root isOpen={open} onOpenChange={setOpen}>
+      <Tooltip title={title} placement="bottom start" isDisabled={open}>
         <AriaButton
-          aria-label={m.ag_sort_opened()}
-          className="flex h-8 min-w-0 max-w-full cursor-pointer items-center gap-1 rounded-lg px-1.5 text-left text-sm font-medium text-primary outline-focus-ring transition-colors duration-150 hover:bg-primary_hover focus-visible:outline-2"
+          aria-label={`${title}, ${m.ag_sort_opened()}`}
+          className="relative flex h-8 min-w-0 max-w-full cursor-pointer items-center gap-1 rounded-lg px-1.5 text-left text-sm font-medium text-primary outline-focus-ring transition-colors duration-150 hover:bg-primary_hover focus-visible:outline-2 any-pointer-coarse:after:absolute any-pointer-coarse:after:-inset-y-1.5 any-pointer-coarse:after:inset-x-0"
         >
           <h2 id={titleId} className="min-w-0 truncate">
             {title}

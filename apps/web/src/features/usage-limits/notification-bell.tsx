@@ -1,12 +1,10 @@
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
-import { Bell01 } from "@untitledui/icons";
+import { Bell01, XClose } from "@untitledui/icons";
 import { useState, type ReactNode } from "react";
 import {
   Dialog as AriaDialog,
   DialogTrigger as AriaDialogTrigger,
-  Modal as AriaModal,
-  ModalOverlay as AriaModalOverlay,
   Popover as AriaPopover,
 } from "react-aria-components";
 
@@ -16,6 +14,7 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { Fold } from "#src/components/ui/fold";
+import { Modal, ModalOverlay, SheetGrabber } from "#src/components/ui/modal";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { UnreadBadge } from "#src/components/ui/unread-marker";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
@@ -93,9 +92,17 @@ function NoticeList({
   const rows = useLeavingItems(notifications.notices);
   return (
     <>
-      <h2 className="border-b border-secondary px-4 py-3 text-sm font-semibold text-primary">
-        {m.system_notifications_title()}
-      </h2>
+      <div className="flex items-center justify-between gap-2 border-b border-secondary px-4 py-3">
+        <h2 className="text-sm font-semibold text-primary">{m.system_notifications_title()}</h2>
+        <ButtonUtility
+          icon={XClose}
+          size="xs"
+          color="tertiary"
+          aria-label={m.controls_close()}
+          onClick={close}
+          className="lg:hidden"
+        />
+      </div>
       {notifications.loading ? (
         <div role="status" aria-label={m.empty_notifications_loading()} className="grid gap-3 p-4">
           <Skeleton className="h-14 w-full" />
@@ -153,28 +160,24 @@ function NoticeList({
 
 function NoticeSheet({ children }: { children: ReactNode }) {
   return (
-    <AriaModalOverlay
+    <ModalOverlay
       isDismissable
-      className={({ isEntering, isExiting }) =>
-        cn(
-          "fixed inset-x-0 top-0 z-50 flex h-[var(--app-height,100dvh)] items-end bg-modal-scrim/70",
-          isEntering && "motion-enter animate-in scrim-in",
-          isExiting && "motion-leave animate-out scrim-out",
-        )
-      }
+      className="items-end px-0 sm:items-end sm:px-0 [--modal-pb:0rem] sm:[--modal-pb:0rem]"
     >
-      <AriaModal
-        className={({ isEntering, isExiting }) =>
+      <Modal
+        className={(state) =>
           cn(
-            "w-full",
-            isEntering && "motion-enter-lg animate-in slide-in-from-bottom",
-            isExiting && "motion-leave-lg animate-out slide-out-to-bottom",
+            "relative flex max-h-[80dvh] w-full max-w-none flex-col overflow-hidden rounded-t-2xl rounded-b-none sm:rounded-t-2xl sm:rounded-b-none pb-safe-bottom",
+            "zoom-in-100 zoom-out-100 slide-in-from-bottom slide-out-to-bottom",
+            state.isEntering && "motion-enter-lg",
+            state.isExiting && "motion-leave-lg",
           )
         }
       >
-        {children}
-      </AriaModal>
-    </AriaModalOverlay>
+        <SheetGrabber className="sm:flex" />
+        <div className="flex min-h-0 flex-1 flex-col pt-5">{children}</div>
+      </Modal>
+    </ModalOverlay>
   );
 }
 
@@ -244,15 +247,7 @@ export function NotificationBell({
           {panel}
         </AriaPopover>
       ) : (
-        <NoticeSheet>
-          <div className="flex max-h-[80dvh] flex-col overflow-hidden rounded-t-2xl bg-primary pb-safe-bottom ring-1 ring-modal-edge">
-            <span
-              aria-hidden="true"
-              className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-quaternary"
-            />
-            {panel}
-          </div>
-        </NoticeSheet>
+        <NoticeSheet>{panel}</NoticeSheet>
       )}
     </AriaDialogTrigger>
   );

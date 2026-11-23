@@ -96,19 +96,21 @@ export function ComputerLayout({
                 : operatingSystemLabel(computer);
             return (
               <li key={computer.id}>
-                <div className="flex min-w-0 items-center">
+                <div
+                  className={cn(
+                    "group relative flex min-h-18 min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-3 transition-colors",
+                    selected
+                      ? "bg-secondary text-brand-secondary hover:bg-secondary_hover"
+                      : "hover:bg-primary_hover",
+                  )}
+                >
                   <Link
                     to="/w/$workspaceSlug/computer/$computerId"
                     params={{ workspaceSlug, computerId: computer.id }}
                     aria-current={selected ? "page" : undefined}
                     resetScroll={false}
                     onClick={() => setShowMobileList(false)}
-                    className={cn(
-                      "group flex min-h-18 min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-3 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset",
-                      selected
-                        ? "bg-secondary text-brand-secondary hover:bg-secondary_hover"
-                        : "hover:bg-primary_hover",
-                    )}
+                    className="flex min-w-0 flex-1 items-center gap-3 rounded-lg outline-none after:absolute after:inset-0 after:rounded-lg focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset"
                   >
                     <ComputerTile
                       computer={computer}
@@ -148,24 +150,24 @@ export function ComputerLayout({
                         </span>
                       )}
                     </span>
-                    {computer.creator && (
-                      <Tooltip
-                        title={m.computer_added_by_name({
-                          name: creatorName,
-                        })}
-                      >
-                        <TooltipTrigger className="shrink-0 rounded-full">
-                          <ActorAvatar
-                            presence={false}
-                            size="xs"
-                            name={creatorName}
-                            src={computer.creator.avatarUrl}
-                          />
-                          <span className="sr-only">{creatorName}</span>
-                        </TooltipTrigger>
-                      </Tooltip>
-                    )}
                   </Link>
+                  {computer.creator && (
+                    <Tooltip
+                      title={m.computer_added_by_name({
+                        name: creatorName,
+                      })}
+                    >
+                      <TooltipTrigger className="relative z-10 shrink-0 rounded-full">
+                        <ActorAvatar
+                          presence={false}
+                          size="xs"
+                          name={creatorName}
+                          src={computer.creator.avatarUrl}
+                        />
+                        <span className="sr-only">{creatorName}</span>
+                      </TooltipTrigger>
+                    </Tooltip>
+                  )}
                 </div>
               </li>
             );

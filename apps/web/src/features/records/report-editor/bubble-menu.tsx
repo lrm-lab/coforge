@@ -425,6 +425,7 @@ export function EditorBubbleMenu({ editor }: { editor: Editor }) {
   return createPortal(
     <div
       ref={floatingRef}
+      role="toolbar"
       className={cn(
         "fixed top-0 left-0 z-50 flex max-w-[calc(100vw-1rem)] flex-wrap items-center gap-0.5 rounded-lg bg-primary p-1 shadow-lg ring-1 ring-secondary_alt",
         !visible && "pointer-events-none",
@@ -435,7 +436,30 @@ export function EditorBubbleMenu({ editor }: { editor: Editor }) {
       }}
     >
       {linkMode ? (
-        <div className="flex items-center gap-1 px-1">
+        <div
+          className="flex items-center gap-1 px-1"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              event.stopPropagation();
+              setLinkMode(false);
+              editor.commands.focus();
+            } else if (event.key === "Enter") {
+              event.preventDefault();
+              if (!linkUrl.trim()) {
+                editor.chain().focus().extendMarkRange("link").unsetLink().run();
+              } else {
+                editor
+                  .chain()
+                  .focus()
+                  .extendMarkRange("link")
+                  .setLink({ href: linkUrl.trim() })
+                  .run();
+              }
+              setLinkMode(false);
+            }
+          }}
+        >
           <Input
             value={linkUrl}
             onChange={setLinkUrl}

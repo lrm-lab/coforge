@@ -3,7 +3,7 @@ import { CatchBoundary, ClientOnly } from "@tanstack/react-router";
 import { CircleAlert } from "kubai-icons/duotone";
 import { Suspense, useMemo, useState } from "react";
 
-import { Dialog, Modal, ModalOverlay } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { Button } from "#src/components/base/buttons/button";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";

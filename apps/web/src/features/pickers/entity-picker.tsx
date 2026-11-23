@@ -17,7 +17,7 @@ import { Check, Folder } from "@untitledui/icons";
 
 import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
 import { EmptyState } from "#src/components/ui/empty";
-import { Dialog, DialogTrigger, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { Dialog, DialogTrigger, Modal, ModalOverlay, SheetGrabber } from "#src/components/ui/modal";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
@@ -356,12 +356,9 @@ export function PickerSurface({
     <DialogTrigger isOpen={open} onOpenChange={setOpen}>
       {trigger}
       <ModalOverlay isDismissable className="px-0 [--modal-pb:0rem]">
-        <Modal className="w-full rounded-t-2xl rounded-b-none">
-          <Dialog aria-label={label} className="pb-safe-bottom outline-hidden">
-            <div
-              aria-hidden="true"
-              className="mx-auto mt-2 mb-1 h-1 w-9 rounded-full bg-quaternary/40"
-            />
+        <Modal className="relative w-full rounded-t-2xl rounded-b-none">
+          <SheetGrabber />
+          <Dialog aria-label={label} className="pt-5 pb-safe-bottom outline-hidden">
             {children({ phone: true, close })}
           </Dialog>
         </Modal>

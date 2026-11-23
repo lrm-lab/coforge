@@ -178,30 +178,33 @@ function RepositoryContents({ data, projectSlug }: { data: Repository; projectSl
         {data.commits.length ? (
           <ul className="divide-y divide-secondary">
             {data.commits.map((commit) => (
-              <li key={commit.sha}>
+              <li
+                key={commit.sha}
+                className="relative flex min-w-0 items-center gap-3 px-4 py-3 hover:bg-primary_hover"
+              >
+                <span className="relative z-10 flex shrink-0 -space-x-1.5">
+                  <CommitIdentity
+                    name={commit.author}
+                    email={commit.authorEmail}
+                    role={m.project_commit_role_author()}
+                    avatarUrl={commit.authorAvatarUrl}
+                  />
+                  {commit.coAuthors.slice(0, 2).map((coAuthor) => (
+                    <CommitIdentity
+                      key={coAuthor.name}
+                      name={coAuthor.name}
+                      email={coAuthor.email}
+                      role={m.project_commit_role_coauthored()}
+                      avatarUrl={coAuthor.avatarUrl}
+                    />
+                  ))}
+                </span>
                 <a
                   href={`${base}/commit/${commit.sha}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex min-w-0 items-center gap-3 px-4 py-3 outline-focus-ring hover:bg-primary_hover focus-visible:outline-2 focus-visible:-outline-offset-2"
+                  className="flex min-w-0 flex-1 items-center gap-3 outline-focus-ring after:absolute after:inset-0 focus-visible:outline-2 focus-visible:-outline-offset-2"
                 >
-                  <span className="flex shrink-0 -space-x-1.5">
-                    <CommitIdentity
-                      name={commit.author}
-                      email={commit.authorEmail}
-                      role={m.project_commit_role_author()}
-                      avatarUrl={commit.authorAvatarUrl}
-                    />
-                    {commit.coAuthors.slice(0, 2).map((coAuthor) => (
-                      <CommitIdentity
-                        key={coAuthor.name}
-                        name={coAuthor.name}
-                        email={coAuthor.email}
-                        role={m.project_commit_role_coauthored()}
-                        avatarUrl={coAuthor.avatarUrl}
-                      />
-                    ))}
-                  </span>
                   <span className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-primary">
                       {commit.message.split("\n")[0]}

@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { useHotkey } from "@tanstack/react-hotkeys";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link, useHydrated, useNavigate, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
@@ -27,6 +28,7 @@ import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { formatCalendarDate } from "#src/lib/dates";
 import { formatNumber } from "#src/lib/format-number";
+import { OPEN_OVERLAY_SELECTOR } from "#src/lib/open-overlay";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
@@ -67,6 +69,13 @@ export function PersonProfilePanel({
     enabled: workspaceId !== undefined,
   });
   const openDirectConversation = useOpenDirectConversation();
+  useHotkey(
+    "Escape",
+    () => {
+      if (document.querySelector(OPEN_OVERLAY_SELECTOR) === null) onClose();
+    },
+    { ignoreInputs: true, preventDefault: false },
+  );
 
   if (person.isPending) {
     return (

@@ -16,7 +16,7 @@ export const ModalOverlay = (props: ModalOverlayProps) => {
             {...props}
             className={(state) =>
                 cx(
-                    "fixed inset-0 flex min-h-dvh w-full items-center justify-end bg-overlay/70 pl-6 outline-hidden md:pl-10",
+                    "fixed inset-0 z-50 flex min-h-dvh w-full items-center justify-end bg-modal-scrim/70 pl-6 outline-hidden md:pl-10",
                     state.isEntering && "motion-enter animate-in fade-in",
                     state.isExiting && "motion-leave animate-out fade-out",
                     typeof props.className === "function" ? props.className(state) : props.className,
@@ -34,7 +34,7 @@ export const Modal = (props: ModalProps) => (
         {...props}
         className={(state) =>
             cx(
-                "inset-y-0 right-0 h-full w-full max-w-100 shadow-xl transition",
+                "inset-y-0 right-0 h-full w-full max-w-100 pb-safe-bottom shadow-xl transition",
                 state.isEntering && "motion-enter animate-in slide-in-from-right",
                 state.isExiting && "motion-leave animate-out slide-out-to-right",
                 typeof props.className === "function" ? props.className(state) : props.className,
@@ -81,7 +81,7 @@ const Menu = ({ children, dialogClassName, ...props }: SlideoutMenuProps) => {
 };
 Menu.displayName = "SlideoutMenu";
 
-const Content = ({ role = "main", ...props }: ComponentPropsWithRef<"div">) => {
+const Content = ({ role = "region", ...props }: ComponentPropsWithRef<"div">) => {
     return <div role={role} {...props} className={cx("flex size-full flex-col gap-6 overflow-y-auto overscroll-auto px-4 md:px-6", props.className)} />;
 };
 Content.displayName = "SlideoutContent";

@@ -11,6 +11,7 @@ import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
+import { POPOVER_MOTION } from "#src/utils/popover-motion";
 
 import { useRealtimeConnection } from "./browser-realtime";
 
@@ -60,7 +61,7 @@ function OfflinePill({ lostAt, retry }: { lostAt: number | null; retry?: () => v
       <AriaPopover
         placement="bottom end"
         offset={6}
-        className="w-72 max-w-[calc(100vw-1rem)] rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt outline-none"
+        className={`w-72 max-w-[calc(100vw-1rem)] origin-(--trigger-anchor-point) rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt outline-none will-change-transform ${POPOVER_MOTION}`}
       >
         <Dialog aria-label={title} className="outline-none">
           {({ close }) => (

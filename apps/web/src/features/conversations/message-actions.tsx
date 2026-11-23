@@ -8,12 +8,10 @@ import {
   DotsHorizontal,
   FlipForward,
 } from "@untitledui/icons";
-import { Modal as AriaModal, ModalOverlay as AriaModalOverlay } from "react-aria-components";
-
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { useDialogControlSize } from "#src/components/ui/dialog-actions";
-import { Dialog } from "#src/components/application/modals/modal";
+import { Dialog, Modal, ModalOverlay, SheetGrabber } from "#src/components/ui/modal";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -178,31 +176,26 @@ export function MessageActionSheet({
 }) {
   const controlSize = useDialogControlSize();
   return (
-    <AriaModalOverlay
+    <ModalOverlay
       isOpen={isOpen}
       onOpenChange={onOpenChange}
       isDismissable
       data-message-actions-popover
-      className={(state) =>
-        cn(
-          "fixed inset-x-0 top-0 z-50 flex h-[var(--app-height,100dvh)] items-end justify-center bg-modal-scrim/70 outline-hidden",
-          state.isEntering && "motion-enter animate-in scrim-in",
-          state.isExiting && "motion-leave animate-out scrim-out",
-        )
-      }
+      className="items-end px-0 sm:items-end sm:px-0 [--modal-pb:0rem] sm:[--modal-pb:0rem]"
     >
-      <AriaModal
+      <Modal
         className={(state) =>
           cn(
-            "w-full rounded-t-2xl bg-primary shadow-xl ring-1 ring-modal-edge outline-hidden",
-            state.isEntering && "motion-enter-lg animate-in slide-in-from-bottom",
-            state.isExiting && "motion-leave-lg animate-out slide-out-to-bottom",
+            "relative w-full max-w-none rounded-t-2xl rounded-b-none sm:rounded-t-2xl sm:rounded-b-none",
+            "zoom-in-100 zoom-out-100 slide-in-from-bottom slide-out-to-bottom",
+            state.isEntering && "motion-enter-lg",
+            state.isExiting && "motion-leave-lg",
           )
         }
       >
-        <Dialog aria-label={m.conversation_message_actions()} className="pb-safe-bottom">
-          <div aria-hidden="true" className="mx-auto mt-2 h-1 w-9 rounded-full bg-quaternary/40" />
-          <div className="mt-2 flex gap-2.5 border-b border-secondary px-4 py-3">
+        <SheetGrabber className="sm:flex" />
+        <Dialog aria-label={m.conversation_message_actions()} className="pt-5 pb-safe-bottom">
+          <div className="flex gap-2.5 border-b border-secondary px-4 py-3">
             <span className="shrink-0">{avatar}</span>
             <div className="flex min-w-0 flex-col gap-0.5">
               <p className="flex items-baseline gap-2">
@@ -345,7 +338,7 @@ export function MessageActionSheet({
             )}
           </div>
         </Dialog>
-      </AriaModal>
-    </AriaModalOverlay>
+      </Modal>
+    </ModalOverlay>
   );
 }

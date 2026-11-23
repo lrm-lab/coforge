@@ -453,10 +453,10 @@ const DropdownPopover = ({ title, children, ...props }: DropdownPopoverProps) =>
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLElement>) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && cascade) {
         event.preventDefault();
         event.stopPropagation();
-        cascade?.closeAll(true);
+        cascade.closeAll(true);
       } else if (isVerticalMenuNavKey(event.key)) {
         cascade?.clearHoverAtDepth(depth);
       }

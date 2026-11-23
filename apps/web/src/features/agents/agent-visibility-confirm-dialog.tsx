@@ -175,7 +175,7 @@ export function AgentVisibilityConfirmDialog({
                 <DialogAction
                   autoFocus
                   color={goingPrivate ? "secondary-destructive" : "primary"}
-                  isDisabled={submitting}
+                  isDisabled={submitting || (goingPrivate && !preview && !previewFailed)}
                   isLoading={submitting}
                   showTextWhileLoading
                   onPress={submit}

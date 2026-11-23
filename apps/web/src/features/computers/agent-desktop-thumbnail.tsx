@@ -111,7 +111,7 @@ export function AgentDesktopThumbnail({
               type="button"
               size="sm"
               color="secondary"
-              isDisabled={!canWake}
+              aria-disabled={!canWake || undefined}
               aria-label={wakeLabel}
               onPress={() => {
                 if (!canWake) return;
@@ -120,7 +120,7 @@ export function AgentDesktopThumbnail({
               }}
               className={cx(
                 "h-full w-full flex-col gap-0 overflow-hidden rounded-md p-0 before:rounded-md data-icon-only:p-0",
-                canWake && "hover:border-brand",
+                canWake ? "hover:border-brand" : "cursor-not-allowed opacity-50",
               )}
             >
               <span className="flex h-3 w-full items-center justify-center gap-0.5 border-b border-secondary bg-tertiary/40 px-1">

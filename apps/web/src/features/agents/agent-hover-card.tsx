@@ -6,7 +6,6 @@ import { Heading } from "react-aria-components";
 
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Button } from "#src/components/base/buttons/button";
-import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { HoverPopover, useClosePreview } from "#src/components/ui/hover-popover";
 import { ClockTime } from "#src/components/ui/relative-time";
 import { Badge } from "#src/components/base/badges/badges";
@@ -211,11 +210,9 @@ function AgentCard({
         </div>
       </div>
       {data?.description && (
-        <Tooltip title={data.description}>
-          <TooltipTrigger className="block w-full truncate border-t border-secondary px-3 py-2 text-left text-xs text-tertiary outline-none">
-            {data.description}
-          </TooltipTrigger>
-        </Tooltip>
+        <p className="line-clamp-3 border-t border-secondary px-3 py-2 text-left text-xs text-tertiary">
+          {data.description}
+        </p>
       )}
       {canSeeActivity && onOpenActivity && (
         <CardRecentActivity activity={activity} onOpenActivity={onOpenActivity} />

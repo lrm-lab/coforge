@@ -215,6 +215,7 @@ export function createSuggestionPopupRender<
 
       onKeyDown: (props: SuggestionKeyDownProps) => {
         if (props.event.key === "Escape") {
+          exitSuggestion(props.view, pluginKey);
           cleanup();
           return true;
         }

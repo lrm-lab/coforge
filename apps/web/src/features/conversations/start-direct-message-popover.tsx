@@ -12,6 +12,7 @@ import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
+import { POPOVER_MOTION } from "#src/utils/popover-motion";
 import { useOpenDirectConversation } from "./open-direct-conversation";
 import { useWorkspaceDirectory } from "./workspace-directory-query";
 import { useCloseConversationList } from "./conversation-navigation";
@@ -36,7 +37,7 @@ export function StartDirectMessagePopover({
       onOpenChange={onOpenChange}
       placement="bottom start"
       offset={8}
-      className="h-[23.75rem] w-[19.5rem] rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt outline-none"
+      className={`h-[23.75rem] w-[19.5rem] max-w-[calc(100vw-1rem)] origin-(--trigger-anchor-point) rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt outline-none will-change-transform ${POPOVER_MOTION}`}
     >
       <Dialog className="flex h-full flex-col overflow-hidden outline-none">
         {({ close }) => <DirectMessagePicker onDone={close} />}

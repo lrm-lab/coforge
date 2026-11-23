@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { animate, motion, useMotionValue, useTransform } from "motion/react";
+import { FocusScope } from "react-aria";
 
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { cn } from "#src/lib/utils";
@@ -180,33 +181,35 @@ export function ArtifactMobileSheet({
         onClick={onClose}
         className="fixed inset-0 bg-overlay/50"
       />
-      <motion.aside
-        role="dialog"
-        aria-modal="true"
-        aria-label={label}
-        data-artifact-mobile-sheet=""
-        initial={reduced ? { opacity: 0 } : undefined}
-        animate={reduced ? { opacity: 1 } : undefined}
-        transition={reduced ? { duration: DURATION_S.reduced, ease: EASE_OUT } : undefined}
-        style={{ y }}
-        className={cn(
-          "fixed inset-x-0 bottom-0 z-50 flex h-[92dvh] flex-col overflow-hidden rounded-t-2xl border-t border-secondary bg-primary shadow-xl will-change-transform",
-          snap === "half" ? "pb-[calc(27dvh+var(--spacing-safe-bottom))]" : "pb-safe-bottom",
-        )}
-      >
-        <div
-          role="button"
-          tabIndex={0}
-          aria-label={m.av_sheet_drag_label()}
-          aria-expanded={snap === "tall"}
-          onPointerDown={onHandlePointerDown}
-          onKeyDown={onHandleKeyDown}
-          className="flex min-h-11 w-full shrink-0 cursor-grab touch-none items-center justify-center outline-focus-ring focus-visible:outline-2 focus-visible:-outline-offset-2 active:cursor-grabbing"
+      <FocusScope contain restoreFocus autoFocus>
+        <motion.aside
+          role="dialog"
+          aria-modal="true"
+          aria-label={label}
+          data-artifact-mobile-sheet=""
+          initial={reduced ? { opacity: 0 } : undefined}
+          animate={reduced ? { opacity: 1 } : undefined}
+          transition={reduced ? { duration: DURATION_S.reduced, ease: EASE_OUT } : undefined}
+          style={{ y }}
+          className={cn(
+            "fixed inset-x-0 bottom-0 z-50 flex h-[92dvh] flex-col overflow-hidden rounded-t-2xl border-t border-secondary bg-primary shadow-xl will-change-transform",
+            snap === "half" ? "pb-[calc(27dvh+var(--spacing-safe-bottom))]" : "pb-safe-bottom",
+          )}
         >
-          <span aria-hidden="true" className="h-1 w-9 rounded-full bg-quaternary" />
-        </div>
-        <div className="flex min-h-0 flex-1 flex-col">{children}</div>
-      </motion.aside>
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label={m.av_sheet_drag_label()}
+            aria-expanded={snap === "tall"}
+            onPointerDown={onHandlePointerDown}
+            onKeyDown={onHandleKeyDown}
+            className="flex min-h-11 w-full shrink-0 cursor-grab touch-none items-center justify-center outline-focus-ring focus-visible:outline-2 focus-visible:-outline-offset-2 active:cursor-grabbing"
+          >
+            <span aria-hidden="true" className="h-1 w-9 rounded-full bg-quaternary" />
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+        </motion.aside>
+      </FocusScope>
     </div>
   );
 }

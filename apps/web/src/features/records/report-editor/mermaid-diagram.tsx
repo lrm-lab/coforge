@@ -25,9 +25,10 @@ import {
   type CSSProperties,
   type Ref,
 } from "react";
-import { Maximize02 as Maximize2 } from "@untitledui/icons";
+import { Maximize02 as Maximize2, XClose } from "@untitledui/icons";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { m } from "#src/paraglide/messages";
 import { useT } from "./i18n";
 import { normalizeMermaidChart, sanitizeMermaidSvg } from "./normalize-mermaid-chart";
 
@@ -397,15 +398,31 @@ export function MermaidDiagram({
         isDismissable
       >
         <Modal className="h-[min(90vh,calc(100vh-2rem))] w-full max-w-6xl overflow-hidden bg-secondary">
-          <Dialog aria-label={t(($) => $.code_block.fullscreen)} className="h-full overflow-hidden">
-            {expandedDocument ? (
-              <iframe
-                className="mermaid-diagram-lightbox-frame h-full w-full rounded-none border-0 bg-secondary"
-                sandbox=""
-                srcDoc={expandedDocument}
-                aria-label="Mermaid diagram fullscreen"
-              />
-            ) : null}
+          <Dialog
+            aria-label={t(($) => $.code_block.fullscreen)}
+            className="relative h-full overflow-hidden"
+          >
+            {({ close }) => (
+              <>
+                <ButtonUtility
+                  size="sm"
+                  color="secondary"
+                  icon={XClose}
+                  tooltip={m.controls_close()}
+                  aria-label={m.controls_close()}
+                  onClick={close}
+                  className="absolute top-3 end-3 z-10"
+                />
+                {expandedDocument ? (
+                  <iframe
+                    className="mermaid-diagram-lightbox-frame h-full w-full rounded-none border-0 bg-secondary"
+                    sandbox=""
+                    srcDoc={expandedDocument}
+                    aria-label="Mermaid diagram fullscreen"
+                  />
+                ) : null}
+              </>
+            )}
           </Dialog>
         </Modal>
       </ModalOverlay>

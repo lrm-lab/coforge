@@ -121,7 +121,6 @@ export function FormatChipSlot({
         placement="right"
       >
         <TooltipTrigger
-          excludeFromTabOrder
           aria-disabled="true"
           aria-label={m.records_current_week_template_disabled()}
           className={chipClassName}

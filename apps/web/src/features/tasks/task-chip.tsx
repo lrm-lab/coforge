@@ -144,7 +144,10 @@ export function HiddenTaskChip() {
   return (
     <Tooltip title={m.tasks_ref_hidden_hint()}>
       <Focusable>
-        <span className="inline-flex items-center gap-1 align-baseline text-tertiary outline-none focus-visible:outline-2 focus-visible:outline-focus-ring">
+        <span
+          tabIndex={0}
+          className="inline-flex items-center gap-1 align-baseline text-tertiary outline-none focus-visible:outline-2 focus-visible:outline-focus-ring"
+        >
           <Lock01 aria-hidden="true" className="size-3.5 self-center" />
           {m.tasks_ref_hidden()}
         </span>
