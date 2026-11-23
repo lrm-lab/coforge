@@ -172,3 +172,36 @@ test("all pages put older unreads ahead of read rows and merge ties across sourc
   expect(all).toEqual(expect.arrayContaining([artifact, tied, ...newer]));
   expect(page.unreadItemCount).toBe(rest.unreadItemCount);
 });
+
+test("an off-page selection follows its authorized row without changing the page or its cursor", async () => {
+  const reader = { workspaceId: f.workspaceId, userId: f.bob };
+  const load = (selectedKey?: string, cursor?: ActivityInboxCursor) =>
+    inbox.list(reader.workspaceId, reader.userId, { filter: "all", limit: 1, selectedKey, cursor });
+  const selected = await artifactItem("Selected", -50);
+  const other = await conversationItem("selected-channel", -48);
+  await conversationItem("next-channel", 65);
+  const reference = await load();
+  for (const key of [selected, other]) {
+    const page = await load(key);
+    expect(page.selectedItem?.key).toBe(key);
+    expect(page.items).toEqual(reference.items);
+    expect(page.nextCursor).toEqual(reference.nextCursor);
+    expect(page.unreadItemCount).toBe(reference.unreadItemCount);
+    expect(page.activeItemCount).toBe(reference.activeItemCount);
+    expect((await load(key, reference.nextCursor!)).selectedItem).toBeUndefined();
+  }
+  const artifactId = selected.slice("artifact:".length);
+  await inbox.markArtifactRead(reader.workspaceId, reader.userId, {
+    kind: "artifact",
+    artifactId,
+    throughAt: Date.now(),
+  });
+  expect((await load(selected)).selectedItem?.unreadCount).toBe(0);
+  await follows.set({ ...place(artifactId), following: false });
+  expect((await load(selected)).selectedItem).toBeUndefined();
+  await f.db.conversationMember.updateMany({
+    where: { userId: f.bob, conversationId: other.slice("conversation:".length) },
+    data: { leftAt: new Date() },
+  });
+  expect((await load(other)).selectedItem).toBeUndefined();
+});

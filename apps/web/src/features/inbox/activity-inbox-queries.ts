@@ -35,7 +35,11 @@ export const ACTIVITY_INBOX_QUERY_PREFIX = ["activity-inbox"] as const;
 
 export const ACTIVITY_INBOX_LISTS_KEY = [...ACTIVITY_INBOX_QUERY_PREFIX, "list"] as const;
 
-export const activityInboxQuery = (workspaceId: string, filter: ActivityInboxFilter) =>
+export const activityInboxQuery = (
+  workspaceId: string,
+  filter: ActivityInboxFilter,
+  selected?: { current: string | undefined },
+) =>
   infiniteQueryOptions({
     queryKey: [
       ...ACTIVITY_INBOX_LISTS_KEY,
@@ -44,7 +48,14 @@ export const activityInboxQuery = (workspaceId: string, filter: ActivityInboxFil
       ...(filter === "all" ? ["unread-first-v1"] : []),
     ],
     queryFn: ({ pageParam, signal }) =>
-      loadActivityInbox({ data: { filter, cursor: pageParam }, signal }),
+      loadActivityInbox({
+        data: {
+          filter,
+          cursor: pageParam,
+          selectedKey: filter === "all" && !pageParam ? selected?.current : undefined,
+        },
+        signal,
+      }),
     initialPageParam: undefined as ActivityInboxCursor | undefined,
     getNextPageParam: (page) => page.nextCursor ?? undefined,
     structuralSharing: (held: unknown, next: unknown) =>
@@ -87,7 +98,7 @@ export type ActivityCompletionItem = Pick<
 type ActivityCompletionPage<Item extends ActivityCompletionItem = ActivityCompletionItem> = Pick<
   ActivityInboxPage,
   "unreadItemCount" | "unreadMentionItemCount" | "activeItemCount"
-> & { unreadArtifactItemCount?: number; items: Item[]; pinned?: Item[] };
+> & { unreadArtifactItemCount?: number; items: Item[]; pinned?: Item[]; selectedItem?: Item };
 
 export async function cancelActivityInboxListReads(
   queryClient: QueryClient,
@@ -103,7 +114,14 @@ export function projectPendingActivityCompletions<
   let projected = data;
   for (const item of items) {
     const matches = (entry: ActivityCompletionItem) => entry.key === item.key;
-    if (projected.pages.some((page) => page.items.some(matches) || page.pinned?.some(matches))) {
+    if (
+      projected.pages.some(
+        (page) =>
+          page.items.some(matches) ||
+          page.pinned?.some(matches) ||
+          (page.selectedItem && matches(page.selectedItem)),
+      )
+    ) {
       projected = withoutItem(projected, item);
     }
   }
@@ -119,6 +137,7 @@ function withoutItem<
     ...data,
     pages: data.pages.map((page) => ({
       ...page,
+      ...(page.selectedItem?.key === item.key ? { selectedItem: undefined } : {}),
       items: page.items.filter((entry) => entry.key !== item.key),
       ...(page.pinned ? { pinned: page.pinned.filter((entry) => entry.key !== item.key) } : {}),
       unreadItemCount: Math.max(0, page.unreadItemCount - (item.unreadCount > 0 ? 1 : 0)),

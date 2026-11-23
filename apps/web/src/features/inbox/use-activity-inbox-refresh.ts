@@ -22,16 +22,18 @@ export function useActivityInboxRefresh({
   userId,
   workspaceId,
   filter,
+  selected,
   onRealtimeActivity,
 }: {
   userId: string;
   workspaceId: string;
   filter: ActivityInboxFilter;
+  selected: { current: string | undefined };
   onRealtimeActivity?: (refresh: () => void) => void;
 }) {
   const queryClient = useQueryClient();
   const restartAll = useCallback(async () => {
-    const options = activityInboxQuery(workspaceId, "all");
+    const options = activityInboxQuery(workspaceId, "all", selected);
     const cached = queryClient.getQueryCache().find({ queryKey: options.queryKey, exact: true });
     if (!cached?.isActive()) {
       await queryClient.invalidateQueries({
@@ -45,7 +47,7 @@ export function useActivityInboxRefresh({
     await queryClient
       .fetchInfiniteQuery({ ...options, pages: 1, staleTime: 0 })
       .catch(() => undefined);
-  }, [queryClient, workspaceId]);
+  }, [queryClient, workspaceId, selected]);
   const refreshMatching = useCallback(
     (queryKey: readonly unknown[]) =>
       Promise.all([

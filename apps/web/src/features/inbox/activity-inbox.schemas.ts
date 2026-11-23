@@ -29,6 +29,7 @@ export function activityCursorForFilter(
 export const activityInboxPageSchema = z.object({
   filter: z.enum(ACTIVITY_INBOX_FILTERS),
   cursor: activityInboxCursorSchema.optional(),
+  selectedKey: z.string().min(1).max(64).optional(),
 });
 
 export const ACTIVITY_MAX_TIME = Date.UTC(2100, 0, 1);

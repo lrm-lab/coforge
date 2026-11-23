@@ -42,16 +42,23 @@ export class ActivityInbox {
   async list(
     workspaceId: string,
     userId: string,
-    options: { filter: ActivityInboxFilter; cursor?: ActivityInboxCursor; limit?: number },
+    options: {
+      filter: ActivityInboxFilter;
+      cursor?: ActivityInboxCursor;
+      limit?: number;
+      selectedKey?: string;
+    },
   ) {
     await this.authorize(workspaceId, userId);
     const loadedAt = new Date();
     const unreadFirst = options.filter === "all";
     const cursor = activityCursorForFilter(options.filter, options.cursor);
     const limit = clampPageLimit(options.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+    const selectedKey = unreadFirst && !cursor ? options.selectedKey : undefined;
     const [rows, artifactRows] = await Promise.all([
       this.db.$queryRaw<ActivityPageRow[]>(
         activityPageSql(workspaceId, userId, {
+          selectedKey: selectedKey?.startsWith("artifact:") ? undefined : selectedKey,
           filter: options.filter,
           cursor,
           limit,
@@ -59,6 +66,7 @@ export class ActivityInbox {
       ),
       this.db.$queryRaw<ArtifactListedRow[]>(
         artifactActivityPageSql(workspaceId, userId, {
+          selectedKey: selectedKey?.startsWith("artifact:") ? selectedKey : undefined,
           filter: options.filter,
           cursor,
           limit,
@@ -89,13 +97,18 @@ export class ActivityInbox {
     ].sort(compareActivityOrder);
     const shown = ordered.slice(0, limit);
     const last = ordered.length > limit ? shown.at(-1)! : null;
-    const shownArtifacts = shown.flatMap(({ row }) => ("artifactId" in row ? [row] : []));
+    const extra =
+      selectedKey && !shown.some((entry) => entry.key === selectedKey)
+        ? ordered.find((entry) => entry.key === selectedKey)
+        : undefined;
+    const hydrate = extra ? [...shown, extra] : shown;
+    const shownArtifacts = hydrate.flatMap(({ row }) => ("artifactId" in row ? [row] : []));
     const [conversations, artifacts, pinned] = await Promise.all([
       hydrateConversationRows(
         this.db,
         workspaceId,
         userId,
-        shown.flatMap(({ row }) => ("artifactId" in row ? [] : [row])),
+        hydrate.flatMap(({ row }) => ("artifactId" in row ? [] : [row])),
       ),
       hydrateArtifactItems(this.db, workspaceId, userId, shownArtifacts),
       pins.length > 0 ? hydrateConversationRows(this.db, workspaceId, userId, pins) : [],
@@ -103,9 +116,10 @@ export class ActivityInbox {
     const byKey = new Map<string, (typeof conversations)[number] | (typeof artifacts)[number]>(
       [...conversations, ...artifacts].map((item) => [item.key, item]),
     );
-    const missing = shownArtifacts.filter((row) => !byKey.has(row.key));
+    const missing = shownArtifacts.filter((row) => row.key !== extra?.key && !byKey.has(row.key));
     const without = (count: (row: ArtifactListedRow) => boolean) => missing.filter(count).length;
     return {
+      ...(extra ? { selectedItem: byKey.get(extra.key) } : {}),
       items: shown.flatMap(({ key }) => byKey.get(key) ?? []),
       pinned,
       unreadItemCount:

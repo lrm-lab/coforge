@@ -102,8 +102,9 @@ export function ActivityInboxView({
   useLayoutEffect(() => {
     listScroll.current?.scrollTo({ top: 0 });
   }, [filter]);
+  const selection = useRef<string>(undefined);
   const query = useInfiniteQuery({
-    ...activityInboxQuery(workspaceId, filter),
+    ...activityInboxQuery(workspaceId, filter, selection),
     placeholderData: keepPreviousData,
   });
   const prefetchFilter = useActivityFilterPrefetch(filter);
@@ -133,8 +134,7 @@ export function ActivityInboxView({
     listed,
     opened,
     workspaceId,
-    projectedData?.pages.at(-1)?.nextCursor,
-    pinned,
+    firstPage?.selectedItem,
   );
   const onDoneStarted = useCallback(
     (item: ActivityCompletionItem) => {
@@ -148,6 +148,7 @@ export function ActivityInboxView({
     () => openedItemKey([...pinned, ...items], opened),
     [pinned, items, opened],
   );
+  selection.current = currentKey ?? selected;
   const taskAlone =
     opened?.taskAlone && opened.task !== undefined ? { ...opened, task: opened.task } : undefined;
   const pane = taskAlone ? undefined : opened;
@@ -179,6 +180,7 @@ export function ActivityInboxView({
     userId: user.id,
     workspaceId,
     filter,
+    selected: selection,
     onRealtimeActivity,
   });
   refreshAfterDoneRef.current = refreshAfterDone;

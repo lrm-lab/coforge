@@ -67,7 +67,12 @@ function afterSql(cursor: ActivityInboxCursor | undefined) {
 export function activityPageSql(
   workspaceId: string,
   userId: string,
-  options: { filter: ActivityInboxFilter; cursor?: ActivityInboxCursor; limit: number },
+  options: {
+    filter: ActivityInboxFilter;
+    cursor?: ActivityInboxCursor;
+    limit: number;
+    selectedKey?: string;
+  },
 ) {
   const unreadFirst = options.filter === "all";
   return Prisma.sql`
@@ -81,6 +86,14 @@ export function activityPageSql(
       LIMIT ${options.limit + 1}
     ), listed AS (
       SELECT FALSE AS "isPin", page.* FROM page
+      ${
+        options.selectedKey
+          ? Prisma.sql`UNION ALL
+          SELECT FALSE AS "isPin", items.* FROM items
+          WHERE items."key" = ${options.selectedKey} AND items."pastDone" AND ${viewSql(options.filter)}
+            AND NOT EXISTS (SELECT 1 FROM page WHERE page."key" = items."key")`
+          : Prisma.empty
+      }
       ${pinsSql(options.filter, options.cursor)}
     ), counts AS (
       SELECT

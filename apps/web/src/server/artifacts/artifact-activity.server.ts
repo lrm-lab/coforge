@@ -95,7 +95,12 @@ function viewSql(filter: ActivityInboxFilter) {
 export function artifactActivityPageSql(
   workspaceId: string,
   userId: string,
-  options: { filter: ActivityInboxFilter; cursor?: ActivityInboxCursor | undefined; limit: number },
+  options: {
+    filter: ActivityInboxFilter;
+    cursor?: ActivityInboxCursor | undefined;
+    limit: number;
+    selectedKey?: string;
+  },
 ) {
   const { cursor } = options;
   const unreadFirst = options.filter === "all";
@@ -145,7 +150,15 @@ export function artifactActivityPageSql(
     )
     SELECT counts.*, page."artifactId", page."key", page."latestAt", page."hasUnread",
       page."unreadMention"
-    FROM counts LEFT JOIN page ON TRUE
+    FROM counts LEFT JOIN ${
+      options.selectedKey
+        ? Prisma.sql`(
+        SELECT * FROM page UNION ALL
+        SELECT * FROM listed WHERE listed."key" = ${options.selectedKey}
+          AND NOT EXISTS (SELECT 1 FROM page WHERE page."key" = listed."key")
+      ) page`
+        : Prisma.sql`page`
+    } ON TRUE
     ORDER BY ${unreadFirst ? Prisma.sql`page."hasUnread" DESC NULLS LAST,` : Prisma.empty}
       page."latestAt" DESC NULLS LAST, page."key" COLLATE "C" DESC`;
 }
