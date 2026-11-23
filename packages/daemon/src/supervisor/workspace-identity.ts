@@ -7,6 +7,10 @@ export const WORKSPACE_IDENTITY_FILE = "workspace-identities.json";
 
 export const MIN_AGENT_UID = 20_000;
 
+/** Where the container mounts the state volume, and the path the boot script and
+ * `dockerServiceCreateArgs` use instead when an agent uid has to reach it. */
+export const CONTAINER_STATE_MOUNT = "/root/.coforge";
+
 const MAX_AGENT_UID = 65_000;
 
 export function isUsableIdentity(value: unknown): value is WorkspaceIdentity {
@@ -51,6 +55,18 @@ export function canDropPrivileges(
 
 export type SpawnIdentity = { identity: WorkspaceIdentity; directory: string };
 
+export function aliasPath(path: string, volumeRoot: string | undefined): string {
+  if (!volumeRoot || volumeRoot === CONTAINER_STATE_MOUNT) return path;
+  if (path === CONTAINER_STATE_MOUNT) return volumeRoot;
+  return path.startsWith(`${CONTAINER_STATE_MOUNT}/`)
+    ? `${volumeRoot}${path.slice(CONTAINER_STATE_MOUNT.length)}`
+    : path;
+}
+
+export function profileRoot(stateRoot: string, volumeRoot: string | undefined): string {
+  return volumeRoot ? join(volumeRoot, "ws") : stateRoot;
+}
+
 export async function resolveSpawnIdentity(input: {
   stateRoot: string;
   workspaceId: string;
@@ -59,7 +75,10 @@ export async function resolveSpawnIdentity(input: {
   statOwner?: (path: string) => Promise<number | undefined>;
 }): Promise<SpawnIdentity | undefined> {
   if (!canDropPrivileges(input.getuid ?? (() => process.getuid?.()))) return undefined;
-  const identity = await resolveWorkspaceIdentity(input.stateRoot, input.workspaceId);
+  const identity = await resolveWorkspaceIdentity(
+    profileRoot(input.stateRoot, input.volumeRoot),
+    input.workspaceId,
+  );
   if (!identity || !input.volumeRoot) return undefined;
   const directory = workspaceDirectory(input.volumeRoot, input.workspaceId);
   const owner = await (input.statOwner ?? ownerOf)(directory);
