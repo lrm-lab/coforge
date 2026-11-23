@@ -22,7 +22,7 @@ test("the channel name keeps its room and the description stays out of the heade
   const { browser, evaluate } = browserSession(browserPath, `channel-header-name-${process.pid}`);
   const header = `document.querySelector('[aria-label="Channel details and settings"]')?.closest("header")`;
   const measure = `(() => {
-    const name = ${header}.querySelector("h1");
+    const name = ${header}.querySelector("[data-channel-name]");
     const actions = document.querySelector('[aria-label="Channel details and settings"]');
     return {
       nameWhole: name.scrollWidth <= name.clientWidth,
@@ -47,9 +47,10 @@ test("the channel name keeps its room and the description stays out of the heade
   const workspacePath = `/en/w/${membership.workspace.slug}`;
   const workspaceId = membership.workspaceId;
   const description = "Questions and results for every interface change, ".repeat(6).trim();
+  const ordinaryName = `e2e-${process.pid.toString(36).padStart(5, "0")}`;
   const channels = await Promise.all(
-    [`e2e-name-${process.pid}`, `e2e-name-${"very-long-".repeat(12)}${process.pid}`].map(
-      (channelName) => db.conversation.create({ data: { workspaceId, channelName, description } }),
+    [ordinaryName, `e2e-name-${"very-long-".repeat(12)}${process.pid}`].map((channelName) =>
+      db.conversation.create({ data: { workspaceId, channelName, description } }),
     ),
   );
   const [ordinary, overlong] = channels;
