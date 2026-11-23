@@ -78,7 +78,7 @@ export function ComputerRuntimeList({
 
   return (
     <>
-      <ul className="flex flex-wrap gap-1.5">
+      <ul className="flex flex-wrap gap-1.5 any-pointer-coarse:gap-y-5">
         {computer.runtimes.map((runtime) => {
           const provider = runtime.provider;
           const login = runtimeLoginChip({

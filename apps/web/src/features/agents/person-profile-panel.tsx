@@ -129,7 +129,7 @@ export function PersonProfilePanel({
   const profile = person.data;
   return (
     <aside aria-label={profile.displayName} className="flex min-h-0 flex-1 flex-col">
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-secondary px-5">
+      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-secondary px-5 any-pointer-coarse:gap-3">
         {back && <BackButton back={back} />}
         <ActorAvatar
           presence
@@ -144,7 +144,6 @@ export function PersonProfilePanel({
         <ButtonUtility
           icon={MessageSquare}
           size="sm"
-          className="any-pointer-coarse:min-h-11 any-pointer-coarse:min-w-11"
           tooltip={m.agent_profile_panel_message()}
           onClick={() => void openDirectConversation({ userId: profile.id })}
         />
@@ -163,7 +162,7 @@ function BackButton({ back }: { back: PanelBack }) {
       icon={ArrowLeft}
       size="sm"
       color="tertiary"
-      className="-ms-1.5 any-pointer-coarse:min-h-11 any-pointer-coarse:min-w-11 [&_svg]:rtl:rotate-180"
+      className="-ms-1.5 [&_svg]:rtl:rotate-180"
       tooltip={back.label}
       aria-label={back.label}
       onClick={back.onPress}
@@ -177,7 +176,7 @@ function CloseButton({ onClose }: { onClose: () => void }) {
       icon={X}
       size="sm"
       color="tertiary"
-      className="-me-1.5 any-pointer-coarse:min-h-11 any-pointer-coarse:min-w-11"
+      className="-me-1.5"
       tooltip={m.controls_close()}
       onClick={onClose}
     />

@@ -173,7 +173,7 @@ export function AgentCard({
             @{member.name}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1 any-pointer-coarse:gap-2">
           {member.canMessage && (
             <Button
               size="sm"
@@ -188,7 +188,6 @@ export function AgentCard({
               icon={DotsVertical}
               size="sm"
               color="tertiary"
-              className="any-pointer-coarse:min-h-11 any-pointer-coarse:min-w-11"
               tooltip={m.member_agent_actions({ name: member.displayName })}
               isDisabled={!canEdit && !onDelete}
             />

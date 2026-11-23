@@ -183,7 +183,7 @@ export function RuntimeUsage({
         <AriaButton
           aria-label={label}
           className={cn(
-            "relative cursor-pointer any-pointer-coarse:min-h-11 any-pointer-coarse:inline-flex any-pointer-coarse:items-center any-pointer-coarse:after:absolute any-pointer-coarse:after:-inset-x-1 any-pointer-coarse:after:-inset-y-2",
+            "relative cursor-pointer any-pointer-coarse:after:absolute any-pointer-coarse:after:top-1/2 any-pointer-coarse:after:left-1/2 any-pointer-coarse:after:size-full any-pointer-coarse:after:min-h-11 any-pointer-coarse:after:min-w-11 any-pointer-coarse:after:-translate-x-1/2 any-pointer-coarse:after:-translate-y-1/2",
             triggerClassName ?? DEFAULT_TRIGGER_CLASS_NAME,
           )}
         >

@@ -51,13 +51,13 @@ export function AgentProfileHeader({
   const message = () => void openDirectConversation({ agentId: agent.id });
   const Name = pageHeading ? "h1" : "p";
   const header = (
-    <header className="@container/agent-header flex h-12 shrink-0 items-center gap-2 px-5 py-0">
+    <header className="@container/agent-header flex h-12 shrink-0 items-center gap-2 px-5 py-0 any-pointer-coarse:gap-3">
       {back && (
         <ButtonUtility
           icon={ArrowLeft}
           size="sm"
           color="tertiary"
-          className="-ms-1.5 any-pointer-coarse:min-h-11 any-pointer-coarse:min-w-11 [&_svg]:rtl:rotate-180"
+          className="-ms-1.5 [&_svg]:rtl:rotate-180"
           tooltip={back.label}
           aria-label={back.label}
           onClick={back.onPress}
@@ -91,12 +91,11 @@ export function AgentProfileHeader({
         {agent.displayName}
       </Name>
       {deleted && <DeletedAgentLabel />}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 any-pointer-coarse:gap-3">
         {canMessage && (
           <ButtonUtility
             icon={MessageSquare}
             size="sm"
-            className="any-pointer-coarse:min-h-11 any-pointer-coarse:min-w-11"
             tooltip={m.agent_profile_panel_message()}
             onClick={message}
           />
@@ -104,13 +103,13 @@ export function AgentProfileHeader({
         {!deleted && (
           <>
             <AgentProfileActionsMenu
-              className="flex any-pointer-coarse:min-h-11 any-pointer-coarse:min-w-11 @lg/agent-header:hidden"
+              className="flex items-center @lg/agent-header:hidden"
               controls={controls}
             />
             <ButtonUtility
               icon={controls.isOnline ? Stop : Play}
               size="sm"
-              className="hidden any-pointer-coarse:min-h-11 any-pointer-coarse:min-w-11 @lg/agent-header:inline-flex"
+              className="hidden @lg/agent-header:inline-flex"
               isDisabled={controls.startStopBusy}
               tooltip={
                 controls.isOnline
@@ -126,7 +125,7 @@ export function AgentProfileHeader({
             <ButtonUtility
               icon={RotateCcw}
               size="sm"
-              className="hidden any-pointer-coarse:min-h-11 any-pointer-coarse:min-w-11 @lg/agent-header:inline-flex"
+              className="hidden @lg/agent-header:inline-flex"
               isDisabled={controls.controlInFlight}
               tooltip={m.agent_control_restart_reset_tooltip()}
               onClick={() => controls.openRestart("restart")}
@@ -138,7 +137,7 @@ export function AgentProfileHeader({
         icon={X}
         size="sm"
         color="tertiary"
-        className="-me-1.5 any-pointer-coarse:min-h-11 any-pointer-coarse:min-w-11"
+        className="-me-1.5"
         tooltip={m.controls_close()}
         onClick={onClose}
       />
