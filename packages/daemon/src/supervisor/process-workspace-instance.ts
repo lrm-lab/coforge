@@ -65,7 +65,7 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
     this.#legacyRecordPath = join(config.stateDirectory, LEGACY_RECORD_FILE);
   }
 
-  async ensureStarted(beforeLaunch?: () => Promise<void>): Promise<number> {
+  async ensureStarted(beforeLaunch?: () => Promise<boolean | void>): Promise<number> {
     const current = await this.#readRecord();
     if (current && this.isAlive(current.mainPid)) return current.mainPid;
 

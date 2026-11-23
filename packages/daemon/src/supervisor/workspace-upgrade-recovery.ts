@@ -17,7 +17,7 @@ import type { NativeProcessIdentity } from "./workspace-instance";
 type Binding = Pick<ManagedBinding, "workspaceId" | "computerId" | "serverHttpUrl">;
 type LaunchIdentity = Pick<NativeProcessIdentity, "mainPid" | "invocationId">;
 export type WorkspaceRecoveryLaunch = {
-  beforeLaunch: () => Promise<void>;
+  beforeLaunch: () => Promise<boolean>;
   cancelAttribution: () => Promise<void>;
   observeLaunch: (identity: LaunchIdentity) => Promise<void>;
 };
@@ -224,12 +224,12 @@ export class WorkspaceUpgradeRecovery {
     let authorization: { authorizedAt: number; launch?: LaunchIdentity } | undefined;
     const { invocationId, processId, daemonId } = await run({
       beforeLaunch: async () => {
-        if (attempt.expiresAt <= Date.now() || (await hasReadyReceipt(receipt))) return;
+        if (attempt.expiresAt <= Date.now() || (await hasReadyReceipt(receipt))) return false;
         const at = performance.timeOrigin + performance.now();
-        if (await save({ ...evidence, state: "armed", authorizedAt: at })) {
-          authorization = { authorizedAt: at };
-          this.#pending.set(workspaceId, receipt);
-        }
+        if (!(await save({ ...evidence, state: "armed", authorizedAt: at }))) return false;
+        authorization = { authorizedAt: at };
+        this.#pending.set(workspaceId, receipt);
+        return true;
       },
       cancelAttribution: async () => {
         if (!authorization) return;

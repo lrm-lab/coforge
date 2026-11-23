@@ -55,38 +55,15 @@ export class SystemdWorkspaceInstance {
   }
 
   async ensureStarted(
-    beforeLaunch?: () => Promise<void>,
+    beforeLaunch?: () => Promise<boolean | void>,
     attribution?: WorkspaceLaunchAttribution,
   ): Promise<number> {
     if (beforeLaunch && attribution && !(await this.#show()).exists) {
-      const { command, environment } = workspaceService(this.config);
-      const description = `CoForge Workspace ${this.config.workspaceId} (upgrade ${crypto.randomUUID()})`;
-      const args = [
-        `--unit=${this.unitName}`,
-        `--description=${description}`,
-        ...serviceProperties.map((property) => `--property=${property}`),
-        ...environment.map((assignment) => `--setenv=${assignment}`),
-        "--",
-        ...command.map((part, index) => (index === 0 ? part : part.replaceAll("$", "$$"))),
-      ];
-      await beforeLaunch();
-      let accepted = false;
-      try {
-        accepted = (await this.runTransient(args)) === 0;
-      } catch {}
-      if (accepted) {
-        try {
-          const observed = await this.#waitForMainPid();
-          if (observed.description === description && observed.transient) {
-            await attribution.observeLaunch(observed);
-          } else await attribution.cancelAttribution();
-          return observed.mainPid;
-        } catch (error) {
-          await attribution.cancelAttribution();
-          throw error;
-        }
+      const service = workspaceService(this.config);
+      if ((await beforeLaunch()) === true) {
+        const pid = await this.#startTransient(service, attribution);
+        if (pid !== undefined) return pid;
       }
-      await attribution.cancelAttribution();
     }
     await this.write(this.unitPath, workspaceUnit(this.config));
     await this.#runChecked(["daemon-reload"], "reload the systemd user manager");
@@ -94,6 +71,38 @@ export class SystemdWorkspaceInstance {
     if (state.active && state.mainPid > 0) return state.mainPid;
     await this.#runChecked(["start", this.unitName], `start ${this.unitName}`);
     return (await this.#waitForMainPid()).mainPid;
+  }
+
+  async #startTransient(
+    { command, environment }: ReturnType<typeof workspaceService>,
+    attribution: WorkspaceLaunchAttribution,
+  ): Promise<number | undefined> {
+    const description = `CoForge Workspace ${this.config.workspaceId} (upgrade ${crypto.randomUUID()})`;
+    const args = [
+      `--unit=${this.unitName}`,
+      `--description=${description}`,
+      ...serviceProperties.map((property) => `--property=${property}`),
+      ...environment.map((assignment) => `--setenv=${assignment}`),
+      "--",
+      ...command.map((part, index) => (index === 0 ? part : part.replaceAll("$", "$$"))),
+    ];
+    let accepted = false;
+    try {
+      accepted = (await this.runTransient(args)) === 0;
+    } catch {}
+    if (accepted) {
+      try {
+        const observed = await this.#waitForMainPid();
+        if (observed.description === description && observed.transient) {
+          await attribution.observeLaunch(observed);
+        } else await attribution.cancelAttribution();
+        return observed.mainPid;
+      } catch (error) {
+        await attribution.cancelAttribution();
+        throw error;
+      }
+    }
+    await attribution.cancelAttribution();
   }
 
   async stop(): Promise<void> {

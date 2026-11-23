@@ -48,7 +48,7 @@ export type WorkspaceLaunchAttribution = {
 
 export interface WorkspaceInstance {
   ensureStarted(
-    beforeLaunch?: () => Promise<void>,
+    beforeLaunch?: () => Promise<boolean | void>,
     attribution?: WorkspaceLaunchAttribution,
   ): Promise<number>;
   stop(): Promise<void>;

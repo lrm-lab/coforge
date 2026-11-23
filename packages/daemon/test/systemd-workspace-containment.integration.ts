@@ -53,6 +53,7 @@ test("Workspace pre-readiness SIGKILL cleans live detached descendants without a
     let cancelled = 0;
     const arm = async () => {
       authorized += 1;
+      return true;
     };
     const observe = {
       async cancelAttribution() {
@@ -87,6 +88,7 @@ test("Workspace pre-readiness SIGKILL cleans live detached descendants without a
           ? await a.ensureStarted(async () => {
               await a.ensureStarted();
               external = await a.identity();
+              return true;
             }, observe)
           : await a.ensureStarted();
       if (iteration === 0) {

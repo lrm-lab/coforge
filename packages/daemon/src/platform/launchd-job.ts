@@ -43,7 +43,7 @@ export class LaunchdJob {
     this.#platform = config.platform ?? nativeLaunchd;
   }
 
-  async ensureStarted(beforeLaunch?: () => Promise<void>): Promise<NativeProcessIdentity> {
+  async ensureStarted(beforeLaunch?: () => Promise<unknown>): Promise<NativeProcessIdentity> {
     const existing = await this.identity();
     if (existing?.active) return existing;
     if (!(await this.#platform.jobs()).has(this.config.label)) {

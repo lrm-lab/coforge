@@ -20,7 +20,15 @@ import {
 
 afterEach(cleanupFixtures);
 
-test.each(["none", "same-name refusal", "unknown result", "replacement"] as const)(
+const recoveryCases = [
+  "none",
+  "same-name refusal",
+  "unknown result",
+  "replacement",
+  "no persisted grant",
+] as const;
+
+test.each(recoveryCases)(
   "systemd recovery after Installer settlement with a native race: %s",
   async (race) => {
     const { installRoot, stateDirectory, directory, requestId, context, version } = await fixture();
@@ -67,6 +75,10 @@ test.each(["none", "same-name refusal", "unknown result", "replacement"] as cons
       let child: ReturnType<typeof spawnWorkspaceActivation> | undefined;
       let hasUnitFile = false;
       const raced = race !== "none" && binding.workspaceId === "beta";
+      const grantWriteFails = raced && race === "no persisted grant";
+      if (grantWriteFails) await mkdir(record);
+      let transientStarts = 0;
+      let ordinaryStarts = 0;
       let description = "";
       const instance: WorkspaceInstance = new SystemdWorkspaceInstance(
         {
@@ -78,8 +90,10 @@ test.each(["none", "same-name refusal", "unknown result", "replacement"] as cons
           unitDirectory: stateDirectory,
         },
         async ([command]) => {
-          if (command === "start" && !child)
+          if (command === "start" && !child) {
+            ordinaryStarts += 1;
             child = spawnWorkspaceActivation(installRoot, version, state);
+          }
           return 0;
         },
         async () => {
@@ -93,6 +107,8 @@ test.each(["none", "same-name refusal", "unknown result", "replacement"] as cons
               }
             : { code: 4, stdout: "LoadState=not-found\n" },
         async ([, descriptionArg]) => {
+          transientStarts += 1;
+          if (grantWriteFails) return 1;
           expect(hasUnitFile).toBe(false);
           expect(await readUpgradeProgressFile(record)).toMatchObject({ state: "armed" });
           child = spawnWorkspaceActivation(installRoot, version, state);
@@ -112,6 +128,9 @@ test.each(["none", "same-name refusal", "unknown result", "replacement"] as cons
           return { processId, invocationId, daemonId: handshake.daemonId };
         });
         expect(await workspaceActivationResult(child!)).toEqual(raced ? null : activation);
+        expect(transientStarts).toBe(grantWriteFails ? 0 : 1);
+        expect(ordinaryStarts).toBe(grantWriteFails ? 1 : 0);
+        if (grantWriteFails) continue;
         expect(await readUpgradeProgressFile(record)).toMatchObject({
           state: raced ? "failed" : "confirmed",
           binding: { workspaceId: binding.workspaceId, computerId: binding.computerId },
