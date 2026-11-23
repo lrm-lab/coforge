@@ -256,8 +256,12 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
   async #readAt(path: string): Promise<InstanceRecord | null> {
     try {
       const bytes = await Bun.file(path).arrayBuffer();
+      const text = Buffer.from(bytes).toString("utf8");
+      // The record is pre-created so the child owns it before it runs (#591); a zero-byte file is
+      // therefore "no record yet", not a corrupt one.
+      if (text.trim() === "") return null;
       // Keep UTF-8 bytes explicit: BunFile.text() strips BOMs and detects UTF-16 records.
-      const value = JSON.parse(Buffer.from(bytes).toString("utf8")) as Partial<InstanceRecord>;
+      const value = JSON.parse(text) as Partial<InstanceRecord>;
       if (
         !Number.isSafeInteger(value.mainPid) ||
         (value.mainPid as number) <= 0 ||
