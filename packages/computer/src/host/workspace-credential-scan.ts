@@ -1,4 +1,4 @@
-import { lstat, open, readdir } from "node:fs/promises";
+import { open, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 export type WorkspaceCredentialFinding = {
@@ -83,6 +83,11 @@ export async function scanWorkspaceCredentials(
     }
     for (const entry of entries) {
       if (visited >= limits.maxFiles) break;
+      if (Date.now() - started >= limits.timeBudgetMs) {
+        truncated = true;
+        queue.length = 0;
+        break;
+      }
       const path = join(directory, entry.name);
       if (entry.isDirectory()) {
         if (depth + 1 < limits.maxDepth && !SKIPPED_DIRECTORY.has(entry.name))
@@ -90,7 +95,15 @@ export async function scanWorkspaceCredentials(
         continue;
       }
       if (entry.isSymbolicLink()) {
-        skippedSymlinkDirectories += 1;
+        const target = await stat(path).catch(() => null);
+        if (target?.isDirectory()) {
+          skippedSymlinkDirectories += 1;
+          continue;
+        }
+        if (!target?.isFile()) continue;
+        visited += 1;
+        const linked = await inspectFile(path, limits.maxBytes);
+        if (linked) findings.push(linked);
         continue;
       }
       if (!entry.isFile()) continue;
@@ -112,7 +125,7 @@ async function inspectFile(
 ): Promise<WorkspaceCredentialFinding | null> {
   let stats;
   try {
-    stats = await lstat(path);
+    stats = await stat(path);
   } catch {
     return null;
   }
