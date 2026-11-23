@@ -171,7 +171,7 @@
       "dependencies": {
         "@earendil-works/pi-ai": "1.6.0",
         "@earendil-works/pi-coding-agent": "1.6.0",
-        "@logtape/logtape": "2.3.2",
+        "@logtape/logtape": "2.4.2",
         "@lrm/coforge-sdk": "workspace:*",
         "zod": "4.5.4",
       },
@@ -188,7 +188,7 @@
       "dependencies": {
         "@agentclientprotocol/sdk": "2.9.1",
         "@coforge/agent": "workspace:*",
-        "@logtape/logtape": "2.3.2",
+        "@logtape/logtape": "2.4.2",
         "@lrm/coforge-sdk": "workspace:*",
       },
       "devDependencies": {
@@ -248,9 +248,9 @@
       "version": "0.1.0",
       "dependencies": {
         "@coforge/agent": "workspace:*",
-        "@logtape/file": "2.3.2",
-        "@logtape/logtape": "2.3.2",
-        "@logtape/redaction": "2.3.2",
+        "@logtape/file": "2.4.2",
+        "@logtape/logtape": "2.4.2",
+        "@logtape/redaction": "2.4.2",
         "@lrm/coforge": "workspace:*",
         "@lrm/coforge-daemon": "workspace:*",
         "@lrm/coforge-sdk": "workspace:*",
@@ -270,9 +270,9 @@
       "version": "0.1.0",
       "dependencies": {
         "@coforge/agent": "workspace:*",
-        "@logtape/file": "2.3.2",
-        "@logtape/logtape": "2.3.2",
-        "@logtape/redaction": "2.3.2",
+        "@logtape/file": "2.4.2",
+        "@logtape/logtape": "2.4.2",
+        "@logtape/redaction": "2.4.2",
         "@lrm/coforge-anvil": "workspace:*",
         "@lrm/coforge-sdk": "workspace:*",
         "centrifuge": "5.8.0",
@@ -699,11 +699,11 @@
 
     "@lobehub/icons-static-svg": ["@lobehub/icons-static-svg@1.95.0", "", {}, "sha512-VSObF66DUVQe0EK3xbIoFcw+Fcia1+bLVFkMsQbmz0zCceMxPmoLImS5VM5SM7zL+/NarZ11/ySNfkekcomIkQ=="],
 
-    "@logtape/file": ["@logtape/file@2.3.2", "", { "peerDependencies": { "@logtape/logtape": "^2.3.2" } }, "sha512-yCUuznM5U8n43p6cDV8FFNTOkjKC2lEWGDMvGWbCIxbQ0JqIlhYdiu3b9ITV6z87PwGLxko7Ru54SgOSze6QCA=="],
+    "@logtape/file": ["@logtape/file@2.4.2", "", { "peerDependencies": { "@logtape/logtape": "^2.4.2" } }, "sha512-Wit1GrwBQ1mCERREsBX5C4TKe3SWoAZ2bFBh7e4sbAnh1w2rOjD46puW+/f/A3G7HFIsAYlL03/r1/9CeKZ0XQ=="],
 
-    "@logtape/logtape": ["@logtape/logtape@2.3.2", "", {}, "sha512-SfxHfSdDlTp6tLpYP5uezNitSCTQUB3FZ1MXDbgDBN9t9kvF+XL0rOGTIa/pJcDMy1o9FELaZ25E/Ypmsf5fNQ=="],
+    "@logtape/logtape": ["@logtape/logtape@2.4.2", "", {}, "sha512-YJyC1gEMgWmTqJTRtKkjgasEbi8/0gP7Dj8n6bL46gQIAhpTY8uXJ+1QYMOgF5asotlGMvy3G7ejXUe45Yd1MQ=="],
 
-    "@logtape/redaction": ["@logtape/redaction@2.3.2", "", { "peerDependencies": { "@logtape/logtape": "^2.3.2" } }, "sha512-tLiLxtMm99oKP6g19+yBUmk54HawuVKh4xlW9lAPhyayjisnJ9gwjihxjqd6lo0Bf090/gQvI9eJ3MWSS8w+aw=="],
+    "@logtape/redaction": ["@logtape/redaction@2.4.2", "", { "peerDependencies": { "@logtape/logtape": "^2.4.2" } }, "sha512-QERsPJYr+ZaHj+pPoGGMlDcpE+V27j05ImDyGRi6vxuAQ3uIBCJtUUrcs6jNwXWG90SEZw9C0dS0jeLFOayjrg=="],
 
     "@lrm/coforge": ["@lrm/coforge@workspace:packages/coforge"],
 
