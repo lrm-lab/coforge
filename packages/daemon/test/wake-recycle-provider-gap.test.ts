@@ -36,6 +36,7 @@ async function plan(gap: number | undefined) {
   const decision = await recycle.plan({
     agentId: "agent-a",
     provider: "codex",
+    configRevision: undefined,
     sessionId: "thread-1",
     sessionMode: "resume",
     hasResumePrompt: false,

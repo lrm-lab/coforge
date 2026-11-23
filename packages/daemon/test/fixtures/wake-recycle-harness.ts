@@ -78,10 +78,13 @@ export type HarnessOptions = {
   disposeGate?: Promise<void>;
   /** The first session's `dispose` fails, as a process that will not exit does. */
   disposeFails?: boolean;
-  /** The first attempt to create a session fails, as a spawn failure does. */
-  failFirstCreate?: boolean;
+  createError?: Error;
+  failCreateAttempt?: number;
+  reportBeforeFirstCreateError?: string;
+  configRevisions?: readonly number[];
   /** Holds the first session's creation open until it settles: a launch stays in flight. */
   createGate?: Promise<void>;
+  gateCreateAttempt?: number;
 };
 
 /** One Claude-like Agent whose sessions, session reads and briefings can be observed. */
@@ -121,20 +124,25 @@ export async function harness(options: HarnessOptions = {}) {
   const rejections: string[] = [];
   const acks: string[] = [];
   const factReads: Array<{ sessionId: string; envVars?: Readonly<Record<string, string>> }> = [];
-  let createFailed = false;
+  const attempts: Pick<AgentSessionOptions, "sessionId" | "sessionMode">[] = [];
   const createEntered = Promise.withResolvers<void>();
   const activityWaiters: Array<{ matches(a: AgentActivity): boolean; done(): void }> = [];
   const factsOf = "facts" in options ? options.facts : COLD;
   const provider: CodeAgentProvider = {
     provider: options.provider ?? config.provider,
     async createAgentSession(sessionOptions: AgentSessionOptions) {
-      if (sessions.length === 0 && options.createGate) {
+      attempts.push({
+        sessionId: sessionOptions.sessionId,
+        sessionMode: sessionOptions.sessionMode,
+      });
+      if (attempts.length === (options.gateCreateAttempt ?? 1) && options.createGate) {
         createEntered.resolve();
         await options.createGate;
       }
-      if (options.failFirstCreate && !createFailed) {
-        createFailed = true;
-        throw new Error("spawn failed");
+      if (attempts.length === options.failCreateAttempt) {
+        if (options.reportBeforeFirstCreateError)
+          await sessionOptions.onSessionId?.(options.reportBeforeFirstCreateError);
+        throw options.createError ?? new Error("spawn failed");
       }
       const listeners = new Set<(event: AgentRuntimeEvent) => void>();
       const exitListeners = new Set<() => void>();
@@ -218,6 +226,7 @@ export async function harness(options: HarnessOptions = {}) {
         async requestAgentLaunchConfig() {
           return {
             agentApiKey: `sk_agent_${"a".repeat(43)}`,
+            runtimeConfigRevision: options.configRevisions?.[attempts.length],
             ...(options.launchEnvVars ? { envVars: options.launchEnvVars } : {}),
           };
         },
@@ -260,7 +269,9 @@ export async function harness(options: HarnessOptions = {}) {
   });
   return {
     runtime,
+    agentDirectory,
     sessions,
+    attempts,
     activities,
     reports,
     statuses,

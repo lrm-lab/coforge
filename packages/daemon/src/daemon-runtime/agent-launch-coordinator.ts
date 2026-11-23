@@ -395,6 +395,7 @@ export class AgentLaunchCoordinator {
 
   /** Drops what the Agent was owed: a Stop a person made, or the Agent's delete. */
   dropOwedRecovery(agentId: string): void {
+    this.ports.wakeRecycle.forgetFailure(agentId);
     this.memory.review.forget(agentId);
     this.turnEndCompaction.noteTurnFinished(agentId);
     this.#liveWarmSweep.cancelWarmCheck(agentId);
@@ -409,6 +410,7 @@ export class AgentLaunchCoordinator {
 
   /** Drops every debt, as a whole-runtime stop does: the cloud's next Start is the source then. */
   clearOwedRecovery(): void {
+    this.ports.wakeRecycle.clearFailures();
     this.memory.review.clear();
     this.turnEndCompaction.disposeAll();
     this.#liveWarmSweep.stop();

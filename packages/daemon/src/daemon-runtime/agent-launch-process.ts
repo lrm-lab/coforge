@@ -135,6 +135,7 @@ export async function launchAgentProcess(
           agentId,
           provider: config.provider,
           envVars: launchConfig.envVars,
+          configRevision: launchConfig.runtimeConfigRevision,
           sessionId: reference.sessionId,
           sessionMode: reference.sessionMode,
           hasResumePrompt: request.resumePrompt !== undefined,
@@ -196,6 +197,18 @@ export async function launchAgentProcess(
         runtimeId: launch.launchId,
         startupSignal: launch.startupAbort?.signal,
         effectiveConfigRevision: launchConfig.runtimeConfigRevision,
+        onCreateSessionError: recycled
+          ? (error) => {
+              if (
+                current() &&
+                !ports.isStopping() &&
+                !ports.stops.stopping(agentId) &&
+                noticeSessionId === undefined &&
+                reference.sessionId === recycledSessionId
+              )
+                recycled.recordFailure(error);
+            }
+          : undefined,
         onSessionId: async (sessionId, replacedSessionId) => {
           if (
             sessionId &&

@@ -1,5 +1,6 @@
 import { getLogger } from "@logtape/logtape";
 import { thrownMessage, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import { isNonRetryableLaunchFailure } from "#src/agent-runtime/launch-failure";
 import { agentStartupInput } from "#src/agent-runtime/agent-startup";
 import { startupMemoryBlock } from "#src/agent-runtime/startup-memory-block";
 import {
@@ -18,12 +19,14 @@ import {
   type AgentInputQueue,
 } from "./runtime-launch-intent";
 const logger = getLogger(["coforge", "daemon", "runtime"]);
+const RECYCLE_FAILURE_TTL_MS = 6 * 60 * 60 * 1000;
 const BRIEFING_NOTE =
   "That is context carried over from your previous session, which was retired after sitting idle. Treat it as reference only and do not reply to it; your next input follows.";
 export type WakeRecycleRequest = Readonly<{
   agentId: string;
   provider: RuntimeProvider;
   envVars?: Readonly<Record<string, string>>;
+  configRevision: number | undefined;
   sessionId: string | undefined;
   sessionMode: "create" | "resume" | undefined;
   hasResumePrompt: boolean;
@@ -32,6 +35,7 @@ export type WakeRecycleRequest = Readonly<{
 export type RecycledWake = Readonly<{
   activityText: string;
   carriedMemoryBlock: boolean;
+  recordFailure(error: unknown): void;
 }>;
 export type WakeRecyclePorts = Readonly<{
   provider(provider: RuntimeProvider): CodeAgentProvider;
@@ -39,7 +43,14 @@ export type WakeRecyclePorts = Readonly<{
   hasQueuedDeliveries(agentId: string): boolean;
   readSummaryFacts?(agentId: string, sessionId: string): SessionResumeFacts | undefined;
 }>;
+type RecycleFailure = Readonly<{
+  sessionId: string;
+  provider: RuntimeProvider;
+  configRevision: number | undefined;
+  expiresAtMs: number;
+}>;
 export class WakeRecycle {
+  readonly #failures = new Map<string, RecycleFailure>();
   readonly #ports: WakeRecyclePorts;
   constructor(ports: WakeRecyclePorts) {
     this.#ports = ports;
@@ -49,6 +60,12 @@ export class WakeRecycle {
   }
   readSummaryFacts(agentId: string, sessionId: string): SessionResumeFacts | undefined {
     return this.#ports.readSummaryFacts?.(agentId, sessionId);
+  }
+  forgetFailure(agentId: string): void {
+    this.#failures.delete(agentId);
+  }
+  clearFailures(): void {
+    this.#failures.clear();
   }
   async plan(request: WakeRecycleRequest): Promise<RecycledWake | undefined> {
     try {
@@ -73,15 +90,35 @@ export class WakeRecycle {
     );
     const warmConfig = resolveWarmRecycleConfig(request.envVars, Bun.env);
     const supported = supportsSessionResume(provider);
-    const facts =
-      config.enabled && supported && !request.hasResumePrompt
-        ? await resolveSessionResumeFacts(provider, {
-            agentId,
-            sessionId,
-            ...(request.envVars ? { envVars: request.envVars } : {}),
-            readSummaryFacts: this.#ports.readSummaryFacts,
-          })
-        : undefined;
+    const canRecycle = config.enabled && supported && !request.hasResumePrompt;
+    const failure = this.#failures.get(agentId);
+    if (failure) {
+      if (
+        failure.sessionId !== sessionId ||
+        failure.provider !== request.provider ||
+        failure.configRevision !== request.configRevision ||
+        failure.expiresAtMs <= Date.now()
+      ) {
+        this.#failures.delete(agentId);
+      } else if (canRecycle) {
+        logger.info("Agent wake resumed its session", {
+          event: "agent.runtime.wake_recycle",
+          outcome: "resume",
+          reason: "recent_recycle_launch_failure",
+          agent_id: agentId,
+          session_id: sessionId,
+        });
+        return undefined;
+      }
+    }
+    const facts = canRecycle
+      ? await resolveSessionResumeFacts(provider, {
+          agentId,
+          sessionId,
+          ...(request.envVars ? { envVars: request.envVars } : {}),
+          readSummaryFacts: this.#ports.readSummaryFacts,
+        })
+      : undefined;
     const decision = decideWakeRecycle({
       config,
       warmConfig,
@@ -145,6 +182,15 @@ export class WakeRecycle {
     return {
       carriedMemoryBlock: memoryBlock !== undefined,
       activityText: `Starting a fresh ${runtimeDisplayName(request.provider)} session (${describeRecycledSession(decision.idleMs, decision.priorContextTokens)}) with a briefing`,
+      recordFailure: (error) => {
+        if (isNonRetryableLaunchFailure(error)) return;
+        this.#failures.set(agentId, {
+          sessionId,
+          provider: request.provider,
+          configRevision: request.configRevision,
+          expiresAtMs: Date.now() + RECYCLE_FAILURE_TTL_MS,
+        });
+      },
     };
   }
 }

@@ -1,5 +1,6 @@
 import { expect, setSystemTime, test } from "bun:test";
-import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
+import { mkdir, rm } from "node:fs/promises";
+import { RuntimeLoginRequiredError, type AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import type { AgentStartIntent } from "@lrm/coforge-sdk/internal";
 import {
   COLD,
@@ -13,6 +14,7 @@ import {
   sweepAfterLaunch,
   sweepWith,
   useWakeRecycleEnvironment,
+  type Harness,
   type HarnessOptions,
 } from "./fixtures/wake-recycle-harness";
 useWakeRecycleEnvironment();
@@ -115,22 +117,161 @@ test("a session whose last event is recent is not even read by the sweep", async
     expect(h.factReads).toEqual([]);
   });
 });
-test("a launch that fails after the decision keeps the old session id for the next attempt", async () => {
-  const { result: h } = await run({ failFirstCreate: true }, async (h) => {
-    setSystemTime(minutes(90));
-    const start = h.intent({ sessionId: "old-session", sessionMode: "resume" });
-    await expect(h.runtime.handleAgentStart(start)).rejects.toThrow("spawn failed");
-    expect(h.reports).toEqual([]);
-    await h.runtime.handleAgentStart(h.intent({ requestId: "start-1" }));
-    return h;
-  });
-  expect(h.factReads.map((read) => read.sessionId)).toEqual(["old-session", "old-session"]);
+test("a failed recycle resumes the original session on the next qualified wake", async () => {
+  const gate = Promise.withResolvers<void>();
+  const { result: h } = await run(
+    { failCreateAttempt: 1, createGate: gate.promise, gateCreateAttempt: 2 },
+    async (h) => {
+      setSystemTime(minutes(90));
+      const start = h.intent({ sessionId: "old-session", sessionMode: "resume" });
+      await expect(h.runtime.handleAgentStart(start)).rejects.toThrow("spawn failed");
+      expect(h.attempts).toEqual([{ sessionMode: "create", sessionId: undefined }]);
+      expect(h.reports).toEqual([]);
+      const resumed = h.runtime.handleAgentStart(h.intent());
+      await h.createEntered;
+      const joining = h.runtime.handleAgentStart(h.intent());
+      const delivery = h.deliver(1);
+      gate.resolve();
+      await Promise.all([resumed, joining, delivery]);
+      return h;
+    },
+  );
+  expect(h.attempts).toEqual([
+    { sessionMode: "create", sessionId: undefined },
+    { sessionMode: "resume", sessionId: "old-session" },
+  ]);
+  expect(h.factReads.map((read) => read.sessionId)).toEqual(["old-session"]);
   expect(h.sessions).toHaveLength(1);
-  expect(h.reports.at(-1)).toMatchObject({
-    sessionId: "native-1",
-    replacedSessionId: "old-session",
+  expect(h.reports).toHaveLength(1);
+  expect(h.reports[0]?.sessionId).toBe("old-session");
+  expect(h.reports[0]?.replacedSessionId).toBeUndefined();
+  expect(h.acks).toEqual(["delivery-1"]);
+  const inputs = h.sessions[0]!.inputs.join("\n");
+  expect(inputs.split("#general")).toHaveLength(2);
+  expect(inputs).not.toContain(PROVIDER_BRIEFING);
+  expect(inputs).not.toContain("You are starting a fresh session.");
+});
+
+test("the next message wakes the old session after a failed automatic recycle", async () => {
+  Bun.env[SWEEP_MS] = "5";
+  await run({ failCreateAttempt: 2 }, async (h, records) => {
+    await h.runtime.handleAgentStart(h.intent({ controlEpoch: 1, launchId: "launch-1" }));
+    setSystemTime(minutes(90));
+    await logged(records, sweepWith(1));
+    await expect(h.deliver(1)).rejects.toThrow("spawn failed");
+    expect(h.reports.map((report) => report.sessionId)).toEqual(["native-1"]);
+    setSystemTime(minutes(91));
+    await h.deliver(2);
+    expect(h.attempts.slice(1)).toEqual([
+      { sessionMode: "create", sessionId: undefined },
+      { sessionMode: "resume", sessionId: "native-1" },
+    ]);
+    expect(h.acks).toEqual(["delivery-1", "delivery-2"]);
+    expect(h.rejections).toEqual([]);
+    expect(h.sessions[1]?.inputs.filter((input) => input.includes("#general"))).toHaveLength(1);
+    expect(h.sessions[1]?.inputs.join("\n")).not.toContain(PROVIDER_BRIEFING);
+    expect(h.reports.every((report) => report.replacedSessionId === undefined)).toBe(true);
   });
 });
+
+const oldSession = { sessionId: "old-session", sessionMode: "resume" } as const;
+test("a work directory preparation failure leaves the next recycle eligible", async () => {
+  await run({}, async (h) => {
+    setSystemTime(minutes(90));
+    await rm(h.agentDirectory, { recursive: true });
+    await Bun.write(h.agentDirectory, "ordinary file");
+    await expect(h.runtime.handleAgentStart(h.intent(oldSession))).rejects.toThrow("EEXIST");
+    expect(h.attempts).toEqual([]);
+    expect(h.reports).toEqual([]);
+    await rm(h.agentDirectory);
+    await mkdir(h.agentDirectory);
+    await h.runtime.handleAgentStart(h.intent());
+    expect(h.attempts).toEqual([{ sessionMode: "create", sessionId: undefined }]);
+    expect(h.reports.at(-1)?.replacedSessionId).toBe("old-session");
+  });
+});
+
+const retryCases: {
+  name: string;
+  options?: HarnessOptions;
+  beforeRetry?: (h: Harness) => void | Promise<void>;
+  retry?: Partial<AgentStartIntent>;
+  nextFacts: string[];
+}[] = [
+  {
+    name: "after six hours",
+    beforeRetry: () => {
+      setSystemTime(minutes(450));
+    },
+    nextFacts: ["old-session"],
+  },
+  {
+    name: "for a different Agent with the same native ID",
+    retry: { ...oldSession, agentId: "agent-b" },
+    nextFacts: ["old-session"],
+  },
+  {
+    name: "for another native ID on the same Agent",
+    retry: { ...oldSession, sessionId: "another-session" },
+    nextFacts: ["another-session"],
+  },
+  {
+    name: "after a new runtime configuration is granted",
+    options: { configRevisions: [1, 2] },
+    nextFacts: ["old-session"],
+  },
+  {
+    name: "after Stop",
+    beforeRetry: (h) =>
+      h.runtime.handleAgentStop({
+        protocolMajor: 1,
+        requestId: "stop-1",
+        workspaceId: h.intent().workspaceId,
+        computerId: h.intent().computerId,
+        agentId: h.intent().agentId,
+      }),
+    retry: oldSession,
+    nextFacts: ["old-session"],
+  },
+  {
+    name: "for an explicit fresh start",
+    retry: { sessionMode: "create" },
+    nextFacts: [],
+  },
+  {
+    name: "after a permanent login failure",
+    options: { createError: new RuntimeLoginRequiredError("login required") },
+    nextFacts: ["old-session"],
+  },
+  {
+    name: "after a replacement was already reported",
+    options: { reportBeforeFirstCreateError: "committed-session" },
+    nextFacts: ["committed-session"],
+  },
+];
+
+test.each(retryCases)(
+  "uses the normal launch decision $name",
+  async ({ options, beforeRetry, retry, nextFacts }) => {
+    await run({ failCreateAttempt: 1, ...options }, async (h) => {
+      setSystemTime(minutes(90));
+      await expect(h.runtime.handleAgentStart(h.intent(oldSession))).rejects.toThrow(
+        options?.createError?.message ?? "spawn failed",
+      );
+      if (options?.reportBeforeFirstCreateError)
+        expect(h.reports[0]).toMatchObject({
+          sessionId: options.reportBeforeFirstCreateError,
+          replacedSessionId: "old-session",
+        });
+      else expect(h.reports).toEqual([]);
+      await beforeRetry?.(h);
+      await h.runtime.handleAgentStart(h.intent(retry));
+      expect(h.attempts.map((attempt) => attempt.sessionMode)).toEqual(["create", "create"]);
+      expect(h.factReads.map((read) => read.sessionId)).toEqual(["old-session", ...nextFacts]);
+      expect(h.reports.at(-1)?.replacedSessionId).toBe(nextFacts[0]);
+    });
+  },
+);
 test("a recycled session can itself be recycled at the next wake", async () => {
   Bun.env[SWEEP_MS] = "5";
   const { result: h } = await run({}, async (h, records) => {

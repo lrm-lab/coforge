@@ -26,6 +26,7 @@ export type AgentLaunchInput = Readonly<{
   environment?: Readonly<Record<string, string>>;
   runtimeId?: string;
   onSessionId?: AgentSessionOptions["onSessionId"];
+  onCreateSessionError?(error: unknown): void;
   assignedSkillPacks?: readonly AssignedSkillPack[];
   identity?: AgentLaunchIdentity;
   onInstructions?: (instructions: string) => void;
@@ -129,6 +130,12 @@ export async function createAgentSession(
   ports: AgentLaunchPreparationPorts,
 ): Promise<AgentSession> {
   const provider = ports.createProvider(input.config.provider);
-  const session = await provider.createAgentSession(options);
+  let session: AgentSession;
+  try {
+    session = await provider.createAgentSession(options);
+  } catch (error) {
+    input.onCreateSessionError?.(error);
+    throw error;
+  }
   return withMemoryRecovery(session, input.agentWorkspaceDirectory);
 }
