@@ -11,6 +11,7 @@ import {
   openTraversalForIdentity,
   resolveSpawnIdentity,
   workspaceDirectory,
+  workspaceSharedGid,
   type WorkspaceIdentity,
 } from "./workspace-identity";
 import { CONTAINER_BINDING_ENV_KEYS } from "./container-binding-env";
@@ -172,7 +173,16 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
         reachable(this.config.stateDirectory),
       ],
       cwd: reachable(this.config.stateDirectory),
-      ...(spawnIdentity ? { identity: spawnIdentity.identity } : {}),
+      ...(spawnIdentity
+        ? {
+            identity: {
+              uid: spawnIdentity.identity.uid,
+              // The shared group carries the `/workspace` write permission; the uid stays this
+              // Workspace's own, so the shared area is the only place two Agents can meet.
+              gid: workspaceSharedGid() ?? spawnIdentity.identity.gid,
+            },
+          }
+        : {}),
       env: {
         ...env,
         // The child rewrites this record itself once it holds the binding lock, so a Coordinator

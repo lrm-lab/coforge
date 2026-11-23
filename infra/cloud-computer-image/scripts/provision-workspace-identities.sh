@@ -100,6 +100,18 @@ while IFS= read -r wsid; do
   done
 done <<< "${workspace_ids}"
 
+# The shared tree stays writable for every Workspace Agent, and only that tree: the group is
+# added to each Agent's gid at spawn, so `/workspace` is the single place two Agents can meet.
+SHARED_GID="${COFORGE_WORKSPACE_SHARED_GID:-20100}"
+if ! getent group "${SHARED_GID}" >/dev/null; then
+  groupadd --gid "${SHARED_GID}" coforge-workspace || true
+fi
+for shared_tree in /workspace "${SHARED}"; do
+  [[ -d "${shared_tree}" ]] || continue
+  chgrp "${SHARED_GID}" "${shared_tree}" 2>/dev/null || true
+  chmod 2775 "${shared_tree}"
+done
+
 mkdir -p "${SHARED}"
 chown 0:0 "${SHARED}"
 chmod 755 "${SHARED}"

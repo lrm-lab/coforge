@@ -344,3 +344,15 @@ async function inspectPath(path: string): Promise<Entry> {
 async function grantTraverse(path: string, mode: number): Promise<void> {
   await chmod(path, mode);
 }
+
+/** Group that owns the shared `/workspace` tree. Each Workspace keeps its own uid; this group is
+ * what lets an Agent write the shared area without becoming another Workspace's uid. */
+export const DEFAULT_WORKSPACE_SHARED_GID = 20_100;
+
+export function workspaceSharedGid(
+  value: string | undefined = process.env.COFORGE_WORKSPACE_SHARED_GID,
+): number | undefined {
+  const gid = Number(value ?? DEFAULT_WORKSPACE_SHARED_GID);
+  if (!Number.isInteger(gid) || gid < MIN_AGENT_UID || gid > MAX_AGENT_UID) return undefined;
+  return gid;
+}
