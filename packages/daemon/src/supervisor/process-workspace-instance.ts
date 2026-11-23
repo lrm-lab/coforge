@@ -101,9 +101,14 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
       spawnIdentity ? aliasPath(path, volumeRoot) : path;
     // A child that cannot exec the binary dies at spawn and takes the Workspace with it, so the
     // drop only stands if the copy it will exec is reachable for that uid.
-    const executable = spawnIdentity
-      ? await executableForIdentity(this.config.executablePath, spawnIdentity.identity, volumeRoot)
-      : this.config.executablePath;
+    const executable =
+      spawnIdentity && volumeRoot
+        ? await executableForIdentity({
+            executablePath: this.config.executablePath,
+            identity: spawnIdentity.identity,
+            volumeRoot,
+          })
+        : this.config.executablePath;
     if (spawnIdentity && !executable) spawnIdentity = undefined;
     const env: Record<string, string> = {
       ...Object.fromEntries(
