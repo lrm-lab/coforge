@@ -161,3 +161,31 @@ test("an already recorded identity is reused instead of renumbered", async () =>
   });
   expect(identity).toEqual({ uid: 20_150, gid: 20_150 });
 });
+
+test("two workspaces provisioned at the same moment never share a uid", async () => {
+  const volumeRoot = join(realpathSync(tmpdir()), `coforge-concurrent-${crypto.randomUUID()}`);
+  await mkdir(join(volumeRoot, "ws"), { recursive: true });
+  const ownDirectory = async () => {};
+  try {
+    const settled = await Promise.all(
+      ["workspace-first", "workspace-second", "workspace-third"].map((workspaceId) =>
+        ensureWorkspaceIdentity({
+          stateRoot,
+          workspaceId,
+          volumeRoot,
+          directories: [],
+          ownDirectory,
+        }),
+      ),
+    );
+    const uids = settled.map((identity) => identity?.uid);
+    expect(new Set(uids).size).toBe(3);
+    const profile = JSON.parse(
+      await readFile(join(volumeRoot, "ws", WORKSPACE_IDENTITY_FILE), "utf8"),
+    ) as Record<string, { uid: number }>;
+    expect(Object.keys(profile)).toHaveLength(3);
+    expect(new Set(Object.values(profile).map((entry) => entry.uid)).size).toBe(3);
+  } finally {
+    await rm(volumeRoot, { recursive: true, force: true });
+  }
+});

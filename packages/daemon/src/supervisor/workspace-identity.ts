@@ -1,4 +1,4 @@
-import { chmod, chown, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { chmod, chown, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export type WorkspaceIdentity = { uid: number; gid: number };
@@ -131,6 +131,16 @@ export async function ensureWorkspaceIdentity(
 ): Promise<WorkspaceIdentity | undefined> {
   if (!canDropPrivileges(input.getuid ?? (() => process.getuid?.()))) return undefined;
   const profilePath = join(profileRoot(input.stateRoot, input.volumeRoot), WORKSPACE_IDENTITY_FILE);
+  const identity = await withProfileLock(profilePath, () => allocateIdentity(input, profilePath));
+  const own = input.ownDirectory ?? ownDirectory;
+  for (const directory of input.directories) await own(directory, identity);
+  return identity;
+}
+
+async function allocateIdentity(
+  input: IdentityProvisioning,
+  profilePath: string,
+): Promise<WorkspaceIdentity> {
   const profile = await readProfileFile(profilePath);
   const known = profile[input.workspaceId];
   const identity = isUsableIdentity(known)
@@ -154,9 +164,27 @@ export async function ensureWorkspaceIdentity(
       `${JSON.stringify(ordered, null, 2)}\n`,
     );
   }
-  const own = input.ownDirectory ?? ownDirectory;
-  for (const directory of input.directories) await own(directory, identity);
   return identity;
+}
+
+/** Allocation reads and rewrites one profile, so two Workspaces starting together
+ * would otherwise pick the same uid and share access to each other's files. */
+async function withProfileLock<T>(profilePath: string, run: () => Promise<T>): Promise<T> {
+  const lockPath = `${profilePath}.lock`;
+  let held = false;
+  for (let attempt = 0; attempt < 400 && !held; attempt += 1) {
+    try {
+      await mkdir(lockPath, { mode: 0o700 });
+      held = true;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  }
+  try {
+    return await run();
+  } finally {
+    if (held) await rm(lockPath, { recursive: true, force: true }).catch(() => undefined);
+  }
 }
 
 async function writeProfileFile(path: string, contents: string): Promise<void> {
@@ -170,9 +198,25 @@ async function ownDirectory(path: string, identity: WorkspaceIdentity): Promise<
     try {
       await mkdir(target, { recursive: true, mode: 0o700 });
       await chmod(target, 0o700);
-      await chown(target, identity.uid, identity.gid);
     } catch {
       continue;
     }
+    await chownTree(target, identity);
   }
+}
+
+/** Files left by an earlier root-owned run (an old socket, the instance record, logs)
+ * keep this child from writing unless the whole tree moves with the directory. */
+async function chownTree(path: string, identity: WorkspaceIdentity): Promise<void> {
+  try {
+    const child = Bun.spawn(["chown", "-R", `${identity.uid}:${identity.gid}`, path], {
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "ignore",
+    });
+    if ((await child.exited) === 0) return;
+  } catch {}
+  try {
+    await chown(path, identity.uid, identity.gid);
+  } catch {}
 }
