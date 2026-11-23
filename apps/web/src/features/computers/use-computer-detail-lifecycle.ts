@@ -9,6 +9,7 @@ import { computerDetailUpgradeSlotsFor } from "./computer-detail-upgrade-slots";
 import { submitComputerDetailUpgrade } from "./computer-detail-submit-upgrade";
 import {
   computerUpgradeStatusQuery,
+  hasTrustedUpgradeProgress,
   upgradeProgressActive,
   upgradeRunning,
 } from "./computer-upgrade-status";
@@ -19,6 +20,92 @@ import {
   upgradeOutcome,
   type ComputerUpgradeOutcome,
 } from "./upgrade-failure";
+
+export function isStaleCachedAcceptedForTerminalStored(
+  liveData: ComputerUpgradeStatus | null | undefined,
+  storedUpgrade: ComputerUpgradeStatus | undefined,
+): boolean {
+  return Boolean(
+    liveData?.status === "accepted" &&
+    storedUpgrade &&
+    storedUpgrade.requestId === liveData.requestId &&
+    (storedUpgrade.status === "failed" || storedUpgrade.status === "completed"),
+  );
+}
+
+export function isUnconfirmedPriorCachedAccepted(
+  liveStatus:
+    | {
+        data: ComputerUpgradeStatus | null | undefined;
+        dataUpdatedAt?: number;
+      }
+    | undefined,
+  upgradeRequestState: ComputerUpgradeRequest["state"],
+  mountedAt: number | undefined,
+): boolean {
+  return Boolean(
+    mountedAt !== undefined &&
+    upgradeRequestState !== "accepted" &&
+    liveStatus?.data?.status === "accepted" &&
+    !hasTrustedUpgradeProgress(liveStatus.data.progress) &&
+    (liveStatus.dataUpdatedAt ?? 0) < mountedAt,
+  );
+}
+
+export function resolveLiveUpgradeOutcome(input: {
+  liveStatus:
+    | {
+        data: ComputerUpgradeStatus | null | undefined;
+        dataUpdatedAt?: number;
+        isError: boolean;
+        isFetching: boolean;
+        error: unknown;
+      }
+    | undefined;
+  upgradeRequestState: ComputerUpgradeRequest["state"];
+  storedOutcome: ComputerUpgradeOutcome | undefined;
+  storedUpgrade?: ComputerUpgradeStatus;
+  mountedAt?: number;
+}): ComputerUpgradeOutcome | undefined {
+  const { liveStatus, upgradeRequestState, storedOutcome, storedUpgrade, mountedAt } = input;
+  if (!liveStatus || liveStatus.data === null) return undefined;
+  if (liveStatus.isError && !liveStatus.isFetching)
+    return { state: "failed", failure: describeUpgradeRequestError(liveStatus.error) };
+  if (liveStatus.data) {
+    if (isStaleCachedAcceptedForTerminalStored(liveStatus.data, storedUpgrade))
+      return storedOutcome;
+    if (isUnconfirmedPriorCachedAccepted(liveStatus, upgradeRequestState, mountedAt))
+      return storedOutcome?.state === "running" ? undefined : storedOutcome;
+    return upgradeOutcome(liveStatus.data);
+  }
+  if (upgradeRequestState === "accepted") return { state: "running" };
+  return storedOutcome?.state === "running" ? undefined : storedOutcome;
+}
+
+export function isUpgradeStatusCheckPending(input: {
+  followedUpgradeId: string | null;
+  liveStatus:
+    | {
+        data: ComputerUpgradeStatus | null | undefined;
+        dataUpdatedAt?: number;
+        isError: boolean;
+        isFetching: boolean;
+      }
+    | undefined;
+  upgradeRequestState?: ComputerUpgradeRequest["state"];
+  mountedAt?: number;
+}): boolean {
+  return Boolean(
+    input.followedUpgradeId &&
+    input.liveStatus &&
+    (input.liveStatus.data === undefined ||
+      isUnconfirmedPriorCachedAccepted(
+        input.liveStatus,
+        input.upgradeRequestState ?? "idle",
+        input.mountedAt,
+      )),
+  );
+}
 
 /** Upgrade slots and restart polling for one Computer detail panel. */
 export function useComputerDetailLifecycle(input: {
@@ -40,6 +127,7 @@ export function useComputerDetailLifecycle(input: {
   const toast = useAppToast();
   const queryClient = useQueryClient();
   const mountedRef = useRef(true);
+  const mountedAtRef = useRef(Date.now());
   useEffect(() => {
     // Set again on mount: StrictMode unmounts and remounts once in development.
     mountedRef.current = true;
@@ -68,28 +156,40 @@ export function useComputerDetailLifecycle(input: {
     })),
   });
   const storedOutcome = storedUpgrade ? upgradeOutcome(storedUpgrade) : undefined;
-  const liveUpgrade: ComputerUpgradeOutcome | undefined =
-    !liveStatus || liveStatus.data === null
-      ? undefined
-      : liveStatus.isError && !liveStatus.isFetching
-        ? { state: "failed", failure: describeUpgradeRequestError(liveStatus.error) }
-        : liveStatus.data
-          ? upgradeOutcome(liveStatus.data)
-          : upgradeRequest.state === "accepted"
-            ? { state: "running" }
-            : (storedOutcome ?? { state: "running" });
+  const liveUpgrade = resolveLiveUpgradeOutcome({
+    liveStatus,
+    upgradeRequestState: upgradeRequest.state,
+    storedOutcome,
+    storedUpgrade,
+    mountedAt: mountedAtRef.current,
+  });
+  const statusCheckPending = isUpgradeStatusCheckPending({
+    followedUpgradeId,
+    liveStatus,
+    upgradeRequestState: upgradeRequest.state,
+    mountedAt: mountedAtRef.current,
+  });
+  const liveNotFound = liveStatus?.data === null;
   // A stored success is history: the loader's version already includes it.
   const upgrade: ComputerUpgradeOutcome | { state: "idle" } =
     upgradeRequest.state === "requesting"
       ? { state: "running" }
       : upgradeRequest.state === "refused"
         ? { state: "failed", failure: upgradeRequest }
-        : (liveUpgrade ??
-          (storedOutcome && storedOutcome.state !== "succeeded"
-            ? storedOutcome
-            : { state: "idle" }));
+        : liveNotFound
+          ? { state: "idle" }
+          : (liveUpgrade ??
+            (storedOutcome &&
+            storedOutcome.state !== "succeeded" &&
+            !(storedOutcome.state === "running" && statusCheckPending)
+              ? storedOutcome
+              : { state: "idle" }));
   const activeLiveStatus =
-    liveStatus?.isError && !liveStatus.isFetching ? undefined : (liveStatus?.data ?? undefined);
+    (liveStatus?.isError && !liveStatus.isFetching) ||
+    isStaleCachedAcceptedForTerminalStored(liveStatus?.data, storedUpgrade) ||
+    isUnconfirmedPriorCachedAccepted(liveStatus, upgradeRequest.state, mountedAtRef.current)
+      ? undefined
+      : (liveStatus?.data ?? undefined);
   const slots = computerDetailUpgradeSlotsFor(
     {
       kind: input.kind,
@@ -157,6 +257,7 @@ export function useComputerDetailLifecycle(input: {
     ...slots,
     upgrading:
       upgrade.state === "running" ||
+      statusCheckPending ||
       (isLocalOwner &&
         upgradeProgressActive(activeLiveStatus?.progress, Date.now(), activeLiveStatus?.status)),
     restartState,

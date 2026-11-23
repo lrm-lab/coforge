@@ -176,17 +176,19 @@ export const listComputers = createServerFn({ method: "GET" })
           .map(({ id }) => id),
       ).catch(() => new Map<string, string>()),
     ]);
-    const progressWithoutStatus = connections.flatMap(({ id: bindingId, computer }, index) => {
+    const progressToVerify = connections.flatMap(({ id: bindingId, computer }, index) => {
       const requestId = progressIds.get(bindingId);
-      return requestId && !upgrades[index]
+      const stored = upgrades[index];
+      return requestId &&
+        (!stored || (stored.status === "failed" && stored.requestId === requestId))
         ? [{ bindingId, computerId: computer.id, requestId }]
         : [];
     });
-    if (progressWithoutStatus.length) {
+    if (progressToVerify.length) {
       const recoverableProgress = await getComputerUpgradeProgressStore()
-        .hasEvidenceMany(progressWithoutStatus)
+        .hasEvidenceMany(progressToVerify)
         .catch(() => []);
-      progressWithoutStatus.forEach(({ bindingId }, index) => {
+      progressToVerify.forEach(({ bindingId }, index) => {
         if (!recoverableProgress[index]) progressIds.delete(bindingId);
       });
     }

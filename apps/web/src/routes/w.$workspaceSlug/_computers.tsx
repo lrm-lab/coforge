@@ -17,6 +17,8 @@ import { listComputerConnections } from "#src/features/computers/computer-connec
 import { getCloudDesktopOrigin } from "#src/features/computers/cloud-desktop-origin.functions";
 import { listComputers } from "#src/features/computers/computers.functions";
 import {
+  activeUpgradingComputerIds,
+  computerUpgradeStatusQuery,
   followComputerUpgrade,
   followedComputerUpgradesQuery,
   isComputerUpgradeSettled,
@@ -77,8 +79,30 @@ export const Route = createFileRoute("/w/$workspaceSlug/_computers")({
 
 function ComputersPage() {
   const { computers, installOrigin } = Route.useLoaderData();
+  const mountedAtRef = useRef(Date.now());
   const followedUpgrades = useQuery(followedComputerUpgradesQuery).data ?? [];
-  const upgradingComputerIds = new Set(followedUpgrades.map((item) => item.computerId));
+  const followedStatuses = useQueries({
+    queries: followedUpgrades.map(({ computerId, requestId }) => ({
+      ...computerUpgradeStatusQuery(computerId, requestId),
+      enabled: false,
+    })),
+  });
+  const terminalUpgradeRequestIds = new Set(
+    computers.flatMap((computer) =>
+      computer.upgrade &&
+      (computer.upgrade.status === "failed" || computer.upgrade.status === "completed")
+        ? [computer.upgrade.requestId]
+        : [],
+    ),
+  );
+  const upgradingComputerIds = activeUpgradingComputerIds(
+    followedUpgrades,
+    followedStatuses.map((query) => query.data),
+    Date.now(),
+    terminalUpgradeRequestIds,
+    followedStatuses.map((query) => query.dataUpdatedAt),
+    mountedAtRef.current,
+  );
   const router = useRouter();
   const releaseChannels = [
     ...new Set(computers.map((computer) => computer.releaseChannel ?? "latest")),

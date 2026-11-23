@@ -18,6 +18,15 @@ export function upgradeRunning(
   );
 }
 
+export function hasTrustedUpgradeProgress(progress: ComputerUpgradeProgress | undefined): boolean {
+  if (!progress) return false;
+  return Boolean(
+    progress.phase !== undefined ||
+    progress.switchState !== "pending" ||
+    progress.workspaces.some((row) => row.state === "restored"),
+  );
+}
+
 export function upgradeProgressActive(
   progress: ComputerUpgradeProgress | undefined,
   now = Date.now(),

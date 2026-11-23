@@ -7,6 +7,7 @@ import {
   upgradeRunning,
 } from "#src/features/computers/computer-upgrade-follow";
 import {
+  activeUpgradingComputerIds,
   computerUpgradeSettledToastable,
   followComputerUpgrade,
   followedComputerUpgradesQuery,
@@ -15,6 +16,10 @@ import {
   settleComputerUpgradeFollow,
   unfollowComputerUpgrade,
 } from "#src/features/computers/computer-upgrade-status";
+import {
+  isUpgradeStatusCheckPending,
+  resolveLiveUpgradeOutcome,
+} from "#src/features/computers/use-computer-detail-lifecycle";
 import type {
   ComputerUpgradeProgress,
   ComputerUpgradeStatus,
@@ -271,4 +276,302 @@ test("an expired status settles without leaving a recoverable read error", () =>
   } finally {
     client.clear();
   }
+});
+
+test("pointer-only recovery never synthesizes running before the first status read returns", () => {
+  const pendingRead = { data: undefined, isError: false, isFetching: true, error: null };
+  expect(
+    resolveLiveUpgradeOutcome({
+      liveStatus: pendingRead,
+      upgradeRequestState: "idle",
+      storedOutcome: undefined,
+    }),
+  ).toBeUndefined();
+  expect(
+    resolveLiveUpgradeOutcome({
+      liveStatus: pendingRead,
+      upgradeRequestState: "accepted",
+      storedOutcome: undefined,
+    }),
+  ).toEqual({ state: "running" });
+  expect(
+    resolveLiveUpgradeOutcome({
+      liveStatus: pendingRead,
+      upgradeRequestState: "idle",
+      storedOutcome: { state: "running", version: "0.1.35-dev.5" },
+    }),
+  ).toBeUndefined();
+  expect(
+    resolveLiveUpgradeOutcome({
+      liveStatus: { data: accepted(), isError: false, isFetching: false, error: null },
+      upgradeRequestState: "idle",
+      storedOutcome: undefined,
+    }),
+  ).toEqual({ state: "running", version: "0.1.4-dev.2" });
+
+  expect([
+    ...activeUpgradingComputerIds(
+      [{ computerId: "c1", requestId: "req-1", startedHere: false }],
+      [undefined],
+    ),
+  ]).toEqual([]);
+  expect([
+    ...activeUpgradingComputerIds(
+      [{ computerId: "c1", requestId: "req-1", startedHere: true }],
+      [undefined],
+    ),
+  ]).toEqual(["c1"]);
+  expect([
+    ...activeUpgradingComputerIds(
+      [{ computerId: "c1", requestId: "req-1", startedHere: false }],
+      [accepted()],
+    ),
+  ]).toEqual(["c1"]);
+  expect([
+    ...activeUpgradingComputerIds(
+      [{ computerId: "c1", requestId: "req-1", startedHere: false }],
+      [completed()],
+    ),
+  ]).toEqual([]);
+
+  expect(
+    isUpgradeStatusCheckPending({
+      followedUpgradeId: "req-1",
+      liveStatus: pendingRead,
+    }),
+  ).toBe(true);
+  expect(
+    isUpgradeStatusCheckPending({
+      followedUpgradeId: "req-1",
+      liveStatus: { data: null, isError: false, isFetching: false },
+    }),
+  ).toBe(false);
+  expect(
+    isUpgradeStatusCheckPending({
+      followedUpgradeId: "req-1",
+      liveStatus: { data: completed(), isError: false, isFetching: false },
+    }),
+  ).toBe(false);
+  expect(
+    isUpgradeStatusCheckPending({
+      followedUpgradeId: "req-1",
+      liveStatus: { data: undefined, isError: true, isFetching: false },
+    }),
+  ).toBe(true);
+  expect(
+    isUpgradeStatusCheckPending({
+      followedUpgradeId: null,
+      liveStatus: undefined,
+    }),
+  ).toBe(false);
+});
+
+test("same-id stale cached accepted never overrides terminal loader failed or completed status", () => {
+  const cachedAccepted: ComputerUpgradeStatus = {
+    status: "accepted",
+    requestId: "req-1",
+    expectedVersion: "0.1.35-dev.5",
+    expiresAt: new Date(Date.now() + 300_000).toISOString(),
+  };
+  const storedFailed: ComputerUpgradeStatus = {
+    status: "failed",
+    requestId: "req-1",
+    reason: "reported",
+    error: "download failed",
+  };
+  const storedCompleted: ComputerUpgradeStatus = {
+    status: "completed",
+    requestId: "req-1",
+    expectedVersion: "0.1.35-dev.5",
+    computerVersion: "0.1.35-dev.5",
+    daemonVersion: "0.1.35-dev.5",
+    workerInstanceId: "worker-1",
+    completedAt: new Date().toISOString(),
+  };
+  const failedOutcome = {
+    state: "failed" as const,
+    failure: { headline: "failed", steps: [] },
+  };
+  expect(
+    resolveLiveUpgradeOutcome({
+      liveStatus: { data: cachedAccepted, isError: false, isFetching: true, error: null },
+      upgradeRequestState: "idle",
+      storedOutcome: failedOutcome,
+      storedUpgrade: storedFailed,
+    }),
+  ).toEqual(failedOutcome);
+  expect(
+    resolveLiveUpgradeOutcome({
+      liveStatus: { data: cachedAccepted, isError: false, isFetching: false, error: null },
+      upgradeRequestState: "idle",
+      storedOutcome: { state: "succeeded", version: "0.1.35-dev.5" },
+      storedUpgrade: storedCompleted,
+    }),
+  ).toEqual({ state: "succeeded", version: "0.1.35-dev.5" });
+  expect(
+    resolveLiveUpgradeOutcome({
+      liveStatus: { data: cachedAccepted, isError: false, isFetching: false, error: null },
+      upgradeRequestState: "idle",
+      storedOutcome: { state: "running", version: "0.1.35-dev.5" },
+      storedUpgrade: cachedAccepted,
+    }),
+  ).toEqual({ state: "running", version: "0.1.35-dev.5" });
+  expect([
+    ...activeUpgradingComputerIds(
+      [{ computerId: "c1", requestId: "req-1", startedHere: false }],
+      [cachedAccepted],
+      Date.now(),
+      new Set(["req-1"]),
+    ),
+  ]).toEqual([]);
+  expect([
+    ...activeUpgradingComputerIds(
+      [{ computerId: "c1", requestId: "req-1", startedHere: false }],
+      [cachedAccepted],
+      Date.now(),
+      undefined,
+      [1_000],
+      2_000,
+    ),
+  ]).toEqual([]);
+  expect([
+    ...activeUpgradingComputerIds(
+      [{ computerId: "c1", requestId: "req-1", startedHere: false }],
+      [cachedAccepted],
+      Date.now(),
+      undefined,
+      [2_500],
+      2_000,
+    ),
+  ]).toEqual(["c1"]);
+
+  expect(
+    resolveLiveUpgradeOutcome({
+      liveStatus: {
+        data: cachedAccepted,
+        dataUpdatedAt: 1_000,
+        isError: false,
+        isFetching: true,
+        error: null,
+      },
+      upgradeRequestState: "idle",
+      storedOutcome: { state: "running", version: "0.1.35-dev.5" },
+      storedUpgrade: cachedAccepted,
+      mountedAt: 2_000,
+    }),
+  ).toBeUndefined();
+  expect(
+    isUpgradeStatusCheckPending({
+      followedUpgradeId: "req-1",
+      liveStatus: {
+        data: cachedAccepted,
+        dataUpdatedAt: 1_000,
+        isError: false,
+        isFetching: true,
+      },
+      upgradeRequestState: "idle",
+      mountedAt: 2_000,
+    }),
+  ).toBe(true);
+  expect(
+    resolveLiveUpgradeOutcome({
+      liveStatus: {
+        data: cachedAccepted,
+        dataUpdatedAt: 2_500,
+        isError: false,
+        isFetching: false,
+        error: null,
+      },
+      upgradeRequestState: "idle",
+      storedOutcome: { state: "running", version: "0.1.35-dev.5" },
+      storedUpgrade: cachedAccepted,
+      mountedAt: 2_000,
+    }),
+  ).toEqual({ state: "running", version: "0.1.35-dev.5" });
+  expect(
+    isUpgradeStatusCheckPending({
+      followedUpgradeId: "req-1",
+      liveStatus: {
+        data: cachedAccepted,
+        dataUpdatedAt: 2_500,
+        isError: false,
+        isFetching: false,
+      },
+      upgradeRequestState: "idle",
+      mountedAt: 2_000,
+    }),
+  ).toBe(false);
+
+  const cachedAcceptedWithProgress: ComputerUpgradeStatus = {
+    ...cachedAccepted,
+    progress: progressBase({ phase: "downloading" }),
+  };
+  expect(
+    resolveLiveUpgradeOutcome({
+      liveStatus: {
+        data: cachedAcceptedWithProgress,
+        dataUpdatedAt: 1_000,
+        isError: false,
+        isFetching: true,
+        error: null,
+      },
+      upgradeRequestState: "idle",
+      storedOutcome: { state: "running", version: "0.1.35-dev.5" },
+      storedUpgrade: cachedAccepted,
+      mountedAt: 2_000,
+    }),
+  ).toEqual({ state: "running", version: "0.1.35-dev.5" });
+  expect([
+    ...activeUpgradingComputerIds(
+      [{ computerId: "c1", requestId: "req-1", startedHere: false }],
+      [cachedAcceptedWithProgress],
+      Date.now(),
+      undefined,
+      [1_000],
+      2_000,
+    ),
+  ]).toEqual(["c1"]);
+
+  const cachedAcceptedWithEmptyProgress: ComputerUpgradeStatus = {
+    ...cachedAccepted,
+    progress: progressBase({ phase: undefined, switchState: "pending", workspaces: [] }),
+  };
+  expect(
+    resolveLiveUpgradeOutcome({
+      liveStatus: {
+        data: cachedAcceptedWithEmptyProgress,
+        dataUpdatedAt: 1_000,
+        isError: false,
+        isFetching: true,
+        error: null,
+      },
+      upgradeRequestState: "idle",
+      storedOutcome: { state: "running", version: "0.1.35-dev.5" },
+      storedUpgrade: cachedAccepted,
+      mountedAt: 2_000,
+    }),
+  ).toBeUndefined();
+  expect(
+    isUpgradeStatusCheckPending({
+      followedUpgradeId: "req-1",
+      liveStatus: {
+        data: cachedAcceptedWithEmptyProgress,
+        dataUpdatedAt: 1_000,
+        isError: false,
+        isFetching: true,
+      },
+      upgradeRequestState: "idle",
+      mountedAt: 2_000,
+    }),
+  ).toBe(true);
+  expect([
+    ...activeUpgradingComputerIds(
+      [{ computerId: "c1", requestId: "req-1", startedHere: false }],
+      [cachedAcceptedWithEmptyProgress],
+      Date.now(),
+      undefined,
+      [1_000],
+      2_000,
+    ),
+  ]).toEqual([]);
 });

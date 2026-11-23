@@ -124,8 +124,9 @@ export function ComputerLayout({
                       )}
                       upgrading={
                         computer.ownedByCurrentUser &&
-                        (upgradeRunning(computer.upgrade) ||
-                          Boolean(upgradingComputerIds?.has(computer.id)))
+                        (upgradingComputerIds !== undefined
+                          ? upgradingComputerIds.has(computer.id)
+                          : upgradeRunning(computer.upgrade))
                       }
                     />
                     <span className="flex min-w-0 flex-1 flex-col gap-1">

@@ -3,6 +3,7 @@ import { queryOptions, skipToken, type QueryClient } from "@tanstack/react-query
 import { m } from "#src/paraglide/messages";
 import {
   UPGRADE_DEADLINE_MARGIN_MS,
+  hasTrustedUpgradeProgress,
   settledUpgradeFollow,
   upgradeFollowActive,
   upgradeProgressActive,
@@ -13,6 +14,7 @@ import { readComputerUpgradeStatus } from "./computers.functions";
 
 export {
   UPGRADE_DEADLINE_MARGIN_MS,
+  hasTrustedUpgradeProgress,
   settledUpgradeFollow,
   upgradeFollowActive,
   upgradeProgressActive,
@@ -86,6 +88,32 @@ export function markComputerUpgradeSettled(queryClient: QueryClient, requestId: 
   const current = queryClient.getQueryData(settledComputerUpgradesQuery.queryKey) ?? [];
   if (current.includes(requestId)) return;
   queryClient.setQueryData(settledComputerUpgradesQuery.queryKey, [...current, requestId]);
+}
+
+export function activeUpgradingComputerIds(
+  followed: readonly FollowedComputerUpgrade[],
+  statuses: readonly (ComputerUpgradeStatus | null | undefined)[],
+  now = Date.now(),
+  terminalRequestIds?: ReadonlySet<string>,
+  updatedAtByIndex?: readonly number[],
+  mountedAt?: number,
+): Set<string> {
+  return new Set(
+    followed.flatMap((item, index) => {
+      const status = statuses[index];
+      if (status?.status === "accepted" && terminalRequestIds?.has(item.requestId)) return [];
+      if (item.startedHere)
+        return status === undefined || upgradeFollowActive(status, now) ? [item.computerId] : [];
+      if (
+        status?.status === "accepted" &&
+        !hasTrustedUpgradeProgress(status.progress) &&
+        mountedAt !== undefined &&
+        (updatedAtByIndex?.[index] ?? 0) < mountedAt
+      )
+        return [];
+      return status && upgradeFollowActive(status, now) ? [item.computerId] : [];
+    }),
+  );
 }
 
 export function computerUpgradeSettledToastable(status: ComputerUpgradeStatus): boolean {
