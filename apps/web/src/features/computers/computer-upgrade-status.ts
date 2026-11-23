@@ -58,7 +58,15 @@ export type FollowedComputerUpgrade = {
   computerId: string;
   requestId: string;
   startedHere: boolean;
+  version?: string;
+  target?: "runtime" | "image";
+  computerName?: string;
+  workspaceSlug?: string;
 };
+
+export function computerUpgradeNoticeId(computerId: string): string {
+  return `computer-upgrade:${computerId}`;
+}
 
 /**
  * The upgrades this tab follows, kept in the app's QueryClient so they outlive every route. Client

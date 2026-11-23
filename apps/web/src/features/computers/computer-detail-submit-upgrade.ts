@@ -1,19 +1,32 @@
 import type { QueryClient } from "@tanstack/react-query";
+import { appNotice } from "#src/components/ui/notice-card";
 import { describeUpgradeRequestError, upgradeOutcome } from "./upgrade-failure";
-import { followComputerUpgrade } from "./computer-upgrade-status";
+import { computerUpgradeNoticeId, followComputerUpgrade } from "./computer-upgrade-status";
 import type { ComputerUpgradeRequest } from "./computer-upgrade-slot";
 import type { ComputerUpgradeStatus } from "./computer.schemas";
 
 export async function submitComputerDetailUpgrade(input: {
   computerId: string;
+  computerName?: string;
+  workspaceSlug?: string;
   onUpgrade?: (requestId: string, target?: "runtime" | "image") => Promise<ComputerUpgradeStatus>;
   queryClient: QueryClient;
   setUpgradeRequest: (request: ComputerUpgradeRequest) => void;
   version: string | undefined;
   target: "runtime" | "image";
 }): Promise<void> {
-  const { onUpgrade, queryClient, setUpgradeRequest, version, target, computerId } = input;
+  const {
+    onUpgrade,
+    queryClient,
+    setUpgradeRequest,
+    version,
+    target,
+    computerId,
+    computerName,
+    workspaceSlug,
+  } = input;
   if (!onUpgrade) return;
+  if (target === "runtime") appNotice.dismiss(computerUpgradeNoticeId(computerId));
   const requestId = crypto.randomUUID();
   setUpgradeRequest({ state: "requesting", version, target });
   try {
@@ -23,14 +36,16 @@ export async function submitComputerDetailUpgrade(input: {
       setUpgradeRequest({ state: "refused", version, target, ...outcome.failure });
       return;
     }
-    // The server answers with the upgrade it actually holds: a request that lost the race to
-    // one already in flight comes back under that request's id and row, so follow those.
     const acceptedVersion = "expectedVersion" in status ? status.expectedVersion : version;
     const acceptedTarget = "target" in status ? (status.target ?? target) : target;
     followComputerUpgrade(queryClient, {
       computerId,
       requestId: status.requestId,
       startedHere: true,
+      version: acceptedVersion,
+      target: acceptedTarget,
+      computerName,
+      workspaceSlug,
     });
     setUpgradeRequest({
       state: "accepted",

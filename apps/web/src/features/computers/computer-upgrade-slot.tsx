@@ -1,4 +1,3 @@
-import { InstallerRecoveryAdvice } from "./installer-recovery-advice";
 import { useState, type ReactNode } from "react";
 import {
   AlertTriangle,
@@ -23,7 +22,6 @@ import { m } from "#src/paraglide/messages";
 import { cloudImageUpdateConsequences } from "./cloud-image-update";
 import { ComputerReleaseNotesLink, useComputerRelease } from "./computer-release-notes";
 import { isPrereleaseVersion } from "./computer-identity";
-import { ComputerUpgradeProgressSlot } from "./computer-upgrade-progress-slot";
 import {
   upgradeSlotState,
   type ComputerUpgradeRequest,
@@ -42,15 +40,12 @@ function slotRelease(slot: ComputerUpgradeSlotState): string | undefined {
   return slot.offer ?? slot.version;
 }
 
-/** The bordered area under a Computer's Version row, with that release's "What's new" when the
- * catalog has notes for it. Upgrade and Retry show only when `canUpgrade` (the owner); `onUpgrade`
- * opens the confirmation. */
+/** The bordered area for a cloud Computer's Image update row, with release notes when available. */
 export function ComputerUpgradeSlot({
   slot,
   canUpgrade,
   computerName,
   cloud,
-  localComputerId,
   online,
   upgradeInFlight = false,
   onUpgrade,
@@ -59,38 +54,15 @@ export function ComputerUpgradeSlot({
   canUpgrade: boolean;
   computerName: string;
   cloud: boolean;
-  localComputerId?: string;
   online: boolean;
-  /** Any upgrade already running on this Computer, on either row: one runs at a time. */
   upgradeInFlight?: boolean;
   onUpgrade: () => void;
 }) {
   const release = useComputerRelease(slotRelease(slot));
   const retry = canUpgrade && slot.state === "failed" && slot.offer !== undefined;
   const whatsNew = release && <ComputerReleaseNotesLink release={release} />;
-  const recoveryAdvice = canUpgrade && localComputerId && online && !upgradeInFlight && (
-    <InstallerRecoveryAdvice
-      computerId={localComputerId}
-      command={<UpgradeCommand command="coforge-computer repair" />}
-    />
-  );
 
-  if (slot.state === "progress") {
-    return (
-      <ComputerUpgradeProgressSlot
-        progress={slot.progress}
-        status={slot.status}
-        failure={slot.failure}
-        canUpgrade={canUpgrade}
-        canRetryOffer={slot.offer !== undefined}
-        online={online}
-        upgradeInFlight={upgradeInFlight}
-        whatsNew={whatsNew}
-        recoveryAdvice={recoveryAdvice}
-        onUpgrade={onUpgrade}
-      />
-    );
-  }
+  if (slot.state === "progress") return null;
 
   if (slot.state === "upgrading")
     return (
@@ -163,7 +135,6 @@ export function ComputerUpgradeSlot({
             {failure.errorId && (
               <p className="mt-2 text-xs">{m.error_reference({ errorId: failure.errorId })}</p>
             )}
-            {retry && recoveryAdvice}
           </>
         }
         actions={
@@ -227,16 +198,11 @@ export function ComputerUpgradeSlot({
         </span>
       }
       description={
-        !online ? (
-          m.computer_upgrade_offline()
-        ) : cloud ? (
-          m.computer_cloud_image_update_available_body()
-        ) : (
-          <>
-            {m.computer_upgrade_available_body({ name: computerName })}
-            {recoveryAdvice}
-          </>
-        )
+        !online
+          ? m.computer_upgrade_offline()
+          : cloud
+            ? m.computer_cloud_image_update_available_body()
+            : m.computer_upgrade_available_body({ name: computerName })
       }
       actions={
         <>
@@ -259,7 +225,7 @@ export function ComputerUpgradeSlot({
 /** One failure-recovery command, in the app's mono command style, with a copy-to-clipboard
  * affordance - the same `ButtonUtility` + Copy/Check pattern `ComputerInstallCommand` already
  * uses, sized for an inline list item rather than a terminal block. */
-function UpgradeCommand({ command }: { command: string }) {
+export function UpgradeCommand({ command }: { command: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <span className="inline-flex items-center gap-1 rounded-md bg-secondary px-1.5 py-0.5 align-middle font-mono text-xs text-secondary">
@@ -370,6 +336,7 @@ export function ComputerUpgradeConfirmDialog({
   targetVersion?: string | null;
   onConfirm: () => Promise<void>;
 }) {
+  const release = useComputerRelease(targetVersion ?? undefined);
   return (
     <UpgradeConfirmFrame
       open={open}
@@ -378,12 +345,17 @@ export function ComputerUpgradeConfirmDialog({
       confirmLabel={m.computer_upgrade_confirm_submit()}
       onConfirm={onConfirm}
     >
-      {currentVersion && targetVersion && (
-        <p className="mt-2 font-mono text-sm text-secondary wrap-anywhere">
-          {currentVersion} <span className="text-quaternary">→</span>{" "}
-          <span className="font-medium text-primary">{targetVersion}</span>
-        </p>
-      )}
+      {(currentVersion && targetVersion) || release ? (
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+          {currentVersion && targetVersion && (
+            <p className="font-mono text-secondary wrap-anywhere">
+              {currentVersion} <span className="text-quaternary">→</span>{" "}
+              <span className="font-medium text-primary">{targetVersion}</span>
+            </p>
+          )}
+          {release && <ComputerReleaseNotesLink release={release} size="sm" />}
+        </div>
+      ) : null}
       <div className="mt-4 flex gap-2.5 rounded-lg bg-warning-primary px-3 py-2.5 text-sm text-warning-primary">
         <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0 text-fg-warning-primary" />
         <p>{m.computer_upgrade_confirm_runs_stop()}</p>

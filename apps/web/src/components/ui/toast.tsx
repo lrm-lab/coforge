@@ -126,12 +126,13 @@ export const appToast = {
       action: { label: m.action_undo(), onClick: () => void undo() },
     });
   },
-  progress(title: string) {
-    const id = toastId("progress", title);
+  progress(title: string, options?: { key?: string }) {
+    const id = toastId("progress", title, options?.key);
     show(id, title, "progress", Infinity);
     return {
       done: (result: string) => show(id, result, "done", RESULT_TOAST_MS),
       fail: (result: string) => show(id, result, "error"),
+      dismiss: () => toastStore.dismiss(id),
     };
   },
   dismiss(title: string, key?: string) {

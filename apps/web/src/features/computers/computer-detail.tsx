@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronRight, RefreshCw01 as RotateCw, Terminal } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -30,6 +30,7 @@ import {
 } from "./computer-detail-view";
 import { ComputerDetailWorkspaceInventory } from "./computer-detail-workspace-inventory";
 import { computerRestartBusy } from "./computer-restart-run";
+import { nextProgressDeadline, runtimeUpgradePresentation } from "./computer-upgrade-progress-view";
 import { runtimeDetectionStatus, runtimeRescanNotice } from "./runtime-rescan-notice";
 import { useComputerDetailLifecycle } from "./use-computer-detail-lifecycle";
 
@@ -111,6 +112,7 @@ export function ComputerDetail({
     rescanButtonVisible: canRescan,
   });
   const workspaceSlug = useWorkspaceSlug();
+  const label = computerLabel(computer);
   const creatorName = computer.creator ? humanLabel(computer.creator) : "";
   const {
     isCloud,
@@ -126,6 +128,8 @@ export function ComputerDetail({
     runRestart,
   } = useComputerDetailLifecycle({
     computerId: computer.id,
+    computerName: label,
+    workspaceSlug,
     kind: computer.kind,
     ownedByCurrentUser: computer.ownedByCurrentUser,
     computerVersion: computer.computerVersion,
@@ -141,6 +145,38 @@ export function ComputerDetail({
     restartMaxPolls,
   });
   const canUpgrade = Boolean(onUpgrade) && computer.ownedByCurrentUser;
+  const visibleRuntimeSlot = computer.ownedByCurrentUser ? runtimeSlot : null;
+  const [upgradeClockNow, setUpgradeClockNow] = useState(() => Date.now());
+  const progressDeadline =
+    visibleRuntimeSlot?.state === "progress"
+      ? nextProgressDeadline(visibleRuntimeSlot.progress, upgradeClockNow)
+      : undefined;
+  useEffect(() => {
+    if (progressDeadline === undefined) return;
+    const delay = Math.max(0, progressDeadline - Date.now()) + 16;
+    const timer = setTimeout(() => setUpgradeClockNow(Date.now()), delay);
+    return () => clearTimeout(timer);
+  }, [progressDeadline]);
+  const runtimePresentation = runtimeUpgradePresentation({
+    slot: visibleRuntimeSlot,
+    canUpgrade,
+    online: computer.online,
+    upgradeInFlight: upgrading,
+    now: upgradeClockNow,
+  });
+  const headerUpgrade = runtimePresentation.headerAction
+    ? {
+        kind: runtimePresentation.headerAction.kind,
+        label:
+          runtimePresentation.headerAction.kind === "upgrading"
+            ? m.computer_upgrade_in_progress()
+            : runtimePresentation.headerAction.kind === "retry"
+              ? m.computer_upgrade_retry_action()
+              : m.computer_upgrade(),
+        disabled: runtimePresentation.headerAction.disabled,
+        onPress: () => setUpgradeConfirmOpen(true),
+      }
+    : undefined;
   const scanWorkspaces = async () => {
     if (!onScanAgentWorkspaces) return;
     setWorkspaceScanStatus("scanning");
@@ -152,7 +188,6 @@ export function ComputerDetail({
     }
   };
 
-  const label = computerLabel(computer);
   const refusal = activeRefusal(computer);
 
   return (
@@ -170,6 +205,7 @@ export function ComputerDetail({
         desktopTitle={label}
         showDesktop={isCloud && computer.ownedByCurrentUser}
         online={computer.online}
+        upgrade={headerUpgrade}
         restart={
           onRestart && (computer.ownedByCurrentUser || computer.canManageAgents)
             ? {
@@ -209,11 +245,14 @@ export function ComputerDetail({
               isCloud={isCloud}
               currentVersion={currentVersion}
               currentImageVersion={currentImageVersion}
-              runtimeSlot={computer.ownedByCurrentUser ? runtimeSlot : null}
+              versionNotice={runtimePresentation.versionNotice}
+              showRecoveryAdvice={
+                runtimePresentation.headerAction !== undefined &&
+                runtimePresentation.headerAction.kind !== "upgrading"
+              }
               imageSlot={computer.ownedByCurrentUser ? imageSlot : null}
               canUpgrade={canUpgrade}
               upgradeInFlight={upgrading}
-              onRuntimeUpgrade={() => setUpgradeConfirmOpen(true)}
               onImageUpgrade={() => setImageUpdateOpen(true)}
             />
             <section aria-labelledby="computer-runtimes">

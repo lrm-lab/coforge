@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Monitor01 as Monitor, RefreshCw01 as RotateCw } from "@untitledui/icons";
+import { ArrowUp, Monitor01 as Monitor, RefreshCw01 as RotateCw } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -17,12 +17,20 @@ export type ComputerDetailRestart = {
   onPress: () => void;
 };
 
+export type ComputerDetailUpgrade = {
+  kind: "upgrade" | "upgrading" | "retry";
+  label: string;
+  disabled: boolean;
+  onPress: () => void;
+};
+
 export function ComputerDetailHeader({
   computerId,
   identity,
   desktopTitle,
   showDesktop,
   online,
+  upgrade,
   restart,
   menu,
 }: {
@@ -31,6 +39,7 @@ export function ComputerDetailHeader({
   desktopTitle: string;
   showDesktop: boolean;
   online: boolean;
+  upgrade?: ComputerDetailUpgrade;
   restart: ComputerDetailRestart | undefined;
   menu?: ReactNode;
 }) {
@@ -43,6 +52,8 @@ export function ComputerDetailHeader({
   const restartLabel = restart?.pending
     ? m.computer_restart_requesting()
     : m.computer_restart_action();
+  const upgradeColor = desktopUrl || upgrade?.kind === "upgrading" ? "secondary" : "primary";
+  const upgradeLoading = upgrade?.kind === "upgrading";
   const openDesktop = () => {
     if (!desktopUrl) return;
     const opening = cloudDesktopOpening({ online, phone });
@@ -83,6 +94,34 @@ export function ComputerDetailHeader({
           title={desktopTitle}
           onClose={() => setOverlayOpen(false)}
         />
+      ) : null}
+      {upgrade ? (
+        <>
+          <Button
+            type="button"
+            size="sm"
+            color={upgradeColor}
+            className="hidden shrink-0 @xs/comp-header:inline-flex"
+            iconLeading={ArrowUp}
+            isLoading={upgradeLoading}
+            showTextWhileLoading
+            isDisabled={upgrade.disabled}
+            onPress={upgrade.onPress}
+          >
+            {upgrade.label}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            color={upgradeColor}
+            aria-label={upgrade.label}
+            className="shrink-0 @xs/comp-header:hidden"
+            iconLeading={ArrowUp}
+            isLoading={upgradeLoading}
+            isDisabled={upgrade.disabled}
+            onPress={upgrade.onPress}
+          />
+        </>
       ) : null}
       {restart ? (
         <>

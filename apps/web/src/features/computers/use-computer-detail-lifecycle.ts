@@ -110,6 +110,8 @@ export function isUpgradeStatusCheckPending(input: {
 /** Upgrade slots and restart polling for one Computer detail panel. */
 export function useComputerDetailLifecycle(input: {
   computerId: string;
+  computerName?: string;
+  workspaceSlug?: string;
   kind: string;
   ownedByCurrentUser?: boolean;
   computerVersion?: string | null;
@@ -208,6 +210,8 @@ export function useComputerDetailLifecycle(input: {
   const runUpgrade = (version: string | undefined, target: "runtime" | "image") =>
     submitComputerDetailUpgrade({
       computerId: input.computerId,
+      computerName: input.computerName,
+      workspaceSlug: input.workspaceSlug,
       onUpgrade: input.onUpgrade,
       queryClient,
       setUpgradeRequest,

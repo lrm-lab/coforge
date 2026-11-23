@@ -1,55 +1,62 @@
-import type { AlertColor } from "#src/components/ui/alert";
 import { m } from "#src/paraglide/messages";
+import { isPrereleaseVersion } from "./computer-identity";
 import type {
   ComputerUpgradeProgress,
   ComputerUpgradeStatus,
   UpgradeWorkspaceProgress,
   UpgradeWorkspaceProgressState,
 } from "./computer.schemas";
+import {
+  computerUpgradeNoticeId,
+  computerUpgradeSettledToastable,
+  type FollowedComputerUpgrade,
+} from "./computer-upgrade-status";
+import type { ComputerUpgradeSlotState } from "./computer-upgrade-slot-state";
+import { upgradeOutcome, type UpgradeRequestErrorCopy } from "./upgrade-failure";
 
-export type UpgradeStepTone = "complete" | "current" | "incomplete" | "warn" | "error";
+export type ComputerUpgradeProgressView =
+  | {
+      kind: "active";
+      version: string;
+    }
+  | {
+      kind: "completed";
+      version: string;
+    }
+  | {
+      kind: "issue";
+      version: string;
+      alertColor: "warning" | "error";
+      title: string;
+      detail: string;
+      unsettledWorkspaces: string[];
+      canRetry: boolean;
+    };
 
-export type UpgradeProgressStep = {
-  id: "download" | "drain" | "switch" | "reconnect";
-  label: string;
-  status: UpgradeStepTone;
+export type RuntimeUpgradeHeaderAction =
+  | { kind: "upgrade"; disabled: boolean }
+  | { kind: "upgrading"; disabled: true }
+  | { kind: "retry"; disabled: boolean };
+
+export type RuntimeUpgradeVersionNotice =
+  | { kind: "available"; version: string; prerelease: boolean; offline: boolean }
+  | { kind: "upgrading"; version?: string }
+  | {
+      kind: "issue";
+      tone: "error" | "warning";
+      title: string;
+      detail: string;
+      steps?: UpgradeRequestErrorCopy["steps"];
+      errorId?: string;
+      unsettledWorkspaces?: string[];
+    };
+
+export type RuntimeUpgradePresentation = {
+  headerAction?: RuntimeUpgradeHeaderAction;
+  versionNotice?: RuntimeUpgradeVersionNotice;
 };
 
-export type UpgradeProgressWorkspaceRow = {
-  workspaceId: string;
-  name: string;
-  label: string;
-  tone: "good" | "warn" | "muted";
-};
-
-export type ComputerUpgradeProgressView = {
-  version: string;
-  alertColor: AlertColor;
-  title: string;
-  headline: string;
-  detail: string;
-  steps: UpgradeProgressStep[];
-  workspaces: UpgradeProgressWorkspaceRow[];
-  canRetry: boolean;
-};
-
-function stepLabels() {
-  return {
-    download: m.computer_upgrade_progress_step_download(),
-    drain: m.computer_upgrade_progress_step_drain(),
-    switch: m.computer_upgrade_progress_step_switch(),
-    reconnect: m.computer_upgrade_progress_step_reconnect(),
-  };
-}
-
-function reachedStage(phase: ComputerUpgradeProgress["phase"]): 0 | 1 | 2 | 3 {
-  if (phase === "downloading" || phase === "verifying") return 1;
-  if (phase === "waiting") return 2;
-  if (phase === "switching" || phase === "uncertain") return 3;
-  return 0;
-}
-
-export function effectiveWorkspaceState(
+function effectiveWorkspaceState(
   row: UpgradeWorkspaceProgress,
   reconnectUntil: number | undefined,
   now: number,
@@ -60,49 +67,22 @@ export function effectiveWorkspaceState(
   return row.state;
 }
 
-function workspaceRowView(
-  row: UpgradeWorkspaceProgress,
-  reconnectUntil: number | undefined,
+export function nextProgressDeadline(
+  progress: ComputerUpgradeProgress,
   now: number,
-): UpgradeProgressWorkspaceRow {
-  const state = effectiveWorkspaceState(row, reconnectUntil, now);
-  switch (state) {
-    case "restored":
-      return {
-        workspaceId: row.workspaceId,
-        name: row.name,
-        label: m.computer_upgrade_workspace_restored(),
-        tone: "good",
-      };
-    case "waiting":
-      return {
-        workspaceId: row.workspaceId,
-        name: row.name,
-        label: m.computer_upgrade_workspace_waiting(),
-        tone: "muted",
-      };
-    case "unconfirmed":
-      return {
-        workspaceId: row.workspaceId,
-        name: row.name,
-        label: m.computer_upgrade_workspace_unconfirmed(),
-        tone: "warn",
-      };
-    case "not_running":
-      return {
-        workspaceId: row.workspaceId,
-        name: row.name,
-        label: m.computer_upgrade_workspace_not_running(),
-        tone: "muted",
-      };
-    case "unknown":
-      return {
-        workspaceId: row.workspaceId,
-        name: row.name,
-        label: m.computer_upgrade_workspace_unknown(),
-        tone: "muted",
-      };
+): number | undefined {
+  if (progress.switchState === "target_online" && now < progress.expiresAt) {
+    return progress.expiresAt;
   }
+  if (
+    progress.switchState === "confirmed" &&
+    progress.workspaces.some((row) => row.state === "waiting") &&
+    progress.reconnectUntil !== undefined &&
+    now < progress.reconnectUntil
+  ) {
+    return progress.reconnectUntil;
+  }
+  return undefined;
 }
 
 export function resolveProgressComputerVersion(input: {
@@ -131,116 +111,13 @@ export function resolveProgressComputerVersion(input: {
   return computerVersion;
 }
 
-function buildSteps(
-  progress: ComputerUpgradeProgress,
-  effectiveWorkspaces: UpgradeWorkspaceProgressState[],
-  now: number,
-): UpgradeProgressStep[] {
-  const labels = stepLabels();
-  const stage = reachedStage(progress.phase);
-  const { switchState } = progress;
-
-  let s1: UpgradeStepTone = stage >= 2 ? "complete" : stage === 1 ? "current" : "incomplete";
-  let s2: UpgradeStepTone = stage >= 3 ? "complete" : stage === 2 ? "current" : "incomplete";
-  let s3: UpgradeStepTone = stage === 3 ? "current" : "incomplete";
-  let s4: UpgradeStepTone = "incomplete";
-
-  if (switchState === "target_online") {
-    s3 = now >= progress.expiresAt ? "warn" : "current";
-  } else if (switchState === "confirmed") {
-    s3 = "complete";
-    const hasWaiting = effectiveWorkspaces.some((state) => state === "waiting");
-    const hasUnsettled = effectiveWorkspaces.some(
-      (state) => state === "unconfirmed" || state === "unknown",
-    );
-    s4 = hasWaiting ? "current" : hasUnsettled ? "warn" : "complete";
-  } else if (switchState === "uncertain") {
-    s3 = "warn";
-  } else if (
-    switchState === "rolled_back" ||
-    switchState === "failed" ||
-    switchState === "conflict"
-  ) {
-    if (stage === 1) s1 = "error";
-    else if (stage === 2) s2 = "error";
-    else s3 = "error";
-  }
-
-  return [
-    { id: "download", label: labels.download, status: s1 },
-    { id: "drain", label: labels.drain, status: s2 },
-    { id: "switch", label: labels.switch, status: s3 },
-    { id: "reconnect", label: labels.reconnect, status: s4 },
-  ];
-}
-
-function pendingSummary(progress: ComputerUpgradeProgress) {
-  switch (progress.phase) {
-    case "downloading":
-      return {
-        headline: m.computer_upgrade_progress_downloading(),
-        detail: m.computer_upgrade_progress_downloading_detail(),
-      };
-    case "verifying":
-      return {
-        headline: m.computer_upgrade_progress_verifying(),
-        detail: m.computer_upgrade_progress_verifying_detail(),
-      };
-    case "waiting":
-      return {
-        headline: m.computer_upgrade_progress_draining(),
-        detail: m.computer_upgrade_progress_draining_detail(),
-      };
-    case "switching":
-      return {
-        headline: m.computer_upgrade_progress_switching(),
-        detail: m.computer_upgrade_progress_switching_detail(),
-      };
-    default:
-      return {
-        headline: m.computer_upgrade_progress_awaiting_stage(),
-        detail: m.computer_upgrade_progress_awaiting_stage_detail(),
-      };
-  }
-}
-
-function confirmedSummary(
-  progress: ComputerUpgradeProgress,
-  effectiveWorkspaces: UpgradeWorkspaceProgressState[],
-  now: number,
-) {
-  const recoverable = effectiveWorkspaces.filter((state) => state !== "not_running");
-  const restored = recoverable.filter((state) => state === "restored").length;
-  const hasWaiting = effectiveWorkspaces.some((state) => state === "waiting");
-  const hasUnsettled = effectiveWorkspaces.some(
-    (state) => state === "unconfirmed" || state === "unknown",
-  );
-  let detail: string;
-  if (recoverable.length > 0) {
-    const base = m.computer_upgrade_progress_workspace_summary({
-      restored: String(restored),
-      total: String(recoverable.length),
-    });
-    if (hasWaiting && progress.reconnectUntil !== undefined && progress.reconnectUntil > now) {
-      const seconds = Math.max(0, Math.ceil((progress.reconnectUntil - now) / 1000));
-      detail = m.computer_upgrade_progress_reconnect_countdown({
-        summary: base,
-        seconds: String(seconds),
-      });
-    } else {
-      detail = base;
-    }
-  } else if (effectiveWorkspaces.length > 0) {
-    detail = m.computer_upgrade_progress_confirmed_none_running_detail();
-  } else {
-    detail = m.computer_upgrade_progress_confirmed_all_detail();
-  }
-  const alertColor: AlertColor = hasWaiting ? "brand" : hasUnsettled ? "warning" : "success";
-  return {
-    alertColor,
-    headline: m.computer_upgrade_progress_confirmed(),
-    detail,
-  };
+function unsettledWorkspaceNames(progress: ComputerUpgradeProgress, now: number): string[] {
+  return progress.workspaces
+    .filter((row) => {
+      const state = effectiveWorkspaceState(row, progress.reconnectUntil, now);
+      return state === "unconfirmed" || state === "unknown";
+    })
+    .map((row) => row.name);
 }
 
 export function buildComputerUpgradeProgressView(input: {
@@ -250,56 +127,45 @@ export function buildComputerUpgradeProgressView(input: {
   now?: number;
 }): ComputerUpgradeProgressView {
   const { progress, status, failureHeadline, now = Date.now() } = input;
-  const effectiveStates = progress.workspaces.map((row) =>
-    effectiveWorkspaceState(row, progress.reconnectUntil, now),
-  );
-  const steps = buildSteps(progress, effectiveStates, now);
-  const workspaces = progress.workspaces.map((row) =>
-    workspaceRowView(row, progress.reconnectUntil, now),
-  );
-  const title = m.computer_upgrade_progress_title({ version: progress.expectedVersion });
+  const version = progress.expectedVersion;
 
   switch (progress.switchState) {
-    case "pending": {
-      const copy = pendingSummary(progress);
-      return {
-        version: progress.expectedVersion,
-        alertColor: "brand",
-        title,
-        headline: copy.headline,
-        detail: copy.detail,
-        steps,
-        workspaces,
-        canRetry: false,
-      };
-    }
+    case "pending":
+      return { kind: "active", version };
     case "target_online": {
-      const expired = now >= progress.expiresAt;
+      if (now < progress.expiresAt) {
+        return { kind: "active", version };
+      }
       return {
-        version: progress.expectedVersion,
-        alertColor: expired ? "warning" : "brand",
-        title,
-        headline: m.computer_upgrade_progress_target_online(),
-        detail: expired
-          ? m.computer_upgrade_progress_target_online_expired_detail()
-          : m.computer_upgrade_progress_target_online_detail(),
-        steps,
-        workspaces,
+        kind: "issue",
+        version,
+        alertColor: "warning",
+        title: m.computer_upgrade_progress_title({ version }),
+        detail: m.computer_upgrade_progress_target_online_expired_detail(),
+        unsettledWorkspaces: [],
         canRetry: false,
       };
     }
     case "confirmed": {
-      const copy = confirmedSummary(progress, effectiveStates, now);
-      return {
-        version: progress.expectedVersion,
-        alertColor: copy.alertColor,
-        title,
-        headline: copy.headline,
-        detail: copy.detail,
-        steps,
-        workspaces,
-        canRetry: false,
-      };
+      const hasWaiting = progress.workspaces.some(
+        (row) => effectiveWorkspaceState(row, progress.reconnectUntil, now) === "waiting",
+      );
+      if (hasWaiting) {
+        return { kind: "active", version };
+      }
+      const unsettled = unsettledWorkspaceNames(progress, now);
+      if (unsettled.length > 0) {
+        return {
+          kind: "issue",
+          version,
+          alertColor: "warning",
+          title: m.computer_upgrade_progress_title({ version }),
+          detail: m.computer_upgrade_progress_workspaces_unconfirmed_detail({ version }),
+          unsettledWorkspaces: unsettled,
+          canRetry: false,
+        };
+      }
+      return { kind: "completed", version };
     }
     case "rolled_back": {
       const restored =
@@ -308,52 +174,193 @@ export function buildComputerUpgradeProgressView(input: {
           ? status.actualVersion
           : undefined);
       return {
-        version: progress.expectedVersion,
+        kind: "issue",
+        version,
         alertColor: "error",
-        title,
-        headline: restored
+        title: m.computer_upgrade_failed_title({ version }),
+        detail: restored
           ? m.computer_upgrade_progress_rolled_back({ version: restored })
           : m.computer_upgrade_progress_rolled_back_unknown(),
-        detail: restored
-          ? m.computer_upgrade_progress_rolled_back_detail()
-          : m.computer_upgrade_progress_rolled_back_unknown_detail(),
-        steps,
-        workspaces: [],
+        unsettledWorkspaces: [],
         canRetry: true,
       };
     }
     case "uncertain":
       return {
-        version: progress.expectedVersion,
+        kind: "issue",
+        version,
         alertColor: "warning",
-        title,
-        headline: m.computer_upgrade_progress_uncertain(),
+        title: m.computer_upgrade_progress_title({ version }),
         detail: m.computer_upgrade_progress_uncertain_detail(),
-        steps,
-        workspaces,
+        unsettledWorkspaces: unsettledWorkspaceNames(progress, now),
         canRetry: false,
       };
     case "conflict":
       return {
-        version: progress.expectedVersion,
+        kind: "issue",
+        version,
         alertColor: "error",
-        title,
-        headline: m.computer_upgrade_progress_conflict(),
+        title: m.computer_upgrade_failed_title({ version }),
         detail: m.computer_upgrade_progress_conflict_detail(),
-        steps,
-        workspaces,
+        unsettledWorkspaces: [],
         canRetry: true,
       };
     case "failed":
       return {
-        version: progress.expectedVersion,
+        kind: "issue",
+        version,
         alertColor: "error",
-        title,
-        headline: m.computer_upgrade_progress_failed(),
-        detail: failureHeadline ?? m.computer_upgrade_progress_rolled_back_detail(),
-        steps,
-        workspaces: [],
+        title: m.computer_upgrade_failed_title({ version }),
+        detail: failureHeadline ?? m.computer_upgrade_progress_failed_detail(),
+        unsettledWorkspaces: [],
         canRetry: true,
       };
   }
+}
+
+export function runtimeUpgradePresentation(input: {
+  slot: ComputerUpgradeSlotState | null;
+  canUpgrade: boolean;
+  online: boolean;
+  upgradeInFlight: boolean;
+  now?: number;
+}): RuntimeUpgradePresentation {
+  const { slot, canUpgrade, online, upgradeInFlight, now = Date.now() } = input;
+  if (!slot) {
+    return {};
+  }
+  if (slot.state === "available") {
+    return {
+      headerAction: canUpgrade
+        ? { kind: "upgrade", disabled: !online || upgradeInFlight }
+        : undefined,
+      versionNotice: {
+        kind: "available",
+        version: slot.offer,
+        prerelease: isPrereleaseVersion(slot.offer),
+        offline: !online,
+      },
+    };
+  }
+  if (slot.state === "upgrading") {
+    return {
+      headerAction: canUpgrade ? { kind: "upgrading", disabled: true } : undefined,
+      versionNotice: { kind: "upgrading", version: slot.version },
+    };
+  }
+  if (slot.state === "progress") {
+    const view = buildComputerUpgradeProgressView({
+      progress: slot.progress,
+      status: slot.status,
+      failureHeadline: slot.failure?.headline,
+      now,
+    });
+    if (view.kind === "active") {
+      return {
+        headerAction: canUpgrade ? { kind: "upgrading", disabled: true } : undefined,
+        versionNotice: { kind: "upgrading", version: view.version },
+      };
+    }
+    if (view.kind === "completed") {
+      if (slot.offer !== undefined) {
+        return {
+          headerAction: canUpgrade
+            ? { kind: "upgrade", disabled: !online || upgradeInFlight }
+            : undefined,
+          versionNotice: {
+            kind: "available",
+            version: slot.offer,
+            prerelease: isPrereleaseVersion(slot.offer),
+            offline: !online,
+          },
+        };
+      }
+      return {};
+    }
+    const canRetry = canUpgrade && view.canRetry && slot.offer !== undefined;
+    return {
+      headerAction: canRetry ? { kind: "retry", disabled: !online || upgradeInFlight } : undefined,
+      versionNotice: {
+        kind: "issue",
+        tone: view.alertColor,
+        title: view.title,
+        detail: view.detail,
+        steps: slot.failure?.steps,
+        errorId: slot.failure?.errorId,
+        unsettledWorkspaces: view.unsettledWorkspaces,
+      },
+    };
+  }
+  const canRetry = canUpgrade && slot.offer !== undefined;
+  return {
+    headerAction: canRetry ? { kind: "retry", disabled: !online || upgradeInFlight } : undefined,
+    versionNotice: {
+      kind: "issue",
+      tone: "error",
+      title: slot.version
+        ? m.computer_upgrade_failed_title({ version: slot.version })
+        : m.computer_upgrade_failed_title_generic(),
+      detail: slot.failure.headline,
+      steps: slot.failure.steps,
+      errorId: slot.failure.errorId,
+    },
+  };
+}
+
+export type ComputerUpgradeFailureNotice = {
+  id: string;
+  title: string;
+  body: string;
+};
+
+export function describeComputerUpgradeFailureNotice(input: {
+  upgrade: FollowedComputerUpgrade;
+  status: ComputerUpgradeStatus | null | undefined;
+  now?: number;
+}): ComputerUpgradeFailureNotice | null {
+  const { upgrade, status, now = Date.now() } = input;
+  if (status && computerUpgradeSettledToastable(status)) return null;
+  const id = computerUpgradeNoticeId(upgrade.computerId);
+  const name = upgrade.computerName;
+  if (status?.progress) {
+    const outcome = upgradeOutcome(status, now);
+    const view = buildComputerUpgradeProgressView({
+      progress: status.progress,
+      status,
+      failureHeadline: outcome.state === "failed" ? outcome.failure.headline : undefined,
+      now,
+    });
+    if (view.kind === "completed") return null;
+    if (view.kind === "issue") {
+      const title = name
+        ? view.alertColor === "error"
+          ? m.computer_upgrade_failed_notice_title({ name })
+          : m.computer_upgrade_issue_notice_title({ name })
+        : view.title;
+      const body =
+        view.unsettledWorkspaces.length > 0
+          ? `${view.detail} ${view.unsettledWorkspaces.join(", ")}`
+          : view.detail;
+      return { id, title, body };
+    }
+  }
+  if (status?.status === "failed") {
+    const outcome = upgradeOutcome(status, now);
+    const title = name
+      ? m.computer_upgrade_failed_notice_title({ name })
+      : upgrade.version
+        ? m.computer_upgrade_failed_title({ version: upgrade.version })
+        : m.computer_upgrade_failed_title_generic();
+    const body =
+      outcome.state === "failed"
+        ? outcome.failure.headline
+        : m.computer_upgrade_progress_failed_detail();
+    return { id, title, body };
+  }
+  const title = name
+    ? m.computer_upgrade_issue_notice_title({ name })
+    : upgrade.version
+      ? m.computer_upgrade_progress_title({ version: upgrade.version })
+      : m.computer_upgrade_failed_title_generic();
+  return { id, title, body: m.computer_upgrade_progress_uncertain_detail() };
 }

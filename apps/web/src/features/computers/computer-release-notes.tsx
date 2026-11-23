@@ -35,12 +35,17 @@ export function useComputerRelease(version: string | undefined): ComputerRelease
   return useQuery(computerReleaseNotesQuery(version)).data ?? undefined;
 }
 
-/** "What's new": a link that opens a release's notes in a dialog. */
-export function ComputerReleaseNotesLink({ release }: { release: ComputerRelease }) {
+export function ComputerReleaseNotesLink({
+  release,
+  size = "sm",
+}: {
+  release: ComputerRelease;
+  size?: "xs" | "sm";
+}) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button type="button" size="sm" color="link-color" onPress={() => setOpen(true)}>
+      <Button type="button" size={size} color="link-color" onPress={() => setOpen(true)}>
         {m.computer_upgrade_whats_new()}
       </Button>
       <ModalOverlay isOpen={open} onOpenChange={setOpen} isDismissable>
