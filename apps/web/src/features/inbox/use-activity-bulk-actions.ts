@@ -12,6 +12,8 @@ import {
 } from "./activity-inbox-queries";
 import type { ActivityDoneUndo } from "./activity-inbox.schemas";
 
+const ACTIVITY_BULK_DONE_UNDO_MS = 5_000;
+
 export function useActivityBulkActions({
   workspaceId,
   onChanged,
@@ -58,6 +60,7 @@ export function useActivityBulkActions({
       }
       toast.undoable(title, {
         key,
+        durationMs: ACTIVITY_BULK_DONE_UNDO_MS,
         failed: m.activity_inbox_action_error(),
         onUndo: () => undoDone({ data: undo }).finally(onChanged),
       });
