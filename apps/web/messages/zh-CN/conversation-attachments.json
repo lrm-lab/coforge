@@ -25,6 +25,12 @@
   "conversation_attachment_signed_out_detail": "刷新页面重新登录。",
   "conversation_attachment_forbidden_detail": "你不能在这里上传文件。",
   "conversation_attachment_offline_detail": "检查网络后重试。",
+  "conversation_attachment_expired": "已失效",
+  "conversation_attachment_expired_detail": "该附件已失效，请重试重新上传，或移除后发送。",
+  "conversation_attachment_reselect": "需重新选择",
+  "conversation_attachment_reselect_detail": "刷新后本地文件已不可用，请重新选择文件或移除。",
+  "conversation_attachment_reselect_named": "重新选择文件 · {name}",
+  "conversation_attachment_uploaded": "已上传",
   "conversation_attachment_remove_named": "移除 {name}",
   "conversation_attachment_comment_count": [
     {

@@ -17,7 +17,12 @@ import {
 import type { ChipMention } from "./message-reference-chips";
 import { MessageBody } from "./message-body";
 import { messageRowKind, messagePaddingClass, ROW_CLASS, RUN_START_CLASS } from "./message-row";
-import { canEditUnsent, failureAnnounced, failureNeedsAnnouncing } from "./use-message-outbox";
+import {
+  canEditUnsent,
+  failureAnnounced,
+  failureNeedsAnnouncing,
+  hasLocalAttachmentFiles,
+} from "./use-message-outbox";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
@@ -27,7 +32,7 @@ const appRoute = getRouteApi("/w/$workspaceSlug");
  * gone through yet, so a greyed message is never mistaken for a sent one. */
 const SLOW_SEND_MS = 3000;
 
-function unsentReasonText(reason: UnsentReason): string {
+function unsentReasonText(reason: UnsentReason, hasLocalFiles: boolean): string {
   switch (reason) {
     case "offline":
       return m.conversation_unsent_offline();
@@ -41,6 +46,10 @@ function unsentReasonText(reason: UnsentReason): string {
       return m.conversation_unsent_gone();
     case "rejected":
       return m.conversation_unsent_rejected();
+    case "attachments_unavailable":
+      return hasLocalFiles
+        ? m.conversation_unsent_attachments_unavailable()
+        : m.conversation_unsent_attachments_reselect();
   }
 }
 
@@ -49,10 +58,12 @@ function unsentReasonText(reason: UnsentReason): string {
 function UnsentReasonText({
   localId,
   reason,
-  text = unsentReasonText(reason),
+  hasLocalFiles,
+  text = unsentReasonText(reason, hasLocalFiles),
 }: {
   localId: string;
   reason: UnsentReason;
+  hasLocalFiles: boolean;
   text?: string;
 }) {
   const [announce] = useState(() => failureNeedsAnnouncing(localId));
@@ -147,12 +158,26 @@ export function OutboxMessageRow({
           </div>
           {entry.attachments.length > 0 && (
             <ul className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-quaternary">
-              {entry.attachments.map((attachment) => (
-                <li key={attachment.id} className="flex min-w-0 items-center gap-1">
-                  <Paperclip aria-hidden="true" className="size-4 shrink-0" />
-                  <span className="truncate">{attachment.fileName}</span>
-                </li>
-              ))}
+              {entry.attachments.map((attachment) => {
+                const unavailable =
+                  unsent?.reason === "attachments_unavailable" &&
+                  (unsent.unavailableAttachmentIds?.includes(attachment.id) ?? false);
+                return (
+                  <li
+                    key={attachment.id}
+                    data-attachment-unavailable={unavailable ? "true" : undefined}
+                    className={cn(
+                      "flex min-w-0 items-center gap-1",
+                      unavailable && "text-error-primary",
+                    )}
+                  >
+                    <Paperclip aria-hidden="true" className="size-4 shrink-0" />
+                    <span className={cn("truncate", unavailable && "line-through")}>
+                      {attachment.fileName}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           )}
           {grouped && sendingLabel}
@@ -162,6 +187,7 @@ export function OutboxMessageRow({
               <UnsentReasonText
                 localId={entry.localId}
                 reason={unsent.reason}
+                hasLocalFiles={hasLocalAttachmentFiles(entry)}
                 text={guidance?.message()}
               />
               {guidance && (

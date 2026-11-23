@@ -19,11 +19,12 @@ export type UploadFailure =
   | "signed_out"
   | "forbidden"
   | "offline"
-  | "failed";
+  | "failed"
+  | "expired";
 
 /** A failure a retry may get past; the others need something else first. */
 export const retryableUploadFailure = (failure: UploadFailure) =>
-  failure === "offline" || failure === "failed";
+  failure === "offline" || failure === "failed" || failure === "expired";
 
 /** A file the next send cannot carry, and no retry would change that: it takes none of the
  * `MAX_ATTACHMENTS` places, and "Remove files that can't be attached" clears it. */

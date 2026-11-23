@@ -47,6 +47,7 @@ export function useComposerAttachments(draftKey: string, uploadTo: () => Promise
   }
 
   async function uploadOne(pending: PendingAttachment) {
+    if (!pending.file) return;
     const key = draftKey;
     patch(key, pending.localId, { failure: undefined, progress: 0 });
     const signal = startUpload(pending.localId);
@@ -65,6 +66,22 @@ export function useComposerAttachments(draftKey: string, uploadTo: () => Promise
     } finally {
       finishUpload(pending.localId);
     }
+  }
+
+  async function replace(targetLocalId: string, file: File) {
+    const failures = pickedFileFailures([file], room + 1);
+    const failure = failures[0];
+    const replacement: PendingAttachment = {
+      localId: targetLocalId,
+      file,
+      fileName: file.name,
+      progress: 0,
+      failure,
+    };
+    setAttachments((current) =>
+      current.map((item) => (item.localId === targetLocalId ? replacement : item)),
+    );
+    if (!failure && !wasRemoved(targetLocalId)) await uploadOne(replacement);
   }
 
   async function addFiles(files: File[]) {
@@ -93,6 +110,6 @@ export function useComposerAttachments(draftKey: string, uploadTo: () => Promise
     anyFailed,
     room,
     addFiles,
-    tray: { attachments, retry: uploadOne, remove },
+    tray: { attachments, retry: uploadOne, replace, remove },
   };
 }

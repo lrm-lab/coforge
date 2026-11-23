@@ -65,8 +65,10 @@ export function useLongMessage({
   }
 
   /** What a send with an empty field says: the preview of a long text it carries, if any. */
-  function emptyBody(files: readonly { file: File }[]) {
-    return files.map((item) => previews.current.get(item.file)).find(Boolean);
+  function emptyBody(files: readonly { file?: File }[]) {
+    return files
+      .map((item) => (item.file ? previews.current.get(item.file) : undefined))
+      .find(Boolean);
   }
 
   return { divert, pasted, emptyBody };

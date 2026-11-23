@@ -74,14 +74,20 @@ export async function postTaskMessage(
     : [];
   if (available.length !== attachmentIds.length) {
     const availableIds = new Set(available.map((attachment) => attachment.id));
+    const missingIds = attachmentIds.filter((id) => !availableIds.has(id));
     throw (
       (await attachmentInOtherConversation(tx, {
         workspaceId,
         conversationId,
-        missingIds: attachmentIds.filter((id) => !availableIds.has(id)),
+        missingIds,
         uploader,
         agentId: member.agentId,
-      })) ?? new AppError("ACCESS_DENIED")
+      })) ??
+      (member.userId
+        ? new AppError("ATTACHMENTS_UNAVAILABLE", {
+            details: { attachmentIds: missingIds.join(",") },
+          })
+        : new AppError("ACCESS_DENIED"))
     );
   }
 

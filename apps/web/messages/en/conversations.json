@@ -80,6 +80,8 @@
   "conversation_unsent_denied": "Couldn't send. You don't have permission to post here",
   "conversation_unsent_gone": "Couldn't send. This conversation was deleted",
   "conversation_unsent_rejected": "Couldn't send. Edit the message and send it again",
+  "conversation_unsent_attachments_unavailable": "Some attachments expired. Edit to upload them again or remove them",
+  "conversation_unsent_attachments_reselect": "Some attachments expired. Edit to select the files again or remove them",
   "conversation_unsent_edit": "Edit",
   "conversation_unsent_discard": "Discard",
   "conversation_add_reaction": "Add reaction",

@@ -44,11 +44,13 @@ export async function claimUploadedAttachments(
     select: ATTACHMENT_VIEW_SELECT,
   });
   const byId = new Map(available.map((attachment) => [attachment.id, attachment]));
-  return attachmentIds.map((attachmentId) => {
-    const attachment = byId.get(attachmentId);
-    if (!attachment) throw new AppError("ACCESS_DENIED");
-    return attachment;
-  });
+  const missingIds = [...new Set(attachmentIds.filter((id) => !byId.has(id)))];
+  if (missingIds.length > 0) {
+    throw new AppError("ATTACHMENTS_UNAVAILABLE", {
+      details: { attachmentIds: missingIds.join(",") },
+    });
+  }
+  return attachmentIds.map((attachmentId) => byId.get(attachmentId)!);
 }
 
 /** Links claimed uploads to their message, keeping send order as `position`. */

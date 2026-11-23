@@ -25,6 +25,12 @@
   "conversation_attachment_signed_out_detail": "Reload the page to sign in again.",
   "conversation_attachment_forbidden_detail": "You can't upload files here.",
   "conversation_attachment_offline_detail": "Check your connection, then retry.",
+  "conversation_attachment_expired": "Expired",
+  "conversation_attachment_expired_detail": "This attachment expired. Retry to upload it again, or remove it.",
+  "conversation_attachment_reselect": "Select again",
+  "conversation_attachment_reselect_detail": "The local file is no longer available after reload. Select the file again, or remove it.",
+  "conversation_attachment_reselect_named": "Select file again · {name}",
+  "conversation_attachment_uploaded": "Uploaded",
   "conversation_attachment_remove_named": "Remove {name}",
   "conversation_attachment_comment_count": [
     {

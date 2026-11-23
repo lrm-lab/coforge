@@ -4,6 +4,8 @@ import {
   createComposerOutbox,
   draftWithUnsentMessage,
   outboxLocalIdOfStorageKey,
+  resolveSubmitIdempotencyKey,
+  unavailableAttachmentIdsOf,
   unsentReason,
   unsentReasonAllowsEdit,
   unsentReasonAllowsRetry,
@@ -356,7 +358,13 @@ describe("unsentReason", () => {
   });
 
   test("editing is offered where a changed message could go through", () => {
-    for (const reason of ["offline", "unavailable", "denied", "rejected"] as const)
+    for (const reason of [
+      "offline",
+      "unavailable",
+      "denied",
+      "rejected",
+      "attachments_unavailable",
+    ] as const)
       expect(unsentReasonAllowsEdit(reason)).toBe(true);
     // Gone: there is nowhere left to send it. Interrupted: it may already be in the conversation.
     for (const reason of ["gone", "interrupted"] as const)
@@ -368,8 +376,97 @@ describe("unsentReason", () => {
     expect(unsentReason(new AppError("AGENT_DM_RESTRICTED"))).toBe("denied");
     expect(unsentReason(new AppError("NOT_FOUND"))).toBe("gone");
     expect(unsentReason(new AppError("INVALID_INPUT"))).toBe("rejected");
-    for (const reason of ["denied", "gone", "rejected"] as const)
+    expect(unsentReason(new AppError("ATTACHMENTS_UNAVAILABLE"))).toBe("attachments_unavailable");
+    for (const reason of ["denied", "gone", "rejected", "attachments_unavailable"] as const)
       expect(unsentReasonAllowsRetry(reason)).toBe(false);
+  });
+
+  test("unavailable attachment ids are filtered to the message's attachments and survive reload", async () => {
+    const storage = memoryStorage();
+    const outbox = createComposerOutbox(storage);
+    const pending = message({
+      attachments: [
+        { id: "expired-1", fileName: "expired.txt" },
+        { id: "valid-1", fileName: "valid.txt" },
+      ],
+    });
+    await outbox.send(pending, async () => {
+      throw new AppError("ATTACHMENTS_UNAVAILABLE", {
+        details: { attachmentIds: "expired-1,foreign-id" },
+      });
+    });
+    const afterReload = createComposerOutbox(storage).entries("chat-a");
+    expect(afterReload).toEqual([
+      {
+        ...pending,
+        state: "unsent",
+        reason: "attachments_unavailable",
+        errorId: undefined,
+        unavailableAttachmentIds: ["expired-1"],
+      },
+    ]);
+  });
+
+  test("unavailableAttachmentIdsOf does not guess when server omits or returns unrelated ids", () => {
+    const attachments = [
+      { id: "expired-1", fileName: "expired.txt" },
+      { id: "valid-1", fileName: "valid.txt" },
+    ];
+    expect(
+      unavailableAttachmentIdsOf(new AppError("ATTACHMENTS_UNAVAILABLE"), attachments),
+    ).toBeUndefined();
+    expect(
+      unavailableAttachmentIdsOf(
+        new AppError("ATTACHMENTS_UNAVAILABLE", { details: { attachmentIds: "foreign-only" } }),
+        attachments,
+      ),
+    ).toBeUndefined();
+  });
+
+  test("resolveSubmitIdempotencyKey rotates on attachment removal or replacement and keeps same payload", () => {
+    const original = {
+      body: "keep text",
+      idempotencyKey: "idem-old",
+      asTask: false,
+      taskPriority: undefined,
+      attachmentIds: ["expired-1", "valid-1"],
+    };
+    expect(
+      resolveSubmitIdempotencyKey(
+        original,
+        {
+          body: "keep text",
+          asTask: false,
+          taskPriority: undefined,
+          attachmentIds: ["expired-1", "valid-1"],
+        },
+        () => "idem-new",
+      ),
+    ).toBe("idem-old");
+    expect(
+      resolveSubmitIdempotencyKey(
+        original,
+        {
+          body: "keep text",
+          asTask: false,
+          taskPriority: undefined,
+          attachmentIds: ["valid-1"],
+        },
+        () => "idem-new",
+      ),
+    ).toBe("idem-new");
+    expect(
+      resolveSubmitIdempotencyKey(
+        original,
+        {
+          body: "keep text",
+          asTask: false,
+          taskPriority: undefined,
+          attachmentIds: ["replacement-2", "valid-1"],
+        },
+        () => "idem-new",
+      ),
+    ).toBe("idem-new");
   });
 });
 

@@ -65,7 +65,8 @@ export type UnsentReason =
   | "interrupted"
   | "denied"
   | "gone"
-  | "rejected";
+  | "rejected"
+  | "attachments_unavailable";
 
 /**
  * - `sending`: on its way, shown greyed in the conversation;
@@ -76,7 +77,12 @@ export type UnsentReason =
 export type OutboxEntry =
   | (OutgoingMessage & { state: "sending" })
   | (OutgoingMessage & { state: "delivered"; messageId: string })
-  | (OutgoingMessage & { state: "unsent"; reason: UnsentReason; errorId?: string });
+  | (OutgoingMessage & {
+      state: "unsent";
+      reason: UnsentReason;
+      errorId?: string;
+      unavailableAttachmentIds?: readonly string[];
+    });
 
 /** `fetch` rejects with a `TypeError` whose message names the network failure; the wording is the
  * browser's (Chromium, Firefox, Safari). Any other `TypeError` is a bug, not a lost connection. */
@@ -101,9 +107,57 @@ export function unsentReason(cause: unknown): UnsentReason {
     case "INVALID_INPUT":
     case "CONFLICT":
       return "rejected";
+    case "ATTACHMENTS_UNAVAILABLE":
+      return "attachments_unavailable";
     default:
       return "unavailable";
   }
+}
+
+export function unavailableAttachmentIdsOf(
+  cause: unknown,
+  attachments: readonly OutgoingAttachment[],
+): readonly string[] | undefined {
+  if (!isAppError(cause) || cause.code !== "ATTACHMENTS_UNAVAILABLE") return undefined;
+  const known = new Set(attachments.map((attachment) => attachment.id));
+  const raw = cause.details?.attachmentIds;
+  if (typeof raw !== "string") return undefined;
+  const matched = raw
+    .split(",")
+    .map((id) => id.trim())
+    .filter((id) => id.length > 0 && known.has(id));
+  return matched.length > 0 ? [...new Set(matched)] : undefined;
+}
+
+export function resolveSubmitIdempotencyKey(
+  previous:
+    | {
+        body: string;
+        idempotencyKey: string;
+        asTask: boolean;
+        taskPriority?: TaskPriorityLevel;
+        attachmentIds: readonly string[];
+      }
+    | undefined,
+  current: {
+    body: string;
+    asTask: boolean;
+    taskPriority?: TaskPriorityLevel;
+    attachmentIds: readonly string[];
+  },
+  freshKey: () => string,
+): string {
+  const sameAttachments =
+    previous !== undefined &&
+    previous.attachmentIds.length === current.attachmentIds.length &&
+    previous.attachmentIds.every((id, index) => id === current.attachmentIds[index]);
+  return previous !== undefined &&
+    previous.body === current.body &&
+    previous.asTask === current.asTask &&
+    previous.taskPriority === current.taskPriority &&
+    sameAttachments
+    ? previous.idempotencyKey
+    : freshKey();
 }
 
 /** Whether sending the same message again can succeed; a refusal would only repeat. */
@@ -191,6 +245,13 @@ function parseStored(raw: string | null): StoredEntry | undefined {
       !(TASK_PRIORITY_LEVELS as readonly string[]).includes(entry.taskPriority)
     )
       entry.taskPriority = undefined;
+    if (
+      entry.state === "unsent" &&
+      entry.unavailableAttachmentIds !== undefined &&
+      (!Array.isArray(entry.unavailableAttachmentIds) ||
+        !entry.unavailableAttachmentIds.every((id) => typeof id === "string"))
+    )
+      entry.unavailableAttachmentIds = undefined;
     return stored;
   } catch {
     return undefined;
@@ -297,9 +358,16 @@ export function createComposerOutbox(storage: OutboxStorage | null): ComposerOut
         const current = stored.get(message.localId);
         if (!current || current.entry.state === "delivered") return undefined;
         const errorId = isAppError(cause) ? cause.errorId : undefined;
+        const unavailableAttachmentIds = unavailableAttachmentIdsOf(cause, message.attachments);
         save({
           ...value,
-          entry: { ...message, state: "unsent", reason: unsentReason(cause), errorId },
+          entry: {
+            ...message,
+            state: "unsent",
+            reason: unsentReason(cause),
+            errorId,
+            ...(unavailableAttachmentIds?.length ? { unavailableAttachmentIds } : {}),
+          },
         });
         return undefined;
       }

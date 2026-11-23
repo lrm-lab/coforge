@@ -12,6 +12,7 @@ import {
   type SendOptions,
 } from "./composer-outbox";
 import { rewriteMentionPins } from "./mention-pins";
+import { localId as createLocalId } from "./composer-behavior";
 import type { PendingAttachment } from "./composer-attachments";
 import type { SentMessage } from "./message-composer";
 
@@ -73,8 +74,60 @@ export function failureAnnounced(localId: string) {
   unannouncedFailures.delete(localId);
 }
 
+export function hasLocalAttachmentFiles(
+  entry: OutboxEntry,
+  memoryChips: readonly PendingAttachment[] | undefined = sentChips.get(entry.localId),
+) {
+  if (entry.attachments.length === 0) return true;
+  if (!memoryChips) return false;
+  const targetIds =
+    entry.state === "unsent" &&
+    entry.reason === "attachments_unavailable" &&
+    entry.unavailableAttachmentIds?.length
+      ? entry.unavailableAttachmentIds
+      : entry.attachments.map((attachment) => attachment.id);
+  return targetIds.every((id) => memoryChips.some((chip) => chip.id === id && Boolean(chip.file)));
+}
+
 export function canEditUnsent(entry: OutboxEntry) {
-  return entry.attachments.length === 0 || sentChips.has(entry.localId);
+  return (
+    entry.attachments.length === 0 ||
+    sentChips.has(entry.localId) ||
+    (entry.state === "unsent" && entry.reason === "attachments_unavailable")
+  );
+}
+
+export function restoredChipsForEdit(
+  entry: OutboxEntry,
+  memoryChips?: readonly PendingAttachment[],
+): PendingAttachment[] {
+  const unavailable = new Set(
+    entry.state === "unsent" && entry.reason === "attachments_unavailable"
+      ? (entry.unavailableAttachmentIds ?? [])
+      : [],
+  );
+  if (memoryChips && memoryChips.length > 0) {
+    return memoryChips.map((chip) =>
+      chip.id && unavailable.has(chip.id)
+        ? { ...chip, id: undefined, progress: 0, failure: "expired" }
+        : chip,
+    );
+  }
+  return entry.attachments.map((attachment) =>
+    unavailable.has(attachment.id)
+      ? {
+          localId: createLocalId(),
+          fileName: attachment.fileName,
+          progress: 0,
+          failure: "expired",
+        }
+      : {
+          localId: createLocalId(),
+          fileName: attachment.fileName,
+          id: attachment.id,
+          progress: 100,
+        },
+  );
 }
 
 /** What a conversation row asks of its chat's composer: take back an unsent message for editing,
@@ -87,6 +140,7 @@ export type ComposerRequest =
       asTask: boolean;
       taskPriority?: TaskPriorityLevel;
       pins: OutgoingMessage["pins"];
+      attachmentIds: readonly string[];
       chips: PendingAttachment[];
     }
   | { kind: "focus" };
@@ -208,7 +262,8 @@ export function useMessageOutbox({
         idempotencyKey: entry.idempotencyKey,
         asTask: entry.asTask,
         taskPriority: entry.taskPriority,
-        chips: sentChips.get(entry.localId) ?? [],
+        attachmentIds: entry.attachments.map((attachment) => attachment.id),
+        chips: restoredChipsForEdit(entry, sentChips.get(entry.localId)),
       });
       if (!taken) return;
       deviceComposerOutbox().discard(entry.localId);

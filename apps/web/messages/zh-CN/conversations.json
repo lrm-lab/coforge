@@ -77,6 +77,8 @@
   "conversation_unsent_denied": "发送失败，你没有在这里发消息的权限",
   "conversation_unsent_gone": "发送失败，这个对话已被删除",
   "conversation_unsent_rejected": "发送失败，请修改后重新发送",
+  "conversation_unsent_attachments_unavailable": "部分附件已失效，请编辑后重新上传或移除",
+  "conversation_unsent_attachments_reselect": "部分附件已失效，请编辑后重新选择文件或移除",
   "conversation_unsent_edit": "编辑",
   "conversation_unsent_discard": "放弃",
   "conversation_add_reaction": "添加表情",

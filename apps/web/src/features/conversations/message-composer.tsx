@@ -13,11 +13,17 @@ import { COMPOSER_FOCUS_CLASS, COMPOSER_FRAME_CLASS } from "./composer-frame";
 import { ComposerNotice } from "./composer-notice";
 import { useLongMessage } from "./use-long-message";
 import { ComposerAttachmentTray } from "./composer-attachment-tray";
+import { pendingAttachmentName } from "./composer-attachments";
 import { useComposerAttachments } from "./use-composer-attachments";
 import { useComposerPaste } from "./use-composer-paste";
 import { useFileDrop } from "./use-file-drop";
 import { useComposerScope } from "./composer-scope";
-import { draftWithUnsentMessage, type OutgoingMessage, type SendOptions } from "./composer-outbox";
+import {
+  draftWithUnsentMessage,
+  resolveSubmitIdempotencyKey,
+  type OutgoingMessage,
+  type SendOptions,
+} from "./composer-outbox";
 import { useComposerRequests, useMessageOutbox } from "./use-message-outbox";
 import {
   clearComposerDraft,
@@ -102,6 +108,7 @@ export function MessageComposer({
         idempotencyKey: string;
         asTask: boolean;
         taskPriority?: TaskPriorityLevel;
+        attachmentIds: readonly string[];
       }
     | undefined
   >(undefined);
@@ -237,16 +244,23 @@ export function MessageComposer({
   function submit() {
     if (sendDisabled || longMessage.divert()) return;
     const text =
-      body.trim() || longMessage.emptyBody(attachments) || attachments[0]?.file.name || "";
+      body.trim() ||
+      longMessage.emptyBody(attachments) ||
+      (attachments[0] ? pendingAttachmentName(attachments[0]) : "");
     const sendAsTask = taskMode && asTask;
     const sendPriority = sendAsTask ? taskPriority : undefined;
-    const idempotencyKey =
-      retryRef.current?.body === text &&
-      retryRef.current.asTask === sendAsTask &&
-      retryRef.current.taskPriority === sendPriority
-        ? retryRef.current.idempotencyKey
-        : localId();
     const uploaded = attachments.filter((item) => item.id);
+    const uploadedIds = uploaded.flatMap((item) => (item.id ? [item.id] : []));
+    const idempotencyKey = resolveSubmitIdempotencyKey(
+      retryRef.current,
+      {
+        body: text,
+        asTask: sendAsTask,
+        taskPriority: sendPriority,
+        attachmentIds: uploadedIds,
+      },
+      localId,
+    );
     const message: OutgoingMessage = {
       localId: localId(),
       draftKey,
@@ -256,7 +270,7 @@ export function MessageComposer({
       asTask: sendAsTask,
       ...(sendPriority && { taskPriority: sendPriority }),
       attachments: uploaded.flatMap((item) =>
-        item.id ? [{ id: item.id, fileName: item.file.name }] : [],
+        item.id ? [{ id: item.id, fileName: pendingAttachmentName(item) }] : [],
       ),
     };
     retryRef.current = undefined;
@@ -286,6 +300,7 @@ export function MessageComposer({
       idempotencyKey: request.idempotencyKey,
       asTask: request.asTask,
       taskPriority: request.asTask ? (request.taskPriority ?? readLastTaskPriority()) : undefined,
+      attachmentIds: request.attachmentIds,
     };
     requestAnimationFrame(focusComposer);
   });

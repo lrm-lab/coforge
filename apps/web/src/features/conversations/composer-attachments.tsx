@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Download01, RefreshCcw01, Trash01, XClose } from "@untitledui/icons";
-import { Popover as AriaPopover } from "react-aria-components";
+import { FileTrigger, Popover as AriaPopover } from "react-aria-components";
 
 import { Dialog } from "#src/components/application/modals/modal";
 import { Button } from "#src/components/base/buttons/button";
@@ -30,7 +30,8 @@ export type PendingAttachment = {
   /** Stable key across renders and across the file's own upload lifecycle; independent of
    * `file` identity so two same-named files can coexist. */
   localId: string;
-  file: File;
+  file?: File;
+  fileName?: string;
   /** Set once the server has accepted the upload. */
   id?: string;
   /** 0 to 100 while uploading. */
@@ -39,8 +40,12 @@ export type PendingAttachment = {
   failure?: UploadFailure;
 };
 
+export function pendingAttachmentName(item: Pick<PendingAttachment, "file" | "fileName">): string {
+  return item.file?.name ?? item.fileName ?? "";
+}
+
 /** The short word a tile says for a failure, as Raft's "Too large". */
-export function uploadFailureLabel(failure: UploadFailure): string {
+export function uploadFailureLabel(failure: UploadFailure, hasFile = true): string {
   switch (failure) {
     case "empty":
       return m.conversation_attachment_empty();
@@ -56,17 +61,19 @@ export function uploadFailureLabel(failure: UploadFailure): string {
       return m.conversation_attachment_offline();
     case "failed":
       return m.conversation_attachment_failed();
+    case "expired":
+      return hasFile ? m.conversation_attachment_expired() : m.conversation_attachment_reselect();
   }
 }
 
 /** The sentence behind the short word: why, and what to do about it. */
-export function uploadFailureDetail(failure: UploadFailure, file: Pick<File, "size">): string {
+export function uploadFailureDetail(failure: UploadFailure, file?: Pick<File, "size">): string {
   switch (failure) {
     case "empty":
       return m.conversation_attachment_empty_detail();
     case "too_large":
       // A file under the limit was refused by the server, or a proxy in front of it (a 413).
-      return file.size > ATTACHMENT_MAX_BYTES
+      return file && file.size > ATTACHMENT_MAX_BYTES
         ? m.conversation_attachment_too_large_detail({
             size: formatFileSize(file.size),
             limit: formatFileSize(ATTACHMENT_MAX_BYTES),
@@ -82,6 +89,10 @@ export function uploadFailureDetail(failure: UploadFailure, file: Pick<File, "si
       return m.conversation_attachment_offline_detail();
     case "failed":
       return m.conversation_attachment_failed_detail();
+    case "expired":
+      return file
+        ? m.conversation_attachment_expired_detail()
+        : m.conversation_attachment_reselect_detail();
   }
 }
 
@@ -138,26 +149,37 @@ export function AttachmentTile({
   attachment,
   onRemove,
   onRetry,
+  onReplace,
 }: {
   attachment: PendingAttachment;
   onRemove: () => void;
   onRetry: () => void;
+  onReplace?: (file: File) => void;
 }) {
   const { file, failure } = attachment;
+  const name = pendingAttachmentName(attachment);
+  const contentType = file?.type ?? "";
   const uploading = stillUploading(attachment);
-  const isImage = isImageType(file.type);
+  const isImage = file ? isImageType(file.type) : false;
   // A failed image is a card too: its thumbnail has no room to say why.
   const thumbnail = isImage && !failure;
-  const retryable = failure !== undefined && retryableUploadFailure(failure);
+  const retryable = Boolean(file) && failure !== undefined && retryableUploadFailure(failure);
+  const reselectable = !file && failure === "expired" && Boolean(onReplace);
   const [previewUrl, setPreviewUrl] = useState<string>();
   useEffect(() => {
+    if (!file) {
+      setPreviewUrl(undefined);
+      return;
+    }
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [file]);
-  const typeLabel = fileTypeLabel(file.name, file.type);
-  const typeAndSize = `${typeLabel ? `${typeLabel} · ` : ""}${formatFileSize(file.size)}`;
-  const failureLabel = failure && uploadFailureLabel(failure);
+  const typeLabel = fileTypeLabel(name, contentType);
+  const typeAndSize = file
+    ? `${typeLabel ? `${typeLabel} · ` : ""}${formatFileSize(file.size)}`
+    : m.conversation_attachment_uploaded();
+  const failureLabel = failure && uploadFailureLabel(failure, Boolean(file));
   const failureDetail = failure && uploadFailureDetail(failure, file);
   const status = failureLabel
     ? failureLabel
@@ -169,7 +191,7 @@ export function AttachmentTile({
   const tileRef = useRef<HTMLLIElement>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   return (
-    <li ref={tileRef} className="group/tile relative shrink-0">
+    <li ref={tileRef} data-attachment-failure={failure} className="group/tile relative shrink-0">
       <Tooltip title={failureDetail} isDisabled={!failure || previewOpen} placement="top start">
         <Button
           onPress={() => setPreviewOpen(true)}
@@ -178,11 +200,11 @@ export function AttachmentTile({
           color="tertiary"
           size="sm"
           noTextPadding
-          aria-label={`${file.name} · ${failure ? `${failureLabel}. ${failureDetail}` : status}`}
+          aria-label={`${name} · ${failure ? `${failureLabel}. ${failureDetail}` : status}`}
           className={cx(
             "overflow-hidden rounded-lg border border-primary bg-primary p-0 hover:bg-primary_hover",
             thumbnail ? "size-14" : "h-14 w-52 justify-start px-2.5",
-            retryable && "pr-10",
+            (retryable || reselectable) && "pr-10",
             failure && "border-error",
           )}
         >
@@ -194,21 +216,21 @@ export function AttachmentTile({
                 className="size-full"
                 imgClassName={cx("size-full object-cover", uploading && "opacity-60")}
                 failed={
-                  <FileTypeIcon fileName={file.name} contentType={file.type} className="size-7" />
+                  <FileTypeIcon fileName={name} contentType={contentType} className="size-7" />
                 }
               />
             ) : (
               <span className="flex size-full items-center justify-center bg-secondary">
-                <FileTypeIcon fileName={file.name} contentType={file.type} className="size-7" />
+                <FileTypeIcon fileName={name} contentType={contentType} className="size-7" />
               </span>
             )
           ) : (
             <span className="flex min-w-0 items-center gap-2 text-left">
               <span className="flex size-8 shrink-0 items-center justify-center">
-                <FileTypeIcon fileName={file.name} contentType={file.type} className="size-8" />
+                <FileTypeIcon fileName={name} contentType={contentType} className="size-8" />
               </span>
               <span className="flex min-w-0 flex-col">
-                <span className="truncate text-sm font-medium text-secondary">{file.name}</span>
+                <span className="truncate text-sm font-medium text-secondary">{name}</span>
                 <span
                   className={cx(
                     "truncate text-xs",
@@ -246,17 +268,13 @@ export function AttachmentTile({
               <div className="flex items-center gap-3 p-3">
                 {!isImage && (
                   <span className="flex size-10 shrink-0 items-center justify-center">
-                    <FileTypeIcon
-                      fileName={file.name}
-                      contentType={file.type}
-                      className="size-10"
-                    />
+                    <FileTypeIcon fileName={name} contentType={contentType} className="size-10" />
                   </span>
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-primary">{file.name}</p>
+                  <p className="truncate text-sm font-medium text-primary">{name}</p>
                   <p className="truncate text-sm text-tertiary">
-                    {uploading
+                    {uploading && file
                       ? `${attachment.progress}% · ${formatFileSize(file.size)}`
                       : typeAndSize}
                   </p>
@@ -265,14 +283,16 @@ export function AttachmentTile({
                     <p className="mt-0.5 text-sm text-error-primary">{failureDetail}</p>
                   )}
                 </div>
-                <ButtonUtility
-                  icon={Download01}
-                  size="sm"
-                  color="tertiary"
-                  tooltip={m.conversation_attachment_download()}
-                  href={previewUrl}
-                  download={file.name}
-                />
+                {previewUrl && (
+                  <ButtonUtility
+                    icon={Download01}
+                    size="sm"
+                    color="tertiary"
+                    tooltip={m.conversation_attachment_download()}
+                    href={previewUrl}
+                    download={name}
+                  />
+                )}
                 <ButtonUtility
                   icon={Trash01}
                   size="sm"
@@ -299,10 +319,26 @@ export function AttachmentTile({
           icon={RefreshCcw01}
           size="xs"
           color="tertiary"
-          tooltip={`${m.controls_retry()} · ${file.name}`}
+          tooltip={`${m.controls_retry()} · ${name}`}
           onClick={onRetry}
           className="absolute top-1/2 right-2 -translate-y-1/2"
         />
+      )}
+      {reselectable && (
+        <FileTrigger
+          onSelect={(list) => {
+            const picked = list?.[0];
+            if (picked) onReplace?.(picked);
+          }}
+        >
+          <ButtonUtility
+            icon={RefreshCcw01}
+            size="xs"
+            color="tertiary"
+            tooltip={m.conversation_attachment_reselect_named({ name })}
+            className="absolute top-1/2 right-2 -translate-y-1/2"
+          />
+        </FileTrigger>
       )}
       {/* As Slack's composer: the remove button shows while the tile is hovered or holds focus,
           and stays on a touch screen, which has no hover, and on a tile still uploading or
@@ -311,7 +347,7 @@ export function AttachmentTile({
         icon={XClose}
         size="xs"
         color="secondary"
-        tooltip={m.conversation_attachment_remove_named({ name: file.name })}
+        tooltip={m.conversation_attachment_remove_named({ name })}
         onClick={onRemove}
         className={cx(
           "absolute -top-2 -right-2 rounded-full bg-primary p-0.5 shadow-xs ring-1 ring-primary",

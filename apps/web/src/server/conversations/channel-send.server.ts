@@ -115,10 +115,15 @@ export async function sendChannel(
         const availableAttachmentIds = new Set(
           availableAttachments.map((attachment) => attachment.id),
         );
-        const attachmentRowIds = requestedAttachmentIds.map((attachmentId) => {
-          if (!availableAttachmentIds.has(attachmentId)) throw new AppError("ACCESS_DENIED");
-          return attachmentId;
-        });
+        const missingAttachmentIds = [
+          ...new Set(requestedAttachmentIds.filter((id) => !availableAttachmentIds.has(id))),
+        ];
+        if (missingAttachmentIds.length > 0) {
+          throw new AppError("ATTACHMENTS_UNAVAILABLE", {
+            details: { attachmentIds: missingAttachmentIds.join(",") },
+          });
+        }
+        const attachmentRowIds = requestedAttachmentIds;
         // Resolve @mentions against the channel's active members they name. The stored body keeps
         // each resolved mention as an embedded-UUID token (`<@human:…>`/`<@agent:…>`,
         // Slack-style) and every resolved mention becomes a MessageMention row in the same
