@@ -2,9 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
+import {
+  Button as AriaButton,
+  Dialog as AriaDialog,
+  DialogTrigger as AriaDialogTrigger,
+  Popover as AriaPopover,
+} from "react-aria-components";
 import { Button } from "#src/components/base/buttons/button";
-import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { useAppToast } from "#src/components/ui/toast";
+import { POPOVER_MOTION } from "#src/utils/popover-motion";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import {
   readAgentTurnInterrupt,
@@ -131,11 +137,20 @@ function StalledTurnStatus({ agentId }: { agentId: string }) {
   return (
     <div className="shrink-0 border-b border-secondary px-5 py-2.5 text-sm">
       <div role="status" className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <Tooltip title={m.agent_turn_stalled_hint()}>
-          <TooltipTrigger className="cursor-default text-warning-primary">
+        <AriaDialogTrigger>
+          <AriaButton className="cursor-pointer rounded-sm text-warning-primary underline decoration-dotted underline-offset-2 outline-focus-ring focus-visible:outline-2">
             {m.agent_turn_stalled()}
-          </TooltipTrigger>
-        </Tooltip>
+          </AriaButton>
+          <AriaPopover
+            placement="bottom start"
+            offset={6}
+            className={`max-w-xs origin-(--trigger-anchor-point) rounded-xl bg-primary p-3 text-sm text-secondary shadow-lg ring-1 ring-secondary_alt outline-hidden will-change-transform ${POPOVER_MOTION}`}
+          >
+            <AriaDialog aria-label={m.agent_turn_stalled()} className="outline-hidden">
+              {m.agent_turn_stalled_hint()}
+            </AriaDialog>
+          </AriaPopover>
+        </AriaDialogTrigger>
         <Button
           color="link-gray"
           size="sm"

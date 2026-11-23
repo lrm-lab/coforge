@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { XClose as X } from "@untitledui/icons";
@@ -15,6 +15,10 @@ import {
   useDialogControlSize,
 } from "#src/components/ui/dialog-actions";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import {
+  UnsavedChangesDialog,
+  useUnsavedChangesGuard,
+} from "#src/components/ui/unsaved-changes-dialog";
 import { useAppToast } from "#src/components/ui/toast";
 import {
   requestAccountPasswordCode,
@@ -55,25 +59,58 @@ export function AccountPasswordDialog({
   profile: Profile;
   arrival?: BindArrival | undefined;
 }) {
+  const [formState, setFormState] = useState({ busy: false, dirty: false });
+  const unsavedGuard = useUnsavedChangesGuard({
+    overlayOpen: open,
+    dirty: formState.dirty,
+    close: () => onOpenChange(false),
+  });
+  function requestClose() {
+    if (formState.busy) return;
+    unsavedGuard.requestClose();
+  }
   return (
-    <ModalOverlay isOpen={open} onOpenChange={onOpenChange}>
-      <Modal className="w-[calc(100vw-2rem)] max-w-md">
-        <Dialog className="text-left" data-account-password-dialog>
-          {({ close }) => <DialogBody profile={profile} arrival={arrival} close={close} />}
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
+    <>
+      <ModalOverlay
+        isOpen={open}
+        isDismissable={!formState.busy}
+        onOpenChange={(next) => {
+          if (next) onOpenChange(true);
+          else requestClose();
+        }}
+      >
+        <Modal className="w-[calc(100vw-2rem)] max-w-md">
+          <Dialog className="text-left" data-account-password-dialog>
+            <DialogBody
+              profile={profile}
+              arrival={arrival}
+              busy={formState.busy}
+              onStateChange={setFormState}
+              requestClose={requestClose}
+              forceClose={() => onOpenChange(false)}
+            />
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
+      <UnsavedChangesDialog {...unsavedGuard.promptProps} />
+    </>
   );
 }
 
 function DialogBody({
   profile,
   arrival,
-  close,
+  busy,
+  onStateChange,
+  requestClose,
+  forceClose,
 }: {
   profile: Profile;
   arrival: BindArrival | undefined;
-  close: () => void;
+  busy: boolean;
+  onStateChange: (state: { busy: boolean; dirty: boolean }) => void;
+  requestClose: () => void;
+  forceClose: () => void;
 }) {
   const router = useRouter();
   const [start] = useState(() => passwordStart(passwordContacts(profile), arrival));
@@ -81,6 +118,10 @@ function DialogBody({
   const [problem, setProblem] = useState<AccountPasswordProblem | null>(start.problem);
   const [bound, setBound] = useState<PasswordContacts>();
   const contacts = passwordContacts(profile, bound);
+
+  useEffect(() => {
+    if (step === "need_contact") onStateChange({ busy: false, dirty: false });
+  }, [step, onStateChange]);
 
   return (
     <>
@@ -93,14 +134,21 @@ function DialogBody({
           icon={X}
           size="sm"
           color="tertiary"
-          onClick={close}
+          isDisabled={busy}
+          onClick={requestClose}
         />
       </div>
       {step === "password" ? (
-        <PasswordForm contacts={contacts} close={close} />
+        <PasswordForm
+          contacts={contacts}
+          onStateChange={onStateChange}
+          requestClose={requestClose}
+          forceClose={forceClose}
+        />
       ) : step === "bind" ? (
         <BindForm
-          close={close}
+          onStateChange={onStateChange}
+          requestClose={requestClose}
           onBound={(next) => {
             setBound(next);
             setProblem(null);
@@ -117,7 +165,7 @@ function DialogBody({
           <p className="text-md text-secondary">{m.settings_password_need_contact()}</p>
           {problem ? <ProblemLine problem={problem} /> : null}
           <DialogActions>
-            <DialogCancel onPress={close}>{m.controls_cancel()}</DialogCancel>
+            <DialogCancel onPress={requestClose}>{m.controls_cancel()}</DialogCancel>
             <DialogAction
               onPress={() => window.location.assign(githubBindPath(window.location.pathname))}
             >
@@ -138,7 +186,17 @@ function ProblemLine({ problem }: { problem: AccountPasswordProblem }) {
   );
 }
 
-function PasswordForm({ contacts, close }: { contacts: PasswordContacts; close: () => void }) {
+function PasswordForm({
+  contacts,
+  onStateChange,
+  requestClose,
+  forceClose,
+}: {
+  contacts: PasswordContacts;
+  onStateChange: (state: { busy: boolean; dirty: boolean }) => void;
+  requestClose: () => void;
+  forceClose: () => void;
+}) {
   const size = useDialogControlSize();
   const requestCode = useServerFn(requestAccountPasswordCode);
   const setPassword = useServerFn(setAccountPasswordFn);
@@ -155,6 +213,10 @@ function PasswordForm({ contacts, close }: { contacts: PasswordContacts; close: 
     setProblem,
   });
 
+  useEffect(() => {
+    onStateChange({ busy: saving, dirty: code.trim() !== "" || password !== "" });
+  }, [saving, code, password, onStateChange]);
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canSavePassword(code, password)) return;
@@ -165,7 +227,7 @@ function PasswordForm({ contacts, close }: { contacts: PasswordContacts; close: 
         if (!result.ok) return setProblem(result.problem);
         if (result.verified) toast.success(m.settings_password_updated());
         else toast.success(m.settings_password_updated_unverified());
-        close();
+        forceClose();
       } catch {
         setProblem("failed");
       }
@@ -226,7 +288,7 @@ function PasswordForm({ contacts, close }: { contacts: PasswordContacts; close: 
       />
       {problem ? <ProblemLine problem={problem} /> : null}
       <DialogActions>
-        <DialogCancel isDisabled={saving} onPress={close}>
+        <DialogCancel isDisabled={saving} onPress={requestClose}>
           {m.controls_cancel()}
         </DialogCancel>
         <DialogAction
@@ -243,11 +305,13 @@ function PasswordForm({ contacts, close }: { contacts: PasswordContacts; close: 
 }
 
 function BindForm({
-  close,
+  onStateChange,
+  requestClose,
   onBound,
   onSpent,
 }: {
-  close: () => void;
+  onStateChange: (state: { busy: boolean; dirty: boolean }) => void;
+  requestClose: () => void;
   onBound: (contacts: PasswordContacts) => void;
   onSpent: (problem: AccountPasswordProblem) => void;
 }) {
@@ -266,6 +330,10 @@ function BindForm({
       setProblem(next);
     },
   });
+
+  useEffect(() => {
+    onStateChange({ busy: saving, dirty: destination.trim() !== "" || code.trim() !== "" });
+  }, [saving, destination, code, onStateChange]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -317,7 +385,7 @@ function BindForm({
       </SendCodeRow>
       {problem ? <ProblemLine problem={problem} /> : null}
       <DialogActions>
-        <DialogCancel isDisabled={saving} onPress={close}>
+        <DialogCancel isDisabled={saving} onPress={requestClose}>
           {m.controls_cancel()}
         </DialogCancel>
         <DialogAction

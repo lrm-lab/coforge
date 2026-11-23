@@ -58,7 +58,7 @@ export function WeeklyTemplateDetailDialog({
     : template.sendTime;
 
   return (
-    <ModalOverlay isOpen onOpenChange={(open) => (!open ? onClose() : undefined)}>
+    <ModalOverlay isOpen isDismissable onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <Modal className="w-[calc(100vw-2rem)] max-w-lg">
         <Dialog>
           {({ close }) => (

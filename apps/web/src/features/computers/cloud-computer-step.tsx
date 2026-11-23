@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -9,16 +9,23 @@ export function CloudComputerStep({
   workspaceSlug,
   onCreated,
   onBack,
+  onBusyChange,
 }: {
   workspaceSlug: string | null;
   onCreated: (computerId: string) => Promise<void>;
   onBack: () => void;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const ensure = useServerFn(ensureCloudComputer);
   const addExtra = useServerFn(addExtraCloudComputer);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState<"default" | "extra" | null>(null);
   const busy = useRef(false);
+
+  useEffect(() => {
+    onBusyChange?.(saving !== null);
+    return () => onBusyChange?.(false);
+  }, [saving, onBusyChange]);
 
   async function create(slot: "default" | "extra") {
     if (!workspaceSlug || busy.current) return;

@@ -31,8 +31,10 @@ export function AddComputerDialog({
 }) {
   const [computerType, setComputerType] = useState<ComputerType>("local");
   const [step, setStep] = useState<"choose" | "install" | "cloud">("choose");
+  const [cloudBusy, setCloudBusy] = useState(false);
 
   function close() {
+    if (cloudBusy) return;
     onOpenChange(false);
   }
 
@@ -47,12 +49,21 @@ export function AddComputerDialog({
     const timer = window.setTimeout(() => {
       setStep("choose");
       setComputerType("local");
+      setCloudBusy(false);
     }, 150);
     return () => window.clearTimeout(timer);
   }, [open]);
 
   return (
-    <ModalOverlay page isOpen={open} onOpenChange={onOpenChange}>
+    <ModalOverlay
+      page
+      isOpen={open}
+      isDismissable={!cloudBusy}
+      onOpenChange={(next) => {
+        if (!next && cloudBusy) return;
+        onOpenChange(next);
+      }}
+    >
       <Modal className="w-[calc(100vw-2rem)] max-w-2xl">
         <Dialog ref={dialogRef} aria-describedby="add-computer-description">
           {() => (
@@ -61,7 +72,7 @@ export function AddComputerDialog({
                 heading={
                   connectedComputerName ? m.computer_add_success_title() : m.computer_add_title()
                 }
-                pending={false}
+                pending={cloudBusy}
                 {...(step === "choose"
                   ? {
                       onCancel: close,
@@ -91,7 +102,7 @@ export function AddComputerDialog({
                         : m.computer_install_description()}
                   </span>
                 }
-                onClose={close}
+                onClose={cloudBusy ? undefined : close}
                 className={cx("sm:px-8 sm:pt-8", PHONE_PAGE_HEADER)}
               />
 
@@ -117,6 +128,7 @@ export function AddComputerDialog({
                   workspaceSlug={workspaceSlug}
                   onBack={() => setStep("choose")}
                   onCreated={onCreated}
+                  onBusyChange={setCloudBusy}
                 />
               ) : (
                 <ComputerInstallCommand

@@ -52,6 +52,7 @@ export function LoginScopeList({ allowedScopes }: { allowedScopes: readonly stri
 export function AppDialogShell({
   open,
   onClose,
+  busy = false,
   eyebrow,
   app,
   badges,
@@ -60,6 +61,7 @@ export function AppDialogShell({
 }: {
   open: boolean;
   onClose: () => void;
+  busy?: boolean;
   eyebrow: string;
   app: { name: string; logoUrl: string | null; category: AppCategory } | undefined;
   badges?: ReactNode;
@@ -67,7 +69,13 @@ export function AppDialogShell({
   children: ReactNode;
 }) {
   return (
-    <ModalOverlay isOpen={open} onOpenChange={(next) => !next && onClose()} isDismissable>
+    <ModalOverlay
+      isOpen={open}
+      onOpenChange={(next) => {
+        if (!next && !busy) onClose();
+      }}
+      isDismissable={!busy}
+    >
       <Modal className="w-[calc(100vw-2rem)] max-w-2xl">
         <Dialog className="flex max-h-[inherit] flex-col overflow-hidden text-left">
           {app && (
@@ -95,6 +103,7 @@ export function AppDialogShell({
                   icon={XClose}
                   size="sm"
                   color="tertiary"
+                  isDisabled={busy}
                   onClick={onClose}
                 />
               </div>

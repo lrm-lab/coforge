@@ -14,6 +14,10 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { DialogAction } from "#src/components/ui/dialog-actions";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import {
+  UnsavedChangesDialog,
+  useUnsavedChangesGuard,
+} from "#src/components/ui/unsaved-changes-dialog";
 import type { Mentionable } from "#src/features/conversations/mention-text";
 import { isAppError } from "#src/lib/app-error";
 import { isImeComposing } from "#src/lib/ime";
@@ -61,16 +65,21 @@ export function CreateTaskDialog({
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [more, setMore] = useState(false);
-  useEffect(() => {
-    const dirty =
-      draft.title.trim() !== "" ||
-      draft.description?.trim() !== "" ||
-      draft.assignee !== undefined ||
-      (draft.labels?.length ?? 0) > 0 ||
-      draft.priority !== undefined ||
-      draft.project !== undefined;
-    return registerUnsavedTemporaryState(open && dirty);
-  }, [open, draft]);
+  const dirty =
+    draft.title.trim() !== "" ||
+    draft.description?.trim() !== "" ||
+    draft.assignee !== undefined ||
+    (draft.labels?.length ?? 0) > 0 ||
+    draft.priority !== undefined ||
+    draft.project !== undefined ||
+    draft.dueAt !== undefined;
+  useEffect(() => registerUnsavedTemporaryState(open && dirty), [open, dirty]);
+  const guard = useUnsavedChangesGuard({
+    overlayOpen: open,
+    dirty,
+    close: () => onOpenChange(false),
+    onDiscard: () => setDraft(emptyDraft),
+  });
   const busy = useRef(false);
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -175,146 +184,154 @@ export function CreateTaskDialog({
 
   const heading = where?.subtask ? m.tasks_new_subtask() : m.tasks_new_task();
   return (
-    <ModalOverlay
-      isOpen={open}
-      onOpenChange={(value) => !busy.current && onOpenChange(value)}
-      isDismissable
-      page
-    >
-      <Modal className="flex w-full flex-col overflow-hidden sm:w-[min(44rem,calc(100vw-2rem))]">
-        <Dialog aria-label={heading} className="flex min-h-0 flex-1 flex-col">
-          {({ close }) => (
-            <form
-              ref={formRef}
-              onSubmit={(event) => void submit(event)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && !event.repeat) {
-                  event.preventDefault();
-                  event.currentTarget.requestSubmit();
-                }
-              }}
-              className="flex min-h-0 flex-1 flex-col"
-            >
-              <PhoneFormBar
-                heading={heading}
-                submitLabel={m.tasks_create_submit_short()}
-                pending={saving}
-                onCancel={close}
-                onSubmit={() => formRef.current?.requestSubmit()}
-              />
-              <div
-                className={cn(
-                  "flex shrink-0 items-center gap-1 pt-3 pe-3 ps-4 max-sm:pt-1 sm:ps-6",
-                  !(board || where) && "max-sm:hidden",
-                )}
+    <>
+      <ModalOverlay
+        isOpen={open}
+        onOpenChange={(value) => {
+          if (busy.current) return;
+          if (value) onOpenChange(true);
+          else guard.requestClose();
+        }}
+        isDismissable
+        page
+      >
+        <Modal className="flex w-full flex-col overflow-hidden sm:w-[min(44rem,calc(100vw-2rem))]">
+          <Dialog aria-label={heading} className="flex min-h-0 flex-1 flex-col">
+            {() => (
+              <form
+                ref={formRef}
+                onSubmit={(event) => void submit(event)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && !event.repeat) {
+                    event.preventDefault();
+                    event.currentTarget.requestSubmit();
+                  }
+                }}
+                className="flex min-h-0 flex-1 flex-col"
               >
-                <p className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium text-tertiary">
-                  {(board || where) && (
-                    <>
-                      <span
-                        data-layout="create"
-                        className="inline-flex h-8 min-w-0 items-center rounded-lg bg-secondary text-secondary ring-1 ring-secondary ring-inset"
-                      >
-                        {board?.place ?? (
-                          <TaskDialogWhere
-                            label={where?.label ?? ""}
-                            channelId={where && !where.subtask ? conversationId : undefined}
-                          />
-                        )}
-                      </span>
-                      <ChevronRight
-                        aria-hidden="true"
-                        className="size-3.5 shrink-0 text-fg-quaternary max-sm:hidden rtl:rotate-180"
-                      />
-                    </>
+                <PhoneFormBar
+                  heading={heading}
+                  submitLabel={m.tasks_create_submit_short()}
+                  pending={saving}
+                  onCancel={guard.requestClose}
+                  onSubmit={() => formRef.current?.requestSubmit()}
+                />
+                <div
+                  className={cn(
+                    "flex shrink-0 items-center gap-1 pt-3 pe-3 ps-4 max-sm:pt-1 sm:ps-6",
+                    !(board || where) && "max-sm:hidden",
                   )}
-                  <span className="shrink-0 max-sm:hidden">{heading}</span>
-                </p>
-                <ButtonUtility
-                  icon={XClose}
-                  size="sm"
-                  color="tertiary"
-                  aria-label={m.tasks_close()}
-                  isDisabled={saving}
-                  onClick={close}
-                  className="max-sm:hidden"
-                />
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                <Heading
-                  slot="title"
-                  level={2}
-                  className="flex items-start gap-2 px-4 pt-4 sm:px-6"
                 >
-                  {!board && <TaskStatusIcon status={status} className="mt-1.5 size-5" />}
-                  <TextArea
-                    ref={titleRef}
-                    aria-label={m.tasks_new_title()}
-                    placeholder={m.tasks_new_title()}
-                    value={draft.title}
-                    onChange={(event) =>
-                      change({ title: event.target.value.replace(/\s*\n\s*/g, " ") })
-                    }
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter" || isImeComposing(event)) return;
-                      event.preventDefault();
-                      if (!event.repeat) event.currentTarget.form?.requestSubmit();
-                    }}
-                    maxLength={TASK_TITLE_MAX_LENGTH}
-                    disabled={saving}
-                    autoFocus
-                    rows={1}
-                    className="min-w-0 flex-1 resize-none bg-transparent text-xl font-semibold text-primary outline-hidden [field-sizing:content] placeholder:font-medium placeholder:text-placeholder"
+                  <p className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium text-tertiary">
+                    {(board || where) && (
+                      <>
+                        <span
+                          data-layout="create"
+                          className="inline-flex h-8 min-w-0 items-center rounded-lg bg-secondary text-secondary ring-1 ring-secondary ring-inset"
+                        >
+                          {board?.place ?? (
+                            <TaskDialogWhere
+                              label={where?.label ?? ""}
+                              channelId={where && !where.subtask ? conversationId : undefined}
+                            />
+                          )}
+                        </span>
+                        <ChevronRight
+                          aria-hidden="true"
+                          className="size-3.5 shrink-0 text-fg-quaternary max-sm:hidden rtl:rotate-180"
+                        />
+                      </>
+                    )}
+                    <span className="shrink-0 max-sm:hidden">{heading}</span>
+                  </p>
+                  <ButtonUtility
+                    icon={XClose}
+                    size="sm"
+                    color="tertiary"
+                    tooltip={m.tasks_close()}
+                    aria-label={m.tasks_close()}
+                    isDisabled={saving}
+                    onClick={guard.requestClose}
+                    className="max-sm:hidden"
                   />
-                </Heading>
-                <TextArea
-                  aria-label={m.tasks_new_description()}
-                  placeholder={m.tasks_new_description()}
-                  value={draft.description}
-                  onChange={(event) => change({ description: event.target.value })}
-                  maxLength={TASK_DESCRIPTION_MAX_LENGTH}
-                  disabled={saving}
-                  rows={3}
-                  className="mt-2 block w-full resize-none bg-transparent px-4 pb-4 text-md text-secondary outline-hidden placeholder:text-placeholder sm:px-6"
-                />
-              </div>
-              <CreateTaskProperties
-                board={board}
-                assignable={assignable}
-                task={draftTask}
-                offersProject={offersProject}
-                lastUsed={lastProject}
-                draft={draft}
-                saving={saving}
-                onChange={change}
-              />
-              {error && (
-                <p role="alert" className="shrink-0 px-4 pb-2 text-sm text-error-primary sm:px-6">
-                  {error}
-                </p>
-              )}
-              <div className="flex shrink-0 items-center justify-end gap-4 border-t border-secondary px-4 py-3 max-sm:hidden sm:px-6">
-                <Toggle
-                  size="sm"
-                  label={m.tasks_create_more()}
-                  isSelected={more}
-                  onChange={setMore}
-                  isDisabled={saving}
-                />
-                <DialogAction type="submit" isLoading={saving} isDisabled={!draft.priority}>
-                  {m.tasks_new_submit()}
-                  <kbd
-                    aria-hidden="true"
-                    className="ms-1.5 inline-flex items-center rounded-xs px-1 py-0.5 font-body text-xs leading-none font-medium ring-1 ring-current/35 ring-inset any-pointer-coarse:hidden"
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <Heading
+                    slot="title"
+                    level={2}
+                    className="flex items-start gap-2 px-4 pt-4 sm:px-6"
                   >
-                    {isApplePlatform() ? "⌘↵" : "Ctrl ↵"}
-                  </kbd>
-                </DialogAction>
-              </div>
-            </form>
-          )}
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
+                    {!board && <TaskStatusIcon status={status} className="mt-1.5 size-5" />}
+                    <TextArea
+                      ref={titleRef}
+                      aria-label={m.tasks_new_title()}
+                      placeholder={m.tasks_new_title()}
+                      value={draft.title}
+                      onChange={(event) =>
+                        change({ title: event.target.value.replace(/\s*\n\s*/g, " ") })
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" || isImeComposing(event)) return;
+                        event.preventDefault();
+                        if (!event.repeat) event.currentTarget.form?.requestSubmit();
+                      }}
+                      maxLength={TASK_TITLE_MAX_LENGTH}
+                      disabled={saving}
+                      autoFocus
+                      rows={1}
+                      className="min-w-0 flex-1 resize-none bg-transparent text-xl font-semibold text-primary outline-hidden [field-sizing:content] placeholder:font-medium placeholder:text-placeholder"
+                    />
+                  </Heading>
+                  <TextArea
+                    aria-label={m.tasks_new_description()}
+                    placeholder={m.tasks_new_description()}
+                    value={draft.description}
+                    onChange={(event) => change({ description: event.target.value })}
+                    maxLength={TASK_DESCRIPTION_MAX_LENGTH}
+                    disabled={saving}
+                    rows={3}
+                    className="mt-2 block w-full resize-none bg-transparent px-4 pb-4 text-md text-secondary outline-hidden placeholder:text-placeholder sm:px-6"
+                  />
+                </div>
+                <CreateTaskProperties
+                  board={board}
+                  assignable={assignable}
+                  task={draftTask}
+                  offersProject={offersProject}
+                  lastUsed={lastProject}
+                  draft={draft}
+                  saving={saving}
+                  onChange={change}
+                />
+                {error && (
+                  <p role="alert" className="shrink-0 px-4 pb-2 text-sm text-error-primary sm:px-6">
+                    {error}
+                  </p>
+                )}
+                <div className="flex shrink-0 items-center justify-end gap-4 border-t border-secondary px-4 py-3 max-sm:hidden sm:px-6">
+                  <Toggle
+                    size="sm"
+                    label={m.tasks_create_more()}
+                    isSelected={more}
+                    onChange={setMore}
+                    isDisabled={saving}
+                  />
+                  <DialogAction type="submit" isLoading={saving} isDisabled={!draft.priority}>
+                    {m.tasks_new_submit()}
+                    <kbd
+                      aria-hidden="true"
+                      className="ms-1.5 inline-flex items-center rounded-xs px-1 py-0.5 font-body text-xs leading-none font-medium ring-1 ring-current/35 ring-inset any-pointer-coarse:hidden"
+                    >
+                      {isApplePlatform() ? "⌘↵" : "Ctrl ↵"}
+                    </kbd>
+                  </DialogAction>
+                </div>
+              </form>
+            )}
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
+      <UnsavedChangesDialog {...guard.promptProps} />
+    </>
   );
 }

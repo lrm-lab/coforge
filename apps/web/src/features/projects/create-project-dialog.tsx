@@ -4,6 +4,10 @@ import { useServerFn } from "@tanstack/react-start";
 import { ChevronRight, FolderLock, GitBranch01, Share04 } from "@untitledui/icons";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { PHONE_PAGE_HEADER, PhoneFormBar } from "#src/components/ui/phone-form-bar";
+import {
+  UnsavedChangesDialog,
+  useUnsavedChangesGuard,
+} from "#src/components/ui/unsaved-changes-dialog";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
@@ -225,169 +229,188 @@ export function CreateProjectDialog({
       ? m.project_repository_not_connected()
       : undefined;
 
+  const dirty =
+    step === "form" && (name.trim() !== "" || slug.trim() !== "" || repositoryQuery.trim() !== "");
+  const guard = useUnsavedChangesGuard({
+    overlayOpen: open,
+    dirty,
+    close: () => onOpenChange(false),
+  });
+
   return (
-    <ModalOverlay
-      page
-      isOpen={open}
-      onOpenChange={(next) => {
-        if (!busy) onOpenChange(next);
-      }}
-    >
-      <Modal className="w-[min(30rem,calc(100vw-2rem))]">
-        <Dialog>
-          {() => (
-            <>
-              <PhoneFormBar
-                heading={m.project_create_title()}
-                pending={busy}
-                {...(step === "choose"
-                  ? { onCancel: () => onOpenChange(false) }
-                  : {
-                      cancelLabel: m.controls_back(),
-                      onCancel: () => setStep("choose"),
-                      submitLabel: m.controls_create(),
-                      submitDisabled: !canSubmit,
-                      onSubmit: () => formRef.current?.requestSubmit(),
-                    })}
-              />
-              <DialogHeader
-                className={PHONE_PAGE_HEADER}
-                title={m.project_create_title()}
-                description={step === "choose" ? m.project_create_source_description() : undefined}
-                onClose={busy ? undefined : () => onOpenChange(false)}
-              />
-              {step === "choose" ? (
-                <>
-                  <div className="grid gap-3 px-6 py-6 max-sm:px-4 max-sm:py-4">
-                    <SourceOption
-                      icon={FolderLock}
-                      label={m.project_create_from_scratch()}
-                      description={m.project_create_from_scratch_description()}
-                      onSelect={() => chooseSource("scratch")}
-                    />
-                    <SourceOption
-                      icon={GitBranch01}
-                      label={m.project_create_from_github()}
-                      description={m.project_create_from_github_description()}
-                      onSelect={() => chooseSource("github")}
-                    />
-                  </div>
-                  <DialogActions className="px-6 pt-4 pb-6 max-sm:hidden">
-                    <DialogCancel type="button" onPress={() => onOpenChange(false)}>
-                      {m.controls_cancel()}
-                    </DialogCancel>
-                  </DialogActions>
-                </>
-              ) : (
-                <form ref={formRef} onSubmit={submit}>
-                  <div className="grid gap-4 px-6 py-6 max-sm:px-4 max-sm:pt-2">
-                    <Input
-                      size={controlSize}
-                      label={m.project_name()}
-                      isRequired
-                      maxLength={100}
-                      value={name}
-                      onChange={changeName}
-                    />
-                    <div className="grid gap-1.5">
+    <>
+      <ModalOverlay
+        page
+        isOpen={open}
+        onOpenChange={(next) => {
+          if (busy) return;
+          if (next) onOpenChange(true);
+          else guard.requestClose();
+        }}
+      >
+        <Modal className="w-[min(30rem,calc(100vw-2rem))]">
+          <Dialog>
+            {() => (
+              <>
+                <PhoneFormBar
+                  heading={m.project_create_title()}
+                  pending={busy}
+                  {...(step === "choose"
+                    ? { onCancel: guard.requestClose }
+                    : {
+                        cancelLabel: m.controls_back(),
+                        onCancel: () => setStep("choose"),
+                        submitLabel: m.controls_create(),
+                        submitDisabled: !canSubmit,
+                        onSubmit: () => formRef.current?.requestSubmit(),
+                      })}
+                />
+                <DialogHeader
+                  className={PHONE_PAGE_HEADER}
+                  title={m.project_create_title()}
+                  description={
+                    step === "choose" ? m.project_create_source_description() : undefined
+                  }
+                  onClose={busy ? undefined : guard.requestClose}
+                />
+                {step === "choose" ? (
+                  <>
+                    <div className="grid gap-3 px-6 py-6 max-sm:px-4 max-sm:py-4">
+                      <SourceOption
+                        icon={FolderLock}
+                        label={m.project_create_from_scratch()}
+                        description={m.project_create_from_scratch_description()}
+                        onSelect={() => chooseSource("scratch")}
+                      />
+                      <SourceOption
+                        icon={GitBranch01}
+                        label={m.project_create_from_github()}
+                        description={m.project_create_from_github_description()}
+                        onSelect={() => chooseSource("github")}
+                      />
+                    </div>
+                    <DialogActions className="px-6 pt-4 pb-6 max-sm:hidden">
+                      <DialogCancel type="button" onPress={() => onOpenChange(false)}>
+                        {m.controls_cancel()}
+                      </DialogCancel>
+                    </DialogActions>
+                  </>
+                ) : (
+                  <form ref={formRef} onSubmit={submit}>
+                    <div className="grid gap-4 px-6 py-6 max-sm:px-4 max-sm:pt-2">
                       <Input
                         size={controlSize}
-                        label={m.project_slug()}
+                        label={m.project_name()}
                         isRequired
-                        pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
-                        maxLength={PROJECT_SLUG_MAX_LENGTH}
-                        value={slug}
-                        onChange={changeSlug}
-                        isInvalid={Boolean(slugError)}
+                        maxLength={100}
+                        value={name}
+                        onChange={changeName}
                       />
-                      {slugError && (
+                      <div className="grid gap-1.5">
+                        <Input
+                          size={controlSize}
+                          label={m.project_slug()}
+                          isRequired
+                          pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+                          maxLength={PROJECT_SLUG_MAX_LENGTH}
+                          value={slug}
+                          onChange={changeSlug}
+                          isInvalid={Boolean(slugError)}
+                        />
+                        {slugError && (
+                          <p role="alert" className="text-sm text-error-primary">
+                            {slugError}
+                          </p>
+                        )}
+                      </div>
+                      {needsRepository && (
+                        <>
+                          <ComboBox
+                            size={controlSize}
+                            label={m.project_repository()}
+                            placeholder={m.project_repository_url_placeholder()}
+                            shortcut={false}
+                            allowsCustomValue
+                            items={items.map((item) => ({
+                              id: String(item.id),
+                              label: item.fullName,
+                            }))}
+                            selectedKey={repositoryId ? String(repositoryId) : null}
+                            inputValue={repositoryQuery}
+                            onInputChange={applyRepositoryQuery}
+                            onSelectionChange={(key) => {
+                              if (key) selectRepository(Number(key));
+                            }}
+                          >
+                            {(item) => <SelectItem id={item.id} label={item.label} />}
+                          </ComboBox>
+                          <p className="text-sm text-tertiary">
+                            {repositoryHint ? `${repositoryHint} ` : null}
+                            {githubConnected ? (
+                              <>
+                                {m.github_repository_missing()}{" "}
+                                {connection.installUrl ? (
+                                  <a
+                                    href={connection.installUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 font-medium text-secondary underline underline-offset-4 hover:text-primary"
+                                  >
+                                    {m.github_manage_repository_access()}
+                                    <Share04 aria-hidden="true" className="size-4" />
+                                  </a>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 font-medium text-secondary">
+                                    {m.github_manage_repository_access()}
+                                    <Share04 aria-hidden="true" className="size-4" />
+                                  </span>
+                                )}
+                              </>
+                            ) : (
+                              <Link
+                                to="/w/$workspaceSlug/settings"
+                                params={{ workspaceSlug }}
+                                search={{ section: "integrations" }}
+                                className="font-medium text-brand-secondary underline underline-offset-4 hover:text-primary"
+                              >
+                                {m.github_connect()}
+                              </Link>
+                            )}
+                          </p>
+                        </>
+                      )}
+                      {error && (
                         <p role="alert" className="text-sm text-error-primary">
-                          {slugError}
+                          {error}
                         </p>
                       )}
                     </div>
-                    {needsRepository && (
-                      <>
-                        <ComboBox
-                          size={controlSize}
-                          label={m.project_repository()}
-                          placeholder={m.project_repository_url_placeholder()}
-                          shortcut={false}
-                          allowsCustomValue
-                          items={items.map((item) => ({
-                            id: String(item.id),
-                            label: item.fullName,
-                          }))}
-                          selectedKey={repositoryId ? String(repositoryId) : null}
-                          inputValue={repositoryQuery}
-                          onInputChange={applyRepositoryQuery}
-                          onSelectionChange={(key) => {
-                            if (key) selectRepository(Number(key));
-                          }}
-                        >
-                          {(item) => <SelectItem id={item.id} label={item.label} />}
-                        </ComboBox>
-                        <p className="text-sm text-tertiary">
-                          {repositoryHint ? `${repositoryHint} ` : null}
-                          {githubConnected ? (
-                            <>
-                              {m.github_repository_missing()}{" "}
-                              {connection.installUrl ? (
-                                <a
-                                  href={connection.installUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 font-medium text-secondary underline underline-offset-4 hover:text-primary"
-                                >
-                                  {m.github_manage_repository_access()}
-                                  <Share04 aria-hidden="true" className="size-4" />
-                                </a>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 font-medium text-secondary">
-                                  {m.github_manage_repository_access()}
-                                  <Share04 aria-hidden="true" className="size-4" />
-                                </span>
-                              )}
-                            </>
-                          ) : (
-                            <Link
-                              to="/w/$workspaceSlug/settings"
-                              params={{ workspaceSlug }}
-                              search={{ section: "integrations" }}
-                              className="font-medium text-brand-secondary underline underline-offset-4 hover:text-primary"
-                            >
-                              {m.github_connect()}
-                            </Link>
-                          )}
-                        </p>
-                      </>
-                    )}
-                    {error && (
-                      <p role="alert" className="text-sm text-error-primary">
-                        {error}
-                      </p>
-                    )}
-                  </div>
-                  <DialogActions className="px-6 pt-4 pb-6 max-sm:hidden">
-                    <DialogCancel type="button" onPress={() => setStep("choose")} isDisabled={busy}>
-                      {m.controls_back()}
-                    </DialogCancel>
-                    <DialogAction
-                      type="submit"
-                      isDisabled={!canSubmit}
-                      isLoading={busy}
-                      showTextWhileLoading
-                    >
-                      {m.project_create()}
-                    </DialogAction>
-                  </DialogActions>
-                </form>
-              )}
-            </>
-          )}
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
+                    <DialogActions className="px-6 pt-4 pb-6 max-sm:hidden">
+                      <DialogCancel
+                        type="button"
+                        onPress={() => setStep("choose")}
+                        isDisabled={busy}
+                      >
+                        {m.controls_back()}
+                      </DialogCancel>
+                      <DialogAction
+                        type="submit"
+                        isDisabled={!canSubmit}
+                        isLoading={busy}
+                        showTextWhileLoading
+                      >
+                        {m.project_create()}
+                      </DialogAction>
+                    </DialogActions>
+                  </form>
+                )}
+              </>
+            )}
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
+      <UnsavedChangesDialog {...guard.promptProps} />
+    </>
   );
 }
 

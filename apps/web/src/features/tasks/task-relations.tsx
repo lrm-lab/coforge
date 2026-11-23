@@ -1,13 +1,19 @@
 import { taskNameLabel } from "@lrm/coforge-sdk/internal";
 import type { TaskLink, TaskName, TaskTreeNode } from "@lrm/coforge-sdk/internal";
 import type { ReactNode } from "react";
-import { Button as AriaButton } from "react-aria-components";
+import {
+  Button as AriaButton,
+  Dialog as AriaDialog,
+  DialogTrigger as AriaDialogTrigger,
+  Popover as AriaPopover,
+} from "react-aria-components";
 import { ChevronDown, ChevronRight, CornerLeftUp } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { POPOVER_MOTION } from "#src/utils/popover-motion";
 
 import { isFinishedStatus } from "./finished-tasks";
 import { TaskLocator, taskMetaLabel } from "./task-chip";
@@ -22,28 +28,45 @@ export function TaskBlockedMark({ blockedBy }: { blockedBy: readonly (TaskName |
   if (!first) return null;
   const name = first.hidden ? m.tasks_ref_hidden() : taskMetaLabel(first);
   return (
-    <Tooltip
-      title={
-        <span className="flex flex-col gap-0.5">
-          <span className="font-semibold">{m.tasks_blocked_by()}</span>
-          {open.map((task, index) => (
-            <span key={task.hidden ? `hidden-${index}` : taskNameLabel(task)} className="truncate">
-              {task.hidden
-                ? m.tasks_ref_hidden()
-                : "title" in task
-                  ? `${task.title} ${taskMetaLabel(task)}`
-                  : taskMetaLabel(task)}
-            </span>
-          ))}
-        </span>
-      }
-    >
-      <TooltipTrigger className="inline-flex shrink-0 items-center gap-1 rounded-sm text-xs whitespace-nowrap text-tertiary tabular-nums focus-visible:ring-2 focus-visible:ring-focus-ring">
+    <AriaDialogTrigger>
+      <AriaButton className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-sm text-xs whitespace-nowrap text-tertiary tabular-nums outline-hidden hover:text-secondary focus-visible:ring-2 focus-visible:ring-focus-ring">
         {open.length > 1
           ? m.tasks_blocked_by_count({ count: open.length })
           : m.tasks_blocked_by_mark({ name })}
-      </TooltipTrigger>
-    </Tooltip>
+      </AriaButton>
+      <AriaPopover
+        placement="bottom start"
+        offset={6}
+        className={cn(
+          "w-72 max-w-[calc(100vw-2rem)] origin-(--trigger-anchor-point) rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt outline-hidden will-change-transform",
+          POPOVER_MOTION,
+        )}
+      >
+        <AriaDialog aria-label={m.tasks_blocked_by()} className="py-2 outline-hidden">
+          <p className="px-3 pb-1 text-xs font-semibold text-tertiary">{m.tasks_blocked_by()}</p>
+          <ul>
+            {open.map((task, index) => (
+              <li
+                key={task.hidden ? `hidden-${index}` : taskNameLabel(task)}
+                className="flex min-w-0 items-center gap-2 px-3 py-1.5 text-sm"
+              >
+                {"status" in task && <TaskStatusIcon status={task.status} className="size-3.5" />}
+                {task.hidden ? (
+                  <span className="truncate text-tertiary">{m.tasks_ref_hidden()}</span>
+                ) : (
+                  <>
+                    {"title" in task && (
+                      <span className="min-w-0 truncate text-primary">{task.title}</span>
+                    )}
+                    <TaskLocator task={task} />
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        </AriaDialog>
+      </AriaPopover>
+    </AriaDialogTrigger>
   );
 }
 

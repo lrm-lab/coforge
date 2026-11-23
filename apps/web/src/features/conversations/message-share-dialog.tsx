@@ -134,6 +134,7 @@ export function MessageShareDialog({
     <>
       <ModalOverlay
         isOpen
+        isDismissable
         onOpenChange={(open) => {
           if (!open) onClose();
         }}

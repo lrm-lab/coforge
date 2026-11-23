@@ -1,3 +1,4 @@
+import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Input } from "#src/components/base/input/input";
 import {
   DialogAction,
@@ -24,32 +25,45 @@ export function RecordSideRenameDialog({
   onSubmit: () => void;
 }) {
   const controlSize = useDialogControlSize();
-  if (!open) return null;
   return (
-    <ModalOverlay isOpen isDismissable onOpenChange={(next) => !next && onClose()}>
-      <Modal className="w-full max-w-sm p-5">
+    <ModalOverlay
+      isOpen={open}
+      isDismissable={!busy}
+      onOpenChange={(next) => {
+        if (!next && !busy) onClose();
+      }}
+    >
+      <Modal className="w-[calc(100vw-2rem)] max-w-sm">
         <Dialog className="outline-none">
-          <h2 className="text-md font-semibold text-primary">
-            {m.records_side_chat_rename_title()}
-          </h2>
+          <DialogHeader
+            title={m.records_side_chat_rename_title()}
+            onClose={busy ? undefined : onClose}
+          />
           <form
+            className="p-6 pt-4"
             onSubmit={(event) => {
               event.preventDefault();
               onSubmit();
             }}
           >
-            <div className="mt-3">
-              <Input
-                size={controlSize}
-                value={draft}
-                onChange={onDraftChange}
-                placeholder={m.records_side_chat_rename_placeholder()}
-                autoFocus
-              />
-            </div>
+            <Input
+              size={controlSize}
+              value={draft}
+              onChange={onDraftChange}
+              placeholder={m.records_side_chat_rename_placeholder()}
+              isDisabled={busy}
+              autoFocus
+            />
             <DialogActions className="mt-4">
-              <DialogCancel onPress={onClose}>{m.controls_cancel()}</DialogCancel>
-              <DialogAction isDisabled={!draft.trim() || busy} type="submit">
+              <DialogCancel isDisabled={busy} onPress={onClose}>
+                {m.controls_cancel()}
+              </DialogCancel>
+              <DialogAction
+                isDisabled={!draft.trim() || busy}
+                isLoading={busy}
+                showTextWhileLoading
+                type="submit"
+              >
                 {m.records_side_chat_rename_save()}
               </DialogAction>
             </DialogActions>

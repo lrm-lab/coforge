@@ -1,19 +1,25 @@
 import { useServerFn } from "@tanstack/react-start";
 import { DotsHorizontal } from "@untitledui/icons";
 import { useRef, useState } from "react";
-import { Button as AriaButton } from "react-aria-components";
+import {
+  Button as AriaButton,
+  Dialog as AriaDialog,
+  DialogTrigger as AriaDialogTrigger,
+  Popover as AriaPopover,
+} from "react-aria-components";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Input } from "#src/components/base/input/input";
-import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
+import { useAppToast } from "#src/components/ui/toast";
 import { isAppError } from "#src/lib/app-error";
 import { formatCalendarDate } from "#src/lib/dates";
 import { cn } from "#src/lib/utils";
 import { useTimeZone } from "#src/lib/time-zone-context";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
+import { POPOVER_MOTION } from "#src/utils/popover-motion";
 
 import { LabelColorPicker } from "./label-color-picker";
 import {
@@ -62,6 +68,7 @@ export function LabelSettingsRow({
 }) {
   const update = useServerFn(updateTaskLabel);
   const remove = useServerFn(deleteTaskLabel);
+  const toast = useAppToast();
   const timeZone = useTimeZone();
   const nameButton = useRef<HTMLButtonElement>(null);
   const [editing, setEditing] = useState<Editing>(null);
@@ -95,6 +102,16 @@ export function LabelSettingsRow({
       await update({ data: { id: label.id, ...change, color: change.color as never } });
       await onChanged();
       close();
+      if (change.archived === true) {
+        toast.undoable(m.tasks_label_archived_toast({ name: label.name }), {
+          key: label.id,
+          failed: m.labels_settings_save_failed(),
+          onUndo: async () => {
+            await update({ data: { id: label.id, archived: false } });
+            await onChanged();
+          },
+        });
+      }
     } catch (cause) {
       setError(changeError(cause, change.name ?? label.name));
     } finally {
@@ -203,12 +220,26 @@ export function LabelSettingsRow({
                 )}
           </div>
         )}
-        {/* How many of them are not finished, on hover or focus. */}
-        <Tooltip title={m.labels_settings_open_count({ count: label.openCount })}>
-          <TooltipTrigger className="h-auto w-20 shrink-0 rounded-sm text-right text-sm text-tertiary tabular-nums outline-focus-ring focus-visible:outline-2">
+        <AriaDialogTrigger>
+          <AriaButton className="h-auto w-20 shrink-0 cursor-pointer rounded-sm text-right text-sm text-tertiary tabular-nums outline-focus-ring hover:text-secondary focus-visible:outline-2">
             {m.labels_settings_task_count({ count: label.taskCount })}
-          </TooltipTrigger>
-        </Tooltip>
+          </AriaButton>
+          <AriaPopover
+            placement="top end"
+            offset={6}
+            className={cn(
+              "origin-(--trigger-anchor-point) rounded-lg bg-primary px-3 py-2 text-xs font-medium text-secondary shadow-lg ring-1 ring-secondary_alt outline-hidden will-change-transform",
+              POPOVER_MOTION,
+            )}
+          >
+            <AriaDialog
+              aria-label={m.labels_settings_open_count({ count: label.openCount })}
+              className="outline-hidden"
+            >
+              {m.labels_settings_open_count({ count: label.openCount })}
+            </AriaDialog>
+          </AriaPopover>
+        </AriaDialogTrigger>
         <span className="hidden w-28 shrink-0 text-right text-sm text-tertiary sm:block">
           {label.lastUsedAt
             ? formatCalendarDate(label.lastUsedAt, timeZone, getLocale())

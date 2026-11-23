@@ -58,6 +58,7 @@ export function MarketplaceAppDetail({
     <AppDialogShell
       open={open}
       onClose={close}
+      busy={installing}
       eyebrow={m.apps_marketplace_eyebrow()}
       app={app}
       badges={
@@ -71,7 +72,7 @@ export function MarketplaceAppDetail({
         app && (
           <>
             {canManage && !app.installed ? (
-              <DialogCancel type="button" onPress={close}>
+              <DialogCancel type="button" isDisabled={installing} onPress={close}>
                 {m.apps_marketplace_close()}
               </DialogCancel>
             ) : (

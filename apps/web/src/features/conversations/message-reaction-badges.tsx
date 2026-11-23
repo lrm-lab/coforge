@@ -1,14 +1,10 @@
-import { Button } from "#src/components/base/buttons/button";
-import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
+import { HoverPopover } from "#src/components/ui/hover-popover";
 import { RollingNumber } from "#src/components/ui/rolling-number";
 import { cn } from "#src/lib/utils";
 import { ActorName } from "#src/features/avatars/actor-name";
 import { useMemberDirectory } from "./member-directory";
 import type { ReactionSummary, Reactor } from "./message-reactions";
 
-/** Who reacted, each with their face (task #521). The face comes from the conversation's members
- * by id; a reactor who has since left is still named, with an initial in place of a picture. An
- * Agent's label is its `@handle`, which is how the server writes one. */
 function ReactorNames({ reactors }: { reactors: Reactor[] }) {
   const directory = useMemberDirectory();
   return reactors.map((reactor, index) => {
@@ -29,11 +25,6 @@ function ReactorNames({ reactors }: { reactors: Reactor[] }) {
   });
 }
 
-/**
- * A message's reactions, one badge per emoji with its count; hovering names who reacted, and
- * pressing one adds the viewer's reaction or takes it back. A badge counts as mine when a reactor
- * is the viewer, and flips to brand to show it. Renders nothing for a message without reactions.
- */
 export function MessageReactionBadges({
   reactions,
   viewerId,
@@ -49,25 +40,25 @@ export function MessageReactionBadges({
       {reactions.map(({ emoji, count, reactors }) => {
         const mine = viewerId !== undefined && reactors.some((reactor) => reactor.id === viewerId);
         return (
-          <Tooltip key={emoji} title={<ReactorNames reactors={reactors} />}>
-            <TooltipTrigger>
-              <Button
-                color="tertiary"
-                size="sm"
-                noTextPadding
-                onPress={() => onToggle?.(emoji, !mine)}
-                aria-pressed={mine}
-                className={cn(
-                  "h-auto rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset",
-                  mine
-                    ? "bg-utility-brand-50 text-utility-brand-700 ring-utility-brand-200 hover:bg-utility-brand-100"
-                    : "bg-utility-neutral-50 text-utility-neutral-700 ring-utility-neutral-200 hover:bg-utility-neutral-100",
-                )}
-              >
+          <HoverPopover
+            key={emoji}
+            label={`${emoji} ${count}`}
+            onPress={() => onToggle?.(emoji, !mine)}
+            triggerClassName={cn(
+              "inline-flex h-auto cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2",
+              mine
+                ? "bg-utility-brand-50 text-utility-brand-700 ring-utility-brand-200 hover:bg-utility-brand-100"
+                : "bg-utility-neutral-50 text-utility-neutral-700 ring-utility-neutral-200 hover:bg-utility-neutral-100",
+            )}
+            className="w-auto max-w-xs px-3 py-2 text-xs text-secondary"
+            trigger={
+              <>
                 {emoji} <RollingNumber value={count} />
-              </Button>
-            </TooltipTrigger>
-          </Tooltip>
+              </>
+            }
+          >
+            <ReactorNames reactors={reactors} />
+          </HoverPopover>
         );
       })}
     </div>

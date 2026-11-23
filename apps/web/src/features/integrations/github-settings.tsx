@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { InfoCircle } from "@untitledui/icons";
+import { Popover as AriaPopover } from "react-aria-components";
 import { Button } from "#src/components/base/buttons/button";
+import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { GitHubMark } from "#src/components/foundations/github-mark";
-import { HoverPopover } from "#src/components/ui/hover-popover";
+import { Dialog, DialogTrigger } from "#src/components/ui/modal";
+import { Popconfirm } from "#src/components/ui/popconfirm";
 import { m } from "#src/paraglide/messages";
+import { POPOVER_MOTION } from "#src/utils/popover-motion";
 import {
   disconnectGitHub,
   getGitHubConnection,
@@ -78,19 +82,6 @@ export function GitHubSettings({ callbackFailure }: { callbackFailure?: GitHubCa
     }
   }
 
-  async function removeConnection() {
-    setBusy(true);
-    setError(false);
-    try {
-      await disconnect();
-      setRevision((value) => value + 1);
-    } catch {
-      setError(true);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function configureInstallation() {
     setBusy(true);
     setError(false);
@@ -130,28 +121,37 @@ export function GitHubSettings({ callbackFailure }: { callbackFailure?: GitHubCa
                 {connection?.login ? `@${connection.login} on GitHub` : "GitHub"}
               </h2>
               {connection?.status === "connected" && (
-                <HoverPopover
-                  label={m.github_repository_access()}
-                  trigger={<InfoCircle className="size-4 text-fg-quaternary" />}
-                  triggerClassName="shrink-0 rounded-full outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2"
-                  className="w-auto min-w-72"
-                >
-                  <div className="p-4">
-                    <p className="font-semibold text-primary">{m.github_repository_access()}</p>
-                    <ul className="mt-3 space-y-2 text-sm text-tertiary">
-                      {connection.installations.map((installation) => (
-                        <li key={installation.id} className="flex flex-wrap items-baseline gap-2">
-                          <span className="font-medium text-secondary">@{installation.login}</span>
-                          <span>
-                            {installation.repositorySelection === "all"
-                              ? m.github_all_repositories()
-                              : m.github_selected_repositories()}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </HoverPopover>
+                <DialogTrigger>
+                  <ButtonUtility
+                    icon={InfoCircle}
+                    size="xs"
+                    color="tertiary"
+                    aria-label={m.github_repository_access()}
+                  />
+                  <AriaPopover
+                    placement="bottom start"
+                    offset={6}
+                    className={`w-auto min-w-72 max-w-[calc(100vw-1rem)] origin-(--trigger-anchor-point) rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt outline-none will-change-transform ${POPOVER_MOTION}`}
+                  >
+                    <Dialog aria-label={m.github_repository_access()} className="p-4 outline-none">
+                      <p className="font-semibold text-primary">{m.github_repository_access()}</p>
+                      <ul className="mt-3 space-y-2 text-sm text-tertiary">
+                        {connection.installations.map((installation) => (
+                          <li key={installation.id} className="flex flex-wrap items-baseline gap-2">
+                            <span className="font-medium text-secondary">
+                              @{installation.login}
+                            </span>
+                            <span>
+                              {installation.repositorySelection === "all"
+                                ? m.github_all_repositories()
+                                : m.github_selected_repositories()}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </Dialog>
+                  </AriaPopover>
+                </DialogTrigger>
               )}
             </div>
             <p className="text-tertiary">
@@ -196,9 +196,22 @@ export function GitHubSettings({ callbackFailure }: { callbackFailure?: GitHubCa
               <Button size="sm" color="secondary" isDisabled={busy} onPress={configureInstallation}>
                 {m.github_configure()}
               </Button>
-              <Button size="sm" color="secondary" isDisabled={busy} onPress={removeConnection}>
-                {m.github_disconnect()}
-              </Button>
+              <Popconfirm
+                title={m.github_disconnect()}
+                description={m.github_disconnect_help()}
+                confirmLabel={m.github_disconnect()}
+                errorMessage={m.github_error()}
+                placement="bottom end"
+                isDisabled={busy}
+                onConfirm={async () => {
+                  await disconnect();
+                  setRevision((value) => value + 1);
+                }}
+              >
+                <Button size="sm" color="secondary" isDisabled={busy}>
+                  {m.github_disconnect()}
+                </Button>
+              </Popconfirm>
             </>
           )}
           {error && (

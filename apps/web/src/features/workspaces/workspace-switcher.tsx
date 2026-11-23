@@ -160,25 +160,39 @@ function CreateWorkspaceDialog({
   onOpenChange: (open: boolean) => void;
   onCreate: (input: CreateWorkspaceInput) => Promise<void>;
 }) {
-  const close = () => onOpenChange(false);
+  const [submitting, setSubmitting] = useState(false);
+  const close = () => {
+    if (!submitting) onOpenChange(false);
+  };
   return (
-    <ModalOverlay isOpen={open} onOpenChange={onOpenChange}>
+    <ModalOverlay
+      isOpen={open}
+      onOpenChange={(next) => {
+        if (next) onOpenChange(true);
+        else close();
+      }}
+    >
       <Modal className="w-[min(30rem,calc(100vw-2rem))]">
         <Dialog>
           <DialogHeader
             title={m.workspace_create_title()}
             description={m.workspace_create_description()}
-            onClose={close}
+            onClose={submitting ? undefined : close}
           />
           <CreateWorkspaceForm
             onCreate={async (input) => {
-              await onCreate(input);
-              close();
+              setSubmitting(true);
+              try {
+                await onCreate(input);
+                onOpenChange(false);
+              } finally {
+                setSubmitting(false);
+              }
             }}
             fieldsClassName="grid gap-4 px-6 py-6"
             actions={(submit) => (
               <DialogActions className="px-6 pt-4 pb-6">
-                <DialogCancel type="button" onPress={close}>
+                <DialogCancel type="button" isDisabled={submitting} onPress={close}>
                   {m.controls_cancel()}
                 </DialogCancel>
                 <DialogAction {...submit} />

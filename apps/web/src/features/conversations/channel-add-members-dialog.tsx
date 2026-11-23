@@ -4,6 +4,10 @@ import { Text } from "react-aria-components";
 import { Plus, SearchLg } from "@untitledui/icons";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import {
+  UnsavedChangesDialog,
+  useUnsavedChangesGuard,
+} from "#src/components/ui/unsaved-changes-dialog";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Input } from "#src/components/base/input/input";
 import { useOpenAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
@@ -95,13 +99,17 @@ export function ChannelAddMembersDialog({
   const { openAgentProfile } = useOpenAgentProfile();
   const members = useChannelMembers(channelId);
   const [search, setSearch] = useState("");
-  // The proposal seeds the selection once; it must not fight the human's own removals on later
-  // renders while the dialog stays open.
-  const [selected, setSelected] = useState<ReadonlySet<string>>(
-    () => new Set(proposedKeys(proposed)),
-  );
+  const [initialKeys] = useState<ReadonlySet<string>>(() => new Set(proposedKeys(proposed)));
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set(initialKeys));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const dirty =
+    selected.size !== initialKeys.size || [...selected].some((key) => !initialKeys.has(key));
+  const unsavedGuard = useUnsavedChangesGuard({
+    overlayOpen: open,
+    dirty,
+    close: () => onOpenChange(false),
+  });
 
   const candidates = useMemo(
     () => (members.data ? buildChannelCandidates(members.data.candidates) : []),
@@ -118,7 +126,7 @@ export function ChannelAddMembersDialog({
 
   function close() {
     if (submitting) return;
-    onOpenChange(false);
+    unsavedGuard.requestClose();
   }
 
   function toggle(key: string, on: boolean) {
@@ -151,85 +159,85 @@ export function ChannelAddMembersDialog({
   }
 
   return (
-    <ModalOverlay
-      isOpen={open}
-      isDismissable={!submitting}
-      onOpenChange={(next) => {
-        if (next) onOpenChange(true);
-        else close();
-      }}
-    >
-      <Modal className="w-[calc(100vw-2rem)] max-w-md">
-        <Dialog className="flex max-h-[inherit] flex-col overflow-hidden text-left">
-          <DialogHeader
-            title={m.channel_members_add_to_channel({ channel: channelName })}
-            onClose={submitting ? undefined : close}
-          />
-          {members.isPending && (
-            <p className="px-6 py-6 text-sm text-tertiary">{m.channel_members_loading()}</p>
-          )}
-          {members.isError && (
-            <p role="alert" className="px-6 py-6 text-sm text-error-primary">
-              {m.channel_members_load_error()}
-            </p>
-          )}
-          {members.data && (
-            <>
-              <div className="flex shrink-0 flex-col gap-3 px-6 pt-4 pb-3">
-                <ChannelCandidateChips
-                  keys={[...selected]}
-                  byKey={byKey}
-                  disabled={submitting}
-                  onRemove={(key) => toggle(key, false)}
-                />
-                {canAdd ? (
-                  // Unlike the settings panel's add view, the search does not take focus: the
-                  // first thing to do here is read the proposal, and a mobile keyboard over the
-                  // dialog would hide the Add button.
-                  <Input
-                    size={controlSize}
-                    label={m.channel_members_search()}
-                    placeholder={m.channel_members_name_placeholder()}
-                    icon={SearchLg}
-                    value={search}
-                    onChange={setSearch}
-                  />
-                ) : (
-                  <Text slot="description" className="block text-sm text-tertiary">
-                    {m.channel_members_access_denied()}
-                  </Text>
-                )}
-              </div>
-              {canAdd && (
-                <div className="min-h-0 flex-1 overflow-y-auto border-t border-secondary px-4 py-2">
-                  <ChannelCandidateGroups
-                    candidates={candidates}
-                    shown={shown}
-                    term={term}
-                    selected={selected}
+    <>
+      <ModalOverlay
+        isOpen={open}
+        isDismissable={!submitting}
+        onOpenChange={(next) => {
+          if (next) onOpenChange(true);
+          else close();
+        }}
+      >
+        <Modal className="w-[calc(100vw-2rem)] max-w-md">
+          <Dialog className="flex max-h-[inherit] flex-col overflow-hidden text-left">
+            <DialogHeader
+              title={m.channel_members_add_to_channel({ channel: channelName })}
+              onClose={submitting ? undefined : close}
+            />
+            {members.isPending && (
+              <p className="px-6 py-6 text-sm text-tertiary">{m.channel_members_loading()}</p>
+            )}
+            {members.isError && (
+              <p role="alert" className="px-6 py-6 text-sm text-error-primary">
+                {m.channel_members_load_error()}
+              </p>
+            )}
+            {members.data && (
+              <>
+                <div className="flex shrink-0 flex-col gap-3 px-6 pt-4 pb-3">
+                  <ChannelCandidateChips
+                    keys={[...selected]}
+                    byKey={byKey}
                     disabled={submitting}
-                    onToggle={toggle}
-                    onOpenAgent={(agentId) => {
-                      close();
-                      openAgentProfile(agentId);
-                    }}
-                    inset="dialog"
+                    onRemove={(key) => toggle(key, false)}
                   />
+                  {canAdd ? (
+                    <Input
+                      size={controlSize}
+                      label={m.channel_members_search()}
+                      placeholder={m.channel_members_name_placeholder()}
+                      icon={SearchLg}
+                      value={search}
+                      onChange={setSearch}
+                    />
+                  ) : (
+                    <Text slot="description" className="block text-sm text-tertiary">
+                      {m.channel_members_access_denied()}
+                    </Text>
+                  )}
                 </div>
-              )}
-              <ChannelAddMembersActions
-                canAdd={canAdd}
-                submitting={submitting}
-                count={selected.size}
-                error={error}
-                onCancel={close}
-                onSubmit={() => void submit()}
-              />
-            </>
-          )}
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
+                {canAdd && (
+                  <div className="min-h-0 flex-1 overflow-y-auto border-t border-secondary px-4 py-2">
+                    <ChannelCandidateGroups
+                      candidates={candidates}
+                      shown={shown}
+                      term={term}
+                      selected={selected}
+                      disabled={submitting}
+                      onToggle={toggle}
+                      onOpenAgent={(agentId) => {
+                        onOpenChange(false);
+                        openAgentProfile(agentId);
+                      }}
+                      inset="dialog"
+                    />
+                  </div>
+                )}
+                <ChannelAddMembersActions
+                  canAdd={canAdd}
+                  submitting={submitting}
+                  count={selected.size}
+                  error={error}
+                  onCancel={close}
+                  onSubmit={() => void submit()}
+                />
+              </>
+            )}
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
+      <UnsavedChangesDialog {...unsavedGuard.promptProps} />
+    </>
   );
 }
 

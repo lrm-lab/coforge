@@ -93,7 +93,12 @@ export function RuntimeSignInDialog({ onClose, ...target }: Target & { onClose: 
       <Modal className="w-[calc(100vw-2rem)] max-w-md">
         <Dialog className="text-left">
           {target.provider === RUNTIME_PROVIDER.KIRO && !kiro ? (
-            <KiroChoice computerId={target.computerId} onStart={setKiro} onClose={onClose} />
+            <KiroChoice
+              computerId={target.computerId}
+              runtimeName={target.runtimeName}
+              onStart={setKiro}
+              onClose={onClose}
+            />
           ) : target.provider === RUNTIME_PROVIDER.ANTIGRAVITY && !antigravityMethodId ? (
             <AntigravitySignIn onStart={setAntigravityMethodId} onClose={onClose} />
           ) : (
@@ -122,10 +127,12 @@ export function RuntimeSignInDialog({ onClose, ...target }: Target & { onClose: 
  */
 function KiroChoice({
   computerId,
+  runtimeName,
   onStart,
   onClose,
 }: {
   computerId: string;
+  runtimeName: string;
   onStart: (target: KiroLoginTarget) => void;
   onClose: () => void;
 }) {
@@ -137,9 +144,23 @@ function KiroChoice({
   });
   if (offerFree.isPending)
     return (
-      <div className="flex min-h-40 items-center justify-center">
-        <Spinner />
-      </div>
+      <>
+        <div className="flex items-start justify-between gap-4 px-6 pt-6">
+          <Heading slot="title" className="min-w-0 text-lg font-semibold text-primary">
+            {m.runtime_auth_sign_in_title({ runtime: runtimeName })}
+          </Heading>
+          <ButtonUtility
+            aria-label={m.controls_close()}
+            icon={XClose}
+            size="sm"
+            color="tertiary"
+            onClick={onClose}
+          />
+        </div>
+        <div className="flex min-h-32 items-center justify-center pb-6">
+          <Spinner />
+        </div>
+      </>
     );
   return (
     <KiroEnterpriseSignIn offerFree={offerFree.data === true} onStart={onStart} onClose={onClose} />

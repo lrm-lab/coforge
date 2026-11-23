@@ -10,10 +10,16 @@ import {
   type MachineStatusReading,
 } from "./computer-machine-status";
 import type { ReactNode } from "react";
-import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
+import {
+  Button as AriaButton,
+  Dialog as AriaDialog,
+  DialogTrigger as AriaDialogTrigger,
+  Popover as AriaPopover,
+} from "react-aria-components";
 import { ProgressBarBase } from "#src/components/base/progress-indicators/progress-indicators";
 import { usedPercentText } from "./usage-window";
 import { cn } from "#src/lib/utils";
+import { POPOVER_MOTION } from "#src/utils/popover-motion";
 
 /**
  * What the machine is, as one strip of short facts — Disk, Memory, Version (and a cloud Computer's
@@ -148,9 +154,10 @@ function MachineUsage({
 }) {
   const percent = machineUsedPercent(reading);
   const low = warn && isMachineDiskLow(reading);
+  const details = machineUsageLabel(reading, base);
   return (
-    <Tooltip title={machineUsageLabel(reading, base)}>
-      <TooltipTrigger className="flex flex-col items-start gap-1.5 rounded-sm text-start">
+    <AriaDialogTrigger>
+      <AriaButton className="flex cursor-pointer flex-col items-start gap-1.5 rounded-sm text-start outline-focus-ring focus-visible:outline-2">
         <span className={cn("tabular-nums", low && "text-warning-primary")}>
           {usedPercentText(percent)}
         </span>
@@ -159,7 +166,19 @@ function MachineUsage({
           className="h-1.5 w-32 rounded-full"
           progressClassName={cn("rounded-full", low && "bg-warning-solid")}
         />
-      </TooltipTrigger>
-    </Tooltip>
+      </AriaButton>
+      <AriaPopover
+        placement="bottom start"
+        offset={6}
+        className={cn(
+          "origin-(--trigger-anchor-point) rounded-lg bg-primary px-3 py-2 text-xs font-medium text-secondary shadow-lg ring-1 ring-secondary_alt outline-hidden will-change-transform",
+          POPOVER_MOTION,
+        )}
+      >
+        <AriaDialog aria-label={details} className="outline-hidden">
+          {details}
+        </AriaDialog>
+      </AriaPopover>
+    </AriaDialogTrigger>
   );
 }
