@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { browserSession, localBrowserE2e } from "./helpers/browser-e2e";
 
 /**
  * The channel header gives its room to the name: at every width a channel name of ordinary length
@@ -13,35 +14,12 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`, the dev user an owner of
  * its Workspace (seed-dev). Screenshots are written under `.artifacts/e2e/channel-header-name/`.
  */
-const webOrigin = Bun.env.COFORGE_E2E_WEB_URL;
-if (!webOrigin || !["localhost", "127.0.0.1"].includes(new URL(webOrigin).hostname))
-  throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
-const browserPath = Bun.which("agent-browser");
-if (!browserPath) throw new Error("agent-browser is required");
-const databaseUrl = Bun.env.DATABASE_URL;
-if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
-  throw new Error("DATABASE_URL must target local PostgreSQL");
+const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/channel-header-name");
 
 test("the channel name keeps its room and the description stays out of the header", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-  const session = `channel-header-name-${process.pid}`;
-  async function browser(...args: string[]) {
-    const child = Bun.spawn([browserPath!, "--session", session, ...args], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    if (code !== 0) throw new Error(`Browser ${args[0]} failed: ${stderr}`);
-    return stdout;
-  }
-  async function evaluate<T>(expression: string): Promise<T> {
-    return JSON.parse(JSON.parse(await browser("eval", `JSON.stringify(${expression})`))) as T;
-  }
+  const { browser, evaluate } = browserSession(browserPath, `channel-header-name-${process.pid}`);
   const header = `document.querySelector('[aria-label="Channel details and settings"]')?.closest("header")`;
   const measure = `(() => {
     const name = ${header}.querySelector("h1");
@@ -86,7 +64,7 @@ test("the channel name keeps its room and the description stays out of the heade
     });
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
-    await browser("open", `${webOrigin}${workspacePath}/channel/${ordinary.id}`);
+    await browser("open", `${origin}${workspacePath}/channel/${ordinary.id}`);
     await browser("wait", "--fn", `Boolean(${header})`);
 
     for (const width of [1440, 1100, 900, 768]) {
@@ -110,7 +88,7 @@ test("the channel name keeps its room and the description stays out of the heade
     expect(phone.descriptionShown).toBe(false);
     expect(phone.actionsInView).toBe(true);
 
-    await browser("open", `${webOrigin}${workspacePath}/channel/${overlong.id}`);
+    await browser("open", `${origin}${workspacePath}/channel/${overlong.id}`);
     await browser("wait", "--fn", `Boolean(${header})`);
     const cut = await evaluate<Record<string, boolean | null>>(measure);
     expect(cut.nameWhole).toBe(false);
