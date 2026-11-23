@@ -244,24 +244,43 @@ async function changeOwnerOf(path: string, identity: WorkspaceIdentity): Promise
 }
 
 /** The child runs the same binary as the Coordinator, but from the traversable copy:
- * `/root/...` is unreachable for an agent uid, and spawning it fails with EACCES. */
-export async function executableForIdentity(
-  executablePath: string,
-  identity: WorkspaceIdentity,
-  volumeRoot: string,
-  inspect: (path: string) => Promise<{ mode: number; directory: boolean }> = inspectPath,
-): Promise<string | undefined> {
-  if (identity.uid <= 0) return undefined;
-  const candidate = aliasPath(executablePath, volumeRoot);
-  const usable = (entry: { mode: number }): boolean => (entry.mode & 0o001) !== 0;
+ * `/root/...` is unreachable for an agent uid, and the version directories under it are
+ * `0700 root`, so the spawn dies with EACCES unless the path is opened up for traversal. */
+export async function executableForIdentity(input: {
+  executablePath: string;
+  identity: WorkspaceIdentity;
+  volumeRoot: string;
+  inspect?: (path: string) => Promise<{ mode: number; directory: boolean }>;
+  grantTraverse?: (path: string, mode: number) => Promise<void>;
+}): Promise<string | undefined> {
+  if (input.identity.uid <= 0) return undefined;
+  const inspect = input.inspect ?? inspectPath;
+  const grant = input.grantTraverse ?? grantTraverse;
+  const candidate = aliasPath(input.executablePath, input.volumeRoot);
+  const traversable = (mode: number): boolean => (mode & 0o001) !== 0;
+  /** Traversal needs `o+x`, not `o+r`: the version directory stays unlistable for the agent. */
+  const open = async (
+    path: string,
+    entry: { mode: number; directory: boolean },
+  ): Promise<boolean> => {
+    if (traversable(entry.mode)) return true;
+    try {
+      await grant(path, entry.directory ? entry.mode | 0o111 : entry.mode | 0o001);
+      const after = await inspect(path);
+      return traversable(after.mode);
+    } catch {
+      return false;
+    }
+  };
   try {
     const file = await inspect(candidate);
-    if (file.directory || !usable(file)) return undefined;
+    if (file.directory) return undefined;
+    if (!(await open(candidate, file))) return undefined;
     const levels = candidate.split("/").filter(Boolean);
     for (let depth = 1; depth < levels.length; depth += 1) {
       const parent = `/${levels.slice(0, depth).join("/")}`;
       const entry = await inspect(parent);
-      if (!entry.directory || !usable(entry)) return undefined;
+      if (!entry.directory || !(await open(parent, entry))) return undefined;
     }
   } catch {
     return undefined;
@@ -272,4 +291,8 @@ export async function executableForIdentity(
 async function inspectPath(path: string): Promise<{ mode: number; directory: boolean }> {
   const info = await stat(path);
   return { mode: info.mode, directory: info.isDirectory() };
+}
+
+async function grantTraverse(path: string, mode: number): Promise<void> {
+  await chmod(path, mode);
 }
