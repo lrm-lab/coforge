@@ -115,6 +115,10 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
           })
         : this.config.executablePath;
     if (spawnIdentity && !executable) spawnIdentity = undefined;
+    const sharedGid =
+      spawnIdentity && volumeRoot
+        ? await workspaceSharedGid(this.config.stateRoot, volumeRoot)
+        : undefined;
     if (spawnIdentity && volumeRoot) {
       // The child reads, traverses and writes under these paths; each one it cannot reach shows up
       // as "failed process readiness" instead of a clear permission error.
@@ -179,7 +183,7 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
               uid: spawnIdentity.identity.uid,
               // The shared group carries the `/workspace` write permission; the uid stays this
               // Workspace's own, so the shared area is the only place two Agents can meet.
-              gid: workspaceSharedGid() ?? spawnIdentity.identity.gid,
+              gid: sharedGid ?? spawnIdentity.identity.gid,
             },
           }
         : {}),
