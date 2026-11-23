@@ -30,7 +30,7 @@ import {
 } from "./computer-detail-view";
 import { ComputerDetailWorkspaceInventory } from "./computer-detail-workspace-inventory";
 import { computerRestartBusy } from "./computer-restart-run";
-import { runtimeRescanNotice } from "./runtime-rescan-notice";
+import { runtimeDetectionStatus, runtimeRescanNotice } from "./runtime-rescan-notice";
 import { useComputerDetailLifecycle } from "./use-computer-detail-lifecycle";
 
 export { RESTART_MAX_POLLS, RESTART_POLL_INTERVAL_MS, type ComputerDetailView };
@@ -102,6 +102,14 @@ export function ComputerDetail({
     }
   };
   const rescanNotice = runtimeRescanNotice(rescanResult);
+  const canRescan = Boolean(onRescanRuntimes && computer.online);
+  const hasRuntimes = computer.runtimes.length > 0;
+  const detectionStatus = runtimeDetectionStatus({
+    hasRuntimes,
+    runtimeDetecting: computer.runtimeDetecting,
+    rescanning,
+    rescanButtonVisible: canRescan,
+  });
   const workspaceSlug = useWorkspaceSlug();
   const creatorName = computer.creator ? humanLabel(computer.creator) : "";
   const {
@@ -211,18 +219,27 @@ export function ComputerDetail({
                 {m.computer_runtimes()}
               </h2>
               <div className="mt-2">
-                {computer.runtimes.length ? (
+                {hasRuntimes ? (
                   <ComputerRuntimeList
                     computer={computer}
                     timeZone={timeZone}
                     onSetRuntimePublic={onSetRuntimePublic}
                   />
+                ) : detectionStatus === "detecting_empty" ? (
+                  <p className="text-sm text-tertiary" role="status">
+                    {m.computer_runtime_detection_empty()}
+                  </p>
                 ) : (
                   <p className="text-sm text-tertiary">{m.computer_no_code_agents()}</p>
                 )}
-                {(rescanning || computer.runtimeDetecting) && (
+                {detectionStatus === "detecting_with_list" && (
                   <p className="mt-1 text-sm text-tertiary" role="status">
                     {m.computer_runtime_detection_pending()}
+                  </p>
+                )}
+                {detectionStatus === "rescanning_with_list" && (
+                  <p className="mt-1 text-sm text-tertiary" role="status">
+                    {m.computer_runtime_detection_rescanning()}
                   </p>
                 )}
                 {!rescanning && rescanNotice.kind === "timeout" && (
@@ -237,7 +254,7 @@ export function ComputerDetail({
                       : m.computer_runtime_rescan_failed()}
                   </p>
                 )}
-                {onRescanRuntimes && computer.online && (
+                {canRescan && (
                   <Button
                     type="button"
                     size="xs"

@@ -1,20 +1,32 @@
 import type { RuntimeRescanResult } from "./computer-detail-view";
 
-/** What the Computer page says under the runtime list after a rescan the page asked for. */
 export type RuntimeRescanNotice =
   | { kind: "none" }
-  /** The daemon never answered in time: the Computer, not a runtime, is the problem. */
   | { kind: "timeout" }
-  /** The daemon answered with a failure of its own; `message` is its sentence when it sent one. */
   | { kind: "error"; message?: string };
 
-/**
- * Tells the outcomes apart, as the reference Computer does: no answer, or a failure the daemon
- * reported. A rescan that ran needs no line of its own — an unusable runtime's chip says so.
- */
 export function runtimeRescanNotice(result: RuntimeRescanResult | undefined): RuntimeRescanNotice {
   if (!result) return { kind: "none" };
   if (result.status === "timeout") return { kind: "timeout" };
   if (result.status === "error") return { kind: "error", message: result.message };
   return { kind: "none" };
+}
+
+export type RuntimeDetectionStatus =
+  | "none"
+  | "detecting_empty"
+  | "detecting_with_list"
+  | "rescanning_with_list";
+
+export function runtimeDetectionStatus(input: {
+  hasRuntimes: boolean;
+  runtimeDetecting?: boolean;
+  rescanning: boolean;
+  rescanButtonVisible: boolean;
+}): RuntimeDetectionStatus {
+  const detecting = input.rescanning || Boolean(input.runtimeDetecting);
+  if (!detecting) return "none";
+  if (!input.hasRuntimes) return "detecting_empty";
+  if (input.rescanning && input.rescanButtonVisible) return "rescanning_with_list";
+  return "detecting_with_list";
 }

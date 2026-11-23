@@ -82,7 +82,9 @@
   "computer_runtime_unavailable_unknown": "Cannot be used",
   "computer_runtime_rescan_error": "The Computer reported a failure: {message}",
   "computer_runtime_rescan_failed": "The Computer did not answer the rescan. Try again.",
-  "computer_runtime_detection_pending": "Detecting runtimes… the list below is the last confirmed one.",
+  "computer_runtime_detection_pending": "Detecting… showing the last result for now.",
+  "computer_runtime_detection_rescanning": "Showing the last result for now.",
+  "computer_runtime_detection_empty": "Detecting runtimes…",
   "computer_runtimes": "Runtimes",
   "computer_runtime_visibility_error": "Runtime visibility could not be changed. Try again."
 }

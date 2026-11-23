@@ -73,7 +73,9 @@
   "computer_runtime_unavailable_unknown": "无法使用",
   "computer_runtime_rescan_error": "电脑报告了失败：{message}",
   "computer_runtime_rescan_failed": "电脑没有响应这次重新检测，请重试。",
-  "computer_runtime_detection_pending": "正在检测运行时…下方是上一次确认的列表。",
+  "computer_runtime_detection_pending": "检测中，暂时显示上次结果。",
+  "computer_runtime_detection_rescanning": "暂时显示上次结果。",
+  "computer_runtime_detection_empty": "正在检测运行时…",
   "computer_runtimes": "运行时",
   "computer_runtime_visibility_error": "无法更改运行时可见性，请重试。"
 }
