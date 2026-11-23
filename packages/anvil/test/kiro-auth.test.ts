@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, jest, test } from "bun:test";
 import { KiroRuntimeAuthAdapter, type KiroAuthHost, type KiroAuthProcess } from "#src/kiro/auth";
 import { kiroDeviceLinkAllowed } from "#src/kiro/auth-link-hosts";
 import { parseKiroWhoami } from "#src/kiro/whoami";
@@ -50,8 +50,9 @@ function child() {
   };
 }
 function setup() {
-  const login = child();
+  let login = child();
   const spawned = Promise.withResolvers<void>();
+  const offered = Promise.withResolvers<void>();
   const commands: readonly string[][] = [];
   const host: KiroAuthHost = {
     enterpriseLoginSupported: true,
@@ -59,6 +60,7 @@ function setup() {
     spawn(args, _cwd, terminal) {
       (commands as string[][]).push([...args]);
       if (terminal) {
+        login = child();
         spawned.resolve();
         return login.process;
       }
@@ -70,18 +72,31 @@ function setup() {
   };
   const adapter = new KiroRuntimeAuthAdapter(host);
   const events: RuntimeAuthLoginEvent[] = [];
-  const signIn = (signal?: AbortSignal, timeoutMs = 1000) =>
+  const signIn = (signal?: AbortSignal, timeoutMs?: number) =>
     adapter.startLogin(
       { workingDirectory: "/test", kiroIdentityCenter: target, timeoutMs },
       {
         signal,
-        onEvent: (e) => events.push(e),
+        onEvent(event) {
+          events.push(event);
+          offered.resolve();
+        },
         prompt: async () => {
           throw new Error("no manual code expected");
         },
       },
     );
-  return { login, spawned, adapter, events, signIn, commands };
+  return {
+    get login() {
+      return login;
+    },
+    spawned,
+    offered,
+    adapter,
+    events,
+    signIn,
+    commands,
+  };
 }
 
 test("Kiro IDC answers only its two prefilled prompts and verifies the resulting identity", async () => {
@@ -142,6 +157,90 @@ for (const mode of ["cancel", "deadline", "dispose"] as const)
       mode === "deadline" ? { status: "failed", reason: "timed_out" } : { status: "cancelled" },
     );
     expect(x.login.closed).toBe(true);
+  });
+
+const startupBudgetMs = 45_000;
+const authorizationBudgetMs = 16 * 60_000;
+const deviceCode = "Open https://device.sso.us-east-1.amazonaws.com/\nCode: ABCD-EFGH\n";
+
+for (const action of ["timeout", "cancel"] as const)
+  test(`Kiro ${action} during silent startup closes the child and releases login`, async () => {
+    jest.useFakeTimers();
+    const x = setup();
+    try {
+      const cancel = new AbortController();
+      const pending = x.signIn(cancel.signal);
+      jest.advanceTimersByTime(startupBudgetMs - 1);
+      expect(x.login.closed).toBe(false);
+      expect(await x.signIn()).toEqual({ status: "busy" });
+      if (action === "cancel") cancel.abort();
+      jest.advanceTimersByTime(1);
+      expect(await pending).toEqual(
+        action === "cancel" ? { status: "cancelled" } : { status: "failed", reason: "timed_out" },
+      );
+      expect(x.login.closed).toBe(true);
+      expect(x.events).toEqual([]);
+      expect(x.commands).toHaveLength(1);
+    } finally {
+      await x.adapter.dispose();
+      jest.useRealTimers();
+    }
+  });
+
+test("Kiro startup timeout wins over a late device code and releases login for retry", async () => {
+  jest.useFakeTimers();
+  const x = setup();
+  try {
+    const cancel = new AbortController();
+    const pending = x.signIn(cancel.signal);
+    const first = x.login;
+    first.send(deviceCode);
+    jest.advanceTimersByTime(startupBudgetMs);
+    cancel.abort();
+    expect(await pending).toEqual({ status: "failed", reason: "timed_out" });
+    expect(first.closed).toBe(true);
+    expect(x.events).toEqual([]);
+    expect(x.commands).toHaveLength(1);
+
+    const retry = x.signIn();
+    const second = x.login;
+    expect(second).not.toBe(first);
+    second.send(deviceCode);
+    second.end();
+    expect(await retry).toMatchObject({ status: "logged_in" });
+    expect(x.events).toHaveLength(1);
+  } finally {
+    await x.adapter.dispose();
+    jest.useRealTimers();
+  }
+});
+
+for (const action of ["complete", "time out"] as const)
+  test(`Kiro can ${action} within its original login limit after a slow startup`, async () => {
+    jest.useFakeTimers();
+    const x = setup();
+    try {
+      const pending = x.signIn();
+      const login = x.login;
+      jest.advanceTimersByTime(startupBudgetMs - 1);
+      login.send(deviceCode);
+      await x.offered.promise;
+      jest.advanceTimersByTime(authorizationBudgetMs - startupBudgetMs);
+      expect(login.closed).toBe(false);
+      if (action === "complete") login.end();
+      else {
+        jest.advanceTimersByTime(1);
+        await x.adapter.cancel();
+      }
+      expect(await pending).toMatchObject(
+        action === "complete" ? { status: "logged_in" } : { status: "failed", reason: "timed_out" },
+      );
+      expect(x.events).toHaveLength(1);
+      expect(login.closed).toBe(true);
+    } finally {
+      await x.adapter.dispose();
+      jest.useRealTimers();
+    }
   });
 
 test("Kiro terminal framing survives prompts split across data chunks", async () => {

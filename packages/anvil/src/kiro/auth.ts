@@ -15,6 +15,7 @@ import { parseKiroWhoami } from "./whoami";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.KIRO, "auth"]);
 
+const KIRO_LOGIN_START_TIMEOUT_MS = 45_000;
 export const KIRO_LOGIN_TIMEOUT_MS = 16 * 60 * 1000;
 export const KIRO_AUTH_PROBE_TIMEOUT_MS = 20_000;
 export interface KiroAuthProcess {
@@ -29,7 +30,6 @@ export interface KiroAuthHost {
   maskAccountLabel(value: string): string | undefined;
 }
 
-/** Native Kiro login policy; all processes, environments and account masking come from the host. */
 export class KiroRuntimeAuthAdapter implements RuntimeAuthAdapter {
   readonly provider = RUNTIME_PROVIDER.KIRO;
   #active?: { abort: AbortController; done: Promise<RuntimeAuthLoginResult> };
@@ -106,7 +106,7 @@ export class KiroRuntimeAuthAdapter implements RuntimeAuthAdapter {
     const cancel = () => abort.abort();
     interaction.signal?.addEventListener("abort", cancel, { once: true });
     if (interaction.signal?.aborted) abort.abort();
-    const done = this.#login(options, interaction, abort.signal).finally(() => {
+    const done = this.#login(options, interaction, abort).finally(() => {
       interaction.signal?.removeEventListener("abort", cancel);
       this.#active = undefined;
     });
@@ -116,15 +116,17 @@ export class KiroRuntimeAuthAdapter implements RuntimeAuthAdapter {
   async #login(
     options: Parameters<RuntimeAuthAdapter["startLogin"]>[0],
     interaction: RuntimeAuthLoginInteraction,
-    signal: AbortSignal,
+    abort: AbortController,
   ): Promise<RuntimeAuthLoginResult> {
+    const { signal } = abort;
     let child: KiroAuthProcess | undefined;
     let work: Promise<RuntimeAuthLoginResult> | undefined;
-    let deadline = false;
-    let stop: () => void = () => {};
+    let startupTimer: ReturnType<typeof setTimeout> | undefined;
+    let loginTimer: ReturnType<typeof setTimeout> | undefined;
+    const timeOut = () => abort.abort(new KiroAuthFailure("timed_out"));
+    const cancelled = Promise.withResolvers<never>();
+    const stop = () => cancelled.reject(signal.reason);
     try {
-      // A free sign-in (Builder ID, Google, GitHub) is the same command without the identity
-      // center: `kiro-cli` asks for the provider itself, so nothing here names one.
       const license = options.kiroLicense ?? "pro";
       const target =
         license === "pro" ? parseKiroIdentityCenterOptions(options.kiroIdentityCenter) : undefined;
@@ -146,18 +148,23 @@ export class KiroRuntimeAuthAdapter implements RuntimeAuthAdapter {
       const transcript = new KiroEnterpriseLoginTranscript(
         target,
         (t) => process.write(t),
-        interaction.onEvent,
+        (event) => {
+          if (event.kind === "device_code") clearTimeout(startupTimer);
+          interaction.onEvent(event);
+        },
         options.onSecret,
       );
-      const abort = new Promise<never>((_, reject) => {
-        stop = () => reject(new KiroAuthFailure("interaction_failed"));
-        signal.addEventListener("abort", stop, { once: true });
-        if (signal.aborted) stop();
-      });
+      signal.addEventListener("abort", stop, { once: true });
+      if (signal.aborted) stop();
+      startupTimer = setTimeout(timeOut, KIRO_LOGIN_START_TIMEOUT_MS);
+      loginTimer = setTimeout(timeOut, options.timeoutMs ?? KIRO_LOGIN_TIMEOUT_MS);
       work = (async () => {
         const decoder = new TextDecoder();
-        for await (const chunk of process.output)
+        for await (const chunk of process.output) {
+          signal.throwIfAborted();
           transcript.accept(decoder.decode(chunk, { stream: true }));
+        }
+        signal.throwIfAborted();
         transcript.accept(decoder.decode());
         if ((await process.exited) !== 0) throw new KiroAuthFailure("process_failed");
         const result = await this.#read(
@@ -165,9 +172,6 @@ export class KiroRuntimeAuthAdapter implements RuntimeAuthAdapter {
           KIRO_AUTH_PROBE_TIMEOUT_MS,
           signal,
         );
-        // A `pro` sign-in must have landed on the identity center it was given. A free one has no
-        // target to compare: the account type it reports is recorded as-is (Builder ID, Google,
-        // GitHub), and the first real free login's exact value is what later tightens this.
         const landed = result.data;
         if (
           target !== undefined &&
@@ -184,17 +188,10 @@ export class KiroRuntimeAuthAdapter implements RuntimeAuthAdapter {
           });
         return { status: "logged_in", authStatus: result.status } as const;
       })();
-      return await withDeadline(
-        Promise.race([work, abort]),
-        options.timeoutMs ?? KIRO_LOGIN_TIMEOUT_MS,
-        () => {
-          deadline = true;
-          this.#active?.abort.abort();
-          return new KiroAuthFailure("timed_out");
-        },
-      );
+      return await Promise.race([work, cancelled.promise]);
     } catch (error) {
-      if (deadline) return { status: "failed", reason: "timed_out" };
+      if (signal.reason instanceof KiroAuthFailure)
+        return { status: "failed", reason: signal.reason.reason };
       if (signal.aborted) return { status: "cancelled" };
       if ((error as { code?: string }).code === "runtime_not_found")
         return { status: "unsupported", reason: "not_installed" };
@@ -206,6 +203,8 @@ export class KiroRuntimeAuthAdapter implements RuntimeAuthAdapter {
         };
       return { status: "failed", reason: "interaction_failed" };
     } finally {
+      clearTimeout(startupTimer);
+      clearTimeout(loginTimer);
       signal.removeEventListener("abort", stop);
       await child?.dispose();
       await work?.catch(() => {});
