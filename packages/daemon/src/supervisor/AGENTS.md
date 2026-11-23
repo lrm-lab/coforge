@@ -42,6 +42,9 @@ Rules for the machine Coordinator in `src/supervisor/`. They extend
   launched externally or by automatic restart. Keep scoped upgrade recovery
   pending when the original Installer transaction has settled and the launch's
   provenance is unknown.
+- Scoped systemd recovery attributes a launch only when the user manager
+  atomically creates the absent Workspace unit. A refused creation cancels its
+  grant before any ordinary start or adoption.
 - `workspace-adoption.ts` owns the record of adopted Workspace daemons. Reading
   a Workspace's OS identity only observes: a read that finds it gone never
   drops the adopted child; only `stop` or a failed start does. One failed

@@ -6,11 +6,21 @@ import {
   validateWorkspaceEndpoint,
   WORKSPACE_RELAUNCH_SECONDS,
   type WorkspaceInstanceConfig,
+  type WorkspaceLaunchAttribution,
 } from "./workspace-instance";
 export type { WorkspaceInstanceConfig } from "./workspace-instance";
 
 export type SystemdUserCommand = (args: string[]) => Promise<number>;
 export type SystemdUserCapture = (args: string[]) => Promise<{ code: number; stdout: string }>;
+
+const serviceProperties = [
+  "Restart=on-failure",
+  `RestartSec=${WORKSPACE_RELAUNCH_SECONDS}s`,
+  "KillMode=mixed",
+  "OOMPolicy=continue",
+  "SendSIGKILL=yes",
+  "TimeoutStopSec=10s",
+];
 
 /** One user-manager unit is the process-containment seam for one Workspace. */
 export class SystemdWorkspaceInstance {
@@ -29,6 +39,12 @@ export class SystemdWorkspaceInstance {
       });
       return { code: await process.exited, stdout: await new Response(process.stdout).text() };
     },
+    private readonly runTransient: SystemdUserCommand = (args) =>
+      Bun.spawn(["systemd-run", "--user", "--no-ask-password", "--no-block", ...args], {
+        stdin: "ignore",
+        stdout: "ignore",
+        stderr: "ignore",
+      }).exited,
   ) {
     const identity = new Bun.CryptoHasher("sha256")
       .update(`${config.stateRoot}\0${config.workspaceId}`)
@@ -38,7 +54,40 @@ export class SystemdWorkspaceInstance {
     this.unitPath = join(config.unitDirectory, this.unitName);
   }
 
-  async ensureStarted(): Promise<number> {
+  async ensureStarted(
+    beforeLaunch?: () => Promise<void>,
+    attribution?: WorkspaceLaunchAttribution,
+  ): Promise<number> {
+    if (beforeLaunch && attribution && !(await this.#show()).exists) {
+      const { command, environment } = workspaceService(this.config);
+      const description = `CoForge Workspace ${this.config.workspaceId} (upgrade ${crypto.randomUUID()})`;
+      const args = [
+        `--unit=${this.unitName}`,
+        `--description=${description}`,
+        ...serviceProperties.map((property) => `--property=${property}`),
+        ...environment.map((assignment) => `--setenv=${assignment}`),
+        "--",
+        ...command.map((part, index) => (index === 0 ? part : part.replaceAll("$", "$$"))),
+      ];
+      await beforeLaunch();
+      let accepted = false;
+      try {
+        accepted = (await this.runTransient(args)) === 0;
+      } catch {}
+      if (accepted) {
+        try {
+          const observed = await this.#waitForMainPid();
+          if (observed.description === description && observed.transient) {
+            await attribution.observeLaunch(observed);
+          } else await attribution.cancelAttribution();
+          return observed.mainPid;
+        } catch (error) {
+          await attribution.cancelAttribution();
+          throw error;
+        }
+      }
+      await attribution.cancelAttribution();
+    }
     await this.write(this.unitPath, workspaceUnit(this.config));
     await this.#runChecked(["daemon-reload"], "reload the systemd user manager");
     const state = await this.#show();
@@ -66,6 +115,8 @@ export class SystemdWorkspaceInstance {
     active: boolean;
     mainPid: number;
     invocationId: string;
+    description: string;
+    transient: boolean;
   }> {
     const result = await this.capture([
       "show",
@@ -74,6 +125,8 @@ export class SystemdWorkspaceInstance {
       "--property=MainPID",
       "--property=LoadState",
       "--property=InvocationID",
+      "--property=Description",
+      "--property=Transient",
     ]);
     const properties = new Map<string, string>();
     for (const line of result.stdout.trim().split("\n")) {
@@ -84,7 +137,14 @@ export class SystemdWorkspaceInstance {
       properties.set(key, line.slice(separator + 1));
     }
     if (properties.get("LoadState") === "not-found")
-      return { exists: false, active: false, mainPid: 0, invocationId: "" };
+      return {
+        exists: false,
+        active: false,
+        mainPid: 0,
+        invocationId: "",
+        description: "",
+        transient: false,
+      };
     const pid = properties.get("MainPID") ?? "";
     const invocationId = properties.get("InvocationID") ?? "";
     if (
@@ -102,10 +162,12 @@ export class SystemdWorkspaceInstance {
       active: properties.get("ActiveState") === "active",
       mainPid: Number(pid),
       invocationId,
+      description: properties.get("Description") ?? "",
+      transient: properties.get("Transient") === "yes",
     };
   }
 
-  async #waitForMainPid(): Promise<{ mainPid: number; active: boolean }> {
+  async #waitForMainPid() {
     const deadline = Date.now() + 30_000;
     while (Date.now() < deadline) {
       const state = await this.#show();
@@ -121,28 +183,47 @@ export class SystemdWorkspaceInstance {
   }
 }
 
-export function workspaceUnit(config: WorkspaceInstanceConfig): string {
+function workspaceService(config: WorkspaceInstanceConfig) {
   validateWorkspaceEndpoint(config.daemonConnectionEndpoint);
+  const environment = [`COFORGE_DAEMON_HOME=${config.stateDirectory}`];
+  if (config.supervisorSocketPath) {
+    environment.push(
+      `COFORGE_SUPERVISOR_SOCKET=${config.supervisorSocketPath}`,
+      `COFORGE_SUPERVISOR_STATE_PATH=${join(dirname(config.supervisorSocketPath), "upgrade-request-ids.json")}`,
+    );
+  }
+  if (config.daemonConnectionEndpoint)
+    environment.push(`COFORGE_DAEMON_CONNECTION_ENDPOINT=${config.daemonConnectionEndpoint}`);
+  const command = [
+    config.executablePath,
+    "__workspace-daemon",
+    "--socket",
+    config.socketPath,
+    "--state-directory",
+    config.stateDirectory,
+  ];
+  for (const value of [config.workspaceId, ...command, ...environment]) {
+    if (value.includes("\n") || value.includes("\r") || value.includes("\0"))
+      throw new Error("invalid systemd unit value");
+  }
+  return { environment, command };
+}
+
+export function workspaceUnit(config: WorkspaceInstanceConfig): string {
+  const { command, environment } = workspaceService(config);
   return `[Unit]
 Description=CoForge Workspace ${escapeUnit(config.workspaceId)}
 
 [Service]
-Environment="COFORGE_DAEMON_HOME=${escapeUnit(config.stateDirectory)}"
-${config.supervisorSocketPath ? `Environment="COFORGE_SUPERVISOR_SOCKET=${escapeUnit(config.supervisorSocketPath)}"\nEnvironment="COFORGE_SUPERVISOR_STATE_PATH=${escapeUnit(join(dirname(config.supervisorSocketPath), "upgrade-request-ids.json"))}"\n` : ""}${config.daemonConnectionEndpoint ? `Environment="COFORGE_DAEMON_CONNECTION_ENDPOINT=${escapeUnit(config.daemonConnectionEndpoint)}"\n` : ""}ExecStart=${escapeUnit(config.executablePath)} __workspace-daemon --socket ${escapeUnit(config.socketPath)} --state-directory ${escapeUnit(config.stateDirectory)}
-Restart=on-failure
-RestartSec=${WORKSPACE_RELAUNCH_SECONDS}s
-KillMode=mixed
-OOMPolicy=continue
-SendSIGKILL=yes
-TimeoutStopSec=10s
+${environment.map((assignment) => `Environment="${escapeUnit(assignment)}"`).join("\n")}
+ExecStart=${command.map(escapeUnit).join(" ")}
+${serviceProperties.join("\n")}
 
 [Install]
 `;
 }
 
 function escapeUnit(value: string): string {
-  if (value.includes("\n") || value.includes("\r") || value.includes("\0"))
-    throw new Error("invalid systemd unit value");
   return value
     .replaceAll("\\", "\\\\")
     .replaceAll('"', '\\"')

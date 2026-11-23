@@ -18,6 +18,7 @@ type Binding = Pick<ManagedBinding, "workspaceId" | "computerId" | "serverHttpUr
 type LaunchIdentity = Pick<NativeProcessIdentity, "mainPid" | "invocationId">;
 export type WorkspaceRecoveryLaunch = {
   beforeLaunch: () => Promise<void>;
+  cancelAttribution: () => Promise<void>;
   observeLaunch: (identity: LaunchIdentity) => Promise<void>;
 };
 
@@ -230,8 +231,13 @@ export class WorkspaceUpgradeRecovery {
           this.#pending.set(workspaceId, receipt);
         }
       },
-      observeLaunch: async ({ mainPid, invocationId }) => {
+      cancelAttribution: async () => {
         if (!authorization) return;
+        authorization = undefined;
+        await save({ ...evidence, state: "failed" });
+      },
+      observeLaunch: async ({ mainPid, invocationId }) => {
+        if (!authorization || authorization.launch) return;
         const launch = { mainPid, invocationId };
         authorization.launch = launch;
         await save({

@@ -41,8 +41,16 @@ export function validateWorkspaceEndpoint(value: string | undefined): void {
     throw new Error("Workspace endpoint must be a credential-free WebSocket URL");
 }
 
+export type WorkspaceLaunchAttribution = {
+  cancelAttribution(): Promise<void>;
+  observeLaunch(identity: NativeProcessIdentity): Promise<void>;
+};
+
 export interface WorkspaceInstance {
-  ensureStarted(beforeLaunch?: () => Promise<void>): Promise<number>;
+  ensureStarted(
+    beforeLaunch?: () => Promise<void>,
+    attribution?: WorkspaceLaunchAttribution,
+  ): Promise<number>;
   stop(): Promise<void>;
   identity(): Promise<NativeProcessIdentity | null>;
 }

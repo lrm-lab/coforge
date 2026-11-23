@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { SystemdWorkspaceInstance } from "#src/supervisor/systemd-workspace-instance";
+import type { NativeProcessIdentity } from "#src/supervisor/workspace-instance";
 
 // Explicit invocation: mise exec -- bun test ./packages/daemon/test/systemd-workspace-containment.integration.ts
 // Requires an existing Linux user manager. Never installs one or changes lingering.
@@ -47,14 +48,53 @@ test("Workspace pre-readiness SIGKILL cleans live detached descendants without a
       return instance;
     };
     const b = make("b");
-    const bPid = await b.ensureStarted();
+    const attribution: NativeProcessIdentity[] = [];
+    let authorized = 0;
+    let cancelled = 0;
+    const arm = async () => {
+      authorized += 1;
+    };
+    const observe = {
+      async cancelAttribution() {
+        cancelled += 1;
+      },
+      async observeLaunch(identity: NativeProcessIdentity) {
+        attribution.push({
+          mainPid: identity.mainPid,
+          active: identity.active,
+          invocationId: identity.invocationId,
+        });
+      },
+    };
+    const bPid = await b.ensureStarted(arm, observe);
     const bIdentity = await b.identity();
+    if (!bIdentity) throw new Error("transient Workspace has no systemd identity");
     expect(bIdentity).toMatchObject({ mainPid: bPid, active: true });
+    expect(attribution).toEqual([bIdentity]);
+    expect(authorized).toBe(1);
+    expect(cancelled).toBe(0);
+    expect(await Bun.file(b.unitPath).exists()).toBe(false);
+    expect(await b.ensureStarted(arm, observe)).toBe(bPid);
+    expect(attribution).toEqual([bIdentity]);
+    expect(authorized).toBe(1);
     const bAgent = await ready(root, "b", bPid, b.unitName);
     for (let iteration = 0; iteration < 5; iteration++) {
       const name = `a-${iteration}`;
       const a = make(name);
-      const aPid = await a.ensureStarted();
+      let external: NativeProcessIdentity | null = null;
+      const aPid =
+        iteration === 0
+          ? await a.ensureStarted(async () => {
+              await a.ensureStarted();
+              external = await a.identity();
+            }, observe)
+          : await a.ensureStarted();
+      if (iteration === 0) {
+        expect(external).toMatchObject({ mainPid: aPid, active: true });
+        expect(await a.identity()).toEqual(external);
+        expect(attribution).toEqual([bIdentity]);
+        expect(cancelled).toBe(1);
+      }
       const aAgent = await ready(root, name, aPid, a.unitName);
       expect(await a.ensureStarted()).toBe(aPid);
       await Bun.write(join(root, name, "crash"), "SIGKILL");

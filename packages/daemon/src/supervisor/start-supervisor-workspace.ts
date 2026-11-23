@@ -54,7 +54,7 @@ export function startSupervisorWorkspace({
       }
       await new DaemonConfigStore(directory).save(workspaceDaemonConfig(binding));
       const instance = workspaceInstance(binding.workspaceId);
-      const processId = await instance.ensureStarted(recovery?.beforeLaunch);
+      const processId = await instance.ensureStarted(recovery?.beforeLaunch, recovery);
       const observed = await instance.identity();
       if (!observed?.active || observed.mainPid !== processId)
         throw new Error("Workspace OS identity changed during startup");
