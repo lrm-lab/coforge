@@ -288,3 +288,23 @@ test("the state root the child is handed is opened for traversal, one level at a
   ]);
   expect(modes["/srv/coforge/daemon"]?.mode).toBe(0o711);
 });
+
+test("a path that stays closed is reported instead of silently weakening the drop", async () => {
+  const unopened = await openTraversalForIdentity({
+    paths: ["/srv/coforge/daemon/workspaces/MDFh/daemon.sock", "/srv/coforge/daemon/daemon.sock"],
+    identity: { uid: 20_101, gid: 20_101 },
+    volumeRoot: "/srv/coforge",
+    inspect: async (path) => {
+      if (path === "/srv/coforge/daemon") return { mode: 0o700, directory: true };
+      if (path === "/srv/coforge/daemon/workspaces") throw new Error("EPERM");
+      return { mode: 0o755, directory: true };
+    },
+    grantTraverse: async (path) => {
+      if (path === "/srv/coforge/daemon") throw new Error("EPERM");
+    },
+  });
+  expect(unopened).toEqual([
+    "/srv/coforge/daemon/workspaces/MDFh/daemon.sock",
+    "/srv/coforge/daemon/daemon.sock",
+  ]);
+});

@@ -300,14 +300,19 @@ export async function openTraversalForIdentity(input: {
   volumeRoot: string;
   inspect?: Inspect;
   grantTraverse?: Grant;
-}): Promise<void> {
-  if (input.identity.uid <= 0) return;
+}): Promise<string[]> {
+  if (input.identity.uid <= 0) return [];
   const inspect = input.inspect ?? inspectPath;
   const grant = input.grantTraverse ?? grantTraverse;
+  const unopened: string[] = [];
   for (const path of input.paths) {
     if (!path) continue;
-    await openChain(aliasPath(path, input.volumeRoot), inspect, grant, false);
+    const target = aliasPath(path, input.volumeRoot);
+    // Reporting the ones that could not be opened is the whole point: a read-only volume, an EPERM
+    // or a root-owned directory nobody listed all end as "failed process readiness" otherwise.
+    if (!(await openChain(target, inspect, grant, false))) unopened.push(target);
   }
+  return unopened;
 }
 
 /** The child runs the same binary as the Coordinator, but from the traversable copy:

@@ -1,5 +1,6 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { getLogger } from "@logtape/logtape";
 import { isPidAlive } from "#src/platform/process-liveness";
 
 import { WorkspaceHealthJournal, workspaceHealthJournalPath } from "./workspace-health-journal";
@@ -13,6 +14,8 @@ import {
   type WorkspaceIdentity,
 } from "./workspace-identity";
 import { CONTAINER_BINDING_ENV_KEYS } from "./container-binding-env";
+
+const logger = getLogger(["coforge", "daemon", "supervisor"]);
 import {
   validateWorkspaceEndpoint,
   type NativeProcessIdentity,
@@ -114,7 +117,7 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
     if (spawnIdentity && volumeRoot) {
       // The child reads, traverses and writes under these paths; each one it cannot reach shows up
       // as "failed process readiness" instead of a clear permission error.
-      await openTraversalForIdentity({
+      const unopened = await openTraversalForIdentity({
         paths: [
           this.config.stateDirectory,
           this.config.socketPath,
@@ -125,6 +128,12 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
         identity: spawnIdentity.identity,
         volumeRoot,
       });
+      if (unopened.length > 0)
+        logger.warn("Workspace paths are not reachable for its identity", {
+          workspaceId: this.config.workspaceId,
+          uid: spawnIdentity.identity.uid,
+          unopened,
+        });
     }
     const env: Record<string, string> = {
       ...Object.fromEntries(

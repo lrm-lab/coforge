@@ -22,6 +22,19 @@ UID_MAX=20250
 mkdir -p "${WS_ROOT}"
 chmod 711 "${WS_ROOT}"
 
+# Directories the dropped child has to walk through, created by the launcher as 0700.
+# Traversal only (`o+x`): the daemon state stays unlistable for an Agent, but the uid that
+# owns a state directory can reach it without the spawn-time repair having to fix it again.
+for shared_dir in "${VOLUME_ROOT}/daemon" "${VOLUME_ROOT}/daemon/workspaces" \
+  "${VOLUME_ROOT}/daemon/logs" "${VOLUME_ROOT}/computer" \
+  "${VOLUME_ROOT}/computer/install" "${VOLUME_ROOT}/computer/install/versions"; do
+  [[ -d "${shared_dir}" ]] || continue
+  chmod o+x "${shared_dir}"
+done
+for version_dir in "${VOLUME_ROOT}"/computer/install/versions/*/; do
+  [[ -d "${version_dir}" ]] && chmod o+x "${version_dir}"
+done
+
 if [[ ! -f "${BINDINGS}" ]]; then
   log "no bindings file at ${BINDINGS}; nothing to provision"
   exit 0
