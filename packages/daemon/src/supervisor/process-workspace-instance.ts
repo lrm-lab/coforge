@@ -167,35 +167,54 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
     // to the uid *before* it starts; creating it here keeps that write a no-op for ownership.
     if (spawnIdentity) await this.#prepareRecord(spawnIdentity.identity);
     if (beforeLaunch) await beforeLaunch();
-    const child = await this.spawnChild({
-      command: [
-        executable ?? this.config.executablePath,
-        "__workspace-daemon",
-        "--socket",
-        reachable(this.config.socketPath),
-        "--state-directory",
-        reachable(this.config.stateDirectory),
-      ],
-      cwd: reachable(this.config.stateDirectory),
-      ...(spawnIdentity
-        ? {
-            identity: {
-              uid: spawnIdentity.identity.uid,
-              // The shared group carries the `/workspace` write permission; the uid stays this
-              // Workspace's own, so the shared area is the only place two Agents can meet.
-              gid: sharedGid ?? spawnIdentity.identity.gid,
-            },
-          }
-        : {}),
-      env: {
-        ...env,
-        // The child rewrites this record itself once it holds the binding lock, so a Coordinator
-        // that dies between spawn and the write below still leaves a discoverable live instance
-        // for the next Coordinator to adopt instead of spawning a duplicate beside it.
-        COFORGE_WORKSPACE_INSTANCE_RECORD: reachable(this.#recordPath),
-        COFORGE_WORKSPACE_INVOCATION_ID: invocationId,
-      },
-    });
+    const launch = (gid: number | undefined) =>
+      this.spawnChild({
+        command: [
+          executable ?? this.config.executablePath,
+          "__workspace-daemon",
+          "--socket",
+          reachable(this.config.socketPath),
+          "--state-directory",
+          reachable(this.config.stateDirectory),
+        ],
+        cwd: reachable(this.config.stateDirectory),
+        ...(spawnIdentity
+          ? {
+              identity: {
+                uid: spawnIdentity.identity.uid,
+                // The shared group carries the `/workspace` write permission; the uid stays this
+                // Workspace's own, so the shared area is the only place two Agents can meet.
+                gid: gid ?? spawnIdentity.identity.gid,
+              },
+            }
+          : {}),
+        env: {
+          ...env,
+          // The child rewrites this record itself once it holds the binding lock, so a Coordinator
+          // that dies between spawn and the write below still leaves a discoverable live instance
+          // for the next Coordinator to adopt instead of spawning a duplicate beside it.
+          COFORGE_WORKSPACE_INSTANCE_RECORD: reachable(this.#recordPath),
+          COFORGE_WORKSPACE_INVOCATION_ID: invocationId,
+        },
+      });
+    let child: { pid: number };
+    try {
+      child = await launch(spawnIdentity ? sharedGid : undefined);
+    } catch (error) {
+      // The recorded shared group is a fact from provisioning, and provisioning may be older than
+      // the container: a gid that no longer exists fails `setgid` here. Fall back to the Workspace's
+      // own gid rather than taking the Workspace down for a permission that only widens `/workspace`.
+      const code = (error as NodeJS.ErrnoException).code;
+      if (!spawnIdentity || sharedGid === undefined || (code !== "EPERM" && code !== "EINVAL"))
+        throw error;
+      logger.warn("Shared group cannot be used; starting on the Workspace's own group", {
+        workspaceId: this.config.workspaceId,
+        sharedGid,
+        uid: spawnIdentity.identity.uid,
+        code,
+      });
+      child = await launch(undefined);
+    }
     if (!Number.isSafeInteger(child.pid) || child.pid <= 0)
       throw new Error(`Workspace ${this.config.workspaceId} did not start`);
     await this.#writeRecord({ mainPid: child.pid, invocationId });
