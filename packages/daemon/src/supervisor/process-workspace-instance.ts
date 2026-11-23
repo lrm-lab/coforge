@@ -158,6 +158,9 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
       env.COFORGE_DAEMON_CONNECTION_ENDPOINT = this.config.daemonConnectionEndpoint;
 
     const invocationId = crypto.randomUUID().replaceAll("-", "");
+    // The child may write the record before the launcher's write lands, so the file has to belong
+    // to the uid *before* it starts; creating it here keeps that write a no-op for ownership.
+    if (spawnIdentity) await this.#prepareRecord(spawnIdentity.identity);
     if (beforeLaunch) await beforeLaunch();
     const child = await this.spawnChild({
       command: [
@@ -266,6 +269,16 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw error;
+    }
+  }
+
+  async #prepareRecord(identity: WorkspaceIdentity): Promise<void> {
+    try {
+      await writeFile(this.#recordPath, "", { encoding: "utf8", mode: 0o600, flag: "a" });
+      await chown(this.#recordPath, identity.uid, identity.gid);
+    } catch {
+      // A record that cannot be handed over only costs the child's own write; the launcher's
+      // write after the spawn still leaves a discoverable instance.
     }
   }
 
