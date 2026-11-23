@@ -1,9 +1,7 @@
 import type { TaskView } from "@lrm/coforge-sdk/internal";
 import { Lock01 } from "@untitledui/icons";
 import { useRef, type ReactNode } from "react";
-import { Focusable } from "react-aria-components";
 
-import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { HoverPopover } from "#src/components/ui/hover-popover";
 import { useChannelMembers } from "#src/features/conversations/channel-members";
 import { GroupAvatar } from "#src/features/conversations/group-avatar";
@@ -155,16 +153,12 @@ function TaskPeek({ task, meta }: { task: ChipTask; meta: ReactNode }) {
 
 export function HiddenTaskChip() {
   return (
-    <Tooltip title={m.tasks_ref_hidden_hint()}>
-      <Focusable>
-        <span
-          tabIndex={0}
-          className="inline-flex items-center gap-1 align-baseline text-tertiary outline-none focus-visible:outline-2 focus-visible:outline-focus-ring"
-        >
-          <Lock01 aria-hidden="true" className="size-3.5 self-center" />
-          {m.tasks_ref_hidden()}
-        </span>
-      </Focusable>
-    </Tooltip>
+    <span
+      data-task-hidden=""
+      className="inline-flex items-center gap-1 align-baseline text-tertiary"
+    >
+      <Lock01 aria-hidden="true" className="size-3.5 self-center" />
+      {m.tasks_ref_hidden()}
+    </span>
   );
 }

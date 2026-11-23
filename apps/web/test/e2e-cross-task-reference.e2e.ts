@@ -18,25 +18,12 @@ import {
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 import { nonTaskDialogs, taskDetailPanels } from "./helpers/task-detail-e2e";
 
-/**
- * Another conversation's Task in a message (task #456, the web part of task #437) reads as its
- * label: the status icon and the title, and nothing else. Its number and where it lives — the
- * channel under its current name, a direct message as the other side from the reader's seat — are
- * in its name and its peek, with the whole title; a press opens its popup over the page. A private channel's Task
- * the reader cannot see is "a Task you can't view", without its number, status or channel. A
- * change to a referenced Task repaints its label live, from any conversation.
- *
- * The write flag (`task-ref-tokens`) is off, so the message is seeded with its stored tokens. Opt-in
- * like the other browser E2Es: real local Web, `agent-browser`, and Centrifugo behind a same-origin
- * proxy (`COFORGE_E2E_CENTRIFUGO_URL`). Screenshots, light, dark and phone, are written under
- * `.artifacts/e2e/cross-task-reference/`.
- */
 const { origin: webOrigin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
 if (!centrifugoOrigin) throw new Error("COFORGE_E2E_CENTRIFUGO_URL is required");
 const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/cross-task-reference");
 
-test("another conversation's Task reads as its live label, or as a Task the reader can't view", async () => {
+test("another conversation's Task reads as its live label, or as a non-focusable lock badge when unauthorized or revoked", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `cross-task-${process.pid}`);
   const centrifugo = createCentrifugoServerApi();
@@ -59,7 +46,6 @@ test("another conversation's Task reads as its live label, or as a Task the read
         members: { create: { userId: DEV_BROWSER_USER.id } },
       },
     });
-  // The channel was renamed after the message named it: the badge reads its current name.
   const launch = await channel(`e2e-xref-launch-${tail}`);
   const secret = await channel(`e2e-xref-secret-${tail}`, "private");
   const here = await channel(`e2e-xref-${tail}`);
@@ -97,14 +83,12 @@ test("another conversation's Task reads as its live label, or as a Task the read
     const secretTask = await create(secret.id, `Secret plan ${tail}`);
     const directTask = await create(directId, `Draft the release notes ${tail}`);
     const hereTask = await create(here.id, `Local follow-up ${tail}`);
-    // The viewer leaves the private channel: its Task is no longer theirs to see.
     await db.conversationMember.updateMany({
       where: { conversationId: secret.id, userId: DEV_BROWSER_USER.id },
       data: { leftAt: new Date() },
     });
     const renamed = `e2e-xref-site-${tail}`;
     await db.conversation.update({ where: { id: launch.id }, data: { channelName: renamed } });
-    // The Agent wrote it, so its DM token names the viewer; the viewer reads the Agent instead.
     const agentMember = await db.conversationMember.create({
       data: { conversationId: here.id, workspaceId, agentId: agent.id },
     });
@@ -113,7 +97,6 @@ test("another conversation's Task reads as its live label, or as a Task the read
         conversationId: here.id,
         workspaceId,
         senderMemberId: agentMember.id,
-        // After the message the channel's own Task was made from.
         sequence:
           ((
             await db.message.findFirst({
@@ -130,8 +113,6 @@ test("another conversation's Task reads as its live label, or as a Task the read
       },
     });
 
-    // The same references as a person types them, which the body keeps while the server stores no
-    // tokens for them (task #472): read from the words, `dm:@peer` never a mention of its own.
     const viewerMember = await db.conversationMember.findFirstOrThrow({
       where: { conversationId: here.id, userId: DEV_BROWSER_USER.id },
     });
@@ -152,42 +133,75 @@ test("another conversation's Task reads as its live label, or as a Task the read
     });
 
     const launchTitle = `Ship the launch page ${tail}`;
+    const directTitle = `Draft the release notes ${tail}`;
     const label = (title: string) =>
       `[...document.querySelectorAll(".message-markdown [data-task-status]")].find((el) => el.textContent === ${JSON.stringify(title)})`;
     const chip = (title: string) => `${label(title)}?.closest("[role=button]")`;
     const settled = () => browser("wait", "--fn", animationsSettled());
+    const noPopup = `(${taskDetailPanels}.length === 0 && ${nonTaskDialogs(true)}.length === 0)`;
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${proxy.origin}/en/w/${workspace.slug}/channel/${here.id}`);
     await browser(
       "wait",
       "--fn",
-      `${pageHydrated} && ${chip(launchTitle)} != null && ${chip(`Draft the release notes ${tail}`)} != null`,
+      `${pageHydrated} && ${chip(launchTitle)} != null && ${chip(directTitle)} != null`,
     );
 
-    // The channel's Task: its title on the label; status, number and current channel in its name.
     expect(await evaluate<string>(`${chip(launchTitle)}.getAttribute("aria-label")`)).toBe(
       `${launchTitle}, To do, #${launchTask} #${renamed}`,
     );
-    // The direct message's: the other side from the viewer's seat.
-    expect(
-      await evaluate<string>(
-        `${chip(`Draft the release notes ${tail}`)}.getAttribute("aria-label")`,
-      ),
-    ).toEndWith(`#${directTask} DM with @${agent.name}`);
-    // The private channel's: said so, with nothing to open and nothing of the Task.
-    const body = await evaluate<string>(
-      `document.querySelector('[data-message-id="${seeded.id}"] .message-markdown').textContent`,
+    expect(await evaluate<string>(`${chip(directTitle)}.getAttribute("aria-label")`)).toEndWith(
+      `#${directTask} DM with @${agent.name}`,
     );
+
+    const seededMarkdown = `document.querySelector('[data-message-id="${seeded.id}"] .message-markdown')`;
+    const body = await evaluate<string>(`${seededMarkdown}.textContent`);
     expect(body).toContain("Task you can't view waits");
     expect(body).not.toContain(`Secret plan`);
     expect(body).not.toContain(secret.channelName!);
     expect(body).not.toContain(`#${secretTask}`);
-    // A reference that names the open channel is its own Task's label, which opens in place.
+
+    const hiddenLockCheck = await evaluate<{
+      count: number;
+      text: string;
+      hasSvg: boolean;
+      tabIndexAttr: string | null;
+      interactiveAncestor: boolean;
+      focusedAfterCall: boolean;
+      html: string;
+    }>(`(() => {
+      const badges = [...${seededMarkdown}.querySelectorAll("[data-task-hidden]")];
+      const badge = badges[0];
+      if (!badge) return { count: 0, text: "", hasSvg: false, tabIndexAttr: null, interactiveAncestor: false, focusedAfterCall: false, html: "" };
+      badge.focus();
+      return {
+        count: badges.length,
+        text: badge.textContent ?? "",
+        hasSvg: badge.querySelector("svg") !== null,
+        tabIndexAttr: badge.getAttribute("tabindex"),
+        interactiveAncestor: badge.closest("button, a, [role='button'], [tabindex]") !== null,
+        focusedAfterCall: document.activeElement === badge,
+        html: badge.outerHTML,
+      };
+    })()`);
+    expect(hiddenLockCheck.count).toBe(1);
+    expect(hiddenLockCheck.text).toBe("Task you can't view");
+    expect(hiddenLockCheck.hasSvg).toBe(true);
+    expect(hiddenLockCheck.tabIndexAttr).toBeNull();
+    expect(hiddenLockCheck.interactiveAncestor).toBe(false);
+    expect(hiddenLockCheck.focusedAfterCall).toBe(false);
+    expect(hiddenLockCheck.html).not.toContain(`Secret plan`);
+    expect(hiddenLockCheck.html).not.toContain(secret.channelName!);
+    expect(hiddenLockCheck.html).not.toContain(`#${secretTask}`);
+
+    await browser("click", `[data-message-id="${seeded.id}"] [data-task-hidden]`);
+    await Bun.sleep(250);
+    expect(await evaluate<boolean>(noPopup)).toBe(true);
+    expect(await evaluate<string>(`location.search`)).not.toContain("otherTask");
+
     expect(await evaluate<boolean>(`${chip(`Local follow-up ${tail}`)} != null`)).toBe(true);
 
-    // The typed references: the channel's and the direct message's Tasks are labels, the private
-    // channel's stays as written, and the Agent named in `dm:@…` is no mention.
     const typedBody = `document.querySelector('[data-message-id="${typed.id}"] .message-markdown')`;
     await browser(
       "wait",
@@ -198,7 +212,7 @@ test("another conversation's Task reads as its live label, or as a Task the read
       await evaluate<string[]>(
         `[...${typedBody}.querySelectorAll("[data-task-status]")].map((el) => el.textContent)`,
       ),
-    ).toEqual([launchTitle, `Draft the release notes ${tail}`]);
+    ).toEqual([launchTitle, directTitle]);
     expect(await evaluate<string>(`${typedBody}.textContent`)).toContain(
       `#${secret.channelName}:#${secretTask} stays.`,
     );
@@ -206,9 +220,6 @@ test("another conversation's Task reads as its live label, or as a Task the read
       await evaluate<number>(`${typedBody}.querySelectorAll("[data-mention-agent-id]").length`),
     ).toBe(0);
 
-    // The peek from the keyboard (task #472): focus on the label opens it, the whole title and
-    // where the Task lives.
-    // Where it lives reads the channel's group avatar and name, no `#` before it (task #74).
     const peekShown = `[...document.querySelectorAll("[data-task-locator]")].some((el) => el.textContent === "#${launchTask}${renamed}" && el.querySelector(".avatar-group") !== null)`;
     await evaluate(`${chip(launchTitle)}.focus() ?? true`);
     await browser("press", "Shift+Tab");
@@ -220,7 +231,6 @@ test("another conversation's Task reads as its live label, or as a Task the read
     );
     await evaluate(`document.activeElement.blur() ?? true`);
     await browser("wait", "--fn", `!(${peekShown})`);
-    // And on hover, once the page has seen a press.
     await browser("click", "textarea[data-composer]");
     await evaluate(`${chip(launchTitle)}.setAttribute("data-e2e-launch", "") ?? true`);
     await browser("hover", "[data-e2e-launch]");
@@ -232,7 +242,6 @@ test("another conversation's Task reads as its live label, or as a Task the read
     await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
     await settled();
 
-    // A change to the Task, announced in its own channel, repaints the label here.
     await live.execute(as, {
       idempotencyKey: crypto.randomUUID(),
       conversationId: launch.id,
@@ -245,14 +254,9 @@ test("another conversation's Task reads as its live label, or as a Task the read
       `${label(launchTitle)}?.getAttribute("data-task-status") === "in_progress"`,
     );
 
-    // The label opens the Task's popup over this page, which stays where it is (task #614), and
-    // the popup shows its discussion and composer as the Task's own channel does.
     const onThisPage = `location.pathname.endsWith("/channel/${here.id}")`;
     const popupOf = (title: string) =>
       `${taskDetailPanels}.find((el) => el.textContent.includes(${JSON.stringify(title)}))`;
-    const noPopup = `(${taskDetailPanels}.length === 0 && ${nonTaskDialogs(true)}.length === 0)`;
-    // The popup scales in, and a click aimed while it moves lands where its close button was, beside
-    // where it is (task #80), so the button is clicked once the popup is still.
     const closePopup = async () => {
       await settled();
       await browser("click", `[role="dialog"] button[aria-label="Close"]`);
@@ -270,7 +274,6 @@ test("another conversation's Task reads as its live label, or as a Task the read
     await browser("screenshot", join(artifacts, "popup-dark.png"));
     await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
 
-    // Back closes it, onto the same page; a reload of an open popup keeps it.
     await browser("back");
     await browser("wait", "--fn", `${noPopup} && ${onThisPage} && ${chip(launchTitle)} != null`);
     expect(await evaluate<string>(`location.search`)).not.toContain("otherTask");
@@ -283,21 +286,17 @@ test("another conversation's Task reads as its live label, or as a Task the read
       `${pageHydrated} && ${popupOf(launchTitle)} != null && ${onThisPage}`,
     );
 
-    // Its close button leaves no popup and nothing in the address.
     await closePopup();
     await browser("wait", "--fn", noPopup);
     expect(await evaluate<string>(`location.search`)).not.toContain("otherTask");
     expect(await evaluate<boolean>(onThisPage)).toBe(true);
 
-    // A direct message's Task opens the same way.
-    const directTitle = `Draft the release notes ${tail}`;
     await evaluate(`${chip(directTitle)}.setAttribute("data-e2e-direct", "") ?? true`);
     await browser("click", "[data-e2e-direct]");
     await browser("wait", "--fn", `${popupOf(directTitle)} != null && ${onThisPage}`);
     await closePopup();
     await browser("wait", "--fn", noPopup);
 
-    // A Task whose conversation cannot be read shows no popup, and the address lets go of it.
     await browser(
       "open",
       `${proxy.origin}/en/w/${workspace.slug}/channel/${here.id}?otherTask=channel:${crypto.randomUUID()}:1`,
@@ -309,7 +308,6 @@ test("another conversation's Task reads as its live label, or as a Task the read
     );
     expect(await evaluate<boolean>(noPopup)).toBe(true);
 
-    // Phone.
     await browser("set", "viewport", "390", "844");
     await browser("open", `${proxy.origin}/en/w/${workspace.slug}/channel/${here.id}`);
     await browser("wait", "--fn", `${pageHydrated} && ${chip(launchTitle)} != null`);
@@ -323,6 +321,63 @@ test("another conversation's Task reads as its live label, or as a Task the read
     await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
     await settled();
     await browser("screenshot", join(artifacts, "popup-phone-dark.png"));
+    await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
+
+    await db.conversation.update({ where: { id: launch.id }, data: { visibility: "private" } });
+    await db.conversationMember.updateMany({
+      where: { conversationId: launch.id, userId: DEV_BROWSER_USER.id },
+      data: { leftAt: new Date() },
+    });
+    await browser("set", "viewport", "1440", "900");
+    await browser("open", `${proxy.origin}/en/w/${workspace.slug}/channel/${here.id}`);
+    await browser(
+      "wait",
+      "--fn",
+      `${pageHydrated} && ${chip(directTitle)} != null && ${seededMarkdown}?.querySelectorAll("[data-task-hidden]").length === 2`,
+    );
+    const revokedCheck = await evaluate<{
+      body: string;
+      html: string;
+      hiddenCount: number;
+      anyFocusable: boolean;
+      typedText: string;
+      typedStatusCount: number;
+    }>(`(() => {
+      const md = ${seededMarkdown};
+      const badges = [...md.querySelectorAll("[data-task-hidden]")];
+      const anyFocusable = badges.some((badge) => {
+        badge.focus();
+        return (
+          document.activeElement === badge ||
+          badge.getAttribute("tabindex") !== null ||
+          badge.closest("button, a, [role='button'], [tabindex]") !== null
+        );
+      });
+      const typedEl = ${typedBody};
+      return {
+        body: md.textContent ?? "",
+        html: md.innerHTML,
+        hiddenCount: badges.length,
+        anyFocusable,
+        typedText: typedEl?.textContent ?? "",
+        typedStatusCount: typedEl?.querySelectorAll("[data-task-status]").length ?? -1,
+      };
+    })()`);
+    expect(revokedCheck.hiddenCount).toBe(2);
+    expect(revokedCheck.anyFocusable).toBe(false);
+    expect(revokedCheck.body).toContain("Task you can't view is next");
+    expect(revokedCheck.body).not.toContain(launchTitle);
+    expect(revokedCheck.body).not.toContain(renamed);
+    expect(revokedCheck.body).not.toContain(launch.channelName!);
+    expect(revokedCheck.html).not.toContain(launchTitle);
+    expect(revokedCheck.html).not.toContain(renamed);
+    expect(revokedCheck.typedText).toContain(`#${renamed}:#${launchTask}`);
+    expect(revokedCheck.typedStatusCount).toBe(1);
+
+    await browser("click", `[data-message-id="${seeded.id}"] [data-task-hidden]`);
+    await Bun.sleep(250);
+    expect(await evaluate<boolean>(noPopup)).toBe(true);
+    expect(await evaluate<string>(`location.search`)).not.toContain("otherTask");
   } finally {
     await browser("close").catch(() => undefined);
     proxy.stop();
