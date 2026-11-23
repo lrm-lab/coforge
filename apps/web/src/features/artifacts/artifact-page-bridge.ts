@@ -319,6 +319,9 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
     dispose() {
       dataCalls.dispose();
     },
+    hasActiveWatches() {
+      return dataCalls.hasActiveWatches();
+    },
     notifyHostContext() {
       send({ method: "ui/notifications/host-context-changed", params: hostContext() });
     },

@@ -54,6 +54,7 @@ import { getStartPage } from "#src/features/workspaces/last-location.functions";
 import { rememberQueryCache } from "#src/features/cache-persistence/browser-query-cache";
 import { nameStepRedirect } from "#src/features/auth/name-step-redirect";
 import { signOut } from "#src/features/auth/sign-out";
+import { InlineEmbedPoolProvider } from "#src/features/artifacts/inline-embed-pool-context";
 
 // Only a member in their first-sign-in setup ever loads it.
 const OnboardingWizard = lazy(() =>
@@ -266,38 +267,40 @@ function AppLayout() {
                         workspaceSlug: currentWorkspace.slug,
                       }}
                     >
-                      <AppShell
-                        user={{
-                          id: user.id,
-                          name: user.name,
-                          email: user.email,
-                          avatarUrl: user.avatarUrl,
-                        }}
-                        workspaces={workspaces}
-                        currentWorkspace={currentWorkspace}
-                        recordsPreview={recordsPreview}
-                        aiWorkbench={aiWorkbench}
-                        canSeeUsageLimits={canSeeUsageLimits}
-                        onSelectWorkspace={async (slug) => {
-                          await navigate({
-                            to: "/w/$workspaceSlug",
-                            params: { workspaceSlug: slug },
-                          });
-                        }}
-                        onCreateWorkspace={createAndOpen}
-                        /** Like FirstWorkspacePage's link: a full browser navigation so the server route
-                         * can clear the session cookie and send the browser to Authing. `?returnTo`
-                         * carries this page back across the sign-out (the root route hands it to
-                         * `/login`) once the switch-account return step is in. */
-                        onSignOut={() => void signOut()}
-                      >
-                        <Outlet />
-                        {otherTask && (
-                          <Suspense fallback={null}>
-                            <OtherTaskPopup task={otherTask} />
-                          </Suspense>
-                        )}
-                      </AppShell>
+                      <InlineEmbedPoolProvider scopeKey={currentWorkspace.id}>
+                        <AppShell
+                          user={{
+                            id: user.id,
+                            name: user.name,
+                            email: user.email,
+                            avatarUrl: user.avatarUrl,
+                          }}
+                          workspaces={workspaces}
+                          currentWorkspace={currentWorkspace}
+                          recordsPreview={recordsPreview}
+                          aiWorkbench={aiWorkbench}
+                          canSeeUsageLimits={canSeeUsageLimits}
+                          onSelectWorkspace={async (slug) => {
+                            await navigate({
+                              to: "/w/$workspaceSlug",
+                              params: { workspaceSlug: slug },
+                            });
+                          }}
+                          onCreateWorkspace={createAndOpen}
+                          /** Like FirstWorkspacePage's link: a full browser navigation so the server route
+                           * can clear the session cookie and send the browser to Authing. `?returnTo`
+                           * carries this page back across the sign-out (the root route hands it to
+                           * `/login`) once the switch-account return step is in. */
+                          onSignOut={() => void signOut()}
+                        >
+                          <Outlet />
+                          {otherTask && (
+                            <Suspense fallback={null}>
+                              <OtherTaskPopup task={otherTask} />
+                            </Suspense>
+                          )}
+                        </AppShell>
+                      </InlineEmbedPoolProvider>
                     </NotificationActivationProvider>
                   </SearchDialogHost>
                 </PanelTabOrderProvider>

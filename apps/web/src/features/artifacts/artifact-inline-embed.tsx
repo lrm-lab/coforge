@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -32,14 +33,14 @@ import {
 } from "./artifact-page-theme";
 import { ARTIFACTS_KEY, type ArtifactCard } from "./artifact-queries";
 import { loadArtifactSandboxLink } from "./artifact-sandbox.functions";
+import type { InlineSandboxLink, PooledInlineFrame } from "./inline-embed-pool";
 import { useInlineEmbedPool } from "./inline-embed-pool-context";
 import { useArtifactPageBridge } from "./use-artifact-page-bridge";
+import { useManagedInlineFrame } from "./use-managed-inline-frame";
 
 const LOADING_LABEL_DELAY_MS = 140;
 const POST_LOAD_REVEAL_MS = 2_000;
 const LOAD_TIMEOUT_MS = 10_000;
-
-type SandboxLink = Awaited<ReturnType<typeof loadArtifactSandboxLink>>;
 
 const inlineSandboxLinkQuery = (
   slotId: string,
@@ -72,6 +73,8 @@ export function ArtifactInlineEmbed({
   const coarse = useCoarsePointer();
   const resolvedVersion = version ?? card.currentVersion;
   const heightKey = `${card.id}:${resolvedVersion}`;
+  const heightKeyRef = useRef(heightKey);
+  heightKeyRef.current = heightKey;
   const title = card.title || m.doc_untitled();
 
   const initialHeightState = (): InlineHeightState => {
@@ -99,36 +102,48 @@ export function ArtifactInlineEmbed({
 
   const expandedRef = useRef(false);
   const inViewRef = useRef(false);
+  const mountedRef = useRef(true);
 
   const handleExpandedChange = useCallback(
     (nextExpanded: boolean) => {
+      if (expandedRef.current === nextExpanded) return;
       expandedRef.current = nextExpanded;
-      pool.setVisible(slotId, nextExpanded || inViewRef.current);
+      if (!mountedRef.current) return;
+      pool.setVisible(slotId, nextExpanded || inViewRef.current, heightKeyRef.current);
     },
     [pool, slotId],
   );
+
+  useLayoutEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      inViewRef.current = false;
+      expandedRef.current = false;
+      pool.release(slotId);
+    };
+  }, [pool, slotId]);
 
   useEffect(() => {
     const node = hostRef.current;
     if (!node) return;
     if (typeof IntersectionObserver !== "function") {
       inViewRef.current = true;
-      pool.setVisible(slotId, true);
-      return () => pool.release(slotId);
+      pool.setVisible(slotId, true, heightKeyRef.current);
+      return;
     }
     const observer = new IntersectionObserver(
       (entries) => {
         const entry = entries[0];
-        if (!entry) return;
+        if (!entry || !mountedRef.current) return;
         inViewRef.current = entry.isIntersecting;
-        pool.setVisible(slotId, entry.isIntersecting || expandedRef.current);
+        pool.setVisible(slotId, entry.isIntersecting || expandedRef.current, heightKeyRef.current);
       },
       { rootMargin: "200px 0px" },
     );
     observer.observe(node);
     return () => {
       observer.disconnect();
-      pool.release(slotId);
     };
   }, [pool, slotId]);
 
@@ -171,7 +186,9 @@ export function ArtifactInlineEmbed({
         />
       ) : (
         <ActiveInlineEmbed
+          key={heightKey}
           slotId={slotId}
+          heightKey={heightKey}
           card={card}
           version={version}
           resolvedVersion={resolvedVersion}
@@ -191,6 +208,7 @@ export function ArtifactInlineEmbed({
 
 function ActiveInlineEmbed({
   slotId,
+  heightKey,
   card,
   version,
   resolvedVersion,
@@ -204,6 +222,7 @@ function ActiveInlineEmbed({
   onExpandedChange,
 }: {
   slotId: string;
+  heightKey: string;
   card: ArtifactCard;
   version: number | undefined;
   resolvedVersion: number;
@@ -216,25 +235,73 @@ function ActiveInlineEmbed({
   onSizeChanged: (size: PageFrameSize) => void;
   onExpandedChange: (expanded: boolean) => void;
 }) {
-  const link = useQuery(inlineSandboxLinkQuery(slotId, card.id, version, resolvedVersion));
+  const pool = useInlineEmbedPool();
+  const [reusedFrame, setReusedFrame] = useState<PooledInlineFrame | null>(null);
+  const [checkedPool, setCheckedPool] = useState(() => !pool.hasParkedFrame(heightKey));
+  const claimAttemptedRef = useRef(false);
+  const claimedRef = useRef<PooledInlineFrame | null>(null);
+
+  useLayoutEffect(() => {
+    if (checkedPool || claimAttemptedRef.current) return;
+    claimAttemptedRef.current = true;
+    const claimed = pool.claimParkedFrame(slotId, heightKey);
+    if (claimed) {
+      claimedRef.current = claimed;
+      setReusedFrame(claimed);
+    }
+    setCheckedPool(true);
+  }, [checkedPool, pool, slotId, heightKey]);
+
+  useLayoutEffect(
+    () => () => {
+      const pending = claimedRef.current;
+      if (!pending) return;
+      claimedRef.current = null;
+      pool.releaseClaimedIfUnattached(pending);
+    },
+    [pool],
+  );
+
+  const link = useQuery({
+    ...inlineSandboxLinkQuery(slotId, card.id, version, resolvedVersion),
+    enabled: checkedPool && reusedFrame === null,
+  });
+  const refetchLink = link.refetch;
   const [showLoading, setShowLoading] = useState(false);
 
   useEffect(() => {
+    if (reusedFrame) return;
     setShowLoading(false);
     const timer = window.setTimeout(() => setShowLoading(true), LOADING_LABEL_DELAY_MS);
     return () => window.clearTimeout(timer);
-  }, [card.id, resolvedVersion]);
+  }, [card.id, resolvedVersion, reusedFrame]);
 
   const loadingLabel = m.doc_embed_loading_version({
     title,
-    version: link.data?.version ?? resolvedVersion,
+    version: reusedFrame?.version ?? link.data?.version ?? resolvedVersion,
   });
 
   const handleReload = useCallback(() => {
-    void link.refetch();
-  }, [link]);
+    if (reusedFrame) {
+      claimedRef.current = null;
+      reusedFrame.blocked = true;
+      pool.discardFrame(reusedFrame);
+      setReusedFrame(null);
+      return;
+    }
+    void refetchLink();
+  }, [reusedFrame, pool, refetchLink]);
 
-  if (link.isError) {
+  if (!reusedFrame && !checkedPool) {
+    return (
+      <div
+        style={{ height: `${height}px` }}
+        className="relative w-full rounded-lg bg-transparent"
+      />
+    );
+  }
+
+  if (!reusedFrame && link.isError) {
     const off = isAppError(link.error) && link.error.errorId === "artifact-sandbox-off";
     return (
       <InlineEmbedFallback
@@ -246,21 +313,27 @@ function ActiveInlineEmbed({
       />
     );
   }
-  if (!link.data) {
+
+  const activeLink = reusedFrame?.link ?? link.data;
+  if (!activeLink) {
     return <InlineEmbedLoadingShell height={height} showLabel={showLoading} label={loadingLabel} />;
   }
+
   return (
     <InlineEmbedFrame
-      key={link.data.url}
-      link={link.data}
+      key={activeLink.url}
+      slotId={slotId}
+      heightKey={heightKey}
+      reusedFrame={reusedFrame ?? undefined}
+      link={activeLink}
       artifactId={card.id}
       title={title}
       entryPath={card.entryPath}
       height={height}
       coarse={coarse}
       selectionActive={selectionActive}
-      retrying={link.isFetching}
-      showLoading={showLoading}
+      retrying={reusedFrame ? false : link.isFetching}
+      showLoading={reusedFrame ? false : showLoading}
       loadingLabel={loadingLabel}
       openProps={openProps}
       onOpenPanel={onOpenPanel}
@@ -272,6 +345,9 @@ function ActiveInlineEmbed({
 }
 
 function InlineEmbedFrame({
+  slotId,
+  heightKey,
+  reusedFrame,
   link,
   artifactId,
   title,
@@ -288,7 +364,10 @@ function InlineEmbedFrame({
   onExpandedChange,
   onReload,
 }: {
-  link: SandboxLink;
+  slotId: string;
+  heightKey: string;
+  reusedFrame?: PooledInlineFrame;
+  link: InlineSandboxLink;
   artifactId: string;
   title: string;
   entryPath: string;
@@ -304,7 +383,10 @@ function InlineEmbedFrame({
   onExpandedChange: (expanded: boolean) => void;
   onReload: () => void;
 }) {
-  const frame = useRef<HTMLIFrameElement>(null);
+  const pool = useInlineEmbedPool();
+  const initialReady = Boolean(reusedFrame?.ready);
+  const useManagedFrame = reusedFrame !== undefined || pool.canParkFrames();
+  const frame = useRef<HTMLIFrameElement>(reusedFrame?.iframe ?? null);
   const suggestions = useRef<PageSuggestHandler | null>(null);
   const origin = useMemo(() => new URL(link.url).origin, [link.url]);
   const artifact = useMemo(
@@ -312,23 +394,27 @@ function InlineEmbedFrame({
     [artifactId, title, link.version, entryPath],
   );
 
-  const [phase, setPhase] = useState<"loading" | "ready" | "timeout">("loading");
+  const [phase, setPhase] = useState<"loading" | "ready" | "timeout">(
+    initialReady ? "ready" : "loading",
+  );
   const [expanded, setExpanded] = useState(false);
   const acceptInlineSizeRef = useRef(true);
   if (expanded) acceptInlineSizeRef.current = false;
   const wasExpandedRef = useRef(false);
-  const initializedRef = useRef(false);
-  const sizedRef = useRef(false);
-  const loadedRef = useRef(false);
-  const revealedRef = useRef(false);
+  const initializedRef = useRef(initialReady);
+  const sizedRef = useRef(initialReady);
+  const loadedRef = useRef(initialReady);
+  const revealedRef = useRef(initialReady);
   const revealRaf = useRef<number | null>(null);
   const collapseRaf = useRef<number | null>(null);
+  const pooledEntryRef = useRef<PooledInlineFrame | null>(reusedFrame ?? null);
 
   const reveal = useCallback(() => {
     if (revealedRef.current) return;
     revealedRef.current = true;
     revealRaf.current = requestAnimationFrame(() => {
       revealRaf.current = null;
+      if (pooledEntryRef.current) pooledEntryRef.current.ready = true;
       setPhase("ready");
     });
   }, []);
@@ -374,6 +460,7 @@ function InlineEmbedFrame({
   });
 
   useEffect(() => {
+    if (initialReady) return;
     const timeoutTimer = window.setTimeout(() => {
       if (revealedRef.current) return;
       if (loadedRef.current) reveal();
@@ -382,7 +469,7 @@ function InlineEmbedFrame({
     return () => {
       window.clearTimeout(timeoutTimer);
     };
-  }, [reveal]);
+  }, [initialReady, reveal]);
 
   useEffect(() => {
     if (selectionActive && expanded) setExpanded(false);
@@ -428,6 +515,31 @@ function InlineEmbedFrame({
     }, POST_LOAD_REVEAL_MS);
   }, [reveal]);
 
+  const frameUnavailable = blocked || phase === "timeout";
+  if (blocked && pooledEntryRef.current) {
+    pooledEntryRef.current.blocked = true;
+  }
+  const frameSlotRef = useManagedInlineFrame({
+    enabled: useManagedFrame,
+    unavailable: frameUnavailable,
+    pool,
+    slotId,
+    heightKey,
+    artifactId,
+    title,
+    link,
+    frameRef: frame,
+    pooledEntryRef,
+    onLoad: handleFrameLoad,
+    onReload,
+    shouldDiscard: () => blocked || bridge.hasActiveWatches(),
+  });
+
+  useEffect(() => {
+    if (!initialReady || frameUnavailable) return;
+    bridge.notifyHostContext();
+  }, [initialReady, frameUnavailable, bridge]);
+
   if (blocked) {
     return (
       <InlineEmbedFallback
@@ -456,72 +568,77 @@ function InlineEmbedFrame({
   const ready = phase === "ready";
 
   return (
-    <>
-      <div style={expanded ? { height: `${height}px` } : undefined} className="relative w-full">
-        <ArtifactPreviewFrame
-          full={expanded}
-          onExit={() => setExpanded(false)}
-          aria-label={title}
-          aria-busy={!ready}
+    <div style={expanded ? { height: `${height}px` } : undefined} className="relative w-full">
+      <ArtifactPreviewFrame
+        full={expanded}
+        onExit={() => setExpanded(false)}
+        aria-label={title}
+        aria-busy={!ready}
+        className={cn(
+          "overflow-hidden",
+          expanded
+            ? "fixed inset-0 flex size-full flex-col bg-primary"
+            : "relative block w-full rounded-lg bg-transparent",
+        )}
+      >
+        {error !== null && (
+          <PageErrorBanner
+            className={expanded ? "mx-4 mt-3 shrink-0" : "mb-2 shrink-0"}
+            onAskAgent={() => void askAgent()}
+            onClose={dismissError}
+          />
+        )}
+        <div
+          aria-hidden="true"
           className={cn(
-            "overflow-hidden",
-            expanded
-              ? "fixed inset-0 flex size-full flex-col bg-primary"
-              : "relative block w-full rounded-lg bg-transparent",
+            "pointer-events-none absolute inset-x-0 top-0 z-10 h-0.5 overflow-hidden bg-secondary/40 transition-opacity duration-200",
+            ready ? "opacity-0" : "opacity-100",
           )}
         >
-          {error !== null && (
-            <PageErrorBanner
-              className={expanded ? "mx-4 mt-3 shrink-0" : "mb-2 shrink-0"}
-              onAskAgent={() => void askAgent()}
-              onClose={dismissError}
-            />
+          <div className="h-full rounded-full bg-brand-solid motion-safe:inline-embed-progress" />
+        </div>
+        <div
+          style={expanded ? undefined : { height: `${height}px` }}
+          className={cn(
+            "relative w-full",
+            expanded ? "min-h-0 flex-1" : "transition-[height] duration-200 ease-out",
           )}
+        >
           <div
-            aria-hidden="true"
+            ref={useManagedFrame ? frameSlotRef : undefined}
             className={cn(
-              "pointer-events-none absolute inset-x-0 top-0 z-10 h-0.5 overflow-hidden bg-secondary/40 transition-opacity duration-200",
-              ready ? "opacity-0" : "opacity-100",
+              "size-full transition-opacity duration-150",
+              ready ? "opacity-100" : "pointer-events-none opacity-0",
             )}
           >
-            <div className="h-full rounded-full bg-brand-solid motion-safe:inline-embed-progress" />
-          </div>
-          <div
-            style={expanded ? undefined : { height: `${height}px` }}
-            className={cn(
-              "relative w-full",
-              expanded ? "min-h-0 flex-1" : "transition-[height] duration-200 ease-out",
-            )}
-          >
-            <iframe
-              ref={frame}
-              aria-label={title}
-              src={link.url}
-              sandbox="allow-scripts allow-same-origin"
-              allow="clipboard-read 'none'; clipboard-write 'none'"
-              referrerPolicy="no-referrer"
-              onLoad={handleFrameLoad}
-              className={cn(
-                "block h-full w-full border-0 bg-transparent transition-opacity duration-150",
-                ready ? "opacity-100" : "pointer-events-none opacity-0",
-              )}
-            />
-            {!ready && <InlineEmbedLoadingOverlay showLabel={showLoading} label={loadingLabel} />}
-            {selectionActive && !expanded && (
-              <div aria-hidden="true" className="absolute inset-0 z-20" />
+            {!useManagedFrame && (
+              <iframe
+                ref={frame}
+                aria-label={title}
+                src={link.url}
+                sandbox="allow-scripts allow-same-origin"
+                allow="clipboard-read 'none'; clipboard-write 'none'"
+                referrerPolicy="no-referrer"
+                onLoad={handleFrameLoad}
+                className="block h-full w-full border-0 bg-transparent"
+              />
             )}
           </div>
-          {(expanded || (ready && !selectionActive)) && (
-            <InlineEmbedControls
-              coarse={coarse}
-              expanded={expanded}
-              onOpenPanel={onOpenPanel}
-              onToggleExpand={() => setExpanded((current) => !current)}
-            />
+          {!ready && <InlineEmbedLoadingOverlay showLabel={showLoading} label={loadingLabel} />}
+          {selectionActive && !expanded && (
+            <div aria-hidden="true" className="absolute inset-0 z-20" />
           )}
-          <PageConfirmDialog confirmation={confirmation} title={title} />
-        </ArtifactPreviewFrame>
-      </div>
-    </>
+        </div>
+        {(expanded || (ready && !selectionActive)) && (
+          <InlineEmbedControls
+            coarse={coarse}
+            expanded={expanded}
+            onOpenPanel={onOpenPanel}
+            onToggleExpand={() => setExpanded((current) => !current)}
+          />
+        )}
+        <PageConfirmDialog confirmation={confirmation} title={title} />
+      </ArtifactPreviewFrame>
+    </div>
   );
 }

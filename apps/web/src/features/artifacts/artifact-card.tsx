@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 
 import { Link } from "@tanstack/react-router";
@@ -25,6 +25,7 @@ import {
   type ArtifactCard,
 } from "./artifact-queries";
 import { useArtifactLink } from "./artifact-beside-chat";
+import { useOptionalInlineEmbedPool } from "./inline-embed-pool-context";
 
 export type ArtifactCardState = {
   artifactId: string;
@@ -56,7 +57,7 @@ export function MessageArtifactCards({
       {links.map((link) => {
         const state = states?.find((entry) => entry.artifactId === link.id)?.state;
         return state === "forbidden" || state === "deleted" ? (
-          <ArtifactCardPlaceholder key={link.id} state={state} />
+          <ArtifactCardPlaceholder key={link.id} artifactId={link.id} state={state} />
         ) : (
           <ArtifactCardView
             key={link.id}
@@ -129,7 +130,11 @@ function ArtifactCardView({
   version?: number;
   selectionActive?: boolean;
 }) {
-  const { data: card } = useQuery(artifactCardQuery(artifactId));
+  const pool = useOptionalInlineEmbedPool();
+  const { data: card, isPending } = useQuery(artifactCardQuery(artifactId));
+  useEffect(() => {
+    if (!isPending && card === null) pool?.evictArtifact(artifactId);
+  }, [pool, artifactId, isPending, card]);
   if (!card) return null;
   if (embed && card.entryKind === "html") {
     return <ArtifactInlineEmbed card={card} version={version} selectionActive={selectionActive} />;
@@ -229,7 +234,17 @@ export function ArtifactCardFace({
   );
 }
 
-function ArtifactCardPlaceholder({ state }: { state: "forbidden" | "deleted" }) {
+function ArtifactCardPlaceholder({
+  artifactId,
+  state,
+}: {
+  artifactId: string;
+  state: "forbidden" | "deleted";
+}) {
+  const pool = useOptionalInlineEmbedPool();
+  useEffect(() => {
+    pool?.evictArtifact(artifactId);
+  }, [pool, artifactId]);
   const Icon = state === "forbidden" ? Lock01 : Trash01;
   return (
     <div className="flex w-full max-w-[34rem] items-center gap-3 rounded-xl border border-secondary bg-secondary_subtle p-3">

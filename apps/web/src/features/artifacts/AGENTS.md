@@ -28,9 +28,12 @@ These rules apply to `src/features/artifacts/`. They extend
   validated `ui/notifications/size-changed` updates (clamped to 96px–800px), surfaces runtime errors
   via `PageErrorBanner`, and omits `comments` and annotation messages. Loading uses a centered
   versioned label without a fake chart skeleton; hover controls offer both open-in-panel and
-  in-place fullscreen expand/shrink without remounting or re-minting the ticket. Each conversation
-  pane scopes an LRU pool (`inline-embed-pool.ts`, max 16 active iframes) that activates frames via
-  `IntersectionObserver`, evicts off-screen slots first, and preserves last measured heights.
+  in-place fullscreen expand/shrink without remounting or re-minting the ticket. The Workspace
+  layout (`w.$workspaceSlug.tsx`) scopes an LRU pool (`inline-embed-pool.ts`, max 16 live iframes)
+  that activates frames via `IntersectionObserver`, parks ready frames in a hidden inert container
+  with `Element.prototype.moveBefore()` across conversation switches (falling back to reload on
+  browsers without `moveBefore`), evicts parked and off-screen frames first, and preserves last
+  measured heights.
 - Who can see an artifact is the home conversation, the Workspace, or anyone with the link
   (`use-artifact-visibility.tsx`); narrowing and link changes confirm, and a person never sees a
   fixed "everyone, always" rule. Sending to people who cannot read it is held until the sender

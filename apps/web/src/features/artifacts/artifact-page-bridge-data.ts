@@ -137,6 +137,7 @@ export function createDataCalls(kit: BridgeKit) {
 
   return {
     calls,
+    hasActiveWatches: () => watches.size > 0,
     dispose() {
       watches.clear();
       stopWhenIdle();

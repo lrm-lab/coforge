@@ -15,6 +15,8 @@ import {
   decodeArtifactVersionPublishedEvent,
 } from "./artifact-realtime";
 
+import { useOptionalInlineEmbedPool } from "./inline-embed-pool-context";
+
 export function useArtifactPageRealtime({
   workspaceId,
   artifactId,
@@ -32,6 +34,7 @@ export function useArtifactPageRealtime({
   keepSeen: () => void;
   onIncomingVersion: (version: number) => void;
 }) {
+  const embedPool = useOptionalInlineEmbedPool();
   useRealtimeSubscription({
     channel:
       homeId === undefined || !workspaceId
@@ -62,8 +65,10 @@ export function useArtifactPageRealtime({
         void refreshArtifact(queryClient, artifactId, homeId ?? null, { document: false });
         return;
       }
-      if (decodeArtifactAccessChangedEvent(data)?.artifactId === artifactId)
+      if (decodeArtifactAccessChangedEvent(data)?.artifactId === artifactId) {
+        embedPool?.evictArtifact(artifactId);
         void refreshArtifact(queryClient, artifactId, homeId ?? null);
+      }
     },
   });
 }

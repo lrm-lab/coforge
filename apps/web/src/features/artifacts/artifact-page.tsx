@@ -59,6 +59,7 @@ import { useConversationName } from "./use-conversation-name";
 import { useArtifactActions } from "./use-artifact-actions";
 import { useArtifactPageRealtime } from "./use-artifact-page-realtime";
 import { useArtifactVisibility } from "./use-artifact-visibility";
+import { useOptionalInlineEmbedPool } from "./inline-embed-pool-context";
 
 type ArtifactPlace = {
   pane?: ArtifactPaneControls;
@@ -123,6 +124,7 @@ function ArtifactPageFor({
   const router = useRouter();
   const workspaceId = useCurrentWorkspaceId();
   const workspaceSlug = useWorkspaceSlug();
+  const embedPool = useOptionalInlineEmbedPool();
   const { read, latest, pinned, pinnedRead, current, shownVersion, pin, unpin } = useShownVersion(
     artifactId,
     version,
@@ -517,6 +519,7 @@ function ArtifactPageFor({
                   title={title}
                   onDelete={async () => {
                     await deleteArtifact({ data: { artifactId } });
+                    embedPool?.evictArtifact(artifactId);
                     void refreshArtifact(queryClient, artifactId, homeId ?? null);
                     backHome();
                   }}
