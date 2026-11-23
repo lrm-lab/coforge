@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useServerFn } from "@tanstack/react-start";
 
 import { deLocalizeHref } from "#src/paraglide/runtime";
@@ -6,8 +6,11 @@ import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime
 import {
   decodeNotificationAvailableEvent,
   userConversationChannel,
+  type NotificationAvailableEvent,
 } from "#src/features/conversations/conversation-realtime";
 import { browserNotificationPermission, showPageNotification } from "./browser-push";
+import { browserInstallationId, claimBrowserNotification } from "./browser-notification-store";
+import { isFreshNotification, pageOwnsNotification } from "./notification-routing";
 import { getMessageNotification } from "./notifications.functions";
 
 /**
@@ -36,17 +39,6 @@ export function shouldShowInPageNotification(input: {
   return !(input.visible && input.focused && input.pathname === input.conversationPath);
 }
 
-/**
- * Shows the OS notification itself from the realtime `notification.available.v1` signal while a
- * CoForge tab is open: Google's push services are unreachable from mainland-China
- * staging and clients, so Web Push alone never reaches Chrome there. Renders nothing; Web Push
- * (`BrowserPushLifecycle`) still owns delivery once every tab is closed.
- *
- * `workspaceId` gates readiness the same way `BrowserRealtimeProvider` itself does — the shared
- * connection requires a selected Workspace — not to
- * filter which Workspace's notifications show: a member expects to hear about other Workspaces
- * too while working in this one.
- */
 export function InPageNotifications({
   enabled,
   viewerId,
@@ -57,8 +49,15 @@ export function InPageNotifications({
   workspaceId?: string;
 }) {
   const fetchNotification = useServerFn(getMessageNotification);
-  const enabledRef = useRef(enabled);
-  enabledRef.current = enabled;
+  const state = useRef({ enabled, viewerId, mounted: false });
+  state.current.enabled = enabled;
+  state.current.viewerId = viewerId;
+  useEffect(() => {
+    state.current.mounted = true;
+    return () => {
+      state.current.mounted = false;
+    };
+  }, []);
 
   const onPublication = useCallback(
     (publication: { data: unknown }) => {
@@ -66,12 +65,11 @@ export function InPageNotifications({
       try {
         event = decodeNotificationAvailableEvent(publication.data);
       } catch {
-        // The same channel also carries `message.available.v1`; not for us.
         return;
       }
-      void showInPageNotification(event.messageId, enabledRef, fetchNotification);
+      if (viewerId) void showInPageNotification(event, viewerId, state, fetchNotification);
     },
-    [fetchNotification],
+    [fetchNotification, viewerId],
   );
 
   useRealtimeSubscription({
@@ -83,42 +81,41 @@ export function InPageNotifications({
 }
 
 async function showInPageNotification(
-  messageId: string,
-  enabledRef: { current: boolean },
+  event: NotificationAvailableEvent,
+  viewerId: string,
+  state: { current: { enabled: boolean; viewerId?: string; mounted: boolean } },
   fetchNotification: (input: {
     data: { messageId: string };
   }) => Promise<Awaited<ReturnType<typeof getMessageNotification>>>,
 ) {
-  if (
-    !isInPageNotificationEnabled({
-      enabled: enabledRef.current,
+  const eligible = () =>
+    state.current.mounted &&
+    state.current.viewerId === viewerId &&
+    isInPageNotificationEnabled({
+      enabled: state.current.enabled,
       permission: browserNotificationPermission(),
-    })
-  )
-    return;
-  let notification;
+    }) &&
+    isFreshNotification(event.at, Date.now());
+  if (!eligible()) return;
+
   try {
-    notification = await fetchNotification({ data: { messageId } });
+    if (!(await pageOwnsNotification(event, browserInstallationId)) || !eligible()) return;
+
+    const notification = await fetchNotification({ data: { messageId: event.messageId } });
+    if (!notification || !eligible()) return;
+    if (
+      !shouldShowInPageNotification({
+        visible: document.visibilityState === "visible",
+        focused: document.hasFocus(),
+        pathname: deLocalizeHref(window.location.pathname),
+        conversationPath: notification.conversationPath,
+      })
+    )
+      return;
+    if ((await claimBrowserNotification(viewerId, event.messageId, event.at)) && eligible()) {
+      await showPageNotification(notification, eligible);
+    }
   } catch (cause) {
-    console.warn("in-page notification fetch failed", cause);
-    return;
-  }
-  if (!notification) return;
-  if (
-    !shouldShowInPageNotification({
-      visible: document.visibilityState === "visible",
-      focused: document.hasFocus(),
-      // The address bar carries the locale prefix (`/en/w/…`); the target does not.
-      pathname: deLocalizeHref(window.location.pathname),
-      conversationPath: notification.conversationPath,
-    })
-  )
-    return;
-  try {
-    // Same tag format as Web Push (`message:<id>`, see `messageNotificationTag`): a later push for
-    // the same message replaces this one instead of duplicating it.
-    await showPageNotification(notification);
-  } catch (cause) {
-    console.warn("in-page notification display failed", cause);
+    console.warn("in-page notification unavailable", cause);
   }
 }

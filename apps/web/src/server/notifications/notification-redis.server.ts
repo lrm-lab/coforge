@@ -1,6 +1,9 @@
 import { openRedisClient } from "#src/server/redis-client.server";
 import { RedisComputerActivity } from "./computer-activity.server";
-import { RedisDeferredPushes } from "./deferred-mobile-pushes.server";
+import {
+  RedisDeferredPushes,
+  SCOPED_DEFERRED_MOBILE_PUSH_KEY,
+} from "./deferred-mobile-pushes.server";
 
 /**
  * The notification settings' short-lived Redis state (task #467): who is at a computer, and the
@@ -20,7 +23,10 @@ export function computerActivity(): RedisComputerActivity | undefined {
   return connection && new RedisComputerActivity(connection);
 }
 
-export function deferredMobilePushes(): RedisDeferredPushes | undefined {
+export function deferredMobilePushes(legacy = false): RedisDeferredPushes | undefined {
   const connection = redis();
-  return connection && new RedisDeferredPushes(connection);
+  if (!connection) return undefined;
+  return legacy
+    ? new RedisDeferredPushes(connection)
+    : new RedisDeferredPushes(connection, SCOPED_DEFERRED_MOBILE_PUSH_KEY, true);
 }

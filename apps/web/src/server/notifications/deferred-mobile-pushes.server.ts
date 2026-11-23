@@ -8,9 +8,15 @@
  */
 export const DEFERRED_MOBILE_PUSH_KEY = "coforge:deferred-mobile-push:v2";
 /** A phone notification still waiting this long after it first waited is dropped. */
+export const SCOPED_DEFERRED_MOBILE_PUSH_KEY = "coforge:deferred-mobile-push:v3";
 export const MAX_DEFER_MS = 12 * 3_600_000;
 
-export type DeferredPush = { messageId: string; userId: string; firstQueuedAt: Date };
+export type DeferredPush = {
+  messageId: string;
+  userId: string;
+  firstQueuedAt: Date;
+  routes?: string[];
+};
 
 export interface DeferredPushQueue {
   /** Adds a message to the person's waiting ones (keeping when it first waited) and looks at the
@@ -49,6 +55,7 @@ export class RedisDeferredPushes implements DeferredPushQueue {
   constructor(
     private readonly redis: Redis,
     private readonly prefix = DEFERRED_MOBILE_PUSH_KEY,
+    private readonly scoped = false,
   ) {}
 
   private dueKey() {
@@ -60,6 +67,9 @@ export class RedisDeferredPushes implements DeferredPushQueue {
   }
 
   async defer(entry: DeferredPush, dueAt: Date): Promise<void> {
+    if (this.scoped && !entry.routes?.length) throw new Error("missing deferred Push routes");
+    const queuedAt = entry.firstQueuedAt.getTime();
+    const stored = this.scoped ? JSON.stringify({ queuedAt, routes: entry.routes }) : queuedAt;
     await this.redis.eval(
       DEFER,
       2,
@@ -67,7 +77,7 @@ export class RedisDeferredPushes implements DeferredPushQueue {
       this.personKey(entry.userId),
       entry.userId,
       entry.messageId,
-      entry.firstQueuedAt.getTime(),
+      stored,
       dueAt.getTime(),
       MAX_DEFER_MS + 3_600_000,
     );
@@ -87,9 +97,16 @@ export class RedisDeferredPushes implements DeferredPushQueue {
     const flat = (await this.redis.eval(TAKE_MESSAGES, 1, this.personKey(userId))) as string[];
     const entries: DeferredPush[] = [];
     for (let index = 0; index + 1 < flat.length; index += 2) {
-      const firstQueuedAt = Number(flat[index + 1]);
-      if (flat[index] && Number.isFinite(firstQueuedAt))
-        entries.push({ messageId: flat[index]!, userId, firstQueuedAt: new Date(firstQueuedAt) });
+      const messageId = flat[index]!;
+      const value = flat[index + 1]!;
+      const entry = this.scoped ? parseScopedPush(value) : { queuedAt: Number(value) };
+      if (messageId && entry && Number.isFinite(entry.queuedAt))
+        entries.push({
+          messageId,
+          userId,
+          firstQueuedAt: new Date(entry.queuedAt),
+          ...("routes" in entry ? { routes: entry.routes } : {}),
+        });
     }
     return entries;
   }
@@ -97,5 +114,21 @@ export class RedisDeferredPushes implements DeferredPushQueue {
   /** The people due by `now`, at most `limit`, each taken by this caller alone. */
   async takeDuePeople(limit: number, now: Date): Promise<string[]> {
     return (await this.redis.eval(TAKE_DUE, 1, this.dueKey(), limit, now.getTime())) as string[];
+  }
+}
+
+function parseScopedPush(value: string): { queuedAt: number; routes: string[] } | null {
+  try {
+    const { queuedAt, routes } = JSON.parse(value) ?? {};
+    if (
+      typeof queuedAt !== "number" ||
+      !Array.isArray(routes) ||
+      routes.length === 0 ||
+      !routes.every((route) => typeof route === "string")
+    )
+      return null;
+    return { queuedAt, routes };
+  } catch {
+    return null;
   }
 }

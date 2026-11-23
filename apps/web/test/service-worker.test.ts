@@ -6,7 +6,13 @@ const source = readFileSync(new URL("../public/service-worker.js", import.meta.u
 function workerHarness(windows: readonly Record<string, unknown>[]) {
   const handlers = new Map<string, (event: Record<string, unknown>) => void>();
   const opened: string[] = [];
+  const notifications: { title: string; tag: string }[] = [];
   const self = {
+    registration: {
+      showNotification: async (title: string, options: { tag: string }) => {
+        notifications.push({ title, tag: options.tag });
+      },
+    },
     addEventListener(type: string, handler: (event: Record<string, unknown>) => void) {
       handlers.set(type, handler);
     },
@@ -19,7 +25,7 @@ function workerHarness(windows: readonly Record<string, unknown>[]) {
     },
   };
   new Function("self", source)(self);
-  return { handlers, opened };
+  return { handlers, opened, notifications };
 }
 
 async function clickNotification(
@@ -124,4 +130,24 @@ test("a notification click opens a new window when navigation throws", async () 
   const result = await clickNotification([uncontrolled], "/notifications/open?target=uncontrolled");
 
   expect(result.opened).toEqual(["/notifications/open?target=uncontrolled"]);
+});
+
+test("a delivered push requests a visible notification even with no open pages", async () => {
+  const { handlers, notifications } = workerHarness([]);
+  let waited: unknown;
+  handlers.get("push")!({
+    data: {
+      json: () => ({
+        title: "A message",
+        body: "Preview",
+        tag: "message:late",
+        url: "/notifications/open",
+      }),
+    },
+    waitUntil(value: unknown) {
+      waited = value;
+    },
+  });
+  await waited;
+  expect(notifications).toEqual([{ title: "A message", tag: "message:late" }]);
 });

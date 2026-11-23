@@ -1,6 +1,8 @@
 import { m } from "#src/paraglide/messages";
 import { systemNoticeText } from "#src/features/conversations/system-notice-text";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
+import type { NotificationAvailableEvent } from "#src/features/conversations/conversation-realtime";
+import { deferredPushRoute, pushDecision } from "./push-routes.server";
 import type { ComputerActivityReader } from "./computer-activity.server";
 import type { DeferredPushQueue } from "./deferred-mobile-pushes.server";
 import { releaseDeferred, type DeferredOutcome } from "./deferred-mobile-release.server";
@@ -17,6 +19,7 @@ export type StoredWebPushSubscription = {
   endpoint: string;
   p256dh: string;
   auth: string;
+  browserInstallationId?: string | null;
   /** desktop | mobile as the browser reported it; absent or null is a computer, never delayed. */
   deviceKind?: string | null;
 };
@@ -115,11 +118,12 @@ export interface WebPushSubscriptionStore {
   subscriptionsForUser(userId: string): Promise<StoredWebPushSubscription[]>;
   saveSubscription(userId: string, subscription: WebPushSubscriptionInput): Promise<void>;
   removeSubscription(userId: string, endpoint: string): Promise<void>;
-  removeSubscriptionById(id: string): Promise<void>;
+  removeSubscriptionById(id: string, endpoint: string): Promise<void>;
   recordDeliveries(outcomes: DeliveryOutcome[]): Promise<void>;
 }
 
 export interface WebPushTransport {
+  available?: false;
   send(subscription: StoredWebPushSubscription, payload: WebPushPayload): Promise<void>;
 }
 
@@ -141,22 +145,16 @@ export class WebPushDeliveryError extends Error {
   }
 }
 
-/** The one place `message:<id>` is spelled: the store's `notificationForRecipient` tag and the
- * push payload's own tag must always agree, so a later push replaces the in-page notification
- * instead of duplicating it. */
+export class WebPushUnconfiguredError extends Error {}
+
 export function messageNotificationTag(messageId: string): string {
   return `message:${messageId}`;
 }
 
-/** Publishes the bodiless `notification.available.v1` in-page signal to every recipient's
- * own `chat:user:<user_id>` channel. Best-effort from `WebPushNotifications`' point of view: a
- * rejection is caught and logged, never thrown into the canonical send path. */
 export type NotificationPublisher = {
-  notifyRecipients(input: {
-    messageId: string;
-    workspaceId: string;
-    userIds: readonly string[];
-  }): Promise<void>;
+  notifyRecipient(
+    input: Omit<NotificationAvailableEvent, "type"> & { userId: string },
+  ): Promise<void>;
 };
 
 type DeliveryResult = {
@@ -194,6 +192,7 @@ export function classifyTestDelivery(result: DeliveryResult): TestDelivery {
 export type DeliveryOptions = {
   activity?: ComputerActivityReader;
   deferred?: DeferredPushQueue;
+  legacyDeferred?: DeferredPushQueue;
   now?: () => Date;
 };
 
@@ -219,18 +218,10 @@ export class WebPushNotifications {
     return this.subscriptions.removeSubscription(userId, endpoint);
   }
 
-  /**
-   * One committed message's best-effort notification fan-out: Web Push delivery to every
-   * recipient's browser subscriptions, and the in-page `notification.available.v1` publication to
-   * every recipient — from the same `notificationForMessage` read, so the recipient rule is
-   * evaluated once. Both run concurrently; a publication failure never affects the returned Web
-   * Push delivery counts.
-   */
   async notifyMessage(messageId: string): Promise<DeliveryResult> {
     const notification = await this.subscriptions.notificationForMessage(messageId);
     if (!notification) return { sent: 0, failed: 0, removed: 0, unreachable: 0 };
     const now = this.now();
-    // A pause or quiet hours leave a person out of both paths; the unread counts are separate.
     const recipients = notification.recipients.filter(
       (recipient) =>
         !suppression(
@@ -239,28 +230,30 @@ export class WebPushNotifications {
           now,
         ),
     );
-    const userIds = recipients.map((recipient) => recipient.userId);
     const activity = await this.computerActivity(recipients);
     const outcomes: DeliveryOutcome[] = [];
-    const deliveries = recipients.map(async (recipient) => {
-      const settings = recipient.settings ?? DEFAULT_NOTIFICATION_SETTINGS;
-      const waitUntil = recipient.subscriptions.some(isPhone)
-        ? mobileDeferredUntil(settings.mobileDelay, activity.get(recipient.userId) ?? null, now)
-        : null;
-      const waits =
-        waitUntil !== null && (await this.wait(messageId, recipient.userId, now, waitUntil));
-      return this.deliver(
-        waits
-          ? recipient.subscriptions.filter((subscription) => !isPhone(subscription))
-          : recipient.subscriptions,
-        this.payloadFor(messageId, notification, recipient),
-        outcomes,
-      );
-    });
-    const [results] = await Promise.all([
-      Promise.all(deliveries),
-      this.publishAvailable(messageId, notification.workspaceId, userIds),
-    ]);
+    const results = await Promise.all(
+      recipients.map(async (recipient) => {
+        const { subscriptions, userId } = recipient;
+        const phones = subscriptions.filter(isPhone);
+        const settings = recipient.settings ?? DEFAULT_NOTIFICATION_SETTINGS;
+        const waitUntil =
+          phones.length > 0
+            ? mobileDeferredUntil(settings.mobileDelay, activity.get(userId) ?? null, now)
+            : null;
+        const waits =
+          waitUntil !== null && (await this.wait(messageId, userId, phones, now, waitUntil));
+        const pushOwned = waits ? [...phones] : [];
+        const result = await this.deliver(
+          waits ? subscriptions.filter((subscription) => !isPhone(subscription)) : subscriptions,
+          this.payloadFor(messageId, notification, recipient),
+          outcomes,
+          pushOwned,
+        );
+        await this.publishAvailable(messageId, notification.workspaceId, userId, now, pushOwned);
+        return result;
+      }),
+    );
     await this.recordOutcomes(outcomes);
     const totals = results.reduce(
       (total, result) => ({
@@ -276,8 +269,11 @@ export class WebPushNotifications {
   }
 
   /** A person whose phone notifications were waiting, looked at again (`releaseDeferred`). */
-  async releaseDeferred(userId: string): Promise<{ outcome: DeferredOutcome; sent: number }> {
-    const queue = this.options.deferred;
+  async releaseDeferred(
+    userId: string,
+    legacy = false,
+  ): Promise<{ outcome: DeferredOutcome; sent: number }> {
+    const queue = legacy ? this.options.legacyDeferred : this.options.deferred;
     if (!queue) return { outcome: "gone", sent: 0 };
     return releaseDeferred(
       {
@@ -304,17 +300,28 @@ export class WebPushNotifications {
     );
   }
 
-  /** Puts a person's phone notification in the queue; false when there is none or it failed, and
-   * then the phone rings now, as when the computer's activity cannot be read. */
-  private async wait(messageId: string, userId: string, now: Date, until: Date) {
-    if (!this.options.deferred) return false;
+  private async wait(
+    messageId: string,
+    userId: string,
+    phones: StoredWebPushSubscription[],
+    now: Date,
+    until: Date,
+  ) {
+    if (!this.options.deferred || this.transport.available === false) return false;
     try {
-      await this.options.deferred.defer({ messageId, userId, firstQueuedAt: now }, until);
-      return true;
+      await this.options.deferred.defer(
+        {
+          messageId,
+          userId,
+          firstQueuedAt: now,
+          routes: phones.map(deferredPushRoute),
+        },
+        until,
+      );
     } catch {
-      console.warn(JSON.stringify({ event: "web_push.defer_failed", messageId }));
-      return false;
+      console.warn(JSON.stringify({ event: "web_push.defer_unconfirmed", messageId }));
     }
+    return true;
   }
 
   private async computerActivity(recipients: readonly MessageRecipient[]) {
@@ -362,11 +369,19 @@ export class WebPushNotifications {
   private async publishAvailable(
     messageId: string,
     workspaceId: string,
-    userIds: readonly string[],
+    userId: string,
+    now: Date,
+    pushOwned: StoredWebPushSubscription[],
   ) {
-    if (!this.publisher || userIds.length === 0) return;
+    if (!this.publisher) return;
     try {
-      await this.publisher.notifyRecipients({ messageId, workspaceId, userIds });
+      await this.publisher.notifyRecipient({
+        messageId,
+        workspaceId,
+        userId,
+        at: now.getTime(),
+        ...(await pushDecision(messageId, pushOwned)),
+      });
     } catch {
       console.warn(JSON.stringify({ event: "in_page_notification.unavailable", messageId }));
     }
@@ -428,15 +443,20 @@ export class WebPushNotifications {
     subscriptions: StoredWebPushSubscription[],
     payload: WebPushPayload,
     collected?: DeliveryOutcome[],
+    pushOwned?: StoredWebPushSubscription[],
   ): Promise<DeliveryResult> {
     const errorId = deliveryErrorId();
     const results = await Promise.all(
       subscriptions.map(async (subscription) => {
         try {
           await this.transport.send(subscription, payload);
+          pushOwned?.push(subscription);
           return "sent" as const;
         } catch (error) {
-          const statusCode = error instanceof WebPushDeliveryError ? error.statusCode : undefined;
+          const deliveryError = error instanceof WebPushDeliveryError ? error : undefined;
+          const statusCode = deliveryError?.statusCode;
+          if (!deliveryError?.canFallback && !(error instanceof WebPushUnconfiguredError))
+            pushOwned?.push(subscription);
           if (statusCode === 404 || statusCode === 410) {
             const fields = {
               errorId,
@@ -445,7 +465,10 @@ export class WebPushNotifications {
               outcome: "failed",
             };
             try {
-              await this.subscriptions.removeSubscriptionById(subscription.id);
+              await this.subscriptions.removeSubscriptionById(
+                subscription.id,
+                subscription.endpoint,
+              );
               console.error(JSON.stringify({ event: "web_push.subscription_removed", ...fields }));
             } catch {
               console.error(

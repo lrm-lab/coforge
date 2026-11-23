@@ -1,5 +1,10 @@
 import { describe, expect, spyOn, test } from "bun:test";
 
+import {
+  installationRoute,
+  notificationRouteFingerprint,
+} from "#src/features/notifications/notification-routing";
+import { createCentrifugoNotificationPublisher } from "#src/server/notifications/in-page-notification-publisher.server";
 import { DEFAULT_NOTIFICATION_SETTINGS } from "#src/server/notifications/notification-rules.server";
 import {
   WebPushDeliveryError,
@@ -109,10 +114,10 @@ describe("WebPushNotifications", () => {
       },
     });
     const publisher: NotificationPublisher = {
-      notifyRecipients: async () => {},
+      notifyRecipient: async () => {},
     };
-    const seen: Array<{ messageId: string; workspaceId: string; userIds: readonly string[] }> = [];
-    publisher.notifyRecipients = async (input) => {
+    const seen: Parameters<NotificationPublisher["notifyRecipient"]>[0][] = [];
+    publisher.notifyRecipient = async (input) => {
       seen.push(input);
     };
 
@@ -124,7 +129,14 @@ describe("WebPushNotifications", () => {
 
     expect(result).toEqual({ sent: 0, failed: 0, removed: 0, unreachable: 0 });
     expect(seen).toEqual([
-      { messageId: "message-a", workspaceId: "workspace-a", userIds: ["alice"] },
+      {
+        messageId: "message-a",
+        workspaceId: "workspace-a",
+        userId: "alice",
+        at: expect.any(Number),
+        pushInstallations: [],
+        legacyPush: [],
+      },
     ]);
   });
 
@@ -141,7 +153,7 @@ describe("WebPushNotifications", () => {
         },
       });
       const publisher: NotificationPublisher = {
-        notifyRecipients: async () => {
+        notifyRecipient: async () => {
           throw new Error("centrifugo unreachable");
         },
       };
@@ -466,4 +478,102 @@ describe("a system notice push", () => {
     expect(chinese).toContain("Ada");
     expect(english).toContain("Ada");
   });
+});
+
+test("only accepted and ambiguous deliveries own the browser route for that message", async () => {
+  const subscriptions = Array.from({ length: 6 }, (_, index) => ({
+    ...first,
+    id: String(index),
+    browserInstallationId: crypto.randomUUID(),
+  }));
+  const errors = [
+    undefined,
+    new WebPushDeliveryError(),
+    new WebPushDeliveryError(503),
+    new WebPushDeliveryError(410),
+    new WebPushDeliveryError(undefined, true),
+    new WebPushDeliveryError(429),
+  ];
+  const repository = store({
+    message: {
+      title: "#general",
+      body: "Alice: ship it",
+      url: "/notification",
+      workspaceId: "workspace-a",
+      recipients: [{ userId: "alice", subscriptions }],
+    },
+  });
+  repository.value.removeSubscriptionById = async () => {
+    throw new Error("cleanup unavailable");
+  };
+  const decisions: Parameters<NotificationPublisher["notifyRecipient"]>[0][] = [];
+  const notifications = new WebPushNotifications(
+    repository.value,
+    {
+      async send(subscription) {
+        if (errors[Number(subscription.id)]) throw errors[Number(subscription.id)];
+      },
+    },
+    {
+      async notifyRecipient(input) {
+        decisions.push(input);
+      },
+    },
+  );
+  await notifications.notifyMessage("message-a");
+  expect(decisions[0]?.pushInstallations).toEqual(
+    (
+      await Promise.all(
+        subscriptions
+          .slice(0, 3)
+          .map((subscription) =>
+            notificationRouteFingerprint(
+              "message-a",
+              installationRoute(subscription.browserInstallationId),
+            ),
+          ),
+      )
+    ).sort(),
+  );
+  expect(decisions[0]?.legacyPush).toEqual([]);
+});
+
+test("one recipient publishes before a different recipient's slow push settles", async () => {
+  const repository = store({
+    message: {
+      title: "#general",
+      body: "Alice: ship it",
+      url: "/notification",
+      workspaceId: "workspace-a",
+      recipients: [
+        { userId: "slow", subscriptions: [first] },
+        { userId: "fast", subscriptions: [] },
+        { userId: "also-fast", subscriptions: [] },
+      ],
+    },
+  });
+  const push = Promise.withResolvers<void>();
+  const next = Promise.withResolvers<string[]>();
+  const batches: string[][] = [];
+  const publisher = createCentrifugoNotificationPublisher({
+    async publishJsonBatch(publications) {
+      const channels = publications.map(({ channel }) => channel);
+      batches.push(channels);
+      next.resolve(channels);
+      return publications.map(() => ({ status: "fulfilled", value: undefined }));
+    },
+  });
+  const notifications = new WebPushNotifications(
+    repository.value,
+    { send: () => push.promise },
+    publisher,
+  );
+  const fanout = notifications.notifyMessage("message-a");
+  try {
+    expect(await next.promise).toEqual(["chat:user:fast", "chat:user:also-fast"]);
+  } finally {
+    push.resolve();
+    await fanout;
+  }
+  expect(batches).toEqual([["chat:user:fast", "chat:user:also-fast"], ["chat:user:slow"]]);
 });

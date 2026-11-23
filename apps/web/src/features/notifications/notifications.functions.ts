@@ -61,6 +61,7 @@ export const subscribeBrowserPush = createServerFn({ method: "POST" })
     const { user, subscriptions } = notificationContext(context.user);
     await subscriptions.saveSubscription(user.id, {
       endpoint: data.endpoint,
+      browserInstallationId: data.browserInstallationId,
       p256dh: data.keys.p256dh,
       auth: data.keys.auth,
       expirationTime: data.expirationTime ? new Date(data.expirationTime) : null,
@@ -102,12 +103,6 @@ export const sendTestBrowserNotification = createServerFn({ method: "POST" })
     return { delivery: classifyTestDelivery(result) };
   });
 
-/**
- * The in-page notification read: what `InPageNotifications` fetches once the realtime
- * `notification.available.v1` event tells it a message is worth showing. Authorization is the
- * recipient rule itself — `notificationForRecipient` returns null for a non-recipient, which this
- * handler reports the same as a message the caller cannot see, never distinguishing the two.
- */
 export const getMessageNotification = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator(messageNotificationInput)

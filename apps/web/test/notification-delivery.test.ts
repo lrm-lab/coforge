@@ -74,7 +74,7 @@ function harness(input: {
   now?: Date;
 }) {
   const sent: Array<{ id: string; payload: WebPushPayload }> = [];
-  const published: string[][] = [];
+  const published: string[] = [];
   const queued: Array<{ entry: DeferredPush; dueAt: Date }> = [];
   const recorded: Array<{ id: string; ok: boolean }> = [];
   const store: WebPushSubscriptionStore = {
@@ -93,7 +93,7 @@ function harness(input: {
   const notifications = new WebPushNotifications(
     store,
     { send: async (subscription, payload) => void sent.push({ id: subscription.id, payload }) },
-    { notifyRecipients: async ({ userIds }) => void published.push([...userIds]) },
+    { notifyRecipient: async ({ userId }) => void published.push(userId) },
     {
       activity: {
         read: async (userIds) =>
@@ -146,7 +146,7 @@ describe("a message's fan-out", () => {
       "awake-laptop",
       "evening-laptop",
     ]);
-    expect(h.published).toEqual([["evening", "awake"]]);
+    expect(h.published.sort()).toEqual(["awake", "evening"]);
   });
 
   test("the preview and sound shape each person's payload", async () => {
@@ -191,7 +191,12 @@ describe("a message's fan-out", () => {
     expect(h.sent.map((delivery) => delivery.id).sort()).toEqual(["laptop", "old"]);
     expect(h.queued).toEqual([
       {
-        entry: { messageId: "message-a", userId: "alice", firstQueuedAt: NOW },
+        entry: {
+          messageId: "message-a",
+          userId: "alice",
+          firstQueuedAt: NOW,
+          routes: ["subscription:phone"],
+        },
         dueAt: new Date(NOW.getTime() + 2 * MINUTE),
       },
     ]);
@@ -214,7 +219,7 @@ describe("a message's fan-out", () => {
     }
   });
 
-  test("a queue that cannot take the phone's wait rings every device now", async () => {
+  test("an unconfirmed queue write does not ring the phone twice", async () => {
     const sent: string[] = [];
     const notifications = new WebPushNotifications(
       {
@@ -243,8 +248,8 @@ describe("a message's fan-out", () => {
         now: () => NOW,
       },
     );
-    expect(await notifications.notifyMessage("message-a")).toMatchObject({ sent: 2 });
-    expect(sent.sort()).toEqual(["laptop", "phone"]);
+    expect(await notifications.notifyMessage("message-a")).toMatchObject({ sent: 1 });
+    expect(sent).toEqual(["laptop"]);
   });
 
   test("each device's outcome is recorded once for the whole fan-out", async () => {

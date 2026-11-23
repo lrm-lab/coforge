@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
-import { releaseAll } from "#src/server/notifications/deferred-mobile-push-sweep.server";
+import {
+  releaseAll,
+  releaseDueNotifications,
+} from "#src/server/notifications/deferred-mobile-push-sweep.server";
 
 /**
  * The waiting-phone sweep's work loop (task #467): every due person is looked at once, a few at a
@@ -34,4 +37,23 @@ test("no one due, nothing to do", async () => {
     [],
   );
   expect(called).toBe(false);
+});
+
+test("a failed queue claim leaves the other queue's claimed people released", async () => {
+  for (const failedLegacy of [false, true]) {
+    const released: Array<[string, boolean | undefined]> = [];
+    await releaseDueNotifications(
+      async (legacy) => {
+        if (legacy === failedLegacy) throw new Error("queue claim failed");
+        return [legacy ? "legacy-user" : "scoped-user"];
+      },
+      async () => ({
+        async releaseDeferred(userId, legacy) {
+          released.push([userId, legacy]);
+          return { outcome: "sent", sent: 1 };
+        },
+      }),
+    );
+    expect(released).toEqual([[failedLegacy ? "scoped-user" : "legacy-user", !failedLegacy]]);
+  }
 });

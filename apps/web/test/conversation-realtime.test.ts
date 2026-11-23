@@ -267,9 +267,12 @@ describe("conversation realtime", () => {
 
   test("decodes only the versioned notification-available contract, carrying no message text", () => {
     const event = {
-      type: "notification.available.v1" as const,
+      type: "notification.available.v2" as const,
       messageId: "message-a",
       workspaceId: "workspace-a",
+      at: 1795392000000,
+      pushInstallations: ["a".repeat(64)],
+      legacyPush: [],
     };
 
     expect(decodeNotificationAvailableEvent(event)).toEqual(event);
@@ -277,15 +280,17 @@ describe("conversation realtime", () => {
       decodeNotificationAvailableEvent(new TextEncoder().encode(JSON.stringify(event))),
     ).toEqual(event);
     expect(() =>
-      decodeNotificationAvailableEvent({ ...event, type: "notification.available.v2" }),
+      decodeNotificationAvailableEvent({ ...event, type: "notification.available.v1" }),
     ).toThrow();
     expect(() => decodeNotificationAvailableEvent({ ...event, messageId: "" })).toThrow();
     expect(() => decodeNotificationAvailableEvent({ ...event, workspaceId: "" })).toThrow();
     expect(() =>
       decodeNotificationAvailableEvent({ type: event.type, messageId: "message-a" }),
     ).toThrow();
-    // Never carries message text: an extra `body` field is not part of the contract, but the
-    // decoder only reads the fields it knows, matching `decodeMessageAvailableEvent`'s style.
+    expect(() => decodeNotificationAvailableEvent({ ...event, at: Infinity })).toThrow();
+    expect(() =>
+      decodeNotificationAvailableEvent({ ...event, legacyPush: ["raw-endpoint"] }),
+    ).toThrow();
     expect(decodeNotificationAvailableEvent({ ...event, body: "leaked text" })).toEqual(event);
   });
 

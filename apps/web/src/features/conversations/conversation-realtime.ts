@@ -125,36 +125,46 @@ export function decodeConversationReadEvent(value: unknown): ConversationReadEve
   return decodeJsonPublication(conversationReadEvent, value);
 }
 
-/**
- * An in-page notification signal (Frank, 2026-09-23): while a CoForge tab is open, the page shows
- * the OS notification itself from this realtime event instead of relying on Web Push, since Google
- * push services are unreachable from mainland-China staging and clients. It carries
- * no message text — the bodiless-event rule applies here too — so the browser
- * fetches title/body/url over authenticated HTTPS (`getMessageNotification`) before it can show
- * anything. Published only to the recipient's own `chat:user:<user_id>` channel.
- */
 export type NotificationAvailableEvent = {
-  type: "notification.available.v1";
+  type: "notification.available.v2";
   messageId: string;
   workspaceId: string;
+  at: number;
+  pushInstallations: string[];
+  legacyPush: string[];
 };
+
+function isFingerprintList(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.every((entry) => typeof entry === "string" && /^[a-f0-9]{64}$/.test(entry))
+  );
+}
 
 export function decodeNotificationAvailableEvent(input: unknown): NotificationAvailableEvent {
   const value = publicationData(input);
   if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("invalid conversation event");
+    throw new Error("invalid notification event");
   const type = Reflect.get(value, "type");
   const messageId = Reflect.get(value, "messageId");
   const workspaceId = Reflect.get(value, "workspaceId");
+  const at = Reflect.get(value, "at");
+  const pushInstallations = Reflect.get(value, "pushInstallations");
+  const legacyPush = Reflect.get(value, "legacyPush");
   if (
-    type !== "notification.available.v1" ||
+    type !== "notification.available.v2" ||
     typeof messageId !== "string" ||
     !messageId ||
     typeof workspaceId !== "string" ||
-    !workspaceId
+    !workspaceId ||
+    typeof at !== "number" ||
+    !Number.isSafeInteger(at) ||
+    at <= 0 ||
+    !isFingerprintList(pushInstallations) ||
+    !isFingerprintList(legacyPush)
   )
-    throw new Error("invalid conversation event");
-  return { type, messageId, workspaceId };
+    throw new Error("invalid notification event");
+  return { type, messageId, workspaceId, at, pushInstallations, legacyPush };
 }
 
 /**

@@ -7,6 +7,7 @@ import { PrismaWebPushSubscriptionStore } from "./prisma-web-push-subscriptions.
 import { computerActivity, deferredMobilePushes } from "./notification-redis.server";
 import {
   WebPushNotifications,
+  WebPushUnconfiguredError,
   type NotificationPublisher,
   type WebPushTransport,
 } from "./web-push-notifications.server";
@@ -58,19 +59,17 @@ export async function createWebPushNotifications(
         errorId: isAppError(reported) ? reported.errorId : undefined,
       }),
     );
-    // A plain Error, not `WebPushDeliveryError(undefined)`: server misconfiguration must stay
-    // classified as an ordinary failure (`TEMPORARILY_UNAVAILABLE`), not the browser-facing
-    // "push service unreachable" case `deliver()` reserves for a real send attempt that timed out
-    // or could not connect.
     transport = {
+      available: false,
       async send() {
-        throw new Error("Web Push is not configured");
+        throw new WebPushUnconfiguredError("Web Push is not configured");
       },
     };
   }
   return new WebPushNotifications(new PrismaWebPushSubscriptionStore(db), transport, publisher, {
     activity: computerActivity(),
     deferred: deferredMobilePushes(),
+    legacyDeferred: deferredMobilePushes(true),
   });
 }
 

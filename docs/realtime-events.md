@@ -2,7 +2,7 @@
 
 Part of [the documentation index](../README.md).
 
-Every browser realtime event is a versioned `*.v1` message published over Centrifugo. This table
+Every browser realtime event is a versioned message published over Centrifugo. This table
 is the one place to see, for an event's content, every publisher and every receiver.
 `apps/web/test/realtime-event-catalog.test.ts` fails when a server event is missing from the
 table or a table row names no server event, so adding or renaming an event forces this list to
@@ -35,7 +35,7 @@ omitted from the receiver column; it only routes each event to the feature files
 | `member.changed.v1` | `server/conversations/conversation-realtime.server.ts` | `features/conversations/channel-conversation.tsx`, `features/conversations/use-channel-mentionables.ts` |
 | `message.available.v1` | `server/conversations/conversation-realtime.server.ts` | `features/conversations/use-task-conversation.ts`, `features/notifications/in-page-notifications.ts` |
 | `message.reaction.v1` | `server/conversations/reaction-write.server.ts`, `server/conversations/conversation-realtime.server.ts`, `server/conversations/conversation-history.server.ts` | `features/conversations/message-reactions.functions.ts`, `features/conversations/conversation-messages.ts` |
-| `notification.available.v1` | `server/notifications/in-page-notification-publisher.server.ts`, `server/notifications/web-push-notifications.server.ts` | `features/notifications/in-page-notifications.ts`, `features/notifications/notifications.functions.ts` |
+| `notification.available.v2` | `server/notifications/in-page-notification-publisher.server.ts`, `server/notifications/web-push-notifications.server.ts` | `features/notifications/in-page-notifications.ts`, `features/notifications/notifications.functions.ts` |
 | `pref.changed.v1` | `server/conversations/chat-sections.server.ts`, `server/conversations/conversation-pins.server.ts`, `server/conversations/direct-conversations.server.ts`, `server/conversations/channel-preferences.server.ts` | `features/inbox/use-activity-inbox-realtime.ts`, `features/conversations/conversation-unread.ts`, `features/conversations/chat-sections.ts` |
 | `record.changed.v1` | `server/records/key-point-extraction-write.server.ts` | `features/records/record-realtime.ts`, `features/records/use-record-changed-refresh.ts`, `features/records/records.functions.ts` |
 | `runtime-auth.login.v1` | `server/computers/runtime-auth.server.ts` | `features/computers/runtime-auth-realtime.ts`, `features/computers/runtime-sign-in-dialog.tsx`, `features/agents/agent-create-dialog.tsx` |

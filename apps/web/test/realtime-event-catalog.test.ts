@@ -4,7 +4,7 @@ import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 
 const catalog = readFileSync(new URL("../../../docs/realtime-events.md", import.meta.url), "utf8");
 const listed = new Set(
-  [...catalog.matchAll(/\| `([a-z][a-z0-9.-]*\.v1)` \|/g)].map((match) => match[1]!),
+  [...catalog.matchAll(/\| `([a-z][a-z0-9.-]*\.v[1-9][0-9]*)` \|/g)].map((match) => match[1]!),
 );
 const registered = Object.values(REALTIME_EVENTS);
 

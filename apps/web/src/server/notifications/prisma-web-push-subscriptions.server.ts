@@ -13,6 +13,7 @@ import {
   readAccess,
   readersAmong,
 } from "#src/server/db/repositories/attachment-comment-recipients.repositories.server";
+import { retryOnWriteConflict } from "#src/server/db/write-conflict.server";
 import { messageNotificationTag } from "./web-push-notifications.server";
 import type {
   DeferredNotification,
@@ -37,6 +38,7 @@ const SUBSCRIPTION_SELECT = {
   p256dh: true,
   auth: true,
   deviceKind: true,
+  browserInstallationId: true,
 } as const;
 
 /** One recipient row, with the settings their notifications are decided by. */
@@ -437,11 +439,63 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
   }
 
   async saveSubscription(userId: string, subscription: WebPushSubscriptionInput) {
-    await this.db.webPushSubscription.upsert({
-      where: { endpoint: subscription.endpoint },
-      create: { userId, ...subscription },
-      update: { userId, ...subscription },
-    });
+    const {
+      endpoint,
+      p256dh,
+      auth,
+      expirationTime,
+      deviceKind,
+      deviceLabel,
+      browserInstallationId,
+    } = subscription;
+    const installationId = browserInstallationId?.toLowerCase() ?? null;
+    const save = async (tx: Pick<PrismaClient, "$executeRaw">) => {
+      await tx.$executeRaw`
+        INSERT INTO "web_push_subscriptions" (
+          "id", "userId", "endpoint", "p256dh", "auth", "expirationTime",
+          "deviceKind", "deviceLabel", "browserInstallationId", "updatedAt"
+        ) VALUES (
+          ${Bun.randomUUIDv7()}::uuid, ${userId}::uuid, ${endpoint}, ${p256dh}, ${auth},
+          ${expirationTime}, ${deviceKind ?? null}, ${deviceLabel ?? null}, ${installationId}::uuid, NOW()
+        )
+        ON CONFLICT ("endpoint") DO UPDATE SET
+          "id" = CASE WHEN "web_push_subscriptions"."userId" = EXCLUDED."userId"
+            THEN "web_push_subscriptions"."id" ELSE EXCLUDED."id" END,
+          "lastSuccessAt" = CASE WHEN "web_push_subscriptions"."userId" = EXCLUDED."userId"
+            THEN "web_push_subscriptions"."lastSuccessAt" END,
+          "lastFailureAt" = CASE WHEN "web_push_subscriptions"."userId" = EXCLUDED."userId"
+            THEN "web_push_subscriptions"."lastFailureAt" END,
+          "lastFailureReason" = CASE WHEN "web_push_subscriptions"."userId" = EXCLUDED."userId"
+            THEN "web_push_subscriptions"."lastFailureReason" END,
+          "userId" = EXCLUDED."userId",
+          "p256dh" = EXCLUDED."p256dh",
+          "auth" = EXCLUDED."auth",
+          "expirationTime" = EXCLUDED."expirationTime",
+          "deviceKind" = EXCLUDED."deviceKind",
+          "deviceLabel" = EXCLUDED."deviceLabel",
+          "browserInstallationId" = CASE
+            WHEN EXCLUDED."browserInstallationId" IS NULL
+              AND "web_push_subscriptions"."userId" = EXCLUDED."userId"
+            THEN "web_push_subscriptions"."browserInstallationId"
+            ELSE EXCLUDED."browserInstallationId"
+          END,
+          "updatedAt" = NOW()
+      `;
+    };
+    if (!installationId) return save(this.db);
+    await retryOnWriteConflict(
+      () =>
+        this.db.$transaction(async (tx) => {
+          await tx.$queryRaw`
+          SELECT pg_advisory_xact_lock(hashtextextended(${`web-push:${userId}:${installationId}`}, 0))::text
+        `;
+          await tx.webPushSubscription.deleteMany({
+            where: { userId, browserInstallationId: installationId, endpoint: { not: endpoint } },
+          });
+          await save(tx);
+        }),
+      { attempts: 3, onRetry: () => {} },
+    );
   }
 
   async removeSubscription(userId: string, endpoint: string) {
@@ -450,7 +504,7 @@ export class PrismaWebPushSubscriptionStore implements WebPushSubscriptionStore 
     });
   }
 
-  async removeSubscriptionById(id: string) {
-    await this.db.webPushSubscription.deleteMany({ where: { id } });
+  async removeSubscriptionById(id: string, endpoint: string) {
+    await this.db.webPushSubscription.deleteMany({ where: { id, endpoint } });
   }
 }

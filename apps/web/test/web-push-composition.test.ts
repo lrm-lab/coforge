@@ -31,7 +31,7 @@ describe("createWebPushNotifications", () => {
       readConfig: async () => {
         throw new Error("VAPID key pair is not configured");
       },
-      publisher: { notifyRecipients: async () => {} },
+      publisher: { notifyRecipient: async () => {} },
     });
 
     await expect(

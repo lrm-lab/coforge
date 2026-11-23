@@ -21,7 +21,7 @@ export const REALTIME_EVENTS = {
   conversationRead: "conversation.read.v1",
   messageAvailable: "message.available.v1",
   messageReaction: "message.reaction.v1",
-  notificationAvailable: "notification.available.v1",
+  notificationAvailable: "notification.available.v2",
   prefChanged: "pref.changed.v1",
   recordChanged: "record.changed.v1",
   savedAdded: "saved.added.v1",

@@ -29,6 +29,7 @@ export const browserNotificationPreferenceInput = z.object({
 export const browserPushSubscriptionInput = z.object({
   endpoint: z.string().max(4_096).refine(isSafePushEndpoint),
   expirationTime: z.number().int().positive().nullable(),
+  browserInstallationId: z.uuid().optional(),
   keys: z.object({ p256dh: base64Url(65), auth: base64Url(16) }),
   // Whether this browser is a phone or a computer, and what Settings calls it (task #467); a
   // subscription without them is a computer, whose notifications never wait.

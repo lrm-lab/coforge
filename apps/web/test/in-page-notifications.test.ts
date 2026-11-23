@@ -1,4 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import {
+  installationRoute,
+  notificationRouteFingerprint,
+  pageOwnsNotification,
+} from "#src/features/notifications/notification-routing";
 
 import {
   isInPageNotificationEnabled,
@@ -53,4 +58,22 @@ describe("shouldShowInPageNotification", () => {
       }),
     ).toBe(false);
   });
+});
+
+test("an installation claimed by Push cannot fall back after its subscription changes", async () => {
+  const installation = "first-installation";
+  const messageId = "message-a";
+  const route = await notificationRouteFingerprint(messageId, installationRoute(installation));
+  const event = { messageId, pushInstallations: [route], legacyPush: [] };
+  expect(await pageOwnsNotification(event, async () => installation)).toBe(false);
+  expect(await pageOwnsNotification(event, async () => "different-installation")).toBe(true);
+  expect(
+    await pageOwnsNotification({ ...event, pushInstallations: [] }, async () => installation),
+  ).toBe(true);
+  expect(
+    await pageOwnsNotification(
+      { ...event, legacyPush: ["legacy-route"] },
+      async () => installation,
+    ),
+  ).toBe(false);
 });

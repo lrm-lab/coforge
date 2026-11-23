@@ -1,3 +1,4 @@
+import { browserInstallationId } from "./browser-notification-store";
 import { type PushService, UNREACHABLE_PUSH_SERVICES } from "./unreachable-push-services";
 
 export type BrowserNotificationPermission = NotificationPermission | "unsupported";
@@ -5,6 +6,7 @@ export type BrowserNotificationPermission = NotificationPermission | "unsupporte
 export type SerializedBrowserPushSubscription = {
   endpoint: string;
   expirationTime: number | null;
+  browserInstallationId?: string;
   keys: { p256dh: string; auth: string };
   /** What Settings lists the device as, and whether its notifications wait while the person is at
    * a computer (a phone's do; task #467). */
@@ -93,22 +95,25 @@ export async function ensureBrowserPushSubscription(
 ): Promise<SerializedBrowserPushSubscription> {
   if (browserNotificationPermission() !== "granted")
     throw new Error("Browser notification permission is not granted");
-  const subscription = await withRegistrationTimeout(registerBrowserPush(publicKey));
-  return {
-    ...subscription,
-    deviceKind: browserDeviceKind(navigator.userAgent, navigator.maxTouchPoints),
-    deviceLabel: browserDeviceLabel(navigator.userAgent),
-  };
+  return withRegistrationTimeout(registerBrowserPush(publicKey));
 }
 
-/** Ensures this browser holds a subscription and saves it on the server, unless signing out. */
 export async function syncBrowserPushSubscription(
   publicKey: string,
   save: (subscription: SerializedBrowserPushSubscription) => Promise<unknown>,
 ): Promise<SerializedBrowserPushSubscription> {
-  const subscription = await ensureBrowserPushSubscription(publicKey);
-  if (browserPushLifecycleEnabled()) await save(subscription);
-  return subscription;
+  const sync = async () => {
+    if (browserNotificationPermission() !== "granted")
+      throw new Error("Browser notification permission is not granted");
+    const installation = await browserInstallationId().catch(() => undefined);
+    const bind = (subscription: SerializedBrowserPushSubscription) =>
+      save({ ...subscription, ...(installation && { browserInstallationId: installation }) });
+    const subscription = await registerBrowserPush(publicKey, installation ? bind : undefined);
+    if (browserPushLifecycleEnabled()) await bind(subscription);
+    return subscription;
+  };
+  const synced = navigator.locks ? navigator.locks.request("coforge-web-push-sync", sync) : sync();
+  return withRegistrationTimeout(synced);
 }
 
 /** Registers `/service-worker.js` if it is not already registered and waits for it to become
@@ -123,15 +128,12 @@ async function ensureServiceWorkerRegistration(): Promise<ServiceWorkerRegistrat
 /** Shows an OS notification from the page through the service worker registration (the
  * `Notification()` constructor throws on most mobile browsers). Clicks go through the service
  * worker's `notificationclick`, the same as a Web Push notification. */
-export async function showPageNotification(notification: {
-  title: string;
-  body: string;
-  tag: string;
-  url: string;
-  /** Shown without a sound: the person turned sound off (task #467). */
-  silent?: boolean;
-}) {
+export async function showPageNotification(
+  notification: { title: string; body: string; tag: string; url: string; silent?: boolean },
+  canDisplay: () => boolean,
+) {
   const registration = await ensureServiceWorkerRegistration();
+  if (!canDisplay()) return;
   await registration.showNotification(notification.title, {
     body: notification.body,
     tag: notification.tag,
@@ -141,11 +143,15 @@ export async function showPageNotification(notification: {
   });
 }
 
-async function registerBrowserPush(publicKey: string): Promise<SerializedBrowserPushSubscription> {
+async function registerBrowserPush(
+  publicKey: string,
+  beforeReplacement?: (subscription: SerializedBrowserPushSubscription) => Promise<unknown>,
+): Promise<SerializedBrowserPushSubscription> {
   const registration = await ensureServiceWorkerRegistration();
   const applicationServerKey = decodeBase64Url(publicKey);
   let subscription = await registration.pushManager.getSubscription();
   if (subscription && !sameKey(subscription.options.applicationServerKey, applicationServerKey)) {
+    await beforeReplacement?.(serializeSubscription(subscription));
     await subscription.unsubscribe();
     subscription = null;
   }
@@ -157,6 +163,10 @@ async function registerBrowserPush(publicKey: string): Promise<SerializedBrowser
     await subscription.unsubscribe();
     throw new Error("Browser Push registration stopped during sign out");
   }
+  return serializeSubscription(subscription);
+}
+
+function serializeSubscription(subscription: PushSubscription): SerializedBrowserPushSubscription {
   const value = subscription.toJSON();
   if (!value.endpoint || !value.keys?.p256dh || !value.keys.auth)
     throw new Error("Browser returned an incomplete Push subscription");
@@ -164,6 +174,8 @@ async function registerBrowserPush(publicKey: string): Promise<SerializedBrowser
     endpoint: value.endpoint,
     expirationTime: value.expirationTime ?? null,
     keys: { p256dh: value.keys.p256dh, auth: value.keys.auth },
+    deviceKind: browserDeviceKind(navigator.userAgent, navigator.maxTouchPoints),
+    deviceLabel: browserDeviceLabel(navigator.userAgent),
   };
 }
 

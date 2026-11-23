@@ -192,3 +192,54 @@ describe("a person's waiting phone notifications", () => {
     expect(h.sent).toEqual([]);
   });
 });
+
+test("release rechecks the selected mobile browsers and recognizes a bound replacement", async () => {
+  const installation = crypto.randomUUID();
+  const otherBrowser = {
+    ...phone,
+    id: "registered-later",
+    browserInstallationId: crypto.randomUUID(),
+  };
+  const replacement = { ...phone, id: "replacement", browserInstallationId: installation };
+  const oldLegacy = {
+    ...phone,
+    id: "legacy-now-bound",
+    browserInstallationId: crypto.randomUUID(),
+  };
+  const waiting = waitingMessage("m1");
+  waiting.recipient.subscriptions = [laptop, replacement, otherBrowser, oldLegacy];
+  const h = harness({
+    entries: [
+      { ...entry("m1"), routes: [`installation:${installation}`, "subscription:legacy-now-bound"] },
+      { ...entry("read", 1), routes: [`installation:${installation}`] },
+      { ...entry("removed", 2), routes: ["subscription:gone"] },
+    ],
+    messages: {
+      m1: waiting,
+      read: { ...waiting, read: true },
+      removed: { ...waiting, mentioned: true },
+    },
+  });
+  expect(await h.release()).toEqual({ outcome: "sent", sent: 2 });
+  expect(h.sent.map(({ id }) => id)).toEqual(["replacement", "legacy-now-bound"]);
+});
+
+test("each phone gets its newest eligible message in a conversation", async () => {
+  const otherPhone = { ...phone, id: "second-phone" };
+  const older = waitingMessage("older");
+  const newer = waitingMessage("newer");
+  older.recipient.subscriptions = [phone, otherPhone];
+  newer.recipient.subscriptions = [phone, otherPhone];
+  const h = harness({
+    entries: [
+      { ...entry("older", 5), routes: ["subscription:phone", "subscription:second-phone"] },
+      { ...entry("newer", 1), routes: ["subscription:phone"] },
+    ],
+    messages: { older, newer },
+  });
+  expect(await h.release()).toEqual({ outcome: "sent", sent: 2 });
+  expect(h.sent.map(({ id, payload }) => [id, payload.tag])).toEqual([
+    ["phone", "message:newer"],
+    ["second-phone", "message:older"],
+  ]);
+});

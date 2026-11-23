@@ -1,8 +1,10 @@
 import type { ComputerActivityReader } from "./computer-activity.server";
 import { MAX_DEFER_MS, type DeferredPushQueue } from "./deferred-mobile-pushes.server";
+import { deferredPushRoute } from "./push-routes.server";
 import { mobileDeferredUntil, suppression } from "./notification-rules.server";
 import type {
   DeferredNotification,
+  StoredWebPushSubscription,
   WebPushSubscriptionStore,
 } from "./web-push-notifications.server";
 
@@ -48,7 +50,10 @@ export async function releaseDeferred(
   const fresh = (await queue.takeMessages(userId)).filter(
     (entry) => now.getTime() - entry.firstQueuedAt.getTime() <= MAX_DEFER_MS,
   );
-  const newest = new Map<string, PhoneRelease & { queuedAt: Date }>();
+  const newest = new Map<
+    string,
+    PhoneRelease & { queuedAt: Date; subscriptions: StoredWebPushSubscription[] }
+  >();
   const waitingEntries: { entry: (typeof fresh)[number]; waiting: DeferredNotification | null }[] =
     [];
   for (let offset = 0; offset < fresh.length; offset += DEFERRED_READ_CONCURRENCY) {
@@ -68,18 +73,47 @@ export async function releaseDeferred(
   }
   for (const { entry, waiting } of waitingEntries) {
     if (!waiting || waiting.read) continue;
-    const kept = newest.get(waiting.conversationId);
-    // A message that @mentions the person wins over a plain one; among equals, the newest.
-    const wins =
-      !kept ||
-      (waiting.mentioned && !kept.waiting.mentioned) ||
-      (waiting.mentioned === kept.waiting.mentioned && entry.firstQueuedAt > kept.queuedAt);
-    if (wins)
-      newest.set(waiting.conversationId, {
-        messageId: entry.messageId,
-        waiting,
-        queuedAt: entry.firstQueuedAt,
+    const routes = entry.routes && new Set(entry.routes);
+    const candidates = routes
+      ? waiting.recipient.subscriptions
+          .filter(
+            (subscription) =>
+              subscription.deviceKind === "mobile" &&
+              (routes.has(deferredPushRoute(subscription)) ||
+                routes.has(`subscription:${subscription.id}`)),
+          )
+          .map((subscription) => ({
+            key: `${waiting.conversationId}:${subscription.id}`,
+            subscriptions: [subscription],
+          }))
+      : [{ key: waiting.conversationId, subscriptions: waiting.recipient.subscriptions }];
+    for (const { key, subscriptions } of candidates) {
+      const kept = newest.get(key);
+      const wins =
+        !kept ||
+        (waiting.mentioned && !kept.waiting.mentioned) ||
+        (waiting.mentioned === kept.waiting.mentioned && entry.firstQueuedAt > kept.queuedAt);
+      if (wins)
+        newest.set(key, {
+          messageId: entry.messageId,
+          queuedAt: entry.firstQueuedAt,
+          waiting,
+          subscriptions,
+        });
+    }
+  }
+  const releases = new Map<string, PhoneRelease>();
+  for (const { messageId, waiting, subscriptions } of newest.values()) {
+    const release = releases.get(messageId);
+    if (release) release.waiting.recipient.subscriptions.push(...subscriptions);
+    else
+      releases.set(messageId, {
+        messageId,
+        waiting: {
+          ...waiting,
+          recipient: { ...waiting.recipient, subscriptions: [...subscriptions] },
+        },
       });
   }
-  return { outcome: "sent", sent: await input.send([...newest.values()]) };
+  return { outcome: "sent", sent: await input.send([...releases.values()]) };
 }

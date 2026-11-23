@@ -6,27 +6,60 @@ import {
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import type { NotificationPublisher } from "./web-push-notifications.server";
 
-/**
- * Publishes the bodiless `notification.available.v1` in-page signal to every
- * recipient's own `chat:user:<user_id>` channel in one Centrifugo `broadcast` call, idempotent per
- * message (`notification:<messageId>`, which `broadcast` applies per recipient channel).
- */
+const MAX_BATCH_SIZE = 100;
+
+type PendingPublication = {
+  publication: { channel: string; data: NotificationAvailableEvent; idempotencyKey: string };
+  resolve: () => void;
+  reject: (reason: unknown) => void;
+};
+
 export function createCentrifugoNotificationPublisher(
-  centrifugo: Pick<CentrifugoServerApi, "broadcast">,
+  centrifugo: Pick<CentrifugoServerApi, "publishJsonBatch">,
 ): NotificationPublisher {
-  return {
-    async notifyRecipients({ messageId, workspaceId, userIds }) {
-      if (userIds.length === 0) return;
-      const event: NotificationAvailableEvent = {
-        type: REALTIME_EVENTS.notificationAvailable,
-        messageId,
-        workspaceId,
-      };
-      await centrifugo.broadcast(
-        userIds.map((userId) => userConversationChannel(userId)),
-        event,
-        `notification:${messageId}`,
+  let pending: PendingPublication[] = [];
+
+  async function publish(batch: PendingPublication[]) {
+    try {
+      const replies = await centrifugo.publishJsonBatch(
+        batch.map(({ publication }) => publication),
       );
+      batch.forEach(({ resolve, reject }, index) => {
+        const reply = replies[index];
+        if (reply?.status === "fulfilled") resolve();
+        else reject(reply?.reason ?? new Error("missing notification publication result"));
+      });
+    } catch (error) {
+      batch.forEach(({ reject }) => reject(error));
+    }
+  }
+
+  function flush() {
+    const ready = pending;
+    pending = [];
+    for (let offset = 0; offset < ready.length; offset += MAX_BATCH_SIZE) {
+      void publish(ready.slice(offset, offset + MAX_BATCH_SIZE));
+    }
+  }
+
+  return {
+    notifyRecipient({ userId, ...decision }) {
+      const data: NotificationAvailableEvent = {
+        type: REALTIME_EVENTS.notificationAvailable,
+        ...decision,
+      };
+      return new Promise<void>((resolve, reject) => {
+        if (pending.length === 0) setTimeout(flush, 0);
+        pending.push({
+          publication: {
+            channel: userConversationChannel(userId),
+            data,
+            idempotencyKey: `notification:v2:${data.messageId}`,
+          },
+          resolve,
+          reject,
+        });
+      });
     },
   };
 }

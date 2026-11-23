@@ -33,18 +33,39 @@ async function tick() {
   if (ticking) return;
   ticking = true;
   try {
-    const queue = deferredMobilePushes();
-    if (!queue) return;
-    const due = await queue.takeDuePeople(BATCH, new Date());
-    if (due.length === 0) return;
-    await releaseAll(await createWebPushNotifications(requireDatabaseClient()), due);
-  } catch (error) {
-    console.warn(
-      JSON.stringify({ event: "web_push.deferred_sweep_failed", error: errorType(error) }),
+    const now = new Date();
+    await releaseDueNotifications(
+      async (legacy) => (await deferredMobilePushes(legacy)?.takeDuePeople(BATCH, now)) ?? [],
+      () => createWebPushNotifications(requireDatabaseClient()),
     );
   } finally {
     ticking = false;
   }
+}
+
+export async function releaseDueNotifications(
+  takeDue: (legacy: boolean) => Promise<string[]>,
+  createNotifications: () => Promise<Pick<WebPushNotifications, "releaseDeferred">>,
+): Promise<void> {
+  let notifications: ReturnType<typeof createNotifications> | undefined;
+  await Promise.all(
+    [false, true].map(async (legacy) => {
+      try {
+        const people = await takeDue(legacy);
+        if (people.length === 0) return;
+        const worker = await (notifications ??= createNotifications());
+        await releaseAll(worker, people, CONCURRENCY, legacy);
+      } catch (error) {
+        console.warn(
+          JSON.stringify({
+            event: "web_push.deferred_sweep_failed",
+            legacy,
+            error: errorType(error),
+          }),
+        );
+      }
+    }),
+  );
 }
 
 /** Looks at each of `people`, `CONCURRENCY` at a time; one failure is logged, never fatal. */
@@ -52,13 +73,14 @@ export async function releaseAll(
   notifications: Pick<WebPushNotifications, "releaseDeferred">,
   people: readonly string[],
   concurrency = CONCURRENCY,
+  legacy?: boolean,
 ): Promise<void> {
   let next = 0;
   const worker = async () => {
     while (next < people.length) {
       const userId = people[next++]!;
       try {
-        await notifications.releaseDeferred(userId);
+        await notifications.releaseDeferred(userId, legacy);
       } catch (error) {
         console.warn(
           JSON.stringify({ event: "web_push.deferred_failed", error: errorType(error) }),
