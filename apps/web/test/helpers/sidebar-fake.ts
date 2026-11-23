@@ -135,7 +135,15 @@ export async function sidebarWith(
   await queryClient.query(sidebarChannelsQuery("w", api));
   await queryClient.query(sidebarDirectsQuery("w", { api }));
   const sidebar = createSidebar(queryClient, "w", api, { saveRetryDelaysMs, sleep });
-  if (synced) await Promise.all([sidebar.channels.preload(), sidebar.directs.preload()]);
+  if (synced) {
+    await Promise.all([sidebar.channels.preload(), sidebar.directs.preload()]);
+    await Promise.all(
+      queryClient
+        .getQueryCache()
+        .getAll()
+        .map((query) => query.promise),
+    );
+  }
   return { sidebar, saves, server, queryClient };
 }
 
