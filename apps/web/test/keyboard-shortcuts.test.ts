@@ -1,7 +1,10 @@
 import { beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import { shouldSendAsTaskOnEnter } from "#src/features/conversations/composer-behavior";
+import { ShortcutKeycaps } from "#src/features/shortcuts/shortcut-keycaps";
 import {
   CONFIGURABLE_SHORTCUT_GROUPS,
   FIXED_SHORTCUT_ROWS,
@@ -66,14 +69,37 @@ beforeEach(() => {
   resetAllShortcutBindings();
 });
 
-test("the panel has its four groups arranged into three desktop columns, each row named once", () => {
+test("the panel groups shortcuts by scope into three desktop columns, each row named once", () => {
   expect(SHORTCUT_GROUPS.map((group) => group.title())).toEqual([
     m.shortcuts_group_global(),
     m.shortcuts_group_composer(),
+    m.shortcuts_group_question_cards(),
     m.shortcuts_group_messages(),
+    m.shortcuts_group_activity(),
     m.shortcuts_group_previews(),
   ]);
-  expect(SHORTCUT_MODAL_COLUMNS).toEqual([["global", "composer"], ["messages"], ["previews"]]);
+  expect(SHORTCUT_MODAL_COLUMNS).toEqual([
+    ["global", "composer"],
+    ["questionCards", "messages", "activity"],
+    ["previews"],
+  ]);
+  const byId = new Map(SHORTCUT_GROUPS.map((group) => [group.id, group]));
+  expect(byId.get("global")?.rows.map((row) => row.label)).toContain(m.shortcuts_dialog_submit);
+  expect(byId.get("questionCards")?.rows.map((row) => row.label)).toEqual([
+    m.shortcuts_question_jump,
+    m.shortcuts_card_move,
+    m.shortcuts_card_pick,
+    m.shortcuts_card_tick,
+    m.shortcuts_card_switch,
+    m.shortcuts_card_back,
+  ]);
+  expect(byId.get("messages")?.rows.map((row) => row.label)).toEqual([m.shortcuts_leave]);
+  expect(byId.get("activity")?.rows.map((row) => row.id)).toEqual([
+    "activityNext",
+    "activityPrev",
+    "activityDone",
+    "activityRead",
+  ]);
   const labels = SHORTCUT_GROUPS.flatMap((group) => group.rows.map((row) => row.label()));
   expect(new Set(labels).size).toBe(labels.length);
   for (const group of SHORTCUT_GROUPS)
@@ -351,4 +377,18 @@ test("the panel's send-as-task key is the one the composer acts on, including cu
       true,
     ),
   ).toBe(false);
+});
+
+test("ShortcutKeycaps separates alternative bindings with a visual slash and screen-reader 'or'", () => {
+  const html = renderToStaticMarkup(
+    createElement(ShortcutKeycaps, {
+      hotkeys: ["Alt+ArrowUp", "Alt+ArrowDown"],
+      apple: true,
+    }),
+  );
+  expect(html).toContain('aria-hidden="true"');
+  expect(html).toContain(">/<");
+  expect(html).toContain(`class="sr-only"> ${m.shortcuts_or()} <`);
+  expect(html).toContain('data-hotkey="Alt+ArrowUp"');
+  expect(html).toContain('data-hotkey="Alt+ArrowDown"');
 });

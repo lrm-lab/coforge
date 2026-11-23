@@ -18,10 +18,17 @@ export function ShortcutKeycaps({
     return <span className="shrink-0 text-xs text-quaternary">{m.shortcuts_unassigned()}</span>;
   }
   return (
-    <span className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+    <span className="relative flex shrink-0 flex-wrap items-center justify-end gap-1.5">
       {hotkeys.map((hotkey, index) => (
         <Fragment key={hotkey}>
-          {index > 0 && <span className="px-0.5 text-xs text-quaternary">{m.shortcuts_or()}</span>}
+          {index > 0 && (
+            <>
+              <span aria-hidden="true" className="px-0.5 text-xs text-quaternary">
+                /
+              </span>
+              <span className="sr-only">{` ${m.shortcuts_or()} `}</span>
+            </>
+          )}
           <ShortcutKeycapGroup hotkey={hotkey} apple={apple} />
         </Fragment>
       ))}

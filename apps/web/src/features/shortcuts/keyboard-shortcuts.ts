@@ -6,7 +6,13 @@ import {
 import { m } from "#src/paraglide/messages";
 import type { ShortcutBindingMap } from "./shortcut-bindings";
 
-export type ShortcutGroupId = "global" | "composer" | "messages" | "previews";
+export type ShortcutGroupId =
+  | "global"
+  | "composer"
+  | "questionCards"
+  | "messages"
+  | "activity"
+  | "previews";
 
 export type ShortcutRow = {
   id?: ConfigurableShortcutId;
@@ -45,6 +51,7 @@ const SHORTCUT_CATALOG: readonly ShortcutCatalogGroup[] = [
       { id: "shortcuts", label: m.shortcuts_open },
       { id: "search", label: m.shortcuts_search },
       { id: "sidebar", label: m.shortcuts_sidebar },
+      { label: m.shortcuts_dialog_submit, keys: ["Mod+Enter"] },
     ],
   },
   {
@@ -56,20 +63,29 @@ const SHORTCUT_CATALOG: readonly ShortcutCatalogGroup[] = [
       { id: "sendAsTask", label: m.shortcuts_send_as_task },
       { label: m.shortcuts_mention_move, keys: ["ArrowUp", "ArrowDown"] },
       { label: m.shortcuts_mention_insert, keys: ["Enter", "Tab"] },
-      { label: m.shortcuts_question_jump, keys: ["Alt+ArrowUp", "Alt+ArrowDown"] },
-      { label: m.shortcuts_dialog_submit, keys: ["Mod+Enter"] },
     ],
   },
   {
-    id: "messages",
-    title: m.shortcuts_group_messages,
+    id: "questionCards",
+    title: m.shortcuts_group_question_cards,
     rows: [
+      { label: m.shortcuts_question_jump, keys: ["Alt+ArrowUp", "Alt+ArrowDown"] },
       { label: m.shortcuts_card_move, keys: ["ArrowUp", "ArrowDown"] },
       { label: m.shortcuts_card_pick, keys: ["1–9"] },
       { label: m.shortcuts_card_tick, keys: ["Space"] },
       { label: m.shortcuts_card_switch, keys: ["ArrowLeft", "ArrowRight"] },
       { label: m.shortcuts_card_back, keys: ["Escape"] },
-      { label: m.shortcuts_leave, keys: ["Escape"] },
+    ],
+  },
+  {
+    id: "messages",
+    title: m.shortcuts_group_messages,
+    rows: [{ label: m.shortcuts_leave, keys: ["Escape"] }],
+  },
+  {
+    id: "activity",
+    title: m.shortcuts_group_activity,
+    rows: [
       { id: "activityNext", label: m.shortcuts_activity_next, extraKeys: ["ArrowDown"] },
       { id: "activityPrev", label: m.shortcuts_activity_prev, extraKeys: ["ArrowUp"] },
       { id: "activityDone", label: m.shortcuts_activity_done },
@@ -94,7 +110,7 @@ const SHORTCUT_CATALOG: readonly ShortcutCatalogGroup[] = [
 
 export const SHORTCUT_MODAL_COLUMNS: readonly (readonly ShortcutGroupId[])[] = [
   ["global", "composer"],
-  ["messages"],
+  ["questionCards", "messages", "activity"],
   ["previews"],
 ];
 
