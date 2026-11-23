@@ -1,9 +1,18 @@
 import { useSendAsTask } from "./conversation-view-memory";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { useHydrated } from "@tanstack/react-router";
 import type { TaskPriorityLevel } from "@lrm/coforge-sdk/internal";
 
-import { Plus, UploadCloud02 } from "@untitledui/icons";
+import { Clock, Plus, UploadCloud02 } from "@untitledui/icons";
 import { FileTrigger } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -14,6 +23,7 @@ import { ComposerField, focusDraftEnd } from "./composer-field";
 import { COMPOSER_FOCUS_CLASS, COMPOSER_FRAME_CLASS } from "./composer-frame";
 import { ComposerNotice } from "./composer-notice";
 import { useLongMessage } from "./use-long-message";
+import { composerSendDisabled, composerSendPress } from "./composer-send-gate";
 import { ComposerAttachmentTray } from "./composer-attachment-tray";
 import { pendingAttachmentName } from "./composer-attachments";
 import { useComposerAttachments } from "./use-composer-attachments";
@@ -67,6 +77,8 @@ export type SentMessage = {
 };
 
 const NO_NAMES: ReadonlySet<string> = new Set();
+
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 type ComposerDraftState = {
   key: string;
@@ -282,9 +294,13 @@ export function MessageComposer({
   const handleAddFiles = useLatestCallback((files: File[]) => {
     void addFiles(files);
   });
-  const submitRef = useRef<() => void>(() => {});
-  const runSubmit = useCallback(() => submitRef.current(), []);
+  const submitRef = useRef<(options?: { fromQueuedUpload?: boolean }) => void>(() => {});
+  const runSubmit = useCallback(
+    (options?: { fromQueuedUpload?: boolean }) => submitRef.current(options),
+    [],
+  );
   const longMessage = useLongMessage({
+    draftKey,
     body,
     setBody: updateBody,
     addFiles,
@@ -295,9 +311,18 @@ export function MessageComposer({
   const drop = useFileDrop(composerDisabled || uploading, handleAddFiles);
   const paste = useComposerPaste(room, handleAddFiles, (text) => longMessage.pasted(text));
   const taskMode = !inThread && Boolean(canSendAsTask);
-  const sendDisabled =
-    composerDisabled || uploading || anyFailed || (!body.trim() && attachments.length === 0);
   const placeholder = scope?.placeholder ?? composerPlaceholder(inThread, target);
+  const sendState = {
+    hydrated,
+    uploading,
+    anyFailed,
+    hasContent: Boolean(body.trim()) || attachments.length > 0,
+    waiting: longMessage.waitingToSend,
+  };
+  const sendDisabled = composerSendDisabled(sendState);
+  const waitingToSendNotice =
+    longMessage.waitingToSend && uploading ? m.conversation_send_after_upload() : "";
+  const statusAnnouncement = waitingToSendNotice || unresolvedNotice;
 
   function returnFocusToComposer() {
     completion.textareaRef.current?.focus({ preventScroll: true });
@@ -315,8 +340,17 @@ export function MessageComposer({
     };
   }, [hostRef, completion.textareaRef]);
 
-  function submit() {
-    if (sendDisabled || longMessage.divert()) return;
+  function submit(options?: { fromQueuedUpload?: boolean }) {
+    const action = composerSendPress({
+      ...sendState,
+      waiting: options?.fromQueuedUpload ? false : sendState.waiting,
+    });
+    if (action === "ignored") return;
+    if (action === "after-uploads") {
+      longMessage.sendAfterUploads();
+      return;
+    }
+    if (longMessage.divert()) return;
     const text =
       body.trim() ||
       longMessage.emptyBody(attachments) ||
@@ -358,7 +392,7 @@ export function MessageComposer({
     focusComposer();
     outbox.send(message, uploaded);
   }
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     submitRef.current = submit;
   });
 
@@ -443,8 +477,19 @@ export function MessageComposer({
         />
       )}
       <p role="status" className="sr-only">
-        {unresolvedNotice}
+        {statusAnnouncement}
       </p>
+      {waitingToSendNotice && (
+        <div
+          data-composer-send-waiting
+          className="flex items-center gap-2 px-2 text-sm text-tertiary"
+        >
+          <Clock aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
+          <p aria-hidden="true" className="min-w-0 flex-1">
+            {waitingToSendNotice}
+          </p>
+        </div>
+      )}
       {unresolvedNotice && (
         <ComposerNotice
           text={unresolvedNotice}
@@ -475,7 +520,7 @@ export function MessageComposer({
         onValueChange={updateBody}
         label={m.conversation_message_label()}
         placeholder={placeholder}
-        onSubmit={submit}
+        onSubmit={() => submit()}
         onTaskMode={setAsTask}
         sendDisabled={sendDisabled}
         isDisabled={composerDisabled}
@@ -483,7 +528,17 @@ export function MessageComposer({
         asTask={asTask}
         attachmentCount={attachments.length}
         onPaste={paste}
-        below={attachments.length > 0 && <ComposerAttachmentTray {...tray} />}
+        below={
+          attachments.length > 0 && (
+            <ComposerAttachmentTray
+              {...tray}
+              remove={(localIds) => {
+                longMessage.cancelWaitingSend();
+                tray.remove(localIds);
+              }}
+            />
+          )
+        }
         leading={renderLeading}
       />
       {taskMode && asTask && (
