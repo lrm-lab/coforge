@@ -83,8 +83,14 @@ a restart; after the last retry only a flag file reload or a restart tries again
 hook stops listening for reloads and retrying first, forbids any later start, then stops the queue.
 The database user needs `CREATE` on the database for the first start (staging and production
 included). pg-boss uses its own pool (4 connections, built from the same pool settings as
-Prisma's). Rollback: stop the server, then `DROP SCHEMA pgboss CASCADE`; domain tables are
-untouched.
+Prisma's).
+
+On the first start with pg-boss 12.39.0, an existing v46 schema upgrades to v47. The migration
+adds nullable `pgboss.schedule.sent_on` without a backfill. It can wait up to 30 seconds for
+the table lock, and the queue startup retry handles a lock timeout. Before promoting, verify
+a pre-upgrade database recovery point and exercise queue startup, delivery and retry with both
+Web images on the same staging database. App rollback switches to the previous Web image and
+keeps the v47 schema and its jobs. Dropping the schema deletes queued notifications and job history.
 
 ## HTTP delivery
 
