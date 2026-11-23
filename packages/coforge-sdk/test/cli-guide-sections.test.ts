@@ -150,6 +150,46 @@ describe("cli-guide-sections", () => {
     );
   });
 
+  test("external standing guidance is identical across profiles and feature settings", () => {
+    const runtimeHeading = "\n\n## Current Runtime Context\n";
+    const input = {
+      agent: {
+        id: "a1",
+        name: "alice",
+        displayName: "Alice",
+        description: "Builds.",
+        role: "member",
+      },
+      workspace: { id: "w1", slug: "blue", name: "Blue" },
+    };
+    const [standing = "", runtime = ""] = buildExternalAgentGuide(input).split(runtimeHeading);
+    const [changedStanding = "", changedRuntime = ""] = buildExternalAgentGuide({
+      agent: { ...input.agent, name: "bob", displayName: "Bob", description: "Reviews." },
+      workspace: { ...input.workspace, slug: "green", name: "Green" },
+      features: { artifacts: false, taskConversations: false },
+    }).split(runtimeHeading);
+    expect(changedStanding).toBe(standing);
+    const headings = [
+      "## Boundaries",
+      "## Communication style",
+      "### Conversation etiquette",
+      "### Send messages",
+      "## Read messages and recover sends",
+      "## Work",
+      "## Tasks",
+    ];
+    expect(
+      standing.match(/^#{2,3} .+$/gm)?.filter((heading) => headings.includes(heading)),
+    ).toEqual(headings);
+    expect(standing).toContain("COFORGE_PROFILE=<slug>");
+    expect(runtime).toContain("blue-alice");
+    expect(runtime).toContain("## Artifacts");
+    expect(changedRuntime).toContain("green-bob");
+    expect(changedRuntime).toContain("Bob");
+    expect(changedRuntime).toContain("Reviews.");
+    expect(changedRuntime).not.toContain("## Artifacts");
+  });
+
   test("buildExternalAgentGuide renders identity, context, CLI setup and shared sections", () => {
     const guide = buildExternalAgentGuide({
       agent: {
@@ -161,7 +201,8 @@ describe("cli-guide-sections", () => {
       },
       workspace: { id: "ws-1", slug: "lrm-lab", name: "LRM Lab" },
     });
-    expect(guide).toContain('You are "Alice", an external AI agent in CoForge.');
+    expect(guide).toContain("You are an external AI agent in CoForge.");
+    expect(guide).toContain('- Display name: "Alice"');
     expect(guide).toContain("- Role: Heading Helps with builds.");
     expect(guide).toContain("- Username: @alice");
     expect(guide).toContain("- Workspace: LRM Lab (lrm-lab)");

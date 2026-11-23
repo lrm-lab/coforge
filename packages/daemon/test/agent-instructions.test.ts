@@ -136,6 +136,52 @@ test("recovers context on demand without loading the Manual into every session",
   expect(instructions).not.toContain("automatically join");
   expect(instructions).not.toContain("Use channel mute");
 });
+test("managed standing guidance is identical across identities and launch environments", () => {
+  const runtimeHeading = "\n\n## Current Runtime Context\n";
+  const changed = buildCoforgeAgentInstructions({
+    agentWorkspaceDirectory: "/isolated/work/changed",
+    agentId: "changed-agent",
+    identity: {
+      name: "changed",
+      displayName: "Changed Display",
+      description: "Reviews changes.",
+      runtimeContext: { workspaceName: "Other Workspace", computerName: "Other Computer" },
+      features: { artifacts: false, taskConversations: false },
+      apps: [{ key: "acme-notes", name: "Changed App", description: "Other notes." }],
+    },
+    capabilities: { cloudDesktop: true },
+    environment: { COFORGE_CLOUD_COMPUTER: "1", WORKSPACE: "/isolated/work" },
+    extraCriticalRules: ["Use the changed provider command."],
+  });
+  const [standing = "", runtime = ""] = changed.split(runtimeHeading);
+  expect(standing).toBe(instructions.split(runtimeHeading)[0] ?? "");
+  const headings = [
+    "## Boundaries",
+    "## Communication style",
+    "### Conversation etiquette",
+    "### Send messages",
+    "## Read messages and recover sends",
+    "## Work",
+    "## Tasks",
+  ];
+  expect(standing.match(/^#{2,3} .+$/gm)?.filter((heading) => headings.includes(heading))).toEqual(
+    headings,
+  );
+  for (const detail of [
+    "Changed Display",
+    "Reviews changes.",
+    "Other Workspace",
+    "Other Computer",
+    "/isolated/work/changed",
+    "page:fill",
+    "Changed App",
+    "Other notes.",
+    "Use the changed provider command.",
+  ])
+    expect(runtime).toContain(detail);
+  expect(runtime).not.toContain("## Artifacts");
+  expect(instructions.split(runtimeHeading)[1]).toContain("## Artifacts");
+});
 test("identity is optional and the configured directory appears exactly once", () => {
   expect(instructions.startsWith("You are an AI agent in CoForge.")).toBe(true);
   expect(instructions.split(directory)).toHaveLength(2);
@@ -162,7 +208,7 @@ test("known runtime identity remains available without repeating the role", () =
       },
     },
   });
-  expect(rendered.startsWith('You are "Scout the Builder", an AI agent in CoForge.')).toBe(true);
+  expect(rendered).toContain('- Display name: "Scout the Builder"');
   expect(rendered).toContain("- Role: Reviews pull requests.");
   expect(rendered.split("Reviews pull requests.")).toHaveLength(2);
   expect(rendered).not.toContain("## Reviews");
@@ -181,7 +227,7 @@ test("runtime labels work without IDs and IDs work without labels", () => {
     agentWorkspaceDirectory: directory,
     identity: { name: "scout", runtimeContext: { computerName: "Builder", workspaceSlug: "acme" } },
   });
-  expect(rendered.startsWith('You are "scout"')).toBe(true);
+  expect(rendered).toContain('- Display name: "scout"');
   expect(rendered).toContain("- Computer: Builder\n");
   expect(rendered).toContain("- Workspace: acme\n");
 });
@@ -309,7 +355,7 @@ test("shares communication style with platform assistants", () => {
   for (const identity of [undefined, { systemKind: "workspace-assistant" as const }]) {
     const prompt = buildCoforgeAgentInstructions({ agentWorkspaceDirectory: directory, identity });
     const style = prompt.indexOf("## Communication style\n");
-    expect(style).toBeGreaterThan(prompt.indexOf("## Current Runtime Context\n"));
+    expect(style).toBeLessThan(prompt.indexOf("## Current Runtime Context\n"));
     expect(style).toBeLessThan(prompt.indexOf("## CoForge communication\n"));
     expect(prompt.match(/## Communication style\n/gu)).toHaveLength(1);
     for (const rule of [

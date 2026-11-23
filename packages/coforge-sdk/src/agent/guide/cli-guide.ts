@@ -82,6 +82,14 @@ ${(options.extraCriticalRules ?? []).join("\n")}`.trim();
   return sections;
 }
 
+export function partitionCoforgeCliGuideSections(sections: CoforgeCliGuideSections) {
+  const { safety, communication, messages, execution, tasks, queue, ...features } = sections;
+  return {
+    standing: [safety, COMMUNICATION_STYLE, communication, messages, execution, tasks, queue],
+    features: Object.values(features),
+  };
+}
+
 export function renderCoforgeCliGuide(options: CoforgeCliGuideOptions = {}): string[] {
   return Object.values(buildCoforgeCliGuideSections(options));
 }

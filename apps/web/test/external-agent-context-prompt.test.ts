@@ -35,9 +35,11 @@ describe("readAgentContext prompt", () => {
       external: true,
     });
     expect(view?.agent.external).toBe(true);
-    expect(view?.prompt?.text).toContain('You are "Alice", an external AI agent in CoForge.');
-    expect(view?.prompt?.text).toContain("COFORGE_PROFILE=<slug>");
-    expect(view?.prompt?.text).toContain("reminders_unsupported_for_external_agents");
+    const prompt = view?.prompt?.text ?? "";
+    expect(prompt).toMatch(/^You are an external AI agent in CoForge\./u);
+    expect(prompt).toContain('## Current Runtime Context\n\n- Display name: "Alice"');
+    expect(prompt).toContain("COFORGE_PROFILE=<slug>");
+    expect(prompt).toContain("reminders_unsupported_for_external_agents");
   });
 
   test("returns prompt: null for managed Agent principal", async () => {

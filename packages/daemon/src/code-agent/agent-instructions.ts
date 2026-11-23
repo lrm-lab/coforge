@@ -1,6 +1,6 @@
 import { collapseWhitespace } from "@lrm/coforge-anvil";
 import {
-  COMMUNICATION_STYLE,
+  partitionCoforgeCliGuideSections,
   sanitizeQuotedName,
   stripHeadingMarkers,
 } from "@lrm/coforge-sdk/agent";
@@ -82,6 +82,8 @@ function buildRuntimeContextSection(context: CoforgeAgentPromptContext): string 
   const identity = context.identity;
   const runtimeContext = identity?.runtimeContext;
   const lines = ["## Current Runtime Context", ""];
+  const rawName = identity?.displayName || identity?.name;
+  if (rawName) lines.push(`- Display name: "${sanitizeQuotedName(rawName)}"`);
   const description = identity?.description?.trim();
   if (description) lines.push(`- Role: ${collapseWhitespace(stripHeadingMarkers(description))}`);
   if (identity?.name) lines.push(`- Username: @${collapseWhitespace(identity.name)}`);
@@ -94,16 +96,21 @@ function buildRuntimeContextSection(context: CoforgeAgentPromptContext): string 
   return lines.join("\n");
 }
 export function buildCoforgeAgentInstructions(context: CoforgeAgentPromptContext): string {
-  const rawName = context.identity?.displayName || context.identity?.name;
-  const who = rawName
-    ? `You are "${sanitizeQuotedName(rawName)}", an AI agent in CoForge.`
-    : "You are an AI agent in CoForge.";
-  const guide = buildCoforgeCliGuideSections({
-    ...context,
-    ...(context.identity?.features ? { features: context.identity.features } : {}),
-  });
-  const sections = [who, buildRuntimeContextSection(context), COMMUNICATION_STYLE];
-  sections.push(...Object.values(guide));
+  const { extraCriticalRules, ...launch } = context;
+  const { standing, features } = partitionCoforgeCliGuideSections(
+    buildCoforgeCliGuideSections({
+      ...launch,
+      ...(launch.identity?.features ? { features: launch.identity.features } : {}),
+    }),
+  );
+  const sections = [
+    "You are an AI agent in CoForge.",
+    ...standing,
+    buildRuntimeContextSection(launch),
+  ];
+  if (extraCriticalRules?.length)
+    sections.push(["## Provider rules", ...extraCriticalRules].join("\n"));
+  sections.push(...features);
   const apps = buildAppsSection(context.identity?.apps ?? []);
   if (apps) sections.push(apps);
   if (context.identity?.systemKind === "workspace-assistant")
