@@ -8,8 +8,8 @@ import { dirname } from "node:path";
  * owner-read/write (`0600`) as UTF-8. `daemon-host/launchd.ts`, `daemon-host/systemd-user.ts` and
  * `supervisor/systemd-workspace-instance.ts` each wrote this default out by hand.
  *
- * `mode` applies only when a directory or file is created; an existing one keeps its permissions,
- * exactly as before.
+ * `mode` is applied unconditionally: an existing file is `chmod`-ed to it, so a file written by
+ * an older build with a narrower mode is widened (or narrowed) on the next write.
  */
 export async function writePrivateFile(path: string, content: string, mode = 0o600): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
@@ -19,7 +19,8 @@ export async function writePrivateFile(path: string, content: string, mode = 0o6
 
 /**
  * Like `writePrivateFile`, but a reader never sees a partial file: the content goes to a sibling
- * temporary file (created `0600`) that is then renamed over `path`.
+ * temporary file with `mode` applied, which is then renamed over `path` - the rename carries that
+ * mode to the final file, so no `chmod` is needed after it.
  */
 export async function writePrivateFileAtomic(
   path: string,
