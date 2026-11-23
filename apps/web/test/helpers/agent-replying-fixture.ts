@@ -20,29 +20,22 @@ import {
 import { ComputerRegistrar } from "#src/server/computers/registration.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { RedisMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
+import {
+  prepareAppNotificationQueues,
+  stopAppNotificationQueue,
+} from "#src/server/app-notifications/app-notification-queue.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import {
   agentMessagesPostDependencies,
   handleAgentMessagesPost,
 } from "#src/routes/api/agent/v1/messages";
 
-/**
- * Opt-in like the other browser E2Es: a real local Web built with `bun run build` and served from
- * `.output/` (`COFORGE_E2E_WEB_URL`), a real Centrifugo with this repository's
- * `infra/centrifugo/config.yaml` whose proxies and JWKS point at that Web
- * (`COFORGE_E2E_CENTRIFUGO_URL`), `COFORGE_CENTRIFUGO_API_URL`/`_API_KEY` for that Centrifugo,
- * `COFORGE_CENTRIFUGO_PROXY_SECRET` equal to the Web's, `DATABASE_URL`, `REDIS_URL`,
- * `agent-browser`, and the dev user an owner of its Workspace (seed-dev). The browser talks to a
- * proxy that forwards `/connection/*` to Centrifugo and the rest to the Web. The Agent's reply goes
- * through the Agent API's send handler with the route's own dependencies.
- */
 function requireEnvironment(name: string) {
   const value = Bun.env[name];
   if (!value) throw new Error(`${name} is required`);
   return value;
 }
 
-/** The sentence on screen: a line's status that is drawn, not just in the accessibility tree. */
 export const visible = (text: string) =>
   `[...document.querySelectorAll('[role="status"]')].some((node) => node.textContent === ${JSON.stringify(text)} && node.checkVisibility())`;
 export const announced = (text: string) =>
@@ -54,11 +47,6 @@ const base64 = (bytes: Uint8Array) => {
   return btoa(binary);
 };
 
-/**
- * Registers the calling file's `beforeAll`/`afterAll` and returns what its tests use. `artifactsName`
- * names both the browser session and the screenshot directory `.artifacts/e2e/<name>/`, so files run
- * independently. The seeded ids are filled in by `beforeAll`; read them inside tests.
- */
 export function setupAgentReplying({ artifactsName }: { artifactsName: string }) {
   const upstreamOrigin = requireEnvironment("COFORGE_E2E_WEB_URL");
   if (!["localhost", "127.0.0.1"].includes(new URL(upstreamOrigin).hostname))
@@ -95,9 +83,6 @@ export function setupAgentReplying({ artifactsName }: { artifactsName: string })
     return stdout;
   }
 
-  /** Runs an expression in the page and parses the JSON it returns. An expression with no value
-   * (a `localStorage.setItem`, an `?.click()`) stringifies to `undefined`, which agent-browser
-   * prints bare: that is no JSON, and the call returns `undefined`. */
   async function evaluate<T>(expression: string): Promise<T> {
     const printed = (
       await browser("eval", `(async () => JSON.stringify(await (${expression})))()`)
@@ -114,7 +99,6 @@ export function setupAgentReplying({ artifactsName }: { artifactsName: string })
     }
   }
 
-  /** Holds for `ms` while `condition` stays false. */
   async function staysFalse(condition: string, ms: number) {
     const deadline = Date.now() + ms;
     while (Date.now() < deadline) {
@@ -138,9 +122,7 @@ export function setupAgentReplying({ artifactsName }: { artifactsName: string })
     workspaceId: "",
     computerId: "",
     agentId: "",
-    /** Three more Agents in every channel, for lines naming several (task #210), in start order. */
     otherAgents: [] as { id: string; name: string }[],
-    /** The Agent and the other Agents, in start order. */
     get agentIds() {
       return [fx.agentId, ...fx.otherAgents.map((agent) => agent.id)];
     },
@@ -157,7 +139,6 @@ export function setupAgentReplying({ artifactsName }: { artifactsName: string })
     screenshot: (name: string) => browser("screenshot", join(artifacts, name)),
     open: (conversationId: string, search = "") =>
       browser("open", `${proxy.origin}${fx.workspacePath}/channel/${conversationId}${search}`),
-    /** Waits for a message's text to be on screen. */
     untilText: (text: string) =>
       until(`document.body.innerText.includes(${JSON.stringify(text)})`, 60_000),
     send: (channelId: string, userId: string, body: string, threadRootId?: string) =>
@@ -169,7 +150,6 @@ export function setupAgentReplying({ artifactsName }: { artifactsName: string })
         body,
         threadRootId,
       }),
-    /** A public channel of the dev user with the Agent as a member; removed afterwards. */
     async createChannel(name: string) {
       const channel = await channels.create(fx.workspaceId, DEV_BROWSER_USER.id, name);
       createdConversations.push(channel.id);
@@ -181,8 +161,6 @@ export function setupAgentReplying({ artifactsName }: { artifactsName: string })
     agentSends,
   };
 
-  /** One frame as Centrifugo's publish proxy would post it to the Web; what the Web answers with is
-   * published on the Activity channel. A denial fails the test loudly. */
   async function sendFrame(intent: AgentReplyIntent["intent"], agentId = fx.agentId) {
     const channel = `agent:activity:${fx.workspaceId}`;
     const frame = encodeAgentReplyIntent({
@@ -207,15 +185,12 @@ export function setupAgentReplying({ artifactsName }: { artifactsName: string })
       }),
     });
     const answer = (await response.json()) as { error?: { code?: number } };
-    // The Web publishes a reply intent to its conversation's channel itself and answers the
-    // activity channel's publish with a re-route; anything else means it was not delivered.
     if (!response.ok || answer.error?.code !== PUBLICATION_REROUTED_CODE)
       throw new Error(
         `the Web did not re-route the reply intent: ${response.status} ${JSON.stringify(answer)}`,
       );
   }
 
-  /** Makes every Agent a member of the conversation. */
   async function addAgents(conversationId: string) {
     await db.conversationMember.createMany({
       data: fx.agentIds.map((agentId) => ({
@@ -226,8 +201,6 @@ export function setupAgentReplying({ artifactsName }: { artifactsName: string })
     });
   }
 
-  /** An announced call: its start is repeated while it lasts, as the daemon does, since a browser
-   * drops a start that is not repeated. */
   async function announce(target: string, agentId = fx.agentId) {
     const callId = crypto.randomUUID();
     const start = () => sendFrame({ phase: REPLY_INTENT_PHASE.START, callId, target }, agentId);
@@ -242,7 +215,6 @@ export function setupAgentReplying({ artifactsName }: { artifactsName: string })
     };
   }
 
-  /** The Agent's reply through the Agent API's send handler, with the route's own dependencies. */
   async function agentSends(target: string, content: string) {
     const response = await handleAgentMessagesPost(
       new Request("http://local/api/agent/v1/messages", {
@@ -319,13 +291,12 @@ export function setupAgentReplying({ artifactsName }: { artifactsName: string })
     }
 
     channels = new PublicChannels(db, new RedisMessageRequestIdempotency(redis), centrifugo);
-    // The dev user joined this channel and can write in it; the Agent is a member.
     fx.joinedId = await fx.createChannel(fx.joinedName);
-    // A public channel someone else made: the dev user can read it but has not joined it.
     const unjoined = await channels.create(workspaceId, writer.id, fx.unjoinedName);
     fx.unjoinedId = unjoined.id;
     createdConversations.push(unjoined.id);
     await addAgents(unjoined.id);
+    await prepareAppNotificationQueues(databaseUrl);
     fx.rootId = (await fx.send(fx.joinedId, DEV_BROWSER_USER.id, `Thread root ${suffix}`)).id;
     await fx.send(fx.joinedId, DEV_BROWSER_USER.id, `First reply ${suffix}`, fx.rootId);
     await fx.send(fx.unjoinedId, writer.id, `Read-only channel message ${suffix}`);
@@ -337,27 +308,29 @@ export function setupAgentReplying({ artifactsName }: { artifactsName: string })
   afterAll(async () => {
     await browser("close").catch(() => undefined);
     proxy.stop();
-    await db.message.deleteMany({ where: { conversationId: { in: createdConversations } } });
-    await db.conversationMember.deleteMany({
-      where: { conversationId: { in: createdConversations } },
-    });
-    await db.conversation.deleteMany({ where: { id: { in: createdConversations } } });
-    // The second member's own assistant goes with them.
-    await db.agent.deleteMany({
-      where: {
-        OR: [{ id: { in: fx.agentIds } }, { ownerId: fx.writerUserId }],
-      },
-    });
-    await db.computer.deleteMany({ where: { id: fx.computerId } });
-    await db.workspaceMembership.deleteMany({ where: { userId: fx.writerUserId } });
-    await db.user.deleteMany({ where: { id: fx.writerUserId } });
-    await redis.send("EVAL", [
-      'local keys = redis.call("KEYS", ARGV[1]); if #keys > 0 then return redis.call("DEL", unpack(keys)) end return 0',
-      "0",
-      `*${fx.workspaceId}*`,
-    ]);
-    redis.close();
-    await db.$disconnect();
+    try {
+      await db.message.deleteMany({ where: { conversationId: { in: createdConversations } } });
+      await db.conversationMember.deleteMany({
+        where: { conversationId: { in: createdConversations } },
+      });
+      await db.conversation.deleteMany({ where: { id: { in: createdConversations } } });
+      await db.agent.deleteMany({
+        where: {
+          OR: [{ id: { in: fx.agentIds } }, { ownerId: fx.writerUserId }],
+        },
+      });
+      await db.computer.deleteMany({ where: { id: fx.computerId } });
+      await db.workspaceMembership.deleteMany({ where: { userId: fx.writerUserId } });
+      await db.user.deleteMany({ where: { id: fx.writerUserId } });
+      await redis.send("EVAL", [
+        'local keys = redis.call("KEYS", ARGV[1]); if #keys > 0 then return redis.call("DEL", unpack(keys)) end return 0',
+        "0",
+        `*${fx.workspaceId}*`,
+      ]);
+    } finally {
+      redis.close();
+      await Promise.all([db.$disconnect(), stopAppNotificationQueue()]);
+    }
   });
 
   return fx;
