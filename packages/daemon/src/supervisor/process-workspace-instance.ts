@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { chown, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getLogger } from "@logtape/logtape";
 import { isPidAlive } from "#src/platform/process-liveness";
@@ -182,6 +182,13 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
     if (!Number.isSafeInteger(child.pid) || child.pid <= 0)
       throw new Error(`Workspace ${this.config.workspaceId} did not start`);
     await this.#writeRecord({ mainPid: child.pid, invocationId });
+    // The child rewrites this record under the binding lock. Written by the launcher, it stays
+    // root's, and the child then fails to update it: "EACCES ... process-instance.json", which
+    // surfaces as "Daemon failed to recover configured Workspace".
+    if (spawnIdentity)
+      await chown(this.#recordPath, spawnIdentity.identity.uid, spawnIdentity.identity.gid).catch(
+        () => undefined,
+      );
     return child.pid;
   }
 
