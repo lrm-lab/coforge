@@ -43,7 +43,7 @@ export function MemoryPage({
   graph?: TeamMemoryDecisionGraph;
 }) {
   const workspaceSlug = useWorkspaceSlug();
-  const navigate = useNavigate({ from: "/w/$workspaceSlug/memory" });
+  const navigate = useNavigate({ from: "/w/$workspaceSlug/settings/memory" });
   const router = useRouter();
   const [query, setQuery] = useState(search.q);
   const [drafts, setDrafts] = useState<Record<string, MemoryDraft>>({});
@@ -125,19 +125,20 @@ export function MemoryPage({
   };
   const sectionClass = "flex min-h-0 min-w-0 flex-col";
   return (
-    <main className="flex h-full min-h-0 flex-col bg-primary">
-      <header className="flex items-center justify-between gap-4 border-b border-secondary px-5 py-4 lg:px-8">
-        <h1 className="text-lg font-semibold text-primary">{m.memory_title()}</h1>
-        <Button
-          size="sm"
-          iconLeading={Plus}
-          isDisabled={list.kind === "error"}
-          onPress={() => updateSearch({ id: "new" })}
-        >
-          {m.memory_new()}
-        </Button>
-      </header>
-      <MemoryScopeLinks showReview={list.reviewEnabled && list.kind === "ready"} />
+    <div className="flex h-full min-h-0 flex-col bg-primary">
+      <MemoryScopeLinks
+        showReview={list.reviewEnabled && list.kind === "ready"}
+        actions={
+          <Button
+            size="sm"
+            iconLeading={Plus}
+            isDisabled={list.kind === "error"}
+            onPress={() => updateSearch({ id: "new" })}
+          >
+            {m.memory_new()}
+          </Button>
+        }
+      />
       {list.kind === "error" ? (
         list.error === "disabled" ? (
           <EmptyState
@@ -172,10 +173,10 @@ export function MemoryPage({
           />
         )
       ) : (
-        <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]">
+        <div className="grid min-h-0 flex-1 @3xl/settings:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]">
           <section
             aria-label={m.memory_title()}
-            className={`${sectionClass} ${selected ? "hidden lg:flex" : "flex"} border-secondary lg:border-r`}
+            className={`${sectionClass} ${selected ? "hidden @3xl/settings:flex" : "flex"} border-secondary @3xl/settings:border-r`}
           >
             <div className="flex flex-col gap-3 border-b border-secondary px-5 py-4">
               <form
@@ -269,7 +270,7 @@ export function MemoryPage({
                 {list.result.entries.map((item) => (
                   <li key={item.id}>
                     <Link
-                      to="/w/$workspaceSlug/memory"
+                      to="/w/$workspaceSlug/settings/memory"
                       params={{ workspaceSlug }}
                       search={{ ...search, id: item.id }}
                       className={`block cursor-pointer px-5 py-4 hover:bg-primary_hover ${selected === item.id ? "bg-active" : ""}`}
@@ -312,10 +313,10 @@ export function MemoryPage({
             </div>
           </section>
           <section
-            className={`${sectionClass} ${selected ? "flex" : "hidden lg:flex"} overflow-y-auto px-5 py-5 lg:px-8`}
+            className={`${sectionClass} ${selected ? "flex" : "hidden @3xl/settings:flex"} overflow-y-auto px-5 py-5 lg:px-8`}
           >
             {selected && (
-              <div className="mb-5 lg:hidden">
+              <div className="mb-5 @3xl/settings:hidden">
                 <Button
                   iconLeading={ArrowLeft}
                   color="link-gray"
@@ -486,6 +487,6 @@ export function MemoryPage({
           </section>
         </div>
       )}
-    </main>
+    </div>
   );
 }

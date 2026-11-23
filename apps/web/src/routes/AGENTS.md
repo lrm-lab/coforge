@@ -6,11 +6,12 @@ These rules apply to `src/routes/`.
   styles, `HeadContent`, and `Scripts`.
 - Every app page lives under `/w/$workspaceSlug` (`w.$workspaceSlug.tsx` owns
   `AppShell` and renders `Outlet`), with these page names: `channel/$channelId`,
-  `saved`, `activity`, `tasks`, `search`, `memory`, `members`, `agent/$agentId`,
+  `saved`, `activity`, `tasks`, `search`, `members`, `agent/$agentId`,
   `computers`, `computer/$computerId`, `settings`, `app-review` (platform operators), `pi-chat`, plus `projects` and
   `records`; a direct message is `dm/$dmId`, by its conversation id. Pathless layouts (`_chat`, `_computers`) share chrome between
-  pages without adding a URL segment. Old page names are not redirected; a Workspace's former
-  slug is: `/w/<former>/…` goes to the same page under its current slug.
+  pages without adding a URL segment. Team and personal memory use `settings/memory` and
+  `settings/memory/personal`. Legacy page redirects are limited to their earlier `memory` and
+  `memory/personal` URLs. A Workspace's former slug redirects to the same page under its current slug.
 - Pages opened before someone is in a Workspace — `login`, `welcome`, `join/$token`,
   `apps/share/$token` (a private app share link: the person picks a Workspace to install in),
   `a/$artifactId` (public link-shared Artifact shell accepting short IDs or UUIDs),

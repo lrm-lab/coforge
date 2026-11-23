@@ -28,7 +28,7 @@ export function MemorySnapshot({
   return (
     <div className="min-w-0 rounded-lg border border-secondary px-3 py-3">
       <Link
-        to="/w/$workspaceSlug/memory"
+        to="/w/$workspaceSlug/settings/memory"
         params={{ workspaceSlug }}
         search={{ ...memoryList, id: entry.id, revision: entry.revision }}
         className="text-sm font-medium text-secondary underline underline-offset-4"
@@ -53,10 +53,7 @@ export function MemoryVersionPage({
   const workspaceSlug = useWorkspaceSlug();
   const entry = detail.kind === "ready" ? detail.result.entries[0] : undefined;
   return (
-    <main className="flex h-full min-h-0 flex-col bg-primary">
-      <header className="border-b border-secondary px-5 py-4 lg:px-8">
-        <h1 className="text-lg font-semibold text-primary">{m.memory_title()}</h1>
-      </header>
+    <div className="flex h-full min-h-0 flex-col bg-primary">
       <MemoryScopeLinks />
       <section className="min-h-0 flex-1 overflow-y-auto px-5 py-5 lg:px-8">
         {entry ? (
@@ -75,7 +72,7 @@ export function MemoryVersionPage({
               links={detail.kind === "ready" ? detail.evidenceLinks : undefined}
             />
             <Link
-              to="/w/$workspaceSlug/memory"
+              to="/w/$workspaceSlug/settings/memory"
               params={{ workspaceSlug }}
               search={{ ...memoryList, id: entry.id }}
               className="self-start text-sm text-secondary underline underline-offset-4"
@@ -89,7 +86,7 @@ export function MemoryVersionPage({
           </p>
         )}
       </section>
-    </main>
+    </div>
   );
 }
 
@@ -138,7 +135,7 @@ export function MemoryProvenance({
       {entry.relations?.map(({ kind, id, revision }) => (
         <li key={`${kind}:${id}:${revision}`}>
           <Link
-            to="/w/$workspaceSlug/memory"
+            to="/w/$workspaceSlug/settings/memory"
             params={{ workspaceSlug }}
             search={{ ...memoryList, id, revision }}
             className="underline underline-offset-4"

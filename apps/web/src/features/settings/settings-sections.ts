@@ -35,12 +35,7 @@ export const SETTINGS_SECTION_GROUPS = [
       { id: "members", label: () => m.settings_members(), icon: Users01 },
       { id: "labels", label: () => m.settings_labels(), icon: Tag01 },
       { id: "applications", label: () => m.settings_applications(), icon: Link03 },
-      {
-        id: "team-memory",
-        label: () => m.memory_title(),
-        icon: BookOpen01,
-        to: "/w/$workspaceSlug/memory",
-      },
+      { id: "team-memory", label: () => m.memory_title(), icon: BookOpen01 },
       { id: "experiments", label: () => m.settings_experiments(), icon: Beaker01 },
     ],
   },
@@ -52,14 +47,13 @@ export const SETTINGS_SECTION_GROUPS = [
   },
 ] as const;
 
-type SettingsNavigationEntry = (typeof SETTINGS_SECTION_GROUPS)[number]["sections"][number];
-type SettingsSectionEntry = Exclude<SettingsNavigationEntry, { to: string }>;
+type SettingsSectionEntry = (typeof SETTINGS_SECTION_GROUPS)[number]["sections"][number];
 
 export type SettingsSection = SettingsSectionEntry["id"];
 
 const ENTRIES = SETTINGS_SECTION_GROUPS.flatMap(
-  (group): readonly SettingsNavigationEntry[] => group.sections,
-).filter((entry): entry is SettingsSectionEntry => !("to" in entry));
+  (group): readonly SettingsSectionEntry[] => group.sections,
+);
 
 /** Every section id, for the route's search validation (`z.enum`). */
 export const SETTINGS_SECTIONS = ENTRIES.map((entry) => entry.id) as [

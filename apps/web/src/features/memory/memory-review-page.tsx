@@ -87,20 +87,21 @@ export function MemoryReviewPage({ suggestions }: { suggestions: Response }) {
     }
   };
   return (
-    <main className="flex h-full min-h-0 flex-col bg-primary">
-      <header className="flex items-center justify-between gap-4 border-b border-secondary px-5 py-4 lg:px-8">
-        <h1 className="text-lg font-semibold text-primary">{m.memory_title()}</h1>
-        <Button
-          size="sm"
-          className="min-h-11"
-          color="secondary"
-          isDisabled={busy || suggestions.kind !== "list"}
-          onPress={scan}
-        >
-          {m.memory_review_scan()}
-        </Button>
-      </header>
-      <MemoryScopeLinks review />
+    <div className="flex h-full min-h-0 flex-col bg-primary">
+      <MemoryScopeLinks
+        review
+        actions={
+          <Button
+            size="sm"
+            className="min-h-11"
+            color="secondary"
+            isDisabled={busy || suggestions.kind !== "list"}
+            onPress={scan}
+          >
+            {m.memory_review_scan()}
+          </Button>
+        }
+      />
       <section
         className="min-h-0 flex-1 overflow-y-auto px-5 py-5 lg:px-8"
         aria-label={m.memory_review_tab()}
@@ -265,7 +266,7 @@ export function MemoryReviewPage({ suggestions }: { suggestions: Response }) {
             })}
             {suggestions.next && (
               <Link
-                to="/w/$workspaceSlug/memory"
+                to="/w/$workspaceSlug/settings/memory"
                 params={{ workspaceSlug }}
                 search={{ ...memoryList, review: true, after: suggestions.next }}
                 className="self-start text-sm text-secondary underline underline-offset-4"
@@ -276,6 +277,6 @@ export function MemoryReviewPage({ suggestions }: { suggestions: Response }) {
           </div>
         )}
       </section>
-    </main>
+    </div>
   );
 }

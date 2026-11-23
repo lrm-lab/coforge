@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { createFileRoute, getRouteApi, useRouter } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  getRouteApi,
+  Outlet,
+  redirect,
+  useMatches,
+  useRouter,
+} from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { useQueryClient } from "@tanstack/react-query";
@@ -10,7 +17,7 @@ import { bindArrivalFrom } from "#src/features/profiles/account-password-logic";
 import { useAppToast } from "#src/components/ui/toast";
 import { PageLoadError } from "#src/features/errors/page-load-error";
 import { SettingsPending } from "#src/features/settings/settings-pending";
-import { SETTINGS_SECTIONS } from "#src/features/settings/settings-sections";
+import { SETTINGS_SECTIONS, type SettingsSection } from "#src/features/settings/settings-sections";
 import { APPS_SETTINGS_SEARCH } from "#src/features/apps/apps-settings-search";
 import { chooseAvatarPreset, saveUserProfile } from "#src/features/profiles/profile.functions";
 import { MEMBER_DIRECTORY_KEY } from "#src/features/agents/member-directory-queries";
@@ -81,6 +88,16 @@ export const Route = createFileRoute("/w/$workspaceSlug/settings")({
       .catch(undefined),
     ...APPS_SETTINGS_SEARCH,
   }),
+  beforeLoad: ({ params, search }) => {
+    if (search.section === "team-memory") {
+      throw redirect({
+        to: "/w/$workspaceSlug/settings/memory",
+        params,
+        search: { q: "", archived: false, offset: 0 },
+        replace: true,
+      });
+    }
+  },
   // The loader reads nothing from the search. A navigation that stays on Settings (a section, the
   // Applications tab or category, clicking the one already open) does not re-run it; entering the
   // page and `router.invalidate()` after a save still do.
@@ -122,6 +139,9 @@ function SettingsPage() {
   const [hideEmptySidebarSections, setHideEmptySidebarSections] = useState(false);
   const [messageFullWidth, setMessageFullWidth] = useState(false);
   const { section, github, bind, bindError } = Route.useSearch();
+  const activeRoute = useMatches({ select: (matches) => matches.at(-1)?.routeId });
+  const personalMemory = activeRoute === "/w/$workspaceSlug/settings/memory_/personal";
+  const memorySelected = personalMemory || activeRoute === "/w/$workspaceSlug/settings/memory";
   const bindArrival = useMemo(() => bindArrivalFrom({ bind, bindError }), [bind, bindError]);
   const navigate = Route.useNavigate();
   const {
@@ -155,6 +175,17 @@ function SettingsPage() {
   const toast = useAppToast();
   const locale = savedLanguage ?? getLocale();
   const saveLanguage = useServerFn(saveLanguagePreference);
+
+  function selectSection(next: SettingsSection) {
+    if (next === "team-memory") {
+      void navigate({
+        to: "/w/$workspaceSlug/settings/memory",
+        search: { q: "", archived: false, offset: 0 },
+      });
+      return;
+    }
+    void navigate({ to: "/w/$workspaceSlug/settings", search: { section: next }, replace: true });
+  }
 
   const dropBindArrival = useCallback(
     () => void navigate({ search: { section }, replace: true }),
@@ -344,8 +375,10 @@ function SettingsPage() {
       bindArrival={bindArrival}
       onBindArrivalHandled={dropBindArrival}
       githubCallbackFailure={github === "connected" ? undefined : github}
-      section={section}
-      onSectionChange={(next) => void navigate({ search: { section: next }, replace: true })}
+      section={memorySelected ? "team-memory" : section}
+      memoryContent={memorySelected ? <Outlet /> : undefined}
+      personalMemory={personalMemory}
+      onSectionChange={selectSection}
       profile={profile}
       createdAgents={createdAgents}
       members={members}

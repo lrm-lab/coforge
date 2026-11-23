@@ -1,10 +1,9 @@
 import type { DateTimePreferenceUpdate } from "#src/features/settings/settings.schemas";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
-import { Link } from "@tanstack/react-router";
 import { useEffect, useId, useState } from "react";
 import { ChevronLeft, Share01 } from "@untitledui/icons";
 import { PageHeader } from "#src/components/layout/page-header";
-import { Button, styles as buttonStyles } from "#src/components/base/buttons/button";
+import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { Checkbox } from "#src/components/base/checkbox/checkbox";
@@ -50,6 +49,8 @@ const navigationRowClass = "h-9 w-full min-w-0 justify-start rounded-lg px-3 tex
 export interface SettingsContentProps {
   /** Controlled section; falls back to internal state when omitted (tests, previews). */
   section?: SettingsSection;
+  memoryContent?: React.ReactNode;
+  personalMemory?: boolean;
   githubCallbackFailure?: GitHubCallbackFailure;
   onSectionChange?: (section: SettingsSection) => void;
   /** Set while the page is opened by the way back from GitHub's confirmation, for the password dialog. */
@@ -112,13 +113,17 @@ export function SettingsContent(props: SettingsContentProps) {
   const experiments = useWorkspaceExperiments();
   const section = props.section ?? internalSection;
   const [showList, setShowList] = useState(
-    props.section !== "integrations" && props.section !== "shortcuts",
+    props.section !== "integrations" &&
+      props.section !== "shortcuts" &&
+      props.section !== "team-memory",
   );
   useEffect(() => {
     if (props.section === "shortcuts") setShowList(false);
   }, [props.section]);
   const current = settingsSection(section);
-  const sectionLabel = current.label();
+  const memorySelected = section === "team-memory";
+  const sectionLabel =
+    memorySelected && props.personalMemory ? m.memory_personal() : current.label();
 
   function selectSection(next: SettingsSection) {
     setInternalSection(next);
@@ -141,40 +146,19 @@ export function SettingsContent(props: SettingsContentProps) {
             <SettingsNavigationGroup key={group.label()} label={group.label()}>
               {group.sections.map((item) => (
                 <li key={item.id}>
-                  {"to" in item ? (
-                    <Link
-                      to={item.to}
-                      params={{ workspaceSlug: props.workspace.slug }}
-                      search={{ q: "", archived: false, offset: 0 }}
-                      className={cn(
-                        buttonStyles.common.root,
-                        buttonStyles.sizes.sm.root,
-                        buttonStyles.colors.tertiary.root,
-                        navigationRowClass,
-                      )}
-                    >
-                      <item.icon
-                        aria-hidden="true"
-                        data-icon="leading"
-                        className={buttonStyles.common.icon}
-                      />
-                      <span className="truncate px-0.5">{item.label()}</span>
-                    </Link>
-                  ) : (
-                    <Button
-                      type="button"
-                      color="tertiary"
-                      iconLeading={item.icon}
-                      aria-current={section === item.id ? "page" : undefined}
-                      onPress={() => selectSection(item.id)}
-                      className={cn(
-                        navigationRowClass,
-                        section === item.id && "bg-active text-brand-secondary",
-                      )}
-                    >
-                      <span className="truncate">{item.label()}</span>
-                    </Button>
-                  )}
+                  <Button
+                    type="button"
+                    color="tertiary"
+                    iconLeading={item.icon}
+                    aria-current={section === item.id ? "page" : undefined}
+                    onPress={() => selectSection(item.id)}
+                    className={cn(
+                      navigationRowClass,
+                      section === item.id && "bg-active text-brand-secondary",
+                    )}
+                  >
+                    <span className="truncate">{item.label()}</span>
+                  </Button>
                 </li>
               ))}
             </SettingsNavigationGroup>
@@ -205,8 +189,12 @@ export function SettingsContent(props: SettingsContentProps) {
         </div>
 
         <section aria-label={sectionLabel} className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {section === "account" ? (
+          <div
+            className={cn("min-h-0 flex-1", memorySelected ? "overflow-hidden" : "overflow-y-auto")}
+          >
+            {memorySelected ? (
+              props.memoryContent
+            ) : section === "account" ? (
               <AccountSettings {...props} />
             ) : section === "language-region" ? (
               <LanguageRegionSettings {...props} />
