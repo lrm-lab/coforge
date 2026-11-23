@@ -1,7 +1,7 @@
 import { SpanStatusCode, context, trace, type Attributes } from "@opentelemetry/api";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
 import { resourceFromAttributes } from "@opentelemetry/resources";
-import { BasicTracerProvider, BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { BatchSpanProcessor, TracerProvider } from "@opentelemetry/sdk-trace";
 
 type MessageSendTrace = {
   measure<T>(name: string, operation: () => Promise<T>): Promise<T>;
@@ -23,14 +23,15 @@ async function initializeTracing() {
       : Bun.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT;
     if (!endpoint) return false;
 
-    const provider = new BasicTracerProvider({
+    const provider = new TracerProvider({
       resource: resourceFromAttributes({
         "service.name": Bun.env.OTEL_SERVICE_NAME ?? "coforge-web",
         "service.version": Bun.env.OTEL_SERVICE_VERSION ?? "unknown",
         "deployment.environment": Bun.env.OTEL_DEPLOYMENT_ENVIRONMENT ?? "unknown",
       }),
       spanProcessors: [
-        new BatchSpanProcessor(new OTLPTraceExporter({ url: endpoint }), {
+        new BatchSpanProcessor({
+          exporter: new OTLPTraceExporter({ url: endpoint }),
           scheduledDelayMillis: 1_000,
           exportTimeoutMillis: 5_000,
         }),
