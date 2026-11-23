@@ -197,24 +197,12 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
           COFORGE_WORKSPACE_INVOCATION_ID: invocationId,
         },
       });
-    let child: { pid: number };
-    try {
-      child = await launch(spawnIdentity ? sharedGid : undefined);
-    } catch (error) {
-      // The recorded shared group is a fact from provisioning, and provisioning may be older than
-      // the container: a gid that no longer exists fails `setgid` here. Fall back to the Workspace's
-      // own gid rather than taking the Workspace down for a permission that only widens `/workspace`.
-      const code = (error as NodeJS.ErrnoException).code;
-      if (!spawnIdentity || sharedGid === undefined || (code !== "EPERM" && code !== "EINVAL"))
-        throw error;
-      logger.warn("Shared group cannot be used; starting on the Workspace's own group", {
-        workspaceId: this.config.workspaceId,
-        sharedGid,
-        uid: spawnIdentity.identity.uid,
-        code,
-      });
-      child = await launch(undefined);
-    }
+    const child = await spawnWithGroupFallback({
+      workspaceId: this.config.workspaceId,
+      uid: spawnIdentity?.identity.uid ?? 0,
+      sharedGid: spawnIdentity ? sharedGid : undefined,
+      spawn: launch,
+    });
     if (!Number.isSafeInteger(child.pid) || child.pid <= 0)
       throw new Error(`Workspace ${this.config.workspaceId} did not start`);
     await this.#writeRecord({ mainPid: child.pid, invocationId });
@@ -370,4 +358,30 @@ async function defaultSpawn(input: {
 
 function defaultSignal(pid: number, signal?: NodeJS.Signals): void {
   process.kill(pid, signal);
+}
+
+/**
+ * A recorded shared group can outlive the container it came from, and `setgid` on a gid the
+ * container no longer has fails the spawn. That permission only widens `/workspace`, so it is not
+ * worth a dead Workspace: retry once on the Workspace's own group. Any other failure is a real
+ * startup failure and must not be retried, or the log would carry two contradictory causes.
+ */
+export async function spawnWithGroupFallback<T>(input: {
+  workspaceId: string;
+  uid: number;
+  sharedGid: number | undefined;
+  spawn: (gid: number | undefined) => Promise<T>;
+  warn?: (message: string, details: Record<string, unknown>) => void;
+}): Promise<T> {
+  try {
+    return await input.spawn(input.sharedGid);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (input.sharedGid === undefined || (code !== "EPERM" && code !== "EINVAL")) throw error;
+    (input.warn ?? logger.warn.bind(logger))(
+      "Shared group cannot be used; starting on the Workspace's own group",
+      { workspaceId: input.workspaceId, sharedGid: input.sharedGid, uid: input.uid, code },
+    );
+    return input.spawn(undefined);
+  }
 }
