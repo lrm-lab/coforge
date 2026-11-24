@@ -10,6 +10,7 @@ export function ActorAvatarStack({
   overlap = "loose",
   ring = "regular",
   more = 0,
+  moreLabel,
   className,
   children,
   ...props
@@ -17,19 +18,26 @@ export function ActorAvatarStack({
   overlap?: keyof typeof OVERLAP;
   ring?: keyof typeof AVATAR_STACK_RING;
   more?: number;
+  moreLabel?: string;
 }) {
   return (
     <span {...props} className={cn("flex items-center", OVERLAP[overlap], className)}>
       {children}
       {more > 0 && (
-        <ActorAvatar
-          presence={false}
-          size="xs"
-          alt=""
-          initials={`+${more}`}
-          contentClassName="bg-avatar-more text-avatar-more-fg outline-none [&>span]:text-avatar-more-fg [&>span]:tabular-nums"
-          className={AVATAR_STACK_RING[ring]}
-        />
+        <span dir="ltr" className="inline-flex shrink-0">
+          <ActorAvatar
+            presence={false}
+            size="xs"
+            alt={moreLabel ?? ""}
+            initials={`+${more}`}
+            contentClassName={cn(
+              "bg-avatar-more text-avatar-more-fg outline-none [&>span]:text-avatar-more-fg [&>span]:tabular-nums",
+              more > 9 && "px-1",
+              more > 99 && "px-1.5",
+            )}
+            className={cn(more > 9 && "[&&]:w-auto [&&]:min-w-6", AVATAR_STACK_RING[ring])}
+          />
+        </span>
       )}
     </span>
   );

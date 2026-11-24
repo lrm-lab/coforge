@@ -41,19 +41,29 @@ export type ComputerOverviewRowActions = {
 
 export function ComputerCardAgentChip({
   agent,
+  avatarClassName,
+  triggerClassName,
 }: {
   agent: ComputerOverviewItem["agents"][number];
+  avatarClassName?: string;
+  triggerClassName?: string;
 }) {
   const display = useLiveAgentDisplay(agent.id) ?? agent.display;
   return (
     <Tooltip title={agent.displayName}>
-      <TooltipTrigger className="relative z-10 shrink-0 rounded-full">
+      <TooltipTrigger
+        className={cn(
+          "relative z-10 inline-flex shrink-0 rounded-full focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus-ring",
+          triggerClassName,
+        )}
+      >
         <AgentDisplayAvatar
           agentId={agent.id}
           name={agent.displayName}
           src={agent.avatarUrl}
           display={display}
           size="xs"
+          className={avatarClassName}
         />
       </TooltipTrigger>
     </Tooltip>

@@ -11,11 +11,8 @@ import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { humanLabel } from "#src/lib/human-label";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import {
-  ComputerCardAgentChip,
-  ComputerOverviewActionMenu,
-  type ComputerOverviewRowActions,
-} from "./computer-card";
+import { ComputerOverviewActionMenu, type ComputerOverviewRowActions } from "./computer-card";
+import { ComputerTableAgentsCell } from "./computer-table-agents";
 import {
   availableUpdateVersion,
   computerKind,
@@ -224,22 +221,7 @@ export function ComputerTable({
                   </div>
                 </div>
 
-                <div className="hidden items-center gap-1 md:flex">
-                  {computer.agents.length > 0 ? (
-                    <>
-                      {computer.agents.slice(0, 3).map((agent) => (
-                        <ComputerCardAgentChip key={agent.id} agent={agent} />
-                      ))}
-                      {computer.agents.length > 3 ? (
-                        <span className="text-xs font-medium text-tertiary tabular-nums">
-                          +{computer.agents.length - 3}
-                        </span>
-                      ) : null}
-                    </>
-                  ) : (
-                    <span className="text-xs text-quaternary">—</span>
-                  )}
-                </div>
+                <ComputerTableAgentsCell agents={computer.agents} compact={compact} />
 
                 {compact ? null : (
                   <>
