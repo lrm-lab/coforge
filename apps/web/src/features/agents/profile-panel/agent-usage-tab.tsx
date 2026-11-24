@@ -1,59 +1,42 @@
-import { useMemo, useState } from "react";
+import { Suspense, lazy, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useHydrated } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { AlertCircle, BarChart01, HelpCircle } from "@untitledui/icons";
-import { Button as AriaButton } from "react-aria-components";
+import { AlertCircle, BarChart01 } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
-import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
+import { Skeleton } from "#src/components/ui/skeleton";
 import { getAgentTokenUsage } from "#src/features/agents/agent-token-usage.functions";
 import { agentTokenUsageKeys } from "#src/features/agents/agent-token-usage-queries";
 import {
-  AGENT_TOKEN_USAGE_RANGES,
   formatCompactTokens,
-  formatExactTokens,
-  formatUsagePercent,
+  resolveDefaultUsageProvider,
   summarizeAgentTokenUsage,
   type AgentTokenUsageRange,
+  type AgentTokenUsageRuntimeSummary,
 } from "#src/features/agents/agent-token-usage-model";
 import { browserTimeZone, dateTimeFormat, resolveTimeZone } from "#src/lib/dates";
-import { formatNumber } from "#src/lib/format-number";
-import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { AgentTabEmpty } from "./agent-tab-empty";
+import type { CacheHitChartDatum } from "./agent-usage-cache-hit-chart";
 import { CalendarHeatmapChart, DailyBarChart, TodayHourlyChart } from "./agent-usage-charts";
 import {
-  UsageBreakdownSection,
+  UsageAllRuntimesHeader,
+  UsageSingleRuntimeHeader,
+  UsageToolbar,
+} from "./agent-usage-header";
+import {
   UsageModelsSection,
   UsageTabSkeleton,
+  UsageTokenCompositionStrip,
 } from "./agent-usage-sections";
 
-const RANGE_LABELS: Record<AgentTokenUsageRange, () => string> = {
-  1: m.agent_usage_range_today,
-  7: m.agent_usage_range_7d,
-  14: m.agent_usage_range_14d,
-  30: m.agent_usage_range_30d,
-};
+const LazyCacheHitChart = lazy(() => import("./agent-usage-cache-hit-chart"));
 
-function formatClock(iso: string, zone: string, locale: string): string {
-  return dateTimeFormat(locale, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: zone,
-  }).format(new Date(iso));
-}
-
-function formatShortDate(iso: string, zone: string, locale: string): string {
-  return dateTimeFormat(locale, {
-    month: "numeric",
-    day: "numeric",
-    timeZone: zone,
-  }).format(new Date(iso));
-}
+const ALL_RUNTIMES_CHOICE = "__all__";
+const EMPTY_RUNTIMES: readonly AgentTokenUsageRuntimeSummary[] = [];
 
 function formatSelectedLabel(dateKey: string, hour: number | undefined, locale: string): string {
   if (hour !== undefined) return `${String(hour).padStart(2, "0")}:00`;
@@ -67,11 +50,20 @@ function formatSelectedLabel(dateKey: string, hour: number | undefined, locale: 
   }).format(utc);
 }
 
+function formatMonthDay(dateKey: string): string {
+  const date = Temporal.PlainDate.from(dateKey);
+  return `${date.month}/${date.day}`;
+}
+
 export function AgentUsageTab({ agentId, timeZone }: { agentId: string; timeZone: string | null }) {
   const hydrated = useHydrated();
   const locale = getLocale();
   const [range, setRange] = useState<AgentTokenUsageRange>(7);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [providerChoice, setProviderChoice] = useState<string | typeof ALL_RUNTIMES_CHOICE | null>(
+    null,
+  );
+  const [metric, setMetric] = useState<"hit" | "tokens">("hit");
 
   const effectiveTimeZone = resolveTimeZone(timeZone, hydrated ? browserTimeZone() : undefined);
   const loadUsage = useServerFn(getAgentTokenUsage);
@@ -91,20 +83,62 @@ export function AgentUsageTab({ agentId, timeZone }: { agentId: string; timeZone
     refetchOnReconnect: "always",
   });
 
-  const summary = useMemo(
-    () => (query.data ? summarizeAgentTokenUsage(query.data, selectedKey) : null),
-    [query.data, selectedKey],
+  const baseSummary = useMemo(
+    () => (query.data ? summarizeAgentTokenUsage(query.data, null, null) : null),
+    [query.data],
   );
 
-  const selectedIndex = useMemo(() => {
-    if (!query.data || selectedKey === null) return null;
-    const idx = query.data.buckets.findIndex((b) => b.key === selectedKey);
-    return idx >= 0 ? idx : null;
-  }, [query.data, selectedKey]);
+  const reportRuntimes = baseSummary?.reportRuntimes ?? EMPTY_RUNTIMES;
+  const currentProvider = query.data?.currentProvider ?? null;
+
+  const defaultProvider = useMemo(
+    () => resolveDefaultUsageProvider(reportRuntimes, currentProvider),
+    [reportRuntimes, currentProvider],
+  );
+
+  const effectiveProvider = useMemo(() => {
+    if (!query.data) return null;
+    if (providerChoice === ALL_RUNTIMES_CHOICE) {
+      return reportRuntimes.length > 1 ? null : defaultProvider;
+    }
+    if (
+      providerChoice !== null &&
+      reportRuntimes.some((runtime) => runtime.provider === providerChoice)
+    ) {
+      return providerChoice;
+    }
+    return defaultProvider;
+  }, [query.data, providerChoice, reportRuntimes, defaultProvider]);
+
+  const summary = useMemo(
+    () =>
+      query.data ? summarizeAgentTokenUsage(query.data, selectedKey, effectiveProvider) : null,
+    [query.data, selectedKey, effectiveProvider],
+  );
+
+  const isAllMultiRuntime = effectiveProvider === null && reportRuntimes.length > 1;
+  const activeMetric: "hit" | "tokens" = isAllMultiRuntime ? "tokens" : metric;
+
+  const cacheHitChartData = useMemo<CacheHitChartDatum[]>(() => {
+    if (!summary) return [];
+    return summary.buckets.map((bucket, index) => ({
+      key: bucket.key,
+      label: bucket.hour !== undefined ? `${bucket.key}:00` : formatMonthDay(bucket.dateKey),
+      tooltipLabel: formatSelectedLabel(bucket.dateKey, bucket.hour, locale),
+      hitPercent: summary.cacheHitSeries[index] ?? null,
+      cacheReadTokens: bucket.cacheReadTokens,
+    }));
+  }, [summary, locale]);
 
   function onChangeRange(next: AgentTokenUsageRange) {
     setRange(next);
     setSelectedKey(null);
+  }
+
+  function onSelectProvider(provider: string | null) {
+    setProviderChoice(provider ?? ALL_RUNTIMES_CHOICE);
+    setSelectedKey(null);
+    if (provider !== null) setMetric("hit");
   }
 
   function onToggleSelect(key: string) {
@@ -113,44 +147,18 @@ export function AgentUsageTab({ agentId, timeZone }: { agentId: string; timeZone
 
   return (
     <div role="region" aria-label={m.agent_usage_tab()} className="flex flex-col pb-6">
-      <div className="flex flex-wrap items-center justify-between gap-2 px-5 pt-4 sm:px-6">
-        <div
-          role="group"
-          aria-label={m.agent_usage_range_label()}
-          className="inline-flex rounded-lg bg-secondary p-0.5"
-        >
-          {AGENT_TOKEN_USAGE_RANGES.map((option) => {
-            const active = range === option;
-            return (
-              <AriaButton
-                key={option}
-                aria-pressed={active}
-                onPress={() => onChangeRange(option)}
-                className={cn(
-                  "min-h-8 cursor-pointer rounded-md px-2.5 text-xs font-medium outline-none transition-colors data-focus-visible:ring-2 data-focus-visible:ring-brand",
-                  active
-                    ? "bg-primary font-semibold text-primary shadow-xs"
-                    : "text-tertiary hover:text-primary",
-                )}
-              >
-                {RANGE_LABELS[option]()}
-              </AriaButton>
-            );
-          })}
-        </div>
-        {hydrated && query.data && (
-          <span className="font-mono text-xs tabular-nums text-quaternary">
-            {m.agent_usage_as_of({
-              time: formatClock(query.data.asOf, query.data.timeZone, locale),
-            })}
-          </span>
-        )}
-      </div>
+      <UsageToolbar
+        reportRuntimes={reportRuntimes}
+        effectiveProvider={effectiveProvider}
+        range={range}
+        onSelectProvider={onSelectProvider}
+        onChangeRange={onChangeRange}
+      />
 
       {query.isPending ? (
         <UsageTabSkeleton />
       ) : query.isError ? (
-        <div className="p-5">
+        <div className="p-4 sm:p-5">
           <EmptyState
             size="card"
             role="alert"
@@ -177,126 +185,94 @@ export function AgentUsageTab({ agentId, timeZone }: { agentId: string; timeZone
           description={m.agent_usage_empty_description()}
         />
       ) : (
-        <>
-          <section className="border-b border-secondary px-5 py-5 sm:px-6">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <p className="text-xs font-semibold text-tertiary">
-                {summary.selectedBucket
-                  ? `${formatSelectedLabel(summary.selectedBucket.dateKey, summary.selectedBucket.hour, locale)} · ${m.agent_usage_effective_heading()}`
-                  : m.agent_usage_effective_heading()}
-              </p>
-              {summary.selectedBucket ? (
-                <Button
-                  size="sm"
-                  color="link-gray"
-                  onPress={() => setSelectedKey(null)}
-                  className="text-xs"
-                >
-                  {m.agent_usage_selected_clear()}
-                </Button>
-              ) : hydrated && query.data.trackingStartedAt ? (
-                <span className="text-xs text-quaternary">
-                  {m.agent_usage_tracking_since({
-                    date: formatShortDate(
-                      query.data.trackingStartedAt,
-                      query.data.timeZone,
-                      locale,
-                    ),
-                  })}
-                </span>
-              ) : null}
-            </div>
-
-            <div className="mt-2 flex flex-wrap items-end justify-between gap-2">
-              <div className="flex items-baseline gap-2">
-                <Tooltip title={formatExactTokens(summary.effectiveTokens, locale)}>
-                  <TooltipTrigger className="cursor-default rounded-xs font-mono text-2xl font-bold tracking-tight tabular-nums text-primary outline-none focus-visible:ring-2 focus-visible:ring-brand">
-                    {formatCompactTokens(summary.effectiveTokens, locale)}
-                  </TooltipTrigger>
-                </Tooltip>
-                <span
-                  className={cn(
-                    "font-mono text-xs font-medium tabular-nums",
-                    summary.deltaPercent === null
-                      ? "text-quaternary"
-                      : summary.deltaPercent > 0
-                        ? "text-success-primary"
-                        : summary.deltaPercent < 0
-                          ? "text-tertiary"
-                          : "text-quaternary",
-                  )}
-                >
-                  {summary.deltaPercent === null
-                    ? "—"
-                    : `${summary.deltaPercent > 0 ? "+" : ""}${summary.deltaPercent}%`}
-                </span>
-              </div>
-
-              {summary.cacheHitPercent !== null && (
-                <Tooltip title={m.agent_usage_cache_hit_help()}>
-                  <TooltipTrigger className="inline-flex items-center gap-1 rounded-full bg-success-primary px-2.5 py-0.5 font-mono text-xs font-semibold tabular-nums text-success-primary outline-none focus-visible:ring-2 focus-visible:ring-brand">
-                    <span>
-                      {m.agent_usage_cache_hit({
-                        percent: formatUsagePercent(summary.cacheHitPercent, locale),
-                      })}
-                    </span>
-                    <HelpCircle className="size-3 shrink-0 opacity-80" aria-hidden="true" />
-                  </TooltipTrigger>
-                </Tooltip>
-              )}
-            </div>
-
-            <p className="mt-1 font-mono text-xs tabular-nums text-quaternary">
-              {m.agent_usage_total_throughput({
-                total: formatCompactTokens(summary.totalTokens, locale),
-                cache: formatCompactTokens(summary.cacheReadTokens, locale),
-              })}
-            </p>
-
-            {summary.turns > 0 && (
-              <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs text-tertiary tabular-nums">
-                <span>
-                  {m.agent_usage_team_summary_turns({
-                    turns: formatNumber(summary.turns, locale),
-                  })}
-                </span>
-                {summary.avgEffectivePerTurn !== null && (
-                  <span>
-                    {m.agent_usage_team_avg_turn({
-                      tokens: formatCompactTokens(summary.avgEffectivePerTurn, locale),
-                    })}
-                  </span>
-                )}
-              </div>
-            )}
-
-            {query.data.range === 1 ? (
-              <TodayHourlyChart
-                buckets={query.data.buckets}
-                peak={summary.peakEffective}
-                selectedKey={selectedKey}
-                onToggleSelect={onToggleSelect}
-              />
-            ) : query.data.range === 30 ? (
-              <CalendarHeatmapChart
-                buckets={query.data.buckets}
-                peak={summary.peakEffective}
-                selectedKey={selectedKey}
-                onToggleSelect={onToggleSelect}
+        <div className="space-y-4 px-4 py-4 sm:px-5">
+          <section className="overflow-hidden rounded-xl border border-secondary bg-primary">
+            {!isAllMultiRuntime ? (
+              <UsageSingleRuntimeHeader
+                summary={summary}
+                activeMetric={activeMetric}
+                locale={locale}
+                onSelectMetric={setMetric}
               />
             ) : (
-              <DailyBarChart
-                buckets={query.data.buckets}
-                peak={summary.peakEffective}
-                selectedKey={selectedKey}
-                onToggleSelect={onToggleSelect}
+              <UsageAllRuntimesHeader
+                summary={summary}
+                locale={locale}
+                onSelectRuntime={(provider) => onSelectProvider(provider)}
               />
             )}
+
+            <div className="space-y-3 p-4">
+              <div className="flex items-center justify-between gap-2 text-xs text-tertiary">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="truncate">
+                    {summary.selectedBucket
+                      ? formatSelectedLabel(
+                          summary.selectedBucket.dateKey,
+                          summary.selectedBucket.hour,
+                          locale,
+                        )
+                      : activeMetric === "hit"
+                        ? m.agent_usage_hit_trend_title()
+                        : range === 1
+                          ? m.agent_usage_hourly_trend_title()
+                          : m.agent_usage_daily_trend_title()}
+                  </span>
+                  {summary.selectedBucket && (
+                    <Button
+                      size="sm"
+                      color="link-gray"
+                      onPress={() => setSelectedKey(null)}
+                      className="shrink-0 text-xs"
+                    >
+                      {m.agent_usage_selected_clear()}
+                    </Button>
+                  )}
+                </div>
+                <span className="shrink-0 font-mono tabular-nums">
+                  {m.agent_usage_total_summary({
+                    tokens: formatCompactTokens(summary.totalTokens, locale),
+                  })}
+                </span>
+              </div>
+
+              {activeMetric === "hit" ? (
+                <Suspense fallback={<Skeleton className="h-28 w-full rounded-lg" />}>
+                  <LazyCacheHitChart data={cacheHitChartData} locale={locale} />
+                </Suspense>
+              ) : query.data.range === 1 ? (
+                <TodayHourlyChart
+                  buckets={summary.buckets}
+                  peak={summary.peakEffective}
+                  selectedKey={selectedKey}
+                  onToggleSelect={onToggleSelect}
+                />
+              ) : query.data.range === 30 ? (
+                <CalendarHeatmapChart
+                  buckets={summary.buckets}
+                  peak={summary.peakEffective}
+                  selectedKey={selectedKey}
+                  onToggleSelect={onToggleSelect}
+                />
+              ) : (
+                <DailyBarChart
+                  buckets={summary.buckets}
+                  peak={summary.peakEffective}
+                  selectedKey={selectedKey}
+                  onToggleSelect={onToggleSelect}
+                />
+              )}
+
+              <UsageTokenCompositionStrip summary={summary} locale={locale} />
+            </div>
           </section>
 
-          <UsageBreakdownSection summary={summary} selectedIndex={selectedIndex} locale={locale} />
-          <UsageModelsSection summary={summary} locale={locale} />
-        </>
+          <UsageModelsSection
+            summary={summary}
+            locale={locale}
+            groupByRuntime={isAllMultiRuntime}
+          />
+        </div>
       )}
     </div>
   );
