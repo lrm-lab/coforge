@@ -233,10 +233,10 @@ export function DailyBarChart({
 
 const HEAT_CELL_CLASS = {
   0: "bg-secondary text-quaternary",
-  1: "bg-chart-heat-1 text-primary",
-  2: "bg-chart-heat-2 text-primary font-medium",
-  3: "bg-chart-heat-3 text-white font-medium",
-  4: "bg-chart-heat-4 text-white font-semibold",
+  1: "bg-chart-heat-1 text-chart-heat-1-fg",
+  2: "bg-chart-heat-2 text-chart-heat-2-fg font-medium",
+  3: "bg-chart-heat-3 text-chart-heat-3-fg font-medium",
+  4: "bg-chart-heat-4 text-chart-heat-4-fg font-semibold",
 } as const;
 
 export function CalendarHeatmapChart({
@@ -287,7 +287,7 @@ export function CalendarHeatmapChart({
                   HEAT_CELL_CLASS[level],
                   selectedKey !== null && !selected && "opacity-40 hover:opacity-80",
                   bucket.isCurrent && !selected && "ring-1 ring-inset ring-primary",
-                  selected && "ring-2 ring-inset ring-brand",
+                  selected && "ring-2 ring-inset ring-chart-heat-ring",
                 )}
               >
                 {dayNumber(bucket.dateKey)}
