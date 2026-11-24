@@ -9,8 +9,6 @@ import {
   ensureWorkspaceIdentity,
   executableForIdentity,
   openTraversalForIdentity,
-  workspaceSharedGid,
-  WORKSPACE_SHARED_GROUP_FILE,
   profileRoot,
   isUsableIdentity,
   resolveSpawnIdentity,
@@ -309,17 +307,4 @@ test("a path that stays closed is reported instead of silently weakening the dro
     "/srv/coforge/daemon/workspaces/MDFh/daemon.sock",
     "/srv/coforge/daemon/daemon.sock",
   ]);
-});
-
-test("the shared group is read from what provisioning recorded, and never guessed", async () => {
-  const volumeRoot = join(stateRoot, "volume-shared");
-  await mkdir(join(volumeRoot, "ws"), { recursive: true });
-  await writeFile(join(volumeRoot, "ws", WORKSPACE_SHARED_GROUP_FILE), '{"gid":20100}\n');
-  expect(await workspaceSharedGid(stateRoot, volumeRoot)).toBe(20_100);
-
-  await writeFile(join(volumeRoot, "ws", WORKSPACE_SHARED_GROUP_FILE), '{"gid":7}\n');
-  expect(await workspaceSharedGid(stateRoot, volumeRoot)).toBeUndefined();
-
-  await rm(join(volumeRoot, "ws", WORKSPACE_SHARED_GROUP_FILE));
-  expect(await workspaceSharedGid(stateRoot, volumeRoot)).toBeUndefined();
 });

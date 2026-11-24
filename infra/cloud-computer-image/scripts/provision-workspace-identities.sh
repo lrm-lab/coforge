@@ -103,31 +103,4 @@ done <<< "${workspace_ids}"
 mkdir -p "${SHARED}"
 chown 0:0 "${SHARED}"
 chmod 755 "${SHARED}"
-
-# After the lines above, not before: they reset `${SHARED}` to `0755 root:root`, which would undo
-# the group below. The shared tree is the one place two Workspace Agents can meet; every
-# per-Workspace directory stays 0700.
-SHARED_GID="${COFORGE_WORKSPACE_SHARED_GID:-20100}"
-if getent group "${SHARED_GID}" >/dev/null || groupadd --gid "${SHARED_GID}" coforge-workspace; then
-  node -e 'process.stdout.write(JSON.stringify({ gid: Number(process.argv[1]) }) + "\n")' \
-    "${SHARED_GID}" > "${WS_ROOT}/workspace-shared-group.json"
-  chmod 644 "${WS_ROOT}/workspace-shared-group.json"
-  for shared_tree in /workspace "${SHARED}"; do
-    [[ -d "${shared_tree}" ]] || continue
-    # Existing files are `root:root 0644`: without this an Agent could create new files in the
-    # shared tree but not edit the ones already there, which reads as "my files went read-only".
-    if [[ ! -f "${VOLUME_ROOT}/.shared-group-${SHARED_GID}" ]]; then
-      chgrp -R "${SHARED_GID}" "${shared_tree}" 2>/dev/null || true
-      find "${shared_tree}" -type d -exec chmod g+ws {} + 2>/dev/null || true
-      find "${shared_tree}" -type f -perm -u+w -exec chmod g+w {} + 2>/dev/null || true
-      [[ "${shared_tree}" == "${SHARED}" ]] && : > "${VOLUME_ROOT}/.shared-group-${SHARED_GID}"
-    fi
-    chgrp "${SHARED_GID}" "${shared_tree}" 2>/dev/null || true
-    chmod 2775 "${shared_tree}"
-  done
-  log "shared group ${SHARED_GID}: /workspace and ${SHARED} are 2775"
-else
-  log "shared group ${SHARED_GID} unavailable; Agents keep their own gid"
-fi
-
 log "profile ${PROFILE} ready for $(wc -l <<< "${workspace_ids}") workspace(s)"
