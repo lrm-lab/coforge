@@ -154,6 +154,18 @@ if getent group "${SHARED_GID}" >/dev/null || groupadd --gid "${SHARED_GID}" cof
     chgrp "${SHARED_GID}" "${shared_tree}" 2>/dev/null || true
     chmod 2775 "${shared_tree}"
   done
+  # The Agents are spawned with an explicit `--regid ${SHARED_GID}`, but the user record itself must
+  # name the shared group too: any path that does not pass the gid (a manual `su`/`sudo -u`, a shell
+  # script, a tool that re-resolves the account) falls back to the user's primary gid, and the Agent
+  # then writes nothing while still reporting itself as running. Membership is supplementary, so the
+  # per-Workspace directories stay 0700 and unreadable across Workspaces.
+  while IFS= read -r wsid; do
+    [[ -n "${wsid}" ]] || continue
+    member="coforge-ws-${wsid:0:8}"
+    getent passwd "${member}" >/dev/null || continue
+    if id -nG "${member}" | tr ' ' '\n' | grep -qx "${SHARED_GID}"; then continue; fi
+    usermod -aG "${SHARED_GID}" "${member}" && log "${member} joined shared group ${SHARED_GID}"
+  done <<< "${workspace_ids}"
   log "shared group ${SHARED_GID}: /workspace and ${SHARED} are 2775"
 else
   log "shared group ${SHARED_GID} unavailable; Agents keep their own gid"
