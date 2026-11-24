@@ -230,7 +230,7 @@ test("a read stays pending past another request's report and returns only its ow
     });
     expect(await ask()).toEqual({
       status: "settled",
-      outcome: { status: "refreshed", catalogs: [fresh] },
+      outcome: { status: "reported", refreshed: ["antigravity"], failures: [] },
     });
   } finally {
     if (request) await results.clear(request.requestId);

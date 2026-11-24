@@ -31,8 +31,8 @@ export type ModelCatalogRefreshRead =
   | { status: "settled"; outcome: ModelCatalogRefreshOutcome }
   | { status: "refused" };
 
-/** Each provider's own outcome is in the answer, so one failed runtime never hides another's
- * fresh catalog. */
+export type RuntimeRescanFailure = Omit<ProviderModelRefreshResult, "status" | "catalog">;
+
 export type ModelCatalogRefreshOutcome = ReturnType<typeof refreshOutcomeFor>;
 
 /**
@@ -133,8 +133,6 @@ export class ComputerModelCatalogRefresh {
   }
 }
 
-/** Maps a terminal per-provider answer to the browser's shape: a named refresh returns its own
- * outcome; a whole-Computer rescan returns every fresh catalog, or the first failure's reason. */
 export function refreshOutcomeFor(
   results: ProviderModelRefreshResult[],
   visibleProviders: ReadonlySet<RuntimeProvider>,
@@ -153,16 +151,11 @@ export function refreshOutcomeFor(
       };
     return { status: "refreshed" as const, catalog: entry.catalog };
   }
-  const failure = visible.find((entry) => entry.status !== "refreshed");
-  if (failure)
-    return {
-      status: "error" as const,
-      provider: failure.provider,
-      code: failure.code,
-      diagnostic: failure.diagnostic,
-    };
-  return {
-    status: "refreshed" as const,
-    catalogs: visible.flatMap((entry) => (entry.catalog ? [entry.catalog] : [])),
-  };
+  const refreshed: RuntimeProvider[] = [];
+  const failures: RuntimeRescanFailure[] = [];
+  for (const { provider, status, catalog, code, diagnostic } of visible) {
+    if (status === "refreshed" && catalog) refreshed.push(provider);
+    else failures.push({ provider, code, diagnostic });
+  }
+  return { status: "reported" as const, refreshed, failures };
 }

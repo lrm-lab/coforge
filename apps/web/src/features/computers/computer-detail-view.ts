@@ -11,12 +11,6 @@ import type { MachineStatusView } from "./computer-machine-status";
 import type { ComputerUpgradeStatus } from "./computer.schemas";
 import type { UsageReadResult } from "#src/server/centrifugo/usage-cache.server";
 
-/** What a rescan the page asked for came back with: the daemon answered, or it did not in time,
- * or it answered with a failure of its own. */
-export type RuntimeRescanResult =
-  | { status: "refreshed" | "timeout" }
-  | { status: "error"; message?: string };
-
 export const RESTART_POLL_INTERVAL_MS = 2_000;
 export const RESTART_MAX_POLLS = 31;
 

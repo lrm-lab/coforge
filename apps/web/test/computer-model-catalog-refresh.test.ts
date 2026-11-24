@@ -239,24 +239,51 @@ test("a named refresh that failed reports the runtime's classified reason and no
   });
 });
 
-test("a whole-Computer rescan returns every visible fresh catalog", async () => {
+test("a whole-Computer rescan reports which visible runtimes refreshed", async () => {
   const { refresh, answer, start } = useCase({ visible: ["codex"] });
   const request = await start();
   answer({ results: [refreshed("codex"), refreshed("claude-code")] });
-  // A runtime the viewer may not see is not returned.
   expect(await refresh.read(viewer, request)).toEqual({
     status: "settled",
-    outcome: { status: "refreshed", catalogs: [catalog("codex")] },
+    outcome: { status: "reported", refreshed: ["codex"], failures: [] },
   });
 });
 
-test("a whole-Computer rescan with a failed runtime returns that runtime's reason", async () => {
+test("a whole-Computer rescan keeps successes and every visible failure from an older Daemon", async () => {
+  const { refresh, answer, start } = useCase({ visible: ["coforge", "kiro", "codex"] });
+  const request = await start();
+  answer({
+    results: [
+      refreshed("coforge"),
+      failed("kiro", "unknown"),
+      failed("codex", "start_failed", "launch diagnostic"),
+      failed("claude-code", "probe_failed", "private diagnostic"),
+    ],
+  });
+  expect(await refresh.read(viewer, request)).toEqual({
+    status: "settled",
+    outcome: {
+      status: "reported",
+      refreshed: ["coforge"],
+      failures: [
+        { provider: "kiro", code: "unknown", diagnostic: undefined },
+        { provider: "codex", code: "start_failed", diagnostic: "launch diagnostic" },
+      ],
+    },
+  });
+});
+
+test("a whole-Computer rescan with only a genuine failure reports no success", async () => {
   const { refresh, answer, start } = useCase();
   const request = await start();
-  answer({ results: [refreshed("codex"), failed("claude-code", "start_failed")] });
-  expect(await refresh.read(viewer, request)).toMatchObject({
+  answer({ results: [failed("codex", "probe_failed")] });
+  expect(await refresh.read(viewer, request)).toEqual({
     status: "settled",
-    outcome: { status: "error", provider: "claude-code", code: "start_failed" },
+    outcome: {
+      status: "reported",
+      refreshed: [],
+      failures: [{ provider: "codex", code: "probe_failed", diagnostic: undefined }],
+    },
   });
 });
 

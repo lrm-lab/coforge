@@ -1,15 +1,36 @@
-import type { RuntimeRescanResult } from "./computer-detail-view";
+import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import type { RuntimeRescanFailure } from "#src/server/computers/computer-model-catalog-refresh.server";
+import type { ComputerDetailView } from "./computer-detail-view";
+import type { RuntimeCatalogRefreshResult } from "./runtime-catalog-refresh-poll";
+import { isRuntimeLoginStateProvider } from "./runtime-login-chip";
 
 export type RuntimeRescanNotice =
-  | { kind: "none" }
-  | { kind: "timeout" }
-  | { kind: "error"; message?: string };
+  | { kind: "none" | "timeout" | "error" }
+  | {
+      kind: "reported";
+      refreshed: readonly RuntimeProvider[];
+      failures: readonly RuntimeRescanFailure[];
+      signedOut: RuntimeProvider[];
+    };
 
-export function runtimeRescanNotice(result: RuntimeRescanResult | undefined): RuntimeRescanNotice {
-  if (!result) return { kind: "none" };
-  if (result.status === "timeout") return { kind: "timeout" };
-  if (result.status === "error") return { kind: "error", message: result.message };
-  return { kind: "none" };
+export function runtimeRescanNotice(
+  result: RuntimeCatalogRefreshResult | undefined,
+  auth?: ComputerDetailView["runtimeAuth"],
+): RuntimeRescanNotice {
+  if (!result || result.status === "refreshed") return { kind: "none" };
+  if (result.status !== "reported") return { kind: result.status };
+  const { refreshed, failures } = result;
+  return {
+    kind: "reported",
+    refreshed,
+    failures,
+    signedOut: failures
+      .map(({ provider }) => provider)
+      .filter(
+        (provider) =>
+          isRuntimeLoginStateProvider(provider) && auth?.[provider]?.state === "logged_out",
+      ),
+  };
 }
 
 export type RuntimeDetectionStatus =

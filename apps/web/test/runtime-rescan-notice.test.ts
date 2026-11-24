@@ -1,27 +1,52 @@
 import { describe, expect, test } from "bun:test";
+import type { RuntimeCatalogRefreshResult } from "#src/features/computers/runtime-catalog-refresh-poll";
 import {
   runtimeDetectionStatus,
   runtimeRescanNotice,
 } from "#src/features/computers/runtime-rescan-notice";
 
 describe("runtimeRescanNotice", () => {
-  test("says nothing before a rescan and after one that left every runtime usable", () => {
+  test("says nothing without a whole-Computer report", () => {
     expect(runtimeRescanNotice(undefined)).toEqual({ kind: "none" });
-    expect(runtimeRescanNotice({ status: "refreshed" })).toEqual({ kind: "none" });
+    expect(
+      runtimeRescanNotice({ status: "refreshed", catalog: { provider: "kiro", models: [] } }),
+    ).toEqual({ kind: "none" });
   });
 
   test("a Computer that never answered is the timeout, not a runtime's failure", () => {
     expect(runtimeRescanNotice({ status: "timeout" })).toEqual({ kind: "timeout" });
   });
 
-  test("a failure the daemon reported keeps its own sentence", () => {
-    expect(runtimeRescanNotice({ status: "error", message: "probe crashed" })).toEqual({
-      kind: "error",
-      message: "probe crashed",
+  test("a request that could not start still shows the rescan error", () => {
+    expect(runtimeRescanNotice({ status: "error" })).toEqual({ kind: "error" });
+  });
+
+  test("keeps login state independent of the refresh result and uses only visible reports", () => {
+    const result = {
+      status: "reported",
+      refreshed: ["coforge"],
+      failures: [
+        { provider: "kiro", code: "unknown" },
+        { provider: "codex", code: "start_failed", diagnostic: "launch diagnostic" },
+      ],
+    } satisfies RuntimeCatalogRefreshResult;
+    expect(
+      runtimeRescanNotice(result, {
+        kiro: { provider: "kiro", state: "logged_out" },
+        codex: { provider: "codex", state: "logged_in" },
+        "claude-code": { provider: "claude-code", state: "logged_out" },
+      }),
+    ).toEqual({
+      kind: "reported",
+      refreshed: result.refreshed,
+      failures: result.failures,
+      signedOut: ["kiro"],
     });
-    expect(runtimeRescanNotice({ status: "error" })).toEqual({
-      kind: "error",
-      message: undefined,
+    expect(runtimeRescanNotice(result)).toEqual({
+      kind: "reported",
+      refreshed: result.refreshed,
+      failures: result.failures,
+      signedOut: [],
     });
   });
 });

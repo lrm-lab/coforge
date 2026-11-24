@@ -15,8 +15,6 @@ import {
   restartComputer,
 } from "#src/features/computers/computer-restart.functions";
 import { useRuntimeCatalogRefreshRequest } from "#src/features/computers/use-runtime-catalog-refresh-request";
-import { runtimeUnavailableReason } from "#src/features/computers/runtime-unavailable-reason";
-import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { ComputerNotFound } from "#src/features/computers/computer-not-found";
 import {
@@ -217,18 +215,7 @@ function ComputerDetailPage() {
             ? async () => {
                 const result = await rescanRuntimes({ computerId });
                 await router.invalidate({ sync: true });
-                return result.status === "error"
-                  ? {
-                      status: "error",
-                      message:
-                        "provider" in result && result.provider && "code" in result && result.code
-                          ? `${runtimeProviderLabel(result.provider)}: ${runtimeUnavailableReason(
-                              result.code,
-                              result.diagnostic,
-                            )}`
-                          : undefined,
-                    }
-                  : { status: result.status };
+                return result;
               }
             : undefined
         }

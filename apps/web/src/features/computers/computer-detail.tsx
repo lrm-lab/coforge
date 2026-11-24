@@ -20,7 +20,6 @@ import {
   RESTART_MAX_POLLS,
   RESTART_POLL_INTERVAL_MS,
   type ComputerDetailView,
-  type RuntimeRescanResult,
 } from "./computer-detail-view";
 import { ComputerDetailWorkspaceInventory } from "./computer-detail-workspace-inventory";
 import { computerLabel } from "./computer-identity";
@@ -32,6 +31,8 @@ import { CloudImageUpdateDialog, ComputerUpgradeConfirmDialog } from "./computer
 import type { ComputerRestartStatus, ComputerUpgradeStatus } from "./computer.schemas";
 import { FormatCloudComputerDialog } from "./format-cloud-computer-dialog";
 import { runtimeDetectionStatus, runtimeRescanNotice } from "./runtime-rescan-notice";
+import type { RuntimeCatalogRefreshResult } from "./runtime-catalog-refresh-poll";
+import { RuntimeRescanFeedback } from "./runtime-rescan-feedback";
 import { TerminalCommand } from "./terminal-command";
 import { useComputerDetailLifecycle } from "./use-computer-detail-lifecycle";
 
@@ -75,7 +76,7 @@ export function ComputerDetail({
   onFormatCloudComputer?: (confirmName: string) => Promise<void>;
   onCreateAgent?: (input: CreateAgentInput) => Promise<{ startPublished: boolean }>;
   onLoadRuntimeCatalog?: (computerId: string) => Promise<RuntimeCatalog[]>;
-  onRescanRuntimes?: () => Promise<RuntimeRescanResult>;
+  onRescanRuntimes?: () => Promise<RuntimeCatalogRefreshResult>;
   onSelectAgent?: (agentId: string) => void;
   onExecuteAgentControl?: AgentControlExecute;
   latestComputerVersion?: string | null;
@@ -90,7 +91,9 @@ export function ComputerDetail({
   const [imageUpdateOpen, setImageUpdateOpen] = useState(false);
   const [upgradeConfirmOpen, setUpgradeConfirmOpen] = useState(false);
   const [rescanning, setRescanning] = useState(false);
-  const [rescanResult, setRescanResult] = useState<RuntimeRescanResult | undefined>(undefined);
+  const [rescanResult, setRescanResult] = useState<RuntimeCatalogRefreshResult | undefined>(
+    undefined,
+  );
   const rescan = async () => {
     if (!onRescanRuntimes || rescanning) return;
     setRescanning(true);
@@ -103,7 +106,7 @@ export function ComputerDetail({
       setRescanning(false);
     }
   };
-  const rescanNotice = runtimeRescanNotice(rescanResult);
+  const rescanNotice = runtimeRescanNotice(rescanResult, computer.runtimeAuth);
   const canRescan = Boolean(onRescanRuntimes && computer.online);
   const hasRuntimes = computer.runtimes.length > 0;
   const detectionStatus = runtimeDetectionStatus({
@@ -216,18 +219,7 @@ export function ComputerDetail({
           {m.computer_runtime_detection_rescanning()}
         </p>
       ) : null}
-      {!rescanning && rescanNotice.kind === "timeout" ? (
-        <p className="mt-1 text-sm text-error-primary" role="alert">
-          {m.computer_runtime_rescan_failed()}
-        </p>
-      ) : null}
-      {!rescanning && rescanNotice.kind === "error" ? (
-        <p className="mt-1 text-sm text-error-primary" role="alert">
-          {rescanNotice.message
-            ? m.computer_runtime_rescan_error({ message: rescanNotice.message })
-            : m.computer_runtime_rescan_failed()}
-        </p>
-      ) : null}
+      {!rescanning && <RuntimeRescanFeedback notice={rescanNotice} />}
       {canRescan ? (
         <Button
           type="button"
