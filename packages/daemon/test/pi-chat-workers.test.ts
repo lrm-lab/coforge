@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, jest, spyOn, test } from "bun:test";
 import { PiChatWorkers } from "#src/pi-chat/workers";
 
 test("the Workspace daemon relays independent Pi input and live feedback without any host HTTP or Docker", async () => {
@@ -58,8 +58,39 @@ test("closing a worker forcibly terminates a child that ignores graceful shutdow
     `,
     ],
   });
-  await workers.execute(scope, { action: "list" });
-  const started = Date.now();
-  await workers.close();
-  expect(Date.now() - started).toBeLessThan(40_000);
+  const spawn = spyOn(Bun, "spawn");
+  const ready = workers.execute(scope, { action: "list" });
+  const child = spawn.mock.results[0]?.value as Bun.Subprocess | undefined;
+  spawn.mockRestore();
+
+  try {
+    expect(await ready).toEqual({ sessions: [] });
+    if (!child) throw new Error("Pi chat worker did not start");
+
+    const kill = spyOn(child, "kill");
+    jest.useFakeTimers();
+    try {
+      const signalAtClose = workers.close().then(() => child.signalCode);
+      jest.advanceTimersByTime(34_999);
+      expect(kill).not.toHaveBeenCalled();
+      expect(child.exitCode).toBeNull();
+      expect(child.signalCode).toBeNull();
+
+      jest.advanceTimersByTime(1);
+      expect(kill).toHaveBeenCalledTimes(1);
+      expect(kill).toHaveBeenCalledWith("SIGKILL");
+      jest.useRealTimers();
+
+      expect(await signalAtClose).toBe("SIGKILL");
+    } finally {
+      jest.useRealTimers();
+      kill.mockRestore();
+    }
+  } finally {
+    if (child) {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+      await child.exited;
+    }
+    await workers.close();
+  }
 }, 45_000);
