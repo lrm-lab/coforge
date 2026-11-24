@@ -45,6 +45,7 @@
   "computer_detail_collapse": "恢复分栏",
   "computer_detail_close": "关闭",
   "computer_detail_resize": "调整电脑详情宽度",
+  "computer_detail_info_section": "信息",
   "computer_upgrade_all_action": "升级全部 ({count})",
   "computer_upgrade_all_title": "升级 {count} 台电脑？",
   "computer_upgrade_all_confirm": "全部升级",

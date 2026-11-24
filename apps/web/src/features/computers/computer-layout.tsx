@@ -6,6 +6,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
+import { useHotkey } from "@tanstack/react-hotkeys";
 import { useRouter } from "@tanstack/react-router";
 import { AlertCircle, Plus } from "@untitledui/icons";
 
@@ -13,6 +14,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { PageHeader } from "#src/components/layout/page-header";
 import { EmptyState } from "#src/components/ui/empty";
 import { ComputersWireframe } from "#src/components/ui/empty-wireframes";
+import { OPEN_OVERLAY_SELECTOR } from "#src/lib/open-overlay";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -101,6 +103,17 @@ export function ComputerLayout({
     if (!selectedComputerId) setExpanded(false);
   }, [selectedComputerId]);
 
+  const expandedOverlay = Boolean(selectedComputerId) && expanded;
+
+  useHotkey(
+    "Escape",
+    () => {
+      if (document.querySelector(OPEN_OVERLAY_SELECTOR) !== null) return;
+      setExpanded(false);
+    },
+    { enabled: expandedOverlay, ignoreInputs: true, preventDefault: false },
+  );
+
   const summary = useMemo(() => computerSummaryCounts(computers), [computers]);
   const batchCandidates = useMemo(
     () =>
@@ -185,7 +198,6 @@ export function ComputerLayout({
   }
 
   const splitOpen = Boolean(selectedComputerId) && !expanded;
-  const overviewHiddenOnDesktop = Boolean(selectedComputerId) && expanded;
   const overviewHiddenOnMobile = Boolean(selectedComputerId);
   const hasFilters = Boolean(query.trim()) || status !== "all" || runtime !== "all";
   const rowActions = {
@@ -211,10 +223,10 @@ export function ComputerLayout({
 
       <nav
         aria-label={m.computer_connected_list()}
+        inert={expandedOverlay}
         className={cn(
-          "@container/overview min-w-0 flex-1 flex-col overflow-hidden bg-primary",
+          "@container/overview min-w-0 flex-1 flex-col overflow-hidden bg-primary md:flex",
           overviewHiddenOnMobile ? "hidden" : "flex",
-          overviewHiddenOnDesktop ? "md:hidden" : "md:flex",
         )}
       >
         <PageHeader
@@ -361,6 +373,14 @@ export function ComputerLayout({
         </div>
       </nav>
 
+      {expandedOverlay ? (
+        <div
+          aria-hidden="true"
+          onClick={toggleExpand}
+          className="absolute inset-0 z-20 hidden bg-overlay/15 md:block"
+        />
+      ) : null}
+
       {selectedComputerId ? (
         <section
           style={
@@ -369,10 +389,10 @@ export function ComputerLayout({
               : undefined
           }
           className={cn(
-            "relative flex min-w-0 flex-col overflow-hidden bg-primary",
+            "flex min-w-0 flex-col overflow-hidden bg-primary",
             splitOpen
-              ? "flex-1 md:w-(--computer-detail-width) md:max-w-[65%] md:min-w-96 md:flex-none md:shrink-0 md:border-s md:border-secondary"
-              : "flex-1",
+              ? "relative flex-1 md:w-(--computer-detail-width) md:max-w-[65%] md:min-w-96 md:flex-none md:shrink-0 md:border-s md:border-secondary"
+              : "flex-1 md:absolute md:inset-y-0 md:end-0 md:z-30 md:w-[calc(100%-8rem)] md:border-s md:border-secondary md:shadow-2xl",
           )}
         >
           {splitOpen ? (

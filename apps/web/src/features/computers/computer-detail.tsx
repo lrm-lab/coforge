@@ -5,23 +5,17 @@ import { Button } from "#src/components/base/buttons/button";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { humanLabel } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
-import { TerminalCommand } from "./terminal-command";
-import { FormatCloudComputerDialog } from "./format-cloud-computer-dialog";
-import { ComputerDetailHeader } from "./computer-detail-header";
-import { computerLabel } from "./computer-identity";
-import { ComputerDetailTitle, ComputerDetailWhere } from "./computer-detail-title";
-import { CloudImageUpdateDialog, ComputerUpgradeConfirmDialog } from "./computer-upgrade-slot";
-import { ComputerRuntimeList } from "./computer-runtimes";
 import { AgentCreateDialog } from "#src/features/agents/agent-create-dialog";
 import type { CreateAgentInput } from "#src/features/agents/agent.schemas";
 import type { RuntimeCatalog } from "#src/features/agents/agent-runtime-fields";
 import type { AgentControlExecute } from "#src/features/agents/agent-runtime-controls";
-import type { ComputerRestartStatus, ComputerUpgradeStatus } from "./computer.schemas";
 import type { AgentWorkspaceScanSnapshot } from "./agent-workspace-scan.query";
-import { ComputerDetailMenu } from "./computer-detail-menu";
 import { ComputerDetailAgentRoster } from "./computer-detail-agent-roster";
+import { ComputerDetailHeader } from "./computer-detail-header";
+import { ComputerDetailHero } from "./computer-detail-hero";
+import { ComputerDetailMenu } from "./computer-detail-menu";
 import { ComputerDetailStats } from "./computer-detail-stats";
-import { activeRefusal, ComputerRefusalAlert } from "./computer-refusal";
+import { ComputerDetailNameBand } from "./computer-detail-title";
 import {
   RESTART_MAX_POLLS,
   RESTART_POLL_INTERVAL_MS,
@@ -29,9 +23,16 @@ import {
   type RuntimeRescanResult,
 } from "./computer-detail-view";
 import { ComputerDetailWorkspaceInventory } from "./computer-detail-workspace-inventory";
+import { computerLabel } from "./computer-identity";
+import { activeRefusal, ComputerRefusalAlert } from "./computer-refusal";
 import { computerRestartBusy } from "./computer-restart-run";
+import { ComputerRuntimeList } from "./computer-runtimes";
 import { nextProgressDeadline, runtimeUpgradePresentation } from "./computer-upgrade-progress-view";
+import { CloudImageUpdateDialog, ComputerUpgradeConfirmDialog } from "./computer-upgrade-slot";
+import type { ComputerRestartStatus, ComputerUpgradeStatus } from "./computer.schemas";
+import { FormatCloudComputerDialog } from "./format-cloud-computer-dialog";
 import { runtimeDetectionStatus, runtimeRescanNotice } from "./runtime-rescan-notice";
+import { TerminalCommand } from "./terminal-command";
 import { useComputerDetailLifecycle } from "./use-computer-detail-lifecycle";
 
 export { RESTART_MAX_POLLS, RESTART_POLL_INTERVAL_MS, type ComputerDetailView };
@@ -164,7 +165,7 @@ export function ComputerDetail({
     upgradeInFlight: upgrading,
     now: upgradeClockNow,
   });
-  const headerUpgrade = runtimePresentation.headerAction
+  const heroUpgrade = runtimePresentation.headerAction
     ? {
         kind: runtimePresentation.headerAction.kind,
         label:
@@ -190,31 +191,66 @@ export function ComputerDetail({
 
   const refusal = activeRefusal(computer);
 
+  const runtimesNode = (
+    <>
+      {hasRuntimes ? (
+        <ComputerRuntimeList
+          computer={computer}
+          timeZone={timeZone}
+          onSetRuntimePublic={onSetRuntimePublic}
+        />
+      ) : detectionStatus === "detecting_empty" ? (
+        <p className="text-sm text-tertiary" role="status">
+          {m.computer_runtime_detection_empty()}
+        </p>
+      ) : (
+        <p className="text-sm text-tertiary">{m.computer_no_code_agents()}</p>
+      )}
+      {detectionStatus === "detecting_with_list" ? (
+        <p className="mt-1 text-sm text-tertiary" role="status">
+          {m.computer_runtime_detection_pending()}
+        </p>
+      ) : null}
+      {detectionStatus === "rescanning_with_list" ? (
+        <p className="mt-1 text-sm text-tertiary" role="status">
+          {m.computer_runtime_detection_rescanning()}
+        </p>
+      ) : null}
+      {!rescanning && rescanNotice.kind === "timeout" ? (
+        <p className="mt-1 text-sm text-error-primary" role="alert">
+          {m.computer_runtime_rescan_failed()}
+        </p>
+      ) : null}
+      {!rescanning && rescanNotice.kind === "error" ? (
+        <p className="mt-1 text-sm text-error-primary" role="alert">
+          {rescanNotice.message
+            ? m.computer_runtime_rescan_error({ message: rescanNotice.message })
+            : m.computer_runtime_rescan_failed()}
+        </p>
+      ) : null}
+      {canRescan ? (
+        <Button
+          type="button"
+          size="xs"
+          color="link-gray"
+          iconLeading={RotateCw}
+          isLoading={rescanning}
+          showTextWhileLoading
+          isDisabled={rescanning}
+          className="mt-2"
+          onPress={() => void rescan()}
+        >
+          {rescanning ? m.computer_runtime_rescanning() : m.computer_runtime_rescan()}
+        </Button>
+      ) : null}
+    </>
+  );
+
   return (
     <>
       <ComputerDetailHeader
-        computerId={computer.id}
-        identity={
-          <ComputerDetailTitle
-            key={computer.id}
-            computer={computer}
-            label={label}
-            onUpdateDisplayName={onUpdateDisplayName}
-          />
-        }
-        desktopTitle={label}
-        showDesktop={isCloud && computer.ownedByCurrentUser}
-        online={computer.online}
-        upgrade={headerUpgrade}
-        restart={
-          onRestart && (computer.ownedByCurrentUser || computer.canManageAgents)
-            ? {
-                pending: restartState === "pending",
-                disabled: computerRestartBusy({ upgrading, restartState }),
-                onPress: runRestart,
-              }
-            : undefined
-        }
+        computer={computer}
+        title={label}
         menu={
           <ComputerDetailMenu
             name={label}
@@ -225,95 +261,63 @@ export function ComputerDetail({
         }
       />
 
-      <div className="@container min-h-0 flex-1 overflow-y-auto px-page pt-6 pb-10">
-        <div className="flex w-full flex-col gap-10">
-          <div className="flex flex-col gap-6">
-            {refusal && (
-              <ComputerRefusalAlert refusal={refusal} computer={computer} timeZone={timeZone} />
-            )}
-            <ComputerDetailWhere
-              computer={computer}
-              label={label}
-              phone
-              className="-mb-2 @md:hidden"
-            />
-            <ComputerDetailStats
-              computer={computer}
-              label={label}
-              timeZone={timeZone}
-              creatorName={creatorName}
-              isCloud={isCloud}
-              currentVersion={currentVersion}
-              currentImageVersion={currentImageVersion}
-              versionNotice={runtimePresentation.versionNotice}
-              showRecoveryAdvice={
-                runtimePresentation.headerAction !== undefined &&
-                runtimePresentation.headerAction.kind !== "upgrading"
-              }
-              imageSlot={computer.ownedByCurrentUser ? imageSlot : null}
-              canUpgrade={canUpgrade}
-              upgradeInFlight={upgrading}
-              onImageUpgrade={() => setImageUpdateOpen(true)}
-            />
-            <section aria-labelledby="computer-runtimes">
-              <h2 id="computer-runtimes" className="text-xs text-tertiary">
-                {m.computer_runtimes()}
-              </h2>
-              <div className="mt-2">
-                {hasRuntimes ? (
-                  <ComputerRuntimeList
-                    computer={computer}
-                    timeZone={timeZone}
-                    onSetRuntimePublic={onSetRuntimePublic}
-                  />
-                ) : detectionStatus === "detecting_empty" ? (
-                  <p className="text-sm text-tertiary" role="status">
-                    {m.computer_runtime_detection_empty()}
-                  </p>
-                ) : (
-                  <p className="text-sm text-tertiary">{m.computer_no_code_agents()}</p>
-                )}
-                {detectionStatus === "detecting_with_list" && (
-                  <p className="mt-1 text-sm text-tertiary" role="status">
-                    {m.computer_runtime_detection_pending()}
-                  </p>
-                )}
-                {detectionStatus === "rescanning_with_list" && (
-                  <p className="mt-1 text-sm text-tertiary" role="status">
-                    {m.computer_runtime_detection_rescanning()}
-                  </p>
-                )}
-                {!rescanning && rescanNotice.kind === "timeout" && (
-                  <p className="mt-1 text-sm text-error-primary" role="alert">
-                    {m.computer_runtime_rescan_failed()}
-                  </p>
-                )}
-                {!rescanning && rescanNotice.kind === "error" && (
-                  <p className="mt-1 text-sm text-error-primary" role="alert">
-                    {rescanNotice.message
-                      ? m.computer_runtime_rescan_error({ message: rescanNotice.message })
-                      : m.computer_runtime_rescan_failed()}
-                  </p>
-                )}
-                {canRescan && (
-                  <Button
-                    type="button"
-                    size="xs"
-                    color="link-gray"
-                    iconLeading={RotateCw}
-                    isLoading={rescanning}
-                    showTextWhileLoading
-                    isDisabled={rescanning}
-                    className="mt-2"
-                    onPress={() => void rescan()}
-                  >
-                    {rescanning ? m.computer_runtime_rescanning() : m.computer_runtime_rescan()}
-                  </Button>
-                )}
-              </div>
-            </section>
-          </div>
+      <div className="@container min-h-0 flex-1 overflow-y-auto pb-8">
+        <ComputerDetailHero
+          computer={computer}
+          label={label}
+          showDesktop={isCloud && computer.ownedByCurrentUser}
+          upgrade={heroUpgrade}
+          restart={
+            onRestart && (computer.ownedByCurrentUser || computer.canManageAgents)
+              ? {
+                  pending: restartState === "pending",
+                  disabled: computerRestartBusy({ upgrading, restartState }),
+                  onPress: runRestart,
+                }
+              : undefined
+          }
+        />
 
+        {refusal ? (
+          <div className="border-b border-secondary px-page py-4">
+            <ComputerRefusalAlert refusal={refusal} computer={computer} timeZone={timeZone} />
+          </div>
+        ) : null}
+
+        <ComputerDetailNameBand
+          key={computer.id}
+          computer={computer}
+          label={label}
+          onUpdateDisplayName={onUpdateDisplayName}
+        />
+
+        <ComputerDetailStats
+          computer={computer}
+          label={label}
+          timeZone={timeZone}
+          creatorName={creatorName}
+          isCloud={isCloud}
+          currentVersion={currentVersion}
+          currentImageVersion={currentImageVersion}
+          isLatestVersion={Boolean(
+            latestComputerVersion &&
+            !runtimeOffer &&
+            !runtimePresentation.versionNotice &&
+            computer.online,
+          )}
+          versionNotice={runtimePresentation.versionNotice}
+          showRecoveryAdvice={
+            runtimePresentation.headerAction !== undefined &&
+            runtimePresentation.headerAction.kind !== "upgrading"
+          }
+          imageSlot={computer.ownedByCurrentUser ? imageSlot : null}
+          canUpgrade={canUpgrade}
+          upgradeInFlight={upgrading}
+          onImageUpgrade={() => setImageUpdateOpen(true)}
+          runtimes={runtimesNode}
+        />
+
+        <div className="border-b border-secondary px-page py-4">
           <ComputerDetailAgentRoster
             agents={computer.agents}
             onCreateAgent={
@@ -325,6 +329,9 @@ export function ComputerDetail({
             computerOnline={computer.online}
             computerName={label}
           />
+        </div>
+
+        <div className="px-page py-4">
           <div className="divide-y divide-secondary rounded-xl border border-secondary [&>*]:px-4">
             <div className="py-2">
               <ComputerDetailWorkspaceInventory
@@ -344,7 +351,7 @@ export function ComputerDetail({
               />
             </div>
 
-            {computer.ownedByCurrentUser && (
+            {computer.ownedByCurrentUser ? (
               <details className="group">
                 <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 py-3 text-sm font-semibold text-primary outline-none focus-visible:ring-2 focus-visible:ring-brand [&::-webkit-details-marker]:hidden">
                   <Terminal aria-hidden="true" className="size-4 text-fg-quaternary" />
@@ -366,18 +373,19 @@ export function ComputerDetail({
                   />
                 </div>
               </details>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
-      {onFormatCloudComputer && (
+
+      {onFormatCloudComputer ? (
         <FormatCloudComputerDialog
           open={formatOpen}
           onOpenChange={setFormatOpen}
           name={label}
           onConfirm={onFormatCloudComputer}
         />
-      )}
+      ) : null}
       <CloudImageUpdateDialog
         open={imageUpdateOpen}
         name={label}
@@ -399,7 +407,7 @@ export function ComputerDetail({
           await runUpgrade(runtimeOffer, "runtime");
         }}
       />
-      {onCreateAgent && onLoadRuntimeCatalog && (
+      {onCreateAgent && onLoadRuntimeCatalog ? (
         <AgentCreateDialog
           open={createAgentOpen}
           onOpenChange={setCreateAgentOpen}
@@ -426,7 +434,7 @@ export function ComputerDetail({
           onCreate={onCreateAgent}
           onLoadRuntimeCatalog={onLoadRuntimeCatalog}
         />
-      )}
+      ) : null}
     </>
   );
 }

@@ -44,6 +44,11 @@ export function ComputerDetailPaneActions() {
         size="sm"
         icon={pane.expanded ? Minimize02 : Maximize02}
         tooltip={pane.expanded ? m.computer_detail_collapse() : m.computer_detail_expand()}
+        className={
+          pane.expanded
+            ? "bg-secondary text-primary hover:bg-secondary_hover hover:text-primary"
+            : undefined
+        }
         onClick={pane.onToggleExpand}
       />
       <ButtonUtility

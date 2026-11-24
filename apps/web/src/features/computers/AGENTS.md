@@ -80,10 +80,11 @@ provider)`, with its count and account label fixed when it opens.
   fails and then idles stops the follow; opening Computers starts it again. That recovery fetch
   still reports the old error while `isFetching` is true, and the follow stays until it returns.
 - Every member is told an update is waiting on the list tile's badge, while the owner's detail
-  panel surfaces runtime upgrades without a full-width card: the header carries the Upgrade /
-  Upgrading / Retry upgrade action, the Version stat carries a borderless status line (available
-  release + "What's new", `current → target` while upgrading, or a single-line issue notice with
-  a details modal), and `ComputerUpgradeWatcher` drives one aggregated cross-route `toast.progress`
+  panel surfaces runtime upgrades without a full-width card: the top bar carries only the Computer
+  icon, title, more menu, and split Expand/Close controls, the Identity Hero carries the primary
+  actions (Open desktop, in-place Upgrade / Upgrading / Retry, Restart), followed by Raft-aligned
+  divided bands (Name edit, Information with OS / Version status + details modal / Disk & Memory /
+  Runtimes + Rescan / Added & Creator, Agents roster, and Workspace inventory), and `ComputerUpgradeWatcher` drives one aggregated cross-route `toast.progress`
   capsule across concurrent runtime upgrades (naming the Computer for one, or the count for many)
   that morphs to done on success (resuming remaining active upgrades after the done window) or
   surfaces per-Computer `appNotice` cards on failure (§13). `useComputerDetailLifecycle` also reads

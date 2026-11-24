@@ -45,6 +45,7 @@
   "computer_detail_collapse": "Restore split",
   "computer_detail_close": "Close",
   "computer_detail_resize": "Resize computer details",
+  "computer_detail_info_section": "Information",
   "computer_upgrade_all_action": "Upgrade all ({count})",
   "computer_upgrade_all_title": "Upgrade {count} Computers?",
   "computer_upgrade_all_confirm": "Upgrade all",
