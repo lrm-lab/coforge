@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo } from "react";
 import { getLocale, setLocale } from "#src/paraglide/runtime";
 import { useQuery } from "@tanstack/react-query";
 import { Outlet, createFileRoute, notFound, redirect, useNavigate } from "@tanstack/react-router";
@@ -56,14 +56,12 @@ import { nameStepRedirect } from "#src/features/auth/name-step-redirect";
 import { signOut } from "#src/features/auth/sign-out";
 import { InlineEmbedPoolProvider } from "#src/features/artifacts/inline-embed-pool-context";
 
-// Only a member in their first-sign-in setup ever loads it.
 const OnboardingWizard = lazy(() =>
   import("#src/features/onboarding/onboarding-wizard").then((module) => ({
     default: module.OnboardingWizard,
   })),
 );
 
-// Only a press on another conversation's Task loads the conversation UI on a page without one.
 const OtherTaskPopup = lazy(() =>
   import("#src/features/tasks/other-task-popup").then((module) => ({
     default: module.OtherTaskPopup,
@@ -74,27 +72,18 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
   staleTime: Infinity,
   validateSearch: z.object({ otherTask: otherTaskParamSchema }),
   beforeLoad: async ({ params, context, preload, location }) => {
-    // A malformed slug names no Workspace; server calls would fall back to the remembered one.
     if (!isValidWorkspaceSlug(params.workspaceSlug)) throw notFound();
-    // A preload runs while the browser URL still names the Workspace on screen: it must neither
-    // check the target Workspace against that one nor clear what is on screen.
     if (preload) return;
     const shown = shownWorkspace(context.queryClient);
     if (shown === params.workspaceSlug) return;
-    // Runs before any page loader: a Workspace the User is not in is a page that does not exist
-    // for them. Checked once per Workspace entered; every server call re-checks it anyway.
     const opened = await openWorkspace().catch(async (error: unknown) => {
       if (!isAppError(error) || error.code !== "NOT_FOUND") throw error;
-      // A person in no Workspace at all has nowhere to go from here but creating one.
       if (!(await getStartPage({ data: { resume: false } })))
         throw redirect({ to: "/workspaces/new" });
       throw notFound();
     });
-    // Query keys are not scoped by Workspace, so moving to another one starts from an empty cache.
     if (shown && shown !== opened.slug) context.queryClient.clear();
     markShownWorkspace(context.queryClient, opened.slug);
-    // A former slug still names its Workspace: the same page under the current one. It is marked
-    // shown above, so the redirected load does not open it again.
     if (opened.slug !== params.workspaceSlug)
       throw redirect({
         href: workspacePath(opened.slug, splitWorkspacePath(location.href)?.rest),
@@ -118,19 +107,12 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
       getUserPreferences(),
       loadMemberWorkspaceSettings(),
       loadAiWorkbenchOn(),
-      // Shown at once from the cache, and read again in the background once older than its
-      // staleTime, as each run of this loader read it before (task #366).
       context.queryClient.ensureQueryData({
         ...recordsNavAttentionQuery(params.workspaceSlug),
         revalidateIfStale: true,
       }),
     ]);
-    // A person who has not been asked for a display name is asked once, here for a session that
-    // predates the step, and comes back to this page.
     if (!user.named) throw nameStepRedirect(location.href);
-    // The setup wizard shows over the Workspace while the member's first-sign-in mark is set. The
-    // mark came with their settings, so a member who finished it costs no further read; one still
-    // in it gets the wizard's state with the page, not after a request of its own.
     const onboarding = memberSettings.setupPending ? await loadOnboardingWizard() : null;
     return {
       user,
@@ -145,9 +127,6 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
       statusAgents: workspaceAgents.statusAgents,
       agentStreamPositions: workspaceAgents.streamPositions,
       timeZone: preferences.timeZone,
-      // The browser's zone, which the server knows only from the cookie the page writes, and when
-      // this ran: together the render's clock, so a list grouped by day is grouped before hydration
-      // the same way the browser hydrates it (task #68).
       cookieTimeZone: loadCookieTimeZone() ?? null,
       observedTimeZone: preferences.observedTimeZone ?? null,
       renderedAt: Date.now(),
@@ -186,18 +165,12 @@ function AppLayout() {
   const { queryClient } = Route.useRouteContext();
   const recordsPreview =
     useQuery(recordsNavAttentionQuery(currentWorkspace.slug)).data?.preview ?? false;
-  // Hydration does not re-run `beforeLoad`, so the browser learns here which Workspace the server
-  // rendered; otherwise the first switch away would keep this Workspace's cache.
   useEffect(() => {
     markShownWorkspace(queryClient, currentWorkspace.slug);
   }, [queryClient, currentWorkspace.slug]);
-  // Reads that finished before the person was known wrote nothing: store them now, so the next page
-  // load opens from them (`features/cache-persistence/`).
   useEffect(() => {
     void rememberQueryCache(queryClient);
   }, [queryClient, currentWorkspace.slug]);
-  // The language saved in Settings is the person's, on every page of the Workspace: an address
-  // in another language (a link someone shared) switches to it, rather than only Settings did.
   useEffect(() => {
     if (language && language !== getLocale()) setLocale(language);
   }, [language]);
@@ -210,6 +183,34 @@ function AppLayout() {
   const navigate = useNavigate();
   const createAndOpen = useCreateAndOpenWorkspace();
   const otherTask = parseOtherTask(useOtherTaskParam());
+  const notificationActivation = useMemo(
+    () => ({
+      publicKey: notifications.publicKey,
+      workspaceSlug: currentWorkspace.slug,
+    }),
+    [notifications.publicKey, currentWorkspace.slug],
+  );
+  const shellUser = useMemo(
+    () => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      avatarUrl: user.avatarUrl,
+    }),
+    [user.id, user.name, user.email, user.avatarUrl],
+  );
+  const handleSelectWorkspace = useCallback(
+    async (slug: string) => {
+      await navigate({
+        to: "/w/$workspaceSlug",
+        params: { workspaceSlug: slug },
+      });
+    },
+    [navigate],
+  );
+  const handleSignOut = useCallback(() => {
+    void signOut();
+  }, []);
   return (
     <TimeFormatProvider timeFormat={timeFormat}>
       <TimeZoneProvider saved={timeZone} cookie={cookieTimeZone} renderedAt={renderedAt}>
@@ -233,23 +234,17 @@ function AppLayout() {
                     viewerId={user.id}
                     timeZone={timeZone}
                   >
-                    {/* Every open page leaves a Workspace its owner deleted. */}
                     <LeaveDeletedWorkspace workspaceId={currentWorkspace.id} />
                     <ReferencedTasksRealtime workspaceId={currentWorkspace.id} userId={user.id} />
-                    {/* The server prunes dead web-push subscriptions (404/410), and nothing else ever
-            re-registers them — without this the phone stays silent until a manual toggle. */}
                     <BrowserPushLifecycle
                       enabled={notifications.enabled}
                       publicKey={notifications.publicKey}
                     />
-                    {/* While a tab is open, show the OS notification here instead of relying on
-                Web Push, which mainland-China staging/clients cannot reach for Chrome. */}
                     <InPageNotifications
                       enabled={notifications.enabled}
                       viewerId={user.id}
                       workspaceId={currentWorkspace.id}
                     />
-                    {/* Says when the person is at this computer, so a phone's notifications can wait. */}
                     <ComputerActivityReport enabled={notifications.enabled} />
                     <ComputerUpgradeWatcher />
                     {onboarding && (
@@ -261,37 +256,18 @@ function AppLayout() {
                         />
                       </Suspense>
                     )}
-                    <NotificationActivationProvider
-                      value={{
-                        publicKey: notifications.publicKey,
-                        workspaceSlug: currentWorkspace.slug,
-                      }}
-                    >
+                    <NotificationActivationProvider value={notificationActivation}>
                       <InlineEmbedPoolProvider scopeKey={currentWorkspace.id}>
                         <AppShell
-                          user={{
-                            id: user.id,
-                            name: user.name,
-                            email: user.email,
-                            avatarUrl: user.avatarUrl,
-                          }}
+                          user={shellUser}
                           workspaces={workspaces}
                           currentWorkspace={currentWorkspace}
                           recordsPreview={recordsPreview}
                           aiWorkbench={aiWorkbench}
                           canSeeUsageLimits={canSeeUsageLimits}
-                          onSelectWorkspace={async (slug) => {
-                            await navigate({
-                              to: "/w/$workspaceSlug",
-                              params: { workspaceSlug: slug },
-                            });
-                          }}
+                          onSelectWorkspace={handleSelectWorkspace}
                           onCreateWorkspace={createAndOpen}
-                          /** Like FirstWorkspacePage's link: a full browser navigation so the server route
-                           * can clear the session cookie and send the browser to Authing. `?returnTo`
-                           * carries this page back across the sign-out (the root route hands it to
-                           * `/login`) once the switch-account return step is in. */
-                          onSignOut={() => void signOut()}
+                          onSignOut={handleSignOut}
                         >
                           <Outlet />
                           {otherTask && (

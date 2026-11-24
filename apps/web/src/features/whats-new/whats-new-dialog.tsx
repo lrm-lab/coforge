@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Heading } from "react-aria-components";
 import { XClose } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
@@ -9,6 +9,8 @@ import { localizeHref } from "#src/paraglide/runtime";
 import { cx } from "#src/utils/cx";
 import { WHATS_NEW_CONTENT } from "./whats-new-content";
 import type { WhatsNewId } from "./whats-new-entries";
+
+const EXIT_UNMOUNT_MS = 300;
 
 export function WhatsNewDialog({
   ids,
@@ -21,7 +23,18 @@ export function WhatsNewDialog({
   onClose: (seen: readonly WhatsNewId[]) => void;
   base?: string;
 }) {
+  const [mounted, setMounted] = useState(open);
+  if (open && !mounted) setMounted(true);
   const reached = useRef(0);
+
+  useEffect(() => {
+    if (open || !mounted) return;
+    const timer = window.setTimeout(() => setMounted(false), EXIT_UNMOUNT_MS);
+    return () => window.clearTimeout(timer);
+  }, [open, mounted]);
+
+  if (!mounted) return null;
+
   return (
     <ModalOverlay
       isOpen={open}

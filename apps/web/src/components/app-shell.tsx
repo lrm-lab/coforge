@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type FC } from "react";
-import { useRouterState } from "@tanstack/react-router";
+import { memo, useEffect, useMemo, useRef, useState, type FC } from "react";
+import { useRouter, useRouterState } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
@@ -92,7 +92,7 @@ function useNavItems(
   icon: FC<{ className?: string }>;
   unreadCount?: number;
   bareHref: string;
-  sections?: readonly string[];
+  sections: readonly string[];
   tab?: "chat" | "activity";
 })[] {
   const unreadCount =
@@ -113,6 +113,7 @@ function useNavItems(
     const item = (section: string) => ({
       bareHref: `${base}/${section}`,
       href: localizeHref(`${base}/${section}`),
+      sections: [section],
     });
     return [
       {
@@ -149,6 +150,7 @@ function useNavItems(
         label: m.navigation_records(),
         bareHref: `${base}/records`,
         href: localizeHref(`${base}${recordsHref}`),
+        sections: ["records"],
         icon: FileText,
         badge: recordsDot,
       },
@@ -161,6 +163,14 @@ function useNavItems(
     ];
   }, [base, recordsPreview, aiWorkbench, unreadCount, hasUnread, recordsHref]);
 }
+
+const MemoSidebarExpanded = memo(SidebarExpanded);
+const MemoSidebarRail = memo(SidebarRail);
+const MemoPhoneTabBar = memo(PhoneTabBar);
+const SEARCH_FIELD = <SearchField />;
+const SIDEBAR_TOGGLE_COLLAPSE = <SidebarToggle />;
+const SIDEBAR_TOGGLE_EXPAND = <SidebarToggle expand />;
+const SEARCH_RAIL_BUTTON = <SearchRailButton />;
 
 type AppShellProps = {
   aiWorkbench?: boolean;
@@ -212,44 +222,38 @@ function WorkspaceChrome({
   aiWorkbench = false,
   standalone = false,
 }: AppShellProps & { standalone?: boolean }) {
-  const pathname = useRouterState({
-    select: (state) => state.location.pathname,
-  });
-  const searchStr = useRouterState({
-    select: (state) => state.location.searchStr,
+  const router = useRouter();
+  const section = useRouterState({
+    select: (state) => {
+      const current = sectionOf(state.location.pathname);
+      return current && CHAT_SECTIONS.includes(current) ? "channel" : current;
+    },
   });
   const itemOpen = useRouterState({
     select: (state) =>
+      sectionOf(state.location.pathname) === "activity" &&
       (state.matches.at(-1)?.search as { open?: unknown } | undefined)?.open !== undefined,
   });
   const workspaceId = currentWorkspace.id;
   const base = workspacePath(currentWorkspace.slug);
   useEffect(() => {
-    if (!pathname.startsWith(`${base}/records`)) return;
-    const query = !searchStr ? "" : searchStr.startsWith("?") ? searchStr : `?${searchStr}`;
-    rememberRecordsLastPath(workspaceId, `${pathname.slice(base.length)}${query}`);
-  }, [workspaceId, base, pathname, searchStr]);
+    const remember = () => {
+      const { pathname, searchStr } = router.state.location;
+      if (!pathname.startsWith(`${base}/records`)) return;
+      const query = !searchStr ? "" : searchStr.startsWith("?") ? searchStr : `?${searchStr}`;
+      rememberRecordsLastPath(workspaceId, `${pathname.slice(base.length)}${query}`);
+    };
+    remember();
+    return router.subscribe("onResolved", remember);
+  }, [router, workspaceId, base]);
   const activityAttention = useActivityAttention(user, workspaceId);
   useReportActivityUnread(activityAttention.hasUnread, activityAttention.unreadCount);
   const navItems = useNavItems(base, recordsPreview, workspaceId, aiWorkbench, activityAttention);
-  const section = sectionOf(pathname);
   const defaultRail = CHAT_SECTIONS.includes(section);
   const [chatListOpen, setChatListOpen] = useState(false);
   const tabHome = tabHomeOf({ section, itemOpen, chatListOpen });
   const phone = !useBreakpoint("lg");
-  const activeUrl = navItems.find((item) =>
-    item.sections
-      ? item.sections.includes(section)
-      : pathname === item.bareHref || pathname.startsWith(`${item.bareHref}/`),
-  )?.href;
-  const workspaceSwitcher = (
-    <WorkspaceSwitcher
-      workspaces={workspaces}
-      current={currentWorkspace}
-      onSelect={onSelectWorkspace}
-      onCreate={onCreateWorkspace}
-    />
-  );
+  const activeUrl = navItems.find((item) => item.sections.includes(section))?.href;
   const chatItem = navItems.find((item) => item.tab === "chat");
   const activityItem = navItems.find((item) => item.tab === "activity");
   const chatHref = chatItem?.href;
@@ -289,6 +293,65 @@ function WorkspaceChrome({
       signOut,
     ],
   );
+  const expandedHeader = useMemo(
+    () => (
+      <>
+        <div className="flex min-w-0 flex-1">
+          <WorkspaceSwitcher
+            workspaces={workspaces}
+            current={currentWorkspace}
+            onSelect={selectWorkspace}
+            onCreate={createWorkspace}
+          />
+        </div>
+        {SIDEBAR_TOGGLE_COLLAPSE}
+      </>
+    ),
+    [workspaces, currentWorkspace, selectWorkspace, createWorkspace],
+  );
+  const expandedFooter = useMemo(
+    () => (
+      <>
+        <WhatsNewRow base={base} />
+        <UserRow
+          base={base}
+          user={user}
+          onSignOut={signOut}
+          workspaceSlug={currentWorkspace.slug}
+        />
+      </>
+    ),
+    [base, user, signOut, currentWorkspace.slug],
+  );
+  const railHeader = useMemo(
+    () => (
+      <>
+        {SIDEBAR_TOGGLE_EXPAND}
+        {phoneShell.workspaceSwitcher}
+        {SEARCH_RAIL_BUTTON}
+      </>
+    ),
+    [phoneShell.workspaceSwitcher],
+  );
+  const railFooter = useMemo(
+    () => (
+      <>
+        <WhatsNewRailButton base={base} />
+        <NotificationBell workspaceSlug={currentWorkspace.slug} badgeRing="ring-sidebar" />
+        <UserMenuCard compact base={base} user={user} onSignOut={signOut} />
+      </>
+    ),
+    [base, currentWorkspace.slug, user, signOut],
+  );
+  const activityUnreadCount = activityItem?.unreadCount;
+  const activityUnreadLit = Boolean(activityItem?.badge);
+  const activityUnread = useMemo(
+    () => ({
+      count: activityUnreadCount,
+      lit: activityUnreadLit,
+    }),
+    [activityUnreadCount, activityUnreadLit],
+  );
 
   return (
     <PhoneShellContext value={phoneShell}>
@@ -306,50 +369,20 @@ function WorkspaceChrome({
           <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
             <div className={standalone ? "hidden" : "contents"}>
               <ShellLinks>
-                <SidebarExpanded
+                <MemoSidebarExpanded
                   defaultRail={defaultRail}
                   activeUrl={activeUrl}
                   items={navItems}
-                  header={
-                    <>
-                      <div className="flex min-w-0 flex-1">{workspaceSwitcher}</div>
-                      <SidebarToggle />
-                    </>
-                  }
-                  search={<SearchField />}
-                  footer={
-                    <>
-                      <WhatsNewRow base={base} />
-                      <UserRow
-                        base={base}
-                        user={user}
-                        onSignOut={onSignOut}
-                        workspaceSlug={currentWorkspace.slug}
-                      />
-                    </>
-                  }
+                  header={expandedHeader}
+                  search={SEARCH_FIELD}
+                  footer={expandedFooter}
                 />
-                <SidebarRail
+                <MemoSidebarRail
                   defaultRail={defaultRail}
                   activeUrl={activeUrl}
                   items={navItems}
-                  header={
-                    <>
-                      <SidebarToggle expand />
-                      {phoneShell.workspaceSwitcher}
-                      <SearchRailButton />
-                    </>
-                  }
-                  footer={
-                    <>
-                      <WhatsNewRailButton base={base} />
-                      <NotificationBell
-                        workspaceSlug={currentWorkspace.slug}
-                        badgeRing="ring-sidebar"
-                      />
-                      <UserMenuCard compact base={base} user={user} onSignOut={onSignOut} />
-                    </>
-                  }
+                  header={railHeader}
+                  footer={railFooter}
                 />
               </ShellLinks>
             </div>
@@ -377,14 +410,11 @@ function WorkspaceChrome({
           </div>
           {tabBar && chatHref && activityHref && (
             <ShellLinks>
-              <PhoneTabBar
+              <MemoPhoneTabBar
                 current={tabBar}
                 chatHref={chatHref}
                 activityHref={activityHref}
-                activityUnread={{
-                  count: activityItem?.unreadCount,
-                  lit: Boolean(activityItem?.badge),
-                }}
+                activityUnread={activityUnread}
                 base={base}
                 user={user}
                 scrollRootRef={contentScrollRootRef}
