@@ -39,7 +39,7 @@ const roster = (extraAgents: number): ChannelHeaderFace[] => [
   })),
 ];
 
-test("channel header cluster renders 24px faces with a 1px outline, spec +N chip, and dashed add button", () => {
+test("channel header cluster renders up to 3 24px faces with 6px overlap, 1px outline, spec +N chip, and dashed add button", () => {
   const html = renderToStaticMarkup(
     <ChannelHeaderFaces
       entries={roster(8)}
@@ -49,19 +49,48 @@ test("channel header cluster renders 24px faces with a 1px outline, spec +N chip
     />,
   );
 
+  expect(html).toContain("-space-x-1.5");
+  expect(html).not.toContain("-space-x-1 ");
   expect(html).toContain("avatar-portrait");
   expect(html).toContain("size-6 avatar-stack-face bg-avatar-outline ring-1 ring-avatar-outline");
   expect(html).not.toContain("avatar-header");
   expect(html).not.toContain("ring-2");
   expect(html).not.toContain("ring-[1.5px]");
 
-  expect(html).toContain(">+7<");
+  const portraits = html.match(/<div[^>]*class="[^"]*avatar-portrait[^"]*"/g) ?? [];
+  expect(portraits).toHaveLength(3);
+
+  expect(html).toContain(">+8<");
   expect(html).toContain("bg-avatar-more");
   expect(html).toContain("[&amp;&gt;span]:text-avatar-more-fg");
   expect(html).toContain("text-xs font-semibold");
   expect(html).toContain("outline-none");
 
   expect(html).toMatch(/border-dashed[^"]*size-6[^"]*border-secondary[^"]*text-avatar-add-fg/);
+});
+
+test("three members render without an overflow chip and four members render +1", () => {
+  const threeHtml = renderToStaticMarkup(
+    <ChannelHeaderFaces
+      entries={roster(0)}
+      canAdd={false}
+      onOpenMembers={() => {}}
+      onAddMembers={() => {}}
+    />,
+  );
+  expect(threeHtml.match(/<div[^>]*class="[^"]*avatar-portrait[^"]*"/g) ?? []).toHaveLength(3);
+  expect(threeHtml).not.toContain("bg-avatar-more");
+
+  const fourHtml = renderToStaticMarkup(
+    <ChannelHeaderFaces
+      entries={roster(1)}
+      canAdd={false}
+      onOpenMembers={() => {}}
+      onAddMembers={() => {}}
+    />,
+  );
+  expect(fourHtml.match(/<div[^>]*class="[^"]*avatar-portrait[^"]*"/g) ?? []).toHaveLength(3);
+  expect(fourHtml).toContain(">+1<");
 });
 
 test("a portrait inside the white outline sits on white, so the dark page never shows between them", () => {
@@ -87,7 +116,7 @@ test("three-digit overflow expands into a 24px-tall pill instead of clipping", (
       onAddMembers={() => {}}
     />,
   );
-  expect(html).toContain(">+104<");
+  expect(html).toContain(">+105<");
   expect(html).toContain("[&amp;&amp;]:w-auto");
   expect(html).toContain("px-1.5");
 });

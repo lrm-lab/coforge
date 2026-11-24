@@ -14,7 +14,7 @@ import { m } from "#src/paraglide/messages";
 import { useChannelMembers } from "./channel-members-query";
 import { PersonHoverCard } from "./person-hover-card";
 
-export const CHANNEL_HEADER_FACE_LIMIT = 4;
+export const CHANNEL_HEADER_FACE_LIMIT = 3;
 
 export type ChannelHeaderFace = {
   key: string;
@@ -49,7 +49,7 @@ export function ChannelHeaderFaces({
     <div className="flex shrink-0 items-center">
       {shown.length > 0 && (
         <ActorAvatarStack
-          overlap="tight"
+          overlap="loose"
           className="hidden md:flex"
           aria-label={m.channel_settings_members()}
         >
