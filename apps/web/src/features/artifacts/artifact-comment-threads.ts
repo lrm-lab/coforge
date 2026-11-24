@@ -175,3 +175,31 @@ export function filterCommentGroups(groups: CommentGroups, query: string): Comme
     resolved: groups.resolved.filter((thread) => matchesCommentSearch(thread, query)),
   };
 }
+
+export type CommentFocusPlan =
+  | { action: "none" }
+  | { action: "prepare"; clearSearch: boolean; openResolved: boolean }
+  | { action: "focus"; targetId: string };
+
+export function planCommentFocus(input: {
+  focus: string | null;
+  groups: CommentGroups;
+  filteredGroups: CommentGroups;
+  searching: boolean;
+  resolvedOpen: boolean;
+  reviewActive: boolean;
+  pendingReview: boolean;
+}): CommentFocusPlan {
+  if (input.focus === null || input.pendingReview) return { action: "none" };
+  const match = findThreadForComment(input.groups, input.focus);
+  const clearSearch =
+    !input.reviewActive &&
+    input.searching &&
+    match !== null &&
+    findThreadForComment(input.filteredGroups, input.focus) === null;
+  const openResolved = !input.reviewActive && match?.resolved === true && !input.resolvedOpen;
+  if (clearSearch || openResolved) {
+    return { action: "prepare", clearSearch, openResolved };
+  }
+  return { action: "focus", targetId: match ? match.thread.root.id : input.focus };
+}

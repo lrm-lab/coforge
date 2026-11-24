@@ -5,6 +5,7 @@ import {
   filterCommentGroups,
   groupThreads,
   matchesCommentSearch,
+  planCommentFocus,
   sortThreadsByUpdated,
   threadUpdatedAt,
 } from "#src/features/artifacts/artifact-comment-threads";
@@ -95,5 +96,151 @@ describe("artifact comment last-updated sorting", () => {
     expect(sorted.map((thread) => thread.root.id)).toEqual(["t1", "t2", "t3"]);
     expect(threadUpdatedAt(sorted[0]!)).toBe(new Date("2026-11-20T15:00:00Z").getTime());
     expect(threadUpdatedAt(sorted[1]!)).toBe(new Date("2026-11-20T14:00:00Z").getTime());
+  });
+});
+
+describe("planCommentFocus", () => {
+  const groups = groupThreads([
+    makeComment("a1", { body: "Alpha topic" }),
+    makeComment("b1", { body: "Beta topic" }),
+    makeComment("b1-reply", { replyTo: "b1", body: "Beta reply" }),
+    makeComment("c1", {
+      body: "Gamma resolved",
+      resolvedAt: new Date("2026-11-20T12:00:00Z"),
+    }),
+  ]);
+  const alphaFiltered = filterCommentGroups(groups, "Alpha");
+  const gammaFiltered = filterCommentGroups(groups, "Gamma");
+
+  test("keeps search and focuses directly when target matches current search", () => {
+    expect(
+      planCommentFocus({
+        focus: "a1",
+        groups,
+        filteredGroups: alphaFiltered,
+        searching: true,
+        resolvedOpen: false,
+        reviewActive: false,
+        pendingReview: false,
+      }),
+    ).toEqual({ action: "focus", targetId: "a1" });
+  });
+
+  test("clears search when a loaded open thread or reply is filtered out", () => {
+    expect(
+      planCommentFocus({
+        focus: "b1",
+        groups,
+        filteredGroups: alphaFiltered,
+        searching: true,
+        resolvedOpen: false,
+        reviewActive: false,
+        pendingReview: false,
+      }),
+    ).toEqual({ action: "prepare", clearSearch: true, openResolved: false });
+
+    expect(
+      planCommentFocus({
+        focus: "b1-reply",
+        groups,
+        filteredGroups: alphaFiltered,
+        searching: true,
+        resolvedOpen: false,
+        reviewActive: false,
+        pendingReview: false,
+      }),
+    ).toEqual({ action: "prepare", clearSearch: true, openResolved: false });
+
+    expect(
+      planCommentFocus({
+        focus: "b1-reply",
+        groups,
+        filteredGroups: groups,
+        searching: false,
+        resolvedOpen: false,
+        reviewActive: false,
+        pendingReview: false,
+      }),
+    ).toEqual({ action: "focus", targetId: "b1" });
+  });
+
+  test("clears search and expands resolved when a filtered-out resolved thread is targeted", () => {
+    expect(
+      planCommentFocus({
+        focus: "c1",
+        groups,
+        filteredGroups: alphaFiltered,
+        searching: true,
+        resolvedOpen: false,
+        reviewActive: false,
+        pendingReview: false,
+      }),
+    ).toEqual({ action: "prepare", clearSearch: true, openResolved: true });
+
+    expect(
+      planCommentFocus({
+        focus: "c1",
+        groups,
+        filteredGroups: groups,
+        searching: false,
+        resolvedOpen: true,
+        reviewActive: false,
+        pendingReview: false,
+      }),
+    ).toEqual({ action: "focus", targetId: "c1" });
+  });
+
+  test("keeps search while expanding resolved when resolved target already matches search", () => {
+    expect(
+      planCommentFocus({
+        focus: "c1",
+        groups,
+        filteredGroups: gammaFiltered,
+        searching: true,
+        resolvedOpen: false,
+        reviewActive: false,
+        pendingReview: false,
+      }),
+    ).toEqual({ action: "prepare", clearSearch: false, openResolved: true });
+  });
+
+  test("does not clear search for unloaded or out-of-scope targets", () => {
+    expect(
+      planCommentFocus({
+        focus: "missing-id",
+        groups,
+        filteredGroups: alphaFiltered,
+        searching: true,
+        resolvedOpen: false,
+        reviewActive: false,
+        pendingReview: false,
+      }),
+    ).toEqual({ action: "focus", targetId: "missing-id" });
+  });
+
+  test("returns none when focus is null or pending review is showing", () => {
+    expect(
+      planCommentFocus({
+        focus: null,
+        groups,
+        filteredGroups: alphaFiltered,
+        searching: true,
+        resolvedOpen: false,
+        reviewActive: false,
+        pendingReview: false,
+      }),
+    ).toEqual({ action: "none" });
+
+    expect(
+      planCommentFocus({
+        focus: "b1",
+        groups,
+        filteredGroups: alphaFiltered,
+        searching: true,
+        resolvedOpen: false,
+        reviewActive: false,
+        pendingReview: true,
+      }),
+    ).toEqual({ action: "none" });
   });
 });

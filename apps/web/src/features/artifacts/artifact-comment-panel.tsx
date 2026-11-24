@@ -29,8 +29,8 @@ import { CommentThreadView, type CommentContext } from "./artifact-comment-threa
 import { useArtifactCommenting, useCommentPlaces, useCommentRequests } from "./artifact-commenting";
 import {
   filterCommentGroups,
-  findThreadForComment,
   orderAnchored,
+  planCommentFocus,
   sortThreadsByUpdated,
   versionSections,
   type CommentGroups,
@@ -123,21 +123,39 @@ export function ArtifactCommentPanel({
   const showResolved = resolvedOpen || searching;
 
   useEffect(() => {
-    if (focus === null) return;
-    const match = findThreadForComment(groups, focus);
-    if (match?.resolved && !resolvedOpen) {
-      setResolvedOpen(true);
+    const plan = planCommentFocus({
+      focus,
+      groups,
+      filteredGroups,
+      searching,
+      resolvedOpen,
+      reviewActive: review.active,
+      pendingReview,
+    });
+    if (plan.action === "none") return;
+    if (plan.action === "prepare") {
+      if (plan.clearSearch) setSearchQuery("");
+      if (plan.openResolved) setResolvedOpen(true);
       return;
     }
-    const targetId = match ? match.thread.root.id : focus;
     const thread = listElement.current?.querySelector(
-      `[data-comment-thread="${CSS.escape(targetId)}"]`,
+      `[data-comment-thread="${CSS.escape(plan.targetId)}"]`,
     );
     if (!thread) return;
     consumeFocus();
     thread.scrollIntoView({ block: "nearest" });
-    flashThread(targetId);
-  }, [focus, groups, resolvedOpen, consumeFocus, flashThread]);
+    flashThread(plan.targetId);
+  }, [
+    focus,
+    groups,
+    filteredGroups,
+    searching,
+    resolvedOpen,
+    review.active,
+    pendingReview,
+    consumeFocus,
+    flashThread,
+  ]);
 
   if (pendingReview)
     return (
