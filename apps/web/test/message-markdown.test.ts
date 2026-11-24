@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 
 import {
+  cachedChannelIdByName,
   mentionHandlesByToken,
   rehypeReferenceChips,
 } from "#src/features/conversations/message-markdown";
@@ -466,4 +467,40 @@ test("a task token inside a code element is never chipped", () => {
   ]);
   const code = (tree.children[0]!.children as Array<Record<string, unknown>>)[0]!;
   expect(code.children).toEqual([text("<@task:68>")]);
+});
+
+test("cachedChannelIdByName caches reverse lookup per channelNames map", () => {
+  const channelNames = new Map([
+    ["c1", "General"],
+    ["c2", "Product"],
+  ]);
+  const first = cachedChannelIdByName(channelNames);
+  const second = cachedChannelIdByName(channelNames);
+  expect(first).toBe(second);
+  expect(first.get("general")).toBe("c1");
+  expect(first.get("product")).toBe("c2");
+  const updated = new Map([["c1", "Announcements"]]);
+  const third = cachedChannelIdByName(updated);
+  expect(third).not.toBe(first);
+  expect(third.get("announcements")).toBe("c1");
+  expect(cachedChannelIdByName(undefined).size).toBe(0);
+});
+
+test("rehypeReferenceChips resolves #channel:#N using cachedChannelIdByName across repeated passes", () => {
+  const channelNames = new Map([["c1", "Design"]]);
+  for (const label of ["first", "second"]) {
+    const tree = { type: "root", children: [paragraph([text(`${label} #design:#12`)])] } as never;
+    rehypeReferenceChips({ mentions: new Map(), channelNames })(tree);
+    const children = (tree as { children: Array<{ children: Array<Record<string, unknown>> }> })
+      .children[0]!.children;
+    expect(children[1]).toMatchObject({
+      type: "element",
+      tagName: "span",
+      properties: {
+        "data-task-reference-number": 12,
+        "data-task-reference-conversation-id": "c1",
+        "data-task-reference-kind": "channel",
+      },
+    });
+  }
 });

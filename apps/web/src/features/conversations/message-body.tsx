@@ -1,5 +1,6 @@
 import {
   createContext,
+  memo,
   useContext,
   useMemo,
   type ComponentPropsWithoutRef,
@@ -31,29 +32,70 @@ import { TaskReference } from "#src/features/tasks/task-reference";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import "./message-markdown.css";
 
-/**
- * A message body rendered as Markdown with mentions highlighted as inline chips.
- *
- * The source is prepared by `messageSource`, then parsed in the message dialect
- * (`MESSAGE_REMARK_PLUGINS`, shared with the send-time reference recognizer: GFM tables, task
- * lists, strikethrough, autolinks, and single-newline breaks), so a body written as plain text keeps its
- * line structure. `rehype-sanitize` runs before the chip pass: message bodies are untrusted, and
- * `react-markdown`'s default schema already refuses raw HTML, `javascript:` URLs and disallowed
- * attributes. Chips are injected afterwards, in one pass over the stored `<@kind:…>` tokens and,
- * when the view passes `plainMentions`, the plain `@handle`s that name a conversation member,
- * because they are trusted, fixed markup (see `message-markdown.ts`).
- *
- * Deliberate scope boundaries:
- *
- * - A Markdown image renders as a labeled link rather than an auto-loaded `<img>`. Auto-loading
- *   would let any message author — including an Agent — make every viewer's browser fetch an
- *   arbitrary URL, which is a new outbound-request boundary that has not been approved.
- * - Code blocks render as plain monospace without syntax highlighting, so the conversations
- *   chunk does not pull in the Records editor's highlighter.
- */
-export function MessageBody({
+const EMPTY_MENTIONS: readonly MentionRef[] = [];
+
+type MessageMarkdownProps = {
+  body: string;
+  mentions: readonly MentionRef[];
+  plainMentions?: Map<string, ChipMention>;
+  viewerId?: string;
+  onOpenAgentProfile?: OpenAgentProfile;
+  onOpenPersonProfile?: OpenPersonProfile;
+  onOpenTask?: (number: number) => void;
+  channelNames?: ReadonlyMap<string, string>;
+  hasTrailing: boolean;
+};
+
+const MessageMarkdownContent = memo(function MessageMarkdownContent({
   body,
-  mentions = [],
+  mentions,
+  plainMentions,
+  viewerId,
+  onOpenAgentProfile,
+  onOpenPersonProfile,
+  onOpenTask,
+  channelNames,
+  hasTrailing,
+}: MessageMarkdownProps) {
+  const source = useMemo(() => messageSource(body), [body]);
+  const handles = useMemo(() => mentionHandlesByToken(mentions), [mentions]);
+  const hasReference =
+    source.includes("<@") ||
+    source.includes(":#") ||
+    (plainMentions !== undefined && plainMentions.size > 0);
+  const rehypePlugins = useMemo<NonNullable<Options["rehypePlugins"]>>(() => {
+    const plugins: NonNullable<Options["rehypePlugins"]> = [rehypeSanitize];
+    if (hasReference)
+      plugins.push([
+        rehypeReferenceChips,
+        { mentions: handles, viewerId, plainMentions, channelNames },
+      ]);
+    plugins.push(rehypeCjkBreaks);
+    if (hasTrailing) plugins.push(rehypeTrailingSlot);
+    return plugins;
+  }, [hasReference, handles, viewerId, plainMentions, channelNames, hasTrailing]);
+  const components = useMemo<Components>(
+    () => ({
+      ...MARKDOWN_COMPONENTS,
+      span: chipSpan(onOpenAgentProfile, onOpenPersonProfile, onOpenTask),
+    }),
+    [onOpenAgentProfile, onOpenPersonProfile, onOpenTask],
+  );
+
+  return (
+    <Markdown
+      remarkPlugins={MESSAGE_REMARK_PLUGINS}
+      rehypePlugins={rehypePlugins}
+      components={components}
+    >
+      {source}
+    </Markdown>
+  );
+});
+
+export const MessageBody = memo(function MessageBody({
+  body,
+  mentions = EMPTY_MENTIONS,
   plainMentions,
   viewerId,
   onOpenAgentProfile,
@@ -64,80 +106,34 @@ export function MessageBody({
 }: {
   body: string;
   mentions?: readonly MentionRef[];
-  /** Plain-`@handle` display resolution: every conversation member's handle → chip. Absent,
-   * plain handles render as literal text (the stored body is never rewritten either way). */
   plainMentions?: Map<string, ChipMention>;
-  /** The viewing user's id; a mention of them renders with the stronger "me" chip. */
   viewerId?: string;
-  /** Opens the Agent profile panel when an Agent mention chip is activated. Present only where
-   * the conversation owns that slot; absent, Agent chips render as inert highlights (the
-   * previous behavior), never dead controls. */
   onOpenAgentProfile?: OpenAgentProfile;
-  /** Opens a person's profile from their mention chip; absent, a person's chip is inert. */
   onOpenPersonProfile?: OpenPersonProfile;
-  /** Opens a task reference's detail popup. Absent, a known Task's badge is not a control. */
   onOpenTask?: (number: number) => void;
-  /** Every channel of the Workspace, id → current name (closed ones included), for a host that can
-   * navigate: a stored channel reference whose id is listed becomes a link to that channel under
-   * its current name; any other id reads as the plain `#name` it stored. Absent (e.g. a Saved card,
-   * itself one link), every reference reads as plain `#name`. */
   channelNames?: ReadonlyMap<string, string>;
-  /** Inline content after the last word (an own message's ticks), placed by
-   * `rehypeTrailingSlot`. */
   trailing?: ReactNode;
 }) {
-  const source = useMemo(() => messageSource(body), [body]);
-  const handles = useMemo(() => mentionHandlesByToken(mentions), [mentions]);
-  // A body with no token and no plain `@handle` to resolve skips the chip pass entirely.
-  const hasReference =
-    source.includes("<@") ||
-    source.includes(":#") ||
-    (plainMentions !== undefined && plainMentions.size > 0);
   const hasTrailing = trailing !== undefined && trailing !== null;
-  // Typed against react-markdown's own plugin list so the plugin-with-options tuple form
-  // type-checks without a cast.
-  const rehypePlugins = useMemo<NonNullable<Options["rehypePlugins"]>>(() => {
-    const plugins: NonNullable<Options["rehypePlugins"]> = [rehypeSanitize];
-    if (hasReference)
-      plugins.push([
-        rehypeReferenceChips,
-        { mentions: handles, viewerId, plainMentions, channelNames },
-      ]);
-    plugins.push(rehypeCjkBreaks);
-    // After sanitizing, which would strip the slot's marker.
-    if (hasTrailing) plugins.push(rehypeTrailingSlot);
-    return plugins;
-  }, [hasReference, handles, viewerId, plainMentions, channelNames, hasTrailing]);
-  // The `span` override recognises the chips `rehypeReferenceChips` injects: a mention chip
-  // (`data-mention-agent-id` or `data-mention-user-id`) becomes an accessible button, a task reference
-  // (`data-task-reference-number`) its Task's badge (`TaskReference`), a channel-reference chip
-  // (`data-channel-id`) a link to the channel, and a thread-reference chip (`data-thread-root-id`) a
-  // link that opens the thread in its channel. Every other span passes through.
-  const components = useMemo<Components>(
-    () => ({
-      ...MARKDOWN_COMPONENTS,
-      span: chipSpan(onOpenAgentProfile, onOpenPersonProfile, onOpenTask),
-    }),
-    [onOpenAgentProfile, onOpenPersonProfile, onOpenTask],
-  );
-
   return (
     <div className="message-markdown">
       <TrailingContext.Provider value={trailing}>
-        <Markdown
-          remarkPlugins={MESSAGE_REMARK_PLUGINS}
-          rehypePlugins={rehypePlugins}
-          components={components}
-        >
-          {source}
-        </Markdown>
+        <MessageMarkdownContent
+          body={body}
+          mentions={mentions}
+          plainMentions={plainMentions}
+          viewerId={viewerId}
+          onOpenAgentProfile={onOpenAgentProfile}
+          onOpenPersonProfile={onOpenPersonProfile}
+          onOpenTask={onOpenTask}
+          channelNames={channelNames}
+          hasTrailing={hasTrailing}
+        />
       </TrailingContext.Provider>
     </div>
   );
-}
+});
 
-/** What `MessageBody` was given to follow its last word; read by the slot `rehypeTrailingSlot`
- * marks, so the Markdown components stay the same object whatever it is. */
 const TrailingContext = createContext<ReactNode>(undefined);
 
 function TrailingSlot() {
@@ -145,14 +141,10 @@ function TrailingSlot() {
 }
 
 const MARKDOWN_COMPONENTS = {
-  // `react-markdown` renders a fenced block as <pre><code class="language-x">. The `pre`
-  // override owns the block: it reads the language for the label and renders the code itself.
   pre: CodeBlock,
   code: InlineCode,
-  // Images are surfaced as a link, not fetched. See the component doc comment.
   img: ImageLink,
   a: ExternalLink,
-  // Tables scroll inside the message column instead of widening it.
   table: ({ children }: ComponentPropsWithoutRef<"table">) => (
     <div className="message-markdown-table">
       <table>{children}</table>
@@ -160,8 +152,6 @@ const MARKDOWN_COMPONENTS = {
   ),
 };
 
-/** A channel or thread chip's router link, in the Workspace on screen. Its own component so only a
- * message that carries such a chip reads the route. */
 function ChannelChipLink({
   channelId,
   threadRootId,
@@ -176,8 +166,6 @@ function ChannelChipLink({
   const workspaceSlug = useWorkspaceSlug();
   if (threadRootId === undefined) {
     return (
-      // `data-channel-id` stays on the anchor so a copied selection reads it back as `#name`
-      // (see `selection-copy.ts`), not as a Markdown link to the app's URL.
       <Link
         to="/w/$workspaceSlug/channel/$channelId"
         params={{ workspaceSlug, channelId }}
@@ -189,14 +177,10 @@ function ChannelChipLink({
     );
   }
   return (
-    // The data attributes stay on the anchor for the same reason as a channel link's: a copied
-    // selection reads the chip back as `#name:<8 hex>` (see `selection-copy.ts`).
     <Link
       to="/w/$workspaceSlug/channel/$channelId"
       params={{ workspaceSlug, channelId }}
       search={{ threadRootId }}
-      // Opening a thread in the channel already on screen keeps the stream where it is, as the
-      // thread opener does.
       resetScroll={false}
       className={className}
       data-thread-channel-id={channelId}
@@ -207,19 +191,6 @@ function ChannelChipLink({
   );
 }
 
-/**
- * The `span` renderer. A mention chip carries `data-mention-agent-id` (an Agent) or
- * `data-mention-user-id` (a person) and its resolved `data-mention-label`. With the matching
- * handler it becomes a keyboard- and pointer-accessible control that opens that profile and peeks
- * at the card on hover or focus; without one it stays an inert span. A task reference carries
- * `data-task-reference-number` and renders as `TaskReference`, or as `CrossTaskReference` when it
- * also carries another conversation's id (`data-task-reference-conversation-id`). A channel-reference chip carries
- * `data-channel-id` and becomes a router link to that channel: it navigates, so it is a real link
- * (open in a new tab, copy the address) rather than a button. A thread-reference chip carries
- * `data-thread-channel-id` and `data-thread-root-id` and becomes a router link to that channel
- * with the thread pane open (`?threadRootId=`), the same URL state the thread opener writes. All
- * other spans render unchanged.
- */
 function chipSpan(
   onOpenAgentProfile?: OpenAgentProfile,
   onOpenPersonProfile?: OpenPersonProfile,
@@ -232,10 +203,9 @@ function chipSpan(
     ...props
   }: ComponentPropsWithoutRef<"span"> & ExtraProps) {
     void node;
-    // `data-*` attributes arrive on props via react-markdown's hast → props mapping.
-    if ((props as Record<string, unknown>)["data-trailing-slot"] !== undefined)
-      return <TrailingSlot />;
-    const channelId = (props as Record<string, unknown>)["data-channel-id"];
+    const data = props as Record<string, unknown>;
+    if (data["data-trailing-slot"] !== undefined) return <TrailingSlot />;
+    const channelId = data["data-channel-id"];
     if (typeof channelId === "string") {
       return (
         <ChannelChipLink channelId={channelId} className={className}>
@@ -243,8 +213,8 @@ function chipSpan(
         </ChannelChipLink>
       );
     }
-    const threadChannelId = (props as Record<string, unknown>)["data-thread-channel-id"];
-    const threadRootId = (props as Record<string, unknown>)["data-thread-root-id"];
+    const threadChannelId = data["data-thread-channel-id"];
+    const threadRootId = data["data-thread-root-id"];
     if (typeof threadChannelId === "string" && typeof threadRootId === "string") {
       return (
         <ChannelChipLink
@@ -256,7 +226,6 @@ function chipSpan(
         </ChannelChipLink>
       );
     }
-    const data = props as Record<string, unknown>;
     const taskNumber = data["data-task-reference-number"];
     const taskConversationId = data["data-task-reference-conversation-id"];
     const taskKind = data["data-task-reference-kind"];
@@ -292,9 +261,9 @@ function chipSpan(
         </TaskReference>
       );
     }
-    const agentId = (props as Record<string, unknown>)["data-mention-agent-id"];
-    const userId = (props as Record<string, unknown>)["data-mention-user-id"];
-    const label = (props as Record<string, unknown>)["data-mention-label"];
+    const agentId = data["data-mention-agent-id"];
+    const userId = data["data-mention-user-id"];
+    const label = data["data-mention-label"];
     if (typeof agentId === "string" && typeof label === "string" && onOpenAgentProfile) {
       return (
         <AgentMentionChip
@@ -328,8 +297,6 @@ function chipSpan(
 }
 
 function CodeBlock({ node, children, ...props }: ComponentPropsWithoutRef<"pre"> & ExtraProps) {
-  // `node` is react-markdown's hast node, not a DOM attribute; destructuring it out keeps it off
-  // the rendered element.
   const code = node?.children.find(
     (child): child is Element => child.type === "element" && child.tagName === "code",
   );
@@ -337,19 +304,16 @@ function CodeBlock({ node, children, ...props }: ComponentPropsWithoutRef<"pre">
   const language = Array.isArray(className)
     ? className.find((name) => name.startsWith("language-"))?.slice("language-".length)
     : undefined;
-  // A `$$` block, a `\[…\]` one and a ```math fence are all `language-math` (`message-math.ts`).
   if (language === "math") return <MessageFormula source={textOf(code)} display />;
 
   return (
     <div className="message-markdown-code">
       {language && <span className="message-markdown-code-language">{language}</span>}
-      {/* `children` is already the rendered <code> element; wrapping it again would nest two. */}
       <pre {...props}>{children}</pre>
     </div>
   );
 }
 
-/** A formula in text is `code.language-math` (`message-math.ts`); any other code passes through. */
 function InlineCode({
   node,
   className,
@@ -365,7 +329,6 @@ function InlineCode({
   );
 }
 
-/** The text of a hast element: a formula's source. */
 function textOf(node: Element | undefined): string {
   return (node?.children ?? []).map((child) => (child.type === "text" ? child.value : "")).join("");
 }
@@ -376,13 +339,10 @@ function ExternalLink({
   href,
   ...props
 }: ComponentPropsWithoutRef<"a"> & ExtraProps) {
-  // `node` is react-markdown's hast node, not a DOM attribute; destructuring it out keeps it off
-  // the rendered element.
   void node;
   const router = useRouter();
   const internal = internalAppHref(typeof href === "string" ? href : undefined);
   if (internal) {
-    // A stored `target` must not force a new tab over an in-app path.
     const { target: _target, ...rest } = props;
     void _target;
     return (
@@ -400,7 +360,6 @@ function ExternalLink({
     );
   }
   return (
-    // Untrusted links open in a new tab without handing the opener over via `window.opener`.
     <a {...props} href={href} target="_blank" rel="noopener noreferrer">
       {children}
     </a>

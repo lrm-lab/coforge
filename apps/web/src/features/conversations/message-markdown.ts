@@ -1,23 +1,3 @@
-/**
- * Markdown source preparation and mention-chip substitution for a message body.
- *
- * A message body is untrusted text — written by a human or an Agent — and until now it
- * rendered as literal text. Two existing behaviors must survive the move to Markdown rendering:
- *
- * 1. Raw HTML stays literal. `react-markdown` drops HTML by default, which would silently
- *    delete a body such as `<div>x</div>` — a data-loss regression, not a safety win. Every
- *    HTML-looking `<` outside code is escaped (`escapeLiteralHtml`, `#src/lib/message-syntax`) so
- *    it renders as the characters the author typed. GFM autolinks (`<https://…>`) and reference
- *    tokens keep their `<`.
- * 2. A stored `<@kind:…>` token (a mention, a task, a channel or a thread) still renders as its
- *    reference (a task's is resolved when it is drawn), and never inside a code span or fence — the server never stores one there either (its
- *    recognizer reads the same Markdown syntax, `#src/lib/message-syntax`).
- *
- * Chips are injected *after* `rehype-sanitize` runs. The sanitizer strips `className`, and the
- * nodes injected here are trusted — a fixed `span` whose only text is a resolved display label —
- * they need not pass the untrusted-content schema. Nothing sanitizer-relevant is added before
- * it runs.
- */
 import {
   CHANNEL_REFERENCE_TOKEN_PATTERN,
   CHANNEL_TASK_REFERENCE_PATTERN,
@@ -42,13 +22,6 @@ import {
   type ChipMention,
 } from "./message-reference-chips";
 
-/**
- * The resolved mention for every token in a body, keyed the way `MENTION_TOKEN_PATTERN`
- * spells the token (`user:<uuid>` / `agent:<uuid>`, lower-cased). The actor id identifies the
- * viewer while current profile labels are rendered. A token with no row here
- * degrades to its raw text rather than a phantom chip. An `agent` mention carries its
- * `actorId` as `agentId` so the chip can open that Agent's profile panel.
- */
 export function mentionHandlesByToken(mentions: readonly MentionRef[]): Map<string, ChipMention> {
   return new Map(
     mentions.map((mention) => [
@@ -63,11 +36,6 @@ export function mentionHandlesByToken(mentions: readonly MentionRef[]): Map<stri
   );
 }
 
-/**
- * The plain-`@handle` display resolution for a conversation's members (see `MessageBody`): each
- * member's handle → its chip, an Agent's carrying its id for the profile panel. Undefined when there
- * is no member to resolve, so the stream skips the plain-handle pass.
- */
 export function plainMentionsByHandle(
   members: readonly Pick<Mentionable, "kind" | "id" | "handle" | "label">[] | undefined,
 ): Map<string, ChipMention> | undefined {
@@ -85,77 +53,152 @@ export function plainMentionsByHandle(
   );
 }
 
-/** Where a text node sits: code keeps its text as written, and inside a link nothing becomes a
- * chip. That is one consistency rule for every kind, not only the chips a renderer turns into a
- * control: a link reads as the text it shows and keeps pointing where its author aimed it. */
 type Place = "prose" | "link";
 
-/** What a chip pass knows about the viewer and the conversation, each the authority for one kind. */
 type ReferenceChipOptions = {
-  /** The message's mention rows, keyed the way `mentionHandlesByToken` keys them. */
   mentions: Map<string, ChipMention>;
-  /** The viewer's user id: a chip for that person gets the self treatment. */
   viewerId?: string;
-  /** Plain-`@handle` display resolution: every conversation member's handle → chip. */
   plainMentions?: Map<string, ChipMention>;
-  /** Every channel of the Workspace, id → current name, for a view that can navigate: the authority
-   * for channel and thread tokens alike. */
   channelNames?: ReadonlyMap<string, string>;
 };
 
-/** One kind of reference: its pattern, and what one match becomes in a given place —
- * `undefined` when the match is no reference and stays as written. */
-type ReferenceKind = {
+const BASE_REFERENCE_PATTERNS = [
+  MENTION_TOKEN_PATTERN,
+  TASK_REFERENCE_TOKEN_PATTERN,
+  DM_TASK_REFERENCE_PATTERN,
+  CHANNEL_TASK_REFERENCE_PATTERN,
+  CHANNEL_REFERENCE_TOKEN_PATTERN,
+  THREAD_REFERENCE_TOKEN_PATTERN,
+] as const;
+
+export function patternAlternation(patterns: readonly RegExp[]): {
   pattern: RegExp;
-  build: (groups: readonly string[], place: Place) => Element | Text | undefined;
-};
+  read: (match: RegExpMatchArray) => { index: number; groups: string[] };
+} {
+  const flags = [...new Set(["g", ...patterns.flatMap((each) => [...each.flags])])]
+    .filter((flag) => flag !== "y")
+    .join("");
+  const groupCounts = patterns.map(
+    (each) => new RegExp(`${each.source}|`, flags).exec("")!.length - 1,
+  );
+  const pattern = new RegExp(patterns.map((each) => `(${each.source})`).join("|"), flags);
+  return {
+    pattern,
+    read: (match) => {
+      let group = 1;
+      let index = 0;
+      while (match[group] === undefined) group += 1 + groupCounts[index++]!;
+      return { index, groups: match.slice(group + 1, group + 1 + groupCounts[index]!) as string[] };
+    },
+  };
+}
 
-/**
- * Replaces every reference in an already-sanitized tree with its chip, in one pass. Every chip comes
- * from a stored `<@kind:…>` token, and each token is a claim checked against its own authority —
- * here for mentions, channels and threads, at render time for tasks:
- *
- * - a mention token (`<@human|agent:uuid>`) against the message's mention rows (`mentions`): a
- *   token with no row stays as written rather than becoming a phantom highlight. The chip shows the
- *   member's display label; a chip carries its Agent's or person's id (`data-mention-agent-id` / `data-mention-user-id`) so the renderer
- *   can open its profile. A mention is a reference, not a link — wake rules live on the server;
- * - a task token (`<@task:68>`) becomes a task reference carrying `data-task-reference-number`,
- *   written as `task #68`. The renderer checks the claim when it draws it: the part that shows the
- *   reference reads that one Task from the conversation (`features/tasks/task-reference.tsx`), so a Task's change
- *   repaints its references and never re-parses the body; a number with no Task stays the text;
- * - a channel token (`<@channel:uuid:name>`) against the Workspace's channels (`channelNames`, closed
- *   and archived ones included): a listed id is a chip under the channel's current name, carrying
- *   `data-channel-id` for the renderer to make a link; any other id — unknown, deleted or forged —
- *   reads as the plain `#name` it stored. Without `channelNames` (a view that is itself one link,
- *   such as a Saved card) every channel token reads as plain `#name`;
- * - a thread token (`<@thread:uuid:uuid:name>`) against the same channels: a listed channel id is a
- *   chip `#name:xxxxxxxx-xxxx` under the channel's current name, carrying `data-thread-channel-id` and
- *   `data-thread-root-id` for the renderer to make a link that opens the thread; any other reads as
- *   the plain `#name:xxxxxxxx-xxxx` it stored. Whether the root message still exists is the thread
- *   opener's to say: the chip claims only the channel.
- *
- * `plainMentions` additionally chips a *plain* `@handle` (a DM body, or a channel body whose author
- * never used the completion) that names a conversation member exactly, with that member's display
- * label. Display-only: the stored body and the wake rules are unchanged, and an unknown handle, an
- * email address or `@@` stays literal text (`MENTION_PATTERN`).
- *
- * Every pattern is matched in one scan of each text node, so a chip's own label (an Agent called
- * "Scout #5") is finished markup that is never read again. Code (`code`, `pre`) keeps its text as
- * written; inside a link (`a`) every token reads as its text and nothing becomes a chip, whatever
- * its kind (see `Place`).
- */
+const BASE_REFERENCE_ALTERNATION = patternAlternation(BASE_REFERENCE_PATTERNS);
+const PLAIN_REFERENCE_ALTERNATION = patternAlternation([
+  ...BASE_REFERENCE_PATTERNS,
+  MENTION_PATTERN,
+]);
+
+const EMPTY_CHANNEL_IDS: ReadonlyMap<string, string> = new Map();
+const channelIdByNameCache = new WeakMap<
+  ReadonlyMap<string, string>,
+  ReadonlyMap<string, string>
+>();
+
+export function cachedChannelIdByName(
+  channelNames: ReadonlyMap<string, string> | undefined,
+): ReadonlyMap<string, string> {
+  if (!channelNames || channelNames.size === 0) return EMPTY_CHANNEL_IDS;
+  const cached = channelIdByNameCache.get(channelNames);
+  if (cached) return cached;
+  const map = new Map<string, string>();
+  for (const [id, name] of channelNames) map.set(name.toLowerCase(), id);
+  channelIdByNameCache.set(channelNames, map);
+  return map;
+}
+
+function buildReferenceMatch(
+  kindIndex: number,
+  groups: readonly string[],
+  place: Place,
+  options: ReferenceChipOptions,
+  channelIdByName: ReadonlyMap<string, string>,
+): Element | Text | undefined {
+  const { mentions, viewerId, plainMentions, channelNames } = options;
+  switch (kindIndex) {
+    case 0: {
+      const [kind, id] = groups;
+      const mention = mentions.get(
+        `${kind!.toLowerCase() === "human" ? "user" : "agent"}:${id!.toLowerCase()}`,
+      );
+      if (!mention) return undefined;
+      return place === "link"
+        ? { type: "text", value: `@${mention.label}` }
+        : mentionChip(mention, viewerId);
+    }
+    case 1: {
+      const reference = readTaskReferenceToken(["", ...groups]);
+      if (!reference) return undefined;
+      return place === "prose"
+        ? taskReference(reference)
+        : { type: "text", value: canonicalTaskReference(reference) };
+    }
+    case 2: {
+      const [peer, number] = groups;
+      return place === "prose" ? directTaskReferenceByPeer(peer!, Number(number)) : undefined;
+    }
+    case 3: {
+      const [name, number] = groups;
+      const id = channelIdByName.get(name!.toLowerCase());
+      if (id === undefined || place !== "prose") return undefined;
+      return taskReference(
+        {
+          kind: "channel",
+          conversationId: id,
+          channelName: name!.toLowerCase(),
+          number: Number(number),
+        },
+        { prose: true },
+      );
+    }
+    case 4: {
+      const [rawId, stored] = groups;
+      const id = rawId!.toLowerCase();
+      const current = channelNames?.get(id);
+      return place === "prose" && current !== undefined
+        ? channelChip(id, current)
+        : { type: "text", value: `#${current ?? stored!}` };
+    }
+    case 5: {
+      const [rawChannelId, rawRootId, stored] = groups;
+      const channelId = rawChannelId!.toLowerCase();
+      const rootId = rawRootId!.toLowerCase();
+      const current = channelNames?.get(channelId);
+      return place === "prose" && current !== undefined
+        ? threadChip(channelId, rootId, current)
+        : { type: "text", value: threadReferenceText(current ?? stored!, rootId) };
+    }
+    case 6: {
+      const [handle] = groups;
+      const mention = plainMentions?.get(handle!);
+      return mention && place === "prose" ? mentionChip(mention, viewerId) : undefined;
+    }
+    default:
+      return undefined;
+  }
+}
+
 export function rehypeReferenceChips(options: ReferenceChipOptions) {
-  const kinds = referenceKinds(options);
-  const { pattern, read } = patternAlternation(kinds.map((kind) => kind.pattern));
   const plain = options.plainMentions !== undefined && options.plainMentions.size > 0;
+  const { pattern, read } = plain ? PLAIN_REFERENCE_ALTERNATION : BASE_REFERENCE_ALTERNATION;
+  const channelIdByName = cachedChannelIdByName(options.channelNames);
 
-  /** The replacement for one text node, or `undefined` when nothing in it is a reference. */
   const parts = (value: string, place: Place): Array<Element | Text> | undefined => {
     const result: Array<Element | Text> = [];
     let offset = 0;
     for (const match of value.matchAll(pattern)) {
       const { index: kind, groups } = read(match);
-      const built = kinds[kind]!.build(groups, place);
+      const built = buildReferenceMatch(kind, groups, place, options, channelIdByName);
       if (built === undefined) continue;
       if (match.index > offset)
         result.push({ type: "text", value: value.slice(offset, match.index) });
@@ -195,140 +238,4 @@ export function rehypeReferenceChips(options: ReferenceChipOptions) {
 
     visit(tree, "prose");
   };
-}
-
-/**
- * Several patterns as one alternation, matched in one scan: at each position the first listed
- * pattern that matches there wins. `read` names which pattern a match came from, by its index, and
- * that pattern's own capture groups.
- *
- * The alternation is one pattern, so it has one set of flags: `g` and every flag of every pattern.
- * A pattern that needs `u` (a `\p{…}` class) brings `u`, and every source is then read in `u` mode;
- * a case-insensitive pattern makes the whole alternation case-insensitive, so a case-sensitive
- * pattern alongside it also matches other cases, and its reader must tell them apart.
- */
-export function patternAlternation(patterns: readonly RegExp[]): {
-  pattern: RegExp;
-  read: (match: RegExpMatchArray) => { index: number; groups: string[] };
-} {
-  const flags = [...new Set(["g", ...patterns.flatMap((each) => [...each.flags])])]
-    .filter((flag) => flag !== "y")
-    .join("");
-  // Each pattern's own capture groups, counted under the alternation's flags, follow its one
-  // wrapping group.
-  const groupCounts = patterns.map(
-    (each) => new RegExp(`${each.source}|`, flags).exec("")!.length - 1,
-  );
-  const pattern = new RegExp(patterns.map((each) => `(${each.source})`).join("|"), flags);
-  return {
-    pattern,
-    read: (match) => {
-      // The pattern whose wrapping group matched, and its own groups after it.
-      let group = 1;
-      let index = 0;
-      while (match[group] === undefined) group += 1 + groupCounts[index++]!;
-      return { index, groups: match.slice(group + 1, group + 1 + groupCounts[index]!) as string[] };
-    },
-  };
-}
-
-/** The kinds a pass matches, each with its chip builder, the plain `@handle` only when asked for. */
-function referenceKinds(options: ReferenceChipOptions): ReferenceKind[] {
-  const { mentions, viewerId, plainMentions, channelNames } = options;
-  // A written `#channel:#N` names its channel by name; the Workspace's channels are the authority.
-  const channelIdByName = new Map(
-    [...(channelNames ?? [])].map(([id, name]) => [name.toLowerCase(), id] as const),
-  );
-  const kinds: ReferenceKind[] = [
-    {
-      pattern: MENTION_TOKEN_PATTERN,
-      build: ([kind, id], place) => {
-        const mention = mentions.get(
-          `${kind!.toLowerCase() === "human" ? "user" : "agent"}:${id!.toLowerCase()}`,
-        );
-        // A token with no mention row stays as written rather than becoming a phantom highlight.
-        if (!mention) return undefined;
-        // Inside a link every kind reads as its text (see `Place`), a mention included.
-        return place === "link"
-          ? { type: "text", value: `@${mention.label}` }
-          : mentionChip(mention, viewerId);
-      },
-    },
-    {
-      pattern: TASK_REFERENCE_TOKEN_PATTERN,
-      build: (groups, place) => {
-        // The alternation hands over the groups alone; the reader counts the whole match at 0.
-        const reference = readTaskReferenceToken(["", ...groups]);
-        if (!reference) return undefined;
-        return place === "prose"
-          ? taskReference(reference)
-          : { type: "text", value: canonicalTaskReference(reference) };
-      },
-    },
-    // Another conversation's Task as it was written (task #472): the body keeps `dm:@peer:#N` and
-    // `#channel:#N` as typed while the server does not store their tokens, so they are read here.
-    // A `dm:` reference is matched whole, so its `@peer` never becomes a mention of its own.
-    {
-      pattern: DM_TASK_REFERENCE_PATTERN,
-      build: ([peer, number], place) =>
-        place === "prose" ? directTaskReferenceByPeer(peer!, Number(number)) : undefined,
-    },
-    {
-      pattern: CHANNEL_TASK_REFERENCE_PATTERN,
-      build: ([name, number], place) => {
-        const id = channelIdByName.get(name!.toLowerCase());
-        // A channel the reader's Workspace list does not hold (a private one they are not in)
-        // stays as written.
-        if (id === undefined || place !== "prose") return undefined;
-        return taskReference(
-          {
-            kind: "channel",
-            conversationId: id,
-            channelName: name!.toLowerCase(),
-            number: Number(number),
-          },
-          { prose: true },
-        );
-      },
-    },
-    {
-      pattern: CHANNEL_REFERENCE_TOKEN_PATTERN,
-      build: ([rawId, stored], place) => {
-        const id = rawId!.toLowerCase();
-        const current = channelNames?.get(id);
-        // Inside a link the token reads as text under the channel's current name when the
-        // Workspace still has it, the name its chip would show, and only otherwise under the
-        // name it stored. That is intended: a renamed channel reads the same in and out of a link.
-        return place === "prose" && current !== undefined
-          ? channelChip(id, current)
-          : { type: "text", value: `#${current ?? stored!}` };
-      },
-    },
-    {
-      pattern: THREAD_REFERENCE_TOKEN_PATTERN,
-      build: ([rawChannelId, rawRootId, stored], place) => {
-        const channelId = rawChannelId!.toLowerCase();
-        const rootId = rawRootId!.toLowerCase();
-        const current = channelNames?.get(channelId);
-        // The channel token's rule: under the current name when the Workspace still has the
-        // channel, in a link and out of one.
-        return place === "prose" && current !== undefined
-          ? threadChip(channelId, rootId, current)
-          : { type: "text", value: threadReferenceText(current ?? stored!, rootId) };
-      },
-    },
-  ];
-  if (plainMentions && plainMentions.size > 0)
-    kinds.push({
-      pattern: MENTION_PATTERN,
-      // The token patterns make the alternation case-insensitive (`patternAlternation`), so it also
-      // matches `@Bob`, which `MENTION_PATTERN` alone would not. The lookup is exact-case against
-      // lower-case handles, so such a match finds no member and stays as written: the kind keeps
-      // its own lower-case rule.
-      build: ([handle], place) => {
-        const mention = plainMentions.get(handle!);
-        return mention && place === "prose" ? mentionChip(mention, viewerId) : undefined;
-      },
-    });
-  return kinds;
 }

@@ -1,4 +1,4 @@
-import { useMemo, type ComponentPropsWithoutRef } from "react";
+import { memo, useMemo, type ComponentPropsWithoutRef } from "react";
 import Markdown, { type Components, type Options } from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 
@@ -6,17 +6,11 @@ import { MESSAGE_REMARK_PLUGINS, messageSource } from "#src/lib/message-syntax";
 import { mentionHandlesByToken, rehypeReferenceChips } from "./message-markdown";
 import type { MentionRef } from "./mention-text";
 
-/**
- * A message body as a one-paragraph preview, for cards that clamp it to a line or two (the
- * Activity page). It parses the same Markdown dialect and sanitizes the same way as `MessageBody`
- * and shows mentions as chips, but flattens every block (paragraphs, headings, lists, quotes,
- * tables, code blocks) into inline text, and renders nothing interactive: the card around it is
- * one link, and a link or button inside it would be invalid markup and steal the click. Channel and
- * thread references read as their plain `#name`, as on a Saved card.
- */
-export function MessagePreview({
+const EMPTY_MENTIONS: readonly MentionRef[] = [];
+
+export const MessagePreview = memo(function MessagePreview({
   body,
-  mentions = [],
+  mentions = EMPTY_MENTIONS,
 }: {
   body: string;
   mentions?: readonly MentionRef[];
@@ -40,13 +34,12 @@ export function MessagePreview({
       {source}
     </Markdown>
   );
-}
+});
 
 function Inline({ children }: ComponentPropsWithoutRef<"span">) {
   return <span>{children}</span>;
 }
 
-/** A block element that ends a sentence-like unit: its text is followed by a space. */
 function InlineWithSpace({ children }: ComponentPropsWithoutRef<"span">) {
   return <span>{children} </span>;
 }
@@ -68,7 +61,6 @@ const PREVIEW_COMPONENTS: Components = {
   ol: Inline,
   li: InlineWithSpace,
   table: Inline,
-  // GFM footnotes: the reference mark and the notes section read as text.
   section: Inline,
   sup: Inline,
   thead: Inline,
@@ -78,7 +70,6 @@ const PREVIEW_COMPONENTS: Components = {
   td: InlineWithSpace,
   br: Space,
   hr: Space,
-  // A task-list checkbox is a control; the item's text is enough.
   input: () => null,
   pre: ({ children }) => <span className="font-mono">{children}</span>,
   code: ({ children }) => (
