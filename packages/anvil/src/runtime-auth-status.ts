@@ -2,6 +2,7 @@ import {
   MASK_MARKER,
   MAX_LABEL,
   MAX_METHOD_LABEL,
+  RUNTIME_PROVIDER,
   type RuntimeAuthAccount,
 } from "@lrm/coforge-sdk/internal";
 import {
@@ -11,9 +12,9 @@ import {
 } from "./contract";
 
 const OWN_LOGIN_ENV_VARS: Readonly<Record<string, readonly string[]>> = {
-  "claude-code": ["CLAUDE_CONFIG_DIR", "ANTHROPIC_AUTH_TOKEN"],
-  codex: ["CODEX_HOME", "OPENAI_API_KEY"],
-  grok: ["GROK_HOME"],
+  [RUNTIME_PROVIDER.CLAUDE_CODE]: ["CLAUDE_CONFIG_DIR", "ANTHROPIC_AUTH_TOKEN"],
+  [RUNTIME_PROVIDER.CODEX]: ["CODEX_HOME", "OPENAI_API_KEY"],
+  [RUNTIME_PROVIDER.GROK]: ["GROK_HOME"],
 };
 
 export function hasOwnRuntimeLogin(
