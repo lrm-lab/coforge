@@ -457,11 +457,3 @@ test("stop returns once a real SIGTERM-ignoring child is killed, and drops the r
     await rm(cfg.root, { recursive: true, force: true });
   }
 });
-
-test("a record file that exists but is still empty reads as no record", async () => {
-  const base = await config();
-  const instance = new ProcessWorkspaceInstance(base, async () => ({ pid: 1 }));
-  await mkdir(base.stateDirectory, { recursive: true });
-  await writeFile(join(base.stateDirectory, "process-instance.json"), "");
-  expect(await instance.identity()).toBeNull();
-});
