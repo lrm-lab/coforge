@@ -175,5 +175,10 @@ export function createAgentSessions(db: PrismaClient, mentions: AcceptedSessionM
     async (workspaceId, computerId) =>
       (await getComputerRestartStore().identity?.({ workspaceId, computerId }))?.workerInstanceId,
     mentions,
+    async (workspaceId, computerId, workerInstanceId) =>
+      (await getComputerRestartStore().reportedRecently?.(
+        { workspaceId, computerId },
+        workerInstanceId,
+      )) === true,
   );
 }

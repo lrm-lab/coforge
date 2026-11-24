@@ -168,7 +168,7 @@ test("a verify rejection logs the field that diverged, still with the stable rea
   }
   expect(response).toEqual({
     code: 403,
-    message: "Agent Session snapshot is not authorized",
+    message: "Agent Session snapshot is not authorized (field=sessionId)",
     category: "session_mismatch",
   });
   expect(capture.warnings).toEqual([

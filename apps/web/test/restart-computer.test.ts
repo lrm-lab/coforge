@@ -311,3 +311,18 @@ test("a retried requestId still reads its stored status while the Computer is aw
   expect(retry).toEqual(accepted);
   expect(publications).toHaveLength(1);
 });
+
+test("a daemon that cannot take the identity slot is still recorded as a recent reporter", async () => {
+  let now = 1_000;
+  const store = new RedisComputerRestartStore(memoryRedis(() => now) as never, () => now);
+  const scope = { workspaceId: "w", computerId: "c" };
+  const version = { daemonVersion: "1.0.0" };
+  await store.ready(scope, { ...version, workerInstanceId: "daemon-newer", startedAt: 10 }, []);
+  await store.ready(scope, { ...version, workerInstanceId: "daemon-older", startedAt: 5 }, []);
+
+  // The slot only ever moves forward: an older process must not take it.
+  expect((await store.identity(scope))?.workerInstanceId).toBe("daemon-newer");
+  // It did report, though, and the sessions it started are still its own to report.
+  expect(await store.reportedRecently(scope, "daemon-older")).toBe(true);
+  expect(await store.reportedRecently(scope, "daemon-unknown")).toBe(false);
+});

@@ -77,6 +77,13 @@ export class AgentSessions {
       computerId: string,
     ) => Promise<string | undefined>,
     private readonly mentions: AcceptedSessionMentions,
+    /** Optional so existing callers and tests keep one dependency: without it the old, stricter
+     * single-slot rule applies. */
+    private readonly reportedRecently?: (
+      workspaceId: string,
+      computerId: string,
+      workerInstanceId: string,
+    ) => Promise<boolean>,
   ) {}
   async prepare(intent: AgentStartIntent): Promise<AgentStartIntent> {
     const agent = await this.repository.read(intent.agentId);
@@ -160,7 +167,18 @@ export class AgentSessions {
     if (old.provider !== report.provider) reject("reference.provider");
     if (old.computerId !== report.computerId) reject("reference.computerId");
     if (old.startRequestId !== report.startRequestId) reject("startRequestId");
-    if (old.daemonInstanceId !== report.daemonInstanceId) reject("daemonInstanceId");
+    // `old.daemonInstanceId` is whoever held the identity slot when the launch was created, and it is
+    // exactly that value the isolated-Computer case corrupts: the slot names one process while
+    // another runs the Agent. Accept the process that reported ready for this Computer, so the check
+    // still says "a daemon of this Computer" - the launch, session and request ids carry the rest.
+    const reported =
+      old.daemonInstanceId === report.daemonInstanceId ||
+      (await this.reportedRecently?.(
+        report.workspaceId,
+        report.computerId,
+        report.daemonInstanceId,
+      )) === true;
+    if (!reported) reject("daemonInstanceId");
     if (
       old.launchId &&
       old.launchId !== report.launchId &&
@@ -174,7 +192,13 @@ export class AgentSessions {
     )
       reject("sessionId");
     if (
-      (await this.currentDaemon(report.workspaceId, report.computerId)) !== report.daemonInstanceId
+      (await this.currentDaemon(report.workspaceId, report.computerId)) !==
+        report.daemonInstanceId &&
+      !(await this.reportedRecently?.(
+        report.workspaceId,
+        report.computerId,
+        report.daemonInstanceId,
+      ))
     )
       reject("currentDaemon");
     return old;

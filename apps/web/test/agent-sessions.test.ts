@@ -402,3 +402,101 @@ function sessionRace() {
     },
   };
 }
+
+test("a report from a daemon that lost the identity slot is accepted when it reported recently", async () => {
+  const reference: RuntimeSessionReference = {
+    provider: "pi",
+    computerId: "c",
+    startRequestId: "start-1",
+    daemonInstanceId: "child-runtime",
+    launchId: "launch-1",
+  };
+  const repository = {
+    read: async () => ({ workspaceId: "w", computerId: "c", provider: "pi", reference }),
+    replace: async () => true,
+  };
+  const report = {
+    protocolMajor: 1,
+    requestId: "report",
+    workspaceId: "w",
+    computerId: "c",
+    agentId: "a",
+    provider: "pi" as const,
+    sessionId: "thread-1",
+    startRequestId: "start-1",
+    daemonInstanceId: "child-runtime",
+    launchId: "launch-1",
+  };
+  // An isolated Computer runs one daemon per Workspace next to the Computer-level coordinator, and
+  // the single identity slot can only name one of them. The session belongs to the process that
+  // started it, so a report from it must not be refused just because it lost that slot.
+  const accepted = new AgentSessions(
+    repository,
+    async () => "coordinator",
+    { resendForCurrentSession: async () => {} },
+    async (_w, _c, instance) => instance === "child-runtime",
+  );
+  await accepted.accept(report);
+
+  const rejected = new AgentSessions(
+    repository,
+    async () => "coordinator",
+    { resendForCurrentSession: async () => {} },
+    async () => false,
+  );
+  const failure = rejected.accept(report);
+  await expect(failure).rejects.toBeInstanceOf(AgentSessionVerifyError);
+  await failure.catch((error: AgentSessionVerifyError) =>
+    expect(error.field).toBe("currentDaemon"),
+  );
+});
+
+test("a launch recorded before the slot moved is still accepted from the daemon that reported ready", async () => {
+  // The launch records whoever held the identity slot at `prepare` time; on an isolated Computer a
+  // second daemon (the Workspace runtime) can be the one that actually ran the Agent. Refusing that
+  // report at the recorded-instance check is the 1403 we see on the evidence machine.
+  const reference: RuntimeSessionReference = {
+    provider: "pi",
+    computerId: "c",
+    startRequestId: "start-1",
+    daemonInstanceId: "coordinator",
+    launchId: "launch-1",
+  };
+  const repository = {
+    read: async () => ({ workspaceId: "w", computerId: "c", provider: "pi", reference }),
+    replace: async () => true,
+  };
+  const report = {
+    protocolMajor: 1,
+    requestId: "report",
+    workspaceId: "w",
+    computerId: "c",
+    agentId: "a",
+    provider: "pi" as const,
+    sessionId: "thread-1",
+    startRequestId: "start-1",
+    daemonInstanceId: "child-runtime",
+    launchId: "launch-1",
+  };
+  const accepted = new AgentSessions(
+    repository,
+    async () => "coordinator",
+    { resendForCurrentSession: async () => {} },
+    async (_w, _c, instance) => instance === "child-runtime",
+  );
+  await accepted.accept(report);
+
+  // A daemon that never reported ready for this Computer is still refused, and the field says which
+  // check did it.
+  const rejected = new AgentSessions(
+    repository,
+    async () => "coordinator",
+    { resendForCurrentSession: async () => {} },
+    async () => false,
+  );
+  const failure = rejected.accept(report);
+  await expect(failure).rejects.toBeInstanceOf(AgentSessionVerifyError);
+  await failure.catch((error: AgentSessionVerifyError) =>
+    expect(error.field).toBe("daemonInstanceId"),
+  );
+});
