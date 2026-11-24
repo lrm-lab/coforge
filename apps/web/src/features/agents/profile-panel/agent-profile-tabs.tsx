@@ -49,9 +49,8 @@ export function useAgentProfileTabsForProfile(
 }
 
 /**
- * The panel's second band: the reorderable icon + label underline tab strip on the band's bottom
- * rule. The rule is the band's own hairline, drawn under the strip, so the active tab's underline
- * stands in for it. The strip scrolls sideways when its tabs do not fit instead of pushing the
+ * The panel's second band: the reorderable tab strip above the band's bottom rule.
+ * The strip scrolls sideways when its tabs do not fit instead of pushing the
  * panel wider, keeping the selected tab in view; the rule stays put. An edge with more tabs past
  * it fades out, so a tab cut off there reads as "scroll for more" rather than as a clipped label.
  */

@@ -14,9 +14,7 @@ const TABS = {
   files: { label: m.files_tab, icon: Paperclip },
 };
 
-/** Chat, Tasks and Files in the member's saved order; dragging a tab saves a new order. They are
- * icon + label underline tabs sitting on the header's bottom rule, so the active one's brand
- * underline replaces that rule under it. */
+/** Chat, Tasks and Files in the member's saved order; dragging a tab saves a new order. */
 export function ConversationTaskTabs({
   active,
   onShowChat,
