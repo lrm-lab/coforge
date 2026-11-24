@@ -46,6 +46,7 @@ describe("agentProfileTabParamSchema", () => {
     expect(agentProfileTabParamSchema.parse("reminders")).toBe("reminders");
     expect(agentProfileTabParamSchema.parse("activity")).toBe("activity");
     expect(agentProfileTabParamSchema.parse("workspace")).toBe("workspace");
+    expect(agentProfileTabParamSchema.parse("usage")).toBe("usage");
     expect(agentProfileTabParamSchema.parse("computer")).toBeUndefined();
     expect(agentProfileTabParamSchema.parse("nonsense")).toBeUndefined();
     expect(agentProfileTabParamSchema.parse(undefined)).toBeUndefined();
@@ -80,9 +81,18 @@ describe("agentProfileSearchWithoutThread", () => {
 });
 
 describe("visibleAgentProfileTabs", () => {
-  test("shows Activity, Chat, Reminders and Workspace to the Agent's managers, Profile and Apps to everyone", () => {
+  test("shows Activity, Chat, Reminders, Workspace and Usage to the Agent's managers, Profile and Apps to everyone", () => {
     expect(visibleAgentProfileTabs(false, true, false)).toEqual(["profile", "apps"]);
     expect(visibleAgentProfileTabs(true, true, true)).toEqual([
+      "profile",
+      "activity",
+      "chat",
+      "reminders",
+      "workspace",
+      "apps",
+      "usage",
+    ]);
+    expect(visibleAgentProfileTabs(true, true, true, false)).toEqual([
       "profile",
       "activity",
       "chat",
@@ -113,6 +123,7 @@ describe("visibleAgentProfileTabs", () => {
       "chat",
       "reminders",
       "workspace",
+      "usage",
     ]);
     expect(isTabOrder("agentProfile", saved)).toBeTrue();
     expect(isTabOrder("agentProfile", ["chat", "profile"])).toBeTrue();

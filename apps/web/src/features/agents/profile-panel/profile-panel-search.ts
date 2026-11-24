@@ -24,6 +24,7 @@ export const AGENT_PROFILE_TABS = [
   "reminders",
   "workspace",
   "apps",
+  "usage",
 ] as const;
 export type AgentProfileTab = (typeof AGENT_PROFILE_TABS)[number];
 
@@ -75,15 +76,11 @@ function idFromProfileParam(profile: string | undefined, prefix: string): string
   return UUID_PATTERN.test(id) ? id : undefined;
 }
 
-/** The panel offers Profile, Activity, Chat, Reminders, Workspace and Apps. Activity, Reminders
- * and Workspace are for the Agent's creator and a Workspace owner/admin (`canSeeManagerTabs`).
- * Chat is theirs too, and also every viewer's of an app's bot (`canSeeChat`, which the caller
- * answers). Apps is every viewer's, read-only to those who may not change it, but not an archived
- * Agent's (`canSeeApps`). Returned in default order. */
 export function visibleAgentProfileTabs(
   canSeeManagerTabs: boolean,
   canSeeApps: boolean,
   canSeeChat: boolean,
+  canSeeUsage = canSeeManagerTabs,
 ): AgentProfileTab[] {
   const visible = {
     profile: true,
@@ -92,6 +89,7 @@ export function visibleAgentProfileTabs(
     reminders: canSeeManagerTabs,
     workspace: canSeeManagerTabs,
     apps: canSeeApps,
+    usage: canSeeUsage,
   };
   return AGENT_PROFILE_TABS.filter((tab) => visible[tab]);
 }

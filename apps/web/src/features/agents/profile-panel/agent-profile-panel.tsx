@@ -50,7 +50,7 @@ import { agentModelsQueryKey } from "#src/features/agents/agent-models";
 import { OPEN_OVERLAY_SELECTOR } from "#src/lib/open-overlay";
 import { AgentProfileHeader } from "./agent-profile-header";
 import { AgentProfileUnavailable } from "./agent-profile-unavailable";
-import { AgentProfileTabs, useAgentProfileTabOrder } from "./agent-profile-tabs";
+import { AgentProfileTabs, useAgentProfileTabsForProfile } from "./agent-profile-tabs";
 import { setupComputerOptions } from "./setup-computers";
 import { AgentProfileTab } from "./agent-profile-tab";
 import {
@@ -63,6 +63,7 @@ import { AgentWorkspaceTab } from "./agent-workspace-tab";
 import { AgentActivityTab } from "./agent-activity-tab";
 import { AgentAppsTab } from "./agent-apps-tab";
 import { AgentChatTab } from "./agent-chat-tab";
+import { AgentUsageTab } from "./agent-usage-tab";
 import { useAgentPanelLoaders } from "./agent-profile-loaders";
 import { AgentProfileSkeleton } from "./agent-profile-skeleton";
 import { AgentProfileStatus } from "./agent-profile-status";
@@ -146,11 +147,7 @@ export function AgentProfilePanel({
     offerComputerPicker && computersQuery.isSuccess
       ? setupComputerOptions(computersQuery.data ?? [], profile?.isWeeklyReportAssistant)
       : undefined;
-  const tabOrder = useAgentProfileTabOrder(
-    canManage,
-    Boolean(profile) && !deleted && !profile?.appBot,
-    Boolean(profile) && !deleted && (canManage || Boolean(profile?.appBot)),
-  );
+  const tabOrder = useAgentProfileTabsForProfile(profile, canManage);
   const tab = resolveAgentProfileTab(requestedTab, tabOrder.tabs);
   const loaded = Boolean(profile);
   useEffect(() => {
@@ -390,6 +387,8 @@ export function AgentProfilePanel({
           </div>
         ) : tab === "apps" ? (
           <AgentAppsTab agentId={agentId} timeZone={timeZone} />
+        ) : tab === "usage" ? (
+          <AgentUsageTab key={agentId} agentId={agentId} timeZone={timeZone} />
         ) : tab === "workspace" ? (
           <AgentWorkspaceTab
             agentId={agentId}

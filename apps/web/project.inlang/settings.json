@@ -20,6 +20,7 @@
       "./messages/{locale}/agent-runtime.json",
       "./messages/{locale}/agent-turn-interrupt.json",
       "./messages/{locale}/agent-profile.json",
+      "./messages/{locale}/agent-usage.json",
       "./messages/{locale}/conversations.json",
       "./messages/{locale}/action-cards.json",
       "./messages/{locale}/question-card.json",

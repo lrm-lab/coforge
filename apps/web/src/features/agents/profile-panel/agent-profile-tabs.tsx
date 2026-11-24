@@ -1,6 +1,7 @@
 import {
   Activity as ActivityIcon,
   AlarmClock,
+  BarChart01,
   Folder,
   Grid01,
   MessageChatCircle,
@@ -20,18 +21,31 @@ const TABS = {
   activity: { label: m.agent_activity_tab, icon: ActivityIcon },
   workspace: { label: m.agent_workspace_tab, icon: Folder },
   apps: { label: m.agent_apps_tab, icon: Grid01 },
+  usage: { label: m.agent_usage_tab, icon: BarChart01 },
 };
 
-/** The tabs this viewer may see, in their saved order; the first one is the panel's default. */
 export function useAgentProfileTabOrder(
   canSeeManagerTabs: boolean,
   canSeeApps: boolean,
   canSeeChat: boolean,
+  canSeeUsage = canSeeManagerTabs,
 ) {
   return usePanelTabOrder(
     "agentProfile",
-    visibleAgentProfileTabs(canSeeManagerTabs, canSeeApps, canSeeChat),
+    visibleAgentProfileTabs(canSeeManagerTabs, canSeeApps, canSeeChat, canSeeUsage),
   );
+}
+
+export function useAgentProfileTabsForProfile(
+  profile: { appBot?: unknown; hosting?: string; deletedAt?: unknown } | null | undefined,
+  canManage: boolean,
+) {
+  const deleted = Boolean(profile?.deletedAt);
+  const canSeeApps = Boolean(profile) && !deleted && !profile?.appBot;
+  const canSeeChat = Boolean(profile) && !deleted && (canManage || Boolean(profile?.appBot));
+  const canSeeUsage =
+    Boolean(profile) && canManage && !profile?.appBot && profile?.hosting !== "external";
+  return useAgentProfileTabOrder(canManage, canSeeApps, canSeeChat, canSeeUsage);
 }
 
 /**

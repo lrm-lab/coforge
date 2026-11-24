@@ -35,5 +35,7 @@
 | `--color-unread-capsule-muted` / `--color-unread-capsule-muted-fg` / `--color-unread-capsule-muted-divider` | `oklch(0.15 0.01 260 / 0.09)` / `var(--color-text-tertiary)` / `oklch(0.15 0.01 260 / 0.24)` | `oklch(1 0 0 / 0.13)` / `var(--color-neutral-300)` / `oklch(1 0 0 / 0.28)` | 静音或未加入频道的弱化未读胶囊底色、文字、竖线，以及 `@` 图标的浅底圆垫（在静止、悬停和选中卡片底色上均清晰可见） |
 | `--color-selection-bar-bg` / `--color-selection-bar-ring` / `--color-selection-bar-divider` | `var(--color-bg-primary)` / `rgb(16 19 25 / 0.1)` / `var(--color-border-secondary)` | `var(--color-bg-secondary)` / `rgb(255 255 255 / 0.14)` / `rgb(255 255 255 / 0.14)` | 底部多选悬浮胶囊（`SelectionActionBar`）的表面底色、细描边和计数与动作间的竖分割线 |
 | `--color-selection-bar-primary` / `--color-selection-bar-primary-fg` / `--color-selection-bar-primary_hover` | `#101319` / `#ffffff` / `#262b36` | `var(--color-neutral-100)` / `#101319` / `var(--color-neutral-200)` | 底部多选悬浮胶囊内主操作按钮的中性反色底、前景字与悬停底色（不用品牌紫，与输入框发送按钮保持克制单色语言） |
+| `--color-chart-input` / `--color-chart-output` / `--color-chart-cache` / `--color-chart-slot` | `var(--color-brand-600)` / `#0ea5e9` / `#a1a1aa` / `var(--color-neutral-200)` | `var(--color-brand-500)` / `#38bdf8` / `#71788a` / `var(--color-neutral-800)` | Agent 用量图表的有效输入/主柱、输出、缓存复用和零值基线槽位色 |
+| `--color-chart-heat-1…4` | `brand-100` `brand-200` `#7350e5` `brand-600` | `brand-950` `brand-900` `brand-700` `brand-600` | Agent 30 天用量热力日历的四档活跃强度底色（3–4 档配白字均满足 4.5:1 对比度） |
 
 `--color-field-border-typing`（输入中的淡紫描边）和白底的对比度约 1.6:1，低于 3:1，这是设计稿的值：输入中的框里有闪动的光标，描边不是唯一的提示。它的 2px 里有一道是阴影，强制颜色模式下会被去掉，所以那里用 outline 标出焦点。

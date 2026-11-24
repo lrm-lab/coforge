@@ -99,6 +99,15 @@
   --color-selection-bar-primary-fg: #ffffff;
   --color-selection-bar-primary_hover: #262b36;
 
+  --color-chart-input: var(--color-brand-600);
+  --color-chart-output: #0ea5e9;
+  --color-chart-cache: #a1a1aa;
+  --color-chart-slot: var(--color-neutral-200);
+  --color-chart-heat-1: var(--color-brand-100);
+  --color-chart-heat-2: var(--color-brand-200);
+  --color-chart-heat-3: #7350e5;
+  --color-chart-heat-4: var(--color-brand-600);
+
   --radius-xs: 0.25rem;
   --radius-md: 0.5rem;
   --radius-4xl: 2rem;
@@ -207,6 +216,15 @@
     --color-selection-bar-primary: var(--color-neutral-100);
     --color-selection-bar-primary-fg: #101319;
     --color-selection-bar-primary_hover: var(--color-neutral-200);
+
+    --color-chart-input: var(--color-brand-500);
+    --color-chart-output: #38bdf8;
+    --color-chart-cache: #71788a;
+    --color-chart-slot: var(--color-neutral-800);
+    --color-chart-heat-1: var(--color-brand-950);
+    --color-chart-heat-2: var(--color-brand-900);
+    --color-chart-heat-3: var(--color-brand-700);
+    --color-chart-heat-4: var(--color-brand-600);
   }
 }
 
