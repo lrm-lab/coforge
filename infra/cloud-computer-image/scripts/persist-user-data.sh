@@ -141,27 +141,18 @@ persist_workspace() {
   # Fallback when bind mounts are denied: symlink. Callers must cd off
   # /workspace before invoking this script (see entrypoint-foreground.sh).
   log "bind mount failed; falling back to symlink"
-  # A Workspace Agent runs as its own uid and `/root` is 0700, so a link into
-  # `/root/.coforge/workspace` is unreachable for it even when the target is group-writable: the
-  # chain above it has to be traversable too. When the host mounted the volume a second time at a
-  # world-traversable path, link through that; it is the same tree (see the mount check above).
-  local link_target="${store}"
-  local volume_alias="${COFORGE_WORKSPACE_VOLUME_ROOT:-}"
-  if [[ -n "${volume_alias}" && -d "${volume_alias}/workspace" ]]; then
-    link_target="${volume_alias}/workspace"
-  fi
   # Cannot symlink over a non-empty/real dir without replacing it; move aside.
   if [[ -d "${live}" && ! -L "${live}" ]] && ! mountpoint -q "${live}" 2>/dev/null; then
     local aside
     aside="${live}.aside.$$"
     mv "${live}" "${aside}"
-    ln -sfn "${link_target}" "${live}"
+    ln -sfn "${store}" "${live}"
     rm -rf "${aside}"
   else
-    ln -sfn "${link_target}" "${live}"
+    ln -sfn "${store}" "${live}"
   fi
   mkdir -p "${store}/uploads" "${store}/browser-shots"
-  log "workspace -> ${link_target} (symlink)"
+  log "workspace -> ${store} (symlink)"
 }
 
 ensure_venv() {
