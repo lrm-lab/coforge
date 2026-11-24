@@ -77,9 +77,10 @@ export const agentActivityFeedQuery = (agentId: string) =>
     },
   });
 
-/** Shared by the shared-channel and per-Agent-channel subscriptions below, so a private Agent's
- * frame — arriving only on its own per-Agent channel now — patches the exact same
- * cache shapes a public Agent's frame patches on the shared channel. */
+function sameActivityList(a: readonly ActivityEntry[] | undefined, b: readonly ActivityEntry[]) {
+  return a !== undefined && a.length === b.length && a.every((entry, index) => entry === b[index]);
+}
+
 function applyActivityPublication(
   queryClient: QueryClient,
   workspaceId: string,
@@ -88,25 +89,29 @@ function applyActivityPublication(
 ) {
   const frame = decodeActivityFrame(data);
   if (!frame) return;
-  // Reply intents belong to the authorized conversation stream, never Activity.
   if ("replyIntent" in frame) return;
   const observation = activityObservation(frame.activity, { workspaceId, ...scope });
   if (!observation) return;
   const { agentId, entry } = observation;
   const key = agentActivityKeys.workspace(workspaceId);
   const seeded = queryClient.getQueryData(key) !== undefined;
-  queryClient.setQueryData<RecentActivityByAgent>(key, (current = {}) => ({
-    ...current,
-    [agentId]: mergeRecent(current[agentId], [entry]),
-  }));
-  // A publication that beat the first snapshot must not stand in for the whole
-  // history: invalidate so the snapshot still loads and merges onto it.
+  queryClient.setQueryData<RecentActivityByAgent>(key, (current = {}) => {
+    const existing = current[agentId];
+    const next = mergeRecent(existing, [entry]);
+    if (sameActivityList(existing, next)) return current;
+    return {
+      ...current,
+      [agentId]: next,
+    };
+  });
   if (!seeded) void queryClient.invalidateQueries({ queryKey: key });
-  // Only patches a feed that is already cached; the panel loads it on open, and an
-  // uncached feed has no reader to patch here.
   queryClient.setQueryData(
     agentActivityFeedQuery(agentId).queryKey,
-    (current: ActivityEntry[] | undefined) => current && mergeAgentActivity(current, [entry]),
+    (current: ActivityEntry[] | undefined) => {
+      if (!current) return current;
+      const next = mergeAgentActivity(current, [entry]);
+      return sameActivityList(current, next) ? current : next;
+    },
   );
 }
 

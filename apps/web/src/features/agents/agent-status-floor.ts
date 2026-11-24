@@ -47,20 +47,38 @@ export const StatusOnlyDisplaysContext = createContext<Store<StatusOnlyDisplays>
   createStore<StatusOnlyDisplays>(new Map<string, AgentDisplaySnapshot>()),
 );
 
+const agentIndexCache = new WeakMap<
+  readonly { id: string }[],
+  ReadonlyMap<string, { id: string }>
+>();
+
+export function agentById<T extends { id: string }>(
+  agents: readonly T[],
+  agentId: string,
+): T | undefined {
+  if (!agentId) return undefined;
+  let index = agentIndexCache.get(agents);
+  if (!index) {
+    const built = new Map<string, { id: string }>();
+    for (const agent of agents) built.set(agent.id, agent);
+    agentIndexCache.set(agents, built);
+    index = built;
+  }
+  return index.get(agentId) as T | undefined;
+}
+
 export function selectLiveAgentDisplay(
   agents: readonly { id: string; display?: AgentDisplaySnapshot }[],
   agentId: string,
 ): AgentDisplaySnapshot | undefined {
-  return agentId ? agents.find((agent) => agent.id === agentId)?.display : undefined;
+  return agentById(agents, agentId)?.display;
 }
 
 export function selectExtraWatchId(
   agents: readonly { id: string; isExtra?: true }[],
   agentId: string,
 ): string {
-  return agentId && agents.some((agent) => agent.id === agentId && Boolean(agent.isExtra))
-    ? agentId
-    : "";
+  return agentById(agents, agentId)?.isExtra ? agentId : "";
 }
 
 export function resolveAgentDisplay(

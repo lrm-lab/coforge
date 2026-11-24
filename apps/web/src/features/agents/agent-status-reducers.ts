@@ -138,20 +138,56 @@ export function mergeExtraAgents<T extends StatusTrackedAgent>(list: T[], extraA
 }
 
 export function expireAgentStatuses<T extends StatusTrackedAgent>(agents: T[], now: number): T[] {
-  return agents.map((agent) =>
-    agent.status.value === "active" &&
-    typeof agent.status.expiresAt === "number" &&
-    agent.status.expiresAt <= now
-      ? {
-          ...agent,
-          status: {
-            ...agent.status,
-            value: "inactive" as const,
-            expiresAt: null,
-          },
-        }
-      : agent,
-  );
+  let changed = false;
+  const next = agents.map((agent) => {
+    if (
+      agent.status.value === "active" &&
+      typeof agent.status.expiresAt === "number" &&
+      agent.status.expiresAt <= now
+    ) {
+      changed = true;
+      return {
+        ...agent,
+        status: {
+          ...agent.status,
+          value: "inactive" as const,
+          expiresAt: null,
+        },
+      };
+    }
+    return agent;
+  });
+  return changed ? next : agents;
+}
+
+export function nextStatusExpiryMs<T extends StatusTrackedAgent>(
+  agents: readonly T[],
+): number | undefined {
+  let earliest = Number.POSITIVE_INFINITY;
+  for (const agent of agents) {
+    if (
+      agent.status.value === "active" &&
+      agent.status.expiresAt &&
+      agent.status.expiresAt < earliest
+    )
+      earliest = agent.status.expiresAt;
+  }
+  return Number.isFinite(earliest) ? earliest : undefined;
+}
+
+export function nextDisplayDeadlineMs<T extends StatusTrackedAgent>(
+  agents: readonly T[],
+): number | undefined {
+  let earliest = Number.POSITIVE_INFINITY;
+  for (const agent of agents) {
+    const display = agent.display;
+    if (!display || typeof display.expiresAt !== "number") continue;
+    const deadline = isBusyTone(display.activityKind)
+      ? display.expiresAt + ACTIVITY_PROBE_TIMEOUT_MS + 1_000
+      : display.expiresAt;
+    if (deadline < earliest) earliest = deadline;
+  }
+  return Number.isFinite(earliest) ? earliest : undefined;
 }
 
 export function nextDisplayRefreshDelayMs<T extends StatusTrackedAgent>(

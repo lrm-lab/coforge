@@ -2,9 +2,11 @@ import { expect, test } from "bun:test";
 import { createStore } from "@tanstack/react-store";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
+import { agentById } from "#src/features/agents/agent-status-floor";
 import {
   applyAgentDisplaySnapshot,
   applyAgentStatusEvent,
+  expireAgentStatuses,
   type AgentStatusView,
 } from "#src/features/agents/agent-status-realtime";
 import {
@@ -145,4 +147,25 @@ test("a status lease refresh keeps every Agent's display without repainting", ()
     a.stop();
     b.stop();
   }
+});
+
+test("expireAgentStatuses keeps the same array reference when no Agent expires", () => {
+  const list = [agent("a"), agent("b", { status: { value: "inactive", expiresAt: null } })];
+  expect(expireAgentStatuses(list, 10_000)).toBe(list);
+  const expired = expireAgentStatuses(list, 95_000);
+  expect(expired).not.toBe(list);
+  expect(expired[0]?.status.value).toBe("inactive");
+  expect(expired[1]).toBe(list[1]);
+});
+
+test("agentById resolves entries from the current array snapshot and reflects replacements", () => {
+  const first = [agent("a"), agent("b")];
+  expect(agentById(first, "a")).toBe(first[0]);
+  expect(agentById(first, "b")).toBe(first[1]);
+  expect(agentById(first, "missing")).toBeUndefined();
+  expect(agentById(first, "")).toBeUndefined();
+
+  const updated = applyAgentDisplaySnapshot(first, display("a", 2));
+  expect(agentById(updated, "a")?.display?.revision).toBe(2);
+  expect(agentById(first, "a")?.display?.revision).toBe(1);
 });

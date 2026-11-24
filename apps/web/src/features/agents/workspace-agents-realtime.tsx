@@ -3,21 +3,20 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   type ReactNode,
 } from "react";
-import { useSelector } from "@tanstack/react-store";
+import { useSelector, type Store } from "@tanstack/react-store";
 import { useQuery, useQueryClient, skipToken } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
-import { useSyncedStore } from "#src/hooks/use-synced-store";
-
 import { listAgents } from "./agents.functions";
 import { listStatusAgents } from "./workspace-agents.functions";
 import { useAgentStatuses, type AgentStatusView } from "./agent-status-realtime";
-import { LiveAgentStoreContext, StatusOnlyDisplaysContext } from "./agent-status-floor";
+import { agentById, LiveAgentStoreContext, StatusOnlyDisplaysContext } from "./agent-status-floor";
 import { useStatusAgents } from "./use-status-agents";
 import type { StreamPositions } from "#src/features/realtime/subscription-gap";
 import {
@@ -25,7 +24,7 @@ import {
   RECENT_ACTIVITY_LIMIT,
   type ActivityEntry,
 } from "./agent-activity";
-import { AGENT_VISIBILITY, type AgentVisibility } from "./agent-visibility";
+import { type AgentVisibility } from "./agent-visibility";
 import {
   agentActivityFeedQuery,
   useWorkspaceActivityRealtime,
@@ -125,17 +124,12 @@ export function WorkspaceAgentsProvider({
   const refreshStatusAgents = useServerFn(listStatusAgents);
   const loadExtras = useServerFn(loadExtraAgents);
   const queryClient = useQueryClient();
-  // The Agents the store holds right now, so a read can name the extras it still shows busy and
-  // get their real display back (see `heldDisplayAgentIds`); set after `useAgentStatuses` below.
-  const heldAgents = useRef<readonly LiveAgent[]>([]);
-  // The Agents a mounted view reads the display of: held too, and read as soon as one is watched
-  // that the store has no display for.
+  const liveAgentsStoreRef = useRef<Store<LiveAgent[]> | null>(null);
   const watched = useMemo(() => {
     let rereadQueued = false;
     return createDisplayWatchRegistry((agentId) => {
-      const known = heldAgents.current.find((agent) => agent.id === agentId);
+      const known = agentById(liveAgentsStoreRef.current?.state ?? [], agentId);
       if (known && (!known.isExtra || known.display)) return;
-      // A page of views watched at once (the Members cards) reads the extras once, not per view.
       if (rereadQueued) return;
       rereadQueued = true;
       queueMicrotask(() => {
@@ -148,7 +142,11 @@ export function WorkspaceAgentsProvider({
     (fullDisplays = false) =>
       loadExtras({
         data: {
-          heldAgentIds: heldDisplayAgentIds(heldAgents.current, Date.now(), watched.ids()),
+          heldAgentIds: heldDisplayAgentIds(
+            liveAgentsStoreRef.current?.state ?? [],
+            Date.now(),
+            watched.ids(),
+          ),
           ...(fullDisplays ? { fullDisplays: true } : {}),
         },
       }),
@@ -208,24 +206,20 @@ export function WorkspaceAgentsProvider({
     keepStatusAgents,
   ]);
 
-  // `useAgentStatuses` derives its own per-Agent status subscriptions from its own current
-  // state (see agent-status-realtime.ts), so a freshly-private Agent is subscribed the moment
-  // it learns about it — no lag from an external, previous-render list.
   const {
-    agents: visibleAgents,
+    agentsStore: liveAgents,
+    statusOnlyStore,
+    privateAgentIds,
     refresh: refreshDirectory,
-    statusOnlyDisplays,
   } = useAgentStatuses<LiveAgent>({
     agents: latestRoster,
     workspaceId,
     refresh: refreshWithExtras,
     extraAgents,
-    // An empty set means the read never answered: accept every floor rather than hide them all.
     statusOnlyAgentIds: statusAgentIds.size > 0 ? statusAgentIds : undefined,
     readPositions: agentStreamPositions,
     onVisibilityChangedEvent: workspaceId
       ? () => {
-          // A model label follows the Agent's visibility too (`agent-models.ts`).
           void queryClient.invalidateQueries({ queryKey: agentModelsQueryKey(workspaceId) });
           directoryInvalidator.schedule();
         }
@@ -233,48 +227,47 @@ export function WorkspaceAgentsProvider({
     onDirectoryChangedEvent: directoryInvalidator.schedule,
   });
 
-  heldAgents.current = visibleAgents;
+  useLayoutEffect(() => {
+    liveAgentsStoreRef.current = liveAgents;
+  }, [liveAgents]);
 
-  // Same-render derivation from the fresh `visibleAgents` state `useAgentStatuses` just
-  // produced (not a previous-render ref), so the Activity subscription set never lags behind
-  // the status one.
-  const privateAgentIds = useMemo(
-    () =>
-      visibleAgents
-        .filter((agent) => agent.visibility === AGENT_VISIBILITY.PRIVATE)
-        .map((agent) => agent.id),
-    [visibleAgents],
-  );
-  // One per Workspace: a switch starts from an empty set, and nothing outlives the shell.
   const replyIntents = useMemo(() => createReplyIntentStore(), [workspaceId]);
   useEffect(() => () => replyIntents.clear(), [replyIntents]);
   useWorkspaceActivityRealtime(workspaceId, privateAgentIds, viewerId);
   useUserChannelReplyIntents(workspaceId, viewerId, replyIntents);
 
-  // An Agent no longer visible to this viewer (dropped by `mergeAgentStatusSnapshot`
-  // from the fresh `refresh()` list, e.g. after `agent:visibility_changed`) must not leave its
-  // recent-activity entry behind in the shared cache.
   useEffect(() => {
     if (!workspaceId) return;
-    const visibleIds = new Set(visibleAgents.map((agent) => agent.id));
-    queryClient.setQueryData<RecentActivityByAgent>(
-      workspaceActivityQuery(workspaceId).queryKey,
-      (current) => {
-        if (!current) return current;
-        let changed = false;
-        const next: RecentActivityByAgent = {};
-        for (const [agentId, entries] of Object.entries(current)) {
-          if (visibleIds.has(agentId)) next[agentId] = entries;
-          else changed = true;
-        }
-        return changed ? next : current;
-      },
-    );
-  }, [visibleAgents, workspaceId, queryClient]);
+    let previousIds: Set<string> | undefined;
+    const prune = (currentAgents: readonly LiveAgent[]) => {
+      const visibleIds = new Set(currentAgents.map((agent) => agent.id));
+      if (
+        previousIds &&
+        previousIds.size === visibleIds.size &&
+        [...visibleIds].every((id) => previousIds!.has(id))
+      )
+        return;
+      previousIds = visibleIds;
+      queryClient.setQueryData<RecentActivityByAgent>(
+        workspaceActivityQuery(workspaceId).queryKey,
+        (current) => {
+          if (!current) return current;
+          let changed = false;
+          const next: RecentActivityByAgent = {};
+          for (const [agentId, entries] of Object.entries(current)) {
+            if (visibleIds.has(agentId)) next[agentId] = entries;
+            else changed = true;
+          }
+          return changed ? next : current;
+        },
+      );
+    };
+    prune(liveAgents.state);
+    const subscription = liveAgents.subscribe((currentAgents) => prune(currentAgents));
+    return () => subscription.unsubscribe();
+  }, [liveAgents, workspaceId, queryClient]);
 
   const refreshAfterWrite = useRefreshAfterAgentWrite(refreshDirectory);
-  const liveAgents = useSyncedStore(visibleAgents);
-  const statusOnlyStore = useSyncedStore(statusOnlyDisplays);
 
   return (
     <LiveAgentStoreContext value={liveAgents}>
@@ -388,42 +381,41 @@ export function useCurrentWorkspaceId(): string | undefined {
   return useContext(WorkspaceIdContext);
 }
 
-/** One Agent's live status and display snapshot, for pages open on that Agent. */
 export function useLiveAgent(agentId: string): LiveAgent | undefined {
-  return useSelector(useContext(LiveAgentStoreContext), (agents) =>
-    agents.find((agent) => agent.id === agentId),
-  );
+  return useSelector(useContext(LiveAgentStoreContext), (agents) => agentById(agents, agentId));
 }
 
-/** One Agent's mascot from the viewer's own live roster, or nothing for an Agent outside it: an
- * `isExtra` Agent or an archived one. Callers that draw the mascot of an Agent they watch (the
- * Direct-message header) read `useLiveAgent(id)?.mascot` instead, which includes an extra's. Repaints
- * only when that key changes. */
 export function useLiveAgentMascot(agentId: string): AgentMascot | undefined {
-  return useSelector(
-    useContext(LiveAgentStoreContext),
-    (agents) => agents.find((agent) => agent.id === agentId && inRoster(agent))?.mascot,
-  );
+  return useSelector(useContext(LiveAgentStoreContext), (agents) => {
+    const agent = agentById(agents, agentId);
+    return agent && inRoster(agent) ? agent.mascot : undefined;
+  });
 }
 
-/** One Agent's recent activity (≤5, newest first), for the Agent card; read only when `enabled`
- * (the viewer manages the Agent: the server answers no one else). */
 export function useAgentRecentActivity(
   agentId: string,
   conversationId: string | undefined,
   enabled: boolean,
 ): ActivityEntry[] {
   const workspaceId = useContext(WorkspaceIdContext);
+  const selectAgentRecent = useCallback(
+    (data: RecentActivityByAgent) => data[agentId] ?? EMPTY_ACTIVITY,
+    [agentId],
+  );
+  const selectConversationRecent = useCallback(
+    (entries: ActivityEntry[]) =>
+      activityInConversation(entries, conversationId).slice(0, RECENT_ACTIVITY_LIMIT),
+    [conversationId],
+  );
   const query = useQuery({
     ...workspaceActivityQuery(workspaceId),
-    select: (data) => data[agentId] ?? EMPTY_ACTIVITY,
+    select: selectAgentRecent,
     enabled: enabled && !conversationId,
   });
   const scoped = useQuery({
     ...agentActivityFeedQuery(agentId),
     enabled: enabled && Boolean(conversationId),
-    select: (entries) =>
-      activityInConversation(entries, conversationId).slice(0, RECENT_ACTIVITY_LIMIT),
+    select: selectConversationRecent,
   });
   return (conversationId ? scoped.data : query.data) ?? EMPTY_ACTIVITY;
 }
