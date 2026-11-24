@@ -1,19 +1,23 @@
 import {
   useEffect,
+  useImperativeHandle,
   useLayoutEffect,
   useRef,
   useState,
   type ChangeEvent,
   type KeyboardEvent,
   type ReactNode,
+  type Ref,
 } from "react";
 import { ChevronLeft, ChevronRight, Maximize02 as Maximize, XClose as X } from "@untitledui/icons";
 import { Input as AriaInput } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { edgeFadeStyle, TAB_BAR_END_FADE_WIDTH } from "#src/hooks/use-scroll-edges";
 import { m } from "#src/paraglide/messages";
+import type { ContentEditorRef } from "#src/features/records/report-editor/content-editor";
 import { ReportSectionEditor } from "#src/features/records/report-editor/report-section-editor";
 import { orderedReportTabNames, type ReportContent, type ReportTab } from "./records-content";
 import { cn } from "#src/lib/utils";
@@ -27,6 +31,15 @@ import {
   type ReportTabsReadingTurn,
 } from "./use-report-tabs-reading-turn";
 
+export type ReportTabsEditorRef = {
+  flush: () => void;
+  markClean: () => void;
+};
+
+export type ReportTabsChangeMeta = {
+  structural?: boolean;
+};
+
 export function ReportTabsEditor({
   content,
   editable = true,
@@ -36,10 +49,12 @@ export function ReportTabsEditor({
   trailingTabs,
   renderTrailingTab,
   onChange,
+  onDirty,
   onBlur,
   onUploadFile,
   onActiveTabChange,
   readingTurn,
+  editorRef,
 }: {
   content: ReportContent;
   editable?: boolean;
@@ -48,35 +63,88 @@ export function ReportTabsEditor({
   contentRevision?: number;
   trailingTabs?: readonly { id: string; label: string }[];
   renderTrailingTab?: (id: string) => ReactNode;
-  onChange: (content: ReportContent) => void;
+  onChange: (content: ReportContent, meta?: ReportTabsChangeMeta) => void;
+  onDirty?: () => void;
   onActiveTabChange?: (name: string) => void;
   onBlur?: () => void;
   onUploadFile?: (file: File) => Promise<UploadResult | null>;
   readingTurn?: ReportTabsReadingTurn;
+  editorRef?: Ref<ReportTabsEditorRef>;
 }) {
   const pages = content.tabs ?? { Summary: { markdown: content.markdown ?? "" } };
   const tabNames = content.tabs ? orderedReportTabNames(content) : Object.keys(pages);
   const trailing = trailingTabs ?? [];
   const allTabIds = [...tabNames, ...trailing.map((tab) => tab.id)];
-  const [selectedTab, setSelectedTab] = useState(tabNames[0] ?? trailing[0]?.id ?? "");
+  const defaultTab = tabNames[0] ?? trailing[0]?.id ?? "";
+  const [selectedTab, setSelectedTab] = useState(defaultTab);
   const [editingTab, setEditingTab] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
-  const [presenting, setPresenting] = useState(false);
+  const [presentPages, setPresentPages] = useState<ReadonlyArray<{
+    name: string;
+    markdown: string;
+  }> | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const bodyScrollerRef = useRef<HTMLDivElement>(null);
   const contentEndRef = useRef<HTMLDivElement>(null);
+  const sectionEditorRef = useRef<ContentEditorRef>(null);
+  const livePagesRef = useRef<Record<string, ReportTab>>({ ...pages });
   const [tabOverflow, setTabOverflow] = useState({ left: false, right: false });
-  const activeTab = allTabIds.includes(selectedTab)
-    ? selectedTab
-    : (tabNames[0] ?? trailing[0]?.id ?? "");
+  const activeTab = allTabIds.includes(selectedTab) ? selectedTab : defaultTab;
   const trailingActive = trailing.some((tab) => tab.id === activeTab);
+
+  const [syncedContent, setSyncedContent] = useState(() => ({
+    content,
+    contentRevision,
+    activeMarkdown: pages[defaultTab]?.markdown ?? "",
+  }));
+  if (syncedContent.content !== content || syncedContent.contentRevision !== contentRevision) {
+    setSyncedContent({
+      content,
+      contentRevision,
+      activeMarkdown: pages[activeTab]?.markdown ?? "",
+    });
+  }
+
+  useLayoutEffect(() => {
+    livePagesRef.current = { ...pages };
+  }, [content, contentRevision]);
+
+  useImperativeHandle(
+    editorRef,
+    () => ({
+      flush: () => {
+        sectionEditorRef.current?.flush();
+      },
+      markClean: () => {
+        sectionEditorRef.current?.markClean();
+      },
+    }),
+    [],
+  );
+
+  const selectTab = useLatestCallback((nextTab: string) => {
+    if (nextTab === activeTab) return;
+    sectionEditorRef.current?.flush();
+    setSelectedTab(nextTab);
+    setSyncedContent((prev) => ({
+      ...prev,
+      activeMarkdown: livePagesRef.current[nextTab]?.markdown ?? pages[nextTab]?.markdown ?? "",
+    }));
+  });
 
   useEffect(() => {
     if (activeTab) onActiveTabChange?.(activeTab);
   }, [activeTab, onActiveTabChange]);
 
   useEffect(() => {
-    if (!allTabIds.includes(selectedTab)) setSelectedTab(tabNames[0] ?? trailing[0]?.id ?? "");
+    if (!allTabIds.includes(selectedTab)) {
+      setSelectedTab(defaultTab);
+      setSyncedContent((prev) => ({
+        ...prev,
+        activeMarkdown:
+          livePagesRef.current[defaultTab]?.markdown ?? pages[defaultTab]?.markdown ?? "",
+      }));
+    }
   }, [selectedTab, allTabIds.join("\u0000")]);
 
   function updateTabOverflow() {
@@ -110,13 +178,17 @@ export function ReportTabsEditor({
     readingTurn,
     allTabIds,
     activeTab,
-    setSelectedTab,
+    setSelectedTab: selectTab,
     bodyScrollerRef,
     contentEndRef,
   });
 
   function scrollTabs(direction: -1 | 1) {
     scrollerRef.current?.scrollBy({ left: direction * 160, behavior: "smooth" });
+  }
+
+  function currentPage(name: string): ReportTab {
+    return livePagesRef.current[name] ?? pages[name] ?? { markdown: "" };
   }
 
   function defaultTabName() {
@@ -127,20 +199,28 @@ export function ReportTabsEditor({
     return `${base} ${index}`;
   }
 
-  function emitOrderedTabs(entries: [string, ReportTab][]) {
-    onChange({
-      tabs: Object.fromEntries(entries),
-      tabOrder: entries.map(([name]) => name),
-    });
+  function emitOrderedTabs(entries: [string, ReportTab][], structural = false) {
+    onChange(
+      {
+        tabs: Object.fromEntries(entries),
+        tabOrder: entries.map(([name]) => name),
+      },
+      structural ? { structural: true } : undefined,
+    );
   }
 
   function addTab() {
+    sectionEditorRef.current?.flush();
     const name = defaultTabName();
-    emitOrderedTabs([
-      ...tabNames.map((tabName): [string, ReportTab] => [tabName, pages[tabName]!]),
-      [name, { markdown: "" }],
-    ]);
+    emitOrderedTabs(
+      [
+        ...tabNames.map((tabName): [string, ReportTab] => [tabName, currentPage(tabName)]),
+        [name, { markdown: "" }],
+      ],
+      true,
+    );
     setSelectedTab(name);
+    setSyncedContent((prev) => ({ ...prev, activeMarkdown: "" }));
     setEditingTab(name);
     setEditingName("");
   }
@@ -157,13 +237,21 @@ export function ReportTabsEditor({
     const original = editingTab;
     setEditingTab(null);
     if (!name || name === original || pages[name]) return;
+    sectionEditorRef.current?.flush();
     emitOrderedTabs(
       tabNames.map((tabName): [string, ReportTab] => [
         tabName === original ? name : tabName,
-        pages[tabName]!,
+        currentPage(tabName),
       ]),
+      true,
     );
-    if (activeTab === original) setSelectedTab(name);
+    if (activeTab === original) {
+      setSelectedTab(name);
+      setSyncedContent((prev) => ({
+        ...prev,
+        activeMarkdown: currentPage(original).markdown,
+      }));
+    }
   }
 
   function handleEditChange(event: ChangeEvent<HTMLInputElement>) {
@@ -179,7 +267,7 @@ export function ReportTabsEditor({
     const next = nextReportTabIdFromKey(allTabIds, id, event.key, event.shiftKey);
     if (!next) return;
     event.preventDefault();
-    setSelectedTab(next);
+    selectTab(next);
     focusReportTab(next);
   }
 
@@ -192,39 +280,52 @@ export function ReportTabsEditor({
   }
 
   function moveTab(source: string, index: number) {
-    const entries = tabNames.map((tabName): [string, ReportTab] => [tabName, pages[tabName]!]);
+    sectionEditorRef.current?.flush();
+    const entries = tabNames.map((tabName): [string, ReportTab] => [tabName, currentPage(tabName)]);
     const sourceEntry = entries.find(([name]) => name === source);
     if (!sourceEntry) return;
     const remaining = entries.filter(([name]) => name !== source);
     remaining.splice(index, 0, sourceEntry);
-    emitOrderedTabs(remaining);
+    emitOrderedTabs(remaining, true);
   }
 
   function removeTab(name: string) {
     if (tabNames.length <= 1) return;
+    sectionEditorRef.current?.flush();
     const remaining = tabNames
       .filter((tabName) => tabName !== name)
-      .map((tabName): [string, ReportTab] => [tabName, pages[tabName]!]);
-    emitOrderedTabs(remaining);
+      .map((tabName): [string, ReportTab] => [tabName, currentPage(tabName)]);
+    emitOrderedTabs(remaining, true);
     if (activeTab === name) {
       const nextName = remaining[0]?.[0] ?? "";
       setSelectedTab(nextName);
+      setSyncedContent((prev) => ({
+        ...prev,
+        activeMarkdown: remaining[0]?.[1].markdown ?? "",
+      }));
     }
   }
 
   function updateMarkdown(markdown: string) {
     if (!editable) return;
-    const tab = pages[activeTab];
+    const tab = livePagesRef.current[activeTab] ?? pages[activeTab];
     if (!tab) return;
+    const updatedTab: ReportTab = { ...tab, markdown };
+    livePagesRef.current = { ...livePagesRef.current, [activeTab]: updatedTab };
     emitOrderedTabs(
       tabNames.map((tabName): [string, ReportTab] => [
         tabName,
-        tabName === activeTab ? { ...tab, markdown } : pages[tabName]!,
+        tabName === activeTab ? updatedTab : currentPage(tabName),
       ]),
     );
   }
 
-  const activeContent = pages[activeTab]?.markdown ?? "";
+  function openPresentMode() {
+    sectionEditorRef.current?.flush();
+    setPresentPages(tabNames.map((name) => ({ name, markdown: currentPage(name).markdown })));
+  }
+
+  const activeContent = syncedContent.activeMarkdown;
 
   const tabButtonClass = (active: boolean) =>
     cn(
@@ -258,11 +359,11 @@ export function ReportTabsEditor({
           data-report-tab={name}
           data-selected={name === activeTab ? "true" : undefined}
           aria-selected={name === activeTab}
-          onFocus={() => setSelectedTab(name)}
+          onFocus={() => selectTab(name)}
           onKeyDown={(event) => onTabKeyDown(event, name)}
           onPressStart={press?.pressStart}
           onPress={() => {
-            if (!press?.dragged()) setSelectedTab(name);
+            if (!press?.dragged()) selectTab(name);
           }}
           onDoubleClick={() => startEditingTab(name)}
           className={tabButtonClass(name === activeTab)}
@@ -335,9 +436,9 @@ export function ReportTabsEditor({
               data-report-tab={tab.id}
               data-selected={tab.id === activeTab ? "true" : undefined}
               aria-selected={tab.id === activeTab}
-              onFocus={() => setSelectedTab(tab.id)}
+              onFocus={() => selectTab(tab.id)}
               onKeyDown={(event) => onTabKeyDown(event, tab.id)}
-              onPress={() => setSelectedTab(tab.id)}
+              onPress={() => selectTab(tab.id)}
               className={tabButtonClass(tab.id === activeTab)}
             >
               {tab.label}
@@ -372,7 +473,7 @@ export function ReportTabsEditor({
           color="tertiary"
           icon={Maximize}
           aria-label={m.records_report_present()}
-          onClick={() => setPresenting(true)}
+          onClick={openPresentMode}
           className="mb-2 size-6 shrink-0 p-1 text-fg-quaternary any-pointer-coarse:mb-0 any-pointer-coarse:size-11"
         />
       ) : null}
@@ -395,12 +496,14 @@ export function ReportTabsEditor({
             <RecordsReadingColumn className="pt-5">
               <ReportSectionEditor
                 key={`${activeTab}:${contentRevision}`}
+                editorRef={sectionEditorRef}
                 defaultValue={activeContent}
                 placeholder={placeholder}
                 className="report-sections min-h-[55vh]"
                 editable={editable}
                 onUploadFile={onUploadFile}
                 onUpdate={updateMarkdown}
+                onDirty={onDirty}
                 onBlur={onBlur}
               />
             </RecordsReadingColumn>
@@ -414,27 +517,28 @@ export function ReportTabsEditor({
           <RecordsReadingColumn className="pt-5">
             <ReportSectionEditor
               key={`${activeTab}:${contentRevision}`}
+              editorRef={sectionEditorRef}
               defaultValue={activeContent}
               placeholder={placeholder}
               className="report-sections min-h-[55vh] pb-[45vh]"
               editable={editable}
-              debounceMs={editableTabs ? 0 : undefined}
               onUploadFile={onUploadFile}
               onUpdate={updateMarkdown}
+              onDirty={onDirty}
               onBlur={onBlur}
             />
           </RecordsReadingColumn>
         </div>
       )}
-      {presenting ? (
+      {presentPages ? (
         <ReportPresentMode
-          pages={tabNames.map((name) => ({ name, markdown: pages[name]?.markdown ?? "" }))}
+          pages={presentPages}
           startIndex={Math.max(0, tabNames.indexOf(activeTab))}
           placeholder={placeholder ?? ""}
           onClose={(pageIndex) => {
             const name = tabNames[pageIndex];
-            if (name) setSelectedTab(name);
-            setPresenting(false);
+            if (name) selectTab(name);
+            setPresentPages(null);
           }}
         />
       ) : null}

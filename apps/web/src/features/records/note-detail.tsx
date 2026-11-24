@@ -34,11 +34,12 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
   const [body, setBody] = useState(() => readReportDraft(note.id)?.markdown ?? note.body);
   const titleRef = useRef(title);
   const bodyRef = useRef(body);
-  titleRef.current = title;
-  bodyRef.current = body;
   const noteIdRef = useRef(note.id);
-  noteIdRef.current = note.id;
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    noteIdRef.current = note.id;
+  }, [note.id]);
   const [editingTitle, setEditingTitle] = useState(false);
   const deleteDialog = useRecordDeleteDialog();
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -78,7 +79,6 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
 
   function schedulePersist(nextBody: string) {
     dismissClearedToast();
-    setBody(nextBody);
     bodyRef.current = nextBody;
     writeReportDraft(noteIdRef.current, { markdown: nextBody });
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -152,6 +152,7 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
 
   useEffect(() => {
     return () => {
+      editorRef.current?.flush();
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = undefined;
       writeReportDraft(note.id, { markdown: bodyRef.current });

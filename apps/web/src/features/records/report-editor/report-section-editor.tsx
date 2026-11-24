@@ -7,6 +7,7 @@ import { m } from "#src/paraglide/messages";
 export type ReportSectionEditorProps = {
   defaultValue: string;
   onUpdate: (markdown: string) => void;
+  onDirty?: () => void;
   onBlur?: () => void;
   placeholder?: string;
   className?: string;
@@ -19,17 +20,19 @@ export type ReportSectionEditorProps = {
 export function ReportSectionEditor({
   defaultValue,
   onUpdate,
+  onDirty,
   onBlur,
   placeholder,
   className,
   editable = true,
-  debounceMs = 150,
+  debounceMs = 250,
   onUploadFile,
   editorRef,
 }: ReportSectionEditorProps) {
   const props: ContentEditorProps = {
     defaultValue,
     onUpdate,
+    onDirty,
     onBlur,
     placeholder,
     className,

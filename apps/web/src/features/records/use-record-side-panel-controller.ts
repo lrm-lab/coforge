@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { getRouteApi } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 
 import { m } from "#src/paraglide/messages";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { useConversationRealtime } from "#src/features/conversations/conversation-realtime-client";
+import { useBrowserRealtime } from "#src/features/realtime/browser-realtime";
+import { AWAITING_WINDOW_MS, awaitingAssistantPollIntervalMs } from "./record-side-panel-awaiting";
 import type { ReportBodyRestoreView, ReportContent } from "./records-content";
 import { commentThreadStates, sideTimeline } from "./record-side-timeline-model";
 import type { CommentRow } from "./record-side-timeline";
@@ -116,11 +118,33 @@ export function useRecordSidePanelController({
     resume: maybeResumeAwaitingAssistant,
   } = useAwaitingAssistant(assistantMessages);
   const [assistantConversationId, setAssistantConversationId] = useState<string | null>(null);
+  const realtimeClient = useBrowserRealtime();
+  const [realtimeConnected, setRealtimeConnected] = useState(
+    () => realtimeClient?.state === "connected",
+  );
   const activeSessionIdRef = useRef<string | null>(null);
   const legacySessionIdRef = useRef<string | null>(null);
   const loadThreadRef = useRef<(sessionId: string, legacyId: string | null) => Promise<void>>(
     async () => {},
   );
+
+  useEffect(() => {
+    if (!realtimeClient) {
+      setRealtimeConnected(false);
+      return;
+    }
+    setRealtimeConnected(realtimeClient.state === "connected");
+    const onConnected = () => setRealtimeConnected(true);
+    const onNotConnected = () => setRealtimeConnected(false);
+    realtimeClient.on("connected", onConnected);
+    realtimeClient.on("connecting", onNotConnected);
+    realtimeClient.on("disconnected", onNotConnected);
+    return () => {
+      realtimeClient.removeListener("connected", onConnected);
+      realtimeClient.removeListener("connecting", onNotConnected);
+      realtimeClient.removeListener("disconnected", onNotConnected);
+    };
+  }, [realtimeClient]);
 
   const threadStates = useMemo(() => commentThreadStates(comments), [comments]);
   const timeline = useMemo(
@@ -195,9 +219,11 @@ export function useRecordSidePanelController({
 
   useBodyEditRefresh(assistantMessages, bodyRestoreView?.sourceMessageId);
 
-  activeSessionIdRef.current = activeSessionId;
-  legacySessionIdRef.current = legacySessionId;
-  loadThreadRef.current = loadThread;
+  useLayoutEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+    legacySessionIdRef.current = legacySessionId;
+    loadThreadRef.current = loadThread;
+  });
 
   useConversationRealtime(assistantConversationId ?? "", async () => {
     const sessionId = activeSessionIdRef.current;
@@ -242,19 +268,30 @@ export function useRecordSidePanelController({
     session,
   ]);
 
+  const fallbackPollMs = awaitingAssistantPollIntervalMs({
+    realtimeConnected,
+    assistantConversationId,
+  });
+
   useEffect(() => {
     if (!awaitingSynthesis || !activeSessionId) return;
-    const timer = window.setInterval(() => {
-      void loadThread(activeSessionId, legacySessionId);
-    }, 4000);
     const timeout = window.setTimeout(() => {
       hideAwaitingAssistant();
-    }, 180_000);
+    }, AWAITING_WINDOW_MS);
     return () => {
-      window.clearInterval(timer);
       window.clearTimeout(timeout);
     };
-  }, [awaitingSynthesis, activeSessionId, legacySessionId]);
+  }, [awaitingSynthesis, activeSessionId]);
+
+  useEffect(() => {
+    if (!awaitingSynthesis || !activeSessionId || fallbackPollMs === null) return;
+    const timer = window.setInterval(() => {
+      void loadThreadRef.current(activeSessionId, legacySessionIdRef.current);
+    }, fallbackPollMs);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [awaitingSynthesis, activeSessionId, fallbackPollMs]);
 
   const sessionActions = useRecordSideChatSessions({
     subjectType,

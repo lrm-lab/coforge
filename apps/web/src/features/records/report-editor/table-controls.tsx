@@ -91,18 +91,14 @@ export function TableControls({
       const root = rootRef.current;
       if (!root) return;
 
-      // Column-resize updates DOM widths on every mousemove. Remeasuring /
-      // re-rendering our overlays mid-drag makes the dragged edge jump.
       const resizing = isColumnResizeDragging(editor);
       let nextTable: ActiveTable | null | undefined;
       if (resizing) {
-        nextTable = undefined; // keep previous activeTable
+        nextTable = undefined;
       } else {
         const tableInfo = findActiveTable(editor);
         nextTable = tableInfo ? measureTable(editor, root, tableInfo) : null;
 
-        // Keep the last table pinned while a handle menu is open or a drag is in
-        // progress. Otherwise blur-from-menu unmounts controls before the action runs.
         if (!nextTable) {
           const pinnedPos = openMenuRef.current?.tablePos ?? activeTableRef.current?.pos;
           if ((openMenuRef.current || dragRef.current) && typeof pinnedPos === "number") {
@@ -124,9 +120,9 @@ export function TableControls({
         }
       }
 
+      if (nextTable !== undefined) activeTableRef.current = nextTable;
       setOverlay((prev) => {
         const activeTable = nextTable === undefined ? prev.activeTable : nextTable;
-        if (nextTable !== undefined) activeTableRef.current = nextTable;
         if (prev.activeTable === activeTable && prev.columnResizing === resizing) {
           return prev;
         }
@@ -239,8 +235,6 @@ export function TableControls({
   const tableTop = activeTable.rect.top;
   const tableRight = activeTable.rect.left + activeTable.rect.width;
 
-  // Sit against the table's right edge (not the full-width wrapper). When the
-  // table overflows horizontally, clamp so the control stays in view.
   const addColumnStyle: CSSProperties = {
     left: Math.min(tableRight + 2, Math.max(visibleLeft, visibleRight - 18)),
     top: tableTop,
@@ -352,8 +346,6 @@ export function TableControls({
               aria-label={t(($) => $.table_controls.delete_table)}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => {
-                // TipTap deleteTable() walks cell ancestors and fails when the
-                // table itself is NodeSelected — delete by position instead.
                 const tablePos = activeTable.pos;
                 setOpenMenu(null);
                 deleteTableAt(editor, tablePos);
@@ -444,7 +436,6 @@ export function TableControls({
             key={handleId}
             className="pointer-events-none absolute"
             style={{
-              // Sit just outside the cell grid — no table indentation required.
               left: tableLeft - ROW_HANDLE_OUTSET,
               top: rect.top,
               width: ROW_HANDLE_OUTSET,

@@ -5,7 +5,11 @@ import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { useAppToast } from "#src/components/ui/toast";
 import { TeamKeyPointSection } from "./team-key-point-section";
-import { ReportTabsEditor } from "./report-tabs-editor";
+import {
+  ReportTabsEditor,
+  type ReportTabsChangeMeta,
+  type ReportTabsEditorRef,
+} from "./report-tabs-editor";
 import { TemplateReportHeader } from "./template-report-header";
 import {
   readReportDraft,
@@ -75,15 +79,18 @@ export function TemplateReportDetail({
   const [titleDraft, setTitleDraft] = useState(report.title);
   const [editorRevision, setEditorRevision] = useState(0);
   const formatPageRef = useRef("");
+  const tabsEditorRef = useRef<ReportTabsEditorRef>(null);
   const teamKeyPoints = useTeamKeyPointStart(report.id, isOverviewLeader);
   const contentRef = useRef(content);
-  contentRef.current = content;
   const reportIdRef = useRef(report.id);
-  reportIdRef.current = report.id;
   const scheduleWeek = currentScheduledIsoWeek(new Date());
   const formatCancelled = isAutoSendCancelled(content, scheduleWeek.year, scheduleWeek.week);
   const weekDismissed = isWeekSendDismissed(content, scheduleWeek.year, scheduleWeek.week);
   const [sideOpen, setSideOpen] = useReportSidePanelOpen(report.id, formatSurface);
+
+  useEffect(() => {
+    reportIdRef.current = report.id;
+  }, [report.id]);
 
   useEffect(() => {
     setTitleDraft(report.title);
@@ -98,6 +105,7 @@ export function TemplateReportDetail({
       JSON.stringify(normalizeReportContent(report.content))
     );
   });
+  const dirtyRef = useRef(dirty);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [titleError, setTitleError] = useState<string | null>(null);
@@ -127,9 +135,16 @@ export function TemplateReportDetail({
   );
   useEffect(() => {
     setCanSendAssignments(Boolean(report.canSendAssignments));
+    dirtyRef.current = false;
     setDirty(false);
     setConfirmOpen(false);
   }, [report.canSendAssignments, report.id]);
+
+  useEffect(() => {
+    return () => {
+      tabsEditorRef.current?.flush();
+    };
+  }, []);
 
   useEffect(() => {
     writeReportVersion(report.id, report.updatedAt);
@@ -145,8 +160,13 @@ export function TemplateReportDetail({
   }, [hasUnsavedEdits, isOverview, setFormatEditing]);
 
   function replaceContent(next: ReportContent) {
-    setContent(next);
     contentRef.current = next;
+    setContent(next);
+  }
+
+  function updateDirty(next: boolean) {
+    dirtyRef.current = next;
+    setDirty(next);
   }
 
   function onConflict(cause: unknown) {
@@ -166,18 +186,29 @@ export function TemplateReportDetail({
       async () => {
         result = await saved;
       },
-      () => void persist(contentRef.current, undefined, options),
+      () => {
+        tabsEditorRef.current?.flush();
+        void persist(contentRef.current, undefined, options);
+      },
       () => reportId === reportIdRef.current,
       onConflict,
     );
     if (!ok || !result) return false;
     if (reportId === reportIdRef.current) {
+      const editedDuringSave = contentRef.current !== next;
+      const baseContent = editedDuringSave ? contentRef.current : normalized;
       const nextContent = result.autoSendJustCancelled
-        ? withAutoSendCancelled(normalized, report.cycle.year, report.cycle.week)
-        : normalized;
-      replaceContent(nextContent);
+        ? withAutoSendCancelled(baseContent, report.cycle.year, report.cycle.week)
+        : baseContent;
+      if (editedDuringSave) {
+        contentRef.current = nextContent;
+        if (result.autoSendJustCancelled) setContent(nextContent);
+      } else {
+        replaceContent(nextContent);
+        updateDirty(false);
+        tabsEditorRef.current?.markClean();
+      }
       writeReportDraft(reportId, nextContent);
-      setDirty(false);
       if (result.assistantPosted) {
         setSideOpen(true);
         setSideRefresh((token) => token + 1);
@@ -189,13 +220,20 @@ export function TemplateReportDetail({
     return true;
   }
 
-  function markLocalContent(next: ReportContent) {
-    replaceContent(next);
-    setDirty(true);
-    writeReportDraft(reportIdRef.current, next);
+  function markLocalContent(next: ReportContent, meta?: ReportTabsChangeMeta) {
+    const merged: ReportContent = {
+      ...contentRef.current,
+      tabs: next.tabs,
+      tabOrder: next.tabOrder,
+    };
+    contentRef.current = merged;
+    if (meta?.structural) setContent(merged);
+    updateDirty(true);
+    writeReportDraft(reportIdRef.current, merged);
   }
 
   async function saveFormatEdits() {
+    tabsEditorRef.current?.flush();
     if (metaDirty) {
       const nextTitle = titleDraft.trim();
       if (!isValidTemplateName(nextTitle)) {
@@ -220,13 +258,14 @@ export function TemplateReportDetail({
       writeReportVersion(reportIdRef.current, meta.updatedAt);
       await refresh.records();
     }
-    if (dirty) {
+    if (dirtyRef.current) {
       await persist(contentRef.current, undefined, { askToSend: true });
     }
   }
 
   async function onSendAssignments() {
-    if (sending || hasUnsavedEdits) return;
+    tabsEditorRef.current?.flush();
+    if (sending || hasUnsavedEdits || dirtyRef.current) return;
     if (sendSchedule?.alreadySent) {
       setSendError(m.records_report_send_assignments_error());
       setConfirmOpen(false);
@@ -289,7 +328,7 @@ export function TemplateReportDetail({
     if (!draft) return;
     const normalized = normalizeLeaderFormatTabs(draft);
     replaceContent(normalized);
-    setDirty(
+    updateDirty(
       JSON.stringify(normalizeReportContent(normalized)) !==
         JSON.stringify(normalizeReportContent(report.content)),
     );
@@ -342,9 +381,10 @@ export function TemplateReportDetail({
           onOpenSide={() => setSideOpen(true)}
           onRequestDeleteOverview={deleteDialog.request}
           onResetPage={() => {
+            tabsEditorRef.current?.flush();
             const page = formatPageRef.current || Object.keys(contentRef.current.tabs ?? {})[0];
             if (!page) return;
-            markLocalContent(resetLeaderFormatPage(contentRef.current, page));
+            markLocalContent(resetLeaderFormatPage(contentRef.current, page), { structural: true });
             setEditorRevision((revision) => revision + 1);
           }}
         />
@@ -374,12 +414,14 @@ export function TemplateReportDetail({
           </div>
         ) : (
           <ReportTabsEditor
+            editorRef={tabsEditorRef}
             content={content}
             editable={report.editable !== false}
             editableTabs
             contentRevision={editorRevision}
             placeholder={m.records_report_body_placeholder()}
             onUploadFile={fileToDataUrlUpload}
+            onDirty={() => updateDirty(true)}
             onChange={markLocalContent}
             onActiveTabChange={(name) => {
               formatPageRef.current = name;
@@ -403,6 +445,7 @@ export function TemplateReportDetail({
           setConfirmOpen(true);
         }}
         onWeekSendDismissed={() => {
+          tabsEditorRef.current?.flush();
           const week = currentScheduledIsoWeek(new Date());
           const next = withWeekSendDismissed(contentRef.current, week.year, week.week);
           replaceContent(next);

@@ -62,7 +62,8 @@ export function RecordSidePanel({
   keyPointRestartBusy?: boolean;
   onRestartKeyPointExtraction?: () => void;
 }) {
-  const { asideRef, panelWidth, displayWidth, docked, resizeHandle } = useSidePanelWidth(open);
+  const { asideRef, panelWidth, asideStyle, contentMinWidth, docked, resizeHandle } =
+    useSidePanelWidth(open);
   const {
     workspaceSlug,
     viewer,
@@ -120,7 +121,7 @@ export function RecordSidePanel({
   return (
     <aside
       ref={asideRef}
-      style={{ width: displayWidth }}
+      style={asideStyle}
       aria-hidden={!open}
       inert={!open}
       className={cx(
@@ -134,10 +135,7 @@ export function RecordSidePanel({
         open ? "border-s border-secondary" : "border-s-0",
       )}
     >
-      <div
-        className="flex h-full w-full min-h-0 flex-col"
-        style={{ minWidth: open ? `min(100%, ${panelWidth}rem)` : 0 }}
-      >
+      <div className="flex h-full w-full min-h-0 flex-col" style={{ minWidth: contentMinWidth }}>
         <div
           role="separator"
           aria-orientation="vertical"

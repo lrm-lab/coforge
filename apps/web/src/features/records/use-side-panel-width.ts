@@ -1,8 +1,10 @@
 import {
   useCallback,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
@@ -22,13 +24,22 @@ import {
   writeStoredSidePanelWidth,
 } from "./record-side-panel-width";
 
+const SIDE_PANEL_WIDTH_CSS_VAR = "--record-side-panel-width";
+
+type PanelDragState = {
+  startX: number;
+  startWidth: number;
+  rootPx: number;
+  max: number;
+  rtl: boolean;
+};
+
 export function useSidePanelWidth(open: boolean) {
   const asideRef = useRef<HTMLElement>(null);
   const parentRef = useRef<HTMLElement | null>(null);
-  const panelDragRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const panelDragRef = useRef<PanelDragState | null>(null);
   const panelWidthRef = useRef(DEFAULT_SIDE_PANEL_WIDTH);
   const [panelWidth, setPanelWidth] = useState(DEFAULT_SIDE_PANEL_WIDTH);
-  panelWidthRef.current = panelWidth;
   const beside = useBreakpoint("lg");
   const [docked, setDocked] = useState(beside);
 
@@ -37,17 +48,22 @@ export function useSidePanelWidth(open: boolean) {
     parentRef.current = parent;
     if (!parent) return;
     const rootPx = readRootFontSizePx();
-    const nextDocked = canDockSidePanel(parent.clientWidth, beside, rootPx);
+    const parentWidthPx = parent.clientWidth;
+    const nextDocked = canDockSidePanel(parentWidthPx, beside, rootPx);
     setDocked(nextDocked);
+    const drag = panelDragRef.current;
+    if (drag) {
+      drag.rootPx = rootPx;
+      drag.max = Math.max(MIN_SIDE_PANEL_WIDTH, maxDockedSidePanelWidth(parentWidthPx, rootPx));
+      const clamped = fitSidePanelWidth(panelWidthRef.current, parentWidthPx, beside, rootPx);
+      panelWidthRef.current = clamped;
+      asideRef.current?.style.setProperty(SIDE_PANEL_WIDTH_CSS_VAR, `${clamped}rem`);
+      return;
+    }
     const preferred = nextDocked ? readStoredSidePanelWidth() : panelWidthRef.current;
-    setPanelWidth((current) =>
-      fitSidePanelWidth(
-        panelDragRef.current ? current : preferred,
-        parent.clientWidth,
-        beside,
-        rootPx,
-      ),
-    );
+    const next = fitSidePanelWidth(preferred, parentWidthPx, beside, rootPx);
+    panelWidthRef.current = next;
+    setPanelWidth(next);
   }, [beside]);
 
   useLayoutEffect(() => {
@@ -57,26 +73,39 @@ export function useSidePanelWidth(open: boolean) {
 
   useResizeObserver({ ref: parentRef, onResize: clampToParent });
 
-  function commitPanelWidth(width: number) {
-    panelWidthRef.current = width;
-    setPanelWidth(width);
-  }
+  useEffect(() => {
+    return () => {
+      if (!panelDragRef.current) return;
+      panelDragRef.current = null;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, []);
 
-  function currentMaxWidth() {
+  function currentMaxWidth(rootPx: number) {
     const parent = asideRef.current?.parentElement;
-    const rootPx = readRootFontSizePx();
     if (!parent) return roundSidePanelRem(window.innerWidth / rootPx / 2);
     return Math.max(MIN_SIDE_PANEL_WIDTH, maxDockedSidePanelWidth(parent.clientWidth, rootPx));
   }
 
   function onPanelResizePointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
     const parent = asideRef.current?.parentElement;
-    const isDocked = parent
-      ? canDockSidePanel(parent.clientWidth, beside, readRootFontSizePx())
-      : docked;
-    if (event.button !== 0 || !isDocked) return;
+    const rootPx = readRootFontSizePx();
+    const isDocked = parent ? canDockSidePanel(parent.clientWidth, beside, rootPx) : docked;
+    if (!isDocked) return;
     event.preventDefault();
-    panelDragRef.current = { startX: event.clientX, startWidth: panelWidthRef.current };
+    const max = parent
+      ? Math.max(MIN_SIDE_PANEL_WIDTH, maxDockedSidePanelWidth(parent.clientWidth, rootPx))
+      : roundSidePanelRem(window.innerWidth / rootPx / 2);
+    const rtl = window.getComputedStyle(event.currentTarget).direction === "rtl";
+    panelDragRef.current = {
+      startX: event.clientX,
+      startWidth: panelWidthRef.current,
+      rootPx,
+      max,
+      rtl,
+    };
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
     try {
@@ -87,14 +116,15 @@ export function useSidePanelWidth(open: boolean) {
   function onPanelResizePointerMove(event: PointerEvent<HTMLDivElement>) {
     const drag = panelDragRef.current;
     if (!drag) return;
-    const max = currentMaxWidth();
-    const rootPx = readRootFontSizePx();
-    const rtl = window.getComputedStyle(event.currentTarget).direction === "rtl";
-    const deltaRem = (rtl ? event.clientX - drag.startX : drag.startX - event.clientX) / rootPx;
+    const deltaRem =
+      (drag.rtl ? event.clientX - drag.startX : drag.startX - event.clientX) / drag.rootPx;
     const next = roundSidePanelRem(
-      Math.min(Math.max(drag.startWidth + deltaRem, MIN_SIDE_PANEL_WIDTH), max),
+      Math.min(Math.max(drag.startWidth + deltaRem, MIN_SIDE_PANEL_WIDTH), drag.max),
     );
-    commitPanelWidth(next);
+    if (next === panelWidthRef.current) return;
+    panelWidthRef.current = next;
+    asideRef.current?.style.setProperty(SIDE_PANEL_WIDTH_CSS_VAR, `${next}rem`);
+    event.currentTarget.setAttribute("aria-valuenow", String(Math.round(next * 10) / 10));
   }
 
   function onPanelResizePointerUp(event: PointerEvent<HTMLDivElement>) {
@@ -105,41 +135,45 @@ export function useSidePanelWidth(open: boolean) {
     } catch {}
     document.body.style.cursor = "";
     document.body.style.userSelect = "";
-    writeStoredSidePanelWidth(panelWidthRef.current);
+    const committed = panelWidthRef.current;
+    setPanelWidth(committed);
+    writeStoredSidePanelWidth(committed);
   }
 
   function onPanelResizeKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (!docked) return;
-    const max = currentMaxWidth();
-    const step = event.shiftKey ? 3 : 1;
     const rtl = window.getComputedStyle(event.currentTarget).direction === "rtl";
     const widenKey = rtl ? "ArrowRight" : "ArrowLeft";
     const shrinkKey = rtl ? "ArrowLeft" : "ArrowRight";
-    if (event.key === widenKey) {
-      event.preventDefault();
-      setPanelWidth((current) => {
-        const next = roundSidePanelRem(Math.min(current + step, max));
-        panelWidthRef.current = next;
-        writeStoredSidePanelWidth(next);
-        return next;
-      });
-    } else if (event.key === shrinkKey) {
-      event.preventDefault();
-      setPanelWidth((current) => {
-        const next = roundSidePanelRem(Math.max(current - step, MIN_SIDE_PANEL_WIDTH));
-        panelWidthRef.current = next;
-        writeStoredSidePanelWidth(next);
-        return next;
-      });
-    }
+    if (event.key !== widenKey && event.key !== shrinkKey) return;
+    event.preventDefault();
+    const max = currentMaxWidth(readRootFontSizePx());
+    const step = event.shiftKey ? 3 : 1;
+    const next =
+      event.key === widenKey
+        ? roundSidePanelRem(Math.min(panelWidthRef.current + step, max))
+        : roundSidePanelRem(Math.max(panelWidthRef.current - step, MIN_SIDE_PANEL_WIDTH));
+    panelWidthRef.current = next;
+    asideRef.current?.style.setProperty(SIDE_PANEL_WIDTH_CSS_VAR, `${next}rem`);
+    setPanelWidth(next);
+    writeStoredSidePanelWidth(next);
   }
 
-  const displayWidth = open ? (beside ? `min(100%, ${panelWidth}rem)` : "100%") : 0;
+  const asideStyle = (
+    open
+      ? {
+          [SIDE_PANEL_WIDTH_CSS_VAR]: `${panelWidth}rem`,
+          width: beside ? `min(100%, var(${SIDE_PANEL_WIDTH_CSS_VAR}))` : "100%",
+        }
+      : { width: 0 }
+  ) as CSSProperties;
+  const contentMinWidth = open ? `min(100%, var(${SIDE_PANEL_WIDTH_CSS_VAR}))` : 0;
 
   return {
     asideRef,
     panelWidth,
-    displayWidth,
+    asideStyle,
+    contentMinWidth,
     docked,
     resizeHandle: {
       onPointerDown: onPanelResizePointerDown,

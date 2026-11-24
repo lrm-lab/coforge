@@ -4,7 +4,11 @@ import { useServerFn } from "@tanstack/react-start";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { KEY_POINT_EXTRACTION_TAB, KeyPointExtractionPanel } from "./key-point-extraction-panel";
-import { ReportTabsEditor } from "./report-tabs-editor";
+import {
+  ReportTabsEditor,
+  type ReportTabsChangeMeta,
+  type ReportTabsEditorRef,
+} from "./report-tabs-editor";
 import {
   readReportDraft,
   clearReportDraft,
@@ -71,13 +75,12 @@ export function ReportDetail({
       : normalizeReportContent(report.content),
   );
   const contentRef = useRef(content);
-  contentRef.current = content;
+  const tabsEditorRef = useRef<ReportTabsEditorRef>(null);
   const [editorRevision, setEditorRevision] = useState(0);
   const [restoreView, setRestoreView] = useState(report.bodyRestoreView ?? null);
   const [restoreBusy, setRestoreBusy] = useState(false);
   const seenRestoreRevisionRef = useRef<number | null>(null);
   const reportIdRef = useRef(report.id);
-  reportIdRef.current = report.id;
   const isAssignment = Boolean(report.sourceTemplateId);
   const leaderReading = report.kind === "member" && report.editable !== true;
   const memberAssignee = report.kind === "member" && editable && isAssignment;
@@ -92,9 +95,6 @@ export function ReportDetail({
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const [keyPointRestartBusy, setKeyPointRestartBusy] = useState(false);
   const [status, setStatus] = useState(report.status);
-  useEffect(() => {
-    setStatus(report.status);
-  }, [report.status, report.id]);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const submitInFlightRef = useRef(false);
   const sendAckTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -104,10 +104,21 @@ export function ReportDetail({
     if (!memberAssignee) return null;
     return normalizeReportContent(report.content).received ?? null;
   }, [memberAssignee, report.content]);
-  const assignmentUnchanged =
-    receivedBaseline != null && reportTabsEqual(content, receivedBaseline);
+  const [assignmentUnchanged, setAssignmentUnchanged] = useState(
+    () => receivedBaseline != null && reportTabsEqual(content, receivedBaseline),
+  );
   const readingScroll = (leaderReading && sent) || memberAssignee;
   const readingTurn = useReportReadingTurn(report.id, report.cycle, readingScroll);
+
+  useEffect(() => {
+    reportIdRef.current = report.id;
+  }, [report.id]);
+
+  useEffect(() => {
+    setAssignmentUnchanged(
+      receivedBaseline != null && reportTabsEqual(contentRef.current, receivedBaseline),
+    );
+  }, [receivedBaseline]);
 
   useEffect(() => {
     setFavorited(Boolean(report.favorited));
@@ -127,12 +138,18 @@ export function ReportDetail({
     };
   }, []);
 
+  function syncAssignmentUnchanged(next: ReportContent) {
+    setAssignmentUnchanged(receivedBaseline != null && reportTabsEqual(next, receivedBaseline));
+  }
+
   function replaceContent(next: ReportContent) {
-    setContent(next);
     contentRef.current = next;
+    setContent(next);
+    syncAssignmentUnchanged(next);
   }
 
   function exportReport() {
+    tabsEditorRef.current?.flush();
     const markdown = reportContentToMarkdown(contentRef.current);
     const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -165,19 +182,21 @@ export function ReportDetail({
     reportId = reportIdRef.current,
   ) {
     if (!editable) return true;
-    const { normalized, saved } = saveDraft(reportId, next, { status: nextStatus });
+    const { saved } = saveDraft(reportId, next, { status: nextStatus });
     const ok = await track(
       () => saved,
-      () => void persist(contentRef.current, nextStatus),
+      () => {
+        tabsEditorRef.current?.flush();
+        void persist(contentRef.current, nextStatus);
+      },
       () => reportId === reportIdRef.current,
       (cause) => {
         if (isAppErrorCode(cause, "CONFLICT")) void refresh.record();
       },
     );
     if (!ok) return false;
-    if (reportId === reportIdRef.current) {
-      replaceContent(normalized);
-      if (nextStatus) setStatus(nextStatus);
+    if (reportId === reportIdRef.current && nextStatus) {
+      setStatus(nextStatus);
     }
     if (nextStatus === "submitted") {
       showSendAck();
@@ -202,7 +221,10 @@ export function ReportDetail({
   }
 
   async function submitReport() {
-    if (submitInFlightRef.current || assignmentUnchanged) return;
+    tabsEditorRef.current?.flush();
+    const unchanged =
+      receivedBaseline != null && reportTabsEqual(contentRef.current, receivedBaseline);
+    if (submitInFlightRef.current || unchanged) return;
     submitInFlightRef.current = true;
     clearScheduledPersist();
     try {
@@ -215,13 +237,21 @@ export function ReportDetail({
     }
   }
 
-  function schedulePersist(next: ReportContent) {
+  function schedulePersist(next: ReportContent, meta?: ReportTabsChangeMeta) {
     if (!editable) return;
-    replaceContent(next);
-    writeReportDraft(reportIdRef.current, next);
+    const merged: ReportContent = {
+      ...contentRef.current,
+      tabs: next.tabs,
+      tabOrder: next.tabOrder,
+    };
+    contentRef.current = merged;
+    if (meta?.structural) setContent(merged);
+    syncAssignmentUnchanged(merged);
+    writeReportDraft(reportIdRef.current, merged);
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     const reportId = reportIdRef.current;
     saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = undefined;
       void persist(contentRef.current, undefined, reportId);
     }, 900);
   }
@@ -316,7 +346,7 @@ export function ReportDetail({
       if (cancelled) return;
       if (result.updatedAt) writeReportVersion(report.id, result.updatedAt);
       const next = withAssignmentUnread(contentRef.current, false);
-      replaceContent(next);
+      contentRef.current = next;
       writeReportDraft(report.id, next);
       void refresh.records();
     });
@@ -327,7 +357,9 @@ export function ReportDetail({
 
   useEffect(() => {
     return () => {
-      if (!editable || !saveTimerRef.current) return;
+      if (!editable) return;
+      tabsEditorRef.current?.flush();
+      if (!saveTimerRef.current) return;
       clearTimeout(saveTimerRef.current);
       saveTimerRef.current = undefined;
       saveDraft(report.id, contentRef.current);
@@ -376,6 +408,7 @@ export function ReportDetail({
 
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
           <ReportTabsEditor
+            editorRef={tabsEditorRef}
             content={content}
             editable={editable}
             contentRevision={editorRevision}

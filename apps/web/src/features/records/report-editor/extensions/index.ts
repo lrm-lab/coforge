@@ -1,7 +1,3 @@
-/**
- * Shared TipTap extension factory for the weekly-report section editor.
- * Mentions, issue/channel/run refs, and skill slash menus are omitted.
- */
 import type { RefObject } from "react";
 import StarterKit from "@tiptap/starter-kit";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
@@ -126,6 +122,7 @@ export const ImageExtension = Image.extend({
 });
 
 export interface EditorExtensionsOptions {
+  editable?: boolean;
   placeholder?: string;
   onUploadFileRef?: RefObject<((file: File) => Promise<UploadResult | null>) | undefined>;
   mediaModeRef?: RefObject<"inline" | "external">;
@@ -133,14 +130,12 @@ export interface EditorExtensionsOptions {
   enableSlashCommands?: boolean;
   slashCommandMode?: "block";
   enableTextStyles?: boolean;
-  /** Room to write under a heading with nothing under it (a weekly report's sections). */
   sectionGaps?: boolean;
-  /** What an unwritten section's room says. */
   sectionGapPlaceholder?: string;
 }
 
 export function createEditorExtensions(options: EditorExtensionsOptions): AnyExtension[] {
-  const { placeholder: placeholderText } = options;
+  const { editable = true, placeholder: placeholderText } = options;
   const onUploadFileRef = options.onUploadFileRef ?? { current: undefined };
 
   return [
@@ -206,9 +201,9 @@ export function createEditorExtensions(options: EditorExtensionsOptions): AnyExt
     LinkExtension,
     ImageExtension,
     TableWithColwidthMarkdown.configure({
-      resizable: true,
+      resizable: editable,
       renderWrapper: true,
-      allowTableNodeSelection: true,
+      allowTableNodeSelection: editable,
       cellMinWidth: TABLE_CELL_MIN_WIDTH,
       View: StableTableView,
     }),
@@ -222,22 +217,27 @@ export function createEditorExtensions(options: EditorExtensionsOptions): AnyExt
     Markdown.configure({ indentation: { style: "space", size: 3 } }),
     createMarkdownCopyExtension(),
     FileCardExtension,
-    SlashCommandExtension.configure({
-      HTMLAttributes: { class: "slash-command" },
-      suggestion: !options.enableSlashCommands
-        ? { char: "/", allow: () => false }
-        : createBlockCommandSuggestion(),
-    }),
-    Typography,
-    Placeholder.configure({ placeholder: placeholderText }),
-    ...(options.sectionGaps
+    ...(editable && options.enableSlashCommands
+      ? [
+          SlashCommandExtension.configure({
+            HTMLAttributes: { class: "slash-command" },
+            suggestion: createBlockCommandSuggestion(),
+          }),
+        ]
+      : []),
+    ...(editable ? [Typography, Placeholder.configure({ placeholder: placeholderText })] : []),
+    ...(editable && options.sectionGaps
       ? [SectionGap.configure({ placeholder: options.sectionGapPlaceholder ?? "" })]
       : []),
-    createMarkdownPasteExtension(),
-    createBlurShortcutExtension(),
-    createFileUploadExtension(onUploadFileRef, {
-      mediaModeRef: options.mediaModeRef,
-      onExternalFilesRef: options.onExternalFilesRef,
-    }),
+    ...(editable
+      ? [
+          createMarkdownPasteExtension(),
+          createBlurShortcutExtension(),
+          createFileUploadExtension(onUploadFileRef, {
+            mediaModeRef: options.mediaModeRef,
+            onExternalFilesRef: options.onExternalFilesRef,
+          }),
+        ]
+      : []),
   ];
 }
