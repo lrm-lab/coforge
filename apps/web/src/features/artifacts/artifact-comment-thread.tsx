@@ -43,7 +43,7 @@ import { syncOwnComments, type ArtifactCommentView } from "./artifact-comment-qu
 import { CommentAnchorLine } from "./artifact-comment-anchor";
 import { CommentAuthorAvatar } from "./artifact-comment-avatar";
 import { canSaveCommentEdit, type CommentThread } from "./artifact-comment-threads";
-import { InlineRefText } from "./artifact-inline-editor";
+import { InlineRefText } from "./artifact-inline-ref-text";
 import { hasInlineRefs } from "./artifact-inline-refs";
 import {
   commentWriteFailure,

@@ -19,7 +19,7 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { hasImages, type CommentDraftView } from "./artifact-comment-drafts-queries";
 import type { CommentAnchor } from "./artifact-comment-inputs";
-import { InlineRefText } from "./artifact-inline-editor";
+import { InlineRefText } from "./artifact-inline-ref-text";
 import { extractElementTag } from "./artifact-inline-refs";
 
 export const SECONDARY_PILL_CLASS =

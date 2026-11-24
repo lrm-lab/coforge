@@ -13,7 +13,7 @@ import { m } from "#src/paraglide/messages";
 import { CommentAnchorLine } from "./artifact-comment-anchor";
 import { COMMENT_MENTIONS_MAX } from "./artifact-comment-inputs";
 import { CommentEditor } from "./artifact-comment-thread";
-import { InlineRefText } from "./artifact-inline-editor";
+import { InlineRefText } from "./artifact-inline-ref-text";
 import { hasInlineRefs } from "./artifact-inline-refs";
 import {
   useCommentDraftActions,
