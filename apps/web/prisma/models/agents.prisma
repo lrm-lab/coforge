@@ -95,6 +95,7 @@ model Agent {
   appEvents                 AppAgentEvent[]
   systemEvents              SystemAgentEvent[]
   usageLimitEventAgents     UsageLimitEventAgent[]
+  tokenUsageTurns           AgentTokenUsageTurn[]
   /// Set for an app's bot (`systemKind = app-bot`): the installation it speaks for.
   appBot                    AppInstallationBot?
 

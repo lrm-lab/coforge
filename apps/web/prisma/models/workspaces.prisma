@@ -48,6 +48,7 @@ model Workspace {
   messageDeliveries      AgentMessageDelivery[]
   agentActivity          AgentActivity[]
   agentManualEvents      AgentManualEvent[]
+  agentTokenUsageTurns   AgentTokenUsageTurn[]
   reminders              Reminder[]
   reminderEvents         ReminderEvent[]
   reminderTriggers       ReminderTrigger[]

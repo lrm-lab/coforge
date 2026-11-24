@@ -1,0 +1,30 @@
+/// Per-turn token usage reported by the Daemon for an Agent.
+/// Stored at turn granularity so Web aggregates exact calendar days and hours in the viewer's
+/// time zone and deduplicates retries via `(agentId, launchId, turnSeq)`.
+model AgentTokenUsageTurn {
+  id                    String   @id @default(uuid(7)) @db.Uuid
+  workspaceId           String   @map("workspace_id") @db.Uuid
+  agentId               String   @map("agent_id") @db.Uuid
+  computerId            String?  @map("computer_id") @db.Uuid
+  launchId              String   @map("launch_id")
+  sessionId             String?  @map("session_id")
+  turnSeq               Int      @map("turn_seq")
+  provider              String
+  model                 String
+  uncachedInputTokens   BigInt   @map("uncached_input_tokens")
+  cacheReadTokens       BigInt   @map("cache_read_tokens")
+  cacheWriteTokens      BigInt   @map("cache_write_tokens")
+  outputTokens          BigInt   @map("output_tokens")
+  reasoningOutputTokens BigInt?  @map("reasoning_output_tokens")
+  contextUsedTokens     Int?     @map("context_used_tokens")
+  contextWindowTokens   Int?     @map("context_window_tokens")
+  recordedAt            DateTime @map("recorded_at")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  agent     Agent     @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, launchId, turnSeq])
+  @@index([workspaceId, agentId, recordedAt(sort: Desc)])
+  @@map("agent_token_usage_turns")
+}
