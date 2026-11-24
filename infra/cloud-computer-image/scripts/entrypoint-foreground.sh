@@ -40,10 +40,6 @@ export COFORGE_CLOUD_COMPUTER="${COFORGE_CLOUD_COMPUTER:-1}"
 
 # After /workspace is durable: seed/sync Pi skills, then bind-mount so newly
 # created container-level skills land on the persistent volume automatically.
-if [[ -x /usr/local/bin/provision-workspace-identities.sh ]]; then
-  /usr/local/bin/provision-workspace-identities.sh || echo "[entrypoint] provision-workspace-identities.sh failed" >&2
-fi
-
 if [[ -x /usr/local/bin/sync-pi-skills.sh ]]; then
   /usr/local/bin/sync-pi-skills.sh || echo "[entrypoint] sync-pi-skills.sh failed" >&2
 fi
