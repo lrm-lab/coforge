@@ -49,9 +49,7 @@ export async function answeredWithin<T>(
 }
 
 /**
- * How long the Coordinator waits for one Workspace daemon to answer a runner hold. A Workspace
- * that does not answer is reported unreachable and counted as idle: a wedged or dead Workspace
- * daemon must never be able to block a Computer upgrade or a restart.
+ * How long the Coordinator waits for one Workspace daemon to answer a restart runner hold.
  */
 export const RUNNER_HOLD_WORKSPACE_TIMEOUT_MS = 5_000;
 
@@ -71,9 +69,7 @@ export type WorkspaceRunnerHoldRequest = {
 /**
  * Asks one Workspace daemon to hold (or release) its runners. A Workspace that does not answer
  * inside `RUNNER_HOLD_WORKSPACE_TIMEOUT_MS`, answers `accepted: false`, or fails outright is
- * reported unreachable and counted as idle: a wedged or dead Workspace daemon must never be
- * able to block a Computer upgrade or a restart. Shared by the Coordinator-wide fan-out and by
- * the per-Workspace restart hold.
+ * reported unreachable. A restart can proceed when it has no confirmed busy Agents.
  */
 export async function askWorkspaceRunnerHold({
   workspaceId,

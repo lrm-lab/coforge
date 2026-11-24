@@ -128,7 +128,9 @@ export async function readLocalUpgradeContext(installRoot: string, requestId: st
 export async function snapshotUpgradeBindings(
   installRoot: string,
   requestId: string,
-  workspaces: () => Promise<ManagedRuntimeIdentity[]>,
+  workspaces: () => Promise<
+    Pick<ManagedRuntimeIdentity, "workspaceId" | "lifecycleUnderWay" | "processId" | "enabled">[]
+  >,
 ) {
   const attempt = await readLocalUpgradeContext(installRoot, requestId);
   if (!attempt || (await Bun.file(join(attempt.directory, "snapshot.json")).exists())) return;

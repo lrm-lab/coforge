@@ -159,7 +159,7 @@ deployment that accepts it.
 ## Agents during an upgrade
 
 Before stopping, the installer requests a runner hold. It proceeds when idle or after 120 s.
-It also proceeds after 3 s without an acknowledgement or 15 s without a fresh report.
+The Supervisor keeps a Workspace pending while its live native instance lacks a hold receipt from the same connection. It refreshes the report with a positive wait count for existing installers until that instance answers or native observation confirms it has stopped. The installer still proceeds after 3 s without an acknowledgement or 15 s without a fresh report.
 Busy turns can be interrupted. Unread messages resume under the [ACK rules](../agents/architecture-invariants.md). Owners follow download and verification, the turn wait, the installer switch, and Workspace reconnection in Computer details. The target being online and the installer verifying the switch appear separately. Visible Workspaces report their own recovery. The operation accepts evidence for ten minutes. Workspace recovery waits up to two minutes after supervisor health is recorded, within that deadline.
 
 ## The restart runner hold

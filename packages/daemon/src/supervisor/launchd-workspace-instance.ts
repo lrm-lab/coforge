@@ -1,6 +1,7 @@
 import { dirname, join } from "node:path";
 import { LaunchdJob, type LaunchdJobConfig } from "#src/platform/launchd-job";
 import { stopLaunchdAgents } from "#src/platform/launchd-process";
+import { WorkspaceHealthJournal, workspaceHealthJournalPath } from "./workspace-health-journal";
 import {
   validateWorkspaceEndpoint,
   WORKSPACE_RELAUNCH_SECONDS,
@@ -69,11 +70,13 @@ export class LaunchdWorkspaceInstance implements WorkspaceInstance {
   readonly #job: LaunchdJob;
   readonly #agentPrefix: string;
   readonly #agentDirectory: string;
+  readonly #health: WorkspaceHealthJournal;
   constructor(config: WorkspaceInstanceConfig) {
     this.#job = new LaunchdJob(workspaceLaunchdJob(config));
     const agents = agentJobScope(config);
     this.#agentPrefix = agents.prefix;
     this.#agentDirectory = agents.directory;
+    this.#health = new WorkspaceHealthJournal(workspaceHealthJournalPath(config.stateDirectory));
   }
   async ensureStarted(beforeLaunch?: () => Promise<boolean | void>): Promise<number> {
     if (!(await this.#job.identity()))
@@ -86,5 +89,12 @@ export class LaunchdWorkspaceInstance implements WorkspaceInstance {
   }
   identity() {
     return this.#job.identity();
+  }
+
+  upgradeInstance(timeoutMs: number) {
+    return this.#job.upgradeInstance(
+      timeoutMs,
+      async () => (await this.#health.state()).status !== "ok",
+    );
   }
 }

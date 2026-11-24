@@ -78,6 +78,8 @@ import {
 export class MachineSupervisor {
   #bindings: ManagedBinding[] = [];
   #instances = new Map<string, string>();
+  #nextStartRevision = 0;
+  #startRevisions = new Map<string, number>();
   /** Start/restart work under way per Workspace; a stop or configure aborts it. */
   #inFlight = new Map<string, AbortController>();
   /** Request order: a stop or configure supersedes every start/restart of its Workspace requested
@@ -207,12 +209,22 @@ export class MachineSupervisor {
       this.#bindings.map(async (binding) => ({
         ...binding,
         instanceId: await this.processes.instance(binding),
-        /** A start or restart of this Workspace is under way. */
-        inFlight:
-          this.#inFlight.has(binding.workspaceId) ||
-          (this.#underWay.get(binding.workspaceId) ?? 0) > 0,
+        inFlight: this.#bindingInFlight(binding.workspaceId),
       })),
     );
+  }
+
+  bindingView() {
+    return this.#bindings.map(({ workspaceId, enabled }) => ({
+      workspaceId,
+      enabled,
+      inFlight: this.#bindingInFlight(workspaceId),
+      startRevision: this.#startRevisions.get(workspaceId) ?? 0,
+    }));
+  }
+
+  #bindingInFlight(workspaceId: string) {
+    return this.#inFlight.has(workspaceId) || (this.#underWay.get(workspaceId) ?? 0) > 0;
   }
 
   /** Takes over the start/restart work of these Workspaces requested so far; returns this
@@ -361,6 +373,7 @@ export class MachineSupervisor {
     if (expected && (await this.processes.instance(binding)) === expected) return expected;
     this.#instances.delete(binding.workspaceId);
     signal?.throwIfAborted();
+    this.#startRevisions.set(binding.workspaceId, ++this.#nextStartRevision);
     const instanceId = await this.processes.start(binding, {
       ...(signal ? { signal } : {}),
       ...(reconciling ? { reconciling } : {}),
@@ -388,8 +401,8 @@ export class MachineSupervisor {
     | { detached: true; keyRevoked?: boolean }
     | { detached: false; reason: "unconfirmed" | "not_bound" }
   > {
-    return this.#serialize(() =>
-      detachManagedBinding({
+    return this.#serialize(async () => {
+      const result = await detachManagedBinding({
         workspaceId,
         bindings: this.#bindings,
         stop: (binding) => this.#stop(binding),
@@ -397,8 +410,10 @@ export class MachineSupervisor {
         credentials: deps.credentials,
         makeSelfClient: deps.makeSelfClient,
         target: deps.target,
-      }),
-    );
+      });
+      if (result.detached) this.#startRevisions.delete(workspaceId);
+      return result;
+    });
   }
 
   /** One lifecycle command's view of this supervisor: the process seams and the mutation
