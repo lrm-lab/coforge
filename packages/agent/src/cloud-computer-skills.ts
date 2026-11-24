@@ -1,8 +1,5 @@
-import { chmod, cp, lstat, mkdir, readdir, rm } from "node:fs/promises";
+import { cp, lstat, mkdir, readdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
-
-const SHARED_SKILL_ROOT_MODE = 0o2775;
-const AGENT_SKILL_LEAF_MODE = 0o700;
 
 const STABLE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
@@ -54,39 +51,6 @@ export function cloudComputerAgentSkillsDirectory(
   return join(cloudComputerWorkspaceRoot(environment), "agent-skills", agentId);
 }
 
-export function cloudComputerAgentSkillsRoot(
-  environment: Readonly<Record<string, string | undefined>> = Bun.env,
-): string {
-  return join(cloudComputerWorkspaceRoot(environment), "agent-skills");
-}
-
-export async function ensureCloudComputerSkillDirectories(options: {
-  agentId?: string;
-  environment?: Readonly<Record<string, string | undefined>>;
-}): Promise<void> {
-  const environment = options.environment ?? Bun.env;
-  if (!isCloudComputerSkillsEnabled(environment)) return;
-  await Promise.all([
-    ensureDirectoryMode(cloudComputerSharedSkillsDirectory(environment), SHARED_SKILL_ROOT_MODE),
-    ensureDirectoryMode(cloudComputerAgentSkillsRoot(environment), SHARED_SKILL_ROOT_MODE),
-  ]);
-  if (options.agentId && STABLE_ID.test(options.agentId)) {
-    await ensureDirectoryMode(
-      cloudComputerAgentSkillsDirectory(options.agentId, environment),
-      AGENT_SKILL_LEAF_MODE,
-    );
-  }
-}
-
-async function ensureDirectoryMode(path: string, mode: number): Promise<void> {
-  try {
-    await mkdir(path, { recursive: true, mode });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-  }
-  await chmod(path, mode).catch(() => undefined);
-}
-
 export function cloudComputerAdditionalSkillPaths(options: {
   agentId?: string;
   environment?: Readonly<Record<string, string | undefined>>;
@@ -134,10 +98,7 @@ export async function prepareCloudComputerAgentSkills(options: {
   }
 
   const directory = cloudComputerAgentSkillsDirectory(options.agentId, environment);
-  await ensureCloudComputerSkillDirectories({
-    agentId: options.agentId,
-    environment,
-  });
+  await mkdir(directory, { recursive: true, mode: 0o700 });
   await migrateLegacyAgentSkills(legacy, directory);
   await seedSharedSkillsInto(directory, environment);
   await mirrorSkillsTree(directory, legacy);
@@ -226,11 +187,13 @@ export async function prepareCloudComputerSessionSkillPaths(options: {
       agentWorkspaceDirectory: options.agentWorkspaceDirectory,
       environment,
     });
-  } else {
-    await ensureCloudComputerSkillDirectories({ environment });
   }
-  return cloudComputerAdditionalSkillPaths({
+  const paths = cloudComputerAdditionalSkillPaths({
     agentId: options.agentId,
     environment,
   });
+  for (const path of paths) {
+    await mkdir(path, { recursive: true, mode: 0o700 });
+  }
+  return paths;
 }

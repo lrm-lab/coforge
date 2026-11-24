@@ -22,21 +22,6 @@ LOCK_FILE="${PI_SKILLS_SYNC_LOCK:-${WORKSPACE_SKILLS}/.sync.lock}"
 # "promoted" back from a leftover agent copy on the next sync.
 ORIGIN_MANIFEST="${PI_SKILLS_ORIGIN_MANIFEST:-${WORKSPACE_SKILLS}/.workspace-origin}"
 
-# Provision opens these for the shared group, then this script may recreate
-# /workspace/skills as root 0755. Re-apply so a dropped Agent can still write.
-ensure_shared_skill_root() {
-  local dir="$1"
-  [[ "$(id -u)" == "0" ]] || return 0
-  local gid_file="${COFORGE_WORKSPACE_VOLUME_ROOT:-/srv/coforge}/ws/workspace-shared-group.json"
-  local gid=""
-  [[ -f "${gid_file}" ]] || return 0
-  gid="$(node -e 'try{const g=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).gid;if(Number.isInteger(g))process.stdout.write(String(g))}catch{}' "${gid_file}")"
-  [[ -n "${gid}" ]] || return 0
-  mkdir -p "${dir}"
-  chgrp "${gid}" "${dir}" 2>/dev/null || true
-  chmod 2775 "${dir}"
-}
-
 from_image=0
 from_workspace=0
 conflicts=0
@@ -282,8 +267,6 @@ cleanup_stale_agent_skills() {
 main() {
   mkdir -p "${WORKSPACE_SKILLS}" "${AGENT_SKILLS}" "${BAK_ROOT}"
   mkdir -p "$(dirname "${LOCK_FILE}")"
-  ensure_shared_skill_root "${WORKSPACE_SKILLS}"
-  ensure_shared_skill_root "${WORKSPACE}/agent-skills"
 
   # Lock across agents sharing this Computer / workspace.
   exec 9>"${LOCK_FILE}"

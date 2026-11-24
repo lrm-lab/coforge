@@ -1,5 +1,5 @@
 import { expect, test, afterEach } from "bun:test";
-import { mkdtemp, rm, mkdir, stat, symlink } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -7,10 +7,8 @@ import {
   cloudComputerAdditionalSkillPaths,
   cloudComputerAgentSkillsDirectory,
   cloudComputerSharedSkillsDirectory,
-  ensureCloudComputerSkillDirectories,
   isCloudComputerSkillsEnabled,
   prepareCloudComputerAgentSkills,
-  prepareCloudComputerSessionSkillPaths,
 } from "#src/cloud-computer-skills";
 
 const previous = Bun.env[COFORGE_CLOUD_COMPUTER_ENV];
@@ -80,35 +78,6 @@ test("prepareCloudComputerAgentSkills migrates legacy .pi/skills when gate is on
     expect(
       await Bun.file(join(root, ".pi", "skills", "legacy-skill", "SKILL.md")).text(),
     ).toContain("legacy-skill");
-    expect((await stat(join(workspace, "skills"))).mode & 0o7777).toBe(0o2775);
-    expect((await stat(join(workspace, "agent-skills"))).mode & 0o7777).toBe(0o2775);
-    expect((await stat(join(workspace, "agent-skills", "agent-9"))).mode & 0o777).toBe(0o700);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
-
-test("ensureCloudComputerSkillDirectories reopens a 0700 shared parent and keeps the Agent leaf private", async () => {
-  const root = await mkdtemp(join(tmpdir(), "coforge-skills-shared-mode-"));
-  const workspace = join(root, "workspace");
-  try {
-    await mkdir(join(workspace, "agent-skills"), { recursive: true, mode: 0o700 });
-    await mkdir(join(workspace, "skills"), { recursive: true, mode: 0o700 });
-    const env = { [COFORGE_CLOUD_COMPUTER_ENV]: "1", WORKSPACE: workspace };
-    await ensureCloudComputerSkillDirectories({ agentId: "agent-a", environment: env });
-    await ensureCloudComputerSkillDirectories({ agentId: "agent-b", environment: env });
-    expect((await stat(join(workspace, "skills"))).mode & 0o7777).toBe(0o2775);
-    expect((await stat(join(workspace, "agent-skills"))).mode & 0o7777).toBe(0o2775);
-    expect((await stat(join(workspace, "agent-skills", "agent-a"))).mode & 0o777).toBe(0o700);
-    expect((await stat(join(workspace, "agent-skills", "agent-b"))).mode & 0o777).toBe(0o700);
-    const paths = await prepareCloudComputerSessionSkillPaths({
-      agentId: "agent-c",
-      agentWorkspaceDirectory: join(root, "ws-c"),
-      environment: env,
-    });
-    expect(paths).toEqual([join(workspace, "skills"), join(workspace, "agent-skills", "agent-c")]);
-    expect((await stat(join(workspace, "agent-skills"))).mode & 0o7777).toBe(0o2775);
-    expect((await stat(join(workspace, "agent-skills", "agent-c"))).mode & 0o777).toBe(0o700);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
