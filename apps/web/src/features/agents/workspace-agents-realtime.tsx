@@ -241,12 +241,16 @@ export function WorkspaceAgentsProvider({
     let previousIds: Set<string> | undefined;
     const prune = (currentAgents: readonly LiveAgent[]) => {
       const visibleIds = new Set(currentAgents.map((agent) => agent.id));
-      if (
-        previousIds &&
-        previousIds.size === visibleIds.size &&
-        [...visibleIds].every((id) => previousIds!.has(id))
-      )
-        return;
+      if (previousIds && previousIds.size === visibleIds.size) {
+        let same = true;
+        for (const id of visibleIds) {
+          if (!previousIds.has(id)) {
+            same = false;
+            break;
+          }
+        }
+        if (same) return;
+      }
       previousIds = visibleIds;
       queryClient.setQueryData<RecentActivityByAgent>(
         workspaceActivityQuery(workspaceId).queryKey,

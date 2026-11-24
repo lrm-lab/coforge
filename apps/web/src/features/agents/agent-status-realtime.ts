@@ -156,6 +156,7 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
           scheduledAt = undefined;
           timer = undefined;
           agentsStore.setState((list) => expireAgentStatuses(list, Date.now()));
+          sync(agentsStore.state);
         },
         Math.max(0, nextAt - Date.now()) + 10,
       );
@@ -185,6 +186,7 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
             return;
           scheduledDeadline = undefined;
           agentsStore.setState((current) => mergeAgentStatusSnapshot(current, refreshed));
+          sync(agentsStore.state);
         })
         .catch(() => {
           if (!disposed && mounted.current && currentWorkspaceId.current === refreshWorkspaceId)
@@ -200,8 +202,8 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
       }
       scheduledDeadline = deadline;
       if (deadline === undefined) return;
-      const delay = nextDisplayRefreshDelayMs(current, Date.now());
-      if (delay !== undefined) requestRefresh(delay);
+      const now = Date.now();
+      requestRefresh(deadline <= now ? 1_000 : deadline - now + 10);
     };
     sync(agentsStore.state);
     const subscription = agentsStore.subscribe((current) => sync(current));

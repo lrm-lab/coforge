@@ -194,18 +194,8 @@ export function nextDisplayRefreshDelayMs<T extends StatusTrackedAgent>(
   agents: readonly T[],
   now: number,
 ): number | undefined {
-  const deadline = Math.min(
-    ...agents.flatMap((agent) => {
-      const display = agent.display;
-      if (!display || typeof display.expiresAt !== "number") return [];
-      return [
-        isBusyTone(display.activityKind)
-          ? display.expiresAt + ACTIVITY_PROBE_TIMEOUT_MS + 1_000
-          : display.expiresAt,
-      ];
-    }),
-  );
-  if (!Number.isFinite(deadline)) return undefined;
+  const deadline = nextDisplayDeadlineMs(agents);
+  if (deadline === undefined) return undefined;
   return deadline <= now ? 1_000 : deadline - now + 10;
 }
 

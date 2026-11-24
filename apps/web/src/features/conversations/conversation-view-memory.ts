@@ -50,14 +50,6 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener);
 }
 
-function snapshot() {
-  return expanded;
-}
-
-export function useExpandedMessages() {
-  return useSyncExternalStore(subscribe, snapshot, snapshot);
-}
-
 const NOOP_SUBSCRIBE = () => () => {};
 const NOT_EXPANDED = () => false;
 

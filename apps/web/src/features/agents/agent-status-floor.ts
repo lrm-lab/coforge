@@ -60,7 +60,7 @@ export function agentById<T extends { id: string }>(
   let index = agentIndexCache.get(agents);
   if (!index) {
     const built = new Map<string, { id: string }>();
-    for (const agent of agents) built.set(agent.id, agent);
+    for (const agent of agents) if (!built.has(agent.id)) built.set(agent.id, agent);
     agentIndexCache.set(agents, built);
     index = built;
   }

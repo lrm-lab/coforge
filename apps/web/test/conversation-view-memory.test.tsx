@@ -16,23 +16,16 @@ import {
   useMessageHighlighted,
   useQuotedDraft,
 } from "#src/features/conversations/conversation-ui-store";
-import { useMessageExpansion } from "#src/features/conversations/use-message-expansion";
 
 function Pane() {
-  const { expandedMessages } = useMessageExpansion();
-  return <i>{[...expandedMessages].join(",")}</i>;
+  const expanded = useMessageExpanded("m-remount");
+  return <i>{expanded ? "m-remount" : ""}</i>;
 }
 
 test("a long message opened in one pane is still open in the pane that replaces it", () => {
-  let toggle: (id: string) => void = () => {};
-  function Grab() {
-    toggle = useMessageExpansion().toggleExpandedMessage;
-    return null;
-  }
-  renderToStaticMarkup(<Grab />);
-  toggle("m-remount");
+  toggleExpanded("m-remount");
   expect(renderToStaticMarkup(<Pane />)).toContain("m-remount");
-  toggle("m-remount");
+  toggleExpanded("m-remount");
   expect(renderToStaticMarkup(<Pane />)).not.toContain("m-remount");
 });
 

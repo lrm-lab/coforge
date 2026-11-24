@@ -24,7 +24,6 @@ export function ConversationComposerFooter({
   channels,
   onSend,
   canSendAsTask,
-  quotedDraft,
   autoFocus,
   hostRef,
 }: {
@@ -38,7 +37,6 @@ export function ConversationComposerFooter({
   channels?: ComposerProps["channels"];
   onSend: ComposerProps["onSend"];
   canSendAsTask?: boolean;
-  quotedDraft?: ComposerProps["quotedDraft"];
   autoFocus?: boolean;
   hostRef?: ComposerProps["hostRef"];
 }) {
@@ -49,7 +47,7 @@ export function ConversationComposerFooter({
   );
   const recentHandles = useRecentConversationHandles(conversation.messages);
   const selecting = useSelectionIn(conversation.conversationId) !== null && !root;
-  const storeQuotedDraft = useQuotedDraft();
+  const quotedDraft = useQuotedDraft();
   return (
     <div className={column ? MESSAGE_COLUMN_CLASS : undefined}>
       {!narrow && <ConversationUpdateNotice conversation={conversation} />}
@@ -72,7 +70,7 @@ export function ConversationComposerFooter({
             channels={channels}
             onSend={onSend}
             canSendAsTask={canSendAsTask}
-            quotedDraft={quotedDraft ?? storeQuotedDraft}
+            quotedDraft={quotedDraft}
             autoFocus={autoFocus}
             hostRef={hostRef}
           />
