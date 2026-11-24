@@ -165,7 +165,7 @@ export function TabbedHeader({
               ],
             )}
           >
-            <div ref={tabsMeasureRef} className="w-max shrink-0">
+            <div ref={tabsMeasureRef} className="min-h-8 w-max shrink-0">
               {tabs}
             </div>
           </div>
