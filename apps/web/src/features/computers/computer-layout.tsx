@@ -184,6 +184,33 @@ export function ComputerLayout({
     setRuntime("all");
   };
 
+  const rowActions = useMemo(
+    () => ({
+      onSelect: (computer: ComputerOverviewItem) => {
+        void router.navigate({
+          to: "/w/$workspaceSlug/computer/$computerId",
+          params: { workspaceSlug, computerId: computer.id },
+        });
+      },
+      onOpenDesktop: overviewActions.canOpenDesktop ? overviewActions.handleOpenDesktop : undefined,
+      onUpgrade: onUpgradeComputer
+        ? (computer: ComputerOverviewItem, targetVersion: string) =>
+            overviewActions.setUpgradePrompt({ computer, targetVersion })
+        : undefined,
+      onRestart: onRestartComputer ? overviewActions.handleRestart : undefined,
+    }),
+    [
+      router,
+      workspaceSlug,
+      overviewActions.canOpenDesktop,
+      overviewActions.handleOpenDesktop,
+      overviewActions.setUpgradePrompt,
+      overviewActions.handleRestart,
+      onUpgradeComputer,
+      onRestartComputer,
+    ],
+  );
+
   if (!computers.length) {
     return (
       <main className="flex h-full min-w-0">
@@ -200,20 +227,6 @@ export function ComputerLayout({
   const splitOpen = Boolean(selectedComputerId) && !expanded;
   const overviewHiddenOnMobile = Boolean(selectedComputerId);
   const hasFilters = Boolean(query.trim()) || status !== "all" || runtime !== "all";
-  const rowActions = {
-    onSelect: (computer: ComputerOverviewItem) => {
-      void router.navigate({
-        to: "/w/$workspaceSlug/computer/$computerId",
-        params: { workspaceSlug, computerId: computer.id },
-      });
-    },
-    onOpenDesktop: overviewActions.canOpenDesktop ? overviewActions.handleOpenDesktop : undefined,
-    onUpgrade: onUpgradeComputer
-      ? (computer: ComputerOverviewItem, targetVersion: string) =>
-          overviewActions.setUpgradePrompt({ computer, targetVersion })
-      : undefined,
-    onRestart: onRestartComputer ? overviewActions.handleRestart : undefined,
-  };
 
   return (
     <main className="relative flex h-full min-w-0 bg-primary">
@@ -382,6 +395,7 @@ export function ComputerLayout({
 
       {selectedComputerId ? (
         <section
+          ref={detailWidth.paneRef}
           style={
             splitOpen
               ? ({ "--computer-detail-width": `${detailWidth.widthRem}rem` } as CSSProperties)
@@ -396,6 +410,7 @@ export function ComputerLayout({
         >
           {splitOpen ? (
             <div
+              ref={detailWidth.separatorRef}
               role="separator"
               tabIndex={0}
               aria-orientation="vertical"

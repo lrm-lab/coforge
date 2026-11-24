@@ -24,7 +24,7 @@ export const DETAIL_WIDTH_DEFAULT_REM = 43;
 export const DETAIL_WIDTH_MIN_REM = 26;
 export const DETAIL_WIDTH_MAX_REM = 56;
 
-function clampDetailWidth(widthRem: number): number {
+export function clampDetailWidth(widthRem: number): number {
   return Math.min(DETAIL_WIDTH_MAX_REM, Math.max(DETAIL_WIDTH_MIN_REM, widthRem));
 }
 
@@ -38,13 +38,27 @@ const widthPreference = createDevicePreference<number>({
   fallback: DETAIL_WIDTH_DEFAULT_REM,
 });
 
+function applyDetailWidthDom(
+  pane: HTMLElement | null,
+  separator: HTMLDivElement | null,
+  widthRem: number,
+) {
+  pane?.style.setProperty("--computer-detail-width", `${widthRem}rem`);
+  separator?.setAttribute("aria-valuenow", String(Math.round(widthRem * 10) / 10));
+}
+
 export function useComputerDetailWidth() {
   const [storedWidth, setStoredWidth] = widthPreference.useValue();
   const [widthRem, setWidthRem] = useState(storedWidth);
   const [resizing, setResizing] = useState(false);
+  const paneRef = useRef<HTMLElement>(null);
+  const separatorRef = useRef<HTMLDivElement>(null);
   const widthRef = useRef(widthRem);
-  widthRef.current = widthRem;
   const detachDragRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    widthRef.current = widthRem;
+  }, [widthRem]);
 
   useEffect(() => {
     if (!resizing) setWidthRem(storedWidth);
@@ -60,6 +74,8 @@ export function useComputerDetailWidth() {
   const commitWidth = useCallback(
     (next: number) => {
       const clamped = clampDetailWidth(next);
+      widthRef.current = clamped;
+      applyDetailWidthDom(paneRef.current, separatorRef.current, clamped);
       setWidthRem(clamped);
       setStoredWidth(clamped);
     },
@@ -71,30 +87,20 @@ export function useComputerDetailWidth() {
       if (event.button !== 0) return;
       event.preventDefault();
       detachDragRef.current?.();
-      const rootFontSize = Number.parseFloat(
-        getComputedStyle(document.documentElement).fontSize || "16",
-      );
+      const rootFontSize =
+        Number.parseFloat(getComputedStyle(document.documentElement).fontSize || "16") || 16;
       const startX = event.clientX;
       const startWidthRem = widthRef.current;
       const directionSign = getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
-      let frameId: number | null = null;
       let pendingWidth = startWidthRem;
       setResizing(true);
 
       const onMove = (moveEvent: globalThis.PointerEvent) => {
         const deltaRem = ((startX - moveEvent.clientX) * directionSign) / rootFontSize;
         pendingWidth = clampDetailWidth(startWidthRem + deltaRem);
-        if (frameId !== null) return;
-        frameId = window.requestAnimationFrame(() => {
-          frameId = null;
-          setWidthRem(pendingWidth);
-        });
+        applyDetailWidthDom(paneRef.current, separatorRef.current, pendingWidth);
       };
       const detach = () => {
-        if (frameId !== null) {
-          window.cancelAnimationFrame(frameId);
-          frameId = null;
-        }
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
         window.removeEventListener("pointercancel", onUp);
@@ -138,6 +144,8 @@ export function useComputerDetailWidth() {
   const onReset = useCallback(() => commitWidth(DETAIL_WIDTH_DEFAULT_REM), [commitWidth]);
 
   return {
+    paneRef,
+    separatorRef,
     widthRem,
     resizing,
     onPointerDown,
