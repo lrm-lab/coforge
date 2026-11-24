@@ -154,7 +154,15 @@ if getent group "${SHARED_GID}" >/dev/null || groupadd --gid "${SHARED_GID}" cof
     chgrp "${SHARED_GID}" "${shared_tree}" 2>/dev/null || true
     chmod 2775 "${shared_tree}"
   done
-  log "shared group ${SHARED_GID}: /workspace and ${SHARED} are 2775"
+  # Skill roots are shared across Workspace uids. Open them every boot (not behind the
+  # one-shot tree marker): Agents used to `mkdir` the parent as 0700, and sync-pi-skills
+  # creates /workspace/skills after this script, so a single repair pass cannot keep them.
+  for skill_root in /workspace/skills /workspace/agent-skills; do
+    mkdir -p "${skill_root}"
+    chgrp "${SHARED_GID}" "${skill_root}" 2>/dev/null || true
+    chmod 2775 "${skill_root}"
+  done
+  log "shared group ${SHARED_GID}: /workspace, ${SHARED}, skills and agent-skills are 2775"
 else
   log "shared group ${SHARED_GID} unavailable; Agents keep their own gid"
 fi
