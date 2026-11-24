@@ -1,15 +1,13 @@
 import {
   useEffect,
-  useId,
-  useMemo,
   useRef,
-  type CSSProperties,
+  type ComponentType,
   type MouseEvent,
   type ReactNode,
   type RefObject,
+  type SVGProps,
 } from "react";
-import { Activity, Grid, MessageSquare, type KubaiIconData } from "kubai-icons/duotone";
-import { animate, type KubaiController } from "kubai-icons/runtime";
+import { Activity, Grid01, MessageChatSquare } from "@untitledui/icons";
 
 import type { TabHome } from "#src/components/layout/tab-home";
 import { UnreadBadge, UnreadDot } from "#src/components/ui/unread-marker";
@@ -30,77 +28,46 @@ type Tab = {
   unreadText?: string;
 };
 
-type DuotoneStyle = CSSProperties & { "--kd-b"?: string };
+type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
 
-const DUOTONE_STYLE: DuotoneStyle = {
-  "--kd-b": "color-mix(in srgb, currentColor 30%, var(--color-sidebar))",
+const TAB_ACTIVATE_KEYFRAMES: Keyframe[] = [
+  { transform: "scale(1)" },
+  { transform: "scale(0.88)" },
+  { transform: "scale(1.08)" },
+  { transform: "scale(1)" },
+];
+
+const TAB_ACTIVATE_TIMING: KeyframeAnimationOptions = {
+  duration: 240,
+  easing: "cubic-bezier(0.2, 0, 0, 1)",
 };
 
-function TabDuotoneIcon({
-  icon,
+function TabBarIcon({
+  icon: Icon,
   active,
   reducedMotion,
 }: {
-  icon: KubaiIconData;
+  icon: IconComponent;
   active: boolean;
   reducedMotion: boolean;
 }) {
-  const uid = useId().replaceAll(":", "");
-  const svgRef = useRef<SVGSVGElement | null>(null);
-  const controllerRef = useRef<KubaiController | null>(null);
+  const wrapRef = useRef<HTMLSpanElement | null>(null);
   const prevActiveRef = useRef(active);
-  const markup = useMemo(
-    () => icon.markup.replaceAll("__K__", `ki-tab-${uid}`),
-    [icon.markup, uid],
-  );
-
-  useEffect(() => {
-    const svg = svgRef.current;
-    if (!svg) return;
-    const controller = animate(svg, icon);
-    controllerRef.current = controller;
-    const link = svg.closest("a");
-    const onEnter = (event: PointerEvent) => {
-      if (reducedMotion || event.pointerType !== "mouse") return;
-      controller.hover(true);
-    };
-    const onLeave = (event: PointerEvent) => {
-      if (event.pointerType !== "mouse") return;
-      controller.hover(false);
-    };
-    link?.addEventListener("pointerenter", onEnter);
-    link?.addEventListener("pointerleave", onLeave);
-    return () => {
-      link?.removeEventListener("pointerenter", onEnter);
-      link?.removeEventListener("pointerleave", onLeave);
-      controller.destroy();
-      controllerRef.current = null;
-    };
-  }, [icon, reducedMotion]);
 
   useEffect(() => {
     const becameActive = active && !prevActiveRef.current;
     prevActiveRef.current = active;
     if (!becameActive || reducedMotion) return;
-    const controller = controllerRef.current;
-    if (!controller) return;
-    controller.hover(true);
-    const timer = window.setTimeout(() => {
-      controllerRef.current?.hover(false);
-    }, icon.ms ?? 360);
-    return () => window.clearTimeout(timer);
-  }, [active, icon.ms, reducedMotion]);
+    const node = wrapRef.current;
+    if (!node || typeof node.animate !== "function") return;
+    const animation = node.animate(TAB_ACTIVATE_KEYFRAMES, TAB_ACTIVATE_TIMING);
+    return () => animation.cancel();
+  }, [active, reducedMotion]);
 
   return (
-    <svg
-      ref={svgRef}
-      aria-hidden="true"
-      focusable="false"
-      viewBox={icon.viewBox ?? "0 0 16 16"}
-      style={DUOTONE_STYLE}
-      className="size-full shrink-0"
-      dangerouslySetInnerHTML={{ __html: markup }}
-    />
+    <span ref={wrapRef} className="inline-flex size-full items-center justify-center">
+      <Icon aria-hidden="true" className="size-full shrink-0" />
+    </span>
   );
 }
 
@@ -140,8 +107,8 @@ export function PhoneTabBar({
       label: m.navigation_chat_short(),
       href: chatHref,
       icon: (
-        <TabDuotoneIcon
-          icon={MessageSquare}
+        <TabBarIcon
+          icon={MessageChatSquare}
           active={current === "chat"}
           reducedMotion={reducedMotion}
         />
@@ -152,11 +119,7 @@ export function PhoneTabBar({
       label: m.navigation_activity(),
       href: activityHref,
       icon: (
-        <TabDuotoneIcon
-          icon={Activity}
-          active={current === "activity"}
-          reducedMotion={reducedMotion}
-        />
+        <TabBarIcon icon={Activity} active={current === "activity"} reducedMotion={reducedMotion} />
       ),
       badge: activityUnread.count ? (
         <UnreadBadge
@@ -178,11 +141,7 @@ export function PhoneTabBar({
       label: m.navigation_workspace_group(),
       href: localizeHref(`${base}/workspace`),
       icon: (
-        <TabDuotoneIcon
-          icon={Grid}
-          active={current === "workspace"}
-          reducedMotion={reducedMotion}
-        />
+        <TabBarIcon icon={Grid01} active={current === "workspace"} reducedMotion={reducedMotion} />
       ),
     },
     {
