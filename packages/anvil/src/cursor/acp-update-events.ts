@@ -1,4 +1,5 @@
 import type { AgentRuntimeEvent } from "@coforge/agent";
+import { acpContextUsage } from "#src/acp-context-usage";
 import { acpToolOutput, acpToolUpdateEnded } from "#src/acp-tool-output";
 import { asRecord, nonEmptyString } from "#src/json-record";
 import type { CursorAcpRuntimeHost } from "./acp-host";
@@ -65,6 +66,8 @@ export class CursorAcpTurnEvents {
         }
         return events.length ? events : [{ type: "progress", source: "cursor_tool_call_update" }];
       }
+      case "usage_update":
+        return acpContextUsage(update);
       case "compaction_update":
         // UNSTABLE in ACP: an agent sends this only after the client advertised
         // `session.compaction` (see `acp/connection.ts`), and not every agent implements it. A

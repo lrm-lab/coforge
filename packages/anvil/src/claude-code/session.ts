@@ -418,6 +418,7 @@ export class ClaudeCodeAgentSession implements AgentSession {
       this.#deferredCompactionError = undefined;
       this.#outstandingTools.clear();
       this.#interrupt.settle();
+      if (this.#state === "idle" && this.#nativeTurnQueued) this.#beginNativeTurn();
       if (this.#state !== "running" && this.#state !== "interrupting") return;
       const status =
         this.#state === "interrupting"

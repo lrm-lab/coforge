@@ -190,8 +190,7 @@ function openCodeSessionProfile(
       return { sessionId: opened, resumable: resuming && !replaced, replacedSessionId: replaced };
     },
     turn: () => new OpenCodeAcpTurnEvents(host),
-    // `session/cancel` is unimplemented on `opencode acp`: interrupt kills the process, and the
-    // daemon relaunches on the same session id.
+    trailingUsageWaitMs: 500,
     cancelTurn: async (transport) => {
       await transport.process.dispose().catch(() => undefined);
     },

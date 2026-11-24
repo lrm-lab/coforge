@@ -7,11 +7,9 @@ import { acpProcess, type AcpConnection } from "#src/acp/connection";
 import type { AcpRuntimeProfile } from "#src/acp/profile";
 import type { GrokConnectionHost } from "./host";
 
-/** The native notifications Grok publishes beside `session/update`. */
 const GROK_NOTIFICATIONS = ["_x.ai/queue/changed", "_x.ai/session_notification"] as const;
 const SEEN_LIMIT = 256;
 
-/** Adds `value`, evicting the oldest entry once the set exceeds its bound. */
 function remember(seen: Set<string>, value: string) {
   seen.add(value);
   if (seen.size > SEEN_LIMIT) seen.delete(seen.values().next().value!);
@@ -45,15 +43,17 @@ export function grokConnection(
     environment,
     clientInfo: host.sessionClientInfo,
     processTreeSpawner: host.processTreeSpawner,
-    // A notification Grok publishes with malformed params is a protocol failure, not a frame to
-    // drop silently. A replayed event keeps its native id, so it is projected once.
     onUpdate: (method, params) => {
       const parsed = asRecord(params);
       if (!parsed) throw new Error("Invalid Grok ACP notification");
+      const update = asRecord(parsed.update);
       const eventId =
         method === "_x.ai/queue/changed"
           ? undefined
-          : nonEmptyString(asRecord(parsed._meta)?.eventId);
+          : (nonEmptyString(asRecord(parsed._meta)?.eventId) ??
+            nonEmptyString(asRecord(parsed._meta)?.event_id) ??
+            nonEmptyString(asRecord(update?._meta)?.eventId) ??
+            nonEmptyString(asRecord(update?._meta)?.event_id));
       if (eventId) {
         if (seenEvents.has(eventId)) return;
         remember(seenEvents, eventId);

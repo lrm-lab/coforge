@@ -1,3 +1,4 @@
+import { acpContextUsage } from "#src/acp-context-usage";
 import { acpToolUpdateEnded } from "#src/acp-tool-output";
 import type { AgentRuntimeEvent } from "@coforge/agent";
 import { asRecord, nonEmptyString } from "#src/json-record";
@@ -95,6 +96,8 @@ export class CommandCodeTurnEvents {
           ? events
           : [{ type: "progress", source: "command-code_tool_call_update" }];
       }
+      case "usage_update":
+        return acpContextUsage(update);
       case "compaction_update":
         // UNSTABLE in ACP: an agent sends this only after the client advertised
         // `session.compaction` (see `acp/connection.ts`), and not every agent implements it. A

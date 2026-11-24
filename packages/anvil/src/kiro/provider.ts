@@ -9,7 +9,12 @@ import type {
   AgentRuntimeEvent,
   AgentSessionIdentity,
 } from "@coforge/agent";
-import { AgentSessionRecoveryError, type CodeAgentProvider } from "#src/contract";
+import { acpPromptTokenUsage } from "#src/acp-context-usage";
+import {
+  AGENT_RUNTIME_EVENT_TYPE,
+  AgentSessionRecoveryError,
+  type CodeAgentProvider,
+} from "#src/contract";
 import type {
   SessionNotification,
   SessionConfigOption,
@@ -284,8 +289,9 @@ class KiroSession implements AgentSession {
           if (generation !== this.#generation || this.#disposed) return;
           await this.#steering.settle();
           if (generation !== this.#generation || this.#disposed) return;
-          // ACP's standard `StopReason` union has no "error" member, but Kiro sends it; widen
-          // to `string` so every value the CLI can actually send is handled explicitly below.
+          const promptTokenUsage = acpPromptTokenUsage(response);
+          if (promptTokenUsage)
+            this.#emit({ type: AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE, usage: promptTokenUsage });
           const stopReason: string = response.stopReason;
           const shownAlready = this.#turnErrorMessage !== undefined;
           this.#turnErrorMessage = undefined;

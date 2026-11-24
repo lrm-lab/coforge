@@ -1,8 +1,9 @@
 import { RequestError } from "@agentclientprotocol/sdk/unstable";
-import type { AgentNoticeOptions, AgentRuntimeEvent } from "@coforge/agent";
+import type { AgentNoticeOptions, AgentRuntimeEvent, AgentTurnTokenUsage } from "@coforge/agent";
+import { acpPromptTokenUsage } from "#src/acp-context-usage";
+import { AGENT_RUNTIME_EVENT_TYPE } from "#src/contract";
 import type { AcpSteerProfile } from "./profile";
 
-/** A steer the runtime took: the notice text sent under it, and whether delivery was confirmed. */
 type Steer = {
   text: string;
   options?: AgentNoticeOptions;
@@ -13,34 +14,23 @@ type Admission = ReturnType<typeof Promise.withResolvers<void>>;
 
 const SEEN_LIMIT = 256;
 
-/** What a session supplies to its busy-turn insertion: its live state and its own effects. */
 export type AcpSteeringPorts = Readonly<{
-  /** The session can still take input (not disposed, failed or interrupting). */
   acceptsInput(): boolean;
   sessionId(): string;
-  /** Whether a turn is live: only a live turn is steered rather than prompted. */
   turnIsLive(): boolean;
   generation(): number;
-  /** One bounded ACP request on the live connection. */
   request(method: string, params: unknown): Promise<unknown>;
-  /** Closes the session after an answer that never came. */
   dispose(): Promise<void>;
   emit(event: AgentRuntimeEvent, options?: AgentNoticeOptions): void;
   markResumable(options?: AgentNoticeOptions): void;
+  isDisposed?(): boolean;
+  onTokenUsage?(usage: AgentTurnTokenUsage, options?: AgentNoticeOptions): void;
   turnFailure?(response: unknown): Extract<AgentRuntimeEvent, { type: "error" }> | undefined;
   rpcFailure?(error: unknown): Extract<AgentRuntimeEvent, { type: "error" }>;
 }>;
 
-/**
- * Busy-turn insertion for one session: the runtime's own request, the single delivery
- * acknowledgement it answers, and the outcomes it may report itself. A refusal is reported as
- * `notice-undelivered` for the daemon to redeliver once idle; an unanswered request leaves the
- * outcome unknown and closes the session before rejecting.
- */
 export class AcpSteering {
-  /** Steers the runtime took and has not yet reported delivered. */
   readonly #steers = new Map<string, Steer>();
-  /** Steer outcomes that arrived before the answer that named their steer. */
   readonly #earlyOutcomes = new Map<string, "injected" | "cleared">();
   readonly #pending = new Set<Admission>();
   readonly #inflight = new Set<Promise<void>>();
@@ -54,10 +44,6 @@ export class AcpSteering {
     private readonly ports: AcpSteeringPorts,
   ) {}
 
-  /**
-   * Inserts a notice into the live turn. Notices reach the runtime one at a time, and each waits
-   * for the previous notice's admission, as busy input did before this path existed.
-   */
   offer(
     text: string,
     options: AgentNoticeOptions | undefined,
@@ -70,9 +56,6 @@ export class AcpSteering {
       () => this.#pending.delete(admission),
       () => this.#pending.delete(admission),
     );
-    // `session/prompt`-as-steer runtimes send at once — the request is itself a turn the server
-    // interleaves, so it cannot wait on the earlier input's admission or on the prior steer's
-    // turn-ending answer. Bounded-request runtimes keep the one-at-a-time order.
     if (this.profile.unboundedRequest) {
       const work = this.#insert(text, options, admission, generation);
       this.#inflight.add(work);
@@ -86,9 +69,6 @@ export class AcpSteering {
     return admission.promise;
   }
 
-  /** Resolves when every `session/prompt`-as-steer in flight has settled. Only
-   * `unboundedRequest` profiles put inserts here, and a steer offered while a drain waits still
-   * joins the turn: keep waiting until the in-flight set stays empty. */
   async drain(
     initialResponse?: unknown,
     initialOptions?: AgentNoticeOptions,
@@ -112,7 +92,6 @@ export class AcpSteering {
     return status;
   }
 
-  /** Reads a notification's steer outcome; false when the notification carries none. */
   outcome(method: string, params: Readonly<Record<string, unknown>>): boolean {
     const outcome = this.profile.outcome?.(method, params);
     if (!outcome) return false;
@@ -132,7 +111,6 @@ export class AcpSteering {
     return true;
   }
 
-  /** A steer the turn ended without the runtime confirming never reached the model. */
   settle(): void {
     for (const entry of this.#steers.values())
       if (!entry.injected) this.#undeliver(entry.text, entry.options);
@@ -142,7 +120,6 @@ export class AcpSteering {
     this.#settledBySteer = false;
   }
 
-  /** Rejects every notice still waiting to be sent, as a cancelled or disposed session does. */
   rejectPending(message: string): void {
     for (const admission of this.#pending) admission.reject(new Error(message));
     this.#pending.clear();
@@ -155,6 +132,17 @@ export class AcpSteering {
     this.#earlyOutcomes.clear();
     this.#turnStatus = undefined;
     this.#settledBySteer = false;
+  }
+
+  #emitResponseTokenUsage(payload: unknown, options?: AgentNoticeOptions): void {
+    if (this.ports.isDisposed?.()) return;
+    const usage = acpPromptTokenUsage(payload);
+    if (!usage) return;
+    if (this.ports.onTokenUsage) {
+      this.ports.onTokenUsage(usage, options);
+      return;
+    }
+    this.ports.emit({ type: AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE, usage }, options);
   }
 
   async #insert(
@@ -181,6 +169,7 @@ export class AcpSteering {
     try {
       response = await this.ports.request(request.method, request.params);
     } catch (error) {
+      if (error instanceof RequestError) this.#emitResponseTokenUsage(error.data, options);
       if (cancelled()) {
         admission.reject(new Error(`${this.label} notice cancelled`));
       } else if (error instanceof RequestError) {
@@ -195,13 +184,12 @@ export class AcpSteering {
           undeliver();
         }
       } else {
-        // No answer: the runtime may hold the notice. Close the ambiguous session before
-        // rejecting, so neither a late acceptance nor a retry can escape the fence.
         await this.ports.dispose().catch(() => undefined);
         admission.reject(new Error(`${this.label} input delivery outcome is unknown`));
       }
       return;
     }
+    this.#emitResponseTokenUsage(response, options);
     if (cancelled()) {
       admission.reject(new Error(`${this.label} notice cancelled`));
       return;
@@ -212,8 +200,6 @@ export class AcpSteering {
       return;
     }
     if (!this.ports.turnIsLive() && this.profile.abandon && taken.id) {
-      // The turn ended while the runtime was queueing the steer: no turn will read it, so take
-      // it back before the daemon redelivers it as the next prompt.
       await this.profile.abandon(taken.id).catch(() => undefined);
       if (!cancelled()) undeliver();
       return;
@@ -239,7 +225,6 @@ export class AcpSteering {
     this.ports.markResumable(options);
   }
 
-  /** A notice the runtime refused or dropped: one ACK, redelivered by the daemon when idle. */
   #undeliver(text: string, options?: AgentNoticeOptions) {
     this.ports.emit(
       {

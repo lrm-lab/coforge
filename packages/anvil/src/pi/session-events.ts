@@ -57,21 +57,24 @@ export function piSessionEvents(event: PiSessionEvent, windowTokens?: number): A
         : [];
     }
     case "message_end": {
-      if (
-        event.message.role !== "assistant" ||
-        event.message.stopReason === "error" ||
-        event.message.stopReason === "aborted"
-      )
-        return [];
+      if (event.message.role !== "assistant") return [];
+      const failedOrAborted =
+        event.message.stopReason === "error" || event.message.stopReason === "aborted";
       const events: AgentRuntimeEvent[] = [];
       const usedTokens = piMessageContextTokens(event.message.usage);
       const hasWindow =
         windowTokens !== undefined && Number.isFinite(windowTokens) && windowTokens > 0;
-      if (hasWindow && usedTokens > 0) {
+      if (!failedOrAborted && hasWindow && usedTokens > 0) {
         events.push({ type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE, usedTokens, windowTokens });
       }
+      const usageRecord = asRecord(event.message.usage);
       const cacheUsage = piPromptCacheUsage(event.message.usage);
-      const outputTokens = Math.round(nonNegativeFinite(asRecord(event.message.usage)?.output));
+      const outputTokens = Math.round(nonNegativeFinite(usageRecord?.output));
+      const reasoningTokens = Math.round(
+        nonNegativeFinite(
+          usageRecord?.reasoning ?? usageRecord?.reasoningTokens ?? usageRecord?.thoughtTokens,
+        ),
+      );
       const model =
         typeof event.message.model === "string" && event.message.model.trim()
           ? event.message.model.trim()
@@ -84,8 +87,9 @@ export function piSessionEvents(event: PiSessionEvent, windowTokens?: number): A
             cacheReadTokens: Math.round(cacheUsage?.cachedInputTokens ?? 0),
             cacheWriteTokens: Math.round(cacheUsage?.cacheWriteInputTokens ?? 0),
             outputTokens: Math.round(cacheUsage?.outputTokens ?? outputTokens),
+            ...(reasoningTokens > 0 ? { reasoningOutputTokens: reasoningTokens } : {}),
             ...(model ? { model } : {}),
-            ...(hasWindow && usedTokens > 0
+            ...(!failedOrAborted && hasWindow && usedTokens > 0
               ? {
                   contextUsedTokens: Math.round(usedTokens),
                   contextWindowTokens: Math.round(windowTokens),

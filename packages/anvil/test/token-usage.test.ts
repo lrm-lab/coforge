@@ -1,9 +1,15 @@
 import { expect, test } from "bun:test";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { AgentRuntimeEvent } from "@coforge/agent";
 import { acpPromptTokenUsage } from "#src/acp-context-usage";
 import { ClaudeSessionObservations, claudeTurnTokenUsage } from "#src/claude-code/observations";
 import { CodexTokenUsageTracker } from "#src/codex/context-usage";
 import { AGENT_RUNTIME_EVENT_TYPE } from "#src/contract";
+import { KiroProvider } from "#src/kiro/provider";
 import { piSessionEvents, type PiSessionEvent } from "#src/pi/session-events";
+import { fixtureKiroHost } from "./fixtures/kiro-host";
 
 test("claudeTurnTokenUsage extracts full-turn usage, model, and context window", () => {
   const record = {
@@ -187,4 +193,58 @@ test("acpPromptTokenUsage parses prompt usage payloads safely", () => {
     reasoningOutputTokens: 120,
   });
   expect(acpPromptTokenUsage({ stopReason: "end_turn" })).toBeUndefined();
+});
+
+test("KiroSession emits TOKEN_USAGE only when session/prompt carries real ACP usage and never fabricates from usage_update", async () => {
+  const dir = await realpath(await mkdtemp(join(tmpdir(), "coforge-kiro-token-usage-")));
+  const provider = new KiroProvider({
+    command: [process.execPath, new URL("./fixtures/kiro-acp-usage.ts", import.meta.url).pathname],
+    host: fixtureKiroHost,
+  });
+  const session = await provider.createAgentSession({
+    agentWorkspaceDirectory: dir,
+    instructions: "Keep the asymmetric marker 719 in the system prompt.",
+  });
+  const events: AgentRuntimeEvent[] = [];
+  session.subscribe((event) => events.push(event));
+  try {
+    const firstDone = Promise.withResolvers<void>();
+    const offFirst = session.subscribe((event) => {
+      if (event.type === "completed") firstDone.resolve();
+    });
+    await session.sendMessage("turn-context-only");
+    await firstDone.promise;
+    offFirst();
+    expect(events.filter((event) => event.type === AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE)).toEqual(
+      [],
+    );
+
+    events.length = 0;
+    const completed = Promise.withResolvers<void>();
+    const off = session.subscribe((event) => {
+      if (event.type === "completed") completed.resolve();
+    });
+    await session.sendMessage("turn-with-acp-usage");
+    await completed.promise;
+    off();
+
+    const tokenIndex = events.findIndex(
+      (event) => event.type === AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE,
+    );
+    const completedIndex = events.findIndex((event) => event.type === "completed");
+    expect(tokenIndex).toBeGreaterThanOrEqual(0);
+    expect(completedIndex).toBeGreaterThan(tokenIndex);
+    expect(events[tokenIndex]).toEqual({
+      type: AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE,
+      usage: {
+        uncachedInputTokens: 500,
+        cacheReadTokens: 400,
+        cacheWriteTokens: 0,
+        outputTokens: 120,
+      },
+    });
+  } finally {
+    await session.dispose();
+    await rm(dir, { recursive: true, force: true });
+  }
 });

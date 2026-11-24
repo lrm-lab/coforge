@@ -3,7 +3,7 @@ import type {
   RequestPermissionRequest,
   SessionConfigOption,
 } from "@agentclientprotocol/sdk/unstable";
-import type { AgentRuntimeEvent } from "@coforge/agent";
+import type { AgentRuntimeEvent, AgentTurnTokenUsage } from "@coforge/agent";
 import type { AcpConnection } from "./connection";
 
 /** The messages a runtime's own ACP protocol failures carry. */
@@ -49,12 +49,12 @@ export type AcpTurnReader = Readonly<{
   ): string | Extract<AgentRuntimeEvent, { type: "error" }> | undefined;
 }>;
 
-/** A turn the runtime started itself: its prompt id when it starts, its end when it stops. */
 export type AcpNativeTurn = Readonly<{
   promptId: string;
   end?: Readonly<{
     status: "completed" | "interrupted" | "failed";
     error?: Extract<AgentRuntimeEvent, { type: "error" }>;
+    tokenUsage?: AgentTurnTokenUsage;
   }>;
 }>;
 
@@ -147,8 +147,13 @@ export type AcpSessionProfile = Readonly<{
     event: Extract<AgentRuntimeEvent, { type: "error" }>,
     error: unknown,
   ): Extract<AgentRuntimeEvent, { type: "error" }>;
-  /** Runs after an interrupt settled the turn, for work the runtime owes at that point. */
   afterInterrupt?(): Promise<void>;
+  promptNotificationTokenUsage?(
+    method: string,
+    params: Readonly<Record<string, unknown>>,
+    promptId: string,
+  ): AgentTurnTokenUsage | undefined;
+  trailingUsageWaitMs?: number;
 }>;
 
 export type AcpPermissionAnswer =

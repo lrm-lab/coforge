@@ -244,12 +244,56 @@ describe("piSessionEvents", () => {
           message: {
             role: "assistant",
             stopReason: "aborted",
+            model: "claude-sonnet-4-6",
             usage: { input: 50_000, output: 100, cacheRead: 0, cacheWrite: 0, totalTokens: 50_100 },
           },
         } as unknown as PiSessionEvent,
         200_000,
       ),
-    ).toEqual([]);
+    ).toEqual([
+      {
+        type: "token-usage",
+        usage: {
+          uncachedInputTokens: 50_000,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          outputTokens: 100,
+          model: "claude-sonnet-4-6",
+        },
+      },
+    ]);
+
+    expect(
+      piSessionEvents(
+        {
+          type: "message_end",
+          message: {
+            role: "assistant",
+            stopReason: "error",
+            model: "claude-sonnet-4-6",
+            usage: {
+              input: 1_200,
+              output: 40,
+              cacheRead: 3_000,
+              cacheWrite: 100,
+              totalTokens: 4_340,
+            },
+          },
+        } as unknown as PiSessionEvent,
+        200_000,
+      ),
+    ).toEqual([
+      {
+        type: "token-usage",
+        usage: {
+          uncachedInputTokens: 1_200,
+          cacheReadTokens: 3_000,
+          cacheWriteTokens: 100,
+          outputTokens: 40,
+          model: "claude-sonnet-4-6",
+        },
+      },
+    ]);
 
     expect(
       piSessionEvents(

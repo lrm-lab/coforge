@@ -29,12 +29,10 @@ import { scrubError } from "./provider-support";
 import { CodexTurnControl } from "./turn-control";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.CODEX]);
+const SECONDARY_TOKEN_TRACKERS_LIMIT = 128;
 
 export class CodexAgentSession implements AgentSession {
-  /** Busy input steers the live turn through `turn/steer`. */
   readonly steersBusyTurn = true;
-  /** Delegated work runs on secondary threads the main turn never resumes on its own, so the
-   * daemon writes the wake notice once the last subagent finishes. */
   readonly wakesAfterSubagents = true;
   readonly #process: JsonlProcess;
   readonly #threadId: string;
@@ -42,6 +40,7 @@ export class CodexAgentSession implements AgentSession {
   readonly #runtimeId: string | undefined;
   readonly #model: string | undefined;
   readonly #tokenUsage = new CodexTokenUsageTracker();
+  readonly #secondaryTokenUsage = new Map<string, CodexTokenUsageTracker>();
   readonly #listeners = new Set<(event: AgentRuntimeEvent) => void>();
   readonly #commandOutputBytes = new Map<string, number>();
   readonly #itemEvents = new CodexItemEvents();
@@ -200,23 +199,29 @@ export class CodexAgentSession implements AgentSession {
 
   #accept(record: Record<string, unknown>): void {
     const params = asRecord(record.params);
-    // A subagent's own thread reports under its own id: its items and turn lifecycle are that
-    // subagent's, never the main turn's — and they still arrive after the main turn has ended,
-    // which is when the daemon counts them toward the quiet-turn wait.
     const messageThreadId = codexMessageThreadId(record);
     if (this.#subagentThreads.isSecondaryThreadId(messageThreadId)) {
+      if (record.method === "thread/tokenUsage/updated") {
+        if (!this.#turns.isDisposed()) {
+          const tokenDelta = this.#secondaryTokenUsageTracker(messageThreadId).accept(
+            params,
+            undefined,
+            nonEmptyString(params?.model) ?? this.#model,
+          );
+          if (tokenDelta)
+            this.#emitAll([{ type: AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE, usage: tokenDelta }]);
+        }
+        return;
+      }
       this.#emitAll(this.#subagentThreads.acceptSecondary(record, messageThreadId));
       return;
     }
-    // Item notifications can arrive after turn/completed. They must not revive
-    // Activity for an idle session, including completion before turn/start replies.
-    if (
-      typeof record.method === "string" &&
-      (record.method.startsWith("item/") || record.method === "thread/tokenUsage/updated")
-    ) {
-      if (!this.#acceptsTurnItem(params)) return;
-      if (record.method === "thread/tokenUsage/updated") {
-        const usage = codexContextUsage(params);
+    if (record.method === "thread/tokenUsage/updated") {
+      if (this.#turns.isDisposed()) return;
+      if (params?.threadId !== undefined && params.threadId !== this.#threadId) return;
+      const acceptsContext = this.#acceptsTurnItem(params);
+      const usage = codexContextUsage(params);
+      if (acceptsContext) {
         const cacheUsage = codexPromptCacheUsage(params);
         if (cacheUsage) {
           logger.info("Codex observed prompt cache usage", {
@@ -229,11 +234,18 @@ export class CodexAgentSession implements AgentSession {
           });
         }
         if (usage) this.#emitAll([{ type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE, ...usage }]);
-        const tokenDelta = this.#tokenUsage.accept(params, usage, this.#model);
-        if (tokenDelta)
-          this.#emitAll([{ type: AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE, usage: tokenDelta }]);
-        return;
       }
+      const tokenDelta = this.#tokenUsage.accept(
+        params,
+        usage,
+        nonEmptyString(params?.model) ?? this.#model,
+      );
+      if (tokenDelta)
+        this.#emitAll([{ type: AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE, usage: tokenDelta }]);
+      return;
+    }
+    if (typeof record.method === "string" && record.method.startsWith("item/")) {
+      if (!this.#acceptsTurnItem(params)) return;
     }
     const signalEvents = this.#signals.notification(record, params);
     if (signalEvents) {
@@ -399,6 +411,18 @@ export class CodexAgentSession implements AgentSession {
 
   #emitAll(events: readonly AgentRuntimeEvent[]): void {
     for (const event of events) this.#emit(event);
+  }
+
+  #secondaryTokenUsageTracker(threadId: string): CodexTokenUsageTracker {
+    let tracker = this.#secondaryTokenUsage.get(threadId);
+    if (tracker) return tracker;
+    tracker = new CodexTokenUsageTracker();
+    if (this.#secondaryTokenUsage.size >= SECONDARY_TOKEN_TRACKERS_LIMIT) {
+      const oldest = this.#secondaryTokenUsage.keys().next().value;
+      if (oldest !== undefined) this.#secondaryTokenUsage.delete(oldest);
+    }
+    this.#secondaryTokenUsage.set(threadId, tracker);
+    return tracker;
   }
 
   #acceptsTurnItem(params: Record<string, unknown> | undefined): boolean {

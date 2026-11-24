@@ -1,23 +1,24 @@
 import type { InitializeResponse } from "@agentclientprotocol/sdk/unstable";
-import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
+import type { AgentSession, AgentSessionOptions, AgentTurnTokenUsage } from "@coforge/agent";
+import { acpPromptTokenUsage } from "#src/acp-context-usage";
 import { acpBounded, type AcpConnection } from "#src/acp/connection";
-import type { AcpSessionProfile } from "#src/acp/profile";
+import type { AcpNativeTurn, AcpSessionProfile } from "#src/acp/profile";
 import { AcpSession } from "#src/acp/session";
 import { asRecord, nonEmptyString } from "#src/json-record";
 import { grokConnection, GROK_PROFILE } from "./connection";
 import { GrokTurnEvents } from "./update-events";
 import type { GrokRuntimeHost } from "./host";
 
-/** How long a production session waits for each ACP answer. */
 export const ACP_TIMEOUT_MS = 30_000;
 
-// Stop reasons that end a turn normally; `cancelled` is an interruption and any other one failed.
 const COMPLETED_STOP_REASONS = new Set<unknown>([
   "end_turn",
   "max_tokens",
   "max_turn_requests",
   "refusal",
 ]);
+
+const SEEN_EVENT_ID_LIMIT = 256;
 
 export async function createGrokSession(
   options: AgentSessionOptions,
@@ -51,6 +52,7 @@ function grokSessionProfile(
     argv.push("--model", options.runtime.model);
   if (options.runtime?.reasoning) argv.push("--reasoning-effort", options.runtime.reasoning);
   argv.push("stdio");
+  const seenTurnEvents = new Set<string>();
   return {
     label: "Grok",
     openTransport: (sink) =>
@@ -71,8 +73,6 @@ function grokSessionProfile(
         (request) => sink.permission(request),
         () => sink.promptWritten(),
       ),
-    // Grok authenticates before a session exists, and only the methods its initialize answer
-    // advertised can be used.
     beforeSession: async (transport, initialized) => {
       const methods = initialized.authMethods ?? [];
       const preferred = nonEmptyString(asRecord(initialized._meta)?.defaultAuthMethodId);
@@ -95,9 +95,7 @@ function grokSessionProfile(
     openSession: (transport, sessionId, initialized) =>
       openGrokSession(transport, sessionId, initialized, options, acpTimeoutMs),
     turn: () => new GrokTurnEvents(host),
-    // Grok names the prompt it runs, and its queue notifications carry that same id.
     promptMeta: (turnId) => ({ promptId: turnId }),
-    // A prompt Grok queues or starts is delivered before its first output arrives.
     promptAdmitted: (method, params, promptId) => {
       if (method !== "_x.ai/queue/changed") return false;
       if (nonEmptyString(params.runningPromptId) === promptId) return true;
@@ -105,7 +103,8 @@ function grokSessionProfile(
         (entry) => nonEmptyString(asRecord(entry)?.id) === promptId,
       );
     },
-    // A turn that stops at its token limit or a native turn limit is a normal end for Grok.
+    promptNotificationTokenUsage: (method, params, promptId) =>
+      grokPromptNotificationTokenUsage(method, params, promptId, seenTurnEvents),
     stopStatus: (reason) =>
       COMPLETED_STOP_REASONS.has(reason)
         ? { status: "completed" }
@@ -118,15 +117,11 @@ function grokSessionProfile(
         method: "_x.ai/interject",
         params: { sessionId, text, interjectionId: crypto.randomUUID() },
       }),
-      // Measured on grok 1.0.70: an interjection Grok holds answers `status: "queued"`; the only
-      // refusal is a JSON-RPC error, which the session reports undelivered.
       accepted: (response) => ({
         accepted: asRecord(asRecord(response)?.result)?.status === "queued",
       }),
-      // A queued interjection whose turn ends before injection is run by Grok as its own
-      // `interject-fallback-<uuid>` turn. That turn carries no `session/prompt` answer, so it is
-      // adopted here and settled by its own `turn_completed`.
-      nativeTurn: (method, params, ownPromptId) => grokNativeTurn(method, params, ownPromptId),
+      nativeTurn: (method, params, ownPromptId) =>
+        grokNativeTurn(method, params, ownPromptId, seenTurnEvents),
     },
   };
 }
@@ -141,8 +136,6 @@ async function openGrokSession(
   const agent = transport.connection.agent;
   const canLoad = initialized.agentCapabilities?.loadSession === true;
   const params = { cwd: options.agentWorkspaceDirectory, mcpServers: [] };
-  // The instructions replace Grok's native system prompt on new and on load, so a resumed
-  // session runs the current ones. Grok ignores a blank override, so none is sent.
   const meta = {
     yoloMode: true,
     ...(options.instructions.trim() ? { systemPromptOverride: options.instructions } : {}),
@@ -174,9 +167,6 @@ async function openGrokSession(
         GROK_PROFILE.messages.timedOut,
       );
     } catch (error) {
-      // Only a missing session is replaced. Grok reports a local miss whose remote pull 404s,
-      // fails or is not configured as -32603 with data.code FS_NOT_FOUND. Other I/O failures
-      // carry another data.code; any failure but that one keeps the identity and fails launch.
       const native = asRecord(error);
       if (native?.code !== -32603 || asRecord(native.data)?.code !== "FS_NOT_FOUND") throw error;
       replaced = sessionId;
@@ -210,23 +200,94 @@ async function openGrokSession(
   return { sessionId: created, resumable: resuming, replacedSessionId: replaced };
 }
 
-/** The turn Grok started itself for an accepted interjection whose previous turn had ended. */
-function grokNativeTurn(
+function isGrokReplay(
+  params: Readonly<Record<string, unknown>>,
+  update: Readonly<Record<string, unknown>>,
+): boolean {
+  const paramsMeta = asRecord(params._meta);
+  const updateMeta = asRecord(update._meta);
+  return (
+    params.isReplay === true ||
+    params.is_replay === true ||
+    paramsMeta?.isReplay === true ||
+    paramsMeta?.is_replay === true ||
+    update.isReplay === true ||
+    update.is_replay === true ||
+    updateMeta?.isReplay === true ||
+    updateMeta?.is_replay === true
+  );
+}
+
+function grokNotificationEventId(
+  params: Readonly<Record<string, unknown>>,
+  update: Readonly<Record<string, unknown>>,
+): string | undefined {
+  const paramsMeta = asRecord(params._meta);
+  const updateMeta = asRecord(update._meta);
+  return (
+    nonEmptyString(paramsMeta?.eventId) ??
+    nonEmptyString(paramsMeta?.event_id) ??
+    nonEmptyString(updateMeta?.eventId) ??
+    nonEmptyString(updateMeta?.event_id) ??
+    nonEmptyString(params.eventId) ??
+    nonEmptyString(params.event_id) ??
+    nonEmptyString(update.eventId) ??
+    nonEmptyString(update.event_id)
+  );
+}
+
+function rememberSeenEventId(seen: Set<string>, eventId: string): boolean {
+  if (seen.has(eventId)) return false;
+  seen.add(eventId);
+  if (seen.size > SEEN_EVENT_ID_LIMIT) seen.delete(seen.values().next().value!);
+  return true;
+}
+
+function grokTurnCompletedTokenUsage(
+  params: Readonly<Record<string, unknown>>,
+  update: Readonly<Record<string, unknown>>,
+): AgentTurnTokenUsage | undefined {
+  return acpPromptTokenUsage(update) ?? acpPromptTokenUsage(params);
+}
+
+export function grokPromptNotificationTokenUsage(
+  method: string,
+  params: Readonly<Record<string, unknown>>,
+  ownPromptId: string,
+  seenEventIds?: Set<string>,
+): AgentTurnTokenUsage | undefined {
+  if (method !== "_x.ai/session_notification") return undefined;
+  const update = asRecord(params.update);
+  if (!update || update.sessionUpdate !== "turn_completed") return undefined;
+  if (isGrokReplay(params, update)) return undefined;
+  const promptId = nonEmptyString(update.prompt_id);
+  if (!promptId || promptId !== ownPromptId) return undefined;
+  const eventId = grokNotificationEventId(params, update);
+  if (eventId && seenEventIds && !rememberSeenEventId(seenEventIds, eventId)) return undefined;
+  return grokTurnCompletedTokenUsage(params, update);
+}
+
+export function grokNativeTurn(
   method: string,
   params: Readonly<Record<string, unknown>>,
   ownPromptId: string | undefined,
-) {
+  seenEventIds?: Set<string>,
+): AcpNativeTurn | undefined {
   if (method === "_x.ai/queue/changed") {
     const running = nonEmptyString(params.runningPromptId);
     return running && running !== ownPromptId ? { promptId: running } : undefined;
   }
   if (method !== "_x.ai/session_notification") return undefined;
   const update = asRecord(params.update);
-  if (update?.sessionUpdate !== "turn_completed") return undefined;
+  if (!update || update.sessionUpdate !== "turn_completed") return undefined;
+  if (isGrokReplay(params, update)) return undefined;
   const promptId = nonEmptyString(update.prompt_id);
   if (!promptId || promptId === ownPromptId) return undefined;
+  const eventId = grokNotificationEventId(params, update);
+  if (eventId && seenEventIds && !rememberSeenEventId(seenEventIds, eventId)) return undefined;
   const reason = update.stop_reason;
   const detail = nonEmptyString(update.agent_result);
+  const tokenUsage = grokTurnCompletedTokenUsage(params, update);
   const status = COMPLETED_STOP_REASONS.has(reason)
     ? ("completed" as const)
     : reason === "cancelled"
@@ -236,6 +297,7 @@ function grokNativeTurn(
     promptId,
     end: {
       status,
+      ...(tokenUsage ? { tokenUsage } : {}),
       ...(status === "failed"
         ? {
             error: {

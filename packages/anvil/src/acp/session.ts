@@ -7,9 +7,10 @@ import type {
   AgentSessionIdentity,
   AgentSessionOptions,
   AgentTurnProcessWindow,
+  AgentTurnTokenUsage,
 } from "@coforge/agent";
 import { RequestError } from "@agentclientprotocol/sdk/unstable";
-import { acpPromptTokenUsage } from "#src/acp-context-usage";
+import { acpPromptTokenUsage, acpUpdateTokenUsage } from "#src/acp-context-usage";
 import { AGENT_RUNTIME_EVENT_TYPE } from "#src/contract";
 import { asRecord } from "#src/json-record";
 import { attachStderrExcerpt } from "#src/stderr-excerpt";
@@ -25,17 +26,12 @@ import {
 } from "./session-turn";
 import { resolveAcpPermission } from "./session-permission";
 import { AcpSteering } from "./steering";
+import { AcpTrailingUsageGate, acpIdleUsageUpdateEvents } from "./trailing-usage";
 import { SessionExit } from "#src/session-exit";
 
 type Input = AcpSessionInput;
 type NativeTurn = AcpNativeTurnState;
 
-/**
- * One ACP runtime's session state machine: one native prompt at a time, the local queue that
- * custody admits into it, busy-turn insertion, the turn's outcome, permission answers, notice
- * cancellation, interrupt, and the dispose/exit ladder. A runtime supplies only what its own
- * protocol adds, through `AcpSessionProfile`.
- */
 export class AcpSession implements AgentSession {
   #transport: AcpConnection | undefined;
   readonly #listeners = new Set<(event: AgentRuntimeEvent) => void>();
@@ -47,10 +43,8 @@ export class AcpSession implements AgentSession {
   #active: Input | undefined;
   #native: NativeTurn | undefined;
   #turn: Promise<void> | undefined;
-  /** Native-turn notifications that arrived before the session was reported. */
   readonly #openingFrames: [string, Readonly<Record<string, unknown>>][] = [];
   #opening = true;
-  /** Prompts this session already settled, so a late or replayed notification cannot revive one. */
   readonly #completedPrompts = new Set<string>();
   #lastAdmission: Promise<void> = Promise.resolve();
   #generation = 0;
@@ -59,9 +53,9 @@ export class AcpSession implements AgentSession {
   #interrupting = false;
   #dispose: Promise<void> | undefined;
   #termination: Promise<void> | undefined;
+  #turnEmittedTokenUsage = false;
+  readonly #trailingUsage = new AcpTrailingUsageGate();
 
-  /** The profile's `steer` block is this adapter's declaration that a notice sent mid-turn
-   * reaches the model inside that turn; without one, input queues for the next turn. */
   get steersBusyTurn(): boolean {
     return this.profile.steer !== undefined;
   }
@@ -90,6 +84,8 @@ export class AcpSession implements AgentSession {
           },
           emit: (event, options) => this.#emit(event, options),
           markResumable: (options) => this.#markResumable(options),
+          isDisposed: () => this.#disposed,
+          onTokenUsage: (usage, options) => this.#emitTokenUsage(usage, options),
           turnFailure: (response) =>
             acpSteerResponseFailure(response, this.profile, this.#active?.updates),
           rpcFailure: (error) => acpPromptFailure(error, this.profile),
@@ -109,11 +105,9 @@ export class AcpSession implements AgentSession {
       });
       this.#transport = transport;
       transport.process.onFailure((error) => {
-        // A prompt's own rejection reports its failure; only a turn the runtime started has no
-        // request left to settle it. The stderr tail rides the surfaced message too, not just
-        // the daemon's log.
         attachStderrExcerpt(transport.process, error);
         this.#failed = true;
+        this.#trailingUsage.wake();
         if (!this.#native) return;
         this.#finishNative({
           promptId: this.#native.promptId,
@@ -126,6 +120,7 @@ export class AcpSession implements AgentSession {
       transport.process.onClose((exit) => {
         this.#processExit = exit;
         this.#failed = true;
+        this.#trailingUsage.wake();
         const settle = this.#turn ?? Promise.resolve();
         void settle.finally(() => this.#terminate().then(() => this.#exitedNow()));
       });
@@ -140,9 +135,6 @@ export class AcpSession implements AgentSession {
       this.#ready();
     } catch (error) {
       await this.dispose().catch(() => undefined);
-      // The request can reject before stderr has been read. Dispose already waits for that
-      // drain, and the head is still on the process, so the product's own sentence is attached
-      // here rather than at the rejection.
       const process = this.#transport?.process;
       if (typeof process?.stderrExcerpt === "function") attachStderrExcerpt(process, error);
       throw error;
@@ -190,15 +182,11 @@ export class AcpSession implements AgentSession {
     const input = this.#queue.shift();
     if (!input) return;
     this.#active = input;
+    this.#turnEmittedTokenUsage = false;
     this.#turn = this.#run(input);
     if (this.profile.admissionTimeoutMs !== undefined) this.#armAdmissionTimeout(input);
   }
 
-  /**
-   * An input that waits past the runtime's admission deadline has an unknown delivery outcome.
-   * Close the native session before rejecting, so a late native acceptance cannot race the
-   * daemon's retry.
-   */
   #armAdmissionTimeout(input: Input) {
     const timer = setTimeout(() => {
       if (this.#active !== input) return;
@@ -213,7 +201,9 @@ export class AcpSession implements AgentSession {
 
   async #run(input: Input) {
     let status: "completed" | "interrupted" | "failed" = "failed";
-    let settledResponse: unknown;
+    let promptResponse: unknown;
+    let completedResponse: unknown;
+    let errorTokenUsage: AgentTurnTokenUsage | undefined;
     try {
       const meta = input.promptId ? this.profile.promptMeta?.(input.promptId) : undefined;
       const response = await this.#requireTransport().connection.agent.request("session/prompt", {
@@ -221,6 +211,7 @@ export class AcpSession implements AgentSession {
         prompt: [{ type: "text", text: input.text }],
         ...(meta ? { _meta: meta } : {}),
       });
+      promptResponse = response;
       const stop = acpStopStatus(response.stopReason, this.profile);
       const inBand =
         stop.status === "completed" && !this.profile.steer?.settlesTurn
@@ -234,7 +225,7 @@ export class AcpSession implements AgentSession {
         );
       } else if (stop.status === "completed") {
         this.#accept(input);
-        settledResponse = response;
+        completedResponse = response;
         status = "completed";
       } else if (stop.status === "interrupted") {
         input.admission.reject(
@@ -253,6 +244,7 @@ export class AcpSession implements AgentSession {
       }
     } catch (error) {
       const rpcFailure = error instanceof RequestError;
+      if (rpcFailure) errorTokenUsage = acpPromptTokenUsage(error.data);
       if (rpcFailure && input.attempted) this.#accept(input);
       else
         input.admission.reject(
@@ -262,11 +254,7 @@ export class AcpSession implements AgentSession {
               : `${this.profile.label} rejected input before submission`,
           ),
         );
-      // A terminal RPC failure is an accepted failed turn. Only transport loss leaves delivery
-      // unknown; neither outcome permits automatic resending or notice-undelivered.
       if (!rpcFailure && this.#transport) attachStderrExcerpt(this.#transport.process, error);
-      // A deliberate interrupt kills the transport: the turn reports `interrupted`, not the
-      // transport's own "connection closed" complaint.
       if (!this.#disposed && !(this.#interrupting && !rpcFailure))
         this.#emit(acpPromptFailure(error, this.profile), input.options);
       if (!(error instanceof RequestError))
@@ -274,29 +262,46 @@ export class AcpSession implements AgentSession {
         else this.#failed = true;
     } finally {
       if (this.#active === input) {
-        // A steer-as-prompt runtime keeps a steer in flight part of this turn: its updates and
-        // its end share the turn reader, and `completed` fires once the last prompt resolves.
-        // For every other runtime this block must stay synchronous — `completed` is emitted in
-        // the same turn that settles the admission, so an awaiting caller never sees it later.
         if (this.profile.steer?.unboundedRequest) {
-          const steered = await this.#steering?.drain(settledResponse, input.options);
+          const steered = await this.#steering?.drain(completedResponse, input.options);
           if (steered && status === "completed") status = steered;
+        }
+        let promptTokenUsage =
+          acpPromptTokenUsage(promptResponse) ??
+          errorTokenUsage ??
+          input.notificationTokenUsage ??
+          input.updateTokenUsage;
+        if (
+          !promptTokenUsage &&
+          !this.#turnEmittedTokenUsage &&
+          promptResponse !== undefined &&
+          !input.sawUsageUpdate &&
+          !this.#disposed &&
+          !this.#failed &&
+          !this.#interrupting &&
+          this.profile.trailingUsageWaitMs !== undefined &&
+          this.profile.trailingUsageWaitMs > 0
+        ) {
+          await this.#trailingUsage.wait(this.profile.trailingUsageWaitMs);
+          promptTokenUsage = input.updateTokenUsage;
         }
         this.#active = undefined;
         if (input.promptId) rememberCompletedPrompt(this.#completedPrompts, input.promptId);
         this.#steering?.settle();
         for (const event of input.updates.end()) this.#emit(event, input.options);
-        const promptTokenUsage = acpPromptTokenUsage(settledResponse);
         if (promptTokenUsage && !this.#disposed)
-          this.#emit(
-            { type: AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE, usage: promptTokenUsage },
-            input.options,
-          );
+          this.#emitTokenUsage(promptTokenUsage, input.options);
         if (!this.#disposed) this.#emit({ type: "completed", status }, input.options);
         this.#startNext();
         if (this.#failed && !this.#disposed) void this.#terminate();
       }
     }
+  }
+
+  #emitTokenUsage(usage: AgentTurnTokenUsage, options?: AgentNoticeOptions) {
+    if (this.#disposed) return;
+    this.#turnEmittedTokenUsage = true;
+    this.#emit({ type: AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE, usage }, options);
   }
 
   #update(sessionId: string, update: Readonly<Record<string, unknown>>) {
@@ -306,8 +311,6 @@ export class AcpSession implements AgentSession {
 
   #notification(method: string, params: Readonly<Record<string, unknown>>) {
     if (this.#disposed) return;
-    // Until the session is reported its id is unknown, so a native turn's frames are kept and
-    // classified once it is.
     if (this.#opening) {
       if (this.profile.steer?.nativeTurn?.(method, params, undefined))
         this.#openingFrames.push([method, params]);
@@ -321,9 +324,12 @@ export class AcpSession implements AgentSession {
       return;
     const promptId = this.#active?.promptId;
     if (promptId && this.profile.promptAdmitted?.(method, params, promptId)) {
-      // The runtime listed or started the prompt it was given: native acceptance, before any
-      // output. Without it a slow first token would look like an unanswered input.
       this.#accept(this.#active!);
+    }
+    if (promptId && this.profile.promptNotificationTokenUsage) {
+      const notificationUsage = this.profile.promptNotificationTokenUsage(method, params, promptId);
+      if (notificationUsage && this.#active)
+        this.#active.notificationTokenUsage = notificationUsage;
     }
     const update = asRecord(params.update);
     if (update) this.#project(update);
@@ -336,11 +342,6 @@ export class AcpSession implements AgentSession {
     else this.#startNative(native.promptId);
   }
 
-  /**
-   * Replays what arrived while the session was being reported, in arrival order. A native turn
-   * that both started and ended then is not revived: its queue snapshot must not reopen a turn
-   * whose `turn_completed` already arrived.
-   */
   #ready() {
     this.#opening = false;
     const frames = this.#openingFrames.splice(0);
@@ -361,7 +362,20 @@ export class AcpSession implements AgentSession {
   #project(update: Readonly<Record<string, unknown>>) {
     const input = this.#active;
     const turn = input ?? this.#native;
-    if (!turn) return;
+    if (!turn) {
+      if (!this.#opening && !this.#disposed) {
+        const idle = acpIdleUsageUpdateEvents(update, this.#turnEmittedTokenUsage);
+        for (const event of idle.contextEvents) this.#emit(event);
+        if (idle.tokenUsage) this.#emitTokenUsage(idle.tokenUsage);
+      }
+      return;
+    }
+    if (update.sessionUpdate === "usage_update") {
+      turn.sawUsageUpdate = true;
+      const updateTokens = acpUpdateTokenUsage(update);
+      if (updateTokens) turn.updateTokenUsage = updateTokens;
+      this.#trailingUsage.wake();
+    }
     const events = turn.updates.read(update);
     if (input) {
       if (
@@ -381,6 +395,7 @@ export class AcpSession implements AgentSession {
 
   #startNative(promptId: string) {
     if (this.#completedPrompts.has(promptId) || this.#native?.promptId === promptId) return;
+    this.#turnEmittedTokenUsage = false;
     this.#native = {
       promptId,
       updates: this.profile.turn(),
@@ -397,6 +412,8 @@ export class AcpSession implements AgentSession {
     turn.settled.resolve();
     this.#steering?.settle();
     for (const event of turn.updates.end()) this.#emit(event);
+    const tokenUsage = native.end?.tokenUsage ?? turn.updateTokenUsage;
+    if (tokenUsage && !this.#disposed) this.#emitTokenUsage(tokenUsage);
     if (native.end?.error && !this.#disposed) this.#emit(native.end.error);
     if (!this.#disposed) this.#emit({ type: "completed", status: native.end!.status });
     this.#startNext();
@@ -432,6 +449,7 @@ export class AcpSession implements AgentSession {
   async interrupt() {
     if (this.#disposed) return;
     this.#interrupting = true;
+    this.#trailingUsage.wake();
     this.cancelPendingNotices();
     try {
       if (this.#active || this.#native) {
@@ -494,6 +512,7 @@ export class AcpSession implements AgentSession {
 
   dispose(options?: Readonly<{ cutoffAtMs?: number }>): Promise<void> {
     this.#disposed = true;
+    this.#trailingUsage.wake();
     this.cancelPendingNotices();
     this.#steering?.clear();
     this.#native?.settled.resolve();
