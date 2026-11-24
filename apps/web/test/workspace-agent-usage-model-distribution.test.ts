@@ -8,8 +8,14 @@ function makeModelShare(
 ): AgentTokenUsageModelShare {
   return {
     provider: "claude-code",
+    uncachedInputTokens: overrides.effectiveTokens,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    newInputTokens: overrides.effectiveTokens,
+    outputTokens: 0,
     totalTokens: overrides.effectiveTokens,
     turns: 1,
+    cacheHitPercent: null,
     sharePercent: 0,
     ...overrides,
   };

@@ -426,6 +426,7 @@ test("PrismaAgentTokenUsageRepository and loaders aggregate SQL ranges, preserve
       { user: admin, db, workspaceId: workspace.id } as never,
       { agentId: adminAgent.id, range: 7, timeZone: "UTC" },
     );
+    expect(singleReport.currentProvider).toBe("claude-code");
     expect(singleReport.buckets.reduce((sum, b) => sum + b.effectiveTokens, 0)).toBe(2_200);
 
     const adminReport = await loadWorkspaceAgentTokenUsage(

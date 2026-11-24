@@ -1,4 +1,8 @@
-import { RUNTIME_PROVIDER, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import {
+  parseRuntimeProvider,
+  RUNTIME_PROVIDER,
+  type RuntimeProvider,
+} from "@lrm/coforge-sdk/internal";
 import antigravityMark from "@lobehub/icons-static-svg/icons/antigravity-color.svg";
 import claudeCodeMark from "@lobehub/icons-static-svg/icons/claudecode-color.svg";
 import codexMark from "@lobehub/icons-static-svg/icons/codex-color.svg";
@@ -51,6 +55,11 @@ const EXTERNAL_RUNTIME_PROVIDER_LABELS: Record<
 export function runtimeProviderLabel(provider: RuntimeProvider): string {
   if (provider === RUNTIME_PROVIDER.COFORGE) return m.agent_provider_pi_builtin();
   return EXTERNAL_RUNTIME_PROVIDER_LABELS[provider];
+}
+
+export function runtimeProviderDisplayName(provider: string): string {
+  const parsed = parseRuntimeProvider(provider);
+  return parsed ? runtimeProviderLabel(parsed) : provider;
 }
 
 const RUNTIME_LABEL_COLLATOR = new Intl.Collator("en", { sensitivity: "base" });

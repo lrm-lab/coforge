@@ -1,6 +1,7 @@
 import { resolveTimeZone } from "#src/lib/dates";
 import {
   aggregateAgentTokenUsageSlices,
+  computeCacheHitPercent,
   summarizeAgentTokenUsage,
   type AgentTokenUsageBucket,
   type AgentTokenUsageBucketSlice,
@@ -33,6 +34,8 @@ export type WorkspaceAgentBucketEntry = {
   provider: string;
   model: string;
   turns: number;
+  uncachedInputTokens: number;
+  cacheWriteTokens: number;
   newInputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
@@ -202,6 +205,8 @@ export function buildWorkspaceAgentUsageReport(input: {
     const existing = merged.get(mapKey);
     if (existing) {
       existing.turns += slice.turns;
+      existing.uncachedInputTokens += slice.uncachedInputTokens;
+      existing.cacheWriteTokens += slice.cacheWriteTokens;
       existing.newInputTokens += newInputTokens;
       existing.outputTokens += outputTokens;
       existing.cacheReadTokens += slice.cacheReadTokens;
@@ -213,6 +218,8 @@ export function buildWorkspaceAgentUsageReport(input: {
         provider: slice.provider,
         model,
         turns: slice.turns,
+        uncachedInputTokens: slice.uncachedInputTokens,
+        cacheWriteTokens: slice.cacheWriteTokens,
         newInputTokens,
         outputTokens,
         cacheReadTokens: slice.cacheReadTokens,
@@ -257,10 +264,12 @@ function buildFilteredTimelineBuckets(
       isCurrent: bucket.isCurrent,
       newInputTokens: 0,
       cacheReadTokens: 0,
+      cacheWriteTokens: 0,
       outputTokens: 0,
       effectiveTokens: 0,
       totalTokens: 0,
       turns: 0,
+      cacheHitPercent: null,
       models: new Map(),
       lastContextUsed: null,
       lastContextWindow: null,
@@ -274,6 +283,7 @@ function buildFilteredTimelineBuckets(
     const total = entry.newInputTokens + entry.cacheReadTokens + entry.outputTokens;
     bucket.newInputTokens += entry.newInputTokens;
     bucket.cacheReadTokens += entry.cacheReadTokens;
+    bucket.cacheWriteTokens += entry.cacheWriteTokens;
     bucket.outputTokens += entry.outputTokens;
     bucket.effectiveTokens += entry.effectiveTokens;
     bucket.totalTokens += total;
@@ -282,6 +292,11 @@ function buildFilteredTimelineBuckets(
     const modelKey = `${entry.provider}\u0000${entry.model}`;
     const existing = bucket.models.get(modelKey);
     if (existing) {
+      existing.uncachedInputTokens += entry.uncachedInputTokens;
+      existing.cacheReadTokens += entry.cacheReadTokens;
+      existing.cacheWriteTokens += entry.cacheWriteTokens;
+      existing.newInputTokens += entry.newInputTokens;
+      existing.outputTokens += entry.outputTokens;
       existing.effectiveTokens += entry.effectiveTokens;
       existing.totalTokens += total;
       existing.turns += entry.turns;
@@ -289,6 +304,11 @@ function buildFilteredTimelineBuckets(
       bucket.models.set(modelKey, {
         provider: entry.provider,
         model: entry.model,
+        uncachedInputTokens: entry.uncachedInputTokens,
+        cacheReadTokens: entry.cacheReadTokens,
+        cacheWriteTokens: entry.cacheWriteTokens,
+        newInputTokens: entry.newInputTokens,
+        outputTokens: entry.outputTokens,
         effectiveTokens: entry.effectiveTokens,
         totalTokens: total,
         turns: entry.turns,
@@ -300,6 +320,7 @@ function buildFilteredTimelineBuckets(
     const bucket = byKey.get(key)!;
     return {
       ...bucket,
+      cacheHitPercent: computeCacheHitPercent(bucket.newInputTokens, bucket.cacheReadTokens),
       models: [...bucket.models.values()].sort((a, b) => b.effectiveTokens - a.effectiveTokens),
     };
   });
@@ -331,6 +352,7 @@ export function summarizeWorkspaceAgentUsage(
         ...report.timeline,
         buckets: timelineBuckets,
         previousPeriod: { effectiveTokens: 0, totalTokens: 0, turns: 0 },
+        previousPeriodByProvider: {},
       }
     : report.timeline;
   const timelineSummary = summarizeAgentTokenUsage(timelineReport, filters.selectedKey);

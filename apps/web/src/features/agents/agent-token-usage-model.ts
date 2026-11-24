@@ -1,11 +1,31 @@
 import { resolveTimeZone } from "#src/lib/dates";
+import {
+  computeCacheHitPercent,
+  isolateBucketToProvider,
+  resolveDefaultUsageProvider,
+  summarizeRuntimesFromBuckets,
+  type AgentTokenUsageRuntimeSummary,
+} from "./agent-token-usage-runtimes";
+
+export { computeCacheHitPercent, resolveDefaultUsageProvider, type AgentTokenUsageRuntimeSummary };
 
 export const AGENT_TOKEN_USAGE_RANGES = [1, 7, 14, 30] as const;
 export type AgentTokenUsageRange = (typeof AGENT_TOKEN_USAGE_RANGES)[number];
 
+export type AgentTokenUsagePeriodTotals = {
+  effectiveTokens: number;
+  totalTokens: number;
+  turns: number;
+};
+
 export type AgentTokenUsageModelEntry = {
   provider: string;
   model: string;
+  uncachedInputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  newInputTokens: number;
+  outputTokens: number;
   effectiveTokens: number;
   totalTokens: number;
   turns: number;
@@ -19,10 +39,12 @@ export type AgentTokenUsageBucket = {
   isCurrent: boolean;
   newInputTokens: number;
   cacheReadTokens: number;
+  cacheWriteTokens: number;
   outputTokens: number;
   effectiveTokens: number;
   totalTokens: number;
   turns: number;
+  cacheHitPercent: number | null;
   models: AgentTokenUsageModelEntry[];
   lastContextUsed: number | null;
   lastContextWindow: number | null;
@@ -40,12 +62,10 @@ export type AgentTokenUsageReport = {
   asOf: string;
   trackingStartedAt: string | null;
   todayDateKey: string;
+  currentProvider: string | null;
   buckets: AgentTokenUsageBucket[];
-  previousPeriod: {
-    effectiveTokens: number;
-    totalTokens: number;
-    turns: number;
-  };
+  previousPeriod: AgentTokenUsagePeriodTotals;
+  previousPeriodByProvider: Record<string, AgentTokenUsagePeriodTotals>;
   liveContextUsage: AgentTokenUsageLiveContext | null;
 };
 
@@ -62,15 +82,18 @@ export type AgentTokenUsageTurnSample = Readonly<{
 }>;
 
 export type AgentTokenUsageModelShare = AgentTokenUsageModelEntry & {
+  cacheHitPercent: number | null;
   sharePercent: number;
 };
 
 export type AgentTokenUsageSummary = {
+  buckets: AgentTokenUsageBucket[];
   selectedBucket: AgentTokenUsageBucket | null;
   effectiveTokens: number;
   totalTokens: number;
   newInputTokens: number;
   cacheReadTokens: number;
+  cacheWriteTokens: number;
   outputTokens: number;
   turns: number;
   deltaPercent: number | null;
@@ -83,6 +106,8 @@ export type AgentTokenUsageSummary = {
   avgEffectivePerTurn: number | null;
   avgTotalPerTurn: number | null;
   contextUsage: { usedTokens: number; windowTokens: number } | null;
+  runtimes: AgentTokenUsageRuntimeSummary[];
+  reportRuntimes: AgentTokenUsageRuntimeSummary[];
   models: AgentTokenUsageModelShare[];
   series: {
     newInput: number[];
@@ -90,6 +115,7 @@ export type AgentTokenUsageSummary = {
     output: number[];
     effective: number[];
   };
+  cacheHitSeries: (number | null)[];
   peakEffective: number;
   peakKey: string | null;
   hasAnyData: boolean;
@@ -147,10 +173,12 @@ function emptyBucket(
     isCurrent,
     newInputTokens: 0,
     cacheReadTokens: 0,
+    cacheWriteTokens: 0,
     outputTokens: 0,
     effectiveTokens: 0,
     totalTokens: 0,
     turns: 0,
+    cacheHitPercent: null,
     models: new Map(),
     lastContextUsed: null,
     lastContextWindow: null,
@@ -167,6 +195,7 @@ function addSliceToBucket(bucket: MutableBucketWithContextTime, slice: AgentToke
 
   bucket.newInputTokens += newInput;
   bucket.cacheReadTokens += cacheRead;
+  bucket.cacheWriteTokens += slice.cacheWriteTokens;
   bucket.outputTokens += output;
   bucket.effectiveTokens += effective;
   bucket.totalTokens += total;
@@ -188,6 +217,11 @@ function addSliceToBucket(bucket: MutableBucketWithContextTime, slice: AgentToke
   const modelKey = `${slice.provider}\u0000${slice.model}`;
   const existing = bucket.models.get(modelKey);
   if (existing) {
+    existing.uncachedInputTokens += slice.uncachedInputTokens;
+    existing.cacheReadTokens += cacheRead;
+    existing.cacheWriteTokens += slice.cacheWriteTokens;
+    existing.newInputTokens += newInput;
+    existing.outputTokens += output;
     existing.effectiveTokens += effective;
     existing.totalTokens += total;
     existing.turns += slice.turns;
@@ -195,6 +229,11 @@ function addSliceToBucket(bucket: MutableBucketWithContextTime, slice: AgentToke
     bucket.models.set(modelKey, {
       provider: slice.provider,
       model: slice.model,
+      uncachedInputTokens: slice.uncachedInputTokens,
+      cacheReadTokens: cacheRead,
+      cacheWriteTokens: slice.cacheWriteTokens,
+      newInputTokens: newInput,
+      outputTokens: output,
       effectiveTokens: effective,
       totalTokens: total,
       turns: slice.turns,
@@ -209,6 +248,7 @@ export function aggregateAgentTokenUsageSlices(input: {
   now?: Date;
   trackingStartedAt: Date | null;
   liveContextUsage: AgentTokenUsageLiveContext | null;
+  currentProvider?: string | null;
 }): AgentTokenUsageReport {
   const zone = resolveTimeZone(input.timeZone);
   const now = input.now ?? new Date();
@@ -245,6 +285,7 @@ export function aggregateAgentTokenUsageSlices(input: {
   let prevEffective = 0;
   let prevTotal = 0;
   let prevTurns = 0;
+  const previousPeriodByProvider: Record<string, AgentTokenUsagePeriodTotals> = {};
 
   for (const slice of input.slices) {
     const sliceDate = Temporal.PlainDate.from(slice.dateKey);
@@ -265,9 +306,24 @@ export function aggregateAgentTokenUsageSlices(input: {
       Temporal.PlainDate.compare(sliceDate, prevEndDate) <= 0
     ) {
       const newInput = slice.uncachedInputTokens + slice.cacheWriteTokens;
-      prevEffective += newInput + slice.outputTokens;
-      prevTotal += newInput + slice.cacheReadTokens + slice.outputTokens;
+      const effective = newInput + slice.outputTokens;
+      const total = effective + slice.cacheReadTokens;
+      prevEffective += effective;
+      prevTotal += total;
       prevTurns += slice.turns;
+
+      const byProvider = previousPeriodByProvider[slice.provider];
+      if (byProvider) {
+        byProvider.effectiveTokens += effective;
+        byProvider.totalTokens += total;
+        byProvider.turns += slice.turns;
+      } else {
+        previousPeriodByProvider[slice.provider] = {
+          effectiveTokens: effective,
+          totalTokens: total,
+          turns: slice.turns,
+        };
+      }
     }
   }
 
@@ -275,6 +331,7 @@ export function aggregateAgentTokenUsageSlices(input: {
     const { lastContextRecordedAtMs: _ts, ...bucket } = bucketsByKey.get(key)!;
     return {
       ...bucket,
+      cacheHitPercent: computeCacheHitPercent(bucket.newInputTokens, bucket.cacheReadTokens),
       models: [...bucket.models.values()].sort((a, b) => b.effectiveTokens - a.effectiveTokens),
     };
   });
@@ -285,12 +342,14 @@ export function aggregateAgentTokenUsageSlices(input: {
     asOf: now.toISOString(),
     trackingStartedAt: input.trackingStartedAt ? input.trackingStartedAt.toISOString() : null,
     todayDateKey,
+    currentProvider: input.currentProvider ?? null,
     buckets,
     previousPeriod: {
       effectiveTokens: prevEffective,
       totalTokens: prevTotal,
       turns: prevTurns,
     },
+    previousPeriodByProvider,
     liveContextUsage: input.liveContextUsage,
   };
 }
@@ -302,6 +361,7 @@ export function aggregateAgentTokenUsage(input: {
   now?: Date;
   trackingStartedAt: Date | null;
   liveContextUsage: AgentTokenUsageLiveContext | null;
+  currentProvider?: string | null;
 }): AgentTokenUsageReport {
   const zone = resolveTimeZone(input.timeZone);
   const slices: AgentTokenUsageBucketSlice[] = input.turns.map((turn) => {
@@ -330,19 +390,28 @@ export function aggregateAgentTokenUsage(input: {
     now: input.now,
     trackingStartedAt: input.trackingStartedAt,
     liveContextUsage: input.liveContextUsage,
+    currentProvider: input.currentProvider,
   });
 }
 
 export function summarizeAgentTokenUsage(
   report: AgentTokenUsageReport,
   selectedKey: string | null,
+  selectedProvider: string | null = null,
 ): AgentTokenUsageSummary {
+  const reportRuntimes = summarizeRuntimesFromBuckets(report.buckets, report.currentProvider);
+  const buckets =
+    selectedProvider !== null
+      ? report.buckets.map((bucket) => isolateBucketToProvider(bucket, selectedProvider))
+      : report.buckets;
+
   const selectedBucket =
-    selectedKey !== null ? (report.buckets.find((b) => b.key === selectedKey) ?? null) : null;
-  const activeBuckets = selectedBucket ? [selectedBucket] : report.buckets;
+    selectedKey !== null ? (buckets.find((b) => b.key === selectedKey) ?? null) : null;
+  const activeBuckets = selectedBucket ? [selectedBucket] : buckets;
 
   let newInputTokens = 0;
   let cacheReadTokens = 0;
+  let cacheWriteTokens = 0;
   let outputTokens = 0;
   let turns = 0;
   let fallbackContext: { usedTokens: number; windowTokens: number } | null = null;
@@ -351,6 +420,7 @@ export function summarizeAgentTokenUsage(
   for (const bucket of activeBuckets) {
     newInputTokens += bucket.newInputTokens;
     cacheReadTokens += bucket.cacheReadTokens;
+    cacheWriteTokens += bucket.cacheWriteTokens;
     outputTokens += bucket.outputTokens;
     turns += bucket.turns;
     if (bucket.lastContextUsed !== null && bucket.lastContextWindow !== null) {
@@ -363,6 +433,11 @@ export function summarizeAgentTokenUsage(
       const modelKey = `${model.provider}\u0000${model.model}`;
       const existing = modelsMap.get(modelKey);
       if (existing) {
+        existing.uncachedInputTokens += model.uncachedInputTokens;
+        existing.cacheReadTokens += model.cacheReadTokens;
+        existing.cacheWriteTokens += model.cacheWriteTokens;
+        existing.newInputTokens += model.newInputTokens;
+        existing.outputTokens += model.outputTokens;
         existing.effectiveTokens += model.effectiveTokens;
         existing.totalTokens += model.totalTokens;
         existing.turns += model.turns;
@@ -372,57 +447,70 @@ export function summarizeAgentTokenUsage(
     }
   }
 
+  const runtimes = summarizeRuntimesFromBuckets(activeBuckets, report.currentProvider);
   const effectiveTokens = newInputTokens + outputTokens;
   const totalTokens = newInputTokens + cacheReadTokens + outputTokens;
-  const totalInput = newInputTokens + cacheReadTokens;
-  const cacheHitPercent =
-    totalInput > 0 ? Math.round((cacheReadTokens / totalInput) * 1000) / 10 : null;
+  const multiRuntimeActive = selectedProvider === null && runtimes.length > 1;
+  const cacheHitPercent = multiRuntimeActive
+    ? null
+    : computeCacheHitPercent(newInputTokens, cacheReadTokens);
 
   const shareOf = (part: number) =>
     totalTokens > 0 ? Math.round((part / totalTokens) * 1000) / 10 : 0;
 
+  const previousEffective =
+    selectedProvider !== null
+      ? (report.previousPeriodByProvider[selectedProvider]?.effectiveTokens ?? 0)
+      : report.previousPeriod.effectiveTokens;
+
   let deltaPercent: number | null = null;
-  if (!selectedBucket && report.previousPeriod.effectiveTokens > 0) {
+  if (!selectedBucket && previousEffective > 0) {
     let trackingCoversWindow = true;
-    if (report.trackingStartedAt && report.buckets[0]) {
+    if (report.trackingStartedAt && buckets[0]) {
       const startedDate = Temporal.Instant.fromEpochMilliseconds(
         Date.parse(report.trackingStartedAt),
       )
         .toZonedDateTimeISO(report.timeZone)
         .toPlainDate();
-      const previousWindowStart = Temporal.PlainDate.from(report.buckets[0].dateKey).subtract({
+      const previousWindowStart = Temporal.PlainDate.from(buckets[0].dateKey).subtract({
         days: report.range,
       });
       if (Temporal.PlainDate.compare(startedDate, previousWindowStart) > 0)
         trackingCoversWindow = false;
     }
     if (trackingCoversWindow) {
-      deltaPercent = Math.round(
-        ((effectiveTokens - report.previousPeriod.effectiveTokens) /
-          report.previousPeriod.effectiveTokens) *
-          100,
-      );
+      deltaPercent = Math.round(((effectiveTokens - previousEffective) / previousEffective) * 100);
     }
   }
 
   const models: AgentTokenUsageModelShare[] = [...modelsMap.values()]
-    .sort((a, b) => b.effectiveTokens - a.effectiveTokens)
+    .sort((a, b) => {
+      if (b.effectiveTokens !== a.effectiveTokens) return b.effectiveTokens - a.effectiveTokens;
+      if (b.turns !== a.turns) return b.turns - a.turns;
+      return a.model < b.model ? -1 : a.model > b.model ? 1 : 0;
+    })
     .map((entry) => ({
       ...entry,
+      cacheHitPercent: computeCacheHitPercent(entry.newInputTokens, entry.cacheReadTokens),
       sharePercent:
         effectiveTokens > 0 ? Math.round((entry.effectiveTokens / effectiveTokens) * 1000) / 10 : 0,
     }));
 
   const series = {
-    newInput: report.buckets.map((b) => b.newInputTokens),
-    cacheRead: report.buckets.map((b) => b.cacheReadTokens),
-    output: report.buckets.map((b) => b.outputTokens),
-    effective: report.buckets.map((b) => b.effectiveTokens),
+    newInput: buckets.map((b) => b.newInputTokens),
+    cacheRead: buckets.map((b) => b.cacheReadTokens),
+    output: buckets.map((b) => b.outputTokens),
+    effective: buckets.map((b) => b.effectiveTokens),
   };
+
+  const multiRuntimeReport = selectedProvider === null && reportRuntimes.length > 1;
+  const cacheHitSeries = multiRuntimeReport
+    ? buckets.map(() => null)
+    : buckets.map((b) => b.cacheHitPercent);
 
   let peakEffective = 0;
   let peakKey: string | null = null;
-  for (const bucket of report.buckets) {
+  for (const bucket of buckets) {
     if (bucket.effectiveTokens > peakEffective) {
       peakEffective = bucket.effectiveTokens;
       peakKey = bucket.key;
@@ -444,11 +532,13 @@ export function summarizeAgentTokenUsage(
     report.buckets.some((bucket) => bucket.turns > 0 || bucket.totalTokens > 0);
 
   return {
+    buckets,
     selectedBucket,
     effectiveTokens,
     totalTokens,
     newInputTokens,
     cacheReadTokens,
+    cacheWriteTokens,
     outputTokens,
     turns,
     deltaPercent,
@@ -461,8 +551,11 @@ export function summarizeAgentTokenUsage(
     avgEffectivePerTurn: turns > 0 ? Math.round(effectiveTokens / turns) : null,
     avgTotalPerTurn: turns > 0 ? Math.round(totalTokens / turns) : null,
     contextUsage,
+    runtimes,
+    reportRuntimes,
     models,
     series,
+    cacheHitSeries,
     peakEffective,
     peakKey,
     hasAnyData,

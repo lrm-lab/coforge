@@ -42,10 +42,12 @@ export async function loadAgentTokenUsage(
     select: {
       id: true,
       computerId: true,
+      runtimeConfig: true,
     },
   });
   if (!agent) throw new AppError("NOT_FOUND");
 
+  const currentProvider = readableRuntimeConfig(agent.runtimeConfig, agent.id)?.runtime ?? null;
   const now = new Date();
   const timeZone = resolveTimeZone(input.timeZone);
   const since = queryWindowStart(input.range, timeZone, now);
@@ -73,6 +75,7 @@ export async function loadAgentTokenUsage(
     now,
     trackingStartedAt,
     liveContextUsage: display?.contextUsage ?? null,
+    currentProvider,
   });
 }
 
