@@ -82,19 +82,21 @@ test.skipIf(!connectionString)(
     const memberByConversationAndUser = new Map(
       members.map((member) => [`${member.conversationId}:${member.userId}`, member.id]),
     );
-    const now = Date.now();
-    await db.message.createMany({
-      data: Array.from({ length: 100_000 }, (_, index) => ({
-        conversationId: conversations[index % conversations.length]!.id,
-        workspaceId: workspace.id,
-        senderMemberId: memberByConversationAndUser.get(
-          `${conversations[index % conversations.length]!.id}:${users[index % users.length]!.id}`,
-        )!,
-        body: `message ${index}`,
-        sequence: index + 1,
-        createdAt: new Date(now - (100_000 - index) * 1_000),
-      })),
-    });
+    const messageCount = 100_000;
+    const conversationIds = conversations.map((conversation) => conversation.id);
+    const senderMemberIds = conversations.map((conversation, index) =>
+      memberByConversationAndUser.get(`${conversation.id}:${users[index % users.length]!.id}`)!,
+    );
+    const oldestMessageAt = new Date(Date.now() - messageCount * 1_000);
+    await db.$executeRaw`
+      INSERT INTO "messages" (id, "conversationId", "workspaceId", "senderMemberId", body, sequence, "createdAt")
+      SELECT uuidv7(), sender.conversation_id, ${workspace.id}::uuid, sender.member_id,
+        'message ' || n, n + 1, ${oldestMessageAt}::timestamp + n * interval '1 second'
+      FROM generate_series(0, ${messageCount - 1}::int) AS series(n)
+      JOIN unnest(${conversationIds}::uuid[], ${senderMemberIds}::uuid[]) WITH ORDINALITY
+        AS sender(conversation_id, member_id, slot) ON sender.slot = n % ${conversations.length}::int + 1
+      ORDER BY n
+    `;
     // Keep planner statistics representative of a production-sized Workspace. Without this,
     // an empty random Workspace lets PostgreSQL choose an unrelated index by cost alone.
     await db.$executeRaw`ANALYZE "messages"`;
