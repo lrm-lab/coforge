@@ -5,7 +5,7 @@ import {
   type TaskView,
 } from "@lrm/coforge-sdk/internal";
 
-import { memo, useMemo, useState, type FocusEvent, type ReactNode } from "react";
+import { memo, useCallback, useMemo, useState, type FocusEvent, type ReactNode } from "react";
 import { Plus } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
 
@@ -61,6 +61,7 @@ export function TaskBoard<T extends BoardTask>({
   tasks,
   finished,
   view,
+  currentMemberId,
   onOpenTask,
   renderTitle,
   onCommand,
@@ -73,6 +74,7 @@ export function TaskBoard<T extends BoardTask>({
   tasks: readonly T[];
   finished: FinishedTasks<T>;
   view: TaskBoardView;
+  currentMemberId?: string | null;
   onOpenTask: (task: T) => void;
   renderTitle?: (task: T, title: ReactNode) => ReactNode;
   onCommand?: (task: T, command: OverviewTaskCommand) => Promise<void>;
@@ -86,6 +88,10 @@ export function TaskBoard<T extends BoardTask>({
   const openTask = useLatestCallback(onOpenTask);
   const runCommand = useLatestCallback((task: T, command: OverviewTaskCommand) =>
     onCommand ? onCommand(task, command) : Promise.resolve(),
+  );
+  const memberIdFor = useCallback(
+    (task: T) => task.currentMemberId ?? currentMemberId ?? null,
+    [currentMemberId],
   );
   const availableStatuses = TASK_WRITE_STATUSES;
   const showTree = tree !== undefined;
@@ -155,6 +161,7 @@ export function TaskBoard<T extends BoardTask>({
         onFilterChange={view.changeFilter}
         onStatusesChange={view.changeStatuses}
         onLayoutChange={view.changeLayout}
+        currentMemberId={currentMemberId}
         project={project}
         tree={showTree}
         action={
@@ -271,7 +278,7 @@ export function TaskBoard<T extends BoardTask>({
                   }
                 : undefined
             }
-            currentMemberId={(task) => task.currentMemberId ?? null}
+            currentMemberId={memberIdFor}
             onMove={async (task, command) => {
               await onCommand?.(task, command);
             }}
@@ -279,6 +286,7 @@ export function TaskBoard<T extends BoardTask>({
               <BoardTaskCard
                 task={task}
                 controls={controls}
+                currentMemberId={memberIdFor(task)}
                 list={layout === "list"}
                 onOpenTask={openTask}
                 renderTitle={renderTitle}
@@ -366,6 +374,7 @@ const BoardTaskCard = memo(BoardTaskCardContent) as typeof BoardTaskCardContent;
 function BoardTaskCardContent<T extends BoardTask>({
   task,
   controls,
+  currentMemberId,
   list,
   onOpenTask,
   renderTitle,
@@ -377,6 +386,7 @@ function BoardTaskCardContent<T extends BoardTask>({
 }: {
   task: T;
   controls: TaskControls;
+  currentMemberId: string | null;
   list: boolean;
   onOpenTask: (task: T) => void;
   renderTitle?: (task: T, title: ReactNode) => ReactNode;
@@ -422,7 +432,7 @@ function BoardTaskCardContent<T extends BoardTask>({
             onCommand={onCommand}
             conversationName={inConversation ? conversationName : task.source?.label}
             members={members}
-            currentMemberId={task.currentMemberId ?? null}
+            currentMemberId={currentMemberId}
           />
         ) : (
           <ButtonUtility

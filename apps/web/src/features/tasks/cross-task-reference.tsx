@@ -1,10 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 
 import {
   useCurrentWorkspaceId,
-  useLiveAgent,
-  useLiveAgents,
+  useVisibleAgentDirectory,
 } from "#src/features/agents/workspace-agents-realtime";
 import { useConversationId } from "#src/features/conversations/conversation-id";
 import { sidebarDirectsQuery } from "#src/features/conversations/sidebar-collections";
@@ -129,6 +128,8 @@ export function DirectTaskReferenceByPeer({
   );
 }
 
+const HANDLE_SUFFIX_RE = /~(agent|human)$/i;
+
 function useDirectConversationWith(handle: string): string | undefined {
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const { data: rows } = useQuery({
@@ -136,22 +137,32 @@ function useDirectConversationWith(handle: string): string | undefined {
     select: (read) => read.rows,
     enabled: workspaceId !== "",
   });
-  const agents = useLiveAgents();
-  const suffix = /~(agent|human)$/i.exec(handle)?.[1]?.toLowerCase();
-  const name = handle.replace(/~(agent|human)$/i, "").toLowerCase();
-  const row = rows?.find((each) =>
-    each.peer.kind === "people"
-      ? suffix !== "agent" && each.peer.username.toLowerCase() === name
-      : suffix !== "human" &&
-        agents
-          .find((agent) => agent.id === (each.peer as { agentId: string }).agentId)
-          ?.name.toLowerCase() === name,
-  );
-  return row?.conversationId;
+  const agents = useVisibleAgentDirectory();
+  return useMemo(() => {
+    if (!rows) return undefined;
+    const suffix = HANDLE_SUFFIX_RE.exec(handle)?.[1]?.toLowerCase();
+    const name = handle.replace(HANDLE_SUFFIX_RE, "").toLowerCase();
+    const matchingAgentIds =
+      suffix === "human"
+        ? undefined
+        : new Set(
+            agents.filter((agent) => agent.name.toLowerCase() === name).map((agent) => agent.id),
+          );
+    const row = rows.find((each) =>
+      each.peer.kind === "people"
+        ? suffix !== "agent" && each.peer.username.toLowerCase() === name
+        : suffix !== "human" &&
+          each.peer.kind === "agent" &&
+          matchingAgentIds!.has(each.peer.agentId),
+    );
+    return row?.conversationId;
+  }, [rows, agents, handle]);
 }
 
 function useDirectPeerLabel(conversationId: string): string | undefined {
   const peer = useLiveDirectRow(conversationId)?.peer;
-  const agent = useLiveAgent(peer?.kind === "agent" ? peer.agentId : "");
-  return directPeerLabel(peer, agent?.name);
+  const agents = useVisibleAgentDirectory();
+  const agentName =
+    peer?.kind === "agent" ? agents.find((agent) => agent.id === peer.agentId)?.name : undefined;
+  return directPeerLabel(peer, agentName);
 }

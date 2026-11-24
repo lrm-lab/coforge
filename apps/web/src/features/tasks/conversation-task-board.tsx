@@ -62,12 +62,8 @@ export function ConversationTaskBoard({
   const error = taskView.error || (failed ? m.tasks_load_error() : "");
   const held = useHeldTasks(conversationId, listed);
   const tasks = useMemo(
-    () =>
-      filterConversationBoardTasks(held, view.filter.projects).map((task) => ({
-        ...task,
-        currentMemberId: currentMemberId || null,
-      })),
-    [held, view.filter.projects, currentMemberId],
+    () => filterConversationBoardTasks(held, view.filter.projects),
+    [held, view.filter.projects],
   );
   const finished = useFinishedTasks({
     scope: { workspaceId, conversationId },
@@ -87,6 +83,7 @@ export function ConversationTaskBoard({
       tasks={tasks}
       finished={finished}
       view={view}
+      currentMemberId={currentMemberId || null}
       onOpenTask={(task) => onOpenTask(task.number)}
       onCommand={run}
       conversation={{

@@ -1,5 +1,5 @@
 import { Link, useHydrated, useRouter } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, type ReactNode } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
@@ -8,7 +8,6 @@ import {
   ProjectTaskTreeView,
 } from "#src/features/projects/project-task-tree";
 import { useProjectTasks } from "#src/features/projects/project-tasks";
-import { OverviewTaskPopup } from "./overview-task-popup";
 import { TaskBoard } from "./task-board";
 import { useTaskBoardSearch } from "./task-board-search";
 import { TASK_TITLE_CLASS } from "./task-card";
@@ -17,14 +16,14 @@ import { overviewTaskParam, parseOverviewTaskParam } from "./task-overview-searc
 import { useTaskOverview } from "./use-task-overview";
 import { overviewTaskQuery, useFinishedTasks } from "./use-finished-tasks";
 
+const OverviewTaskPopup = lazy(() =>
+  import("./overview-task-popup").then((module) => ({
+    default: module.OverviewTaskPopup,
+  })),
+);
+
 type BoardSearch = Parameters<typeof useTaskBoardSearch>[0] & { task?: string };
 
-/**
- * The Workspace's Task board with each Task's popup over it (`task` in the address): the Tasks
- * page, and a Project page's Tasks tab (`project`), which shows only that Project's Tasks and
- * offers no Project to pick. It navigates relative to the current route (`to: "."`), so either
- * route's `validateSearch` takes what it writes.
- */
 export function WorkspaceTaskBoard({
   search,
   project,
@@ -33,30 +32,22 @@ export function WorkspaceTaskBoard({
 }: {
   search: BoardSearch;
   project?: string;
-  /** The Project's slug, which a new Task on its board is filed under. */
   projectSlug?: string;
-  /** False where only the popup is wanted: a Project page's other tabs and its phone list. */
   board?: boolean;
 }) {
   const { tasks: all, run, refetch } = useTaskOverview();
   const { task: taskParam, ...boardSearch } = search;
   const searched = useTaskBoardSearch(boardSearch);
-  // A Project's list is its task tree (task #462). Until hydration an address naming no layout
-  // cannot tell board from list (a phone opens the list), so a skeleton holds the place.
   const hydrated = useHydrated();
   const layoutPending = project !== undefined && boardSearch.layout === undefined && !hydrated;
   const treeShown = project !== undefined && !layoutPending && searched.layout === "list";
   const projectTasks = useProjectTasks(treeShown ? project : undefined);
-  // The channel pick is the tree's alone: the board never reads it, even from a typed address.
   const view = useMemo(
     () => (treeShown ? searched : { ...searched, filter: { ...searched.filter, channels: [] } }),
     [treeShown, searched],
   );
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const router = useRouter();
-  // A sub-task is its parent's progress, not a card, when its parent is on this board too: one the
-  // viewer may read, within the board's Project pick (task #596). The server applies the same
-  // rule to Done and Closed and their counts.
   const projectPick = useMemo(
     () => (project ? [project] : view.filter.projects),
     [project, view.filter.projects],
@@ -76,15 +67,11 @@ export function WorkspaceTaskBoard({
   const finished = useFinishedTasks({
     scope: { workspaceId },
     window: view.completedWindow,
-    // A Project's board pages its own Done and Closed; its view never names a Project.
     filter: project ? { ...view.filter, projects: [project] } : view.filter,
     onPage: tasks,
-    // The tree lists unfinished Tasks only: Done and Closed are not read under it.
     enabled: !treeShown,
   });
   const { refresh: refreshFinished } = finished;
-  // A move shows at once and takes the server's copy of the Task; a refused one is back in place.
-  // Done and Closed are counted and paged by the server, so they are read again after each.
   const command = useMemo(
     () =>
       run
@@ -94,7 +81,6 @@ export function WorkspaceTaskBoard({
     [run, refreshFinished],
   );
 
-  // Every Task the page has read: the unfinished ones and the opened pages of Done and Closed.
   const known = useMemo(
     () => [...tasks, ...finished.columns.done.rows, ...finished.columns.closed.rows],
     [tasks, finished.columns.done.rows, finished.columns.closed.rows],
@@ -110,16 +96,9 @@ export function WorkspaceTaskBoard({
         : undefined,
     [taskRef, known],
   );
-  // The open popup's Task is always read on its own: the board's rows carry no description, and
-  // the single read is the fresh copy the popup shows once it lands (the listed row paints first).
-  // It sits with the finished-work reads, so the reads after each command and announcement
-  // refresh it too.
   const lookup = useQuery(overviewTaskQuery(workspaceId, taskRef));
-  // The Task whose popup `task` names: the single read once it answers, the listed row until then
-  // (and when it answers `null` — gone or unseen — the listed row still stands, as before).
   const openTask = taskRef ? (lookup.data ?? listed) : undefined;
   const openConversationId = openTask?.conversationId;
-  // Opening a popup is a history entry, so Back closes it; closing replaces in place.
   const setTask = useCallback(
     (task: string | undefined, replace: boolean) =>
       void router.navigate({
@@ -145,8 +124,10 @@ export function WorkspaceTaskBoard({
     void refetch();
     refreshFinished();
   }, [refetch, refreshFinished]);
-  // A `task` that cannot be read (deleted, in a conversation this viewer cannot see, or gone on
-  // a later read) opens nothing, so it leaves the URL rather than lingering there.
+  const newTask = useMemo(
+    () => ({ projectSlug, onCreated: refreshOverview }),
+    [projectSlug, refreshOverview],
+  );
   const missing =
     taskParam !== undefined &&
     !listed &&
@@ -167,7 +148,7 @@ export function WorkspaceTaskBoard({
           onCommand={command}
           commandsPending={!hydrated}
           project={project !== undefined}
-          newTask={{ projectSlug, onCreated: refreshOverview }}
+          newTask={newTask}
           tree={
             treeShown
               ? {
@@ -183,23 +164,22 @@ export function WorkspaceTaskBoard({
         />
       )}
       {openTask && (
-        <OverviewTaskPopup
-          // One conversation per popup instance: another Task of the same conversation keeps it.
-          key={openTask.conversationId}
-          task={openTask}
-          onOpenTask={openConversationTask}
-          onOpenTaskIn={openPopup}
-          onClose={closePopup}
-          onCommand={(input) => (command ? command(openTask, input) : Promise.resolve())}
-          onTaskChanged={refreshOverview}
-        />
+        <Suspense fallback={null}>
+          <OverviewTaskPopup
+            key={openTask.conversationId}
+            task={openTask}
+            onOpenTask={openConversationTask}
+            onOpenTaskIn={openPopup}
+            onClose={closePopup}
+            onCommand={(input) => (command ? command(openTask, input) : Promise.resolve())}
+            onTaskChanged={refreshOverview}
+          />
+        </Suspense>
       )}
     </>
   );
 }
 
-/** A card's title opens its Task's popup over the page; a link, so the popup's URL can also open
- * in a new tab. */
 function renderTaskTitle(task: OverviewTaskRow, title: ReactNode) {
   return (
     <Link

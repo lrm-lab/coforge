@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { getRouteApi, useHydrated } from "@tanstack/react-router";
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
@@ -30,12 +30,8 @@ const appRoute = getRouteApi("/w/$workspaceSlug");
 const selectOrder = (overview: { tasks: readonly { id: string }[] }) =>
   overview.tasks.map((task) => task.id);
 
-// React access to the Tasks page's rows (`task-overview-collection.ts`).
-
 const overviewsByClient = new WeakMap<QueryClient, Map<string, TaskOverviewCollection>>();
 
-/** One overview (collection and commands) per `QueryClient` and Workspace, so every consumer
- * shares one sync and one optimistic state. */
 function overviewFor(queryClient: QueryClient, workspaceId: string) {
   let byWorkspace = overviewsByClient.get(queryClient);
   if (!byWorkspace) overviewsByClient.set(queryClient, (byWorkspace = new Map()));
@@ -45,16 +41,9 @@ function overviewFor(queryClient: QueryClient, workspaceId: string) {
   return overview;
 }
 
-/**
- * The Tasks page's rows, how to run a command on one, and how to read them again. Server-rendered
- * from the Query cache the loader fills; after hydration read live from the collection.
- */
 export function useTaskOverview() {
   const queryClient = useQueryClient();
   const workspaceId = useCurrentWorkspaceId() ?? "";
-  // The server's list of Tasks, which and in what order. Structurally shared, so it re-renders
-  // only when a read changes that list, not when a change rewrites a row in the cache: after
-  // hydration the rows themselves come from the collection.
   const order = useSuspenseQuery({
     ...taskOverviewQuery(workspaceId),
     select: selectOrder,
@@ -69,7 +58,6 @@ export function useTaskOverview() {
     queryKey: ["task-overview", workspaceId, Boolean(overview)],
     query: (q) => (overview ? q.from({ task: overview.tasks }) : undefined),
   });
-  // The rows in the order the server sent them, which a live query does not keep.
   const position = useMemo(() => new Map(order.map((id, index) => [id, index])), [order]);
   const liveRows = live.isReady ? live.data : undefined;
   const tasks: readonly OverviewTaskRow[] = useMemo(
@@ -79,16 +67,13 @@ export function useTaskOverview() {
             (left, right) =>
               (position.get(left.id) ?? Infinity) - (position.get(right.id) ?? Infinity),
           )
-        : // Until the live query is ready (the server render, the first tick after hydration) the
-          // cache holds the same rows, already in order.
-          (queryClient.getQueryData(taskOverviewQuery(workspaceId).queryKey)?.tasks ?? []),
+        : (queryClient.getQueryData(taskOverviewQuery(workspaceId).queryKey)?.tasks ?? []),
     [liveRows, position, queryClient, workspaceId],
   );
   useTaskOverviewRealtime(overview, workspaceId);
   return useMemo(
     () => ({
       tasks,
-      /** Undefined until hydrated: the server render offers no commands. */
       run: overview?.run,
       refetch: () =>
         queryClient.invalidateQueries({ queryKey: taskOverviewQuery(workspaceId).queryKey }),
@@ -97,68 +82,57 @@ export function useTaskOverview() {
   );
 }
 
-/** Announcements arriving together (an Agent working through several Tasks) apply in one write. */
 const APPLY_DELAY_MS = 100;
 
-/**
- * Keeps the rows live: listens for `task.changed.v1` on the Workspace channel, where public
- * channels' Tasks are announced, and on the viewer's own channel, where a private channel's and
- * the viewer's own direct conversations' are (task #596: those are on this page too), the
- * subscriptions the nav rail already holds, and applies each burst in one write. Every other
- * publication (every chat message) is dropped before any parsing beyond its type. Only a Task the
- * page does not list yet reads the list again, once per burst.
- */
 function useTaskOverviewRealtime(
   overview: TaskOverviewCollection | undefined,
   workspaceId: string,
 ) {
   const queryClient = useQueryClient();
   const userId = appRoute.useLoaderData({ select: (data) => data.user.id });
-  // One buffer per overview: a Workspace switch drops what the old one had not applied yet.
-  const burst = useMemo(
-    () => ({
-      pending: [] as TaskChangedEvent[],
-      timer: undefined as ReturnType<typeof setTimeout> | undefined,
-    }),
+  const burstRef = useRef<{
+    pending: TaskChangedEvent[];
+    timer: ReturnType<typeof setTimeout> | undefined;
+  }>({ pending: [], timer: undefined });
+  useEffect(
+    () => () => {
+      clearTimeout(burstRef.current.timer);
+      burstRef.current.timer = undefined;
+      burstRef.current.pending = [];
+    },
     [overview],
   );
-  useEffect(() => () => clearTimeout(burst.timer), [burst]);
 
   const apply = useCallback(
     (event: TaskChangedEvent | undefined) => {
       if (!event || !overview || event.workspaceId !== workspaceId) return;
+      const burst = burstRef.current;
       burst.pending.push(event);
       if (burst.timer !== undefined) return;
       burst.timer = setTimeout(() => {
         burst.timer = undefined;
-        const events = burst.pending.splice(0);
-        // Done and Closed are counted and paged by the server: a change may move a Task into or
-        // out of them, so their counts and opened pages are read again, once per burst.
+        const events = burst.pending;
+        burst.pending = [];
         void queryClient.invalidateQueries({ queryKey: finishedTasksKey(workspaceId) });
         let needsRead: boolean;
         try {
           needsRead = overview.apply(events);
         } catch {
-          // A change that cannot be applied is shown by a read of the list instead.
           needsRead = true;
         }
-        // The collection keeps each applied change over a read that predates it.
         if (needsRead)
           void queryClient.invalidateQueries({ queryKey: taskOverviewQuery(workspaceId).queryKey });
       }, APPLY_DELAY_MS);
     },
-    [overview, workspaceId, queryClient, burst],
+    [overview, workspaceId, queryClient],
   );
-  // Which channels' Tasks the viewer may see changed: only a read of the lists says which.
   const readAgain = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: taskOverviewQuery(workspaceId).queryKey });
     void queryClient.invalidateQueries({ queryKey: finishedTasksKey(workspaceId) });
   }, [queryClient, workspaceId]);
   const onWorkspacePublication = useCallback(
     (publication: { data: unknown }) => {
-      // Parsed once, for both readings below.
       const data = publicationDataOrUndefined(publication.data);
-      // A channel made public (or new) is announced to everyone: its Tasks are theirs to see now.
       if (publicationType(data) === "channel.created.v1") {
         if (channelSignalOf(data)?.workspaceId === workspaceId) readAgain();
         return;
@@ -169,22 +143,17 @@ function useTaskOverviewRealtime(
   );
   const onUserPublication = useCallback(
     (publication: { data: unknown }) => {
-      // Every message's activity rides this channel too: it leaves on its type, parsed once.
       const data = publicationDataOrUndefined(publication.data);
       const type = publicationType(data);
       if (type === "task.changed.v1") {
-        // Only Tasks the viewer may read are announced on their own channel.
         apply(decodeTaskChangedEvent(data));
         return;
       }
-      // The viewer joined or left a channel: a private one's Tasks come or go with it, which only
-      // a read of the list says.
       if (
         (type === "channel.joined.v1" || type === "channel.left.v1") &&
         decodeViewerEvent(data)?.workspaceId === workspaceId
       )
         readAgain();
-      // A channel made private that the viewer is not in: its Tasks go with it.
       if (type === "channel.updated.v1") {
         const signal = channelSignalOf(data);
         if (signal?.workspaceId === workspaceId && "gone" in signal && signal.gone) readAgain();

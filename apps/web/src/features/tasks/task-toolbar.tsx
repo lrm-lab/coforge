@@ -45,6 +45,7 @@ export function TaskToolbar({
   onFilterChange,
   onStatusesChange,
   onLayoutChange,
+  currentMemberId,
   project = false,
   tree = false,
   action,
@@ -57,13 +58,14 @@ export function TaskToolbar({
   onFilterChange: (filter: TaskFilter) => void;
   onStatusesChange: (statuses: readonly TaskStatus[]) => void;
   onLayoutChange: (layout: TaskLayout) => void;
+  currentMemberId?: string | null;
   project?: boolean;
   tree?: boolean;
   action?: ReactNode;
 }) {
   const owners = useMemo(
     () =>
-      ownerOptions(tasks).map((option): PickerOption => ({
+      ownerOptions(tasks, currentMemberId).map((option): PickerOption => ({
         id: option.id,
         label: ownerLabel(option),
         face:
@@ -78,7 +80,7 @@ export function TaskToolbar({
         ...(option.handle !== undefined && agentHandle(option.handle)),
         count: option.count,
       })),
-    [tasks],
+    [tasks, currentMemberId],
   );
   const projects = useMemo(
     () =>
