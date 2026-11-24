@@ -394,6 +394,14 @@ export function ActivityInboxView({
     : undefined;
   const phoneScrimOpacity = phone && !reduced && pane ? 0.24 * (1 - swipe.dragProgress) : 0;
 
+  const emptyState = empty ? (
+    query.isError ? (
+      <ActivityInboxLoadError onRetry={() => void query.refetch()} retrying={query.isRefetching} />
+    ) : (
+      <ActivityInboxEmpty filter={filter} />
+    )
+  ) : undefined;
+
   const list = (
     <div
       data-activity-list
@@ -424,10 +432,10 @@ export function ActivityInboxView({
         {...listProps}
         className="@container/activity-list min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-1"
       >
-        {query.isError && empty ? (
-          <ActivityInboxLoadError onRetry={() => void query.refetch()} />
-        ) : empty ? (
-          <ActivityInboxEmpty filter={filter} onShowAll={() => onFilterChange("all")} />
+        {emptyState ? (
+          desktop && !pane ? null : (
+            emptyState
+          )
         ) : (
           <ActivityInboxSections sections={sections} />
         )}
@@ -471,7 +479,7 @@ export function ActivityInboxView({
             flow={paneFlow}
           />
         ) : (
-          <ActivityInboxIdlePane empty={empty} />
+          <ActivityInboxIdlePane emptyState={emptyState} />
         )
       ) : (
         <AnimatePresence initial={false}>

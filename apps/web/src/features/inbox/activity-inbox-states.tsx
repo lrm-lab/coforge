@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { CircleAlert } from "kubai-icons/duotone";
 
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
@@ -6,12 +7,7 @@ import { ChatWireframe, InboxDoneWireframe } from "#src/components/ui/empty-wire
 import { m } from "#src/paraglide/messages";
 import type { ActivityInboxFilter } from "./activity-inbox.schemas";
 
-export function ActivityInboxEmpty({
-  filter,
-}: {
-  filter: ActivityInboxFilter;
-  onShowAll?: () => void;
-}) {
+export function ActivityInboxEmpty({ filter }: { filter: ActivityInboxFilter }) {
   const title =
     filter === "mentions"
       ? m.empty_activity_mentions_title()
@@ -39,13 +35,13 @@ export function ActivityInboxEmpty({
   );
 }
 
-export function ActivityInboxIdlePane({ empty }: { empty: boolean }) {
+export function ActivityInboxIdlePane({ emptyState }: { emptyState?: ReactNode }) {
   return (
     <div
       data-activity-idle-pane
       className="hidden min-h-0 min-w-0 flex-1 flex-col border-s border-secondary bg-primary lg:flex"
     >
-      {!empty && (
+      {emptyState ?? (
         <EmptyState
           size="page"
           className="h-full"
