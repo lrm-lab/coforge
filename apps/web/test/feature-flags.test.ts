@@ -15,19 +15,27 @@ import {
 const FRANK = { workspaceId: "0199a0b0-0000-7000-8000-000000000001", workspaceSlug: "frank" };
 const OTHER = { workspaceId: "0199a0b0-0000-7000-8000-000000000002", workspaceSlug: "other" };
 
-/** A flagd definition file whose `flag` is on only for the Workspaces with these slugs. */
-function definitions(flag: string, slugs: string[]): string {
+/** A flagd definition file whose flags are each on only for the Workspaces with those slugs. */
+function definitionsMap(flags: Record<string, string[]>): string {
   return JSON.stringify({
     $schema: "https://flagd.dev/schema/v0/flags.json",
-    flags: {
-      [flag]: {
-        state: "ENABLED",
-        variants: { on: true, off: false },
-        defaultVariant: "off",
-        targeting: { if: [{ in: [{ var: "workspaceSlug" }, slugs] }, "on", "off"] },
-      },
-    },
+    flags: Object.fromEntries(
+      Object.entries(flags).map(([flag, slugs]) => [
+        flag,
+        {
+          state: "ENABLED",
+          variants: { on: true, off: false },
+          defaultVariant: "off",
+          targeting: { if: [{ in: [{ var: "workspaceSlug" }, slugs] }, "on", "off"] },
+        },
+      ]),
+    ),
   });
+}
+
+/** A flagd definition file whose `flag` is on only for the Workspaces with these slugs. */
+function definitions(flag: string, slugs: string[]): string {
+  return definitionsMap({ [flag]: slugs });
 }
 
 let directory: string;
@@ -101,29 +109,6 @@ test.each([
   await expect(promise).rejects.toThrow(/COFORGE_FEATURE_FLAGS_FILE/);
 });
 
-// flagd polls the file with `fs.watchFile` (about every five seconds, not configurable).
-const FILE_POLL_BOUND_MS = 15_000;
-
-test(
-  "a rewritten flag file is picked up without a restart",
-  async () => {
-    const path = await installFile(definitions("app-data-permissions", ["other"]));
-    expect(await isFeatureEnabled("app-data-permissions", FRANK)).toBe(false);
-    // The provider's documented change event is the completion this test awaits.
-    const { promise: changed, resolve } = Promise.withResolvers<void>();
-    const onChanged = () => resolve();
-    OpenFeature.addHandler(ProviderEvents.ConfigurationChanged, onChanged);
-    try {
-      await Bun.write(path, definitions("app-data-permissions", ["frank"]));
-      await changed;
-      expect(await isFeatureEnabled("app-data-permissions", FRANK)).toBe(true);
-    } finally {
-      OpenFeature.removeHandler(ProviderEvents.ConfigurationChanged, onChanged);
-    }
-  },
-  FILE_POLL_BOUND_MS,
-);
-
 test("a flag is defined only while the loaded file marks it ENABLED", async () => {
   expect(isFeatureDefined("app-notifications")).toBe(false);
   await installFeatureFlags(await readFeatureFlagsConfiguration({}));
@@ -151,23 +136,56 @@ test("a flag is defined only while the loaded file marks it ENABLED", async () =
   expect(isFeatureDefined("app-data-permissions")).toBe(false);
 });
 
+// flagd polls the file with `fs.watchFile` (about every five seconds, not configurable).
+const FILE_POLL_BOUND_MS = 15_000;
+
 test(
-  "a reload adds and removes defined flags, and tells listeners after it re-read the file",
+  "a rewritten flag file updates targeting, adds and removes defined flags, and notifies listeners after re-reading",
   async () => {
-    const path = await installFile(definitions("app-data-permissions", ["frank"]));
-    const changed = () => {
-      const { promise, resolve } = Promise.withResolvers<void>();
-      const stop = onFeatureFlagsChanged(() => {
-        stop();
-        resolve();
+    const path = await installFile(
+      definitionsMap({
+        "app-data-permissions": ["other"],
+        "app-bot": ["frank"],
+      }),
+    );
+    expect(await isFeatureEnabled("app-data-permissions", FRANK)).toBe(false);
+    expect(isFeatureDefined("app-data-permissions")).toBe(true);
+    expect(isFeatureDefined("app-bot")).toBe(true);
+    expect(isFeatureDefined("app-notifications")).toBe(false);
+
+    // Subscribe to both the OpenFeature event and the app callback before writing so a single
+    // real file poll verifies targeting updates, added/removed definitions, and both notifications.
+    const providerChanged = Promise.withResolvers<void>();
+    const appChanged = Promise.withResolvers<{ addedDefined: boolean; removedDefined: boolean }>();
+    const onProviderChanged = () => providerChanged.resolve();
+    const stopAppListener = onFeatureFlagsChanged(() => {
+      appChanged.resolve({
+        addedDefined: isFeatureDefined("app-notifications"),
+        removedDefined: isFeatureDefined("app-bot"),
       });
-      return promise;
-    };
-    const added = changed();
-    await Bun.write(path, definitions("app-notifications", ["frank"]));
-    await added;
-    expect(isFeatureDefined("app-notifications")).toBe(true);
-    expect(isFeatureDefined("app-data-permissions")).toBe(false);
+    });
+    OpenFeature.addHandler(ProviderEvents.ConfigurationChanged, onProviderChanged);
+    try {
+      await Bun.write(
+        path,
+        definitionsMap({
+          "app-data-permissions": ["frank"],
+          "app-notifications": ["frank"],
+        }),
+      );
+      const [, observedAtCallback] = await Promise.all([
+        providerChanged.promise,
+        appChanged.promise,
+      ]);
+      expect(await isFeatureEnabled("app-data-permissions", FRANK)).toBe(true);
+      expect(observedAtCallback).toEqual({ addedDefined: true, removedDefined: false });
+      expect(isFeatureDefined("app-notifications")).toBe(true);
+      expect(isFeatureDefined("app-bot")).toBe(false);
+      expect(isFeatureDefined("app-data-permissions")).toBe(true);
+    } finally {
+      stopAppListener();
+      OpenFeature.removeHandler(ProviderEvents.ConfigurationChanged, onProviderChanged);
+    }
   },
   FILE_POLL_BOUND_MS,
 );
