@@ -18,6 +18,7 @@ import { readableRuntimeConfig } from "#src/server/agents/agent-runtime-config.s
 import { managedAgentWhere } from "#src/server/agents/agent-visibility.server";
 import { agentFaceUrl } from "#src/server/apps/app-logo.server";
 import { PrismaAgentTokenUsageRepository } from "#src/server/db/repositories/agent-token-usage.repositories.server";
+import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 
 export async function loadAgentTokenUsage(
   context: WorkspaceUserContext,
@@ -109,6 +110,7 @@ export async function loadWorkspaceAgentTokenUsage(
           id: true,
           username: true,
           displayName: true,
+          avatarObjectKey: true,
         },
       },
     },
@@ -138,6 +140,11 @@ export async function loadWorkspaceAgentTokenUsage(
       model: readableRuntimeConfig(agent.runtimeConfig, agent.id)?.model ?? "",
       ownerId: agent.owner.id,
       ownerDisplayName: humanLabel(agent.owner),
+      ownerAvatarUrl: workspaceUserAvatarUrl(
+        workspaceId,
+        agent.owner.id,
+        agent.owner.avatarObjectKey,
+      ),
       archived: agent.deletedAt !== null,
     })),
     slices,

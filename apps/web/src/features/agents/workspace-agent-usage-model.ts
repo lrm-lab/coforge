@@ -22,6 +22,7 @@ export type WorkspaceAgentUsageAgentMeta = Readonly<{
   model: string;
   ownerId: string;
   ownerDisplayName: string;
+  ownerAvatarUrl?: string | null;
   archived?: boolean;
 }>;
 
@@ -43,6 +44,7 @@ export type WorkspaceAgentUsageRow = {
   avatarUrl: string | null;
   ownerId: string;
   ownerDisplayName: string;
+  ownerAvatarUrl: string | null;
   archived: boolean;
   effectiveTokens: number;
   newInputTokens: number;
@@ -290,6 +292,7 @@ export function summarizeWorkspaceAgentUsage(
       avatarUrl: agent.avatarUrl,
       ownerId: agent.ownerId,
       ownerDisplayName: agent.ownerDisplayName,
+      ownerAvatarUrl: agent.ownerAvatarUrl ?? null,
       archived: Boolean(agent.archived),
       effectiveTokens,
       newInputTokens: totals?.newInputTokens ?? 0,

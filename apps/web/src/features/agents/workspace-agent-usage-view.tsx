@@ -28,7 +28,11 @@ import {
   TodayHourlyChart,
 } from "./profile-panel/agent-usage-charts";
 import { summarizeWorkspaceAgentUsage } from "./workspace-agent-usage-model";
-import { ModelDistributionStrip, UsageRow } from "./workspace-agent-usage-sections";
+import {
+  ModelDistributionStrip,
+  USAGE_TABLE_GRID_CLASS,
+  UsageRow,
+} from "./workspace-agent-usage-sections";
 
 const RANGE_LABELS: Record<AgentTokenUsageRange, () => string> = {
   1: m.agent_usage_range_today,
@@ -286,15 +290,16 @@ export function WorkspaceAgentUsageView({
             <div className="overflow-hidden rounded-xl border border-secondary bg-primary">
               <div
                 aria-hidden="true"
-                className="hidden border-b border-secondary px-4 py-2.5 text-xs font-medium text-tertiary @2xl/members:grid @2xl/members:grid-cols-[minmax(12rem,1fr)_7.5rem_6rem] @2xl/members:gap-3 @4xl/members:grid-cols-[minmax(14rem,1.4fr)_7.5rem_6rem_10.5rem_7.5rem]"
+                className={cn(
+                  "hidden border-b border-secondary px-4 py-2.5 text-xs font-medium text-tertiary",
+                  USAGE_TABLE_GRID_CLASS,
+                )}
               >
                 <span>{m.member_table_col_agent()}</span>
                 <span className="text-end">{m.agent_usage_col_tokens()}</span>
                 <span className="text-end">{m.agent_usage_col_turns()}</span>
                 <span className="hidden @4xl/members:block">{m.agent_usage_col_model()}</span>
-                <span className="hidden text-end @4xl/members:block">
-                  {m.member_table_col_owner()}
-                </span>
+                <span className="hidden @4xl/members:block">{m.member_table_col_owner()}</span>
               </div>
               <ul
                 aria-label={m.agent_usage_team_ranking_heading()}

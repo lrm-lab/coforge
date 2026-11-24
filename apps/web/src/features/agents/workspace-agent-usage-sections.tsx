@@ -1,6 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { formatNumber } from "#src/lib/format-number";
 import { rememberSharedRect } from "#src/lib/shared-element-rect";
@@ -19,6 +20,9 @@ import { formatAgentProfileParam } from "./profile-panel/profile-panel-search";
 import { useAgentModelName } from "./use-agent-model-name";
 import { useLiveAgentDisplay } from "./workspace-agents-realtime";
 import type { WorkspaceAgentUsageRow } from "./workspace-agent-usage-model";
+
+export const USAGE_TABLE_GRID_CLASS =
+  "@2xl/members:grid @2xl/members:grid-cols-[minmax(12rem,1fr)_7.5rem_6rem] @2xl/members:gap-3 @4xl/members:grid-cols-[minmax(14rem,1.4fr)_7.5rem_6rem_10.5rem_9.5rem]";
 
 const MODEL_SWATCH_CLASSES = [
   "bg-chart-input",
@@ -124,7 +128,8 @@ export function UsageRow({
   return (
     <li
       className={cn(
-        "relative flex min-w-0 cursor-pointer flex-col gap-2 px-4 py-3 transition-colors hover:bg-primary_hover @2xl/members:grid @2xl/members:grid-cols-[minmax(12rem,1fr)_7.5rem_6rem] @2xl/members:items-center @2xl/members:gap-3 @4xl/members:grid-cols-[minmax(14rem,1.4fr)_7.5rem_6rem_10.5rem_7.5rem]",
+        "relative flex min-w-0 cursor-pointer flex-col gap-2 px-4 py-3 transition-colors hover:bg-primary_hover @2xl/members:items-center",
+        USAGE_TABLE_GRID_CLASS,
         selected && "bg-chat-selected-bg",
       )}
     >
@@ -202,8 +207,17 @@ export function UsageRow({
         {resolvedModel || "—"}
       </div>
 
-      <div className="hidden min-w-0 truncate text-end text-xs text-tertiary @4xl/members:block">
-        {row.ownerDisplayName}
+      <div className="hidden min-w-0 items-center gap-2 text-xs text-tertiary @4xl/members:flex">
+        <ActorAvatar
+          presence={false}
+          size="xs"
+          userId={row.ownerId}
+          name={row.ownerDisplayName}
+          src={row.ownerAvatarUrl}
+        />
+        <span dir="auto" className="min-w-0 truncate">
+          {row.ownerDisplayName}
+        </span>
       </div>
     </li>
   );

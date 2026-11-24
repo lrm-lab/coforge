@@ -15,6 +15,7 @@ describe("buildWorkspaceAgentUsageReport & summarizeWorkspaceAgentUsage", () => 
       model: "claude-sonnet-4-5",
       ownerId: "user-1",
       ownerDisplayName: "Alice",
+      ownerAvatarUrl: "/api/workspaces/w-1/members/user-1/avatar",
     },
     {
       id: "agent-b",
@@ -23,6 +24,7 @@ describe("buildWorkspaceAgentUsageReport & summarizeWorkspaceAgentUsage", () => 
       model: "gpt-5",
       ownerId: "user-2",
       ownerDisplayName: "Bob",
+      ownerAvatarUrl: null,
     },
     {
       id: "agent-c",
@@ -123,12 +125,14 @@ describe("buildWorkspaceAgentUsageReport & summarizeWorkspaceAgentUsage", () => 
       effectiveTokens: 3_750,
       teamSharePercent: 75,
       topModel: "gpt-5",
+      ownerAvatarUrl: null,
     });
     expect(full.rows[1]).toMatchObject({
       agentId: "agent-a",
       effectiveTokens: 1_250,
       teamSharePercent: 25,
       topModel: "claude-opus-4-6",
+      ownerAvatarUrl: "/api/workspaces/w-1/members/user-1/avatar",
     });
 
     const filtered = summarizeWorkspaceAgentUsage(report, {

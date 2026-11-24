@@ -274,7 +274,11 @@ test("PrismaAgentTokenUsageRepository and loaders aggregate SQL ranges, preserve
   const db = testDatabase();
   const fixture = crypto.randomUUID();
   const admin = await db.user.create({
-    data: { displayName: "Admin Owner", username: `usage-admin-${fixture}` },
+    data: {
+      displayName: "Admin Owner",
+      username: `usage-admin-${fixture}`,
+      avatarObjectKey: `avatars/${fixture}.png`,
+    },
   });
   const member = await db.user.create({
     data: { displayName: "Regular Member", username: `usage-member-${fixture}` },
@@ -433,6 +437,12 @@ test("PrismaAgentTokenUsageRepository and loaders aggregate SQL ranges, preserve
     );
     expect(adminReport.agents.find((a) => a.id === archivedUnusedAgent.id)).toBeUndefined();
     expect(adminReport.agents.find((a) => a.id === archivedUsedAgent.id)?.archived).toBe(true);
+    expect(adminReport.agents.find((a) => a.id === adminAgent.id)?.ownerAvatarUrl).toContain(
+      admin.id,
+    );
+    expect(adminReport.agents.find((a) => a.id === memberAgent.id)?.ownerAvatarUrl).toMatch(
+      /^\/avatars\/person-/,
+    );
 
     const adminAll = summarizeWorkspaceAgentUsage(adminReport, {
       selectedKey: null,
