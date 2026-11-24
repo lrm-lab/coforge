@@ -301,7 +301,7 @@ export function ActivityInboxView({
             size="sm"
             color="link-gray"
             aria-expanded={expandedWaiting}
-            onClick={() => setAllWaiting(!expandedWaiting)}
+            onPress={() => setAllWaiting(!expandedWaiting)}
           >
             {expandedWaiting
               ? m.activity_inbox_waiting_fewer()

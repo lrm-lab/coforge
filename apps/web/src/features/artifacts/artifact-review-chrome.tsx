@@ -1,4 +1,4 @@
-import { Button as AriaButton } from "react-aria-components";
+import { Button as AriaButton, Toolbar } from "react-aria-components";
 import {
   ArrowRight,
   ChevronDown,
@@ -228,8 +228,7 @@ export function ArtifactReviewBar({
 }) {
   if (count > 0) {
     return (
-      <div
-        role="toolbar"
+      <Toolbar
         aria-label={m.av_dr_tools()}
         className={cn(
           "pointer-events-auto flex max-w-[calc(100vw-2rem)] min-w-0 items-center gap-1 rounded-full p-1",
@@ -264,7 +263,7 @@ export function ArtifactReviewBar({
             <ArrowRight aria-hidden="true" className="size-3.5 shrink-0" />
           </AriaButton>
         </Tooltip>
-      </div>
+      </Toolbar>
     );
   }
 

@@ -166,7 +166,7 @@ export function MessageShareDialog({
                   <p role="alert" className="text-sm text-secondary">
                     {m.message_share_failed()}
                   </p>
-                  <Button size="sm" color="secondary" onClick={() => setStep(start(ratio))}>
+                  <Button size="sm" color="secondary" onPress={() => setStep(start(ratio))}>
                     {m.message_share_retry()}
                   </Button>
                 </div>
@@ -234,7 +234,7 @@ export function MessageShareDialog({
                   size="sm"
                   iconLeading={Download01}
                   isDisabled={!page}
-                  onClick={() => void downloadSharePages(pages.map(({ png }) => png))}
+                  onPress={() => void downloadSharePages(pages.map(({ png }) => png))}
                 >
                   {total > 1 ? m.message_share_download_all() : m.message_share_download()}
                 </Button>

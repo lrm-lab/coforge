@@ -122,14 +122,14 @@ function WhatsNewPages({
           )}
           <div className="ml-auto flex items-center gap-2">
             {index > 0 && (
-              <Button size="sm" color="tertiary" onClick={() => go(index - 1)}>
+              <Button size="sm" color="tertiary" onPress={() => go(index - 1)}>
                 {m.whats_new_back()}
               </Button>
             )}
             <Button
               size="sm"
               color={last && !actionHref ? "primary" : "secondary"}
-              onClick={() => (last ? onDone() : go(index + 1))}
+              onPress={() => (last ? onDone() : go(index + 1))}
             >
               {last ? m.whats_new_got_it() : m.whats_new_next()}
             </Button>

@@ -413,7 +413,7 @@ export function CommentEditor({
         </p>
       )}
       <div className="flex justify-end gap-2">
-        <Button type="button" size="sm" color="secondary" onClick={onCancel}>
+        <Button type="button" size="sm" color="secondary" onPress={onCancel}>
           {m.av_cm_edit_cancel()}
         </Button>
         <Button size="sm" color="primary" type="submit" isDisabled={!canSave} isLoading={saving}>

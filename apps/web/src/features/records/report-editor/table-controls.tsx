@@ -321,7 +321,7 @@ export function TableControls({
             )}
             aria-label={t(($) => $.table_controls.select_table)}
             onMouseDown={(event) => event.preventDefault()}
-            onClick={() => {
+            onPress={() => {
               setOpenMenu(null);
               const tr = editor.state.tr.setSelection(
                 NodeSelection.create(editor.state.doc, activeTable.pos),
@@ -345,7 +345,7 @@ export function TableControls({
               className="flex size-5 items-center justify-center rounded-md text-quaternary hover:bg-primary_hover hover:text-error-primary"
               aria-label={t(($) => $.table_controls.delete_table)}
               onMouseDown={(event) => event.preventDefault()}
-              onClick={() => {
+              onPress={() => {
                 const tablePos = activeTable.pos;
                 setOpenMenu(null);
                 deleteTableAt(editor, tablePos);
@@ -364,7 +364,7 @@ export function TableControls({
           style={addColumnStyle}
           aria-label={t(($) => $.table_controls.add_column)}
           onMouseDown={(event) => event.preventDefault()}
-          onClick={() => insertColumnAt(editor, activeTable.pos, activeTable.cols)}
+          onPress={() => insertColumnAt(editor, activeTable.pos, activeTable.cols)}
         >
           <Plus className="size-3.5" />
         </AriaButton>
@@ -377,7 +377,7 @@ export function TableControls({
           style={addRowStyle}
           aria-label={t(($) => $.table_controls.add_row)}
           onMouseDown={(event) => event.preventDefault()}
-          onClick={() => insertRowAt(editor, activeTable.pos, activeTable.rows)}
+          onPress={() => insertRowAt(editor, activeTable.pos, activeTable.rows)}
         >
           <Plus className="size-3.5" />
         </AriaButton>
