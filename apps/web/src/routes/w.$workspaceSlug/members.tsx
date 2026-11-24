@@ -23,6 +23,7 @@ export const Route = createFileRoute("/w/$workspaceSlug/members")({
   validateSearch: z.object({
     memberType: z.enum(["all", "agent", "human"]).default("all").catch("all"),
     owner: z.enum(["all", "mine"]).default("all").catch("all"),
+    agentView: z.enum(["list", "usage"]).default("list").catch("list"),
     profile: profileParamSchema,
     agentTab: agentProfileTabParamSchema,
     setup: z.enum(["create-agent", "invite"]).optional().catch(undefined),
@@ -63,7 +64,7 @@ export const Route = createFileRoute("/w/$workspaceSlug/members")({
 
 function AgentsPage() {
   const { summary, weeklyReportAssistantAgentId } = Route.useLoaderData();
-  const { memberType, owner, profile, agentTab, setup } = Route.useSearch();
+  const { memberType, owner, agentView, profile, agentTab, setup } = Route.useSearch();
   const navigate = Route.useNavigate();
   const router = useRouter();
   const visibleAgents = useLiveAgents();
@@ -79,6 +80,7 @@ function AgentsPage() {
       summary={summary}
       memberType={memberType}
       owner={owner}
+      agentView={agentView}
       onFiltersChange={(filters) => {
         void navigate({
           search: (previous) => ({ ...previous, ...filters }),

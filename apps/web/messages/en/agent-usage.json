@@ -35,5 +35,22 @@
   "agent_usage_empty_title": "No usage recorded yet",
   "agent_usage_empty_description": "Token usage records automatically as this Agent completes turns on an up-to-date Computer.",
   "agent_usage_load_failed": "Could not load usage right now.",
-  "agent_usage_retry": "Retry"
+  "agent_usage_retry": "Retry",
+  "agent_view_mode_label": "Agent view",
+  "agent_view_list": "List",
+  "agent_view_usage": "Usage",
+  "agent_usage_team_summary_tokens": "{tokens} tokens used",
+  "agent_usage_team_summary_active": "{count} active",
+  "agent_usage_team_summary_turns": "{turns} turns",
+  "agent_usage_col_tokens": "Tokens used",
+  "agent_usage_col_turns": "Turns",
+  "agent_usage_col_model": "Top model",
+  "agent_usage_team_share": "{percent} of team",
+  "agent_usage_no_usage_short": "No usage",
+  "agent_usage_hover_detail": "{exact} tokens ({newInput} new input · {output} output)",
+  "agent_usage_team_empty_description": "Actual token usage will appear here automatically as your workspace Agents complete turns on up-to-date Computers.",
+  "agent_usage_team_heading": "Team token usage",
+  "agent_usage_team_avg_turn": "{tokens} / turn",
+  "agent_usage_team_models_heading": "Models",
+  "agent_usage_team_ranking_heading": "By Agent"
 }

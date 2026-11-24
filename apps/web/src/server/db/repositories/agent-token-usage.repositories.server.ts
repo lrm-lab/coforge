@@ -1,6 +1,7 @@
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import type { AgentTokenUsageBucketSlice } from "#src/features/agents/agent-token-usage-model";
+import type { WorkspaceAgentUsageBucketSlice } from "#src/features/agents/workspace-agent-usage-model";
 
 export type AgentTokenUsageTurnInput = Readonly<{
   workspaceId: string;
@@ -31,7 +32,31 @@ export interface AgentTokenUsageRepository {
     byHour: boolean;
   }): Promise<AgentTokenUsageBucketSlice[]>;
   findEarliestRecordedAt(scope: { workspaceId: string; agentId: string }): Promise<Date | null>;
+  findWorkspaceEarliestRecordedAt(scope: {
+    workspaceId: string;
+    agentIds: readonly string[];
+  }): Promise<Date | null>;
+  aggregateWorkspaceAgentsInRange(scope: {
+    workspaceId: string;
+    agentIds: readonly string[];
+    since: Date;
+    timeZone: string;
+    byHour: boolean;
+  }): Promise<WorkspaceAgentUsageBucketSlice[]>;
 }
+
+type RawWorkspaceAgentSlice = {
+  agent_id: string;
+  date_key: string;
+  hour: number | null;
+  provider: string;
+  model: string;
+  turns: number;
+  uncached_input_tokens: string;
+  cache_read_tokens: string;
+  cache_write_tokens: string;
+  output_tokens: string;
+};
 
 type RawAggregatedSlice = {
   date_key: string;
@@ -157,5 +182,77 @@ export class PrismaAgentTokenUsageRepository implements AgentTokenUsageRepositor
       select: { recordedAt: true },
     });
     return row?.recordedAt ?? null;
+  }
+
+  async findWorkspaceEarliestRecordedAt(scope: {
+    workspaceId: string;
+    agentIds: readonly string[];
+  }): Promise<Date | null> {
+    if (scope.agentIds.length === 0) return null;
+    const row = await this.db.agentTokenUsageTurn.findFirst({
+      where: {
+        workspaceId: scope.workspaceId,
+        agentId: { in: [...scope.agentIds] },
+      },
+      orderBy: { recordedAt: "asc" },
+      select: { recordedAt: true },
+    });
+    return row?.recordedAt ?? null;
+  }
+
+  async aggregateWorkspaceAgentsInRange(scope: {
+    workspaceId: string;
+    agentIds: readonly string[];
+    since: Date;
+    timeZone: string;
+    byHour: boolean;
+  }): Promise<WorkspaceAgentUsageBucketSlice[]> {
+    if (scope.agentIds.length === 0) return [];
+    const rows = await this.db.$queryRaw<RawWorkspaceAgentSlice[]>(Prisma.sql`
+      SELECT
+        agent_id::text AS agent_id,
+        to_char(local_ts, 'YYYY-MM-DD') AS date_key,
+        CASE WHEN ${scope.byHour} THEN EXTRACT(HOUR FROM local_ts)::int ELSE NULL END AS hour,
+        provider,
+        model,
+        COUNT(*)::int AS turns,
+        COALESCE(SUM(uncached_input_tokens), 0)::text AS uncached_input_tokens,
+        COALESCE(SUM(cache_read_tokens), 0)::text AS cache_read_tokens,
+        COALESCE(SUM(cache_write_tokens), 0)::text AS cache_write_tokens,
+        COALESCE(SUM(output_tokens), 0)::text AS output_tokens
+      FROM (
+        SELECT
+          agent_id,
+          provider,
+          model,
+          uncached_input_tokens,
+          cache_read_tokens,
+          cache_write_tokens,
+          output_tokens,
+          (recorded_at AT TIME ZONE 'UTC') AT TIME ZONE ${scope.timeZone} AS local_ts
+        FROM agent_token_usage_turns
+        WHERE workspace_id = ${scope.workspaceId}::uuid
+          AND agent_id IN (${Prisma.join(scope.agentIds.map((id) => Prisma.sql`${id}::uuid`))})
+          AND recorded_at >= ${scope.since}
+      ) t
+      GROUP BY 1, 2, 3, 4, 5
+      ORDER BY 2 ASC, 3 ASC NULLS FIRST
+    `);
+
+    return rows.map((row) => ({
+      agentId: row.agent_id,
+      dateKey: row.date_key,
+      hour: row.hour,
+      provider: row.provider,
+      model: row.model,
+      turns: Number(row.turns),
+      uncachedInputTokens: toSafeNumber(BigInt(row.uncached_input_tokens)),
+      cacheReadTokens: toSafeNumber(BigInt(row.cache_read_tokens)),
+      cacheWriteTokens: toSafeNumber(BigInt(row.cache_write_tokens)),
+      outputTokens: toSafeNumber(BigInt(row.output_tokens)),
+      contextUsedTokens: null,
+      contextWindowTokens: null,
+      contextRecordedAt: null,
+    }));
   }
 }

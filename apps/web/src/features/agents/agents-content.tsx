@@ -5,6 +5,7 @@ import { useHydrated } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { SearchLg as Search, UsersPlus } from "@untitledui/icons";
 import { CircleAlert } from "kubai-icons/duotone";
+import { Button as AriaButton } from "react-aria-components";
 
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
 import { Button } from "#src/components/base/buttons/button";
@@ -25,6 +26,7 @@ import {
   cancelFlipAnimation,
   consumeSharedRect,
 } from "#src/lib/shared-element-rect";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { DURATION_S, EASE_IN, EASE_OUT } from "#src/utils/motion-tokens";
@@ -44,15 +46,18 @@ import { PersonProfilePanel } from "./person-profile-panel";
 import { AgentProfilePanel } from "./profile-panel/agent-profile-panel";
 import { useOpenAgentProfile } from "./profile-panel/open-agent-profile";
 import type { AgentProfileTab } from "./profile-panel/profile-panel-search";
+import { WorkspaceAgentUsageView } from "./workspace-agent-usage-view";
 import { useLiveWorkspaceAgents } from "./workspace-agents-realtime";
 
 export type MemberTab = "all" | "agent" | "human";
 export type OwnerFilter = "all" | "mine";
+export type AgentViewMode = "list" | "usage";
 
 export function AgentsContent({
   summary,
   memberType,
   owner,
+  agentView,
   onFiltersChange,
   profileAgentId,
   profilePersonId,
@@ -63,7 +68,12 @@ export function AgentsContent({
   summary: MemberDirectorySummary;
   memberType: MemberTab;
   owner: OwnerFilter;
-  onFiltersChange: (filters: { memberType?: MemberTab; owner?: OwnerFilter }) => void;
+  agentView: AgentViewMode;
+  onFiltersChange: (filters: {
+    memberType?: MemberTab;
+    owner?: OwnerFilter;
+    agentView?: AgentViewMode;
+  }) => void;
   profileAgentId?: string;
   profilePersonId?: string;
   agentTab?: AgentProfileTab;
@@ -85,6 +95,7 @@ export function AgentsContent({
   const canCreateAgent = canInviteMember;
   const onAllTab = memberType === "all";
   const onAgentTab = memberType === "agent";
+  const onAgentUsage = onAgentTab && agentView === "usage";
   const onHumanTab = memberType === "human";
   const totalCount = summary.peopleCount + summary.agentCount;
   const effectiveOwner: OwnerFilter = onAgentTab ? owner : "all";
@@ -97,7 +108,7 @@ export function AgentsContent({
 
   const agentPages = useInfiniteQuery({
     ...memberAgentsQuery(summary.workspaceId, { owner: effectiveOwner, query }),
-    enabled: onAllTab || onAgentTab,
+    enabled: onAllTab || (onAgentTab && !onAgentUsage),
     placeholderData: keepPreviousData,
   });
   const peoplePages = useInfiniteQuery({
@@ -156,17 +167,21 @@ export function AgentsContent({
     storage: localLayoutStorage,
   });
 
-  const activeError = onAllTab
-    ? peoplePages.isError && agentPages.isError && !peoplePages.data && !agentPages.data
-    : onAgentTab
-      ? agentPages.isError && !agentPages.data
-      : peoplePages.isError && !peoplePages.data;
+  const activeError = onAgentUsage
+    ? false
+    : onAllTab
+      ? peoplePages.isError && agentPages.isError && !peoplePages.data && !agentPages.data
+      : onAgentTab
+        ? agentPages.isError && !agentPages.data
+        : peoplePages.isError && !peoplePages.data;
 
-  const activePending = onAllTab
-    ? peoplePages.isPending && agentPages.isPending
-    : onAgentTab
-      ? agentPages.isPending
-      : peoplePages.isPending;
+  const activePending = onAgentUsage
+    ? false
+    : onAllTab
+      ? peoplePages.isPending && agentPages.isPending
+      : onAgentTab
+        ? agentPages.isPending
+        : peoplePages.isPending;
 
   const ownerItems = [
     { id: "all", label: m.member_owner_filter_all() },
@@ -227,21 +242,48 @@ export function AgentsContent({
         />
 
         {onAgentTab && summary.agentCount > 0 && (
-          <Select
-            aria-label={m.member_owner_filter()}
-            size="sm"
-            items={ownerItems}
-            selectedKey={owner}
-            onSelectionChange={(key) => {
-              if (key === "all" || key === "mine") onFiltersChange({ owner: key });
-            }}
-            className="w-36 shrink-0"
-          >
-            {(item) => <Select.Item id={item.id} label={item.label} />}
-          </Select>
+          <>
+            <div
+              role="group"
+              aria-label={m.agent_view_mode_label()}
+              className="inline-flex shrink-0 rounded-lg bg-secondary p-0.5 ring-1 ring-primary ring-inset"
+            >
+              {(["list", "usage"] as const).map((mode) => {
+                const active = agentView === mode;
+                return (
+                  <AriaButton
+                    key={mode}
+                    aria-pressed={active}
+                    onPress={() => onFiltersChange({ agentView: mode })}
+                    className={cn(
+                      "min-h-8 cursor-pointer rounded-md px-2.5 text-xs font-medium outline-none transition-colors data-focus-visible:ring-2 data-focus-visible:ring-brand",
+                      active
+                        ? "bg-primary font-semibold text-primary shadow-xs"
+                        : "text-tertiary hover:text-primary",
+                    )}
+                  >
+                    {mode === "list" ? m.agent_view_list() : m.agent_view_usage()}
+                  </AriaButton>
+                );
+              })}
+            </div>
+
+            <Select
+              aria-label={m.member_owner_filter()}
+              size="sm"
+              items={ownerItems}
+              selectedKey={owner}
+              onSelectionChange={(key) => {
+                if (key === "all" || key === "mine") onFiltersChange({ owner: key });
+              }}
+              className="w-36 shrink-0"
+            >
+              {(item) => <Select.Item id={item.id} label={item.label} />}
+            </Select>
+          </>
         )}
 
-        {(canInviteMember || canCreateAgent) && (
+        {!onAgentUsage && (canInviteMember || canCreateAgent) && (
           <div className="flex shrink-0 items-center gap-2">
             {canInviteMember && (
               <Button
@@ -318,6 +360,18 @@ export function AgentsContent({
             onClearSearch={clearSearch}
             onInvite={() => onDialogChange("invite")}
           />
+        ) : onAgentTab && agentView === "usage" ? (
+          <WorkspaceAgentUsageView
+            workspaceId={summary.workspaceId}
+            viewerId={summary.viewerId}
+            owner={owner}
+            query={query}
+            profileAgentId={profileAgentId}
+            onClearFilters={() => {
+              clearSearch();
+              if (filtersActive) onFiltersChange({ owner: "all" });
+            }}
+          />
         ) : (
           <AgentsTableView
             agents={listedAgents}
@@ -336,7 +390,7 @@ export function AgentsContent({
           />
         )}
 
-        {((onAgentTab || onAllTab) && agentPages.isFetchNextPageError) ||
+        {((onAllTab || (onAgentTab && !onAgentUsage)) && agentPages.isFetchNextPageError) ||
         ((onHumanTab || onAllTab) && peoplePages.isFetchNextPageError) ? (
           <EmptyState
             size="row"
