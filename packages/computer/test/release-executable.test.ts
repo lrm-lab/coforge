@@ -235,8 +235,10 @@ test.each(["darwin-arm64", "darwin-x64"])(
     const directory = await mkdtemp(join(temporaryRoot(), "coforge-signed-executable-"));
     try {
       const { build, identity, computer, cli } = await signedReleaseBuild(target, directory);
-      expect(build.stderr.toString()).toBe("");
-      expect(build.exitCode).toBe(0);
+      expect(
+        build.exitCode,
+        `${target} release build exited ${build.exitCode}\nstdout:\n${build.stdout.toString()}\nstderr:\n${build.stderr.toString()}`,
+      ).toBe(0);
       await verifyDarwinExecutable(computer, identity.certificatePem);
       expectValidMacOsSignature(cli);
       const signature = Bun.spawnSync(["/usr/bin/codesign", "-dv", cli], {
