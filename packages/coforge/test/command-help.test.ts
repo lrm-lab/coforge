@@ -368,17 +368,108 @@ test("schedule help and error usage include each accepted time and cadence alias
   expect(help).toContain("(--repeat <rule>|--cadence <rule>) [--tz <zone>]");
 });
 
+function helpExampleArgs(line: string): string[] {
+  return line
+    .replace(/^coforge /, "")
+    .match(/'[^']*'|\S+/g)!
+    .map((token) => token.replace(/^'|'$/g, ""));
+}
+
 test("every reminder help example parses as written", () => {
-  const tokenize = (line: string) =>
-    line
-      .replace(/^coforge /, "")
-      .match(/'[^']*'|\S+/g)!
-      .map((token) => token.replace(/^'|'$/g, ""));
   for (const key of Object.keys(reminderHelp)) {
     const example = commandHelp(key.split(" "))
       ?.split("\n")
       .find((line) => line.startsWith("Example: "));
     expect(example).toBeDefined();
-    expect(() => parseArgs(tokenize(example!.slice("Example: ".length)))).not.toThrow();
+    expect(() => parseArgs(helpExampleArgs(example!.slice("Example: ".length)))).not.toThrow();
   }
 });
+
+test.each<{
+  subcommand: string;
+  usage: readonly string[];
+  obsolete: readonly string[];
+  expected: ReturnType<typeof parseAppArgs>[];
+}>([
+  {
+    subcommand: "invoke",
+    usage: [
+      "--list-actions [--action <name>]",
+      "--param <key=value>",
+      "--data-json",
+      "--data-file",
+    ],
+    obsolete: ["--input"],
+    expected: [
+      { command: "app-invoke", appKey: "example-app", listActions: true },
+      { command: "app-invoke", appKey: "example-app", listActions: true, action: "lookup" },
+      { command: "app-invoke", appKey: "example-app", action: "lookup", params: ["query=hello"] },
+      {
+        command: "app-invoke",
+        appKey: "example-app",
+        action: "lookup",
+        dataJson: '{"query":"hello world"}',
+      },
+      {
+        command: "app-invoke",
+        appKey: "example-app",
+        action: "lookup",
+        dataFile: "./example.json",
+      },
+    ],
+  },
+  {
+    subcommand: "prepare",
+    usage: [
+      "prepare register --target <target> --name <name>",
+      "prepare recover-owner --client <key> --to-agent <name> --target <target>",
+    ],
+    obsolete: [],
+    expected: [
+      {
+        command: "app-prepare-register",
+        target: "#example",
+        action: { type: "app:register", name: "Example App", redirectUrls: [], scopes: [] },
+      },
+      {
+        command: "app-prepare-recover-owner",
+        target: "#example",
+        action: { type: "app:recover_owner", clientKey: "example-app", toAgent: "example-agent" },
+      },
+    ],
+  },
+  {
+    subcommand: "status",
+    usage: ["(--card <message-id> | --client <key>)"],
+    obsolete: ["--app"],
+    expected: [
+      { command: "app-status", card: "11111111-1111-4111-8111-111111111111", json: false },
+      { command: "app-status", client: "example-app", json: true },
+    ],
+  },
+  {
+    subcommand: "rotate-secret",
+    usage: ["--client <key> --output <new path>"],
+    obsolete: ["--app"],
+    expected: [
+      {
+        command: "app-rotate-secret",
+        client: "example-app",
+        output: "./example-secret.txt",
+        json: false,
+      },
+    ],
+  },
+])(
+  "app $subcommand short help matches the CLI parser",
+  async ({ subcommand, usage, obsolete, expected }) => {
+    const help = (await run(["app", subcommand, "--help"], transport)) as string;
+    for (const text of usage) expect(help).toContain(text);
+    for (const flag of obsolete) expect(help).not.toContain(flag);
+
+    const examples = help.split("\nExample: ")[1]?.split("\n") ?? [];
+    expect(examples.map((line) => parseAppArgs(helpExampleArgs(line.trim()).slice(1)))).toEqual(
+      expected,
+    );
+  },
+);
