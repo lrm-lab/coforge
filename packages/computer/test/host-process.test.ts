@@ -314,8 +314,6 @@ describe("swarm service arguments", () => {
       "--mount",
       "type=volume,src=coforge-computer-1,dst=/root/.coforge",
       "--mount",
-      "type=volume,src=coforge-computer-1,dst=/srv/coforge",
-      "--mount",
       "type=volume,src=coforge-computer-1-opt,dst=/opt",
       "--env",
       "COFORGE_SERVER_URL=https://server.example",

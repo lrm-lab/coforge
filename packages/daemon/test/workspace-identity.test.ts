@@ -4,9 +4,7 @@ import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  aliasPath,
   canDropPrivileges,
-  profileRoot,
   isUsableIdentity,
   resolveSpawnIdentity,
   resolveWorkspaceIdentity,
@@ -69,21 +67,16 @@ test("privileges are only dropped by a root launcher", () => {
 });
 
 test("the identity is used only when the workspace directory belongs to it", async () => {
-  const volumeRoot = join(stateRoot, "srv");
-  await mkdir(join(volumeRoot, "ws"), { recursive: true });
-  await writeFile(
-    join(volumeRoot, "ws", WORKSPACE_IDENTITY_FILE),
-    `${JSON.stringify({ "workspace-a": { uid: 20_101, gid: 20_101 } })}\n`,
-  );
+  await writeProfile({ "workspace-a": { uid: 20_101, gid: 20_101 } });
   const base = {
     stateRoot,
     workspaceId: "workspace-a",
-    volumeRoot,
+    volumeRoot: "/srv/coforge",
     getuid: () => 0,
   };
   expect(await resolveSpawnIdentity({ ...base, statOwner: async () => 20_101 })).toEqual({
     identity: { uid: 20_101, gid: 20_101 },
-    directory: join(volumeRoot, "ws", "workspace-a"),
+    directory: "/srv/coforge/ws/workspace-a",
   });
   expect(await resolveSpawnIdentity({ ...base, statOwner: async () => 0 })).toBeUndefined();
   expect(await resolveSpawnIdentity({ ...base, statOwner: async () => undefined })).toBeUndefined();
@@ -93,19 +86,4 @@ test("the identity is used only when the workspace directory belongs to it", asy
   expect(
     await resolveSpawnIdentity({ ...base, volumeRoot: undefined, statOwner: async () => 20_101 }),
   ).toBeUndefined();
-});
-
-test("paths the dropped uid sees are aliased to the traversable volume root", () => {
-  expect(aliasPath("/root/.coforge/daemon/workspaces/x", "/srv/coforge")).toBe(
-    "/srv/coforge/daemon/workspaces/x",
-  );
-  expect(aliasPath("/root/.coforge", "/srv/coforge")).toBe("/srv/coforge");
-  expect(aliasPath("/tmp/elsewhere", "/srv/coforge")).toBe("/tmp/elsewhere");
-  expect(aliasPath("/root/.coforge/daemon", undefined)).toBe("/root/.coforge/daemon");
-  expect(aliasPath("/root/.coforge/daemon", "/root/.coforge")).toBe("/root/.coforge/daemon");
-});
-
-test("the profile has one source: the volume root when the image sets it", () => {
-  expect(profileRoot("/root/.coforge/daemon", "/srv/coforge")).toBe("/srv/coforge/ws");
-  expect(profileRoot("/root/.coforge/daemon", undefined)).toBe("/root/.coforge/daemon");
 });

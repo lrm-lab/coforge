@@ -74,17 +74,6 @@ while IFS= read -r wsid; do
   mkdir -p "${WS_ROOT}/${wsid}"/{work,home,cache}
   chown -R "${uid}:${gid}" "${WS_ROOT}/${wsid}"
   chmod 700 "${WS_ROOT}/${wsid}" "${WS_ROOT}/${wsid}"/{work,home,cache}
-
-  # The daemon child and the Agents it spawns also own their own state: the socket,
-  # the instance record and the session store must be writable by that uid, and
-  # unreadable by the other Workspaces on this Computer.
-  state_dir="${VOLUME_ROOT}/daemon/workspaces/$(node -e 'process.stdout.write(Buffer.from(process.argv[1]).toString("base64url"))' "${wsid}")"
-  agent_dir="${VOLUME_ROOT}/agent-workspaces/${wsid}"
-  for owned in "${state_dir}" "${agent_dir}"; do
-    [[ -d "${owned}" ]] || continue
-    chown -R "${uid}:${gid}" "${owned}"
-    chmod 700 "${owned}"
-  done
 done <<< "${workspace_ids}"
 
 mkdir -p "${SHARED}"

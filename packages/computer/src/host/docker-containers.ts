@@ -1,9 +1,6 @@
 export const COMPUTER_ID_LABEL = "coforge.computer_id";
 export const CONTAINER_STATE_MOUNT = "/root/.coforge";
 export const CONTAINER_OPT_MOUNT = "/opt";
-/** The state volume again, at a path a non-root Workspace uid can traverse:
- * `/root` is 0700, so the same bytes are unreachable below it. */
-export const CONTAINER_WORKSPACE_MOUNT = "/srv/coforge";
 
 export function optVolumeName(computerId: string): string {
   return `${serviceName(computerId)}-opt`;
@@ -36,8 +33,6 @@ export function dockerServiceCreateArgs(input: {
     `${COMPUTER_ID_LABEL}=${input.computerId}`,
     "--mount",
     `type=volume,src=${serviceName(input.computerId)},dst=${CONTAINER_STATE_MOUNT}`,
-    "--mount",
-    `type=volume,src=${serviceName(input.computerId)},dst=${CONTAINER_WORKSPACE_MOUNT}`,
     "--mount",
     `type=volume,src=${optVolumeName(input.computerId)},dst=${CONTAINER_OPT_MOUNT}`,
   ];
