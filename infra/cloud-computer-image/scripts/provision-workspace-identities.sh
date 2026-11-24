@@ -129,26 +129,15 @@ if getent group "${SHARED_GID}" >/dev/null || groupadd --gid "${SHARED_GID}" cof
     # The marker is versioned and written only when every step succeeded: the volume already holds
     # `.shared-group-20100` from the image that did not actually fix the tree, so a same-named marker
     # would make this repair never run again on existing volumes.
-    # One marker per tree, never one for both: `/workspace` and `${SHARED}` are different
-    # directories, and a shared marker let a successful `${SHARED}` hide a failed `/workspace` -
-    # which is exactly the state this change fixes, so it must not be able to come back silently.
-    marker_name="workspace"
-    [[ "${shared_tree}" == "${SHARED}" ]] && marker_name="shared"
-    marker="${VOLUME_ROOT}/.shared-group-${SHARED_GID}-v2-${marker_name}"
-    if [[ ! -f "${marker}" ]]; then
+    if [[ ! -f "${VOLUME_ROOT}/.shared-group-${SHARED_GID}-v2" ]]; then
       resolved="$(readlink -f "${shared_tree}" 2>/dev/null || true)"
       [[ -n "${resolved}" && -d "${resolved}" ]] || resolved="${shared_tree}"
       repaired=1
-      failed_step=""
-      chgrp -R "${SHARED_GID}" "${resolved}" 2>/dev/null || { repaired=0; failed_step="chgrp -R"; }
-      find "${resolved}" -type d -exec chmod g+rwxs {} + 2>/dev/null || { repaired=0; failed_step="${failed_step:-chmod dirs}"; }
-      find "${resolved}" -type f -perm -u+w -exec chmod g+rw {} + 2>/dev/null || { repaired=0; failed_step="${failed_step:-chmod files}"; }
-      if [[ "${repaired}" -eq 1 ]]; then
-        : > "${marker}"
-      else
-        # Say it: a silent failure here means every start re-walks the whole shared tree (minutes on
-        # a large one) and the only symptom a user sees is "this computer boots slower".
-        log "shared tree ${shared_tree}: ${failed_step} failed; not marked done, retried next start"
+      chgrp -R "${SHARED_GID}" "${resolved}" 2>/dev/null || repaired=0
+      find "${resolved}" -type d -exec chmod g+rwxs {} + 2>/dev/null || repaired=0
+      find "${resolved}" -type f -perm -u+w -exec chmod g+rw {} + 2>/dev/null || repaired=0
+      if [[ "${shared_tree}" == "${SHARED}" && "${repaired}" -eq 1 ]]; then
+        : > "${VOLUME_ROOT}/.shared-group-${SHARED_GID}-v2"
       fi
     fi
     chgrp "${SHARED_GID}" "${shared_tree}" 2>/dev/null || true

@@ -161,11 +161,7 @@ persist_workspace() {
     ln -sfn "${link_target}" "${live}"
   fi
   mkdir -p "${store}/uploads" "${store}/browser-shots"
-  if [[ -z "${volume_alias}" ]]; then
-    log "workspace -> ${link_target} (symlink); WARN: no volume alias, a dropped Agent cannot traverse /root"
-  else
-    log "workspace -> ${link_target} (symlink)"
-  fi
+  log "workspace -> ${link_target} (symlink)"
 }
 
 ensure_venv() {
