@@ -119,6 +119,7 @@ test("lists only the requested Workspace directory and denies outsiders", async 
             displayName: "Agent Owner",
             description: "Owns the Workspace Agents",
             avatarUrl: personAvatarUrl(otherOwner.id, null),
+            role: "member",
             createdAgents: {
               total: 2,
               items: [
@@ -143,6 +144,7 @@ test("lists only the requested Workspace directory and denies outsiders", async 
             displayName: "Directory Viewer",
             description: "Views the directory",
             avatarUrl: personAvatarUrl(viewer.id, null),
+            role: "member",
             createdAgents: { total: 0, items: [] },
           },
         },
@@ -156,6 +158,7 @@ test("lists only the requested Workspace directory and denies outsiders", async 
           displayName: "Assigned Agent",
           description: "Runs on the owner workstation",
           avatarUrl: agentAvatarUrl(assignedAgent.id),
+          model: "",
           computerId: computer.id,
           computerName: "Owner workstation",
           computerRevoked: false,
@@ -174,6 +177,7 @@ test("lists only the requested Workspace directory and denies outsiders", async 
           displayName: "Unassigned Agent",
           description: "Has no Computer",
           avatarUrl: agentAvatarUrl(unassignedAgent.id),
+          model: "",
           computerId: null,
           computerName: null,
           computerRevoked: false,

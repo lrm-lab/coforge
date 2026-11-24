@@ -1,20 +1,14 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useServerFn } from "@tanstack/react-start";
 import { useEffect } from "react";
 import { z } from "zod";
 
 import { PageLoadError } from "#src/features/errors/page-load-error";
 import { AgentsContent } from "#src/features/agents/agents-content";
 import { AgentsPending } from "#src/features/agents/agents-pending";
-import {
-  deleteAgent,
-  ensureWeeklyReportAssistantMember,
-} from "#src/features/agents/agents.functions";
+import { ensureWeeklyReportAssistantMember } from "#src/features/agents/agents.functions";
 import { useLiveAgents } from "#src/features/agents/workspace-agents-realtime";
 import { loadMemberDirectorySummary } from "#src/features/workspaces/workspaces.functions";
 import {
-  MEMBER_DIRECTORY_KEY,
   memberAgentsQuery,
   memberPeopleQuery,
 } from "#src/features/agents/member-directory-queries";
@@ -27,34 +21,39 @@ import {
 
 export const Route = createFileRoute("/w/$workspaceSlug/members")({
   validateSearch: z.object({
-    memberType: z.enum(["agent", "human"]).default("agent").catch("agent"),
+    memberType: z.enum(["all", "agent", "human"]).default("all").catch("all"),
     owner: z.enum(["all", "mine"]).default("all").catch("all"),
     profile: profileParamSchema,
     agentTab: agentProfileTabParamSchema,
-    /** The dialog open over the page. */
     setup: z.enum(["create-agent", "invite"]).optional().catch(undefined),
   }),
   loaderDeps: ({ search }) => ({
     memberType: search.memberType,
     owner: search.owner,
   }),
-  // Live Agent status comes from the layout's realtime provider; the directory itself is paged
-  // through the Query cache, and the loader only makes the first page ready for this tab.
   loader: async ({ context, deps }) => {
-    // Members is where Users configure the weekly-report assistant; ensure it exists here
-    // (not in the Workspace layout listAgents loader, which must stay failure-isolated).
-    const [assistant, summary] = await Promise.all([
-      ensureWeeklyReportAssistantMember(),
-      loadMemberDirectorySummary(),
-    ]);
-    await (deps.memberType === "agent"
-      ? context.queryClient.ensureInfiniteQueryData(
+    const assistant = await ensureWeeklyReportAssistantMember();
+    const summary = await loadMemberDirectorySummary();
+    if (deps.memberType === "all") {
+      await Promise.all([
+        context.queryClient.ensureInfiniteQueryData(memberPeopleQuery(summary.workspaceId, "")),
+        context.queryClient.ensureInfiniteQueryData(
           memberAgentsQuery(summary.workspaceId, {
-            owner: deps.owner,
+            owner: "all",
             query: "",
           }),
-        )
-      : context.queryClient.ensureInfiniteQueryData(memberPeopleQuery(summary.workspaceId, "")));
+        ),
+      ]);
+    } else if (deps.memberType === "agent") {
+      await context.queryClient.ensureInfiniteQueryData(
+        memberAgentsQuery(summary.workspaceId, {
+          owner: deps.owner,
+          query: "",
+        }),
+      );
+    } else {
+      await context.queryClient.ensureInfiniteQueryData(memberPeopleQuery(summary.workspaceId, ""));
+    }
     return { summary, weeklyReportAssistantAgentId: assistant.agentId };
   },
   pendingComponent: AgentsPending,
@@ -67,18 +66,8 @@ function AgentsPage() {
   const { memberType, owner, profile, agentTab, setup } = Route.useSearch();
   const navigate = Route.useNavigate();
   const router = useRouter();
-  const removeAgent = useServerFn(deleteAgent);
   const visibleAgents = useLiveAgents();
-  const queryClient = useQueryClient();
-  // Counts, filter choices and every loaded page change together after a create or delete.
-  const refreshDirectory = async () => {
-    await Promise.all([
-      router.invalidate({ sync: true }),
-      queryClient.invalidateQueries({ queryKey: MEMBER_DIRECTORY_KEY }),
-    ]);
-  };
 
-  // Refresh the shell Agent list once so a just-ensured weekly-report assistant appears.
   useEffect(() => {
     if (!weeklyReportAssistantAgentId) return;
     if (visibleAgents.some((agent) => agent.id === weeklyReportAssistantAgentId)) return;
@@ -105,10 +94,6 @@ function AgentsPage() {
           search: (previous) => ({ ...previous, setup: dialog }),
           resetScroll: false,
         });
-      }}
-      onDeleteAgent={async (agentId, confirmation) => {
-        await removeAgent({ data: { agentId, confirmation } });
-        await refreshDirectory();
       }}
     />
   );

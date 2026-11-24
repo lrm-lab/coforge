@@ -74,15 +74,18 @@ test("members open a direct message with each other, and with themselves", async
       }),
     ]);
   };
-  /** The "Private chat" button on the Members page card of `name`. */
-  const cardChat = (name: string) =>
-    `[...([...document.querySelectorAll('[role="row"]')].find((card) => card.querySelector("h2")?.textContent.startsWith(${JSON.stringify(name)}))?.querySelectorAll("button") ?? [])].find((button) => button.textContent.trim() === "Private chat")`;
-  /** Presses it once the page has hydrated (the server-rendered button does nothing before). */
+  const cardLink = (name: string) =>
+    `[...document.querySelectorAll('[role="row"]')].find((card) => card.querySelector("h2")?.textContent.startsWith(${JSON.stringify(name)}))?.querySelector("a")`;
+  const profileMessageButton = `document.querySelector('#profile button[aria-label="Message"]')`;
   const pressCardChat = async (name: string) => {
     await waitFor(
-      `Object.keys(${cardChat(name)} ?? {}).some((key) => key.startsWith("__reactProps"))`,
+      `Object.keys(${cardLink(name)} ?? {}).some((key) => key.startsWith("__reactProps"))`,
     );
-    await browser("eval", `${cardChat(name)}.click()`);
+    await browser("eval", `${cardLink(name)}.click()`);
+    await waitFor(
+      `Object.keys(${profileMessageButton} ?? {}).some((key) => key.startsWith("__reactProps"))`,
+    );
+    await browser("eval", `${profileMessageButton}.click()`);
   };
   /** The conversation's header: the one carrying the Chat / Tasks / Files tabs. */
   const conversationHeader = `[...document.querySelectorAll("main header")].find((header) => header.querySelector('[role="tab"]'))`;

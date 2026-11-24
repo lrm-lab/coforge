@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Cloud01, Link01, Monitor01 } from "@untitledui/icons";
 import { useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -38,10 +38,12 @@ export function NewAgentDialog({
   open,
   onOpenChange,
   conversationReplacesPage = false,
+  initialKind,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   conversationReplacesPage?: boolean;
+  initialKind?: AgentCreateKind;
 }) {
   const [busy, setBusy] = useState(false);
   return (
@@ -57,6 +59,7 @@ export function NewAgentDialog({
         onClose={() => onOpenChange(false)}
         conversationReplacesPage={conversationReplacesPage}
         onBusyChange={setBusy}
+        initialKind={initialKind}
       />
     </AgentCreateModal>
   );
@@ -68,7 +71,8 @@ const KINDS = [
   { id: "external", label: m.agent_create_kind_external, icon: Link01 },
 ] as const;
 
-type AgentKind = (typeof KINDS)[number]["id"];
+export type AgentCreateKind = (typeof KINDS)[number]["id"];
+type AgentKind = AgentCreateKind;
 
 function NewAgentForms({
   open,
@@ -76,12 +80,14 @@ function NewAgentForms({
   onClose,
   conversationReplacesPage,
   onBusyChange,
+  initialKind,
 }: {
   open: boolean;
   busy: boolean;
   onClose: () => void;
   conversationReplacesPage: boolean;
   onBusyChange: (busy: boolean) => void;
+  initialKind?: AgentKind;
 }) {
   const cloud = useCloudAgentComputer();
   const computers = useAgentCreateComputers();
@@ -90,6 +96,9 @@ function NewAgentForms({
   const [submitting, setSubmitting] = useState(false);
   const usernameDraft = useAgentUsernameDraft();
   const heightRef = useDialogHeightTransition(chosen);
+  useEffect(() => {
+    if (!open) setChosen(undefined);
+  }, [open]);
   if (cloud.isPending)
     return (
       <div className="flex min-h-0 flex-1 flex-col">
@@ -101,7 +110,12 @@ function NewAgentForms({
     );
   const cloudComputer = cloud.data?.state === "none" ? undefined : cloud.data;
   const availableKinds = cloudComputer ? KINDS : KINDS.filter((option) => option.id !== "cloud");
-  const defaultKind: AgentKind = cloudComputer ? "cloud" : "local";
+  const defaultKind: AgentKind =
+    initialKind && availableKinds.some((option) => option.id === initialKind)
+      ? initialKind
+      : cloudComputer
+        ? "cloud"
+        : "local";
   const kind: AgentKind =
     chosen && availableKinds.some((option) => option.id === chosen) ? chosen : defaultKind;
   return (

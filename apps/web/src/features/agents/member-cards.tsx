@@ -1,154 +1,138 @@
 import { GridListItem } from "react-aria-components";
-import { Link, useNavigate } from "@tanstack/react-router";
-import { Archive, Calendar, DotsVertical, Edit01, Monitor01 as Monitor } from "@untitledui/icons";
+import { Link } from "@tanstack/react-router";
+
+import { StatusDot } from "#src/components/ui/status-dot";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
-import { ActorAvatarStack } from "#src/features/avatars/actor-avatar-stack";
-import { Button } from "#src/components/base/buttons/button";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
+import { useMemberOnline } from "#src/features/workspaces/member-presence";
+import { workspaceRoleLabel } from "#src/features/workspaces/workspace-role-label";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import type { MemberAgent, MemberPerson } from "#src/features/workspaces/workspaces.functions";
 import { rememberSharedRect } from "#src/lib/shared-element-rect";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import { useMemberOnline } from "#src/features/workspaces/member-presence";
-import type { MemberAgent, MemberPerson } from "#src/features/workspaces/workspaces.functions";
-import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
+import { AgentDisplayAvatar } from "./agent-display-avatar";
+import { agentDisplay } from "./agent-status-display";
 import {
   formatAgentProfileParam,
   formatPersonProfileParam,
 } from "./profile-panel/profile-panel-search";
-import { AgentDisplayAvatar, AgentStackFace } from "./agent-display-avatar";
+import { useAgentModelName } from "./use-agent-model-name";
 import { useLiveAgentDisplay } from "./workspace-agents-realtime";
 
-type DirectoryAgent = MemberAgent;
-type DirectoryPerson = MemberPerson;
+const COMPACT_CARD_CLASS =
+  "relative flex min-w-0 cursor-pointer items-center gap-3 rounded-xl bg-primary px-3.5 py-3 ring-1 ring-secondary ring-inset outline-focus-ring transition-colors hover:bg-primary_hover data-focus-visible:outline-2 data-focus-visible:outline-offset-2";
 
-const CARD_CLASS =
-  "flex min-w-0 flex-col gap-2.5 rounded-xl bg-primary p-4 ring-1 ring-secondary outline-focus-ring ring-inset data-focus-visible:outline-2 data-focus-visible:outline-offset-2";
+function personCornerTags(person: MemberPerson, isSelf: boolean): string[] {
+  const tags: string[] = [];
+  if (isSelf) tags.push(m.workspace_members_you());
+  if (person.role === "owner" || person.role === "admin") {
+    tags.push(workspaceRoleLabel(person.role));
+  }
+  return tags;
+}
 
-export function PersonCard({ person, selected }: { person: DirectoryPerson; selected: boolean }) {
-  const { total, items } = person.createdAgents;
-  const more = total - items.length;
+export function PersonCard({
+  person,
+  isSelf,
+  selected,
+}: {
+  person: MemberPerson;
+  isSelf: boolean;
+  selected: boolean;
+}) {
   const online = useMemberOnline(person.id);
-  const openDirectConversation = useOpenDirectConversation();
   const workspaceSlug = useWorkspaceSlug();
+  const cornerTags = personCornerTags(person, isSelf);
+
   return (
     <GridListItem
       id={person.id}
       textValue={person.displayName}
-      className={cn(CARD_CLASS, selected && "ring-2 ring-brand")}
+      className={cn(COMPACT_CARD_CLASS, selected && "bg-chat-selected-bg ring-2 ring-brand")}
     >
-      <div className="flex min-w-0 items-center gap-3">
-        <ActorAvatar
-          presence
-          size="lg"
-          userId={person.id}
-          name={person.displayName}
-          src={person.avatarUrl}
-        />
-        <h2 className="min-w-0 flex-1 text-sm font-semibold break-words text-primary">
-          <Link
-            to="/w/$workspaceSlug/members"
-            params={{ workspaceSlug }}
-            resetScroll={false}
-            search={(previous) => ({
-              ...previous,
-              profile: formatPersonProfileParam(person.id),
-              agentTab: undefined,
-            })}
-            onClick={(event) => {
-              const cardEl =
-                event.currentTarget.closest<HTMLElement>('[role="row"]') ?? event.currentTarget;
-              rememberSharedRect("member-profile-origin", cardEl);
-            }}
-            aria-label={m.member_person_open_profile({ name: person.displayName })}
-            aria-current={selected ? "page" : undefined}
-            className="rounded-sm outline-focus-ring outline-offset-4 hover:underline focus-visible:outline-2"
-          >
-            {person.displayName}
-          </Link>
-          {online !== undefined && (
-            <span className="sr-only">, {online ? m.member_online() : m.member_offline()}</span>
-          )}
-        </h2>
-        <Button
-          size="sm"
-          color="secondary"
-          className="shrink-0"
-          onPress={() => void openDirectConversation({ userId: person.id })}
+      <ActorAvatar
+        presence
+        size="md"
+        userId={person.id}
+        name={person.displayName}
+        src={person.avatarUrl}
+      />
+      <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-primary">
+        <Link
+          to="/w/$workspaceSlug/members"
+          params={{ workspaceSlug }}
+          resetScroll={false}
+          search={(previous) => ({
+            ...previous,
+            profile: formatPersonProfileParam(person.id),
+            agentTab: undefined,
+          })}
+          onClick={(event) => {
+            const cardEl =
+              event.currentTarget.closest<HTMLElement>('[role="row"]') ?? event.currentTarget;
+            rememberSharedRect("member-profile-origin", cardEl);
+          }}
+          aria-label={m.member_person_open_profile({ name: person.displayName })}
+          aria-current={selected ? "page" : undefined}
+          className="rounded-sm outline-focus-ring outline-offset-4 after:absolute after:inset-0 focus-visible:outline-2"
         >
-          {m.member_private_chat()}
-        </Button>
-      </div>
-      {person.description.trim() !== "" && (
-        <p className="line-clamp-2 text-sm break-words whitespace-pre-line text-secondary">
-          {person.description}
-        </p>
-      )}
-      {total > 0 && (
-        <div className="mt-auto flex justify-end pt-1">
-          <Tooltip title={m.member_created_agents_tooltip()} arrow>
-            <TooltipTrigger className="flex cursor-default items-center rounded-full outline-focus-ring focus-visible:outline-2">
-              <span className="sr-only">{m.member_created_agents_count({ count: total })}</span>
-              <ActorAvatarStack more={more}>
-                {items.map((agent) => (
-                  <AgentStackFace key={agent.id} agent={agent} />
-                ))}
-              </ActorAvatarStack>
-            </TooltipTrigger>
-          </Tooltip>
-        </div>
+          {person.displayName}
+        </Link>
+        {online !== undefined && (
+          <span className="sr-only">, {online ? m.member_online() : m.member_offline()}</span>
+        )}
+      </h2>
+      {cornerTags.length > 0 && (
+        <span className="flex shrink-0 items-center gap-1 rounded-sm bg-secondary px-1.5 py-0.5 text-xs font-medium text-tertiary">
+          {cornerTags.map((tag) => (
+            <span key={tag}>{tag}</span>
+          ))}
+        </span>
       )}
     </GridListItem>
   );
 }
 
-export function AgentCard({
-  member,
-  selected,
-  createdOn,
-  canEdit,
-  onDelete,
-}: {
-  member: DirectoryAgent;
-  selected: boolean;
-  createdOn: string;
-  canEdit: boolean;
-  onDelete?: () => void;
-}) {
+function agentComputerCaption(member: MemberAgent): { text: string; warn: boolean } {
+  if (member.computerRevoked) {
+    return {
+      text: member.computerName
+        ? `${member.computerName} (${m.member_computer_access_revoked()})`
+        : m.member_computer_access_revoked(),
+      warn: true,
+    };
+  }
+  if (member.computerId === null) {
+    return { text: m.member_no_computer(), warn: true };
+  }
+  return { text: member.computerName || m.agent_computer_unnamed(), warn: false };
+}
+
+export function AgentCard({ member, selected }: { member: MemberAgent; selected: boolean }) {
   const display = useLiveAgentDisplay(member.id);
-  const navigate = useNavigate();
-  const openDirectConversation = useOpenDirectConversation();
+  const view = agentDisplay(display);
+  const resolvedModel = useAgentModelName(member.id, member.model);
   const workspaceSlug = useWorkspaceSlug();
-  const openProfileToEdit = () =>
-    void navigate({
-      to: "/w/$workspaceSlug/members",
-      params: { workspaceSlug },
-      resetScroll: false,
-      search: (previous) => ({
-        ...previous,
-        profile: formatAgentProfileParam(member.id),
-        agentTab: "profile",
-      }),
-    });
+  const computer = agentComputerCaption(member);
+  const alertText = view.alert ? view.label : computer.warn ? computer.text : undefined;
+  const subtitle = alertText ?? resolvedModel;
 
   return (
     <GridListItem
       id={member.id}
       textValue={member.displayName}
-      className={cn(CARD_CLASS, selected && "ring-2 ring-brand")}
+      className={cn(COMPACT_CARD_CLASS, selected && "bg-chat-selected-bg ring-2 ring-brand")}
     >
-      <div className="flex min-w-0 items-center gap-3">
-        <AgentDisplayAvatar
-          agentId={member.id}
-          name={member.displayName}
-          src={member.avatarUrl}
-          display={display}
-          size="lg"
-        />
-        <div className="min-w-0 flex-1">
-          <h2 className="text-sm break-words font-semibold text-primary">
+      <AgentDisplayAvatar
+        agentId={member.id}
+        name={member.displayName}
+        src={member.avatarUrl}
+        display={display}
+        size="md"
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-primary">
             <Link
               to="/w/$workspaceSlug/members"
               params={{ workspaceSlug }}
@@ -164,102 +148,119 @@ export function AgentCard({
               }}
               aria-label={m.agent_open_profile({ name: member.displayName })}
               aria-current={selected ? "page" : undefined}
-              className="rounded-sm outline-focus-ring outline-offset-4 hover:underline focus-visible:outline-2"
+              className="rounded-sm outline-focus-ring outline-offset-4 after:absolute after:inset-0 focus-visible:outline-2"
             >
               {member.displayName}
             </Link>
           </h2>
-          <p dir="ltr" className="truncate text-start text-sm text-tertiary">
-            @{member.name}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-1 any-pointer-coarse:gap-2">
-          {member.canMessage && (
-            <Button
-              size="sm"
-              color="secondary"
-              onPress={() => void openDirectConversation({ agentId: member.id })}
-            >
-              {m.agent_private_chat()}
-            </Button>
-          )}
-          <Dropdown.Root>
-            <ButtonUtility
-              icon={DotsVertical}
-              size="sm"
-              color="tertiary"
-              tooltip={m.member_agent_actions({ name: member.displayName })}
-              isDisabled={!canEdit && !onDelete}
-            />
-            <Dropdown.Popover placement="bottom end" className="w-44">
-              <Dropdown.Menu
-                onAction={(key) => {
-                  if (key === "edit") openProfileToEdit();
-                  if (key === "delete") onDelete?.();
-                }}
-              >
-                {canEdit ? <Dropdown.Item id="edit" icon={Edit01} label={m.agent_edit()} /> : null}
-                {onDelete ? (
-                  <Dropdown.Item id="delete" textValue={m.member_agent_delete()}>
-                    <span className="flex items-center text-error-primary">
-                      <Archive
-                        aria-hidden="true"
-                        className="me-2 size-4 shrink-0 stroke-[2.25px]"
-                      />
-                      {m.member_agent_delete()}
-                    </span>
-                  </Dropdown.Item>
-                ) : null}
-              </Dropdown.Menu>
-            </Dropdown.Popover>
-          </Dropdown.Root>
-        </div>
-      </div>
-      {member.description.trim() !== "" && (
-        <p className="line-clamp-2 text-sm break-words whitespace-pre-line text-secondary">
-          {member.description}
-        </p>
-      )}
-      <div className="mt-auto flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 pt-1 text-sm text-tertiary">
-        <span className="flex max-w-full min-w-0 items-center gap-1.5 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-tertiary ring-1 ring-secondary ring-inset">
-          <Monitor aria-hidden="true" className="size-3.5 shrink-0" />
-          {member.computerRevoked ? (
-            <>
-              <span className="min-w-0 truncate">
-                {member.computerName || m.agent_computer_unnamed()}
-              </span>
-              <span className="shrink-0 text-quaternary">{m.member_computer_access_revoked()}</span>
-            </>
-          ) : (
-            <span className="truncate">
-              {member.computerId === null
-                ? m.member_no_computer()
-                : member.computerName || m.agent_computer_unnamed()}
+          {view.pulse && (
+            <span className="shrink-0 rounded-sm bg-secondary px-1.5 py-0.5 text-xs font-medium text-brand-secondary">
+              {m.member_agent_status_working()}
             </span>
           )}
-        </span>
-        <Tooltip title={m.member_created_by()} arrow>
-          <TooltipTrigger className="flex min-w-0 cursor-default items-center gap-2 rounded-sm outline-focus-ring focus-visible:outline-2">
-            <ActorAvatar
-              presence={false}
-              size="xs"
-              alt=""
-              src={member.owner.avatarUrl ?? undefined}
-              name={member.owner.displayName}
-            />
-            <span className="sr-only">{m.member_created_by()}</span>
+        </div>
+        {subtitle && (
+          <p
+            className={cn("truncate text-xs", alertText ? "text-warning-primary" : "text-tertiary")}
+          >
+            {subtitle}
+          </p>
+        )}
+      </div>
+    </GridListItem>
+  );
+}
+
+export function AgentDirectoryRow({
+  member,
+  selected,
+}: {
+  member: MemberAgent;
+  selected: boolean;
+}) {
+  const display = useLiveAgentDisplay(member.id);
+  const view = agentDisplay(display);
+  const resolvedModel = useAgentModelName(member.id, member.model);
+  const workspaceSlug = useWorkspaceSlug();
+  const computer = agentComputerCaption(member);
+  const description = member.description.trim();
+
+  return (
+    <GridListItem
+      id={member.id}
+      textValue={member.displayName}
+      className={cn(
+        "relative flex min-w-0 cursor-pointer flex-col gap-2 px-4 py-3 outline-focus-ring transition-colors hover:bg-primary_hover data-focus-visible:outline-2 data-focus-visible:-outline-offset-2 @2xl/members:grid @2xl/members:grid-cols-[minmax(12rem,1fr)_6.5rem_10rem] @2xl/members:items-center @2xl/members:gap-3 @4xl/members:grid-cols-[minmax(14rem,1.4fr)_6.5rem_11rem_9.5rem_7.5rem]",
+        selected && "bg-chat-selected-bg",
+      )}
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <AgentDisplayAvatar
+          agentId={member.id}
+          name={member.displayName}
+          src={member.avatarUrl}
+          display={display}
+          size="md"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="min-w-0 truncate text-sm font-semibold text-primary">
+              <Link
+                to="/w/$workspaceSlug/members"
+                params={{ workspaceSlug }}
+                resetScroll={false}
+                search={(previous) => ({
+                  ...previous,
+                  profile: formatAgentProfileParam(member.id),
+                })}
+                onClick={(event) => {
+                  const rowEl =
+                    event.currentTarget.closest<HTMLElement>('[role="row"]') ?? event.currentTarget;
+                  rememberSharedRect("member-profile-origin", rowEl);
+                }}
+                aria-label={m.agent_open_profile({ name: member.displayName })}
+                aria-current={selected ? "page" : undefined}
+                className="rounded-sm outline-focus-ring outline-offset-4 after:absolute after:inset-0 focus-visible:outline-2"
+              >
+                {member.displayName}
+              </Link>
+            </h2>
+            <span className="flex shrink-0 items-center gap-1.5 text-xs text-tertiary @2xl/members:hidden">
+              <StatusDot tone={view.tone} pulse={view.pulse} />
+              <span>{view.label}</span>
+            </span>
+          </div>
+          {description && <p className="truncate text-xs text-tertiary">{description}</p>}
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-quaternary @2xl/members:hidden">
+            {resolvedModel && <span className="truncate font-mono">{resolvedModel}</span>}
+            <span className={cn("truncate", computer.warn && "text-warning-primary")}>
+              {computer.text}
+            </span>
             <span className="truncate">{member.owner.displayName}</span>
-          </TooltipTrigger>
-        </Tooltip>
-        <Tooltip title={m.member_created_on()} arrow>
-          <TooltipTrigger className="flex shrink-0 cursor-default items-center gap-1.5 rounded-sm outline-focus-ring focus-visible:outline-2">
-            <Calendar aria-hidden="true" className="size-4 text-fg-quaternary" />
-            <span className="sr-only">{m.member_created_on()}</span>
-            <time className="tabular-nums" dateTime={new Date(member.createdAt).toISOString()}>
-              {createdOn}
-            </time>
-          </TooltipTrigger>
-        </Tooltip>
+          </div>
+        </div>
+      </div>
+
+      <div className="hidden min-w-0 items-center gap-1.5 text-xs text-secondary @2xl/members:flex">
+        <StatusDot tone={view.tone} pulse={view.pulse} />
+        <span className={cn("truncate", view.alert && "text-warning-primary")}>{view.label}</span>
+      </div>
+
+      <div className="hidden min-w-0 truncate font-mono text-xs text-tertiary @2xl/members:block">
+        {resolvedModel || "—"}
+      </div>
+
+      <div
+        className={cn(
+          "hidden min-w-0 truncate text-xs @4xl/members:block",
+          computer.warn ? "text-warning-primary" : "text-tertiary",
+        )}
+      >
+        {computer.text}
+      </div>
+
+      <div className="hidden min-w-0 truncate text-end text-xs text-tertiary @4xl/members:block">
+        {member.owner.displayName}
       </div>
     </GridListItem>
   );

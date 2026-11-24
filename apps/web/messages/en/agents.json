@@ -22,13 +22,42 @@
   "member_person": "Human",
   "member_agent": "Agent",
   "member_type_filter": "Member type",
+  "member_tab_all": "All",
   "member_tab_agents": "Agents",
-  "member_tab_humans": "Collaborators",
-  "member_tab_agents_count": "Agents ({count})",
-  "member_tab_humans_count": "Collaborators ({count})",
+  "member_tab_humans": "Humans",
   "member_directory_title": "Members",
+  "member_working_summary": [
+    {
+      "declarations": ["input working", "local countPlural = working: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{working} Agent working",
+        "countPlural=other": "{working} Agents working"
+      }
+    }
+  ],
+  "member_total_summary": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} member",
+        "countPlural=other": "{count} members"
+      }
+    }
+  ],
+  "member_search_all": "Search members",
   "member_search_agents": "Search agents",
-  "member_search_humans": "Search collaborators",
+  "member_search_humans": "Search humans",
+  "member_create_agent_options": "Agent creation options",
+  "member_owner_filter_all": "All Agents",
+  "member_owner_filter_mine": "Created by me",
+  "member_agent_status_working": "Working",
+  "member_table_col_agent": "Agent",
+  "member_table_col_status": "Status",
+  "member_table_col_model": "Model",
+  "member_table_col_computer": "Computer",
+  "member_table_col_owner": "Created by",
   "member_agent_delete": "Archive",
   "member_owner_filter": "Agent owner",
   "member_agent_actions": "More actions for {name}",
@@ -46,7 +75,7 @@
       }
     }
   ],
-  "member_invite_humans": "Invite collaborators",
+  "member_invite_humans": "Invite humans",
   "member_online": "Online",
   "member_offline": "Offline",
   "member_private_chat": "Private chat",

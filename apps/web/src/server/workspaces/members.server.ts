@@ -4,6 +4,7 @@ import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { AppError } from "#src/lib/app-error";
 import { compareHumanLabels, humanLabel, UNNAMED_PERSON_NAME } from "#src/lib/human-label";
 import { ACTIVE_AGENT_WHERE, ROSTER_AGENT_WHERE } from "#src/server/agents/active-agent.server";
+import { readableRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
 import {
   canDirectMessageAgent,
   visibleAgentWhere,
@@ -149,6 +150,7 @@ export class WorkspaceMembers {
           avatarMascot: true,
           createdAt: true,
           visibility: true,
+          runtimeConfig: true,
           owner: {
             select: {
               id: true,
@@ -179,6 +181,7 @@ export class WorkspaceMembers {
         displayName: shownAgentName(agent),
         description: agent.description,
         avatarUrl: agentFaceUrl(agent),
+        model: readableRuntimeConfig(agent.runtimeConfig, agent.id)?.model ?? "",
         computerId: agent.computer?.workspaces.length ? agent.computer.id : null,
         computerName: agent.computer
           ? agent.computer.displayName.trim() || agent.computer.name.trim()
@@ -352,8 +355,7 @@ export class WorkspaceMembers {
         displayName: true,
         description: true,
         avatarObjectKey: true,
-        // Visible Agents this person created. One list feeds the count and the faces: Prisma
-        // pushes neither a nested `take` nor a page-scoped filtered `_count` into SQL.
+        memberships: { where: { workspaceId }, select: { role: true }, take: 1 },
         agents: createdAgentsSelect(visibleAgents),
       },
     });
@@ -365,6 +367,7 @@ export class WorkspaceMembers {
         displayName: humanLabel(person),
         description: person.description,
         avatarUrl: workspaceUserAvatarUrl(workspaceId, person.id, person.avatarObjectKey),
+        role: person.memberships?.[0]?.role ?? "member",
         createdAgents: {
           total: person.agents.length,
           items: person.agents

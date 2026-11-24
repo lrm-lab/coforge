@@ -56,8 +56,8 @@ test("a DM with another member's public Agent is listed in the sidebar", async (
   };
   const suffix = `${process.pid}-${Date.now()}`;
   const agentName = `Shared helper ${suffix}`;
-  /** The "Private chat" button on the Members page card of `name`. */
-  const cardChat = `[...([...document.querySelectorAll('[role="row"]')].find((card) => card.querySelector("h2")?.textContent.startsWith(${JSON.stringify(agentName)}))?.querySelectorAll("button") ?? [])].find((button) => button.textContent.trim() === "Private chat")`;
+  const cardLink = `[...document.querySelectorAll('[role="row"]')].find((card) => card.querySelector("h2")?.textContent.startsWith(${JSON.stringify(agentName)}))?.querySelector("a")`;
+  const profileMessageButton = `document.querySelector('#profile button[aria-label="Message"]')`;
   /** Whether the sidebar lists a DM: its row card, named for the Agent. */
   const sidebarRow = (conversationId: string) =>
     `[...document.querySelectorAll('a[data-row-card][href$="/dm/${conversationId}"]')].some((row) => row.textContent.includes(${JSON.stringify(agentName)}))`;
@@ -97,10 +97,13 @@ test("a DM with another member's public Agent is listed in the sidebar", async (
     agentId = agent.id;
     await browser("set", "viewport", "1440", "900");
 
-    // The Agent's card on the Members page opens the viewer's DM with it.
     await browser("open", `${origin}${workspacePath}/members?memberType=agent&owner=all`);
-    await waitFor(`Object.keys(${cardChat} ?? {}).some((key) => key.startsWith("__reactProps"))`);
-    await browser("eval", `${cardChat}.click()`);
+    await waitFor(`Object.keys(${cardLink} ?? {}).some((key) => key.startsWith("__reactProps"))`);
+    await browser("eval", `${cardLink}.click()`);
+    await waitFor(
+      `Object.keys(${profileMessageButton} ?? {}).some((key) => key.startsWith("__reactProps"))`,
+    );
+    await browser("eval", `${profileMessageButton}.click()`);
     await waitFor(`location.pathname.startsWith("${workspacePath}/dm/")`);
     const dm = await db.conversation.findFirstOrThrow({
       where: { workspaceId, members: { some: { agentId: agent.id } } },
