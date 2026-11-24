@@ -19,6 +19,6 @@
   "whats_new_artifacts_demo_funnel": "Ablation",
   "whats_new_artifacts_demo_comment": "高亮最优消融组",
   "whats_new_agent_usage_title": "Agent 资料页新增用量统计",
-  "whats_new_agent_usage_body": "打开 Agent 资料页的「用量」标签，按今天、7 天、14 天或 30 天查看有效 Token、缓存命中率、单日下钻、上下文窗口与模型分布。",
+  "whats_new_agent_usage_body": "打开 Agent 资料页的「用量」标签，按今天、7 天、14 天或 30 天查看有效 Token、缓存命中率、每轮均值、单日下钻与模型分布。",
   "whats_new_agent_usage_cta": "前往成员页查看"
 }

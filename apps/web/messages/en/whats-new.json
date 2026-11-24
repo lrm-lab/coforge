@@ -19,6 +19,6 @@
   "whats_new_artifacts_demo_funnel": "Ablation",
   "whats_new_artifacts_demo_comment": "Highlight best ablation",
   "whats_new_agent_usage_title": "Agent token usage in Profiles",
-  "whats_new_agent_usage_body": "Open the Usage tab on any Agent profile to track effective tokens, cache hit rate, per-day drill-downs, context window usage, and model share across Today, 7d, 14d, or 30d.",
+  "whats_new_agent_usage_body": "Open the Usage tab on any Agent profile to track effective tokens, cache hit rate, per-turn averages, daily drill-downs, and model share across Today, 7d, 14d, or 30d.",
   "whats_new_agent_usage_cta": "View in Members"
 }
