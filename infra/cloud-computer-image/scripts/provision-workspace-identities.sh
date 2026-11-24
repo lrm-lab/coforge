@@ -116,11 +116,29 @@ if getent group "${SHARED_GID}" >/dev/null || groupadd --gid "${SHARED_GID}" cof
     [[ -d "${shared_tree}" ]] || continue
     # Existing files are `root:root 0644`: without this an Agent could create new files in the
     # shared tree but not edit the ones already there, which reads as "my files went read-only".
-    if [[ ! -f "${VOLUME_ROOT}/.shared-group-${SHARED_GID}" ]]; then
-      chgrp -R "${SHARED_GID}" "${shared_tree}" 2>/dev/null || true
-      find "${shared_tree}" -type d -exec chmod g+ws {} + 2>/dev/null || true
-      find "${shared_tree}" -type f -perm -u+w -exec chmod g+w {} + 2>/dev/null || true
-      [[ "${shared_tree}" == "${SHARED}" ]] && : > "${VOLUME_ROOT}/.shared-group-${SHARED_GID}"
+    #
+    # Resolve the tree once, then recurse *without* following links: `/workspace` is a symlink, and
+    # GNU `chgrp -R`/`find` default to `-P`, so recursing on the link silently did nothing while the
+    # `chmod` below (which follows it) landed - the top looked right and everything inside stayed
+    # `root:root 0700`. Recursing with `-L` instead would be worse: users keep their own symlinks
+    # under /workspace, and following them would widen the boundary onto /root and the daemon state.
+    #
+    # `g+rwxs` on directories, because a 0700 directory that gains only write and setgid is still
+    # not enterable; files get `g+rw` only, so nothing becomes executable that was not.
+    #
+    # The marker is versioned and written only when every step succeeded: the volume already holds
+    # `.shared-group-20100` from the image that did not actually fix the tree, so a same-named marker
+    # would make this repair never run again on existing volumes.
+    if [[ ! -f "${VOLUME_ROOT}/.shared-group-${SHARED_GID}-v2" ]]; then
+      resolved="$(readlink -f "${shared_tree}" 2>/dev/null || true)"
+      [[ -n "${resolved}" && -d "${resolved}" ]] || resolved="${shared_tree}"
+      repaired=1
+      chgrp -R "${SHARED_GID}" "${resolved}" 2>/dev/null || repaired=0
+      find "${resolved}" -type d -exec chmod g+rwxs {} + 2>/dev/null || repaired=0
+      find "${resolved}" -type f -perm -u+w -exec chmod g+rw {} + 2>/dev/null || repaired=0
+      if [[ "${shared_tree}" == "${SHARED}" && "${repaired}" -eq 1 ]]; then
+        : > "${VOLUME_ROOT}/.shared-group-${SHARED_GID}-v2"
+      fi
     fi
     chgrp "${SHARED_GID}" "${shared_tree}" 2>/dev/null || true
     chmod 2775 "${shared_tree}"
