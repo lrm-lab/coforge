@@ -8,7 +8,6 @@ import {
   canDropPrivileges,
   ensureWorkspaceIdentity,
   executableForIdentity,
-  openTraversalForIdentity,
   profileRoot,
   isUsableIdentity,
   resolveSpawnIdentity,
@@ -256,35 +255,4 @@ test("a path that cannot be opened at all keeps the launcher identity", async ()
     },
   });
   expect(result).toBeUndefined();
-});
-
-test("the state root the child is handed is opened for traversal, one level at a time", async () => {
-  const modes: Record<string, { mode: number; directory: boolean }> = {
-    "/srv": { mode: 0o755, directory: true },
-    "/srv/coforge": { mode: 0o755, directory: true },
-    "/srv/coforge/daemon": { mode: 0o700, directory: true },
-    "/srv/coforge/daemon/workspaces": { mode: 0o700, directory: true },
-    "/srv/coforge/daemon/workspaces/MDFh": { mode: 0o700, directory: true },
-  };
-  const granted: string[] = [];
-  await openTraversalForIdentity({
-    paths: ["/srv/coforge/daemon/workspaces/MDFh/daemon.sock"],
-    identity: { uid: 20_101, gid: 20_101 },
-    volumeRoot: "/srv/coforge",
-    inspect: async (path) => {
-      const entry = modes[path];
-      if (!entry) throw new Error(`ENOENT ${path}`);
-      return entry;
-    },
-    grantTraverse: async (path, mode) => {
-      granted.push(path);
-      modes[path] = { mode, directory: true };
-    },
-  });
-  expect(granted).toEqual([
-    "/srv/coforge/daemon",
-    "/srv/coforge/daemon/workspaces",
-    "/srv/coforge/daemon/workspaces/MDFh",
-  ]);
-  expect(modes["/srv/coforge/daemon"]?.mode).toBe(0o711);
 });

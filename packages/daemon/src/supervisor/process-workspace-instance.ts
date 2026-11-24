@@ -7,7 +7,6 @@ import {
   aliasPath,
   ensureWorkspaceIdentity,
   executableForIdentity,
-  openTraversalForIdentity,
   resolveSpawnIdentity,
   workspaceDirectory,
   type WorkspaceIdentity,
@@ -111,21 +110,6 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
           })
         : this.config.executablePath;
     if (spawnIdentity && !executable) spawnIdentity = undefined;
-    if (spawnIdentity && volumeRoot) {
-      // The child reads, traverses and writes under these paths; each one it cannot reach shows up
-      // as "failed process readiness" instead of a clear permission error.
-      await openTraversalForIdentity({
-        paths: [
-          this.config.stateDirectory,
-          this.config.socketPath,
-          this.config.supervisorSocketPath,
-          join(this.config.stateRoot, "upgrade-request-ids.json"),
-          this.#recordPath,
-        ],
-        identity: spawnIdentity.identity,
-        volumeRoot,
-      });
-    }
     const env: Record<string, string> = {
       ...Object.fromEntries(
         Object.entries(Bun.env).filter(
