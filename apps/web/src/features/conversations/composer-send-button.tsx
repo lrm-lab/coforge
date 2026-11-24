@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { CheckSquare, ChevronDown, Send01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -16,7 +17,7 @@ const MENU_OFFSET_CLEARING_COMPOSER_PADDING_AND_BORDER = 17;
 const SPLIT_HALF_OVERLAPS_ONE_PIXEL_WITH_NO_SEAM_HIGHLIGHT =
   "-ms-px rounded-s-none before:rounded-s-none before:border-s-0";
 
-export function ComposerSendButton({
+export const ComposerSendButton = memo(function ComposerSendButton({
   asTask,
   taskMode,
   isDisabled,
@@ -109,4 +110,4 @@ export function ComposerSendButton({
       )}
     </div>
   );
-}
+});

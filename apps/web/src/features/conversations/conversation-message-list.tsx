@@ -41,7 +41,6 @@ export function ConversationMessageList({
   openTaskReference,
   channelNames,
   canCompose,
-  quoteSelection,
   readTicks,
   threadSeenBy,
   shownOutbox,
@@ -69,7 +68,6 @@ export function ConversationMessageList({
   openTaskReference: RowProps["onOpenTask"];
   channelNames: RowProps["channelNames"];
   canCompose: boolean;
-  quoteSelection: NonNullable<RowProps["onQuoteSelection"]>;
   readTicks: PaneConversation["readTicks"];
   threadSeenBy: boolean;
   shownOutbox: PaneOutbox["shownOutbox"];
@@ -153,7 +151,6 @@ export function ConversationMessageList({
             plainMentions={plainMentions}
             onOpenTask={openTaskReference}
             channelNames={channelNames}
-            onQuoteSelection={canCompose ? quoteSelection : undefined}
             readState={ownMessageReadState(own, message.sequence, readTicks)}
             seenBy={own && threadSeenBy}
           />

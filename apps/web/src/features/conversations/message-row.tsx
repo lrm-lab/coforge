@@ -1,5 +1,5 @@
 import { actionCardPreviewText } from "./action-card-preview";
-import { memo } from "react";
+import { memo, useCallback, useState, type PointerEvent } from "react";
 import { WeeklyReportMessageCard } from "#src/features/records/weekly-report-message-card";
 
 import type {
@@ -20,7 +20,6 @@ import { ArtifactInlineEmbed } from "#src/features/artifacts/artifact-inline-emb
 import { CollapsibleMessageBody } from "./collapsible-message-body";
 import type { ChipMention } from "./message-reference-chips";
 import { messagePlainText } from "./selection-copy";
-import { QuoteSelectionBar, useQuoteSelection } from "./message-quote-selection";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
 import { clockLabel } from "#src/lib/dates";
@@ -30,7 +29,11 @@ import { SystemMessageRow } from "./system-message-row";
 import { MessageRowFooter } from "./message-row-footer";
 import { OwnMessageTicks } from "./message-status-markers";
 import { MessageSenderGutter } from "./message-sender-gutter";
-import { MessageActionSheet, MessageActionToolbar } from "./message-actions";
+import {
+  MessageActionSheet,
+  MessageActionToolbar,
+  type ToolbarActivation,
+} from "./message-actions";
 import { useMessageRowActions } from "./message-row-actions";
 import { useRowSelection } from "./message-selection";
 import { ForwardedMessageCard } from "./message-forward-card";
@@ -75,7 +78,6 @@ export const MessageRow = memo(function MessageRow({
   plainMentions,
   onOpenTask,
   channelNames,
-  onQuoteSelection,
   readState,
   seenBy,
 }: {
@@ -100,7 +102,6 @@ export const MessageRow = memo(function MessageRow({
   plainMentions?: Map<string, ChipMention>;
   onOpenTask?: (number: number) => void;
   channelNames?: ReadonlyMap<string, string>;
-  onQuoteSelection?: (quote: string) => void;
   readState?: ReadState;
   seenBy?: boolean;
 }) {
@@ -112,6 +113,12 @@ export const MessageRow = memo(function MessageRow({
   const highlighted = highlightedProp ?? storeHighlighted;
   const timeFormat = useTimeFormat();
   const timeZone = useTimeZone();
+  const [toolbarActive, setToolbarActive] = useState<ToolbarActivation | undefined>(undefined);
+  const reachToolbar = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "touch") return;
+    setToolbarActive((current) => current ?? {});
+  }, []);
+  const clearToolbarStart = useCallback(() => setToolbarActive({}), []);
   const displayName = own ? m.conversation_you() : message.senderName;
   const deleted = Boolean(message.senderDeleted);
   const openableAgentId =
@@ -147,11 +154,6 @@ export const MessageRow = memo(function MessageRow({
         deleted={deleted}
       />
     );
-  const quoteSelection = useQuoteSelection({
-    onQuoteSelection,
-    author: displayName,
-    time: clockLabel(message.createdAt, dateLocale, timeFormat, timeZone),
-  });
   const { actions, copyable, hasActions, sheetActions, actionsOpen, setActionsOpen, openActions } =
     useMessageRowActions({
       message,
@@ -178,6 +180,10 @@ export const MessageRow = memo(function MessageRow({
         dateLocale={dateLocale}
       />
     );
+  const fullTime = clockLabel(message.createdAt, dateLocale, timeFormat, timeZone);
+  const gutterTime = grouped
+    ? gutterClockLabel(message.createdAt, dateLocale, timeFormat, timeZone)
+    : "";
   const showsBody = !message.forwarded || writtenBody.trim() !== "";
   const textTicks =
     readState && !message.actionCard && artifactLayout.hasText ? (
@@ -200,6 +206,7 @@ export const MessageRow = memo(function MessageRow({
         id={`message-${message.id}`}
         data-message={own ? "own" : "other"}
         onClick={selection?.onClick ?? openActions}
+        onPointerEnter={hasActions && !selection ? reachToolbar : undefined}
         className={cn(
           "group/message relative mx-1 flex scroll-m-6 rounded-lg px-3 transition-[background-color,box-shadow] duration-500 hover:bg-message-hover focus-within:bg-message-hover target:bg-tertiary target:ring-2 target:ring-brand/50 target:ring-offset-0 target:ring-offset-primary md:target:ring-offset-2 md:mx-3",
           highlighted &&
@@ -219,8 +226,8 @@ export const MessageRow = memo(function MessageRow({
           onOpenAgentProfile={onOpenAgentProfile}
           openSenderProfile={openSenderProfile}
           avatar={avatar}
-          gutterTime={gutterClockLabel(message.createdAt, dateLocale, timeFormat, timeZone)}
-          fullTime={clockLabel(message.createdAt, dateLocale, timeFormat, timeZone)}
+          gutterTime={gutterTime}
+          fullTime={fullTime}
         />
         <div className="relative flex min-w-0 flex-1 flex-col gap-0.5 has-[[data-read-ticks=latest]]:pr-5 lg:[@media(hover:hover)_and_(pointer:fine)]:has-[[data-read-ticks=hover]]:pr-5">
           {!grouped && (
@@ -229,7 +236,7 @@ export const MessageRow = memo(function MessageRow({
               displayName={displayName}
               deleted={deleted}
               onOpenSender={openSenderProfile}
-              time={clockLabel(message.createdAt, dateLocale, timeFormat, timeZone)}
+              time={fullTime}
             />
           )}
           {message.actionCard ? (
@@ -246,10 +253,10 @@ export const MessageRow = memo(function MessageRow({
             </>
           ) : showsBody ? (
             <div
-              ref={quoteSelection.bodyRef}
               data-scroll-anchor
-              onMouseUp={quoteSelection.read}
-              onKeyUp={quoteSelection.read}
+              data-quote-body=""
+              data-quote-author={displayName}
+              data-quote-time={fullTime}
               className="relative min-w-0 text-md text-primary [overflow-wrap:anywhere]"
             >
               {hasInFlowEmbeds ? (
@@ -316,9 +323,6 @@ export const MessageRow = memo(function MessageRow({
                   disabled={deleted}
                 />
               ) : null}
-              {onQuoteSelection && (
-                <QuoteSelectionBar selection={quoteSelection} onQuote={onQuoteSelection} />
-              )}
             </div>
           ) : null}
           <ReviewLanding value={message.threadRootId ? undefined : message.id}>
@@ -342,8 +346,16 @@ export const MessageRow = memo(function MessageRow({
             />
           </ReviewLanding>
         </div>
-        {hasActions && !selection && <MessageActionToolbar {...actions} grouped={grouped} />}
-        {sheetActions && hasActions && (
+        {hasActions && !selection && (
+          <MessageActionToolbar
+            {...actions}
+            grouped={grouped}
+            active={toolbarActive}
+            onActivate={setToolbarActive}
+            onStarted={clearToolbarStart}
+          />
+        )}
+        {sheetActions && hasActions && actionsOpen && (
           <MessageActionSheet
             {...actions}
             isOpen={actionsOpen}
@@ -351,7 +363,7 @@ export const MessageRow = memo(function MessageRow({
             avatar={avatar}
             displayName={displayName}
             createdAt={message.createdAt}
-            time={clockLabel(message.createdAt, dateLocale, timeFormat, timeZone)}
+            time={fullTime}
             plainText={messagePlainText(message, channelNames)}
             copyable={copyable}
           />

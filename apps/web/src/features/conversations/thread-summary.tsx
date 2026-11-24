@@ -1,3 +1,4 @@
+import type { RefObject } from "react";
 import { actionCardPreviewText } from "./action-card-preview";
 import { ChevronRight, MessageSquare01 as MessageSquare } from "@untitledui/icons";
 
@@ -27,10 +28,15 @@ type ThreadPartProps = { rootId: string; onOpen: (rootId: string) => void };
 
 /** The hover toolbar's thread button. Unread stays on the preview line and in this
  * button's accessible name; the icon itself has no dot (task #267). */
-export function ThreadToolbarEntry({ rootId, onOpen }: ThreadPartProps) {
+export function ThreadToolbarEntry({
+  rootId,
+  onOpen,
+  triggerRef,
+}: ThreadPartProps & { triggerRef?: RefObject<HTMLButtonElement | null> }) {
   const unread = useThreadUnread(rootId);
   return (
     <ButtonUtility
+      ref={triggerRef}
       icon={MessageSquare}
       size="xs"
       color="tertiary"

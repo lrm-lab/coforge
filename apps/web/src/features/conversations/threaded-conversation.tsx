@@ -122,14 +122,50 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     conversation,
     openTaskMessageId,
   );
-  // What every thread pane shares: the side pane and the thread under the task popup.
+  const profileAgentId = agentProfile?.agentId;
+  const profilePersonId = agentProfile?.personId;
+  const profileOpen = Boolean(profileAgentId || profilePersonId);
+  const standaloneRootId = standaloneThread && !profileOpen ? standaloneThread.rootId : undefined;
+  const selected = resolveConversationThreadRoot({
+    searchThreadRootId: searchThreadRootId ?? standaloneRootId,
+    messages: conversation.messages,
+  });
+
+  const docOpen = useSearch({
+    strict: false,
+    select: (search) => typeof search.doc === "string",
+  });
+  const visibleSlot = resolveVisibleConversationSlot({
+    threadOpen: Boolean(selected),
+    profileOpen,
+    detailsOpen: Boolean(detailsOpen && detailsPane),
+    docOpen: docOpen && standaloneThread === null,
+  });
+  const threadPaneVisible = (rootId: string) => visibleSlot === "thread" && selected === rootId;
+  const focus = useConversationFocus();
+  const threadInView =
+    openTaskRoot?.id ??
+    (detailVisible && focus?.focused !== "chat" && visibleSlot === "thread" ? selected : undefined);
+  const threadInViewSequence = useThreadTailSequence(conversation.conversationId, threadInView);
+  const { visited, windowRead, threadRootFailure, loadThreadRoot } = useConversationSync({
+    conversation,
+    searchThreadRootId,
+    openTaskMessageId,
+    taskRootReads,
+    selected,
+    threadInView,
+    threadInViewSequence,
+    onLoadMessageAround,
+    onReadThread,
+    openThreadFromHash,
+    closeThread,
+  });
   const sidePaneProps = {
     ...conversationProps,
     onOpenTask: openTaskReference,
     channelNames,
     channels: channelList,
     onLoadMessageAround,
-    // A side pane has its own scroll position; it must never steer the main stream's refetch policy.
     onFollowingLatestChange: undefined,
   };
   const threadPaneProps = (root: DirectConversationView["messages"][number]) => ({
@@ -153,7 +189,6 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
   const popupProfile = useTaskPopupProfile(openTask?.id);
   const dialog = openTask ? (
     <TaskDetailDialog
-      // One popup instance per task: switching tasks from a chip inside the popup starts fresh.
       key={openTask.id}
       task={openTask}
       open
@@ -211,8 +246,6 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
       }
     />
   ) : null;
-  // The Tasks the stream and the popup show are read here, once per window rather than per row. A
-  // popup shown alone has no stream: only its thread's references are read.
   const taskLayer = (
     <>
       <ConversationTaskDemand
@@ -227,46 +260,6 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
       {popupProfile.layer}
     </>
   );
-  const profileAgentId = agentProfile?.agentId;
-  const profilePersonId = agentProfile?.personId;
-  const profileOpen = Boolean(profileAgentId || profilePersonId);
-  // A thread shown alone (Activity) is the host's, open whatever `threadRootId` says: a profile
-  // opened from it covers it, and closing the profile returns to it.
-  const standaloneRootId = standaloneThread && !profileOpen ? standaloneThread.rootId : undefined;
-  const selected = resolveConversationThreadRoot({
-    searchThreadRootId: searchThreadRootId ?? standaloneRootId,
-    messages: conversation.messages,
-  });
-
-  const docOpen = useSearch({
-    strict: false,
-    select: (search) => typeof search.doc === "string",
-  });
-  const visibleSlot = resolveVisibleConversationSlot({
-    threadOpen: Boolean(selected),
-    profileOpen,
-    detailsOpen: Boolean(detailsOpen && detailsPane),
-    docOpen: docOpen && standaloneThread === null,
-  });
-  const threadPaneVisible = (rootId: string) => visibleSlot === "thread" && selected === rootId;
-  const focus = useConversationFocus();
-  const threadInView =
-    openTaskRoot?.id ??
-    (detailVisible && focus?.focused !== "chat" && visibleSlot === "thread" ? selected : undefined);
-  const threadInViewSequence = useThreadTailSequence(conversation.conversationId, threadInView);
-  const { visited, windowRead, threadRootFailure, loadThreadRoot } = useConversationSync({
-    conversation,
-    searchThreadRootId,
-    openTaskMessageId,
-    taskRootReads,
-    selected,
-    threadInView,
-    threadInViewSequence,
-    onLoadMessageAround,
-    onReadThread,
-    openThreadFromHash,
-    closeThread,
-  });
   /** A thread's root: as loaded, else as last seen while it was open. */
   const threadRootOf = (rootId: string) =>
     conversation.messages.find((message) => message.id === rootId) ??

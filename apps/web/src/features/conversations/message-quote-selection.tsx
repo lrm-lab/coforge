@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import { Code02, Copy01, CornerUpLeft } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -7,8 +8,15 @@ import { m } from "#src/paraglide/messages";
 import { formatSelectionQuote, selectionAffordancePlacement } from "./message-quote";
 import { copyFragmentMarkdown, copyFragmentStyled, selectionFragmentHtml } from "./selection-copy";
 
-/** The vertical edges of the visible region a floating control must stay inside: the nearest
- * scrollport ancestor's box, or the viewport when the element is not inside a scroller. */
+type QuoteOffer = {
+  container: HTMLElement;
+  quote: string;
+  html: string;
+  text: string;
+  top: number;
+  left: number;
+};
+
 function visibleBoundary(el: HTMLElement): { top: number; bottom: number } {
   let node = el.parentElement;
   while (node) {
@@ -22,109 +30,117 @@ function visibleBoundary(el: HTMLElement): { top: number; bottom: number } {
   return { top: 0, bottom: window.innerHeight };
 }
 
-/**
- * A message row's reply-to-selection: reads the reader's highlight inside the row's body (`bodyRef`)
- * and holds the offer `QuoteSelectionBar` shows. Inert without `onQuoteSelection`.
- */
-export function useQuoteSelection({
-  onQuoteSelection,
-  author,
-  time,
+function resolveQuoteBody(history: HTMLElement, node: Node): HTMLElement | null {
+  const element = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
+  const body = element?.closest<HTMLElement>("[data-quote-body]") ?? null;
+  if (!body || !history.contains(body) || !body.closest("[data-message-id]")) return null;
+  return body;
+}
+
+export function PaneQuoteSelection({
+  historyRef,
+  conversationId,
+  onQuote,
 }: {
-  onQuoteSelection?: (quote: string) => void;
-  /** The quoted message's sender and clock time, as the quote's attribution line. */
-  author: string;
-  time: string;
+  historyRef: RefObject<HTMLDivElement | null>;
+  conversationId: string;
+  onQuote?: (quote: string) => void;
 }) {
-  // Reply-to-selection: the browser owns the highlight, this row only decides whether to *offer*
-  // the action. The offer is made from a completed pointer gesture, so a drag that merely passes
-  // over this message while selecting another one never raises it.
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const quoteAffordanceRef = useRef<HTMLDivElement>(null);
-  /** Whether the latest pointer press was a finger or a pen rather than a mouse: a selection made
-   * that way raises the platform's own edit menu above the highlight, so the bar goes below it. */
+  const barRef = useRef<HTMLDivElement>(null);
   const touchSelectionRef = useRef(false);
-  const [quoteOffer, setQuoteOffer] = useState<
-    { quote: string; html: string; text: string; top: number; left: number } | undefined
-  >(undefined);
-  /**
-   * Reads the current highlight, and offers the quote only when the whole selection lives inside
-   * this message's body: a highlight that spans rows cannot be credited to one of them, and a
-   * quote that silently dropped half the selected text would be worse than no affordance.
-   */
+  const pointerDownRef = useRef(false);
+  const offerRef = useRef<QuoteOffer | undefined>(undefined);
+  const [offer, setOfferState] = useState<QuoteOffer | undefined>(undefined);
+
+  const setOffer = useCallback((next: QuoteOffer | undefined) => {
+    offerRef.current = next;
+    setOfferState(next);
+  }, []);
+
+  const dismiss = useCallback(() => {
+    if (offerRef.current !== undefined) setOffer(undefined);
+  }, [setOffer]);
+
+  useEffect(() => {
+    dismiss();
+  }, [conversationId, onQuote, dismiss]);
+
   const readQuoteSelection = useCallback(() => {
-    if (!onQuoteSelection) return;
-    const container = bodyRef.current;
+    if (!onQuote) return;
+    const history = historyRef.current;
     const selection = typeof window === "undefined" ? null : window.getSelection();
-    if (!container || !selection || selection.isCollapsed || selection.rangeCount === 0) {
-      setQuoteOffer(undefined);
+    if (!history || !selection || selection.isCollapsed || selection.rangeCount === 0) {
+      dismiss();
       return;
     }
     const range = selection.getRangeAt(0);
-    if (!container.contains(range.commonAncestorContainer)) {
-      setQuoteOffer(undefined);
+    const body = resolveQuoteBody(history, range.commonAncestorContainer);
+    if (!body || !body.contains(range.commonAncestorContainer)) {
+      dismiss();
       return;
     }
     const quote = formatSelectionQuote(
       {
-        author,
-        time,
+        author: body.dataset.quoteAuthor ?? "",
+        time: body.dataset.quoteTime ?? "",
       },
       selection.toString(),
     );
     if (!quote) {
-      setQuoteOffer(undefined);
+      dismiss();
       return;
     }
-    // Centered on the highlight, above it for a mouse selection and below it for a touch one
-    // (the platform's own edit menu takes the space above); the visible history scroller is the
-    // flip boundary, so the bar only changes side when it would scroll out of view. The
-    // fragment and its text are captured now: clicking a bar button may collapse the live
-    // selection, but the copy actions must still carry what the reader highlighted.
     const placement = selectionAffordancePlacement(
       range.getBoundingClientRect(),
-      container.getBoundingClientRect(),
-      visibleBoundary(container),
+      body.getBoundingClientRect(),
+      visibleBoundary(body),
       touchSelectionRef.current ? "below" : "above",
     );
-    setQuoteOffer({
+    setOffer({
+      container: body,
       quote,
       html: selectionFragmentHtml(range),
       text: selection.toString(),
       ...placement,
     });
-  }, [onQuoteSelection, author, time]);
-  // A gesture anywhere else (a click, a scroll, Escape) withdraws the offer. The affordance
-  // itself is exempt: pointerdown on it would otherwise unmount the button before its click.
+  }, [onQuote, historyRef, dismiss, setOffer]);
+
   useEffect(() => {
-    if (!quoteOffer) return;
-    const dismiss = (event: Event) => {
-      if (event.target instanceof Node && quoteAffordanceRef.current?.contains(event.target))
-        return;
-      setQuoteOffer(undefined);
+    if (!offer) return;
+    const onDismiss = (event: Event) => {
+      if (event.target instanceof Node && barRef.current?.contains(event.target)) return;
+      dismiss();
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") dismiss(event);
+      if (event.key === "Escape") onDismiss(event);
     };
-    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("pointerdown", onDismiss);
     document.addEventListener("keydown", onKeyDown);
-    window.addEventListener("scroll", dismiss, true);
+    window.addEventListener("scroll", onDismiss, true);
     return () => {
-      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("pointerdown", onDismiss);
       document.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("scroll", dismiss, true);
+      window.removeEventListener("scroll", onDismiss, true);
     };
-  }, [quoteOffer]);
-  // Touch selection ends without a mouseup: the long-press and the OS selection handles fire no
-  // usable mouse events, so on touch the offer is driven by `selectionchange` (debounced, so a
-  // handle drag settles first) and by pointer release. While a pointer is down — a mouse drag
-  // mid-selection — selection events are ignored and `onMouseUp` stays the trigger, keeping the
-  // desktop bar tied to the completed gesture.
-  const pointerDownRef = useRef(false);
+  }, [offer, dismiss]);
+
   useEffect(() => {
-    if (!onQuoteSelection) return;
+    if (!onQuote) return;
+    const history = historyRef.current;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const schedule = () => {
+      const currentHistory = historyRef.current;
+      const selection = typeof window === "undefined" ? null : window.getSelection();
+      const hasCandidate =
+        currentHistory !== null &&
+        selection !== null &&
+        !selection.isCollapsed &&
+        selection.rangeCount > 0 &&
+        currentHistory.contains(selection.anchorNode);
+      if (!hasCandidate && offerRef.current === undefined) {
+        clearTimeout(timer);
+        return;
+      }
       clearTimeout(timer);
       timer = setTimeout(readQuoteSelection, 200);
     };
@@ -139,36 +155,45 @@ export function useQuoteSelection({
     const onSelectionChange = () => {
       if (!pointerDownRef.current) schedule();
     };
+    const onHistoryRelease = () => {
+      readQuoteSelection();
+    };
     document.addEventListener("pointerdown", onPointerDown, true);
     document.addEventListener("pointerup", onPointerUp, true);
     document.addEventListener("pointercancel", onPointerUp, true);
     document.addEventListener("selectionchange", onSelectionChange);
+    history?.addEventListener("mouseup", onHistoryRelease);
+    history?.addEventListener("keyup", onHistoryRelease);
     return () => {
       clearTimeout(timer);
       document.removeEventListener("pointerdown", onPointerDown, true);
       document.removeEventListener("pointerup", onPointerUp, true);
       document.removeEventListener("pointercancel", onPointerUp, true);
       document.removeEventListener("selectionchange", onSelectionChange);
+      history?.removeEventListener("mouseup", onHistoryRelease);
+      history?.removeEventListener("keyup", onHistoryRelease);
     };
-  }, [onQuoteSelection, readQuoteSelection]);
-  return {
-    bodyRef,
-    barRef: quoteAffordanceRef,
-    offer: quoteOffer,
-    read: readQuoteSelection,
-    dismiss: () => setQuoteOffer(undefined),
-  };
+  }, [onQuote, historyRef, readQuoteSelection]);
+
+  if (!onQuote || !offer || !offer.container.isConnected) return null;
+  return createPortal(
+    <QuoteSelectionBar offer={offer} barRef={barRef} dismiss={dismiss} onQuote={onQuote} />,
+    offer.container,
+  );
 }
 
-export function QuoteSelectionBar({
-  selection: { offer, barRef, dismiss },
+function QuoteSelectionBar({
+  offer,
+  barRef,
+  dismiss,
   onQuote,
 }: {
-  selection: ReturnType<typeof useQuoteSelection>;
+  offer: QuoteOffer;
+  barRef: RefObject<HTMLDivElement | null>;
+  dismiss: () => void;
   onQuote: (quote: string) => void;
 }) {
   const toast = useAppToast();
-  if (!offer) return null;
   return (
     <div
       ref={barRef}

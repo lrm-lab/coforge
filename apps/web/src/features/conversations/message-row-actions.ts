@@ -14,11 +14,6 @@ import type { ReadState } from "./conversation-pane-layout";
 import type { MessageView } from "./message-view";
 import { messagePlainText } from "./selection-copy";
 
-/**
- * A message row's actions, bound to its message, and where they open: the hover toolbar on the
- * desktop shell, the tap action sheet on a phone (`MessageActionToolbar`, `MessageActionSheet`).
- * `hasActions` is whether the row offers any.
- */
 export function useMessageRowActions({
   message,
   conversationId,
@@ -31,12 +26,10 @@ export function useMessageRowActions({
   inStream = false,
 }: {
   message: MessageView;
-  /** The conversation's own stream, which offers select mode; a thread pane does not. */
   inStream?: boolean;
   conversationId?: string;
   channelNames?: ReadonlyMap<string, string>;
   readState?: ReadState;
-  /** Offers who has seen the message without ticks to go by (an own thread reply). */
   seenBy?: boolean;
   onOpenThread?: (rootId: string) => void;
   onToggleReaction?: (messageId: string, emoji: string, active: boolean) => void;
@@ -47,18 +40,6 @@ export function useMessageRowActions({
   const openForward = useOpenForward();
   const selection = useMessageSelection();
   const makeTask = useMakeTaskFromMessage();
-  // The mobile shell (single-pane below `lg`) has no hover to reveal the reply/reaction
-  // actions, and keeping the toolbar always visible puts two buttons on every message.
-  // Instead a tap on the row's non-interactive surface opens a
-  // bottom action sheet holding the same actions (the wide desktop shell keeps hover/focus
-  // reveal). Whatever is marked `data-no-row-tap` is not that surface: a video's or an audio's
-  // player, and a card the viewer works (a pending card, a choice or questions card, answered too),
-  // whose text a tap would otherwise take focus away from (task #552). The modal overlay
-  // owns dismissal (backdrop press, Escape). The switch follows the shell, not only the
-  // pointer: a narrow desktop window shows the mobile shell, so it gets sheet interactions
-  // too, and a large touchscreen still prefers tapping. The tap target check runs against
-  // the DOM, so it also covers portaled overlays, whose React events still bubble through
-  // this row.
   const coarsePointer = useCoarsePointer();
   const desktopShell = useBreakpoint("lg");
   const sheetActions = coarsePointer || !desktopShell;
@@ -77,11 +58,7 @@ export function useMessageRowActions({
     },
     [sheetActions],
   );
-  // #544's whole-message copy (the IM-standard "Copy text", the only copy path for a collapsed,
-  // unselectable body) rides the action strip on desktop and the tap action sheet on the mobile
-  // shell; the sheet therefore also opens for a message with no thread and no reactions.
-  const copyable = Boolean(messagePlainText(message, channelNames).trim());
-  // The toolbar's and the sheet's actions, bound to this message.
+  const copyable = Boolean(message.body.trim());
   const actions = {
     messageId: message.id,
     onOpenThread,
@@ -102,7 +79,6 @@ export function useMessageRowActions({
               conversationId,
             })
         : undefined,
-    // Select mode starts with this message picked; it picks what a forward can carry.
     onSelect:
       selection && inStream && conversationId && canForwardMessage(message)
         ? () =>
@@ -111,8 +87,6 @@ export function useMessageRowActions({
               plainBody: messagePlainText(message, channelNames),
             })
         : undefined,
-    // What can be forwarded is someone's own words, which is also what a Task can come from; a
-    // Task's source is a message of the conversation itself, never a thread reply.
     onMakeTask:
       makeTask && conversationId && canForwardMessage(message) && !message.threadRootId
         ? () => makeTask({ conversationId, messageId: message.id })

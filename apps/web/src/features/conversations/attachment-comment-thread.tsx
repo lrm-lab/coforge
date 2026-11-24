@@ -42,7 +42,14 @@ export function useCommentPages(attachmentId: string) {
     queryFn: ({ pageParam }) =>
       loadAttachmentComments({ data: { attachmentId, beforeSequence: pageParam } }),
     getNextPageParam: (page) => (page.hasOlder ? page.comments[0]?.sequence : undefined),
-    refetchInterval: 5_000,
+    refetchInterval: (current) => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return false;
+      if (current.state.status === "error") return false;
+      if (current.state.data?.pages[0]?.disabledReason === "archived") return false;
+      return 5_000;
+    },
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
     refetchOnMount: "always",
   });
   const comments = useMemo(

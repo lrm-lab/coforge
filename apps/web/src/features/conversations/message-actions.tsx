@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FocusEvent, type ReactNode } from "react";
 import {
   ArrowLeft,
   Bookmark,
@@ -7,7 +7,9 @@ import {
   CheckSquare,
   Copy01,
   DotsHorizontal,
+  FaceSmile,
   FlipForward,
+  MessageSquare01 as MessageSquare,
 } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -38,9 +40,17 @@ type MessageActions = {
   seenBy?: { conversationId: string };
 };
 
+export type ToolbarActivation = {
+  target?: "thread" | "reaction" | "copy" | "more";
+  mode?: "focus" | "open";
+};
+
 export function MessageActionToolbar({
   messageId,
   grouped,
+  active,
+  onActivate,
+  onStarted,
   onOpenThread,
   onToggleReaction,
   onToggleSave,
@@ -50,7 +60,18 @@ export function MessageActionToolbar({
   onMakeTask,
   onCopy,
   seenBy,
-}: MessageActions & { grouped: boolean }) {
+}: MessageActions & {
+  grouped: boolean;
+  active?: ToolbarActivation;
+  onActivate: (activation: ToolbarActivation) => void;
+  onStarted: () => void;
+}) {
+  const hasMore = Boolean(onForward || onToggleSave || onMakeTask || seenBy);
+  const focusTarget =
+    (target: NonNullable<ToolbarActivation["target"]>) => (event: FocusEvent<HTMLElement>) => {
+      if (event.currentTarget.matches(":focus-visible")) onActivate({ target, mode: "focus" });
+    };
+
   return (
     <div
       data-message-toolbar
@@ -63,9 +84,120 @@ export function MessageActionToolbar({
         "lg:[@media(hover:hover)_and_(pointer:fine)]:has-[[aria-expanded=true]]:pointer-events-auto lg:[@media(hover:hover)_and_(pointer:fine)]:has-[[aria-expanded=true]]:opacity-100",
       )}
     >
-      {onOpenThread && <ThreadToolbarEntry rootId={messageId} onOpen={onOpenThread} />}
-      {onToggleReaction && <MessageReactionPicker onPick={(emoji) => onToggleReaction(emoji)} />}
+      {active ? (
+        <ActiveMessageActionToolbar
+          messageId={messageId}
+          active={active}
+          onStarted={onStarted}
+          onOpenThread={onOpenThread}
+          onToggleReaction={onToggleReaction}
+          onToggleSave={onToggleSave}
+          saveSaved={saveSaved}
+          onForward={onForward}
+          onSelect={onSelect}
+          onMakeTask={onMakeTask}
+          onCopy={onCopy}
+          seenBy={seenBy}
+          hasMore={hasMore}
+        />
+      ) : (
+        <>
+          {onOpenThread && (
+            <ButtonUtility
+              size="xs"
+              color="tertiary"
+              icon={MessageSquare}
+              aria-label={m.conversation_thread_reply()}
+              onFocus={focusTarget("thread")}
+              onClick={() => onOpenThread(messageId)}
+              className="p-1 *:data-icon:size-3.5"
+            />
+          )}
+          {onToggleReaction && (
+            <ButtonUtility
+              size="xs"
+              color="tertiary"
+              icon={FaceSmile}
+              aria-label={m.conversation_add_reaction()}
+              aria-haspopup="dialog"
+              onFocus={focusTarget("reaction")}
+              onClick={() => onActivate({ target: "reaction", mode: "open" })}
+              className="p-1 *:data-icon:size-3.5"
+            />
+          )}
+          <ButtonUtility
+            size="xs"
+            color="tertiary"
+            icon={Copy01}
+            aria-label={m.conversation_message_copy_text()}
+            onFocus={focusTarget("copy")}
+            onClick={onCopy}
+            className="p-1 *:data-icon:size-3.5"
+          />
+          {hasMore && (
+            <ButtonUtility
+              size="xs"
+              color="tertiary"
+              icon={DotsHorizontal}
+              aria-label={m.conversation_more_actions()}
+              aria-haspopup="menu"
+              onFocus={focusTarget("more")}
+              onClick={() => onActivate({ target: "more", mode: "open" })}
+              className="p-1 *:data-icon:size-3.5"
+            />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function ActiveMessageActionToolbar({
+  messageId,
+  active,
+  onStarted,
+  onOpenThread,
+  onToggleReaction,
+  onToggleSave,
+  saveSaved,
+  onForward,
+  onSelect,
+  onMakeTask,
+  onCopy,
+  seenBy,
+  hasMore,
+}: MessageActions & {
+  active: ToolbarActivation;
+  onStarted: () => void;
+  hasMore: boolean;
+}) {
+  const threadRef = useRef<HTMLButtonElement>(null);
+  const copyRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (active.target === "thread" && active.mode === "focus") {
+      threadRef.current?.focus();
+      onStarted();
+    } else if (active.target === "copy" && active.mode === "focus") {
+      copyRef.current?.focus();
+      onStarted();
+    }
+  }, [active.target, active.mode, onStarted]);
+
+  return (
+    <>
+      {onOpenThread && (
+        <ThreadToolbarEntry rootId={messageId} onOpen={onOpenThread} triggerRef={threadRef} />
+      )}
+      {onToggleReaction && (
+        <MessageReactionPicker
+          onPick={(emoji) => onToggleReaction(emoji)}
+          start={active.target === "reaction" ? active.mode : undefined}
+          onStarted={onStarted}
+        />
+      )}
       <ButtonUtility
+        ref={copyRef}
         size="xs"
         color="tertiary"
         icon={Copy01}
@@ -73,7 +205,7 @@ export function MessageActionToolbar({
         onClick={onCopy}
         className="p-1 *:data-icon:size-3.5"
       />
-      {(onForward || onToggleSave || onMakeTask || seenBy) && (
+      {hasMore && (
         <MessageMoreMenu
           messageId={messageId}
           onForward={onForward}
@@ -82,9 +214,11 @@ export function MessageActionToolbar({
           onToggleSave={onToggleSave}
           saveSaved={saveSaved}
           seenBy={seenBy}
+          start={active.target === "more" ? active.mode : undefined}
+          onStarted={onStarted}
         />
       )}
-    </div>
+    </>
   );
 }
 
@@ -96,14 +230,29 @@ function MessageMoreMenu({
   onToggleSave,
   saveSaved,
   seenBy,
+  start,
+  onStarted,
 }: Pick<
   MessageActions,
   "messageId" | "onForward" | "onSelect" | "onMakeTask" | "onToggleSave" | "saveSaved" | "seenBy"
->) {
+> & {
+  start?: "focus" | "open";
+  onStarted?: () => void;
+}) {
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!start) return;
+    triggerRef.current?.focus();
+    if (start === "open") setOpen(true);
+    onStarted?.();
+  }, [start, onStarted]);
+
   return (
     <Dropdown.Root isOpen={open} onOpenChange={setOpen}>
       <ButtonUtility
+        ref={triggerRef}
         size="xs"
         color="tertiary"
         icon={DotsHorizontal}

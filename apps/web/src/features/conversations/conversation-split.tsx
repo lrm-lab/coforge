@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Group, Panel, Separator, useDefaultLayout, useGroupRef } from "react-resizable-panels";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence } from "motion/react";
+import * as motion from "motion/react-m";
 
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";

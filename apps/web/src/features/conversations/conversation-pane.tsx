@@ -36,6 +36,7 @@ import { ConversationStreamPlaceholder } from "./conversation-stream-placeholder
 import { ThreadRepliesMarker } from "./thread-replies-marker";
 import { ThreadRootMessage } from "./thread-root-message";
 import { QuestionCardsHost } from "./question-card-host";
+import { PaneQuoteSelection } from "./message-quote-selection";
 
 export function ConversationPane({
   conversation,
@@ -267,7 +268,6 @@ export function ConversationPane({
                       plainMentions={plainMentions}
                       onOpenTask={openTaskReference}
                       channelNames={channelNames}
-                      onQuoteSelection={canCompose ? quoteSelection : undefined}
                     />
                   )}
                   {threadMarker && (
@@ -310,7 +310,6 @@ export function ConversationPane({
                       openTaskReference={openTaskReference}
                       channelNames={channelNames}
                       canCompose={canCompose}
-                      quoteSelection={quoteSelection}
                       readTicks={readTicks}
                       threadSeenBy={Boolean(root && conversation.readTicks)}
                       shownOutbox={shownOutbox}
@@ -331,6 +330,11 @@ export function ConversationPane({
                   )}
                 </div>
               </div>
+              <PaneQuoteSelection
+                historyRef={historyRef}
+                conversationId={conversation.conversationId}
+                onQuote={canCompose ? quoteSelection : undefined}
+              />
               <ComposerEdgeOverlay
                 column={column}
                 conversationId={conversation.conversationId}

@@ -1,5 +1,5 @@
 import { useSendAsTask } from "./conversation-view-memory";
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useHydrated } from "@tanstack/react-router";
 import type { TaskPriorityLevel } from "@lrm/coforge-sdk/internal";
 
@@ -7,6 +7,7 @@ import { Plus, UploadCloud02 } from "@untitledui/icons";
 import { FileTrigger } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
+import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { localId, composerPlaceholder } from "./composer-behavior";
 import { ComposerField, focusDraftEnd } from "./composer-field";
 import { COMPOSER_FOCUS_CLASS, COMPOSER_FRAME_CLASS } from "./composer-frame";
@@ -41,6 +42,7 @@ import {
   NO_PINS,
   pinsInText,
   unpinnedLabelMentions,
+  type MentionPin,
 } from "./mention-pins";
 import type { ChannelSuggestion } from "./reference-completion";
 import { useReferenceCompletion } from "./use-reference-completion";
@@ -64,6 +66,50 @@ export type SentMessage = {
 };
 
 const NO_NAMES: ReadonlySet<string> = new Set();
+
+type ComposerDraftState = {
+  key: string;
+  body: string;
+  pins: readonly MentionPin[];
+};
+
+function readDraftState(key: string): ComposerDraftState {
+  return {
+    key,
+    body: readComposerDraft(key),
+    pins: readComposerDraftPins(key),
+  };
+}
+
+const ComposerAttachmentTrigger = memo(function ComposerAttachmentTrigger({
+  className,
+  isDisabled,
+  onFiles,
+}: {
+  className: string;
+  isDisabled: boolean;
+  onFiles: (files: File[]) => void;
+}) {
+  const handleSelect = useCallback(
+    (list: FileList | null) => {
+      const files = Array.from(list ?? []);
+      if (files.length > 0) onFiles(files);
+    },
+    [onFiles],
+  );
+  return (
+    <FileTrigger allowsMultiple onSelect={handleSelect}>
+      <Button
+        color="tertiary"
+        size="xs"
+        iconLeading={Plus}
+        aria-label={m.conversation_attachment_label()}
+        isDisabled={isDisabled}
+        className={`${className} any-pointer-coarse:after:absolute any-pointer-coarse:after:-inset-2`}
+      />
+    </FileTrigger>
+  );
+});
 
 export function MessageComposer({
   conversationId,
@@ -106,6 +152,7 @@ export function MessageComposer({
   const draftKey = scope?.draftKey ?? composerDraftKey(conversationId, threadRootId);
   const retryRef = useRef<
     | {
+        draftKey: string;
         body: string;
         idempotencyKey: string;
         asTask: boolean;
@@ -114,22 +161,45 @@ export function MessageComposer({
       }
     | undefined
   >(undefined);
-  const [body, setBody] = useState(() => readComposerDraft(draftKey));
-  const [pins, setPins] = useState(() => readComposerDraftPins(draftKey));
-  const [keptAsText, setKeptAsText] = useState(NO_NAMES);
-  useEffect(() => {
-    setBody(readComposerDraft(draftKey));
-    setPins(readComposerDraftPins(draftKey));
-    setKeptAsText(NO_NAMES);
-    retryRef.current = undefined;
-  }, [draftKey]);
+  const [draft, setDraft] = useState(() => readDraftState(draftKey));
+  const shown = useMemo(
+    () => (draft.key === draftKey ? draft : readDraftState(draftKey)),
+    [draft, draftKey],
+  );
+  const { body, pins } = shown;
+  const [keptState, setKeptState] = useState<{
+    draftKey: string;
+    names: ReadonlySet<string>;
+  }>(() => ({ draftKey, names: NO_NAMES }));
+  const keptAsText = keptState.draftKey === draftKey ? keptState.names : NO_NAMES;
+
   useEffect(() => {
     writeComposerDraft(draftKey, body);
-    setPins((current) => pinsInText(body, current));
   }, [draftKey, body]);
   useEffect(() => {
     writeComposerDraftPins(draftKey, pins);
   }, [draftKey, pins]);
+
+  const updateBody = useLatestCallback((next: string) => {
+    setDraft((current) => {
+      const base = current.key === draftKey ? current : readDraftState(draftKey);
+      return { key: draftKey, body: next, pins: pinsInText(next, base.pins) };
+    });
+    if (retryRef.current?.draftKey === draftKey && next.trim() !== retryRef.current.body)
+      retryRef.current = undefined;
+  });
+
+  const pinMention = useLatestCallback((mention: Mentionable) => {
+    setDraft((current) => {
+      const base = current.key === draftKey ? current : readDraftState(draftKey);
+      return {
+        key: draftKey,
+        body: base.body,
+        pins: addMentionPin(base.pins, mentionPinFor(mention)),
+      };
+    });
+  });
+
   const completion = useReferenceCompletion({
     mentionables,
     mentionOutsiders,
@@ -138,10 +208,7 @@ export function MessageComposer({
     channels,
     currentChannelId: conversationId,
     value: body,
-    onChange: (next) => {
-      setBody(next);
-      if (retryRef.current && next.trim() !== retryRef.current.body) retryRef.current = undefined;
-    },
+    onChange: updateBody,
     onPickMention: pinMention,
   });
   const namedCandidates = useMemo(
@@ -196,37 +263,42 @@ export function MessageComposer({
     useComposerAttachments(draftKey, scope?.uploadTo ?? (() => Promise.resolve(conversationId)));
   const [asTask, setAsTask] = useSendAsTask(draftKey);
   const [taskPriority, setTaskPriority] = useLastTaskPriority();
-  function focusComposer() {
-    focusDraftEnd(completion.textareaRef.current);
-  }
-
   const consumedQuoteIdRef = useRef<number | undefined>(undefined);
+  const focusComposer = useLatestCallback(() => {
+    focusDraftEnd(completion.textareaRef.current);
+  });
   useEffect(() => {
     if (!quotedDraft || quotedDraft.id === consumedQuoteIdRef.current) return;
     consumedQuoteIdRef.current = quotedDraft.id;
-    setBody((current) => {
-      const kept = current.replace(/\s+$/u, "");
-      return kept ? `${kept}\n\n${quotedDraft.text}\n\n` : `${quotedDraft.text}\n\n`;
+    setDraft((current) => {
+      const base = current.key === draftKey ? current : readDraftState(draftKey);
+      const kept = base.body.replace(/\s+$/u, "");
+      const nextBody = kept ? `${kept}\n\n${quotedDraft.text}\n\n` : `${quotedDraft.text}\n\n`;
+      return { key: draftKey, body: nextBody, pins: pinsInText(nextBody, base.pins) };
     });
     retryRef.current = undefined;
     requestAnimationFrame(focusComposer);
-  }, [quotedDraft]);
+  }, [quotedDraft, draftKey, focusComposer]);
   const composerDisabled = !hydrated;
-  const drop = useFileDrop(composerDisabled || uploading, (files) => void addFiles(files));
-  const paste = useComposerPaste(
-    room,
-    (files) => void addFiles(files),
-    (text) => longMessage.pasted(text),
-  );
+  const handleAddFiles = useLatestCallback((files: File[]) => {
+    void addFiles(files);
+  });
+  const submitRef = useRef<() => void>(() => {});
+  const runSubmit = useCallback(() => submitRef.current(), []);
+  const longMessage = useLongMessage({
+    body,
+    setBody: updateBody,
+    addFiles,
+    uploading,
+    anyFailed,
+    submit: runSubmit,
+  });
+  const drop = useFileDrop(composerDisabled || uploading, handleAddFiles);
+  const paste = useComposerPaste(room, handleAddFiles, (text) => longMessage.pasted(text));
   const taskMode = !inThread && Boolean(canSendAsTask);
   const sendDisabled =
     composerDisabled || uploading || anyFailed || (!body.trim() && attachments.length === 0);
   const placeholder = composerPlaceholder(inThread, target);
-  const longMessage = useLongMessage({ body, setBody, addFiles, uploading, anyFailed, submit });
-
-  function pinMention(mention: Mentionable) {
-    setPins((current) => addMentionPin(current, mentionPinFor(mention)));
-  }
 
   function returnFocusToComposer() {
     completion.textareaRef.current?.focus({ preventScroll: true });
@@ -234,7 +306,7 @@ export function MessageComposer({
 
   useEffect(() => {
     if (autoFocus && hydrated && window.matchMedia("(pointer: fine)").matches) focusComposer();
-  }, [autoFocus, draftKey, hydrated]);
+  }, [autoFocus, draftKey, hydrated, focusComposer]);
   useEffect(() => {
     if (!hostRef) return;
     const field = completion.textareaRef.current;
@@ -254,8 +326,9 @@ export function MessageComposer({
     const sendPriority = sendAsTask ? taskPriority : undefined;
     const uploaded = attachments.filter((item) => item.id);
     const uploadedIds = uploaded.flatMap((item) => (item.id ? [item.id] : []));
+    const activeRetry = retryRef.current?.draftKey === draftKey ? retryRef.current : undefined;
     const idempotencyKey = resolveSubmitIdempotencyKey(
-      retryRef.current,
+      activeRetry,
       {
         body: text,
         asTask: sendAsTask,
@@ -277,9 +350,8 @@ export function MessageComposer({
       ),
     };
     retryRef.current = undefined;
-    setBody("");
-    setPins(NO_PINS);
-    setKeptAsText(NO_NAMES);
+    setDraft({ key: draftKey, body: "", pins: NO_PINS });
+    setKeptState({ draftKey, names: NO_NAMES });
     clearComposerDraft(draftKey);
     completion.close();
     setAttachments(() => []);
@@ -287,18 +359,26 @@ export function MessageComposer({
     focusComposer();
     outbox.send(message, uploaded);
   }
+  useEffect(() => {
+    submitRef.current = submit;
+  });
 
   useComposerRequests(draftKey, (request) => {
     if (request.kind === "focus") {
       focusComposer();
       return;
     }
-    setBody((current) => draftWithUnsentMessage(current, request.body));
-    setPins((current) => request.pins.reduce(addMentionPin, current));
+    setDraft((current) => {
+      const base = current.key === draftKey ? current : readDraftState(draftKey);
+      const nextBody = draftWithUnsentMessage(base.body, request.body);
+      const nextPins = pinsInText(nextBody, request.pins.reduce(addMentionPin, base.pins));
+      return { key: draftKey, body: nextBody, pins: nextPins };
+    });
     setAttachments((current) => [...request.chips, ...current]);
     setAsTask(request.asTask);
     if (request.taskPriority) setTaskPriority(request.taskPriority);
     retryRef.current = {
+      draftKey,
       body: request.body,
       idempotencyKey: request.idempotencyKey,
       asTask: request.asTask,
@@ -307,6 +387,17 @@ export function MessageComposer({
     };
     requestAnimationFrame(focusComposer);
   });
+
+  const renderLeading = useCallback(
+    (className: string) => (
+      <ComposerAttachmentTrigger
+        className={className}
+        isDisabled={composerDisabled}
+        onFiles={handleAddFiles}
+      />
+    ),
+    [composerDisabled, handleAddFiles],
+  );
 
   return (
     <form
@@ -372,7 +463,10 @@ export function MessageComposer({
             returnFocusToComposer();
           }}
           onDismiss={() => {
-            setKeptAsText((current) => new Set(current).add(unpinned.label));
+            setKeptState((current) => {
+              const base = current.draftKey === draftKey ? current.names : NO_NAMES;
+              return { draftKey, names: new Set(base).add(unpinned.label) };
+            });
             returnFocusToComposer();
           }}
         />
@@ -380,11 +474,7 @@ export function MessageComposer({
       <ComposerField
         completion={completion}
         value={body}
-        onValueChange={(value) => {
-          setBody(value);
-          if (retryRef.current && value.trim() !== retryRef.current.body)
-            retryRef.current = undefined;
-        }}
+        onValueChange={updateBody}
         label={m.conversation_message_label()}
         placeholder={placeholder}
         onSubmit={submit}
@@ -396,24 +486,7 @@ export function MessageComposer({
         attachmentCount={attachments.length}
         onPaste={paste}
         below={attachments.length > 0 && <ComposerAttachmentTray {...tray} />}
-        leading={(className) => (
-          <FileTrigger
-            allowsMultiple
-            onSelect={(list) => {
-              const files = Array.from(list ?? []);
-              if (files.length > 0) void addFiles(files);
-            }}
-          >
-            <Button
-              color="tertiary"
-              size="xs"
-              iconLeading={Plus}
-              aria-label={m.conversation_attachment_label()}
-              isDisabled={composerDisabled}
-              className={`${className} any-pointer-coarse:after:absolute any-pointer-coarse:after:-inset-2`}
-            />
-          </FileTrigger>
-        )}
+        leading={renderLeading}
       />
       {taskMode && asTask && (
         <ComposerTaskPriority

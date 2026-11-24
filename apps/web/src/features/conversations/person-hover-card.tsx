@@ -115,10 +115,17 @@ function roleLabel(member: { serverRole?: string | null; channelRole?: string })
   return m.channel_members_role_member();
 }
 
-/**
- * The profile card shown on hover for a human member. Deliberately no actions on it (the boss's
- * ruling, task #210): the hover is for a quick look at a face.
- */
+function MemberOnlineStatus({ userId }: { userId: string }) {
+  const online = useMemberOnline(userId);
+  if (online === undefined) return null;
+  return (
+    <span className="flex min-w-0 items-center gap-1 text-xs text-tertiary">
+      <StatusDot tone={online ? "online" : "offline"} className="size-1.5 shrink-0" />
+      <span className="truncate">{online ? m.member_online() : m.member_offline()}</span>
+    </span>
+  );
+}
+
 function MemberProfileCard({
   userId,
   name,
@@ -130,8 +137,6 @@ function MemberProfileCard({
   userId?: string;
   name: string;
 }) {
-  const online = useMemberOnline(userId);
-
   const roleText =
     serverRole || channelRole
       ? roleLabel({ serverRole, channelRole: channelRole ?? "member" })
@@ -150,12 +155,7 @@ function MemberProfileCard({
             <Heading slot="title" className="truncate text-sm font-semibold text-primary">
               {name}
             </Heading>
-            {online !== undefined && (
-              <span className="flex min-w-0 items-center gap-1 text-xs text-tertiary">
-                <StatusDot tone={online ? "online" : "offline"} className="size-1.5 shrink-0" />
-                <span className="truncate">{online ? m.member_online() : m.member_offline()}</span>
-              </span>
-            )}
+            {userId && <MemberOnlineStatus userId={userId} />}
           </div>
           {roleText && (
             <div className="mt-1">

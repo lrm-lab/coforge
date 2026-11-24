@@ -1,7 +1,6 @@
 import {
-  useCallback,
+  useEffect,
   useId,
-  useLayoutEffect,
   useRef,
   useState,
   type ClipboardEvent,
@@ -10,7 +9,7 @@ import {
 } from "react";
 
 import { readShortcutBindings } from "#src/features/shortcuts/shortcut-bindings";
-import { useResizeObserver } from "#src/hooks/use-resize-observer";
+import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { isApplePlatform } from "#src/lib/platform";
 import { cx } from "#src/utils/cx";
 import {
@@ -26,6 +25,7 @@ const DRAFT_LINE_CLASS = "pe-3 text-md";
 
 const BESIDE_LEADING_CLASS = "ps-1";
 const INSET_CLASS = "ps-3";
+const OVERFLOW_TOLERANCE_PX = 0.5;
 
 export function focusDraftEnd(textarea: HTMLTextAreaElement | null) {
   if (!textarea) return;
@@ -83,17 +83,39 @@ export function ComposerField({
   const lastCompositionEndAtRef = useRef<number | null>(null);
   const stacksAnyway = alwaysStacked || forcesStackedLayout(value, attachmentCount);
   const lineMirrorText = stacksAnyway ? "" : `${value}\n${placeholder}`;
-  const lineMirrorRef = useRef<HTMLSpanElement>(null);
+  const mirrorBoxRef = useRef<HTMLDivElement>(null);
+  const mirrorTextRef = useRef<HTMLDivElement>(null);
   const [overflowsLine, setOverflowsLine] = useState(false);
-  const measureLine = useCallback(() => {
-    const mirror = lineMirrorRef.current;
-    if (mirror) setOverflowsLine(mirror.scrollWidth > mirror.clientWidth);
-  }, []);
-  useLayoutEffect(measureLine, [lineMirrorText, measureLine]);
-  useResizeObserver({ ref: lineMirrorRef, onResize: measureLine });
+
+  useEffect(() => {
+    if (stacksAnyway) return;
+    const box = mirrorBoxRef.current;
+    const text = mirrorTextRef.current;
+    if (!box || !text || typeof ResizeObserver === "undefined") return;
+    let boxWidth = 0;
+    let textWidth = 0;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const size = entry.borderBoxSize?.[0]?.inlineSize ?? entry.contentRect.width;
+        if (entry.target === box) boxWidth = size;
+        else if (entry.target === text) textWidth = size;
+      }
+      if (boxWidth > 0) setOverflowsLine(textWidth - boxWidth > OVERFLOW_TOLERANCE_PX);
+    });
+    observer.observe(box);
+    observer.observe(text);
+    return () => observer.disconnect();
+  }, [stacksAnyway]);
+
   const stacked = stacksAnyway || overflowsLine;
   const barRow = stacked ? "row-start-3" : "row-start-1";
   const oneLineInset = leading ? BESIDE_LEADING_CLASS : INSET_CLASS;
+
+  const handleChooseSendMode = useLatestCallback((wantTask: boolean) => {
+    if (onTaskMode) onTaskMode(wantTask);
+    else onSubmit(wantTask);
+    requestAnimationFrame(() => focusDraftEnd(completion.textareaRef.current));
+  });
 
   function keyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (completion.handleKeyDown(event, isComposingRef.current)) return;
@@ -132,10 +154,6 @@ export function ComposerField({
       <label htmlFor={id} className="sr-only">
         {label}
       </label>
-      {/* One grid for both shapes: on one line `+`, the text and send share a row; stacked, the
-          text spans the top, the attachments sit under it, and `+` and send drop to a bar whose
-          middle cell is the one-line text column (so neither may change width between shapes).
-          Only classes change, so the textarea (focus, caret, IME state) is never remounted. */}
       <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-x-1">
         <textarea
           id={id}
@@ -175,19 +193,23 @@ export function ComposerField({
             stacked ? cx("col-span-full", INSET_CLASS) : cx("col-start-2", oneLineInset),
           )}
         />
-        {/* The draft and placeholder, unwrapped, in the one-line column: wider means a wrap. */}
-        <span
-          ref={lineMirrorRef}
+        <div
+          ref={mirrorBoxRef}
           aria-hidden="true"
           className={cx(
-            "invisible col-start-2 h-0 min-w-0 overflow-hidden whitespace-pre",
-            DRAFT_LINE_CLASS,
-            oneLineInset,
+            "pointer-events-none invisible col-start-2 h-0 min-w-0 overflow-hidden",
             barRow,
           )}
         >
-          {lineMirrorText}
-        </span>
+          {!stacksAnyway && (
+            <div
+              ref={mirrorTextRef}
+              className={cx("w-max whitespace-pre", DRAFT_LINE_CLASS, oneLineInset)}
+            >
+              {lineMirrorText}
+            </div>
+          )}
+        </div>
         {below}
         {leading?.(cx("col-start-1", barRow, stacked && "mt-1"))}
         {actions ? (
@@ -198,11 +220,7 @@ export function ComposerField({
             taskMode={taskMode}
             isDisabled={sendDisabled}
             label={sendLabel}
-            onChoose={(wantTask) => {
-              if (onTaskMode) onTaskMode(wantTask);
-              else onSubmit(wantTask);
-              requestAnimationFrame(() => focusDraftEnd(completion.textareaRef.current));
-            }}
+            onChoose={handleChooseSendMode}
             className={cx("col-start-3", barRow, stacked && "mt-1")}
           />
         )}

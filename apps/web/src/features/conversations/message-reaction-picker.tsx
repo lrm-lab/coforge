@@ -1,4 +1,4 @@
-import { useRef, useState, type ComponentProps } from "react";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
 import { FaceSmile } from "@untitledui/icons";
 import { Popover as AriaPopover } from "react-aria-components";
 
@@ -32,13 +32,28 @@ export function FaceSmilePlus({ className, ...props }: ComponentProps<"svg">) {
   );
 }
 
-export function MessageReactionPicker({ onPick }: { onPick: (emoji: string) => void }) {
+export function MessageReactionPicker({
+  onPick,
+  start,
+  onStarted,
+}: {
+  onPick: (emoji: string) => void;
+  start?: "focus" | "open";
+  onStarted?: () => void;
+}) {
   const label = m.conversation_add_reaction();
   const moreLabel = m.conversation_more_reactions();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    if (!start) return;
+    triggerRef.current?.focus();
+    if (start === "open") setIsOpen(true);
+    onStarted?.();
+  }, [start, onStarted]);
 
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
