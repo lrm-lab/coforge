@@ -35,9 +35,6 @@ function viewerMemberRow(db: PrismaClient, channelId: string, userId: string) {
   return db.conversationMember.findUnique({
     where: { conversationId_userId: { conversationId: channelId, userId } },
     include: {
-      // Every thread the viewer ever read or followed here, so only the columns the page sends.
-      threadReads: { select: { rootMessageId: true, readThroughSequence: true } },
-      threadFollows: { where: { unfollowedAt: null }, select: { rootMessageId: true } },
       user: { select: { username: true } },
       pins: { select: { sortOrder: true } },
     },
