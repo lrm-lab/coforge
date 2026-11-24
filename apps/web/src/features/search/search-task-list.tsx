@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import type { TaskStatus } from "@lrm/coforge-sdk/internal";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence } from "motion/react";
+import * as motion from "motion/react-m";
 
 import { ChannelPlace } from "#src/features/conversations/channel-name";
 import { conversationRoute } from "#src/features/conversations/last-conversation";

@@ -16,7 +16,8 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { MessageQuestionCircle, Pin01 } from "@untitledui/icons";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence } from "motion/react";
+import * as motion from "motion/react-m";
 
 import { Button } from "#src/components/base/buttons/button";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";

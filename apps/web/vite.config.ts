@@ -20,11 +20,16 @@ import {
 // to the package root, and each `@lrm/coforge-sdk/internal/<name>` subpath to
 // `src/internal/<name>.ts`, as the package's own `"./internal/*"` export does.
 const coforgeSdk = fileURLToPath(new URL("../../packages/coforge-sdk", import.meta.url));
+const paraglideViteOutdir = fileURLToPath(new URL("./dist-ssr/paraglide", import.meta.url));
 const workspaceAliases = [
   { find: /^@lrm\/coforge-sdk\/internal$/, replacement: coforgeSdk },
   {
     find: /^@lrm\/coforge-sdk\/internal\/(.+)$/,
     replacement: `${coforgeSdk}/src/internal/$1.ts`,
+  },
+  {
+    find: /^#src\/paraglide\/(.+)$/,
+    replacement: `${paraglideViteOutdir}/$1`,
   },
 ];
 
@@ -40,6 +45,8 @@ compilerPreset.rolldown.filter = {
       "**/src/generated/**",
       "**/src/routes/api/**",
       "**/src/paraglide/**",
+      "**/dist-ssr/paraglide/**",
+      "virtual:paraglide/**",
       "**/packages/**",
     ],
   },
@@ -159,7 +166,12 @@ const config = defineConfig({
         });
       },
     },
-    paraglideVitePlugin(paraglideOptions),
+    paraglideVitePlugin({
+      ...paraglideOptions,
+      outdir: "./dist-ssr/paraglide",
+      outputStructure: "virtual-modules",
+      messageModuleSize: 1,
+    }),
     tanstackStart({
       // Default protection only covers `*.server.*` file names; also keep the
       // whole `src/server/` tree and the generated Prisma client out of the

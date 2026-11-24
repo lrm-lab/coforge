@@ -3,10 +3,10 @@ import codexMark from "@lobehub/icons-static-svg/icons/codex.svg";
 import cursorMark from "@lobehub/icons-static-svg/icons/cursor.svg";
 import kiroMark from "@lobehub/icons-static-svg/icons/kiro-color.svg";
 import piMark from "@lobehub/icons-static-svg/icons/pi.svg";
-import { useReducedMotion } from "motion/react";
 import { useEffect, useState } from "react";
 
 import AnimatedGradient from "#src/components/spell/animated-gradient";
+import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 
@@ -70,7 +70,7 @@ export function useWebGl2() {
  */
 export function LandingBrandPanel({ className }: { className?: string }) {
   const gradientReady = useWebGl2();
-  const reducedMotion = useReducedMotion() ?? false;
+  const reducedMotion = usePrefersReducedMotion();
   return (
     <div
       className={cx(

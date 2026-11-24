@@ -9,7 +9,8 @@ import {
   type KeyboardEvent,
 } from "react";
 import { ChevronLeft, ChevronRight, XClose } from "@untitledui/icons";
-import { AnimatePresence, motion, useDragControls, useIsPresent } from "motion/react";
+import { AnimatePresence, useDragControls, useIsPresent } from "motion/react";
+import * as motion from "motion/react-m";
 import { mergeProps, useToast, useToastRegion } from "react-aria";
 import { Button as AriaButton } from "react-aria-components";
 import type { QueuedToast, ToastState } from "react-stately";

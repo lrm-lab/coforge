@@ -2,7 +2,8 @@ import { channelGlyph } from "#src/features/conversations/channel-name";
 import { GroupAvatar } from "#src/features/conversations/group-avatar";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Link } from "@tanstack/react-router";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence } from "motion/react";
+import * as motion from "motion/react-m";
 
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { agentDisplay } from "#src/features/agents/agent-status-display";

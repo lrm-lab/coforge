@@ -7,7 +7,8 @@ import {
   type RefObject,
 } from "react";
 import { AlertCircle, Check, InfoCircle, XClose } from "@untitledui/icons";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence } from "motion/react";
+import * as motion from "motion/react-m";
 import { Button as AriaButton } from "react-aria-components";
 
 import { Spinner } from "#src/components/ui/spinner";

@@ -1,6 +1,5 @@
 import { useCallback, useId, useRef, useState, type FormEvent } from "react";
 import { Link, useBlocker, type ShouldBlockFn } from "@tanstack/react-router";
-import { useReducedMotion } from "motion/react";
 import { ArrowLeft } from "@untitledui/icons";
 
 import { PhoneFormBar } from "#src/components/ui/phone-form-bar";
@@ -8,6 +7,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { Alert } from "#src/components/ui/alert";
 import { UnsavedChangesDialog } from "#src/components/ui/unsaved-changes-dialog";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -123,7 +123,7 @@ export function AppEditor({
     ...(editing ? [{ id: ids.danger, title: m.apps_section_danger() }] : []),
   ];
   const [active, setActive] = useActiveSection(scroller, sections);
-  const reducedMotion = useReducedMotion() ?? false;
+  const reducedMotion = usePrefersReducedMotion();
   const tooLong = whenToUseLength(draft) > APP_WHEN_TO_USE_MAX_LENGTH;
   const snapshot = () =>
     JSON.stringify({

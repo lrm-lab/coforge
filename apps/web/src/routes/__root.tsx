@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { HeadContent, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
+import { LazyMotion } from "motion/react";
 
 import { Favicon } from "#src/components/foundations/logo/favicon";
 import { AppToastProvider } from "#src/components/ui/toast";
@@ -81,6 +82,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 const HOTKEY_DEFAULTS = { hotkey: { ignoreDefaultPrevented: true } };
 
+const loadMotionFeatures = () =>
+  import("#src/components/ui/motion-features").then((mod) => mod.default);
+
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
     <html lang={getLocale()} suppressHydrationWarning>
@@ -93,12 +97,14 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeldEnterGuard />
         <MenuHighlightTracker />
         <HotkeysProvider defaultOptions={HOTKEY_DEFAULTS}>
-          <AppToastProvider>
-            <BuildUpdateWatcher />
-            <div id="coforge-app-root" className="isolate">
-              {children}
-            </div>
-          </AppToastProvider>
+          <LazyMotion features={loadMotionFeatures} strict>
+            <AppToastProvider>
+              <BuildUpdateWatcher />
+              <div id="coforge-app-root" className="isolate">
+                {children}
+              </div>
+            </AppToastProvider>
+          </LazyMotion>
         </HotkeysProvider>
         <Scripts />
       </body>
