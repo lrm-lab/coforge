@@ -427,6 +427,8 @@ export {
   decodeAgentContextUsage,
   encodeAgentServiceTier,
   decodeAgentServiceTier,
+  encodeAgentTokenUsage,
+  decodeAgentTokenUsage,
 } from "./agent-observation-codec";
 export {
   encodeAgentSessionReport,

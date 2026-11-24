@@ -153,6 +153,29 @@ message AgentServiceTier {
   uint64 client_seq = 13;
 }
 
+message AgentTokenUsage {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string workspace_id = 3;
+  string computer_id = 4;
+  string agent_id = 5;
+  string provider = 6;
+  string launch_id = 7;
+  string session_id = 8;
+  uint64 turn_seq = 9;
+  string model = 10;
+  uint64 uncached_input_tokens = 11;
+  uint64 cache_read_tokens = 12;
+  uint64 cache_write_tokens = 13;
+  uint64 output_tokens = 14;
+  optional uint64 reasoning_output_tokens = 15;
+  optional uint64 context_used_tokens = 16;
+  optional uint64 context_window_tokens = 17;
+  uint64 observed_at_ms = 18;
+  string daemon_instance_id = 19;
+  uint64 client_seq = 20;
+}
+
 // Versioned server-to-daemon intent.
 message AgentStartIntent {
   uint32 protocol_major = 1;

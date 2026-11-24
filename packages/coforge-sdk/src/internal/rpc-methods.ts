@@ -77,6 +77,7 @@ export const RPC_METHODS = {
   agentSession: "agent:v1:session:get",
   agentSessionInvalidate: "agent:v1:session:invalidate",
   agentContextUsage: "agent:v1:context:usage",
+  agentTokenUsage: "agent:v1:token:usage",
   agentServiceTier: "agent:v1:service_tier",
   agentWorkspaceInfo: "agent:v1:workspace:info",
   agentWorkspaceReset: "agent:v1:workspace:reset",

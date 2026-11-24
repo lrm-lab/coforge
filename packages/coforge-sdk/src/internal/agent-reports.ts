@@ -147,6 +147,29 @@ export type AgentContextUsage = {
   daemonInstanceId: string;
   clientSeq: number;
 };
+export const AGENT_TOKEN_USAGE_METHOD = RPC_METHODS.agentTokenUsage;
+export type AgentTokenUsage = {
+  protocolMajor: number;
+  requestId: string;
+  workspaceId: string;
+  computerId: string;
+  agentId: string;
+  provider: RuntimeProvider;
+  launchId: string;
+  sessionId: string;
+  turnSeq: number;
+  model: string;
+  uncachedInputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens?: number;
+  contextUsedTokens?: number;
+  contextWindowTokens?: number;
+  observedAtMs: number;
+  daemonInstanceId: string;
+  clientSeq: number;
+};
 export const AGENT_SERVICE_TIER_METHOD = RPC_METHODS.agentServiceTier;
 /**
  * Fire-and-forget daemon-to-cloud notice of the service tier an Agent's launch actually observed,

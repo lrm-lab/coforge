@@ -2,11 +2,13 @@ import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import {
   AgentContextUsageSchema,
   AgentServiceTierSchema,
+  AgentTokenUsageSchema,
 } from "#src/internal/gen/coforge/rpc/v1/workspace_pb";
 import {
   RUNTIME_PROVIDER,
   type AgentContextUsage,
   type AgentServiceTier,
+  type AgentTokenUsage,
   type RuntimeProvider,
 } from "./index";
 import { AGENT_SERVICE_TIER_OBSERVED, type AgentServiceTierObserved } from "./service-tier";
@@ -153,4 +155,139 @@ function validateAgentServiceTier(value: {
     throw new Error("invalid service tier observedAtMs");
   if (!Number.isSafeInteger(value.clientSeq) || (value.clientSeq as number) < 1)
     throw new Error("invalid service tier clientSeq");
+}
+
+export function encodeAgentTokenUsage(value: AgentTokenUsage): Uint8Array {
+  validateAgentTokenUsage(value);
+  return toBinary(
+    AgentTokenUsageSchema,
+    create(AgentTokenUsageSchema, {
+      protocolMajor: value.protocolMajor,
+      requestId: value.requestId,
+      workspaceId: value.workspaceId,
+      computerId: value.computerId,
+      agentId: value.agentId,
+      provider: value.provider,
+      launchId: value.launchId,
+      sessionId: value.sessionId,
+      turnSeq: BigInt(value.turnSeq),
+      model: value.model,
+      uncachedInputTokens: BigInt(value.uncachedInputTokens),
+      cacheReadTokens: BigInt(value.cacheReadTokens),
+      cacheWriteTokens: BigInt(value.cacheWriteTokens),
+      outputTokens: BigInt(value.outputTokens),
+      ...(value.reasoningOutputTokens !== undefined
+        ? { reasoningOutputTokens: BigInt(value.reasoningOutputTokens) }
+        : {}),
+      ...(value.contextUsedTokens !== undefined
+        ? { contextUsedTokens: BigInt(value.contextUsedTokens) }
+        : {}),
+      ...(value.contextWindowTokens !== undefined
+        ? { contextWindowTokens: BigInt(value.contextWindowTokens) }
+        : {}),
+      observedAtMs: BigInt(value.observedAtMs),
+      daemonInstanceId: value.daemonInstanceId,
+      clientSeq: BigInt(value.clientSeq),
+    }),
+  );
+}
+
+export function decodeAgentTokenUsage(bytes: Uint8Array): AgentTokenUsage {
+  const v = fromBinary(AgentTokenUsageSchema, bytes);
+  const value = {
+    protocolMajor: v.protocolMajor,
+    requestId: v.requestId,
+    workspaceId: v.workspaceId,
+    computerId: v.computerId,
+    agentId: v.agentId,
+    provider: v.provider as RuntimeProvider,
+    launchId: v.launchId,
+    sessionId: v.sessionId,
+    turnSeq: safeUint64(v.turnSeq, "token usage turnSeq"),
+    model: v.model,
+    uncachedInputTokens: safeUint64(v.uncachedInputTokens, "token usage uncachedInputTokens"),
+    cacheReadTokens: safeUint64(v.cacheReadTokens, "token usage cacheReadTokens"),
+    cacheWriteTokens: safeUint64(v.cacheWriteTokens, "token usage cacheWriteTokens"),
+    outputTokens: safeUint64(v.outputTokens, "token usage outputTokens"),
+    ...(v.reasoningOutputTokens !== undefined
+      ? {
+          reasoningOutputTokens: safeUint64(
+            v.reasoningOutputTokens,
+            "token usage reasoningOutputTokens",
+          ),
+        }
+      : {}),
+    ...(v.contextUsedTokens !== undefined
+      ? { contextUsedTokens: safeUint64(v.contextUsedTokens, "token usage contextUsedTokens") }
+      : {}),
+    ...(v.contextWindowTokens !== undefined
+      ? {
+          contextWindowTokens: safeUint64(v.contextWindowTokens, "token usage contextWindowTokens"),
+        }
+      : {}),
+    observedAtMs: safeUint64(v.observedAtMs, "token usage observedAtMs"),
+    daemonInstanceId: v.daemonInstanceId,
+    clientSeq: safeUint64(v.clientSeq, "token usage clientSeq"),
+  };
+  validateAgentTokenUsage(value);
+  return value;
+}
+
+function validateAgentTokenUsage(value: {
+  protocolMajor: number;
+  provider: string;
+  [key: string]: unknown;
+}): asserts value is AgentTokenUsage {
+  if (
+    value.protocolMajor !== 1 ||
+    !Object.values(RUNTIME_PROVIDER).includes(value.provider as RuntimeProvider)
+  )
+    throw new Error("invalid token usage protocol/provider");
+  for (const field of [
+    "requestId",
+    "workspaceId",
+    "computerId",
+    "agentId",
+    "launchId",
+    "sessionId",
+    "daemonInstanceId",
+  ])
+    if (
+      typeof value[field] !== "string" ||
+      !(value[field] as string).trim() ||
+      (value[field] as string).length > 512
+    )
+      throw new Error(`invalid token usage ${field}`);
+  if (typeof value.model !== "string" || value.model.length > 256)
+    throw new Error("invalid token usage model");
+  if (!Number.isSafeInteger(value.turnSeq) || (value.turnSeq as number) < 1)
+    throw new Error("invalid token usage turnSeq");
+  for (const field of [
+    "uncachedInputTokens",
+    "cacheReadTokens",
+    "cacheWriteTokens",
+    "outputTokens",
+  ])
+    if (!Number.isSafeInteger(value[field]) || (value[field] as number) < 0)
+      throw new Error(`invalid token usage ${field}`);
+  if (
+    value.reasoningOutputTokens !== undefined &&
+    (!Number.isSafeInteger(value.reasoningOutputTokens) ||
+      (value.reasoningOutputTokens as number) < 0)
+  )
+    throw new Error("invalid token usage reasoningOutputTokens");
+  if (
+    value.contextUsedTokens !== undefined &&
+    (!Number.isSafeInteger(value.contextUsedTokens) || (value.contextUsedTokens as number) < 0)
+  )
+    throw new Error("invalid token usage contextUsedTokens");
+  if (
+    value.contextWindowTokens !== undefined &&
+    (!Number.isSafeInteger(value.contextWindowTokens) || (value.contextWindowTokens as number) < 1)
+  )
+    throw new Error("invalid token usage contextWindowTokens");
+  if (!Number.isSafeInteger(value.observedAtMs) || (value.observedAtMs as number) < 1)
+    throw new Error("invalid token usage observedAtMs");
+  if (!Number.isSafeInteger(value.clientSeq) || (value.clientSeq as number) < 1)
+    throw new Error("invalid token usage clientSeq");
 }
