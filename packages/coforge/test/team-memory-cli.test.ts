@@ -2,6 +2,18 @@ import { expect, test } from "bun:test";
 import { parseArgs, run } from "../index";
 import type { MessageTransport } from "#src/message-transport";
 
+test("an empty team search page with a continuation describes only that page", async () => {
+  const transport = {
+    teamMemory: async () => ({ status: "ok", entries: [], nextOffset: 10 }),
+  } as unknown as MessageTransport;
+  const output = await run(
+    ["memory", "search", "--scope", "team", "--query", "rollout"],
+    transport,
+  );
+  expect(output).toContain("Continue with --offset 10.");
+  expect(output).toContain("No matching team memory on this page.");
+});
+
 test("team writes are explicit, carry revisions and keep a stable retry identity", async () => {
   const id = "00000000-0000-4000-8000-000000000001";
   const args = [

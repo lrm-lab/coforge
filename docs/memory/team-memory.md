@@ -69,15 +69,19 @@ can permanently clear an entry and its versions. Workspace deletion cascades all
 History pages contain previews within a 12,000-byte response budget. Full historical evidence is
 available one version at a time through `get --revision`, without loading every version into context.
 Entries can cite structured Workspace-readable tasks, messages and artifacts. Exact version
-relationships record replacement or disagreement. Search omits a replaced version while its
-replacement is active and effective. Historical reads still work, with current evidence access.
+relationships record replacement or disagreement. Default search omits a replaced version while its
+replacement is active and effective. It also omits entries whose structured evidence is no longer
+Workspace-readable, including pinned entries. Historical reads still work with current evidence access.
+Follow the next offset even when a filtered page is empty.
 In the Web team-memory detail and version pages, the decision relationships view shows nearby
 versions, replacements, conflicts and readable evidence. Select a node to highlight its links
 and open the exact recorded memory revision or its evidence.
 
 When Web enables `COFORGE_TEAM_MEMORY_RECALL=true`, an Agent opening, viewing or claiming a single task
 can receive up to five current memory excerpts from the task's Project and the Workspace.
-The task request keeps working when recall fails or exceeds its 400 ms budget.
+Conflicting versions can share that budget. If an excerpt cites a conflicting version outside the
+summary, the Agent CLI prompts verification. The task request keeps working when recall fails or
+exceeds its 400 ms budget. The server logs the outcome, count and latency without task or memory text.
 
 Set `COFORGE_TEAM_MEMORY_REVIEW=true` on Web to enable the review queue. A public task
 marked done records one draft for that exact Task revision. Workspace members can also submit new

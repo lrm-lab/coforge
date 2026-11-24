@@ -83,7 +83,7 @@ test("a historical graph finds reverse replacements and keeps references at exac
   });
 });
 
-test("visible task evidence carries its channel and revision, and is withdrawn with the channel", async () => {
+test("withdrawing task evidence immediately removes its entries from recall, including pinned entries", async () => {
   const { workspaceId, userId } = principal;
   const channel = await db.conversation.create({
     data: {
@@ -104,9 +104,21 @@ test("visible task evidence carries its channel and revision, and is withdrawn w
       status: "done",
     },
   });
-  const record = await save("Use verified TLS rollout", {
-    evidence: [{ kind: "task", id: task.id, revision: task.revision }],
+  const evidence = [{ kind: "task" as const, id: task.id, revision: task.revision }];
+  const record = await save("Use verified TLS rollout", { evidence });
+  const pinned = await save("Reserve the TLS rollout window", { evidence, pinned: true });
+  const standalone = await save("Log TLS rollout latency");
+  const objection = await save("Keep the older approval policy outside this case", {
+    evidence,
+    relations: [{ kind: "conflicts_with", id: standalone.id, revision: standalone.revision }],
   });
+  const search = { operation: "search" as const, query: "TLS rollout" };
+  const ids = async (includeConflicts: boolean) =>
+    (await memory.execute(principal, { ...search, includeConflicts })).entries.map(({ id }) => id);
+  expect(await ids(false)).toEqual(expect.arrayContaining([record.id, pinned.id, standalone.id]));
+  expect(await ids(true)).toEqual(
+    expect.arrayContaining([record.id, pinned.id, standalone.id, objection.id]),
+  );
   const graph = await readTeamMemoryDecisionGraph(db, principal, { id: record.id });
   expect(graph.nodes).toContainEqual(
     expect.objectContaining({
@@ -130,6 +142,20 @@ test("visible task evidence carries its channel and revision, and is withdrawn w
   const hidden = await readTeamMemoryDecisionGraph(db, principal, { id: record.id });
   expect(hidden.nodes).toHaveLength(1);
   expect(hidden.edges).toEqual([]);
+  expect(await ids(false)).toEqual([standalone.id]);
+  const recalled = await memory.execute(principal, { ...search, includeConflicts: true });
+  expect(recalled.entries.map(({ id }) => id)).toEqual([standalone.id]);
+  expect(recalled.entries[0]?.relations).toContainEqual({
+    kind: "conflicts_with",
+    id: objection.id,
+    revision: objection.revision,
+  });
+  const history = await memory.execute(principal, {
+    operation: "get",
+    id: pinned.id,
+    revision: pinned.revision,
+  });
+  expect(history.entries[0]).toMatchObject({ id: pinned.id, pinned: true, evidence: [] });
 });
 
 test("a graph omits withdrawn evidence and cannot be opened without Workspace membership", async () => {

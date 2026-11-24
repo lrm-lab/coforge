@@ -94,6 +94,12 @@ export async function runTeamMemoryCommand(
     ...(result.status === "deleted"
       ? ["Team memory deleted; its content and history were removed."]
       : []),
-    ...(!result.entries.length && result.status === "ok" ? ["No matching team memory."] : []),
+    ...(!result.entries.length && result.status === "ok"
+      ? [
+          result.nextOffset === undefined
+            ? "No matching team memory."
+            : "No matching team memory on this page.",
+        ]
+      : []),
   ].join("\n\n");
 }

@@ -62,6 +62,24 @@ test("a verified correction replaces the current fact, preserves history and ref
   );
 });
 
+test("a fresh session resumes current work with the corrected decision", async () => {
+  const { root, memory } = await subject();
+  const original = (await memory.execute(purchased)).entries[0]!;
+  await memory.execute({
+    ...purchased,
+    revision: original.revision,
+    content: "备案已完成，下一步检查预览路由。",
+    source: "用户复核",
+  });
+  const next = "继续检查预览路由，等待 CDN 配置。";
+  await writeFile(join(root, "notes/active-context.md"), next);
+
+  const startup = await buildStartupMemoryBlock({ agentWorkspaceDirectory: root });
+  expect(startup?.text).toContain(next);
+  expect(startup?.text).toContain("备案已完成");
+  expect(startup?.text).not.toContain("ICP 备案办理中");
+});
+
 test("simultaneous updates cannot both replace the same version", async () => {
   const { memory } = await subject();
   const first = (await memory.execute(purchased)).entries[0]!;

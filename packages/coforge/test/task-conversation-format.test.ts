@@ -52,6 +52,27 @@ test("view names the task's Project under its assignee, when the server sends on
   expect(formatTaskView(view())).not.toContain("Project:");
 });
 
+test("task view tells the Agent to verify a conflicting revision omitted from recall", () => {
+  const approval = {
+    id: "approval",
+    revision: 1,
+    title: "Rollout approved",
+    content: "The rollout is ready.",
+    source: "Review",
+    applicability: "production",
+    conflictsWith: [{ id: "objection", revision: 2 }],
+  };
+  const objection = { ...approval, id: "objection", revision: 2, conflictsWith: [] };
+  expect(
+    formatTaskView(view({ relatedMemory: [approval, { ...objection, revision: 1 }] })),
+  ).toContain(
+    "Some conflicting versions are missing from this summary. Check the full versions before acting.",
+  );
+  expect(formatTaskView(view({ relatedMemory: [approval, objection] }))).not.toContain(
+    "Some conflicting versions are missing",
+  );
+});
+
 test("a task with its conversation lists the messages oldest first and what to run next", () => {
   expect(formatTaskView(view())).toBe(
     [
