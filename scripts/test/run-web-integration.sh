@@ -68,16 +68,80 @@ export APP_PRESENCE_TEST_REDIS_URL="$redis"
 export AGENT_TURN_INTERRUPT_TEST_REDIS_URL="$redis"
 export RUNTIME_AUTH_TEST_REDIS_URL="$redis"
 
-cd "$root/apps/web"
 files=()
-for file in "$root"/apps/web/test/*.integration*.ts; do
-  # A glob that matched nothing would leave `bun test` with no arguments, and it would then discover
-  # and run every test in the package instead - a silent change of subject.
-  [ -e "$file" ] || {
-    printf 'No integration files matched under %s/apps/web/test.\n' "$root" >&2
-    exit 1
-  }
-  files+=("$file")
-done
-files+=("$root"/scripts/migration-safety/*.integration.ts)
-bun test --preload ./test/web-integration-queue.preload.ts "${files[@]}"
+if [ "$#" -gt 0 ]; then
+  for arg in "$@"; do
+    if [ -e "$arg" ]; then
+      files+=("$(CDPATH='' cd -- "$(dirname -- "$arg")" && pwd)/$(basename -- "$arg")")
+    else
+      files+=("$arg")
+    fi
+  done
+else
+  for file in "$root"/apps/web/test/*.integration*.ts; do
+    # A glob that matched nothing would leave `bun test` with no arguments, and it would then discover
+    # and run every test in the package instead - a silent change of subject.
+    [ -e "$file" ] || {
+      printf 'No integration files matched under %s/apps/web/test.\n' "$root" >&2
+      exit 1
+    }
+    files+=("$file")
+  done
+  files+=("$root"/scripts/migration-safety/*.integration.ts)
+fi
+
+cd "$root/apps/web"
+unset COFORGE_SCRATCH_DATABASE_TEMPLATE COFORGE_SCRATCH_DATABASE_TEMPLATE_BASE_URL COFORGE_SCRATCH_DATABASE_CREATED_FILE
+scratch_template="scratch_template_$(bun -e 'console.log(crypto.randomUUID().replaceAll("-", ""))')"
+scratch_template_marker=$(mktemp)
+active_child_pid=""
+stop_active_child() {
+  if [ -n "${active_child_pid:-}" ]; then
+    local pid="$active_child_pid"
+    active_child_pid=""
+    kill -TERM "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  fi
+}
+run_cancellable() {
+  "$@" &
+  active_child_pid=$!
+  local status=0
+  wait "$active_child_pid" || status=$?
+  active_child_pid=""
+  return "$status"
+}
+cleanup_scratch_template() {
+  local exit_code=$?
+  trap '' INT TERM
+  stop_active_child
+  if [ -n "${scratch_template_marker:-}" ] && [ -f "$scratch_template_marker" ]; then
+    local marker="$scratch_template_marker"
+    scratch_template_marker=""
+    local drop_status=0
+    if [ -s "$marker" ]; then
+      bun "$root/apps/web/test/support/scratch-database.ts" cleanup "$marker" || drop_status=$?
+    fi
+    rm -f "$marker"
+    if [ "$exit_code" -eq 0 ] && [ "$drop_status" -ne 0 ]; then
+      exit "$drop_status"
+    fi
+  fi
+  exit "$exit_code"
+}
+handle_signal() {
+  local code="$1"
+  trap '' INT TERM
+  stop_active_child
+  exit "$code"
+}
+trap cleanup_scratch_template EXIT
+trap 'handle_signal 130' INT
+trap 'handle_signal 143' TERM
+
+export COFORGE_SCRATCH_DATABASE_CREATED_FILE="$scratch_template_marker"
+run_cancellable bun "$root/apps/web/test/support/scratch-database.ts" prepare "$scratch_template"
+export COFORGE_SCRATCH_DATABASE_TEMPLATE="$scratch_template"
+export COFORGE_SCRATCH_DATABASE_TEMPLATE_BASE_URL="$database"
+
+run_cancellable bun test --preload ./test/web-integration-queue.preload.ts "${files[@]}"
