@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Outlet,
   createFileRoute,
@@ -7,15 +7,21 @@ import {
   useRouter,
   useSearch,
 } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { latestComputerVersionQuery } from "#src/features/computers/latest-version.query";
 import { AddComputerDialog } from "#src/features/computers/add-computer-dialog";
+import { CloudDesktopOriginProvider } from "#src/features/computers/cloud-desktop-origin";
 import { ComputerLayout } from "#src/features/computers/computer-layout";
 import { ComputersPending } from "#src/features/computers/computers-pending";
 import { ensureCloudComputer } from "#src/features/computers/cloud-computers.functions";
 import { listComputerConnections } from "#src/features/computers/computer-connection.functions";
 import { getCloudDesktopOrigin } from "#src/features/computers/cloud-desktop-origin.functions";
-import { listComputers } from "#src/features/computers/computers.functions";
+import {
+  readComputerRestartStatus,
+  restartComputer,
+} from "#src/features/computers/computer-restart.functions";
+import { listComputers, upgradeComputer } from "#src/features/computers/computers.functions";
 import {
   activeUpgradingComputerIds,
   computerUpgradeStatusQuery,
@@ -33,9 +39,6 @@ const appRoute = getRouteApi("/w/$workspaceSlug");
 
 export const Route = createFileRoute("/w/$workspaceSlug/_computers")({
   loader: async ({ context }) => {
-    // Creating a Workspace already starts this. Opening the page ensures it
-    // again, including an attach that waited because the container was not
-    // ready yet. A deployment without a cluster still shows the computers it has.
     await ensureCloudComputer();
     const [computers, preferences, installOrigin, desktopOrigin] = await Promise.all([
       listComputers(),
@@ -43,7 +46,6 @@ export const Route = createFileRoute("/w/$workspaceSlug/_computers")({
       getInstallOrigin(),
       getCloudDesktopOrigin(),
     ]);
-    // An upgrade still running is followed by the Workspace shell (`computer-upgrade-watcher.tsx`).
     for (const computer of computers) {
       const activeId =
         computer.upgrade && upgradeRunning(computer.upgrade)
@@ -78,7 +80,7 @@ export const Route = createFileRoute("/w/$workspaceSlug/_computers")({
 });
 
 function ComputersPage() {
-  const { computers, installOrigin } = Route.useLoaderData();
+  const { computers, installOrigin, desktopOrigin } = Route.useLoaderData();
   const mountedAtRef = useRef(Date.now());
   const followedUpgrades = useQuery(followedComputerUpgradesQuery).data ?? [];
   const followedStatuses = useQueries({
@@ -87,31 +89,53 @@ function ComputersPage() {
       enabled: false,
     })),
   });
-  const terminalUpgradeRequestIds = new Set(
-    computers.flatMap((computer) =>
-      computer.upgrade &&
-      (computer.upgrade.status === "failed" || computer.upgrade.status === "completed")
-        ? [computer.upgrade.requestId]
-        : [],
-    ),
-  );
-  const upgradingComputerIds = activeUpgradingComputerIds(
-    followedUpgrades,
-    followedStatuses.map((query) => query.data),
-    Date.now(),
-    terminalUpgradeRequestIds,
-    followedStatuses.map((query) => query.dataUpdatedAt),
-    mountedAtRef.current,
-  );
+  const upgradingKey = followedUpgrades
+    .map(
+      (entry, index) =>
+        `${entry.computerId}:${entry.requestId}:${followedStatuses[index]?.data?.status ?? ""}:${followedStatuses[index]?.dataUpdatedAt ?? 0}`,
+    )
+    .join("|");
+  const upgradingComputerIds = useMemo(() => {
+    const terminalUpgradeRequestIds = new Set(
+      computers.flatMap((computer) =>
+        computer.upgrade &&
+        (computer.upgrade.status === "failed" || computer.upgrade.status === "completed")
+          ? [computer.upgrade.requestId]
+          : [],
+      ),
+    );
+    return activeUpgradingComputerIds(
+      followedUpgrades,
+      followedStatuses.map((query) => query.data),
+      Date.now(),
+      terminalUpgradeRequestIds,
+      followedStatuses.map((query) => query.dataUpdatedAt),
+      mountedAtRef.current,
+    );
+  }, [computers, upgradingKey]);
   const router = useRouter();
-  const releaseChannels = [
-    ...new Set(computers.map((computer) => computer.releaseChannel ?? "latest")),
-  ];
+  const requestUpgrade = useServerFn(upgradeComputer);
+  const requestRestart = useServerFn(restartComputer);
+  const readRestart = useServerFn(readComputerRestartStatus);
+  const releaseChannels = useMemo(
+    () => [...new Set(computers.map((computer) => computer.releaseChannel ?? "latest"))],
+    [computers],
+  );
   const latestComputerVersions = useQueries({
     queries: releaseChannels.map((channel) => latestComputerVersionQuery(channel)),
   });
-  const latestByChannel = new Map(
-    releaseChannels.map((channel, index) => [channel, latestComputerVersions[index]?.data ?? null]),
+  const latestVersionKey = releaseChannels
+    .map((channel, index) => `${channel}:${latestComputerVersions[index]?.data ?? ""}`)
+    .join("|");
+  const latestByChannel = useMemo(
+    () =>
+      new Map(
+        releaseChannels.map((channel, index) => [
+          channel,
+          latestComputerVersions[index]?.data ?? null,
+        ]),
+      ),
+    [latestVersionKey],
   );
   const { currentWorkspace } = appRoute.useLoaderData();
   const params = useParams({
@@ -123,8 +147,6 @@ function ComputersPage() {
     shouldThrow: false,
   })?.add;
   const [addComputerOpen, setAddComputerOpen] = useState(addRequested === 1);
-  // `/computers?add=1` opens the dialog once; closing it drops the parameter so the page shows
-  // its usual selection.
   const dismissAdd = (open: boolean) => {
     setAddComputerOpen(open);
     const workspaceSlug = currentWorkspace?.slug;
@@ -170,11 +192,22 @@ function ComputersPage() {
   }, [addComputerOpen, connectedComputerName, connectionProbe.data, router]);
 
   return (
-    <>
+    <CloudDesktopOriginProvider origin={desktopOrigin}>
       <ComputerLayout
         computers={computers}
         selectedComputerId={params?.computerId}
         onAdd={() => setAddComputerOpen(true)}
+        onUpgradeComputer={async (computerId, requestId, target) => {
+          const status = await requestUpgrade({ data: { computerId, requestId, target } });
+          if (status.status === "accepted") void router.invalidate();
+          return status;
+        }}
+        onRestartComputer={(computerId, requestId) =>
+          requestRestart({ data: { computerId, requestId } })
+        }
+        onReadRestartStatus={(computerId, requestId) =>
+          readRestart({ data: { computerId, requestId } })
+        }
         latestComputerVersions={latestByChannel}
         upgradingComputerIds={upgradingComputerIds}
       >
@@ -197,6 +230,6 @@ function ComputersPage() {
           });
         }}
       />
-    </>
+    </CloudDesktopOriginProvider>
   );
 }

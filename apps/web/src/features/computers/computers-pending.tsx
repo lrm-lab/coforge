@@ -8,35 +8,50 @@ import { BackToComputers } from "./back-to-computers";
 
 export function ComputersPending() {
   return (
-    <main aria-busy="true" className="flex h-full min-w-0">
+    <main aria-busy="true" className="flex h-full min-w-0 flex-col overflow-hidden bg-primary">
       <p role="status" className="sr-only">
         {m.computer_loading()}
       </p>
-      <nav
-        aria-label={m.computer_connected_list()}
-        className="hidden w-80 shrink-0 flex-col overflow-hidden border-r border-secondary bg-primary md:flex"
+      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-page">
+        <h1 className="text-lg font-semibold text-primary">{m.computer_page_title()}</h1>
+        <Skeleton aria-hidden="true" className="h-3.5 w-40 motion-safe:animate-pulse" />
+      </header>
+      <div
+        aria-hidden="true"
+        className="flex flex-wrap items-center gap-2 border-b border-secondary px-page py-2.5 motion-safe:animate-pulse"
       >
-        <div className="flex h-12 shrink-0 items-center border-b border-secondary px-page">
-          <h1 className="text-lg font-semibold text-primary">{m.computer_page_title()}</h1>
-        </div>
-        <div className="mt-2 flex h-7 shrink-0 items-center pl-5">
-          <span className="text-xs font-semibold text-tertiary">{m.computer_page_title()}</span>
-        </div>
-        <div aria-hidden="true" className="space-y-1 px-3 pt-1 motion-safe:animate-pulse">
-          {["w-3/5", "w-2/5", "w-1/2"].map((width) => (
-            <div key={width} className="flex h-16 items-center gap-3 px-3">
-              <Skeleton className="size-9 shrink-0 rounded-lg" />
-              <div className="min-w-0 flex-1 space-y-2">
-                <Skeleton className={`h-3 ${width}`} />
-                <Skeleton className="h-3 w-4/5" />
+        <Skeleton className="h-9 w-56 rounded-lg" />
+        <Skeleton className="h-9 w-24 rounded-lg" />
+        <Skeleton className="h-9 w-24 rounded-lg" />
+        <Skeleton className="ms-auto h-9 w-24 rounded-lg" />
+      </div>
+      <div
+        aria-hidden="true"
+        className="min-h-0 flex-1 overflow-y-auto px-page py-4 motion-safe:animate-pulse"
+      >
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {[0, 1, 2].map((index) => (
+            <div
+              key={index}
+              className="flex flex-col gap-3 rounded-xl border border-secondary bg-primary p-3.5"
+            >
+              <div className="flex items-center gap-2.5">
+                <Skeleton className="size-9 shrink-0 rounded-lg" />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <Skeleton className="h-4 w-3/5" />
+                  <Skeleton className="h-3 w-2/5" />
+                </div>
               </div>
+              <Skeleton className="h-5 w-1/2" />
+              <div className="grid grid-cols-2 gap-3">
+                <Skeleton className="h-8 rounded-md" />
+                <Skeleton className="h-8 rounded-md" />
+              </div>
+              <Skeleton className="h-10 rounded-md" />
             </div>
           ))}
         </div>
-      </nav>
-      <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-primary">
-        <ComputerDetailSkeleton announce={false} />
-      </section>
+      </div>
     </main>
   );
 }

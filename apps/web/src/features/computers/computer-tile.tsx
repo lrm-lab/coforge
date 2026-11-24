@@ -1,5 +1,5 @@
 import { ProgressBar } from "react-aria-components";
-import { ArrowUp } from "@untitledui/icons";
+import { AlertCircle, ArrowUp } from "@untitledui/icons";
 import { Spinner } from "#src/components/ui/spinner";
 
 import { StatusDot } from "#src/components/ui/status-dot";
@@ -25,11 +25,13 @@ export function ComputerTile({
   online,
   updateAvailableVersion,
   upgrading = false,
+  upgradeFailed = false,
 }: {
   computer: ComputerIdentity;
   online?: boolean;
   updateAvailableVersion?: string | null;
   upgrading?: boolean;
+  upgradeFailed?: boolean;
 }) {
   const Icon = computerIcon(computer);
 
@@ -58,6 +60,19 @@ export function ComputerTile({
         >
           <Spinner className="size-full" />
         </ProgressBar>
+      ) : upgradeFailed ? (
+        <span className={cn("absolute", dims.badgeOffset)}>
+          <span
+            aria-hidden="true"
+            className={cn(
+              "flex items-center justify-center rounded-full border-2 border-primary bg-error-solid",
+              dims.badge,
+            )}
+          >
+            <AlertCircle className={cn(dims.badgeIcon, "text-fg-white")} />
+          </span>
+          <span className="sr-only">{m.computer_upgrade_failed_title_generic()}</span>
+        </span>
       ) : (
         updateAvailableVersion && (
           <span className={cn("absolute", dims.badgeOffset)}>

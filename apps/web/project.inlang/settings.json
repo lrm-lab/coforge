@@ -51,6 +51,7 @@
       "./messages/{locale}/notification-settings.json",
       "./messages/{locale}/computer-refusal.json",
       "./messages/{locale}/computer.json",
+      "./messages/{locale}/computer-overview.json",
       "./messages/{locale}/computer-desktop.json",
       "./messages/{locale}/computer-upgrade-progress.json",
       "./messages/{locale}/workspace.json",

@@ -6,7 +6,7 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { useAppToast } from "#src/components/ui/toast";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { m } from "#src/paraglide/messages";
-import { BackToComputers } from "./back-to-computers";
+import { BackToComputers, ComputerDetailPaneActions } from "./back-to-computers";
 import { CloudDesktopOverlay } from "./cloud-desktop-overlay";
 import { cloudDesktopOpening, cloudDesktopUrl, openCloudDesktopWindow } from "./cloud-desktop-url";
 import { useCloudDesktopOrigin } from "./cloud-desktop-origin";
@@ -148,6 +148,7 @@ export function ComputerDetailHeader({
         </>
       ) : null}
       {menu}
+      <ComputerDetailPaneActions />
     </div>
   );
 }
