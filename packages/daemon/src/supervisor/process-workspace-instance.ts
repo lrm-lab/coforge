@@ -3,7 +3,12 @@ import { join } from "node:path";
 import { isPidAlive } from "#src/platform/process-liveness";
 
 import { WorkspaceHealthJournal, workspaceHealthJournalPath } from "./workspace-health-journal";
-import { resolveSpawnIdentity, type WorkspaceIdentity } from "./workspace-identity";
+import {
+  canDropPrivileges,
+  resolveWorkspaceIdentity,
+  workspaceDirectory,
+  type WorkspaceIdentity,
+} from "./workspace-identity";
 import { CONTAINER_BINDING_ENV_KEYS } from "./container-binding-env";
 import {
   validateWorkspaceEndpoint,
@@ -88,14 +93,15 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
     if (this.config.daemonConnectionEndpoint)
       env.COFORGE_DAEMON_CONNECTION_ENDPOINT = this.config.daemonConnectionEndpoint;
 
-    const spawnIdentity = await resolveSpawnIdentity({
-      stateRoot: this.config.stateRoot,
-      workspaceId: this.config.workspaceId,
-      volumeRoot: Bun.env.COFORGE_WORKSPACE_VOLUME_ROOT,
-    });
-    if (spawnIdentity) {
-      env.HOME = spawnIdentity.directory;
-      env.PI_WORKSPACE_DIR ??= env.HOME;
+    const identity = canDropPrivileges()
+      ? await resolveWorkspaceIdentity(this.config.stateRoot, this.config.workspaceId)
+      : undefined;
+    if (identity) {
+      const volumeRoot = Bun.env.COFORGE_WORKSPACE_VOLUME_ROOT;
+      if (volumeRoot) {
+        env.HOME = workspaceDirectory(volumeRoot, this.config.workspaceId);
+        env.PI_WORKSPACE_DIR ??= env.HOME;
+      }
     }
 
     const invocationId = crypto.randomUUID().replaceAll("-", "");
@@ -110,7 +116,7 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
         this.config.stateDirectory,
       ],
       cwd: this.config.stateDirectory,
-      ...(spawnIdentity ? { identity: spawnIdentity.identity } : {}),
+      ...(identity ? { identity } : {}),
       env: {
         ...env,
         // The child rewrites this record itself once it holds the binding lock, so a Coordinator

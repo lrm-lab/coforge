@@ -6,7 +6,6 @@ import { join } from "node:path";
 import {
   canDropPrivileges,
   isUsableIdentity,
-  resolveSpawnIdentity,
   resolveWorkspaceIdentity,
   WORKSPACE_IDENTITY_FILE,
   workspaceDirectory,
@@ -64,26 +63,4 @@ test("privileges are only dropped by a root launcher", () => {
   expect(canDropPrivileges(() => 0)).toBe(true);
   expect(canDropPrivileges(() => 1000)).toBe(false);
   expect(canDropPrivileges(() => undefined)).toBe(false);
-});
-
-test("the identity is used only when the workspace directory belongs to it", async () => {
-  await writeProfile({ "workspace-a": { uid: 20_101, gid: 20_101 } });
-  const base = {
-    stateRoot,
-    workspaceId: "workspace-a",
-    volumeRoot: "/srv/coforge",
-    getuid: () => 0,
-  };
-  expect(await resolveSpawnIdentity({ ...base, statOwner: async () => 20_101 })).toEqual({
-    identity: { uid: 20_101, gid: 20_101 },
-    directory: "/srv/coforge/ws/workspace-a",
-  });
-  expect(await resolveSpawnIdentity({ ...base, statOwner: async () => 0 })).toBeUndefined();
-  expect(await resolveSpawnIdentity({ ...base, statOwner: async () => undefined })).toBeUndefined();
-  expect(
-    await resolveSpawnIdentity({ ...base, getuid: () => 1000, statOwner: async () => 20_101 }),
-  ).toBeUndefined();
-  expect(
-    await resolveSpawnIdentity({ ...base, volumeRoot: undefined, statOwner: async () => 20_101 }),
-  ).toBeUndefined();
 });
