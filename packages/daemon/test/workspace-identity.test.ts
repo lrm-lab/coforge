@@ -209,50 +209,28 @@ test("files an earlier run left behind are handed over too", async () => {
   expect(changed).toContain(join(ws, "daemon.sock"));
 });
 
-test("a version directory only the launcher can enter is opened for traversal, not reading", async () => {
-  const executable = "/root/.coforge/computer/install/versions/0.1.34-dev.6/coforge-computer";
+test("the child only keeps the drop when it can exec the copy it is handed", async () => {
+  const volumeRoot = "/srv/coforge";
+  const executable = "/root/.coforge/computer/install/active/coforge-computer";
   const modes: Record<string, { mode: number; directory: boolean }> = {
     "/": { mode: 0o755, directory: true },
     "/srv": { mode: 0o755, directory: true },
     "/srv/coforge": { mode: 0o755, directory: true },
     "/srv/coforge/computer": { mode: 0o755, directory: true },
     "/srv/coforge/computer/install": { mode: 0o755, directory: true },
-    "/srv/coforge/computer/install/versions": { mode: 0o755, directory: true },
-    "/srv/coforge/computer/install/versions/0.1.34-dev.6": { mode: 0o700, directory: true },
-    "/srv/coforge/computer/install/versions/0.1.34-dev.6/coforge-computer": {
-      mode: 0o755,
-      directory: false,
-    },
+    "/srv/coforge/computer/install/active": { mode: 0o755, directory: true },
+    "/srv/coforge/computer/install/active/coforge-computer": { mode: 0o755, directory: false },
   };
-  const granted: string[] = [];
-  const result = await executableForIdentity({
-    executablePath: executable,
-    identity: { uid: 20_101, gid: 20_101 },
-    volumeRoot: "/srv/coforge",
-    inspect: async (path) => {
-      const entry = modes[path];
-      if (!entry) throw new Error(`ENOENT ${path}`);
-      return entry;
-    },
-    grantTraverse: async (path, mode) => {
-      granted.push(path);
-      modes[path] = { mode, directory: true };
-    },
-  });
-  expect(result).toBe("/srv/coforge/computer/install/versions/0.1.34-dev.6/coforge-computer");
-  expect(granted).toEqual(["/srv/coforge/computer/install/versions/0.1.34-dev.6"]);
-  // `o+x` only: the agent may pass through the directory, never list it.
-  expect(modes["/srv/coforge/computer/install/versions/0.1.34-dev.6"]?.mode).toBe(0o711);
-});
-
-test("a path that cannot be opened at all keeps the launcher identity", async () => {
-  const result = await executableForIdentity({
-    executablePath: "/root/.coforge/bin/coforge-computer",
-    identity: { uid: 20_101, gid: 20_101 },
-    volumeRoot: "/srv/coforge",
-    inspect: async () => {
-      throw new Error("ENOENT");
-    },
-  });
-  expect(result).toBeUndefined();
+  const inspect = async (path: string) => {
+    const entry = modes[path];
+    if (!entry) throw new Error(`ENOENT ${path}`);
+    return entry;
+  };
+  expect(
+    await executableForIdentity(executable, { uid: 20_101, gid: 20_101 }, volumeRoot, inspect),
+  ).toBe("/srv/coforge/computer/install/active/coforge-computer");
+  modes["/srv/coforge/computer/install/active"] = { mode: 0o700, directory: true };
+  expect(
+    await executableForIdentity(executable, { uid: 20_101, gid: 20_101 }, volumeRoot, inspect),
+  ).toBeUndefined();
 });
