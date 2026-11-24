@@ -334,3 +334,86 @@ test("flushes pending token usage on daemon stop and drains transport before sto
     "transport.stop",
   ]);
 });
+
+test("flushes idle token usage without a subsequent completed event, and flushes synchronous token-usage + completed once", async () => {
+  const h = await createRuntimeHarness();
+  try {
+    h.setLiveTurn(true);
+    h.emit({
+      type: "token-usage",
+      usage: {
+        uncachedInputTokens: 1_000,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        outputTokens: 100,
+      },
+    });
+    h.setLiveTurn(false);
+    h.emit({ type: "completed", status: "completed" });
+    expect(h.tokenUsageReports).toHaveLength(1);
+
+    h.emit({
+      type: "token-usage",
+      usage: {
+        uncachedInputTokens: 250,
+        cacheReadTokens: 50,
+        cacheWriteTokens: 0,
+        outputTokens: 25,
+      },
+    });
+    await Promise.resolve();
+    expect(h.tokenUsageReports).toHaveLength(2);
+    expect(h.tokenUsageReports[1]).toMatchObject({
+      turnSeq: 2,
+      uncachedInputTokens: 250,
+      cacheReadTokens: 50,
+      outputTokens: 25,
+    });
+
+    h.emit({
+      type: "token-usage",
+      usage: {
+        uncachedInputTokens: 300,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        outputTokens: 30,
+      },
+    });
+    h.emit({ type: "completed", status: "completed" });
+    await Promise.resolve();
+    expect(h.tokenUsageReports).toHaveLength(3);
+    expect(h.tokenUsageReports[2]).toMatchObject({
+      turnSeq: 3,
+      uncachedInputTokens: 300,
+      outputTokens: 30,
+    });
+  } finally {
+    await h.runtime.stop();
+  }
+});
+
+test("does not leak a queued idle token-usage microtask after explicit stopAgent or shutdown", async () => {
+  const h = await createRuntimeHarness();
+  try {
+    h.setLiveTurn(false);
+    h.emit({
+      type: "token-usage",
+      usage: {
+        uncachedInputTokens: 420,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        outputTokens: 42,
+      },
+    });
+    await h.runtime.stopAgent("agent-a");
+    await Promise.resolve();
+    expect(h.tokenUsageReports).toHaveLength(1);
+    expect(h.tokenUsageReports[0]).toMatchObject({
+      turnSeq: 1,
+      uncachedInputTokens: 420,
+      outputTokens: 42,
+    });
+  } finally {
+    await h.runtime.stop();
+  }
+});

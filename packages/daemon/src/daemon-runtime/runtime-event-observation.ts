@@ -108,6 +108,14 @@ export function observeRuntimeEvent(
   }
   if (event.type === AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE) {
     ports.usageReport.recordTokenUsage(agentId, event.usage, event.conversation?.conversationId);
+    if (runtime.session.hasLiveTurn === false)
+      ports.usageReport.scheduleIdleTokenUsageFlush?.(
+        agentId,
+        launch,
+        config.provider,
+        config.model,
+        event.conversation?.conversationId,
+      );
     return;
   }
   if (event.type === AGENT_RUNTIME_EVENT_TYPE.SERVICE_TIER) {

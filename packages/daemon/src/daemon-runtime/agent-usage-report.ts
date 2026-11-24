@@ -45,7 +45,9 @@ export class AgentUsageReport {
   >();
   readonly #lastServiceTier = new Map<string, AgentServiceTierObserved>();
   readonly #pendingTurnTokens = new Map<string, Map<string, PendingTurnTokens>>();
+  readonly #scheduledIdleFlushes = new Map<string, Map<string, number>>();
   readonly #turnSeqByAgent = new Map<string, { launchId: string; seq: number }>();
+  #idleFlushEpoch = 0;
 
   constructor(ports: AgentUsageReportPorts) {
     this.#ports = ports;
@@ -154,6 +156,37 @@ export class AgentUsageReport {
     this.#pendingTurnTokens.set(agentId, buckets);
   }
 
+  #cancelIdleFlush(agentId: string, key: string): void {
+    const scheduled = this.#scheduledIdleFlushes.get(agentId);
+    if (!scheduled) return;
+    scheduled.delete(key);
+    if (scheduled.size === 0) this.#scheduledIdleFlushes.delete(agentId);
+  }
+
+  scheduleIdleTokenUsageFlush(
+    agentId: string,
+    launch: PublishedActivityLaunch,
+    provider: RuntimeProvider,
+    fallbackModel?: string,
+    conversationId?: string,
+  ): void {
+    const key = conversationId ?? "";
+    if (!this.#pendingTurnTokens.get(agentId)?.has(key)) return;
+    let scheduled = this.#scheduledIdleFlushes.get(agentId);
+    if (scheduled?.has(key)) return;
+    if (!scheduled) {
+      scheduled = new Map<string, number>();
+      this.#scheduledIdleFlushes.set(agentId, scheduled);
+    }
+    const token = ++this.#idleFlushEpoch;
+    scheduled.set(key, token);
+    queueMicrotask(() => {
+      if (this.#scheduledIdleFlushes.get(agentId)?.get(key) !== token) return;
+      this.#cancelIdleFlush(agentId, key);
+      this.flushTokenUsage(agentId, launch, provider, fallbackModel, conversationId);
+    });
+  }
+
   flushTokenUsage(
     agentId: string,
     launch: PublishedActivityLaunch,
@@ -161,9 +194,10 @@ export class AgentUsageReport {
     fallbackModel?: string,
     conversationId?: string,
   ): boolean {
+    const key = conversationId ?? "";
+    this.#cancelIdleFlush(agentId, key);
     const buckets = this.#pendingTurnTokens.get(agentId);
     if (!buckets) return false;
-    const key = conversationId ?? "";
     const pending = buckets.get(key);
     if (!pending) return false;
     buckets.delete(key);
@@ -177,6 +211,7 @@ export class AgentUsageReport {
     provider: RuntimeProvider,
     fallbackModel?: string,
   ): number {
+    this.#scheduledIdleFlushes.delete(agentId);
     const buckets = this.#pendingTurnTokens.get(agentId);
     if (!buckets || buckets.size === 0) return 0;
     this.#pendingTurnTokens.delete(agentId);
@@ -262,12 +297,14 @@ export class AgentUsageReport {
     this.#lastContextUsage.delete(agentId);
     this.#lastServiceTier.delete(agentId);
     this.#pendingTurnTokens.delete(agentId);
+    this.#scheduledIdleFlushes.delete(agentId);
   }
 
   clear(): void {
     this.#lastContextUsage.clear();
     this.#lastServiceTier.clear();
     this.#pendingTurnTokens.clear();
+    this.#scheduledIdleFlushes.clear();
     this.#turnSeqByAgent.clear();
   }
 }
