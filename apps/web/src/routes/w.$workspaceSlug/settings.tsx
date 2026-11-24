@@ -46,6 +46,7 @@ import {
 import { readMessageFullWidth, writeMessageFullWidth } from "#src/features/settings/message-width";
 import { isAppError } from "#src/lib/app-error";
 import type { DateTimePreferenceUpdate } from "#src/features/settings/settings.schemas";
+import { syncThemeColor } from "#src/lib/theme-color";
 import { m } from "#src/paraglide/messages";
 import {
   loadArchivedChannels,
@@ -234,6 +235,7 @@ function SettingsPage() {
       nextTheme === "dark" ||
       (nextTheme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
     document.documentElement.classList.toggle("dark-mode", dark);
+    syncThemeColor(dark);
   }
 
   function changeHideEmptySidebarSections(hide: boolean) {

@@ -1,28 +1,52 @@
-import { type ComponentPropsWithRef, type ReactNode, type RefAttributes } from "react";
+import { useContext, type ComponentPropsWithRef, type ReactNode, type RefAttributes } from "react";
 import type {
     DialogProps as AriaDialogProps,
     ModalOverlayProps as AriaModalOverlayProps,
     ModalRenderProps as AriaModalRenderProps,
 } from "react-aria-components";
-import { Dialog as AriaDialog, DialogTrigger as AriaDialogTrigger, Modal as AriaModal, ModalOverlay as AriaModalOverlay } from "react-aria-components";
+import {
+    Dialog as AriaDialog,
+    DialogTrigger as AriaDialogTrigger,
+    Modal as AriaModal,
+    ModalOverlay as AriaModalOverlay,
+    OverlayTriggerStateContext,
+} from "react-aria-components";
+import { useOverlayTriggerState } from "react-stately";
 import { CloseButton } from "#src/components/base/buttons/close-button";
+import { PageCoordinateScrim } from "#src/components/ui/modal";
 import { cx } from "#src/utils/cx";
 
 interface ModalOverlayProps extends AriaModalOverlayProps, RefAttributes<HTMLDivElement> {}
 
 export const ModalOverlay = (props: ModalOverlayProps) => {
+    const trigger = useContext(OverlayTriggerStateContext);
+    const usesLocalState = props.isOpen !== undefined || props.defaultOpen !== undefined || !trigger;
+    const localState = useOverlayTriggerState({
+        isOpen: props.isOpen,
+        defaultOpen: props.defaultOpen,
+        onOpenChange: props.onOpenChange,
+    });
+    const overlayState = usesLocalState ? localState : trigger;
+    const open = overlayState.isOpen;
     return (
-        <AriaModalOverlay
-            {...props}
-            className={(state) =>
-                cx(
-                    "fixed inset-0 z-50 flex min-h-dvh w-full items-center justify-end bg-modal-scrim/70 pl-6 outline-hidden md:pl-10",
-                    state.isEntering && "motion-enter animate-in fade-in",
-                    state.isExiting && "motion-leave animate-out fade-out",
-                    typeof props.className === "function" ? props.className(state) : props.className,
-                )
-            }
-        />
+        <>
+            <PageCoordinateScrim open={open} className="bg-modal-scrim/70 motion-enter animate-in fade-in" />
+            <AriaModalOverlay
+                {...props}
+                isOpen={usesLocalState ? overlayState.isOpen : undefined}
+                defaultOpen={undefined}
+                onOpenChange={usesLocalState ? overlayState.setOpen : props.onOpenChange}
+                className={(state) =>
+                    cx(
+                        /* Safari 26+: hide the fixed overlay shell and let PageCoordinateScrim dim in page coordinates. */
+                        "invisible fixed inset-0 z-50 flex min-h-dvh w-full items-center justify-end bg-transparent pl-6 outline-hidden md:pl-10",
+                        state.isEntering && "motion-enter animate-in fade-in",
+                        state.isExiting && "motion-leave animate-out fade-out",
+                        typeof props.className === "function" ? props.className(state) : props.className,
+                    )
+                }
+            />
+        </>
     );
 };
 ModalOverlay.displayName = "ModalOverlay";
@@ -34,7 +58,7 @@ export const Modal = (props: ModalProps) => (
         {...props}
         className={(state) =>
             cx(
-                "inset-y-0 right-0 h-full w-full max-w-100 pb-safe-bottom shadow-xl transition",
+                "visible inset-y-0 right-0 h-full w-full max-w-100 pb-safe-bottom shadow-xl transition",
                 state.isEntering && "motion-enter animate-in slide-in-from-right",
                 state.isExiting && "motion-leave animate-out slide-out-to-right",
                 typeof props.className === "function" ? props.className(state) : props.className,

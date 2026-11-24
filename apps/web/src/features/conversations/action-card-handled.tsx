@@ -165,7 +165,7 @@ function targetLink(
 }
 
 const THING_LINK_CLASS =
-  "rounded-sm font-medium text-primary outline-focus-ring underline-offset-2 hover:underline focus-visible:outline-2 [&:hover_[data-channel-name]]:underline";
+  "rounded-sm font-medium text-primary outline-focus-ring underline-offset-2 hover:underline focus-visible:outline-2 [@media(hover:hover)]:[&:hover_[data-channel-name]]:underline";
 
 const OPEN_LINK_CLASS =
   "ml-auto inline-flex shrink-0 items-center gap-1 rounded-sm font-semibold text-brand-secondary outline-focus-ring underline-offset-2 hover:underline focus-visible:outline-2";

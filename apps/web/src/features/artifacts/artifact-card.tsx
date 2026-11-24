@@ -188,7 +188,7 @@ export function ArtifactCardFace({
   return (
     <article
       aria-label={m.doc_card_label({ kind, title })}
-      className="relative flex w-full max-w-[34rem] items-start gap-3 rounded-xl border border-secondary bg-primary p-3 transition-[border-color] duration-100 has-[a:hover]:border-primary has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-focus-ring"
+      className="relative flex w-full max-w-[34rem] items-start gap-3 rounded-xl border border-secondary bg-primary p-3 transition-[border-color] duration-100 [@media(hover:hover)]:has-[a:hover]:border-primary has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-focus-ring"
     >
       <ArtifactIcon entryPath={card.entryPath} />
       <div className="min-w-0 flex-1">

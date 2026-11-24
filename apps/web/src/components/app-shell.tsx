@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FC } from "react";
+import { useEffect, useMemo, useRef, useState, type FC } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -258,6 +258,7 @@ function WorkspaceChrome({
   const selectWorkspace = useLatestCallback(onSelectWorkspace);
   const createWorkspace = useLatestCallback(onCreateWorkspace);
   const signOut = useLatestCallback(onSignOut);
+  const contentScrollRootRef = useRef<HTMLDivElement>(null);
   const { name, email, avatarUrl } = user;
   const phoneShell = useMemo<PhoneShell>(
     () => ({
@@ -294,9 +295,11 @@ function WorkspaceChrome({
       <ChatListOpenContext value={setChatListOpen}>
         <div
           data-sidebar-default-rail={defaultRail ? "" : undefined}
+          data-phone-page-scroll={tabBar ? "" : undefined}
           className={cx(
-            "flex h-[var(--app-height,100svh)] flex-col bg-primary pt-safe-top pr-safe-right pl-safe-left font-body antialiased",
-            !standalone && "lg:bg-sidebar",
+            "flex flex-col bg-primary pt-safe-top pr-safe-right pl-safe-left font-body antialiased",
+            tabBar ? "min-h-dvh" : "h-[var(--app-height,100svh)]",
+            !standalone && "lg:h-[var(--app-height,100svh)] lg:bg-sidebar",
             !tabBar && "pb-safe-bottom",
           )}
         >
@@ -352,6 +355,8 @@ function WorkspaceChrome({
             </div>
 
             <div
+              ref={contentScrollRootRef}
+              data-phone-tab-bar={tabBar ? "" : undefined}
               className={cx(
                 "flex min-h-0 min-w-0 flex-1 flex-col",
                 !standalone && "lg:p-2 lg:ps-0",
@@ -382,6 +387,7 @@ function WorkspaceChrome({
                 }}
                 base={base}
                 user={user}
+                scrollRootRef={contentScrollRootRef}
               />
             </ShellLinks>
           )}

@@ -2,6 +2,7 @@
 @import "./styles/theme.css";
 @import "./styles/typography.css";
 @import "./styles/subpage-transition.css";
+@import "./styles/floating-foot-bar.css";
 
 @plugin "@tailwindcss/typography";
 @plugin "tailwindcss-react-aria-components";
@@ -139,6 +140,17 @@
   }
 }
 
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  background-color: var(--color-bg-primary);
+  color-scheme: light;
+}
+
+html.dark-mode {
+  color-scheme: dark;
+}
+
 html,
 body {
   font-family: var(--font-body);
@@ -153,6 +165,27 @@ body {
 @layer base {
   body {
     @apply bg-primary text-primary;
+  }
+
+  button,
+  a,
+  [role="button"] {
+    touch-action: manipulation;
+  }
+
+  button,
+  [role="button"] {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  @media (hover: none) {
+    button:not(:disabled, [aria-disabled="true"], [data-disabled]):where(:active, [data-pressed]),
+    a:not([aria-disabled="true"], [data-disabled]):where(:active, [data-pressed]),
+    [role="button"]:not([aria-disabled="true"], [data-disabled]):where(:active, [data-pressed]) {
+      opacity: 0.82;
+    }
   }
 
   b,

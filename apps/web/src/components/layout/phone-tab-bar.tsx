@@ -1,9 +1,21 @@
-import { useRef, type ReactNode } from "react";
-import { Activity, Grid01, MessageChatSquare } from "@untitledui/icons";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  type CSSProperties,
+  type MouseEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
+import { Activity, Grid, MessageSquare, type KubaiIconData } from "kubai-icons/duotone";
+import { animate, type KubaiController } from "kubai-icons/runtime";
 
 import type { TabHome } from "#src/components/layout/tab-home";
 import { UnreadBadge, UnreadDot } from "#src/components/ui/unread-marker";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { useFootBarFold } from "#src/hooks/use-foot-bar-fold";
+import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { useSlidingIndicator } from "#src/hooks/use-sliding-indicator";
 import { m } from "#src/paraglide/messages";
 import { localizeHref } from "#src/paraglide/runtime";
@@ -18,6 +30,80 @@ type Tab = {
   unreadText?: string;
 };
 
+type DuotoneStyle = CSSProperties & { "--kd-b"?: string };
+
+const DUOTONE_STYLE: DuotoneStyle = {
+  "--kd-b": "color-mix(in srgb, currentColor 30%, var(--color-sidebar))",
+};
+
+function TabDuotoneIcon({
+  icon,
+  active,
+  reducedMotion,
+}: {
+  icon: KubaiIconData;
+  active: boolean;
+  reducedMotion: boolean;
+}) {
+  const uid = useId().replaceAll(":", "");
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const controllerRef = useRef<KubaiController | null>(null);
+  const prevActiveRef = useRef(active);
+  const markup = useMemo(
+    () => icon.markup.replaceAll("__K__", `ki-tab-${uid}`),
+    [icon.markup, uid],
+  );
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const controller = animate(svg, icon);
+    controllerRef.current = controller;
+    const link = svg.closest("a");
+    const onEnter = (event: PointerEvent) => {
+      if (reducedMotion || event.pointerType !== "mouse") return;
+      controller.hover(true);
+    };
+    const onLeave = (event: PointerEvent) => {
+      if (event.pointerType !== "mouse") return;
+      controller.hover(false);
+    };
+    link?.addEventListener("pointerenter", onEnter);
+    link?.addEventListener("pointerleave", onLeave);
+    return () => {
+      link?.removeEventListener("pointerenter", onEnter);
+      link?.removeEventListener("pointerleave", onLeave);
+      controller.destroy();
+      controllerRef.current = null;
+    };
+  }, [icon, reducedMotion]);
+
+  useEffect(() => {
+    const becameActive = active && !prevActiveRef.current;
+    prevActiveRef.current = active;
+    if (!becameActive || reducedMotion) return;
+    const controller = controllerRef.current;
+    if (!controller) return;
+    controller.hover(true);
+    const timer = window.setTimeout(() => {
+      controllerRef.current?.hover(false);
+    }, icon.ms ?? 360);
+    return () => window.clearTimeout(timer);
+  }, [active, icon.ms, reducedMotion]);
+
+  return (
+    <svg
+      ref={svgRef}
+      aria-hidden="true"
+      focusable="false"
+      viewBox={icon.viewBox ?? "0 0 16 16"}
+      style={DUOTONE_STYLE}
+      className="size-full shrink-0"
+      dangerouslySetInnerHTML={{ __html: markup }}
+    />
+  );
+}
+
 export function PhoneTabBar({
   current,
   chatHref,
@@ -25,6 +111,7 @@ export function PhoneTabBar({
   activityUnread,
   base,
   user,
+  scrollRootRef,
 }: {
   current: TabHome;
   chatHref: string;
@@ -32,25 +119,45 @@ export function PhoneTabBar({
   activityUnread: { count?: number; lit: boolean };
   base: string;
   user: { name: string; avatarUrl?: string | null };
+  scrollRootRef: RefObject<HTMLElement | null>;
 }) {
   const listRef = useRef<HTMLUListElement>(null);
+  const reducedMotion = usePrefersReducedMotion();
+  const { folded, open, onFocusCapture, onBlurCapture, scrollToTop } = useFootBarFold({
+    scrollRootRef,
+    activeKey: current,
+  });
   const indicator = useSlidingIndicator(listRef, {
     activeKey: current,
     selector: '[aria-current="page"]',
     variant: "pill",
+    paused: folded,
   });
+
   const tabs: Tab[] = [
     {
       key: "chat",
       label: m.navigation_chat_short(),
       href: chatHref,
-      icon: <MessageChatSquare aria-hidden="true" className="size-6" />,
+      icon: (
+        <TabDuotoneIcon
+          icon={MessageSquare}
+          active={current === "chat"}
+          reducedMotion={reducedMotion}
+        />
+      ),
     },
     {
       key: "activity",
       label: m.navigation_activity(),
       href: activityHref,
-      icon: <Activity aria-hidden="true" className="size-6" />,
+      icon: (
+        <TabDuotoneIcon
+          icon={Activity}
+          active={current === "activity"}
+          reducedMotion={reducedMotion}
+        />
+      ),
       badge: activityUnread.count ? (
         <UnreadBadge
           count={activityUnread.count}
@@ -70,7 +177,13 @@ export function PhoneTabBar({
       key: "workspace",
       label: m.navigation_workspace_group(),
       href: localizeHref(`${base}/workspace`),
-      icon: <Grid01 aria-hidden="true" className="size-6" />,
+      icon: (
+        <TabDuotoneIcon
+          icon={Grid}
+          active={current === "workspace"}
+          reducedMotion={reducedMotion}
+        />
+      ),
     },
     {
       key: "me",
@@ -84,53 +197,76 @@ export function PhoneTabBar({
           alt=""
           src={user.avatarUrl}
           rounded
-          className={current === "me" ? "ring-2 ring-nav-fg-current" : undefined}
+          className={cx("size-full", current === "me" ? "ring-2 ring-nav-fg-current" : undefined)}
         />
       ),
     },
   ];
+
+  const handleTabClick = (event: MouseEvent<HTMLAnchorElement>, isCurrent: boolean) => {
+    if (folded) {
+      event.preventDefault();
+      open();
+      return;
+    }
+    if (isCurrent) {
+      event.preventDefault();
+      scrollToTop(reducedMotion);
+    }
+  };
+
   return (
     <nav
       aria-label={m.navigation_label()}
-      className="shrink-0 border-t border-secondary bg-sidebar pb-safe-bottom"
+      data-folded={folded ? "true" : "false"}
+      onFocusCapture={onFocusCapture}
+      onBlurCapture={onBlurCapture}
+      className="phone-foot-bar"
     >
-      <ul ref={listRef} className="relative grid grid-cols-4 px-1.5 py-1">
-        {indicator.visible && (
-          <span
-            ref={indicator.indicatorRef}
-            aria-hidden="true"
-            style={indicator.style}
-            className="pointer-events-none absolute top-0 left-0 z-0 rounded-xl bg-nav-bg-current will-change-transform"
-          />
-        )}
-        {tabs.map(({ key, label, href, icon, badge, unreadText }) => {
-          const isCurrent = key === current;
-          return (
-            <li key={key}>
-              <a
-                href={href}
-                aria-current={isCurrent ? "page" : undefined}
-                className={cx(
-                  "relative z-10 flex h-12 flex-col items-center justify-center gap-0.5 rounded-xl text-xs outline-focus-ring transition-colors duration-150 focus-visible:outline-2 focus-visible:-outline-offset-2",
-                  isCurrent
-                    ? cx(
-                        "font-semibold text-nav-fg-current",
-                        !indicator.visible && "bg-nav-bg-current",
-                      )
-                    : "font-medium text-nav-fg",
-                )}
-              >
-                <span className="relative flex">
-                  {icon}
-                  {badge}
-                </span>
-                <span className="max-w-full truncate px-1">{label}</span>
-                {unreadText && <span className="sr-only">, {unreadText}</span>}
-              </a>
+      <div className="phone-foot-bar__shell">
+        <ul ref={listRef} className="phone-foot-bar__list">
+          {indicator.visible && (
+            <li aria-hidden="true" role="presentation" className="contents">
+              <span
+                ref={indicator.indicatorRef}
+                style={indicator.style}
+                className="phone-foot-bar__indicator"
+              />
             </li>
-          );
-        })}
-      </ul>
+          )}
+          {tabs.map(({ key, label, href, icon, badge, unreadText }) => {
+            const isCurrent = key === current;
+            const hiddenWhileFolded = folded && !isCurrent;
+            return (
+              <li
+                key={key}
+                data-current={isCurrent ? "true" : "false"}
+                aria-hidden={hiddenWhileFolded || undefined}
+                inert={hiddenWhileFolded || undefined}
+                className="phone-foot-bar__item"
+              >
+                <a
+                  href={href}
+                  aria-current={isCurrent ? "page" : undefined}
+                  tabIndex={hiddenWhileFolded ? -1 : undefined}
+                  onClick={(event) => handleTabClick(event, isCurrent)}
+                  className={cx(
+                    "phone-foot-bar__link outline-focus-ring focus-visible:outline-2 focus-visible:-outline-offset-2",
+                    isCurrent && !indicator.visible && !folded && "bg-nav-bg-current",
+                  )}
+                >
+                  <span className="phone-foot-bar__icon">
+                    {icon}
+                    {badge}
+                  </span>
+                  <span className="phone-foot-bar__label truncate">{label}</span>
+                  {unreadText && <span className="sr-only">, {unreadText}</span>}
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
     </nav>
   );
 }

@@ -15,7 +15,10 @@ export function WorkspaceHub() {
     <ShellLinks>
       <div className="flex min-h-0 flex-1 flex-col">
         <TabPageHeader title={m.navigation_workspace_group()} />
-        <ul className="min-h-0 flex-1 divide-y divide-secondary overflow-y-auto lg:max-w-2xl">
+        <ul
+          data-tab-home-scroll=""
+          className="min-h-0 flex-1 divide-y divide-secondary overflow-y-auto lg:max-w-2xl"
+        >
           {workspaceItems.map((item) => (
             <TabPageRow
               key={item.label}

@@ -1,7 +1,15 @@
-// The default theme without its Inter files: `fonts/` holds subsets cut to what this site uses
-// (`scripts/subset-fonts.py`).
+import { h } from "vue";
 import DefaultTheme from "vitepress/theme-without-fonts";
+import DocsFootNav from "./DocsFootNav.vue";
 import "./fonts/fonts.css";
 import "./punctuation.css";
+import "./mobile.css";
 
-export default DefaultTheme;
+export default {
+  extends: DefaultTheme,
+  Layout() {
+    return h(DefaultTheme.Layout, null, {
+      "layout-bottom": () => h(DocsFootNav),
+    });
+  },
+};

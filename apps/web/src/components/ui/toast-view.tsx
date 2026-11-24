@@ -184,8 +184,12 @@ export function ToastView({ toast, onDismiss }: { toast: Toast; onDismiss: () =>
       ref={rootRef}
       data-toast
       style={width === undefined ? undefined : { width }}
-      onPointerEnter={() => setPointerOver(true)}
-      onPointerLeave={() => setPointerOver(false)}
+      onPointerEnter={(event) => {
+        if (event.pointerType === "mouse") setPointerOver(true);
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "mouse") setPointerOver(false);
+      }}
       onFocus={() => setFocusWithin(true)}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) setFocusWithin(false);
@@ -229,7 +233,7 @@ export function ToastView({ toast, onDismiss }: { toast: Toast; onDismiss: () =>
             }
       }
       className={cx(
-        "pointer-events-auto relative col-start-1 row-start-1 flex min-h-10 max-w-full touch-pan-y items-start overflow-hidden rounded-2xl border border-secondary bg-linear-to-b from-bg-primary to-bg-secondary shadow-(--toast-shadow)",
+        "pointer-events-auto visible relative col-start-1 row-start-1 flex min-h-10 max-w-full touch-pan-y items-start overflow-hidden rounded-2xl border border-secondary bg-linear-to-b from-bg-primary to-bg-secondary shadow-(--toast-shadow)",
         !reduceMotion && "transition-[width] duration-(--duration-md) ease-in-out",
       )}
     >

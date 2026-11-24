@@ -106,7 +106,13 @@ export function LoginArt() {
     <div ref={root} className="login-art" aria-hidden="true">
       <img src="/login/frame.webp" alt="" className="login-art__frame" />
       <img src="/login/shadow.webp" alt="" className="login-art__shadow" />
-      <div ref={agent} className="login-art__agent" onPointerEnter={onHop}>
+      <div
+        ref={agent}
+        className="login-art__agent"
+        onPointerEnter={(event) => {
+          if (event.pointerType === "mouse") onHop();
+        }}
+      >
         <div ref={hop} className="login-art__hop">
           <div className="login-art__float">
             <img src="/login/agent.webp" alt="" className="login-art__face" />

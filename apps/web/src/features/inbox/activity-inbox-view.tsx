@@ -405,6 +405,7 @@ export function ActivityInboxView({
   const list = (
     <div
       data-activity-list
+      data-phone-stack-list={phone && !pane ? "" : undefined}
       {...headerProps}
       inert={phone && pane ? true : undefined}
       aria-hidden={phone && pane ? true : undefined}
@@ -430,6 +431,7 @@ export function ActivityInboxView({
       <div
         ref={listScroll}
         {...listProps}
+        data-tab-home-scroll=""
         className="@container/activity-list min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-1"
       >
         {emptyState ? (
@@ -461,13 +463,19 @@ export function ActivityInboxView({
               ? `opacity ${pane ? "var(--duration-lg) var(--ease-out)" : "var(--duration-lg-out) var(--ease-in)"}`
               : undefined,
           }}
-          className="pointer-events-none absolute inset-0 z-30 bg-black"
+          className={cn(
+            "pointer-events-none absolute inset-0 z-30 bg-black",
+            phoneScrimOpacity === 0 && "invisible",
+          )}
         />
       )}
     </div>
   );
   return (
-    <div className="relative flex h-full min-h-0 min-w-0 overflow-hidden lg:overflow-visible">
+    <div
+      data-phone-stack-root={phone && !pane ? "" : undefined}
+      className="relative flex h-full min-h-0 min-w-0 overflow-hidden lg:overflow-visible"
+    >
       {list}
       {desktop ? (
         pane ? (

@@ -189,7 +189,7 @@ function AgentProfileTabBody({
               onPress={() => setAvatarDialogOpen(true)}
             >
               {profileAvatar}
-              <span className="absolute -right-1 -bottom-1 grid size-6 place-items-center rounded-full bg-primary text-fg-secondary shadow-xs ring-1 ring-secondary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+              <span className="absolute -right-1 -bottom-1 grid size-6 place-items-center rounded-full bg-primary text-fg-secondary shadow-xs ring-1 ring-secondary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:none)]:opacity-100">
                 <Camera01 className="size-3.5" />
               </span>
             </Button>

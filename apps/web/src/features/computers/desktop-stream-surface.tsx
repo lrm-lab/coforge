@@ -250,7 +250,7 @@ export function DesktopStreamSurface({
         onCollapse={allowMinimize ? onCollapse : onSleep}
         onSleep={onSleep}
       />
-      {maximized && (
+      {maximized && landscape && (
         <div
           aria-hidden="true"
           className={`fixed inset-0 ${OVERLAY_LAYER} bg-modal-scrim/30 transition-opacity duration-300`}

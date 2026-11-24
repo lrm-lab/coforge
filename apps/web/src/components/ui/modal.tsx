@@ -2,13 +2,19 @@ import {
   createContext,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   type ComponentProps,
   type CSSProperties,
   type PointerEvent,
+  type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
+import { FocusScope } from "react-aria";
 import { OverlayTriggerStateContext } from "react-aria-components";
+import { useOverlayTriggerState, type OverlayTriggerState } from "react-stately";
 
 import {
   Modal as OfficialModal,
@@ -19,7 +25,153 @@ export { Dialog, DialogTrigger } from "#src/components/application/modals/modal"
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useKeyboardFieldFocused } from "#src/hooks/use-keyboard-field-focused";
 import { useVisualViewportTop } from "#src/hooks/use-visual-viewport-top";
+import { acquirePageFlowHandoff, isTopPageFlowEntry } from "#src/lib/page-flow-handoff";
 import { cx } from "#src/utils/cx";
+
+type ModalForm = "sheet" | "page" | "page-flow" | null;
+
+const ModalContext = createContext<{ form: ModalForm; instant: boolean }>({
+  form: null,
+  instant: false,
+});
+
+function resolveScrimConfig(
+  className: ComponentProps<typeof OfficialModalOverlay>["className"],
+  instant: boolean,
+): { enabled: boolean; className: string } {
+  const staticClass = typeof className === "string" ? className : "";
+  if (staticClass.includes("bg-transparent")) {
+    return { enabled: false, className: "" };
+  }
+  const hasLightOverlay = staticClass.includes("bg-overlay/30");
+  const noBlur = staticClass.includes("backdrop-blur-none");
+  return {
+    enabled: true,
+    className: cx(
+      hasLightOverlay ? "bg-overlay/30" : "bg-modal-scrim/70",
+      !noBlur && "backdrop-blur-[6px]",
+      !instant && "motion-enter animate-in fade-in scrim-in",
+    ),
+  };
+}
+
+/* Safari 26+ paints a flat strip behind its bottom toolbar when a fixed scrim reaches the window foot.
+   Positioning the scrim in page coordinates lets Safari render the dimmed page behind the toolbar. */
+export function PageCoordinateScrim({ open, className }: { open: boolean; className: string }) {
+  const [box, setBox] = useState<{ top: number; height: number }>({ top: 0, height: 0 });
+
+  useLayoutEffect(() => {
+    if (!open || typeof window === "undefined") return;
+    const sync = () => {
+      const top = Math.max(0, window.scrollY);
+      const docHeight = Math.max(
+        document.documentElement.scrollHeight,
+        document.body.scrollHeight,
+        window.innerHeight,
+      );
+      const height = Math.max(
+        window.innerHeight,
+        Math.min(docHeight - top, window.innerHeight * 1.25),
+      );
+      setBox({ top, height });
+    };
+    sync();
+    window.addEventListener("resize", sync);
+    window.addEventListener("scroll", sync, { passive: true });
+    return () => {
+      window.removeEventListener("resize", sync);
+      window.removeEventListener("scroll", sync);
+    };
+  }, [open]);
+
+  if (!open || typeof document === "undefined") return null;
+
+  return createPortal(
+    <div
+      aria-hidden="true"
+      data-page-scrim=""
+      style={{
+        top: `${box.top}px`,
+        height: box.height > 0 ? `${box.height}px` : "100dvh",
+      }}
+      className={cx("pointer-events-auto absolute inset-x-0 z-50", className)}
+    />,
+    document.body,
+  );
+}
+
+function PhonePageFlowOverlay({
+  open,
+  instant,
+  state,
+  isKeyboardDismissDisabled,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  instant: boolean;
+  state: OverlayTriggerState;
+  isKeyboardDismissDisabled?: boolean;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const layerRef = useRef<HTMLDivElement>(null);
+  const entryIdRef = useRef<symbol | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  const modalContext = useMemo<{ form: ModalForm; instant: boolean }>(
+    () => ({ form: "page-flow", instant }),
+    [instant],
+  );
+
+  useLayoutEffect(() => {
+    if (!open || typeof window === "undefined") return;
+    const handoff = acquirePageFlowHandoff({
+      root: document.getElementById("coforge-app-root"),
+      win: window,
+      layerEl: layerRef.current,
+    });
+    entryIdRef.current = handoff.id;
+    return () => {
+      entryIdRef.current = null;
+      handoff.release();
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || isKeyboardDismissDisabled) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (entryIdRef.current && !isTopPageFlowEntry(entryIdRef.current)) return;
+      const layer = layerRef.current;
+      if (layer && document.querySelector("[data-page-scrim]")) return;
+      event.preventDefault();
+      onCloseRef.current();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open, isKeyboardDismissDisabled]);
+
+  if (!open || typeof document === "undefined") return null;
+
+  return createPortal(
+    <OverlayTriggerStateContext.Provider value={state}>
+      <ModalContext.Provider value={modalContext}>
+        <FocusScope contain restoreFocus autoFocus>
+          <div
+            ref={layerRef}
+            data-phone-page-flow=""
+            className="relative z-50 flex min-h-dvh w-full flex-col bg-primary safe-area-padding"
+          >
+            {children}
+          </div>
+        </FocusScope>
+      </ModalContext.Provider>
+    </OverlayTriggerStateContext.Provider>,
+    document.body,
+  );
+}
 
 export function ModalOverlay({
   className,
@@ -33,17 +185,57 @@ export function ModalOverlay({
   instant?: boolean;
 }) {
   const trigger = useContext(OverlayTriggerStateContext);
-  const open = props.isOpen ?? trigger?.isOpen ?? false;
-  const viewportTop = useVisualViewportTop(open);
-  const keyboardMayBeUp = useKeyboardFieldFocused(open);
+  const usesLocalState = props.isOpen !== undefined || props.defaultOpen !== undefined || !trigger;
+  const localState = useOverlayTriggerState({
+    isOpen: props.isOpen,
+    defaultOpen: props.defaultOpen,
+    onOpenChange: props.onOpenChange,
+  });
+  const overlayState = usesLocalState ? localState : trigger;
+  const open = overlayState.isOpen;
   const wide = useBreakpoint("sm");
-  const form: "sheet" | "page" | null = confirmation ? "sheet" : page ? "page" : null;
+  const usePhonePageFlow = Boolean(page) && !wide;
+  const viewportTop = useVisualViewportTop(open && !usePhonePageFlow);
+  const keyboardMayBeUp = useKeyboardFieldFocused(open && !usePhonePageFlow);
+  const form: ModalForm = confirmation ? "sheet" : page ? "page" : null;
   const modalContext = useMemo(() => ({ form, instant }), [form, instant]);
-  useKeepFocusedFieldInView(open);
+  const scrim = useMemo(() => resolveScrimConfig(className, instant), [className, instant]);
+  useKeepFocusedFieldInView(open && !usePhonePageFlow);
+
+  if (usePhonePageFlow) {
+    const close = () => {
+      overlayState.close();
+    };
+    const resolvedChildren =
+      typeof props.children === "function"
+        ? props.children({
+            isEntering: false,
+            isExiting: false,
+            state: overlayState,
+            defaultChildren: undefined,
+          })
+        : props.children;
+    return (
+      <PhonePageFlowOverlay
+        open={open}
+        instant={instant}
+        state={overlayState}
+        isKeyboardDismissDisabled={props.isKeyboardDismissDisabled}
+        onClose={close}
+      >
+        {resolvedChildren}
+      </PhonePageFlowOverlay>
+    );
+  }
+
   return (
     <ModalContext.Provider value={modalContext}>
+      {scrim.enabled && <PageCoordinateScrim open={open} className={scrim.className} />}
       <OfficialModalOverlay
         {...props}
+        isOpen={usesLocalState ? overlayState.isOpen : undefined}
+        defaultOpen={undefined}
+        onOpenChange={usesLocalState ? overlayState.setOpen : props.onOpenChange}
         isDismissable={props.isDismissable ?? (Boolean(confirmation) && !wide)}
         style={
           {
@@ -54,7 +246,9 @@ export function ModalOverlay({
         }
         className={(state) =>
           cx(
-            "bg-modal-scrim/70",
+            /* Safari 26+ samples fixed overlays that touch the viewport foot; hide the fixed shell
+               with visibility: hidden while PageCoordinateScrim dims the page in page coordinates. */
+            "invisible bg-transparent backdrop-blur-none",
             instant
               ? "animate-none!"
               : [state.isEntering && "scrim-in", state.isExiting && "scrim-out"],
@@ -65,6 +259,7 @@ export function ModalOverlay({
             page &&
               "max-sm:items-stretch max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px]",
             typeof className === "function" ? className(state) : className,
+            "invisible bg-transparent backdrop-blur-none",
           )
         }
       />
@@ -72,25 +267,88 @@ export function ModalOverlay({
   );
 }
 
-const ModalContext = createContext<{ form: "sheet" | "page" | null; instant: boolean }>({
-  form: null,
-  instant: false,
-});
-
 export function useConfirmationSheet(): boolean {
   const wide = useBreakpoint("sm");
   return useContext(ModalContext).form === "sheet" && !wide;
 }
 
+function PageFlowModal({ className, children, ...props }: ComponentProps<typeof OfficialModal>) {
+  const triggerState = useContext(OverlayTriggerStateContext);
+  const fallbackState = useOverlayTriggerState({ isOpen: true });
+  const state = triggerState ?? fallbackState;
+  const resolvedClass =
+    typeof className === "function"
+      ? className({
+          isEntering: false,
+          isExiting: false,
+          state,
+          defaultClassName: undefined,
+        })
+      : className;
+  const resolvedChildren =
+    typeof children === "function"
+      ? children({
+          isEntering: false,
+          isExiting: false,
+          state,
+          defaultChildren: undefined,
+        })
+      : children;
+  const {
+    isDismissable: _isDismissable,
+    isKeyboardDismissDisabled: _isKeyboardDismissDisabled,
+    isOpen: _isOpen,
+    defaultOpen: _defaultOpen,
+    onOpenChange: _onOpenChange,
+    isEntering: _isEntering,
+    isExiting: _isExiting,
+    shouldCloseOnInteractOutside: _shouldCloseOnInteractOutside,
+    UNSTABLE_portalContainer: _portalContainer,
+    style,
+    ...domProps
+  } = props;
+  const resolvedStyle =
+    typeof style === "function"
+      ? style({
+          isEntering: false,
+          isExiting: false,
+          state,
+          defaultStyle: {},
+        })
+      : style;
+  return (
+    <div
+      {...(domProps as React.HTMLAttributes<HTMLDivElement>)}
+      style={resolvedStyle}
+      className={cx(
+        "visible flex w-full flex-1 flex-col bg-primary",
+        resolvedClass,
+        "h-auto max-h-none max-w-none overflow-visible rounded-none shadow-none ring-0",
+      )}
+    >
+      {resolvedChildren}
+    </div>
+  );
+}
+
 export function Modal({ className, children, ...props }: ComponentProps<typeof OfficialModal>) {
   const { form, instant } = useContext(ModalContext);
+
+  if (form === "page-flow") {
+    return (
+      <PageFlowModal className={className} {...props}>
+        {children}
+      </PageFlowModal>
+    );
+  }
+
   if (form !== "sheet")
     return (
       <OfficialModal
         {...props}
         className={(state) =>
           cx(
-            "rounded-4xl sm:rounded-4xl ring-1 ring-modal-edge",
+            "visible rounded-4xl sm:rounded-4xl ring-1 ring-modal-edge",
             instant
               ? "animate-none!"
               : [state.isEntering && "sm:fade-in", state.isExiting && "fade-out"],
@@ -108,7 +366,7 @@ export function Modal({ className, children, ...props }: ComponentProps<typeof O
       {...props}
       className={(state) =>
         cx(
-          "rounded-4xl sm:rounded-4xl ring-1 ring-modal-edge",
+          "visible rounded-4xl sm:rounded-4xl ring-1 ring-modal-edge",
           instant
             ? "animate-none!"
             : [

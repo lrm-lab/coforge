@@ -20,7 +20,7 @@ export function MePage() {
     <ShellLinks>
       <div className="flex min-h-0 flex-1 flex-col">
         <TabPageHeader title={m.navigation_me()} />
-        <div className="min-h-0 flex-1 overflow-y-auto lg:max-w-2xl">
+        <div data-tab-home-scroll="" className="min-h-0 flex-1 overflow-y-auto lg:max-w-2xl">
           <div className="flex flex-col items-center gap-3 px-page py-8">
             <ActorAvatar
               presence={false}

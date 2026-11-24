@@ -75,7 +75,7 @@ export function InlineEmbedControls({
         "absolute top-1.5 right-1.5 z-10 flex items-center gap-1 transition-opacity duration-150",
         expanded || coarse
           ? "opacity-90"
-          : "opacity-0 group-hover/embed:opacity-100 group-focus-within/embed:opacity-100",
+          : "opacity-0 group-hover/embed:opacity-100 group-focus-within/embed:opacity-100 [@media(hover:none)]:opacity-90",
       )}
     >
       {!expanded && (

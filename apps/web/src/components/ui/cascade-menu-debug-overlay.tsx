@@ -63,14 +63,15 @@ export function CascadeMenuDebugOverlay({
     : 0;
 
   return createPortal(
+    /* Safari 26+ freezes status-bar sampling over transparent fixed full-screen layers. */
     <div
       ref={overlayRef}
       popover="manual"
       aria-hidden="true"
-      className="cascade-menu-debug-overlay pointer-events-none fixed inset-0 m-0 size-full border-0 bg-transparent p-0"
+      className="cascade-menu-debug-overlay pointer-events-none invisible fixed inset-0 m-0 size-full border-0 bg-transparent p-0"
       data-cascade-debug-overlay="true"
     >
-      <svg className="size-full overflow-visible">
+      <svg className="visible size-full overflow-visible">
         {zones.map(({ depth, zone, parentTop, parentBottom }) => {
           const points = `${zone.apex.x},${zone.apex.y} ${zone.edgeTop.x},${zone.edgeTop.y} ${zone.edgeBottom.x},${zone.edgeBottom.y}`;
           return (
@@ -97,7 +98,7 @@ export function CascadeMenuDebugOverlay({
           );
         })}
       </svg>
-      <div className="fixed right-3 bottom-3 rounded-md border border-blue-500/40 bg-neutral-950/85 px-2.5 py-1 font-mono text-xs text-blue-100 tabular-nums shadow-md backdrop-blur-sm">
+      <div className="visible fixed right-3 bottom-3 rounded-md border border-blue-500/40 bg-neutral-950/85 px-2.5 py-1 font-mono text-xs text-blue-100 tabular-nums shadow-md backdrop-blur-sm">
         {timer ? `${timer.kind}: ${elapsedMs}ms / ${timer.durationMs}ms` : "cascade: idle"}
       </div>
     </div>,

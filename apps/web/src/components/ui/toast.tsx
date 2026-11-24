@@ -34,12 +34,13 @@ function ToastHost() {
   }, []);
 
   return (
+    /* Safari 26+ freezes status-bar sampling over transparent fixed layers; hide the host with visibility: hidden and reveal only its visible children. */
     <section
       ref={regionRef}
       aria-label={m.toast_region()}
-      className="pointer-events-none fixed inset-x-0 top-[calc(var(--spacing-safe-top)+3.75rem)] z-60 grid justify-items-center px-4"
+      className="pointer-events-none invisible fixed inset-x-0 top-[calc(var(--spacing-safe-top)+3.75rem)] z-60 grid justify-items-center px-4"
     >
-      <p role="status" className="sr-only">
+      <p role="status" className="sr-only visible">
         {toast?.title}
       </p>
       <AnimatePresence>

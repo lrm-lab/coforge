@@ -86,6 +86,12 @@
   --color-empty-border: var(--color-border-secondary);
   --color-empty-shadow: rgb(16 19 25 / 0.06);
 
+  --color-floating-bar-bg: color-mix(in srgb, var(--color-sidebar) 82%, transparent);
+  --color-floating-bar-hairline: rgb(16 19 25 / 0.06);
+  --color-floating-bar-shadow: rgb(16 19 25 / 0.16);
+  --color-floating-bar-pill: var(--color-nav-bg-current);
+  --color-floating-bar-press: color-mix(in srgb, var(--color-sidebar-accent) 75%, transparent);
+
   --radius-xs: 0.25rem;
   --radius-md: 0.5rem;
   --radius-4xl: 2rem;
@@ -181,6 +187,12 @@
     --color-empty-card: var(--color-bg-secondary);
     --color-empty-border: var(--color-border-primary);
     --color-empty-shadow: rgb(0 0 0 / 0.28);
+
+    --color-floating-bar-bg: color-mix(in srgb, var(--color-sidebar) 82%, transparent);
+    --color-floating-bar-hairline: rgb(255 255 255 / 0.1);
+    --color-floating-bar-shadow: rgb(0 0 0 / 0.42);
+    --color-floating-bar-pill: var(--color-nav-bg-current);
+    --color-floating-bar-press: color-mix(in srgb, var(--color-sidebar-accent) 75%, transparent);
   }
 }
 

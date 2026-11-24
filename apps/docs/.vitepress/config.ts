@@ -17,8 +17,19 @@ export default defineConfig({
   srcExclude: ["AGENTS.md", "test/**"],
   lastUpdated: false,
   head: [
+    [
+      "meta",
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
+    ],
+    ["meta", { name: "color-scheme", content: "light dark" }],
+    ["meta", { name: "theme-color", media: "(prefers-color-scheme: light)", content: "#ffffff" }],
+    ["meta", { name: "theme-color", media: "(prefers-color-scheme: dark)", content: "#1b1b1f" }],
+    ["meta", { name: "mobile-web-app-capable", content: "yes" }],
+    ["meta", { name: "apple-mobile-web-app-title", content: "CoForge Docs" }],
+    ["meta", { name: "apple-mobile-web-app-status-bar-style", content: "default" }],
     ["link", { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" }],
     ["link", { rel: "apple-touch-icon", href: "/apple-touch-icon.png" }],
+    ["link", { rel: "manifest", href: "/manifest.webmanifest" }],
   ],
   vite: {
     plugins: [llmstxt({ domain: process.env.DOCS_ORIGIN, excludeIndexPage: false })],

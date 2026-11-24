@@ -61,11 +61,12 @@ export function NoticeCardHost() {
   const coarse = useCoarsePointer();
 
   return (
+    /* Safari 26+ freezes status-bar sampling over transparent fixed layers; hide the host with visibility: hidden and reveal only its visible children. */
     <section
       aria-label={m.notice_region()}
-      className="pointer-events-none fixed top-[calc(var(--spacing-safe-top)+3.75rem)] right-3 left-3 z-60 sm:left-auto sm:w-[21.5rem]"
+      className="pointer-events-none invisible fixed top-[calc(var(--spacing-safe-top)+3.75rem)] right-3 left-3 z-60 sm:left-auto sm:w-[21.5rem]"
     >
-      <p role="status" className="sr-only">
+      <p role="status" className="sr-only visible">
         {newest ? `${newest.title}. ${newest.body}` : ""}
       </p>
       <AnimatePresence>
@@ -89,7 +90,7 @@ export function NoticeCardHost() {
                 : { opacity: 0, x: 48, transition: { duration: DURATION_S.mdOut, ease: EASE_IN } }
             }
             transition={reduceMotion ? FADE : { duration: DURATION_S.md, ease: EASE_OUT }}
-            className="group pointer-events-auto relative touch-pan-y rounded-3xl border border-secondary bg-primary p-3 shadow-(--toast-shadow)"
+            className="group pointer-events-auto visible relative touch-pan-y rounded-3xl border border-secondary bg-primary p-3 shadow-(--toast-shadow)"
           >
             {notices.length > 1 ? (
               <span

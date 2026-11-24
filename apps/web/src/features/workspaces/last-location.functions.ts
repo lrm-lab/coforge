@@ -18,21 +18,27 @@ import { splitWorkspacePath, workspacePath } from "#src/features/workspaces/work
  * `resume` is off), else the home of the Workspace the User last opened (or their first one);
  * `null` when they have none.
  */
+const startSectionSchema = z.enum(["chat", "activity", "workspace", "tasks"]);
+
 export const getStartPage = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
-  .validator(z.object({ resume: z.boolean() }))
+  .validator(z.object({ resume: z.boolean(), section: startSectionSchema.optional() }))
   .handler(async ({ data, context }) => {
     declareNoStore();
     const workspaces = await new WorkspaceCatalog(
       new PrismaWorkspaceCatalogStore(requireDatabaseClient()),
     ).listForUser(context.user.id);
-    const remembered = data.resume
-      ? restorableLastLocation(getRequest().headers.get("cookie") ?? undefined)
-      : undefined;
-    // Only a page in a Workspace the User is still in; one they left would be a 404.
-    const rememberedSlug = remembered && splitWorkspacePath(remembered)?.slug;
-    if (remembered && workspaces.some((workspace) => workspace.slug === rememberedSlug))
-      return remembered;
+    if (!data.section) {
+      const remembered = data.resume
+        ? restorableLastLocation(getRequest().headers.get("cookie") ?? undefined)
+        : undefined;
+      const rememberedSlug = remembered && splitWorkspacePath(remembered)?.slug;
+      if (remembered && workspaces.some((workspace) => workspace.slug === rememberedSlug))
+        return remembered;
+    }
     const workspace = pickWorkspace(workspaces, preferredWorkspaceSlugFromRequest());
-    return workspace ? workspacePath(workspace.slug) : null;
+    if (!workspace) return null;
+    const base = workspacePath(workspace.slug);
+    if (!data.section || data.section === "chat") return base;
+    return `${base}/${data.section}`;
   });

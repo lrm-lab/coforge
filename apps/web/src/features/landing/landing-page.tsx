@@ -1,10 +1,11 @@
 import { Check, ChevronDown, Translate01 as Languages } from "@untitledui/icons";
 import { Link } from "@tanstack/react-router";
-import { Fragment, useRef } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 
 import { Button as AriaButton } from "react-aria-components";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { setThemeColor, syncThemeColor } from "#src/lib/theme-color";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { useLandingPointerEffects } from "./use-landing-pointer-effects";
@@ -132,13 +133,26 @@ function Sparkle() {
 export function LandingPage() {
   const glow = useRef<HTMLDivElement>(null);
   const sparks = useRef<HTMLCanvasElement>(null);
+  const [atTop, setAtTop] = useState(true);
   useLandingPointerEffects(glow, sparks);
   const lettered = getLocale() === "zh-CN";
+
+  useEffect(() => {
+    setThemeColor("#eeebfe");
+    const onScroll = () => setAtTop(window.scrollY <= 0);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      syncThemeColor(document.documentElement.classList.contains("dark-mode"));
+    };
+  }, []);
 
   return (
     <div className="home-page font-display">
       {/* The document itself is the page colour too, so overscroll never shows the app theme. */}
       <style>{`html,body{background:#eeebfe;color-scheme:light}`}</style>
+      <div aria-hidden="true" className="home-status-strip" data-hidden={!atTop || undefined} />
       <div className="home-screen">
         <header className="home-nav">
           <div className="home-wrap home-nav-inner">

@@ -301,8 +301,10 @@
   text-underline-offset: 2px;
 }
 
-.message-markdown a:hover {
-  text-decoration-color: var(--color-reference-text);
+@media (hover: hover) {
+  .message-markdown a:hover {
+    text-decoration-color: var(--color-reference-text);
+  }
 }
 
 .message-markdown a:focus-visible {
@@ -333,8 +335,10 @@
   cursor: pointer;
 }
 
-.message-markdown-mention-openable:hover {
-  filter: brightness(0.95);
+@media (hover: hover) {
+  .message-markdown-mention-openable:hover {
+    filter: brightness(0.95);
+  }
 }
 
 .message-markdown-mention-openable:focus-visible {
@@ -351,7 +355,9 @@
   text-decoration: none;
 }
 
-.message-markdown a.message-markdown-channel-reference:hover,
-.message-markdown a.message-markdown-thread-reference:hover {
-  filter: brightness(0.95);
+@media (hover: hover) {
+  .message-markdown a.message-markdown-channel-reference:hover,
+  .message-markdown a.message-markdown-thread-reference:hover {
+    filter: brightness(0.95);
+  }
 }

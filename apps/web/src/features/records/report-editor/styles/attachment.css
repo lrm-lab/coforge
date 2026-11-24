@@ -49,8 +49,20 @@
   z-index: 1;
 }
 
-.image-figure:hover .image-toolbar {
+.image-figure:focus-within .image-toolbar {
   opacity: 1;
+}
+
+@media (hover: hover) {
+  .image-figure:hover .image-toolbar {
+    opacity: 1;
+  }
+}
+
+@media (hover: none), (any-pointer: coarse) {
+  .image-toolbar {
+    opacity: 1;
+  }
 }
 
 .image-toolbar button {
@@ -64,8 +76,14 @@
   transition: background-color 150ms var(--ease-out);
 }
 
-.image-toolbar button:hover {
-  background: color-mix(in srgb, var(--color-fg-white) 15%, transparent);
+@media (hover: hover) {
+  .image-toolbar button:hover {
+    background: color-mix(in srgb, var(--color-fg-white) 15%, transparent);
+  }
+}
+
+.image-toolbar button:active {
+  background: color-mix(in srgb, var(--color-fg-white) 24%, transparent);
 }
 
 .message-surface .image-figure {

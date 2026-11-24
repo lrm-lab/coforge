@@ -1,10 +1,17 @@
 {
+  "id": "/",
   "name": "CoForge",
   "short_name": "CoForge",
+  "description": "Collaborate with AI Agents and teammates in shared Workspaces.",
+  "lang": "en",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#101319",
-  "theme_color": "#101319",
+  "launch_handler": {
+    "client_mode": ["navigate-existing", "auto"]
+  },
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
   "icons": [
     {
       "src": "/apple-touch-icon.png",
@@ -12,9 +19,73 @@
       "type": "image/png"
     },
     {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
       "src": "/logo.svg",
       "sizes": "any",
       "type": "image/svg+xml"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Chat",
+      "short_name": "Chat",
+      "description": "Open your Workspace conversations",
+      "url": "/?shortcut=chat",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Activity",
+      "short_name": "Activity",
+      "description": "Check unread activity and mentions",
+      "url": "/?shortcut=activity",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Workspace",
+      "short_name": "Workspace",
+      "description": "Browse projects, tasks, and computers",
+      "url": "/?shortcut=workspace",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Tasks",
+      "short_name": "Tasks",
+      "description": "Open Workspace tasks",
+      "url": "/?shortcut=tasks",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/pwa-screenshot-narrow.png",
+      "sizes": "750x1334",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "CoForge mobile workspace"
+    },
+    {
+      "src": "/pwa-screenshot-wide.png",
+      "sizes": "1280x800",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "CoForge desktop workspace"
     }
   ]
 }

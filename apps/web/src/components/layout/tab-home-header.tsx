@@ -29,7 +29,7 @@ export function TabHomeHeader({
   const { workspaceSwitcher } = usePhoneShell();
   const workspaceSlug = useWorkspaceSlug();
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-secondary px-page">
+    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-secondary bg-primary px-page [[data-phone-page-scroll]_&]:sticky [[data-phone-page-scroll]_&]:top-0 [[data-phone-page-scroll]_&]:z-20">
       <span className="-ml-1.5 flex shrink-0">{workspaceSwitcher}</span>
       <h1 className="min-w-0 truncate text-lg font-semibold text-primary">{title}</h1>
       {meta}

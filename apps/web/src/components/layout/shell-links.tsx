@@ -1,13 +1,18 @@
 import { useCallback } from "react";
 import { useRouter } from "@tanstack/react-router";
 
-/** Official nav components render plain `<a href>` with no onClick hook, so
- * this routes same-origin, unmodified clicks through the router instead. */
 function useSpaNavigation() {
   const router = useRouter();
   return useCallback(
     (event: React.MouseEvent<HTMLElement>) => {
-      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) {
         return;
       }
       const anchor = (event.target as HTMLElement).closest("a[href]");
@@ -22,12 +27,10 @@ function useSpaNavigation() {
   );
 }
 
-/** The shell's own links (the sidebars', the tab bar's and the hub's), routed
- * through the router. */
 export function ShellLinks({ children }: { children: React.ReactNode }) {
-  const onClickCapture = useSpaNavigation();
+  const onClick = useSpaNavigation();
   return (
-    <div onClickCapture={onClickCapture} className="contents">
+    <div onClick={onClick} className="contents">
       {children}
     </div>
   );

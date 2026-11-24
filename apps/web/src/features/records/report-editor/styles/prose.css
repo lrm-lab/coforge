@@ -401,8 +401,10 @@
   cursor: pointer;
 }
 
-.rich-text-editor a:hover {
-  text-decoration-color: var(--color-text-brand-secondary);
+@media (hover: hover) {
+  .rich-text-editor a:hover {
+    text-decoration-color: var(--color-text-brand-secondary);
+  }
 }
 
 .rich-text-editor a.issue-mention {
@@ -410,8 +412,10 @@
   text-decoration: none;
 }
 
-.rich-text-editor a.issue-mention:hover {
-  text-decoration: none;
+@media (hover: hover) {
+  .rich-text-editor a.issue-mention:hover {
+    text-decoration: none;
+  }
 }
 
 .rich-text-editor .mention {

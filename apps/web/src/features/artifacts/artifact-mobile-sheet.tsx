@@ -1,16 +1,20 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent,
   type PointerEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { animate, motion, useMotionValue, useTransform } from "motion/react";
 import { FocusScope } from "react-aria";
 
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
+import { acquirePageFlowHandoff, isTopPageFlowEntry } from "#src/lib/page-flow-handoff";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { DURATION_S, EASE_OUT } from "#src/utils/motion-tokens";
@@ -35,6 +39,15 @@ function snapOffsetPx(snap: SheetSnap): number {
   return snap === "tall" ? 0 : Math.round(viewportHeight() * HALF_DELTA_RATIO);
 }
 
+function findScrollableDescendant(container: HTMLElement | null): HTMLElement | null {
+  if (!container) return null;
+  const marked = container.querySelector<HTMLElement>(
+    "[data-artifact-scroll], [class*='overflow-y-auto'], [class*='overflow-y-scroll']",
+  );
+  if (marked && marked.scrollHeight > marked.clientHeight) return marked;
+  return null;
+}
+
 export function ArtifactMobileSheet({
   label,
   onClose,
@@ -45,16 +58,26 @@ export function ArtifactMobileSheet({
   children: ReactNode;
 }) {
   const reduced = usePrefersReducedMotion();
+  const wide = useBreakpoint("sm");
   const [snap, setSnap] = useState<SheetSnap>("half");
   const snapRef = useRef<SheetSnap>("half");
   snapRef.current = snap;
+  const sheetRef = useRef<HTMLElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const entryIdRef = useRef<symbol | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const handedScrollRef = useRef(0);
   const cleanupDragRef = useRef<(() => void) | null>(null);
+  const [scrimBox, setScrimBox] = useState<{ top: number; height: number }>({ top: 0, height: 0 });
   const y = useMotionValue(reduced ? snapOffsetPx("half") : viewportHeight());
   const backdropOpacity = useTransform(y, (current) => {
     const halfOffset = snapOffsetPx("half");
     if (current <= halfOffset) return 1;
     return Math.max(0, 1 - (current - halfOffset) / 320);
   });
+
+  const isTallFlow = snap === "tall" && !wide;
 
   const animateToSnap = useCallback(
     (nextSnap: SheetSnap, velocity = 0) => {
@@ -69,24 +92,95 @@ export function ArtifactMobileSheet({
   );
 
   useEffect(() => {
-    animateToSnap(snapRef.current);
-  }, [animateToSnap]);
+    if (!isTallFlow) animateToSnap(snapRef.current);
+  }, [animateToSnap, isTallFlow]);
+
+  useLayoutEffect(() => {
+    if (isTallFlow || typeof window === "undefined") return;
+    const sync = () => {
+      const top = Math.max(0, window.scrollY);
+      const docHeight = Math.max(
+        document.documentElement.scrollHeight,
+        document.body.scrollHeight,
+        window.innerHeight,
+      );
+      const height = Math.max(
+        window.innerHeight,
+        Math.min(docHeight - top, window.innerHeight * 1.25),
+      );
+      setScrimBox({ top, height });
+    };
+    sync();
+    window.addEventListener("resize", sync);
+    window.addEventListener("scroll", sync, { passive: true });
+    return () => {
+      window.removeEventListener("resize", sync);
+      window.removeEventListener("scroll", sync);
+    };
+  }, [isTallFlow]);
+
+  // Once the sheet covers the phone screen ("tall"), hand scroll over to the document
+  // so Safari collapses its toolbar and updates status/toolbar colors while scrolling.
+  useLayoutEffect(() => {
+    if (!isTallFlow || typeof window === "undefined") return;
+    const handoff = acquirePageFlowHandoff({
+      root: document.getElementById("coforge-app-root"),
+      win: window,
+      layerEl: sheetRef.current,
+      initialScrollTop: handedScrollRef.current,
+    });
+    entryIdRef.current = handoff.id;
+    return () => {
+      entryIdRef.current = null;
+      handoff.release((pageScrollY) => {
+        handedScrollRef.current = pageScrollY;
+      });
+    };
+  }, [isTallFlow]);
+
+  useLayoutEffect(() => {
+    if (isTallFlow || handedScrollRef.current <= 0) return;
+    const scroller = findScrollableDescendant(bodyRef.current);
+    if (scroller) {
+      scroller.scrollTop = handedScrollRef.current;
+    }
+    handedScrollRef.current = 0;
+  }, [isTallFlow]);
+
+  useEffect(() => {
+    if (wide) return;
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (entryIdRef.current && !isTopPageFlowEntry(entryIdRef.current)) return;
+      if (document.querySelector("[data-page-scrim]")) return;
+      event.preventDefault();
+      onCloseRef.current();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [wide]);
 
   useEffect(() => {
     const onResize = () => {
-      y.set(snapOffsetPx(snapRef.current));
+      if (!isTallFlow) y.set(snapOffsetPx(snapRef.current));
     };
     window.addEventListener("resize", onResize);
     return () => {
       window.removeEventListener("resize", onResize);
       cleanupDragRef.current?.();
     };
-  }, [y]);
+  }, [y, isTallFlow]);
 
   const commitSnap = (nextSnap: SheetSnap, velocity = 0) => {
+    if (nextSnap === "tall" && snapRef.current === "half") {
+      const scroller = findScrollableDescendant(bodyRef.current);
+      handedScrollRef.current = scroller?.scrollTop ?? 0;
+    }
     snapRef.current = nextSnap;
     setSnap(nextSnap);
-    animateToSnap(nextSnap, velocity);
+    if (nextSnap === "half") {
+      animateToSnap(nextSnap, velocity);
+    }
   };
 
   const toggleSnap = () => {
@@ -99,7 +193,7 @@ export function ArtifactMobileSheet({
     const target = event.currentTarget;
     target.setPointerCapture(event.pointerId);
     const startY = event.clientY;
-    const baseY = y.get();
+    const baseY = isTallFlow ? 0 : y.get();
     let lastY = startY;
     let lastTime = performance.now();
     let velocity = 0;
@@ -114,8 +208,10 @@ export function ArtifactMobileSheet({
       if (dt > 0) velocity = ((moveEvent.clientY - lastY) / dt) * 1000;
       lastY = moveEvent.clientY;
       lastTime = now;
-      const next = baseY + offsetY;
-      y.set(next < 0 ? next * UPWARD_ELASTICITY : next);
+      if (!isTallFlow) {
+        const next = baseY + offsetY;
+        y.set(next < 0 ? next * UPWARD_ELASTICITY : next);
+      }
     };
 
     const cleanup = () => {
@@ -127,7 +223,7 @@ export function ArtifactMobileSheet({
 
     const onCancel = () => {
       cleanup();
-      animateToSnap(snapRef.current, 0);
+      if (!isTallFlow) animateToSnap(snapRef.current, 0);
     };
 
     const onFinish = () => {
@@ -154,7 +250,7 @@ export function ArtifactMobileSheet({
         commitSnap("tall", velocity);
         return;
       }
-      animateToSnap(snapRef.current, velocity);
+      if (!isTallFlow) animateToSnap(snapRef.current, velocity);
     };
 
     cleanupDragRef.current = cleanup;
@@ -170,46 +266,64 @@ export function ArtifactMobileSheet({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-40 sm:hidden">
-      <motion.div
-        aria-hidden="true"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: reduced ? DURATION_S.reduced : DURATION_S.sm, ease: EASE_OUT }}
-        style={{ opacity: backdropOpacity }}
-        onClick={onClose}
-        className="fixed inset-0 bg-overlay/50"
-      />
+  if (wide || typeof document === "undefined") return null;
+
+  return createPortal(
+    <>
+      {!isTallFlow && (
+        <motion.div
+          aria-hidden="true"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: reduced ? DURATION_S.reduced : DURATION_S.sm, ease: EASE_OUT }}
+          style={{
+            opacity: backdropOpacity,
+            top: `${scrimBox.top}px`,
+            height: scrimBox.height > 0 ? `${scrimBox.height}px` : "100dvh",
+          }}
+          onClick={onClose}
+          className="absolute inset-x-0 z-40 bg-overlay/50 sm:hidden"
+        />
+      )}
       <FocusScope contain restoreFocus autoFocus>
         <motion.aside
+          ref={sheetRef}
           role="dialog"
           aria-modal="true"
           aria-label={label}
           data-artifact-mobile-sheet=""
+          data-phone-page-flow={isTallFlow ? "" : undefined}
           initial={reduced ? { opacity: 0 } : undefined}
           animate={reduced ? { opacity: 1 } : undefined}
           transition={reduced ? { duration: DURATION_S.reduced, ease: EASE_OUT } : undefined}
-          style={{ y }}
+          style={isTallFlow ? undefined : { y }}
           className={cn(
-            "fixed inset-x-0 bottom-0 z-50 flex h-[92dvh] flex-col overflow-hidden rounded-t-2xl border-t border-secondary bg-primary shadow-xl will-change-transform",
-            snap === "half" ? "pb-[calc(27dvh+var(--spacing-safe-bottom))]" : "pb-safe-bottom",
+            "z-50 flex flex-col bg-primary sm:hidden",
+            isTallFlow
+              ? "relative min-h-dvh w-full pt-safe-top pb-safe-bottom"
+              : "fixed inset-x-0 bottom-0 h-[92dvh] overflow-hidden rounded-t-2xl border-t border-secondary pb-[calc(27dvh+var(--spacing-safe-bottom))] shadow-xl will-change-transform",
           )}
         >
           <div
             role="button"
             tabIndex={0}
             aria-label={m.av_sheet_drag_label()}
-            aria-expanded={snap === "tall"}
+            aria-expanded={isTallFlow}
             onPointerDown={onHandlePointerDown}
             onKeyDown={onHandleKeyDown}
-            className="flex min-h-11 w-full shrink-0 cursor-grab touch-none items-center justify-center outline-focus-ring focus-visible:outline-2 focus-visible:-outline-offset-2 active:cursor-grabbing"
+            className={cn(
+              "flex min-h-11 w-full shrink-0 cursor-grab touch-none items-center justify-center bg-primary outline-focus-ring focus-visible:outline-2 focus-visible:-outline-offset-2 active:cursor-grabbing",
+              isTallFlow && "sticky top-0 z-10",
+            )}
           >
             <span aria-hidden="true" className="h-1 w-9 rounded-full bg-quaternary" />
           </div>
-          <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+          <div ref={bodyRef} className={cn("flex flex-1 flex-col", !isTallFlow && "min-h-0")}>
+            {children}
+          </div>
         </motion.aside>
       </FocusScope>
-    </div>
+    </>,
+    document.body,
   );
 }

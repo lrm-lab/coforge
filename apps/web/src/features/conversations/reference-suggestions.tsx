@@ -66,7 +66,9 @@ export function ReferenceSuggestionList({
           event.stopPropagation();
           onChoose(item);
         }}
-        onMouseEnter={() => onHighlight(index)}
+        onPointerEnter={(event) => {
+          if (event.pointerType === "mouse") onHighlight(index);
+        }}
         className={cx(
           "flex min-h-9 cursor-pointer select-none items-center gap-2 px-3 py-1.5 pointer-coarse:min-h-11",
           active && "bg-secondary",

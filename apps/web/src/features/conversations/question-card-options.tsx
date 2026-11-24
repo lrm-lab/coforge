@@ -80,7 +80,11 @@ export function QuestionOptions({
             data-question-option={sizer ? undefined : option.id}
             data-chosen={!sizer && chosen ? "" : undefined}
             data-hi={live && kbd && row === hi ? "" : undefined}
-            onMouseMove={live ? () => row !== hi && onHover?.(row) : undefined}
+            onPointerMove={
+              live
+                ? (event) => event.pointerType === "mouse" && row !== hi && onHover?.(row)
+                : undefined
+            }
             onClick={live ? () => onPick?.(row) : undefined}
             className={cn("group/row", OPTION_ROW, interactiveMode && OPTION_ROW_LIVE, lit(row))}
           >
@@ -139,7 +143,9 @@ export function QuestionOptions({
             aria-selected={Boolean(ownWords)}
             data-question-other=""
             data-hi={kbd && hi === otherRow ? "" : undefined}
-            onMouseMove={() => hi !== otherRow && onHover?.(otherRow)}
+            onPointerMove={(event) =>
+              event.pointerType === "mouse" && hi !== otherRow && onHover?.(otherRow)
+            }
             onClick={(event) =>
               event.currentTarget.querySelector("input")?.focus({ preventScroll: true })
             }

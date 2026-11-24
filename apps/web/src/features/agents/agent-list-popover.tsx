@@ -110,8 +110,12 @@ export function AgentListRow({
         "flex items-center gap-2 px-3 py-1.5",
         onOpenProfile && "transition-colors hover:bg-primary_hover",
       )}
-      onPointerEnter={() => setHovered(true)}
-      onPointerLeave={() => setHovered(false)}
+      onPointerEnter={(event) => {
+        if (event.pointerType === "mouse") setHovered(true);
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "mouse") setHovered(false);
+      }}
     >
       {onOpenProfile ? (
         <Button

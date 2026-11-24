@@ -121,6 +121,7 @@ export function SearchDialog({
   return (
     <ModalOverlay
       isOpen
+      page
       isDismissable
       instant
       onOpenChange={(open) => !open && onClose()}
@@ -134,7 +135,7 @@ export function SearchDialog({
         >
           <div onKeyDown={onKeyDown} className="flex h-full max-h-[inherit] min-h-0 flex-col">
             <div
-              className="flex flex-col gap-3 border-b border-secondary px-4 pt-3.5 pb-3"
+              className="flex flex-col gap-3 border-b border-secondary bg-primary px-4 pt-3.5 pb-3 max-sm:sticky max-sm:top-safe-top max-sm:z-10"
               onCompositionStart={() => setComposing(true)}
               onCompositionEnd={() => setComposing(false)}
             >

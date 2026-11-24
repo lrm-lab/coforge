@@ -1,0 +1,177 @@
+:root {
+  --docs-foot-inset: 0.75rem;
+  --docs-foot-height: 3.5rem;
+  --docs-foot-pad: 0.25rem;
+  --docs-foot-folded-height: 2.5rem;
+  --docs-foot-bg: color-mix(in srgb, var(--vp-c-bg) 82%, transparent);
+  --docs-foot-hairline: rgb(16 19 25 / 0.06);
+  --docs-foot-shadow: rgb(16 19 25 / 0.16);
+  --docs-foot-press: color-mix(in srgb, var(--vp-c-brand-1) 12%, transparent);
+}
+
+.dark {
+  --docs-foot-hairline: rgb(255 255 255 / 0.1);
+  --docs-foot-shadow: rgb(0 0 0 / 0.42);
+}
+
+@media (display-mode: standalone) {
+  :root {
+    --docs-foot-inset: 1.3125rem;
+    --docs-foot-height: 3.875rem;
+    --docs-foot-folded-height: 2.75rem;
+  }
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  background-color: var(--vp-c-bg);
+}
+
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+}
+
+/* Safari 26+ samples fixed foot bars for toolbar tinting; keep the bar itself transparent
+   and paint the frosted surface, hairline, and shadow on ::before. */
+.docs-foot-bar {
+  position: fixed;
+  inset-inline: var(--docs-foot-inset);
+  bottom: calc(var(--docs-foot-inset) + env(safe-area-inset-bottom, 0px));
+  z-index: 30;
+  display: flex;
+  justify-content: center;
+  background: transparent;
+  pointer-events: none;
+}
+
+@media (min-width: 960px) {
+  .docs-foot-bar {
+    display: none;
+  }
+}
+
+@media (max-width: 959px) {
+  .VPDoc {
+    padding-bottom: calc(
+      var(--docs-foot-height) + var(--docs-foot-inset) * 2 + env(safe-area-inset-bottom, 0px)
+    ) !important;
+  }
+}
+
+.docs-foot-bar__shell {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  width: min(100%, 28rem);
+  height: var(--docs-foot-height);
+  padding: var(--docs-foot-pad);
+  background: transparent;
+  pointer-events: auto;
+  transition:
+    width 280ms cubic-bezier(0, 0, 0.58, 1),
+    height 280ms cubic-bezier(0, 0, 0.58, 1);
+}
+
+.docs-foot-bar__shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: var(--docs-foot-bg);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  box-shadow:
+    0 0 0 0.5px var(--docs-foot-hairline),
+    0 2px 8px -2px var(--docs-foot-shadow);
+  pointer-events: none;
+}
+
+.docs-foot-bar[data-folded="true"] .docs-foot-bar__shell {
+  width: 5rem;
+  height: var(--docs-foot-folded-height);
+  padding: 0;
+}
+
+.docs-foot-bar__link {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
+  height: 100%;
+  padding-inline: 0.75rem;
+  border-radius: 9999px;
+  color: var(--vp-c-text-1);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  transition: background-color 120ms cubic-bezier(0, 0, 0.58, 1);
+}
+
+.docs-foot-bar__link--prev {
+  justify-content: flex-start;
+}
+
+.docs-foot-bar__link--next {
+  justify-content: flex-end;
+}
+
+.docs-foot-bar__link:active {
+  background-color: var(--docs-foot-press);
+  box-shadow: none;
+}
+
+.docs-foot-bar__arrow {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  color: var(--vp-c-text-2);
+}
+
+.docs-foot-bar__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: opacity 120ms cubic-bezier(0, 0, 0.58, 1) 160ms;
+}
+
+.docs-foot-bar[data-folded="true"] .docs-foot-bar__link {
+  justify-content: center;
+  gap: 0;
+  padding-inline: 0;
+}
+
+.docs-foot-bar[data-folded="true"] .docs-foot-bar__link--prev {
+  padding-inline-end: 0.25rem;
+}
+
+.docs-foot-bar[data-folded="true"] .docs-foot-bar__link--next {
+  padding-inline-start: 0.25rem;
+}
+
+.docs-foot-bar[data-folded="true"] .docs-foot-bar__title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 100ms cubic-bezier(0, 0, 0.58, 1) 0ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .docs-foot-bar__shell,
+  .docs-foot-bar__link,
+  .docs-foot-bar__title {
+    transition-duration: 0ms;
+    transition-delay: 0ms;
+  }
+}

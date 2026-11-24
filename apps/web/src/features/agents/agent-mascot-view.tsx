@@ -90,8 +90,12 @@ export function AgentMascotView({
       ref={watch}
       aria-hidden="true"
       className={cx("relative block size-full", className)}
-      onPointerEnter={() => setHovered(true)}
-      onPointerLeave={() => setHovered(false)}
+      onPointerEnter={(event) => {
+        if (event.pointerType === "mouse") setHovered(true);
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "mouse") setHovered(false);
+      }}
     >
       {mayMove && near ? (
         <MovingMascot

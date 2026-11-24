@@ -173,6 +173,12 @@ export function WorkspaceProfileSettings({
                       >
                         <Camera01 className="size-5" />
                       </span>
+                      <span
+                        aria-hidden="true"
+                        className="absolute -right-1 -bottom-1 hidden size-6 place-items-center rounded-full bg-primary text-fg-secondary shadow-xs ring-1 ring-secondary group-pending:hidden [@media(hover:none)]:grid"
+                      >
+                        <Camera01 className="size-3.5" />
+                      </span>
                     </AriaButton>
                   </Tooltip>
                 </FileTrigger>

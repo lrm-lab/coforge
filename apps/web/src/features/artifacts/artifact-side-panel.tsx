@@ -152,7 +152,9 @@ export function ArtifactSidePanel({
 
   return (
     <>
-      {resizing && <div aria-hidden="true" className="fixed inset-0 z-50 cursor-col-resize" />}
+      {resizing && (
+        <div aria-hidden="true" className="fixed inset-0 z-50 cursor-col-resize max-lg:hidden" />
+      )}
       <div
         aria-hidden="true"
         onClick={onClose}

@@ -1,3 +1,4 @@
+import { CLIENT_BUILD_ID } from "#src/features/updates/build-update";
 import { browserInstallationId } from "./browser-notification-store";
 import { type PushService, UNREACHABLE_PUSH_SERVICES } from "./unreachable-push-services";
 
@@ -121,7 +122,11 @@ export async function syncBrowserPushSubscription(
  * Shared by Web Push registration and the in-page path, which needs an active
  * registration to call `showNotification` on even when Web Push itself was never subscribed. */
 async function ensureServiceWorkerRegistration(): Promise<ServiceWorkerRegistration> {
-  await navigator.serviceWorker.register("/service-worker.js", { scope: "/" });
+  const url =
+    CLIENT_BUILD_ID === "development"
+      ? "/service-worker.js?v=development"
+      : `/service-worker.js?v=${encodeURIComponent(CLIENT_BUILD_ID)}`;
+  await navigator.serviceWorker.register(url, { scope: "/" });
   return navigator.serviceWorker.ready;
 }
 

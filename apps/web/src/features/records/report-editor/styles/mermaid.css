@@ -49,12 +49,17 @@
   z-index: 1;
 }
 
-.rich-text-editor .mermaid-diagram:hover .mermaid-diagram-toolbar,
 .rich-text-editor .mermaid-diagram-toolbar:focus-within {
   opacity: 1;
 }
 
-@media (any-pointer: coarse) {
+@media (hover: hover) {
+  .rich-text-editor .mermaid-diagram:hover .mermaid-diagram-toolbar {
+    opacity: 1;
+  }
+}
+
+@media (hover: none), (any-pointer: coarse) {
   .rich-text-editor .mermaid-diagram-toolbar {
     opacity: 1;
   }
@@ -71,8 +76,14 @@
   transition: background-color 150ms var(--ease-out);
 }
 
-.rich-text-editor .mermaid-diagram-toolbar button:hover {
-  background: color-mix(in srgb, white 15%, transparent);
+@media (hover: hover) {
+  .rich-text-editor .mermaid-diagram-toolbar button:hover {
+    background: color-mix(in srgb, white 15%, transparent);
+  }
+}
+
+.rich-text-editor .mermaid-diagram-toolbar button:active {
+  background: color-mix(in srgb, white 24%, transparent);
 }
 
 /* Mermaid fullscreen — iframe fills the Dialog content surface.

@@ -123,7 +123,7 @@ export function AccountSettings({
               userId={profile.id}
               src={profile.avatarUrl}
             />
-            <span className="absolute right-0 bottom-0 grid size-7 place-items-center rounded-full bg-primary text-fg-secondary opacity-0 shadow-xs ring-1 ring-secondary transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+            <span className="absolute right-0 bottom-0 grid size-7 place-items-center rounded-full bg-primary text-fg-secondary opacity-0 shadow-xs ring-1 ring-secondary transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:none)]:opacity-100">
               <Camera01 className="size-4" />
             </span>
           </Button>

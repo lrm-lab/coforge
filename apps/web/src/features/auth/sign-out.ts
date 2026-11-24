@@ -1,18 +1,49 @@
 import { forgetQueryCache } from "#src/features/cache-persistence/browser-query-cache";
 
-/** Longest a sign-out waits for the browser's storage: one that hangs must not keep anyone signed in. */
 const FORGET_TIMEOUT_MS = 2_000;
+const SW_CACHE_PREFIX = "coforge-";
 
-/**
- * Signs out of this browser: what this person's pages kept in it (`features/cache-persistence/`)
- * goes first, then a full navigation to `/auth/logout` clears the session cookie and lands on the sign-in
- * page. `href` carries a `returnTo` for signing in again as
- * someone else.
- */
+async function clearOfflinePageCache(): Promise<void> {
+  if (typeof navigator !== "undefined" && navigator.serviceWorker?.controller) {
+    navigator.serviceWorker.controller.postMessage({ type: "clear-pages" });
+  }
+  if (typeof caches === "undefined") return;
+  const keys = await caches.keys();
+  await Promise.all(
+    keys
+      .filter((key) => key.startsWith(SW_CACHE_PREFIX))
+      .map(async (key) => {
+        const cache = await caches.open(key);
+        const requests = await cache.keys();
+        await Promise.all(
+          requests
+            .filter((request) => {
+              try {
+                return !new URL(request.url).pathname.startsWith("/assets/");
+              } catch {
+                return true;
+              }
+            })
+            .map((request) => cache.delete(request)),
+        );
+      }),
+  );
+}
+
 export async function signOut(href = "/auth/logout") {
-  await Promise.race([
-    forgetQueryCache().catch(() => undefined),
-    new Promise((resolve) => setTimeout(resolve, FORGET_TIMEOUT_MS)),
-  ]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      Promise.all([
+        forgetQueryCache().catch(() => undefined),
+        clearOfflinePageCache().catch(() => undefined),
+      ]),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, FORGET_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
   window.location.assign(href);
 }
