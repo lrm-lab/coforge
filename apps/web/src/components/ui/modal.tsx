@@ -7,13 +7,17 @@ import {
   useRef,
   useState,
   type ComponentProps,
+  type ComponentPropsWithRef,
   type CSSProperties,
   type PointerEvent,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 import { FocusScope } from "react-aria";
-import { OverlayTriggerStateContext } from "react-aria-components";
+import {
+  OverlayTriggerStateContext,
+  type ModalOverlay as AriaModalOverlay,
+} from "react-aria-components";
 import { useOverlayTriggerState, type OverlayTriggerState } from "react-stately";
 
 import {
@@ -25,10 +29,21 @@ export { Dialog, DialogTrigger } from "#src/components/application/modals/modal"
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useKeyboardFieldFocused } from "#src/hooks/use-keyboard-field-focused";
 import { useVisualViewportTop } from "#src/hooks/use-visual-viewport-top";
+import {
+  composeOverlayRefs,
+  OVERLAY_CONTENT_Z,
+  OVERLAY_LAYER,
+  OVERLAY_SCRIM_Z,
+  useOverlayHost,
+} from "#src/lib/overlay-layer";
 import { acquirePageFlowHandoff, isTopPageFlowEntry } from "#src/lib/page-flow-handoff";
 import { cx } from "#src/utils/cx";
 
 type ModalForm = "sheet" | "page" | "page-flow" | null;
+
+const RefForwardingModalOverlay: (
+  props: ComponentPropsWithRef<typeof AriaModalOverlay>,
+) => ReactNode = OfficialModalOverlay;
 
 const ModalContext = createContext<{ form: ModalForm; instant: boolean }>({
   form: null,
@@ -57,7 +72,17 @@ function resolveScrimConfig(
 
 /* Safari 26+ paints a flat strip behind its bottom toolbar when a fixed scrim reaches the window foot.
    Positioning the scrim in page coordinates lets Safari render the dimmed page behind the toolbar. */
-export function PageCoordinateScrim({ open, className }: { open: boolean; className: string }) {
+export function PageCoordinateScrim({
+  open,
+  className,
+  portalContainer,
+  zIndex = OVERLAY_SCRIM_Z,
+}: {
+  open: boolean;
+  className: string;
+  portalContainer?: HTMLElement | null;
+  zIndex?: number;
+}) {
   const [box, setBox] = useState<{ top: number; height: number }>({ top: 0, height: 0 });
 
   useLayoutEffect(() => {
@@ -93,10 +118,11 @@ export function PageCoordinateScrim({ open, className }: { open: boolean; classN
       style={{
         top: `${box.top}px`,
         height: box.height > 0 ? `${box.height}px` : "100dvh",
+        zIndex,
       }}
-      className={cx("pointer-events-auto absolute inset-x-0 z-50", className)}
+      className={cx("pointer-events-auto absolute inset-x-0", className)}
     />,
-    document.body,
+    portalContainer ?? document.body,
   );
 }
 
@@ -162,7 +188,7 @@ function PhonePageFlowOverlay({
           <div
             ref={layerRef}
             data-phone-page-flow=""
-            className="relative z-50 flex min-h-dvh w-full flex-col bg-primary safe-area-padding"
+            className={`relative ${OVERLAY_LAYER} flex min-h-dvh w-full flex-col bg-primary safe-area-padding`}
           >
             {children}
           </div>
@@ -178,8 +204,10 @@ export function ModalOverlay({
   confirmation,
   page,
   instant = false,
+  ref,
+  UNSTABLE_portalContainer,
   ...props
-}: Omit<ComponentProps<typeof OfficialModalOverlay>, "style"> & {
+}: Omit<ComponentProps<typeof RefForwardingModalOverlay>, "style"> & {
   confirmation?: boolean;
   page?: boolean;
   instant?: boolean;
@@ -195,6 +223,7 @@ export function ModalOverlay({
   const open = overlayState.isOpen;
   const wide = useBreakpoint("sm");
   const usePhonePageFlow = Boolean(page) && !wide;
+  const { host, overlayRef } = useOverlayHost(open && !usePhonePageFlow);
   const viewportTop = useVisualViewportTop(open && !usePhonePageFlow);
   const keyboardMayBeUp = useKeyboardFieldFocused(open && !usePhonePageFlow);
   const form: ModalForm = confirmation ? "sheet" : page ? "page" : null;
@@ -230,15 +259,25 @@ export function ModalOverlay({
 
   return (
     <ModalContext.Provider value={modalContext}>
-      {scrim.enabled && <PageCoordinateScrim open={open} className={scrim.className} />}
-      <OfficialModalOverlay
+      {scrim.enabled && (
+        <PageCoordinateScrim
+          open={open}
+          portalContainer={host}
+          zIndex={OVERLAY_SCRIM_Z}
+          className={scrim.className}
+        />
+      )}
+      <RefForwardingModalOverlay
         {...props}
+        ref={composeOverlayRefs(ref, overlayRef)}
+        UNSTABLE_portalContainer={UNSTABLE_portalContainer ?? host ?? undefined}
         isOpen={usesLocalState ? overlayState.isOpen : undefined}
         defaultOpen={undefined}
         onOpenChange={usesLocalState ? overlayState.setOpen : props.onOpenChange}
         isDismissable={props.isDismissable ?? (Boolean(confirmation) && !wide)}
         style={
           {
+            zIndex: OVERLAY_CONTENT_Z,
             "--visual-viewport-top": `${viewportTop}px`,
             "--spacing-safe-bottom":
               "max(0px, calc(env(safe-area-inset-bottom, 0px) - (var(--app-height, 100dvh) - var(--visual-viewport-height, var(--app-height, 100dvh)))))",
@@ -248,10 +287,8 @@ export function ModalOverlay({
           cx(
             /* Safari 26+ samples fixed overlays that touch the viewport foot; hide the fixed shell
                with visibility: hidden while PageCoordinateScrim dims the page in page coordinates. */
-            "invisible bg-transparent backdrop-blur-none",
-            instant
-              ? "animate-none!"
-              : [state.isEntering && "scrim-in", state.isExiting && "scrim-out"],
+            "invisible z-10 bg-transparent backdrop-blur-none",
+            instant && "animate-none!",
             "max-sm:top-(--visual-viewport-top) max-sm:bottom-auto max-sm:h-(--visual-viewport-height) max-sm:min-h-0",
             !keyboardMayBeUp &&
               "max-sm:[--visual-viewport-height:var(--app-height,100dvh)]! max-sm:[--visual-viewport-top:0px]!",
@@ -259,7 +296,7 @@ export function ModalOverlay({
             page &&
               "max-sm:items-stretch max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px]",
             typeof className === "function" ? className(state) : className,
-            "invisible bg-transparent backdrop-blur-none",
+            "invisible z-10 bg-transparent backdrop-blur-none",
           )
         }
       />

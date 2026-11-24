@@ -14,11 +14,17 @@ import {
 import { useOverlayTriggerState } from "react-stately";
 import { CloseButton } from "#src/components/base/buttons/close-button";
 import { PageCoordinateScrim } from "#src/components/ui/modal";
+import {
+    composeOverlayRefs,
+    OVERLAY_CONTENT_Z,
+    OVERLAY_SCRIM_Z,
+    useOverlayHost,
+} from "#src/lib/overlay-layer";
 import { cx } from "#src/utils/cx";
 
 interface ModalOverlayProps extends AriaModalOverlayProps, RefAttributes<HTMLDivElement> {}
 
-export const ModalOverlay = (props: ModalOverlayProps) => {
+export const ModalOverlay = ({ ref, ...props }: ModalOverlayProps) => {
     const trigger = useContext(OverlayTriggerStateContext);
     const usesLocalState = props.isOpen !== undefined || props.defaultOpen !== undefined || !trigger;
     const localState = useOverlayTriggerState({
@@ -28,18 +34,30 @@ export const ModalOverlay = (props: ModalOverlayProps) => {
     });
     const overlayState = usesLocalState ? localState : trigger;
     const open = overlayState.isOpen;
+    const { host, overlayRef } = useOverlayHost(open);
     return (
         <>
-            <PageCoordinateScrim open={open} className="bg-modal-scrim/70 motion-enter animate-in fade-in" />
+            <PageCoordinateScrim
+                open={open}
+                portalContainer={host}
+                zIndex={OVERLAY_SCRIM_Z}
+                className="bg-modal-scrim/70 motion-enter animate-in fade-in"
+            />
             <AriaModalOverlay
                 {...props}
+                ref={composeOverlayRefs(ref, overlayRef)}
+                UNSTABLE_portalContainer={props.UNSTABLE_portalContainer ?? host ?? undefined}
                 isOpen={usesLocalState ? overlayState.isOpen : undefined}
                 defaultOpen={undefined}
                 onOpenChange={usesLocalState ? overlayState.setOpen : props.onOpenChange}
+                style={(state) => ({
+                    ...(typeof props.style === "function" ? props.style(state) : props.style),
+                    zIndex: OVERLAY_CONTENT_Z,
+                })}
                 className={(state) =>
                     cx(
                         /* Safari 26+: hide the fixed overlay shell and let PageCoordinateScrim dim in page coordinates. */
-                        "invisible fixed inset-0 z-50 flex min-h-dvh w-full items-center justify-end bg-transparent pl-6 outline-hidden md:pl-10",
+                        "invisible fixed inset-0 z-10 flex min-h-dvh w-full items-center justify-end bg-transparent pl-6 outline-hidden md:pl-10",
                         state.isEntering && "motion-enter animate-in fade-in",
                         state.isExiting && "motion-leave animate-out fade-out",
                         typeof props.className === "function" ? props.className(state) : props.className,
