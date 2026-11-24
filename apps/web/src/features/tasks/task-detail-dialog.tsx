@@ -383,7 +383,7 @@ function TaskPopupOverlay({
       {...props}
       isKeyboardDismissDisabled={!keyboardDismiss}
       isDismissable
-      className="max-sm:items-stretch max-sm:px-0 max-sm:[--modal-pb:0rem] max-sm:[--modal-pt:0rem]"
+      className="max-sm:items-stretch max-sm:px-0 max-sm:[--modal-pb:0rem] max-sm:[--modal-pt:0rem] max-sm:[@media(display-mode:standalone)]:visible"
     />
   );
 }
