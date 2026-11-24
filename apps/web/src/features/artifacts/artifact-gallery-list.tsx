@@ -1,6 +1,6 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { Link } from "@tanstack/react-router";
-import { motion } from "motion/react";
+import * as motion from "motion/react-m";
 import { Focusable } from "react-aria-components";
 
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
@@ -16,7 +16,11 @@ import type { GallerySort } from "./artifact-gallery-model";
 import { ArtifactActor, ArtifactIcon } from "./artifact-parts";
 import { useArtifactActor } from "./artifact-queries";
 
-function GalleryListRow({
+const LAYOUT_TRANSITION = {
+  layout: { duration: DURATION_S.md, ease: EASE_IN_OUT },
+} as const;
+
+const GalleryListRow = memo(function GalleryListRow({
   card,
   sort,
   reduced,
@@ -38,7 +42,7 @@ function GalleryListRow({
     <motion.tr
       layout={reduced ? false : "position"}
       layoutId={reduced ? undefined : `gallery-item-${card.id}`}
-      transition={{ layout: { duration: DURATION_S.md, ease: EASE_IN_OUT } }}
+      transition={LAYOUT_TRANSITION}
       className="relative border-b border-secondary hover:bg-primary_hover"
     >
       <td className="max-w-0 overflow-hidden py-2 pr-3">
@@ -77,9 +81,15 @@ function GalleryListRow({
       </td>
     </motion.tr>
   );
-}
+});
 
-export function GalleryList({ cards, sort }: { cards: GalleryCard[]; sort: GallerySort }) {
+export const GalleryList = memo(function GalleryList({
+  cards,
+  sort,
+}: {
+  cards: GalleryCard[];
+  sort: GallerySort;
+}) {
   const reduced = usePrefersReducedMotion();
   const locale = getLocale();
   const numberFormat = useMemo(() => new Intl.NumberFormat(locale), [locale]);
@@ -118,4 +128,4 @@ export function GalleryList({ cards, sort }: { cards: GalleryCard[]; sort: Galle
       </table>
     </div>
   );
-}
+});

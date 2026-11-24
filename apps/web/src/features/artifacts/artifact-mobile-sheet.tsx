@@ -9,7 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { animate, motion, useMotionValue, useTransform } from "motion/react";
+import { animate, useMotionValue, useTransform } from "motion/react";
+import * as motion from "motion/react-m";
 import { FocusScope } from "react-aria";
 
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
@@ -119,8 +120,6 @@ export function ArtifactMobileSheet({
     };
   }, [isTallFlow]);
 
-  // Once the sheet covers the phone screen ("tall"), hand scroll over to the document
-  // so Safari collapses its toolbar and updates status/toolbar colors while scrolling.
   useLayoutEffect(() => {
     if (!isTallFlow || typeof window === "undefined") return;
     const handoff = acquirePageFlowHandoff({

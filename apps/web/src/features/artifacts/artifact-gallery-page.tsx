@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { AlertCircle, SearchLg, XClose } from "@untitledui/icons";
 
@@ -26,11 +26,53 @@ import {
   type EmptyGalleryState,
   type GalleryFilters,
 } from "./artifact-gallery-model";
-import { ArtifactPage } from "./artifact-page";
+import { LoadingBody } from "./artifact-page-states";
 import { ARTIFACTS_KEY } from "./artifact-queries";
-import { useScopeOf } from "./artifact-scope";
 
 const SEARCH_DEBOUNCE_MS = 250;
+
+const ArtifactPage = lazy(() =>
+  import("./artifact-page").then((module) => ({ default: module.ArtifactPage })),
+);
+
+function DebouncedSearchInput({
+  resetToken,
+  onDebouncedChange,
+}: {
+  resetToken: number;
+  onDebouncedChange: (query: string) => void;
+}) {
+  const [typed, setTyped] = useState("");
+  const lastResetRef = useRef(resetToken);
+  const lastCommittedRef = useRef("");
+  useEffect(() => {
+    if (lastResetRef.current !== resetToken) {
+      lastResetRef.current = resetToken;
+      lastCommittedRef.current = "";
+      setTyped("");
+      return;
+    }
+    const next = typed.trim();
+    if (next === lastCommittedRef.current) return;
+    const timer = setTimeout(() => {
+      lastCommittedRef.current = next;
+      onDebouncedChange(next);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [typed, resetToken, onDebouncedChange]);
+  return (
+    <div className="w-full sm:w-64">
+      <Input
+        size="sm"
+        icon={SearchLg}
+        aria-label={m.ag_search_aria()}
+        placeholder={m.ag_search()}
+        value={typed}
+        onChange={setTyped}
+      />
+    </div>
+  );
+}
 
 function useGallery(filters: GalleryFilters) {
   const { query, scope, authorAgentIds, related, sort } = filters;
@@ -71,24 +113,19 @@ export function ArtifactGalleryPage({
   onClearReview?: (() => void) | undefined;
 } = {}) {
   const [filters, setFilters] = useState<GalleryFilters>(initialFilters);
-  const [typed, setTyped] = useState("");
+  const [resetToken, setResetToken] = useState(0);
   const [view, setView] = useGalleryView();
-  const scopeOf = useScopeOf();
-  useEffect(() => {
-    const timer = setTimeout(
-      () => setFilters((previous) => ({ ...previous, query: typed.trim() })),
-      SEARCH_DEBOUNCE_MS,
-    );
-    return () => clearTimeout(timer);
-  }, [typed]);
+  const handleQueryChange = useCallback((query: string) => {
+    setFilters((previous) => (previous.query === query ? previous : { ...previous, query }));
+  }, []);
   const update = (patch: Partial<GalleryFilters>) =>
     setFilters((previous) => ({ ...previous, ...patch }));
   const gallery = useGallery(filters);
   const cards = gallery.data?.pages.flatMap((page) => page.artifacts) ?? [];
   const emptyState = emptyGalleryState(filters);
   const clearAll = () => {
-    setTyped("");
-    setFilters({ ...initialFilters, sort: filters.sort });
+    setResetToken((count) => count + 1);
+    setFilters((previous) => ({ ...initialFilters, sort: previous.sort }));
   };
   const overlayOpen = Boolean(openArtifactId && onCloseArtifact);
   const countLabel =
@@ -111,16 +148,7 @@ export function ArtifactGalleryPage({
             {countLabel && <span className="text-sm text-tertiary tabular-nums">{countLabel}</span>}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="w-full sm:w-64">
-              <Input
-                size="sm"
-                icon={SearchLg}
-                aria-label={m.ag_search_aria()}
-                placeholder={m.ag_search()}
-                value={typed}
-                onChange={setTyped}
-              />
-            </div>
+            <DebouncedSearchInput resetToken={resetToken} onDebouncedChange={handleQueryChange} />
             <ConversationFilter scope={filters.scope} onChange={(scope) => update({ scope })} />
             <AuthorFilter
               authorIds={filters.authorAgentIds}
@@ -162,12 +190,7 @@ export function ArtifactGalleryPage({
               {view === "grid" ? (
                 <div className="grid grid-cols-1 gap-3 min-[24rem]:grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(15.5rem,1fr))]">
                   {cards.map((card) => (
-                    <GalleryGridCard
-                      key={card.id}
-                      card={card}
-                      sort={filters.sort}
-                      scope={scopeOf(card)}
-                    />
+                    <GalleryGridCard key={card.id} card={card} sort={filters.sort} />
                   ))}
                 </div>
               ) : (
@@ -196,15 +219,17 @@ export function ArtifactGalleryPage({
       </div>
       {openArtifactId && onCloseArtifact && (
         <div className="absolute inset-0 z-20 flex min-h-0 flex-col bg-primary">
-          <ArtifactPage
-            artifactId={openArtifactId}
-            overlay={{ onClose: onCloseArtifact }}
-            version={version}
-            commentId={commentId}
-            reviewId={reviewId}
-            arrival={arrival}
-            onClearReview={onClearReview}
-          />
+          <Suspense fallback={<LoadingBody />}>
+            <ArtifactPage
+              artifactId={openArtifactId}
+              overlay={{ onClose: onCloseArtifact }}
+              version={version}
+              commentId={commentId}
+              reviewId={reviewId}
+              arrival={arrival}
+              onClearReview={onClearReview}
+            />
+          </Suspense>
         </div>
       )}
     </main>

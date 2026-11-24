@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { Focusable } from "react-aria-components";
 import { MessageSquare01 } from "@untitledui/icons";
 
@@ -17,7 +17,7 @@ import { ArtifactActor, KIND_ICONS, kindName } from "./artifact-parts";
 import { artifactKindOfPath, type ArtifactPathKind } from "./artifact-path-kind";
 import { MarkdownPreview, stripLeadingTitleHeading } from "./artifact-preview";
 import { useArtifactActor } from "./artifact-queries";
-import type { GalleryCard, useScopeOf } from "./artifact-scope";
+import { useScopeOf, type GalleryCard } from "./artifact-scope";
 
 export function CardBadges({
   card,
@@ -100,17 +100,17 @@ function ImagePreview({ card }: { card: GalleryCard }) {
   );
 }
 
-export function GalleryGridCard({
+export const GalleryGridCard = memo(function GalleryGridCard({
   card,
   sort,
-  scope,
 }: {
   card: GalleryCard;
   sort: GallerySort;
-  scope: ReturnType<ReturnType<typeof useScopeOf>>;
 }) {
   const workspaceSlug = useWorkspaceSlug();
   const actorOf = useArtifactActor();
+  const scopeOf = useScopeOf();
+  const scope = scopeOf(card);
   const displayTitle = card.title || m.doc_untitled();
   return (
     <article className="relative flex flex-col overflow-hidden rounded-xl border border-secondary bg-primary transition-[border-color] duration-100 hover:border-primary has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-focus-ring">
@@ -158,7 +158,7 @@ export function GalleryGridCard({
       </div>
     </article>
   );
-}
+});
 
 export function WhenLine({
   card,
