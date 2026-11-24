@@ -66,6 +66,7 @@
   "memory_historical": "Previous version",
   "memory_choose_agent": "Choose one of your Agents to manage its memory.",
   "memory_review_tab": "Pending review",
+  "memory_review_disabled": "Team memory review is unavailable in this environment.",
   "memory_review_submit": "Send for review",
   "memory_review_scan": "Check for suggestions",
   "memory_review_scan_result": "Checked {inspected} entries and found {suggested} new suggestions.",

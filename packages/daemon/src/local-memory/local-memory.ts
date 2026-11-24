@@ -107,10 +107,10 @@ export class LocalMemory {
   ): Promise<LocalMemoryResult> {
     const path = `notes/knowledge/${command.key}.md`;
     const current = await readMemoryFile(this.root, path);
-    if ((current === undefined ? "new" : memoryRevision(current)) !== command.revision)
-      throw new Error("memory_conflict");
     const previous = current === undefined ? undefined : decodeMemoryRecord(current, path);
-    if (current !== undefined && !previous) throw new Error("memory_invalid_file");
+    if (current !== undefined && previous?.key !== command.key)
+      throw new Error("memory_invalid_file");
+    if ((previous?.revision ?? "new") !== command.revision) throw new Error("memory_conflict");
     if (command.operation === "archive" && !previous) throw new Error("memory_not_found");
     const entry =
       command.operation === "save"
@@ -126,10 +126,10 @@ export class LocalMemory {
           }
         : { ...previous!, status: "archived" as const, updatedAt: new Date().toISOString() };
     const text = encodeMemoryRecord(entry);
-    if (current !== undefined)
+    if (current !== undefined && previous)
       await replaceMemoryFile(
         this.root,
-        `notes/history/${command.key}/${memoryRevision(current)}.md`,
+        `notes/history/${command.key}/${previous.revision}.md`,
         current,
       );
     await replaceMemoryFile(this.root, path, text);
@@ -165,14 +165,16 @@ export class LocalMemory {
             }
             throw error;
           });
-          if (!text) return undefined;
+          if (text === undefined) return undefined;
           bytes += Buffer.byteLength(text);
           const saved = decodeMemoryRecord(text, path);
-          if (
-            path.startsWith("notes/knowledge/") &&
-            (!saved || saved.status !== (archived ? "archived" : "active"))
-          )
-            return undefined;
+          if (path.startsWith("notes/knowledge/")) {
+            if (!saved || path !== `notes/knowledge/${saved.key}.md`) {
+              incomplete = true;
+              return undefined;
+            }
+            if (saved.status !== (archived ? "archived" : "active")) return undefined;
+          }
           if (archived && !saved) return undefined;
           const { score: bodyScore, position } = memorySearchScore(saved?.content ?? text, query);
           const score = saved

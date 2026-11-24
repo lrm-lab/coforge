@@ -5,6 +5,8 @@ export function memoryError(code: string) {
   switch (code) {
     case "disabled":
       return m.memory_disabled();
+    case "review_disabled":
+      return m.memory_review_disabled();
     case "forbidden":
       return m.memory_forbidden();
     case "not_found":
