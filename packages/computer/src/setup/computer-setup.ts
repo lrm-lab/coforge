@@ -1,11 +1,11 @@
 import type { AccessibleWorkspace, Credential } from "#src/login";
 import { loadBuildProfile, type ComputerConfig } from "#src/local-config";
-import { CliError, setupError, type SetupErrorCode } from "#src/errors";
+import { CliError, ComputerSetupError, setupError, type SetupErrorCode } from "#src/errors";
 import type {
   ComputerRegisterRequest,
   ComputerRegistrationClient,
 } from "@lrm/coforge-sdk/internal";
-import type { DaemonLauncher } from "@lrm/coforge-daemon";
+import { workspaceParkedRecovery, type DaemonLauncher } from "@lrm/coforge-daemon";
 import type { WorkspaceLookup } from "#src/workspace/lookup";
 import { ensureDaemonConfigured } from "#src/daemon-client/index";
 import { planComputerIdentity } from "./computer-identity-plan";
@@ -391,11 +391,23 @@ export class ComputerSetup {
         "SETUP_ALREADY_ATTACHED_UNSUPPORTED",
         `The server cannot verify this computer's attachment to '${registration.slug}'.`,
       );
-    if (state === "revoked")
-      throw setupError(
+    if (state === "revoked") {
+      const message = `This computer's credential for '${registration.slug}' is no longer valid.`;
+      if (checked.state === "forbidden")
+        throw setupError("SETUP_ALREADY_ATTACHED_INVALID", message);
+      throw new ComputerSetupError(
         "SETUP_ALREADY_ATTACHED_INVALID",
-        `This computer's credential for '${registration.slug}' is no longer valid.`,
+        `${message} The original Computer owner with Workspace access can recover it.`,
+        "computer-registration",
+        {
+          hint: workspaceParkedRecovery("credential_revoked", {
+            workspaceId: registration.id,
+            workspaceSlug: registration.slug,
+            computerId: registration.computerId ?? undefined,
+          }),
+        },
       );
+    }
     if (state === "unreachable")
       throw setupError(
         "SETUP_ALREADY_ATTACHED_UNREACHABLE",

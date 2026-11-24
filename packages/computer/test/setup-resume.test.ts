@@ -3,6 +3,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FileDaemonCredentialStore, workspaceStateDirectory } from "@lrm/coforge-daemon";
+import { runCli } from "#src/cli";
 import { createResumePort } from "#src/cli/login-setup-commands";
 import { createSetup } from "./setup-fixture";
 import type { SetupResumePort } from "#src/setup/computer-setup";
@@ -81,6 +82,44 @@ test("a revoked key errors and writes nothing", async () => {
   expect(calls).toMatchObject({ register: 0, saved: 0, started: [] });
 });
 
+test.each([false, true])(
+  "setup guides the original owner to recover a revoked key (json=%s)",
+  async (json) => {
+    const { setup, calls } = attached("revoked");
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const exitCode = await runCli(
+      ["setup", "--workspace", registration.slug, ...(json ? ["--json"] : [])],
+      {
+        login: { async run() {} },
+        setup: {
+          async run(workspaceSlug) {
+            await setup.run({ workspaceSlug });
+          },
+        },
+      },
+      { stdout: (line) => stdout.push(line), stderr: (line) => stderr.push(line) },
+    );
+    const command = "coforge-computer setup --workspace workspace-a --machine computer-id";
+    expect(exitCode).toBe(1);
+    if (json) {
+      expect(JSON.parse(stdout.join("\n"))).toMatchObject({
+        ok: false,
+        error: {
+          code: "SETUP_ALREADY_ATTACHED_INVALID",
+          hint: expect.stringContaining(command),
+        },
+      });
+    } else {
+      expect(stderr.join("\n")).toContain(`Next: ${command}`);
+    }
+    const output = [...stdout, ...stderr].join("\n");
+    expect(output).toContain("original Computer owner");
+    expect(output).not.toContain("detach");
+    expect(calls).toMatchObject({ register: 0, saved: 0, started: [] });
+  },
+);
+
 test("a missing stored key errors the same way", async () => {
   const { setup, calls } = attached("live", null);
   await expect(setup.run({ workspaceSlug: "workspace-a" })).rejects.toMatchObject({
@@ -129,10 +168,11 @@ test("a revoked dk_ (/self 401) errors and writes nothing", async () => {
   expect(calls).toMatchObject({ register: 0, saved: 0, started: [] });
 });
 
-test("an sk_computer answered 403 counts as revoked", async () => {
+test("a forbidden sk_computer keeps the refusal for a potentially removed binding", async () => {
   const { setup } = attached("forbidden");
   await expect(setup.run({ workspaceSlug: "workspace-a" })).rejects.toMatchObject({
     code: "SETUP_ALREADY_ATTACHED_INVALID",
+    hint: expect.stringContaining("coforge-computer detach"),
   });
 });
 

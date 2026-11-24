@@ -11,6 +11,7 @@ import type {
   UnsettledUpgradeOperation,
   WorkspacesStatus,
 } from "./types";
+import { statusRecoveryComputerId } from "./types";
 import { thrownMessage } from "@lrm/coforge-sdk/internal";
 
 /** Assembles the read-only status report from injected ports. Every section is collected
@@ -219,6 +220,11 @@ async function collectWorkspaces(
           pending: pendingRequestsFor(binding),
           unsettledUpgrades: unsettledUpgradesFor(binding, now),
           health,
+          ...(health.status === "parked" &&
+          health.reason === "credential_revoked" &&
+          binding.computerId
+            ? { [statusRecoveryComputerId]: binding.computerId }
+            : {}),
           cloudConnection,
           ...(version ? { version } : {}),
           ...(versionSkew ? { versionSkew: true as const } : {}),

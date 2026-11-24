@@ -16,9 +16,9 @@ export class ComputerSetupError extends CliError {
     code: SetupErrorCode,
     message: string,
     readonly stage: SetupStage,
-    options?: { cause?: unknown },
+    options?: { cause?: unknown; hint?: string },
   ) {
-    super(code, message, SETUP_HINTS[code], options);
+    super(code, message, options?.hint ?? SETUP_HINTS[code], options);
     this.name = "ComputerSetupError";
   }
 }

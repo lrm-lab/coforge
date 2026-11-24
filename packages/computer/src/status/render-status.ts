@@ -2,6 +2,7 @@ import { workspaceHealthRecoveryCommand, workspaceParkedMessage } from "@lrm/cof
 import { truncateCodePoints } from "@lrm/coforge-sdk/internal";
 import { terminalText } from "#src/terminal-output";
 import { formatMemorySummary } from "./process-memory";
+import { statusRecoveryComputerId } from "./types";
 import type {
   ComputerStatusReport,
   PendingRequest,
@@ -234,11 +235,7 @@ function renderDegradedHealth(workspace: {
 
 /** A parked Workspace: the stable reason, then the sentence that says what happened and which
  * command moves on. */
-function renderParkedHealth(workspace: {
-  workspaceId: string;
-  workspaceSlug: string | null;
-  health: WorkspaceHealth;
-}): string[] {
+function renderParkedHealth(workspace: WorkspaceStatus): string[] {
   const { health } = workspace;
   if (health.status !== "parked") return [];
   return [
@@ -247,6 +244,7 @@ function renderParkedHealth(workspace: {
       workspaceParkedMessage(health.reason, {
         workspaceId: workspace.workspaceId,
         workspaceSlug: workspace.workspaceSlug ?? undefined,
+        computerId: workspace[statusRecoveryComputerId],
       }),
     )}`,
   ];

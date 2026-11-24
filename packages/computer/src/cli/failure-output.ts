@@ -80,6 +80,7 @@ function failureMessage(error: unknown): string {
 
 function nextCommand(code: string, text: string): string {
   if (
+    code === "CREDENTIAL_REVOKED" ||
     code === "DETACH_HOSTING_AGENT_SESSION" ||
     code === "RESTART_HOSTING_AGENT_SESSION" ||
     code === "RESTART_TARGET_UNVERIFIED"

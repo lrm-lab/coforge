@@ -108,7 +108,10 @@ export type WorkspaceHealth = WorkspaceHealthState;
  * carries its latest failed attempt while it retries, `not_connected` why its start gave up. */
 export type WorkspaceCloudStatus = WorkspaceCloudConnectionReport;
 
+export const statusRecoveryComputerId = Symbol("statusRecoveryComputerId");
+
 export type WorkspaceStatus = {
+  [statusRecoveryComputerId]?: string;
   workspaceId: string;
   /** From the local Workspace registration; `null` when none is readable. */
   workspaceSlug: string | null;

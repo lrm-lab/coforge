@@ -71,7 +71,7 @@ export function workspaceDegradedMessage(reason: string, workspaceId?: string): 
   return `${subject} is degraded (${reason}); it will not restart automatically. Run '${workspaceHealthRecoveryCommand(workspaceId)}' after fixing it.`;
 }
 
-type ParkedWorkspace = { workspaceId: string; workspaceSlug?: string };
+type ParkedWorkspace = { workspaceId: string; workspaceSlug?: string; computerId?: string };
 
 /** What happened to a parked Workspace in CoForge and that this Computer stopped trying.
  * `workspaceSlug` is known only to Computer, which reads it from the Workspace registration. */
@@ -88,8 +88,6 @@ export function workspaceParkedDescription(
   return `This Computer was removed from Workspace ${workspace.workspaceSlug ?? workspace.workspaceId} in CoForge (${reason}). ${kept}`;
 }
 
-/** The commands that move on from a parked Workspace. Without a slug the setup command keeps a
- * placeholder. */
 export function workspaceParkedRecovery(
   reason: DaemonConnectRejectionReason,
   workspace: ParkedWorkspace,
@@ -97,6 +95,21 @@ export function workspaceParkedRecovery(
   const selector = workspace.workspaceSlug ?? workspace.workspaceId;
   if (reason === "workspace_deleted")
     return `Run 'coforge-computer setup --workspace <workspace-slug>' to attach this Computer to another Workspace, or 'coforge-computer stop --workspace ${selector}' to stop this binding.`;
+  if (reason === "credential_revoked") {
+    const commandArgument = /^[a-zA-Z0-9][a-zA-Z0-9-]*$/;
+    const slug =
+      workspace.workspaceSlug && commandArgument.test(workspace.workspaceSlug)
+        ? workspace.workspaceSlug
+        : "<workspace-slug>";
+    const computerId =
+      workspace.computerId && commandArgument.test(workspace.computerId)
+        ? workspace.computerId
+        : undefined;
+    const instruction = computerId
+      ? "The original Computer owner with Workspace access can run"
+      : "The original Computer owner with Workspace access can recover this binding. Open the original device on the Computers page, copy the ID after /computer/ in its URL, then run";
+    return `${instruction} \`coforge-computer setup --workspace ${slug} --machine ${computerId ?? "<original-computer-id>"}\`.`;
+  }
   const slug = workspace.workspaceSlug ?? "<workspace-slug>";
   return `Run 'coforge-computer detach --workspace ${slug}' to remove the stale binding, then 'coforge-computer setup --workspace ${slug}' to attach it again.`;
 }

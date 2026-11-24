@@ -24,7 +24,7 @@ import { formatLogindSessionRisk } from "#src/logind-session-risk";
 import type { LogindSessionRisk } from "#src/logind-session-risk";
 
 /** A locally registered Workspace a `--workspace <slug-or-id>` selector names. */
-export type LocalWorkspace = { id: string; slug: string };
+export type LocalWorkspace = { id: string; slug: string; computerId?: string };
 
 export function createCommand(input: {
   daemon: DaemonCommandRunner;
@@ -267,7 +267,11 @@ function parkedWorkspaceError(
       "Run 'coforge-computer status' to see which Workspace binding is parked and the command that moves on.",
       { cause: error },
     );
-  const workspace = { workspaceId: local.id, workspaceSlug: local.slug };
+  const workspace = {
+    workspaceId: local.id,
+    workspaceSlug: local.slug,
+    computerId: local.computerId,
+  };
   return new CliError(
     code,
     workspaceParkedDescription(reason, workspace),

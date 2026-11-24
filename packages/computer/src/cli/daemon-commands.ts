@@ -15,7 +15,10 @@ import {
   restartSupervisor,
 } from "./restart-supervisor";
 import { stopComputer } from "./stop-computer";
-import { createCommand as createClientCommand } from "#src/daemon-client/index";
+import {
+  createCommand as createClientCommand,
+  type LocalWorkspace,
+} from "#src/daemon-client/index";
 import {
   DEFAULT_LOG_LINES,
   followComputerLogs,
@@ -43,7 +46,7 @@ export function createCommand(
       assertRestartable: () => Promise<void>;
       stop: () => Promise<void>;
     };
-    resolveWorkspace?: (selector: string) => Promise<{ id: string; slug: string }>;
+    resolveWorkspace?: (selector: string) => Promise<LocalWorkspace>;
     callerIsAgentHosted?: boolean;
   },
 ): DaemonCommand {
@@ -54,7 +57,7 @@ export function createCommand(
     (async (selector: string) => {
       const binding = await config.loadRegistration(selector);
       if (!binding) throw new Error(`Workspace '${selector}' is not registered locally`);
-      return { id: binding.id, slug: binding.slug };
+      return binding;
     });
   const caller = seams?.callerIsAgentHosted
     ? {
@@ -188,7 +191,7 @@ export function createLogsCommand(
   io: { stdout: (line: string) => void },
   options?: {
     stateDirectory?: string;
-    resolveWorkspace?: (selector: string) => Promise<{ id: string; slug: string }>;
+    resolveWorkspace?: (selector: string) => Promise<LocalWorkspace>;
   },
 ): LogsCommand {
   return {
