@@ -1,8 +1,7 @@
 import { ChannelPlace } from "./channel-name";
 import { actionCardPreviewText } from "./action-card-preview";
 import { Link, useRouter } from "@tanstack/react-router";
-import { BookmarkCheck, Copy01, Link01, MessageTextSquare01 } from "@untitledui/icons";
-import { Bookmark as BookmarkDuotone } from "kubai-icons/duotone";
+import { Bookmark, BookmarkCheck, Copy01, Link01, MessageTextSquare01 } from "@untitledui/icons";
 import { Link as AriaLink } from "react-aria-components";
 
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
@@ -42,7 +41,7 @@ export function SavedMessagesView() {
       {entries.length === 0 ? (
         <EmptyState
           size="page"
-          picture={<EmptyIcon icon={BookmarkDuotone} />}
+          picture={<EmptyIcon icon={Bookmark} />}
           title={m.conversation_saved_empty_title()}
           description={m.conversation_saved_empty_description()}
         />

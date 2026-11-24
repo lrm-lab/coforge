@@ -1,6 +1,5 @@
-import { RefreshCcw01 as Refresh } from "@untitledui/icons";
+import { AlertCircle, RefreshCcw01 as Refresh } from "@untitledui/icons";
 import { Link } from "@tanstack/react-router";
-import { CircleAlert } from "kubai-icons/duotone";
 
 import { Button } from "#src/components/base/buttons/button";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
@@ -119,7 +118,7 @@ export function KeyPointExtractionPanel({
           <EmptyState
             size="card"
             role="alert"
-            picture={<EmptyIcon icon={CircleAlert} size="card" />}
+            picture={<EmptyIcon icon={AlertCircle} size="card" />}
             title={m.empty_records_key_points_failed_title()}
             primaryAction={
               onRestart ? (

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { CircleAlert, MessageSquare } from "kubai-icons/duotone";
+import { AlertCircle, MessageChatCircle } from "@untitledui/icons";
 
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
@@ -28,7 +28,7 @@ export function AgentChatTab({ agentId, timeZone }: { agentId: string; timeZone:
           <EmptyState
             size="card"
             role="alert"
-            picture={<EmptyIcon icon={CircleAlert} size="card" />}
+            picture={<EmptyIcon icon={AlertCircle} size="card" />}
             title={m.agent_chat_error()}
             primaryAction={
               <RetryButton
@@ -52,7 +52,7 @@ export function AgentChatTab({ agentId, timeZone }: { agentId: string; timeZone:
         <AgentTabEmpty
           belowBar
           level={3}
-          picture={<EmptyIcon icon={MessageSquare} />}
+          picture={<EmptyIcon icon={MessageChatCircle} />}
           title={m.agent_chat_empty_title()}
           description={m.agent_chat_empty_description()}
         />
@@ -71,7 +71,7 @@ export function AgentChatTab({ agentId, timeZone }: { agentId: string; timeZone:
               <div className="px-5 pb-4">
                 <EmptyState
                   size="card"
-                  picture={<EmptyIcon icon={MessageSquare} size="card" muted />}
+                  picture={<EmptyIcon icon={MessageChatCircle} size="card" muted />}
                   title={m.agent_chat_channels_empty_title()}
                 />
               </div>
@@ -90,7 +90,7 @@ export function AgentChatTab({ agentId, timeZone }: { agentId: string; timeZone:
               <div className="px-5 pb-4">
                 <EmptyState
                   size="card"
-                  picture={<EmptyIcon icon={MessageSquare} size="card" muted />}
+                  picture={<EmptyIcon icon={MessageChatCircle} size="card" muted />}
                   title={m.agent_chat_dms_empty_title()}
                 />
               </div>

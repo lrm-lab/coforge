@@ -5,9 +5,8 @@ import {
   type TaskStatus,
 } from "@lrm/coforge-sdk/internal";
 import { getRouteApi } from "@tanstack/react-router";
-import { ArrowRight } from "@untitledui/icons";
+import { AlertCircle, ArrowRight } from "@untitledui/icons";
 
-import { CircleAlert } from "kubai-icons/duotone";
 import { Badge } from "#src/components/base/badges/badges";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
@@ -62,7 +61,7 @@ export function TaskHistory({
         size="card"
         role="alert"
         className="mt-3"
-        picture={<EmptyIcon icon={CircleAlert} size="card" />}
+        picture={<EmptyIcon icon={AlertCircle} size="card" />}
         title={m.empty_tasks_history_load_failed()}
         primaryAction={
           onRetry ? <RetryButton size="card" isRetrying={retrying} onPress={onRetry} /> : undefined

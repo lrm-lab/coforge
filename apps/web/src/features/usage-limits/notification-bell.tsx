@@ -1,6 +1,6 @@
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
-import { Bell01, XClose } from "@untitledui/icons";
+import { AlertCircle, Bell01, XClose } from "@untitledui/icons";
 import { useState, type ReactNode } from "react";
 import {
   Dialog as AriaDialog,
@@ -8,7 +8,6 @@ import {
   Popover as AriaPopover,
 } from "react-aria-components";
 
-import { Bell, CircleAlert } from "kubai-icons/duotone";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
@@ -113,7 +112,7 @@ function NoticeList({
           <EmptyState
             size="card"
             role="alert"
-            picture={<EmptyIcon icon={CircleAlert} size="card" />}
+            picture={<EmptyIcon icon={AlertCircle} size="card" />}
             title={m.empty_notifications_load_failed()}
             primaryAction={
               <RetryButton
@@ -128,7 +127,7 @@ function NoticeList({
         <div className="p-3">
           <EmptyState
             size="card"
-            picture={<EmptyIcon icon={Bell} size="card" muted />}
+            picture={<EmptyIcon icon={Bell01} size="card" muted />}
             title={m.empty_notifications_all_done()}
           />
         </div>

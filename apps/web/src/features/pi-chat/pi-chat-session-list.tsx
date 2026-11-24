@@ -1,7 +1,7 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { useEffect, useState } from "react";
 import { Link, useHydrated } from "@tanstack/react-router";
-import { MessagesSquare } from "kubai-icons/duotone";
+import { MessageChatSquare } from "@untitledui/icons";
 import type { PiChatSession } from "@lrm/coforge-sdk/internal/pi-chat";
 import { Button } from "#src/components/base/buttons/button";
 import { EmptyState } from "#src/components/ui/empty";
@@ -70,7 +70,7 @@ export function PiChatSessionList({
         live="polite"
         title={m.empty_pi_chat_sessions_no_match({ query: trimmed })}
         primaryAction={
-          <Button color="link-gray" size="xs" onClick={clearSearch}>
+          <Button color="link-gray" size="xs" onPress={clearSearch}>
             {m.pi_chat_clear_search()}
           </Button>
         }
@@ -79,7 +79,7 @@ export function PiChatSessionList({
       <div className="p-2">
         <EmptyState
           size="card"
-          picture={<EmptyIcon icon={MessagesSquare} size="card" />}
+          picture={<EmptyIcon icon={MessageChatSquare} size="card" />}
           title={m.pi_chat_no_sessions()}
         />
       </div>

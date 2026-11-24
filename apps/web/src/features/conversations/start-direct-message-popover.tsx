@@ -2,7 +2,7 @@ import { useRef, useState, type RefObject } from "react";
 import { Spinner } from "#src/components/ui/spinner";
 import { Heading, Popover as AriaPopover } from "react-aria-components";
 
-import { CircleAlert } from "kubai-icons/duotone";
+import { AlertCircle } from "@untitledui/icons";
 import { Dialog } from "#src/components/application/modals/modal";
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
@@ -151,7 +151,7 @@ function DirectMessagePicker({ onDone }: { onDone: () => void }) {
           <EmptyState
             size="card"
             role="alert"
-            picture={<EmptyIcon icon={CircleAlert} size="card" />}
+            picture={<EmptyIcon icon={AlertCircle} size="card" />}
             title={m.empty_members_load_failed_title()}
             primaryAction={
               <RetryButton

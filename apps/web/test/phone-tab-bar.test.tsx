@@ -21,8 +21,6 @@ test("phone tab bar uses Untitled UI navigation icons and preserves unread badge
   for (const svg of svgs) {
     expect(svg).toContain('viewBox="0 0 24 24"');
   }
-  expect(html).not.toContain("--kd-b");
-  expect(html).not.toContain("ki-tab-");
 
   const links = html.match(/<a\b[^>]*class="phone-foot-bar__link[^"]*"/g) ?? [];
   expect(links).toHaveLength(4);
@@ -48,5 +46,4 @@ test("phone tab bar imports MessageChatSquare, Activity, and Grid01 from @untitl
   expect(source).toContain(
     'import { Activity, Grid01, MessageChatSquare } from "@untitledui/icons";',
   );
-  expect(source).not.toContain("kubai-icons");
 });

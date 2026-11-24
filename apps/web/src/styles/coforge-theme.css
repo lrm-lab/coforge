@@ -72,9 +72,7 @@
   --color-unread-capsule-muted-divider: oklch(0.15 0.01 260 / 0.24);
 
   --color-empty-accent: #7a869d;
-  --color-empty-icon-body: color-mix(in srgb, #7a869d 38%, #ffffff);
   --color-empty-muted: #8b95a7;
-  --color-empty-muted-body: color-mix(in srgb, #8b95a7 28%, #ffffff);
   --color-empty-slot: color-mix(in srgb, var(--color-text-quaternary) 14%, var(--color-bg-primary));
   --color-empty-bar: color-mix(in srgb, var(--color-text-quaternary) 28%, var(--color-bg-primary));
   --color-empty-title-bar: color-mix(
@@ -190,9 +188,7 @@
     --color-unread-capsule-muted-divider: oklch(1 0 0 / 0.28);
 
     --color-empty-accent: #9aa4b8;
-    --color-empty-icon-body: color-mix(in srgb, #9aa4b8 38%, #0c0e12);
     --color-empty-muted: #7f8799;
-    --color-empty-muted-body: color-mix(in srgb, #7f8799 28%, #0c0e12);
     --color-empty-slot: color-mix(in srgb, var(--color-neutral-400) 14%, var(--color-bg-primary));
     --color-empty-bar: color-mix(in srgb, var(--color-neutral-400) 28%, var(--color-bg-primary));
     --color-empty-title-bar: color-mix(

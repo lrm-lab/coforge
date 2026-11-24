@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useRouter } from "@tanstack/react-router";
-import { CircleAlert, Plug } from "kubai-icons/duotone";
+import { AlertCircle, WifiOff } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
@@ -71,7 +71,7 @@ export function PageLoadError({
         size="page"
         role="alert"
         headingLevel={headingLevel}
-        picture={<EmptyIcon icon={offline ? Plug : CircleAlert} />}
+        picture={<EmptyIcon icon={offline ? WifiOff : AlertCircle} />}
         title={offline ? m.empty_offline_title() : m.empty_page_load_failed_title()}
         description={
           offline ? m.empty_offline_description() : m.empty_page_load_failed_description()

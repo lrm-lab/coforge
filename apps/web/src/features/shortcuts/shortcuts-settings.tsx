@@ -1,7 +1,14 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useHydrated } from "@tanstack/react-router";
-import { Edit02, Keyboard01, Plus, RefreshCcw01, SearchMd, Trash01 } from "@untitledui/icons";
-import { Search } from "kubai-icons/duotone";
+import {
+  Edit02,
+  Keyboard01,
+  Plus,
+  RefreshCcw01,
+  SearchLg,
+  SearchMd,
+  Trash01,
+} from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -201,7 +208,7 @@ export function ShortcutsSettings() {
         <EmptyState
           size="card"
           live="polite"
-          picture={<EmptyIcon icon={Search} size="card" />}
+          picture={<EmptyIcon icon={SearchLg} size="card" />}
           title={
             query.trim()
               ? m.empty_shortcuts_no_match_query({ query: query.trim() })

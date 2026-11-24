@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, type ReactNode } from "react";
-import { ArrowUpRight } from "@untitledui/icons";
-import { CircleAlert } from "kubai-icons/duotone";
+import { AlertCircle, ArrowUpRight } from "@untitledui/icons";
 
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
@@ -118,7 +117,7 @@ function ProjectTaskGroupsOf({ data }: { data: Overview }) {
         size="card"
         role="alert"
         className="mt-8"
-        picture={<EmptyIcon icon={CircleAlert} size="card" />}
+        picture={<EmptyIcon icon={AlertCircle} size="card" />}
         title={m.empty_tasks_load_failed_title()}
         primaryAction={<RetryButton size="card" isRetrying={data.retrying} onPress={data.retry} />}
       />

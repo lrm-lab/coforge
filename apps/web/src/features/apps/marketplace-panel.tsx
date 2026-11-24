@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { CircleAlert } from "kubai-icons/duotone";
+import { AlertCircle } from "@untitledui/icons";
 
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
@@ -97,7 +97,7 @@ export function MarketplacePanel({
         <EmptyState
           size="card"
           role="alert"
-          picture={<EmptyIcon icon={CircleAlert} size="card" />}
+          picture={<EmptyIcon icon={AlertCircle} size="card" />}
           title={m.apps_marketplace_load_error()}
           primaryAction={
             <RetryButton size="card" isRetrying={loading} onPress={() => void refresh()} />

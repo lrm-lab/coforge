@@ -3,8 +3,7 @@ import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { Group, Panel, Separator, useDefaultLayout } from "react-resizable-panels";
 import { useHydrated } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { SearchLg as Search, UsersPlus } from "@untitledui/icons";
-import { CircleAlert } from "kubai-icons/duotone";
+import { AlertCircle, SearchLg as Search, UsersPlus } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
 
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
@@ -308,7 +307,7 @@ export function AgentsContent({
           <EmptyState
             size="page"
             role="alert"
-            picture={<EmptyIcon icon={CircleAlert} />}
+            picture={<EmptyIcon icon={AlertCircle} />}
             title={m.empty_members_load_failed_title()}
             description={m.empty_load_failed_safe()}
             primaryAction={

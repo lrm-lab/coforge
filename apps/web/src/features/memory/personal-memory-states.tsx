@@ -1,5 +1,4 @@
-import { BookOpen, CircleAlert, Search } from "kubai-icons/duotone";
-import { Plus } from "@untitledui/icons";
+import { AlertCircle, BookOpen01, Plus, SearchLg } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
@@ -53,7 +52,7 @@ export function PersonalMemoryListEmpty({
         <EmptyState
           size="card"
           live="polite"
-          picture={<EmptyIcon icon={Search} size="card" />}
+          picture={<EmptyIcon icon={SearchLg} size="card" />}
           title={m.empty_memory_no_match_query({ query: query.trim() })}
           primaryAction={
             <Button size="sm" color="tertiary" onPress={onClear}>
@@ -70,7 +69,7 @@ export function PersonalMemoryListEmpty({
         <EmptyState
           size="card"
           live="polite"
-          picture={<EmptyIcon icon={Search} size="card" />}
+          picture={<EmptyIcon icon={SearchLg} size="card" />}
           title={m.empty_memory_no_match_filters()}
           primaryAction={
             <Button size="sm" color="tertiary" onPress={onClear}>
@@ -109,7 +108,7 @@ export function PersonalMemoryErrorState({
     <EmptyState
       size={size}
       role="alert"
-      picture={<EmptyIcon icon={CircleAlert} size={size === "card" ? "card" : "page"} />}
+      picture={<EmptyIcon icon={AlertCircle} size={size === "card" ? "card" : "page"} />}
       title={message}
       description={size === "page" ? m.empty_load_failed_safe() : undefined}
       primaryAction={<RetryButton size={size} onPress={onRetry} />}
@@ -127,7 +126,7 @@ export function PersonalMemoryDetailEmpty({
   if (!hasAgents) {
     return (
       <EmptyState
-        picture={<EmptyIcon icon={BookOpen} />}
+        picture={<EmptyIcon icon={BookOpen01} />}
         title={m.empty_memory_personal_no_agents_title()}
         description={m.empty_memory_personal_no_agents_description()}
       />
@@ -136,7 +135,7 @@ export function PersonalMemoryDetailEmpty({
   if (!hasAgentSelected) {
     return (
       <EmptyState
-        picture={<EmptyIcon icon={BookOpen} />}
+        picture={<EmptyIcon icon={BookOpen01} />}
         title={m.empty_memory_personal_no_agent_selected_title()}
         description={m.empty_memory_personal_no_agent_selected_description()}
       />
@@ -144,7 +143,7 @@ export function PersonalMemoryDetailEmpty({
   }
   return (
     <EmptyState
-      picture={<EmptyIcon icon={BookOpen} />}
+      picture={<EmptyIcon icon={BookOpen01} />}
       title={m.empty_memory_none_selected_title()}
       description={m.empty_memory_none_selected_description()}
     />

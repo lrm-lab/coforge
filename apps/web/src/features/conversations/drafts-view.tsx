@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Link, Navigate } from "@tanstack/react-router";
 import { Edit01 } from "@untitledui/icons";
-import { Pencil } from "kubai-icons/duotone";
 
 import { PageHeader } from "#src/components/layout/page-header";
 import { ConversationListButton } from "./conversation-list-button";
@@ -45,7 +44,7 @@ function DraftsList() {
       {rows.length === 0 ? (
         <EmptyState
           size="page"
-          picture={<EmptyIcon icon={Pencil} muted />}
+          picture={<EmptyIcon icon={Edit01} muted />}
           title={m.conversation_drafts_empty_title()}
           description={m.conversation_drafts_empty_description()}
         />

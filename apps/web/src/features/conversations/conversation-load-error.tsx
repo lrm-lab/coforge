@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMatch, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
-import { CircleAlert } from "kubai-icons/duotone";
+import { AlertCircle } from "@untitledui/icons";
 import { z } from "zod";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -61,7 +61,7 @@ export function ConversationLoadError({ error }: { error: unknown }) {
       <EmptyState
         size="page"
         role="alert"
-        picture={<EmptyIcon icon={CircleAlert} />}
+        picture={<EmptyIcon icon={AlertCircle} />}
         title={m.empty_conversation_load_failed_title()}
         description={m.empty_load_failed_safe()}
         primaryAction={

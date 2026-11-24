@@ -2,7 +2,7 @@ import { lazy, Suspense, type ReactNode } from "react";
 import { CatchBoundary } from "@tanstack/react-router";
 import type { AgentWorkspaceFileReadResult } from "@lrm/coforge-sdk/internal";
 
-import { CircleAlert, FileText } from "kubai-icons/duotone";
+import { AlertCircle, File02 } from "@untitledui/icons";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { ProjectFileViewSkeleton } from "#src/features/projects/project-file-view-pending";
@@ -161,7 +161,7 @@ function EmptyFileState({
     <EmptyState
       role={alert || onRetry ? "alert" : undefined}
       picture={
-        alert || onRetry ? <EmptyIcon icon={CircleAlert} /> : <EmptyIcon icon={FileText} muted />
+        alert || onRetry ? <EmptyIcon icon={AlertCircle} /> : <EmptyIcon icon={File02} muted />
       }
       title={text}
       description={alert || onRetry ? m.empty_load_failed_safe() : undefined}

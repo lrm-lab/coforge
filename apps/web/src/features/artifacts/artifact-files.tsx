@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { CircleAlert } from "kubai-icons/duotone";
+import { AlertCircle } from "@untitledui/icons";
 
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
@@ -108,7 +108,7 @@ function ArtifactList({
         <EmptyState
           size="card"
           role="alert"
-          picture={<EmptyIcon icon={CircleAlert} size="card" />}
+          picture={<EmptyIcon icon={AlertCircle} size="card" />}
           title={m.doc_list_failed()}
           primaryAction={
             <RetryButton

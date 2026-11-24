@@ -1,7 +1,7 @@
 import { memo, Suspense, useContext, useMemo, useState, type Ref } from "react";
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { CatchBoundary, ClientOnly } from "@tanstack/react-router";
-import { CircleAlert } from "kubai-icons/duotone";
+import { AlertCircle } from "@untitledui/icons";
 
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
@@ -64,7 +64,7 @@ export const HostedConversationPane = memo(function HostedConversationPane({
           )}
           <EmptyState
             role="alert"
-            picture={<EmptyIcon icon={CircleAlert} />}
+            picture={<EmptyIcon icon={AlertCircle} />}
             title={failedText}
             description={m.empty_load_failed_safe()}
             primaryAction={

@@ -1,7 +1,6 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
-import { Download01, MarkerPin01 } from "@untitledui/icons";
-import { CircleAlert, Folder } from "kubai-icons/duotone";
+import { AlertCircle, Download01, Folder, MarkerPin01 } from "@untitledui/icons";
 
 import { m } from "#src/paraglide/messages";
 import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
@@ -202,7 +201,7 @@ export function ConversationFilesPanel({
       <EmptyState
         size="page"
         role="alert"
-        picture={<EmptyIcon icon={CircleAlert} />}
+        picture={<EmptyIcon icon={AlertCircle} />}
         title={m.empty_files_load_failed_title()}
         description={m.empty_load_failed_safe()}
         primaryAction={

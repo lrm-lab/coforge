@@ -1,7 +1,14 @@
 import { useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Copy01, DotsVertical, Flag01, Link01, LinkExternal01, XClose } from "@untitledui/icons";
-import { CircleAlert } from "kubai-icons/duotone";
+import {
+  AlertCircle,
+  Copy01,
+  DotsVertical,
+  Flag01,
+  Link01,
+  LinkExternal01,
+  XClose,
+} from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -90,7 +97,7 @@ export function PublicArtifactShell({
         <EmptyState
           headingLevel={1}
           role={rateLimited ? "alert" : undefined}
-          picture={rateLimited ? <EmptyIcon icon={CircleAlert} /> : <LockedWireframe />}
+          picture={rateLimited ? <EmptyIcon icon={AlertCircle} /> : <LockedWireframe />}
           title={m.ap_unavailable_title()}
           description={rateLimited ? m.ap_rate_limited() : m.ap_unavailable_body()}
           primaryAction={

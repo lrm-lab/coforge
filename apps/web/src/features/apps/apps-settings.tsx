@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import { getRouteApi } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { Grid01, Link03, List, Plus, SearchLg } from "@untitledui/icons";
-import { CircleAlert } from "kubai-icons/duotone";
+import { AlertCircle, Grid01, Link03, List, Plus, SearchLg } from "@untitledui/icons";
 
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
 import { Badge } from "#src/components/base/badges/badges";
@@ -267,7 +266,7 @@ export function AppsSettings({ actorRole }: { actorRole: string }) {
               <EmptyState
                 size="card"
                 role="alert"
-                picture={<EmptyIcon icon={CircleAlert} size="card" />}
+                picture={<EmptyIcon icon={AlertCircle} size="card" />}
                 title={m.apps_load_error()}
                 primaryAction={
                   <RetryButton size="card" isRetrying={loading} onPress={() => void refresh()} />

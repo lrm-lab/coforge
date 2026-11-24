@@ -1,5 +1,5 @@
 import { useRouter } from "@tanstack/react-router";
-import { CircleAlert } from "kubai-icons/duotone";
+import { AlertCircle } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
@@ -55,7 +55,7 @@ export function ArtifactUnavailable({
       <EmptyState
         headingLevel={onClose ? 2 : 1}
         role={gone ? undefined : "alert"}
-        picture={gone ? <LockedWireframe /> : <EmptyIcon icon={CircleAlert} />}
+        picture={gone ? <LockedWireframe /> : <EmptyIcon icon={AlertCircle} />}
         title={gone ? m.doc_unavailable_title() : m.doc_load_failed_title()}
         description={gone ? m.doc_load_failed() : m.doc_load_failed_retry()}
         primaryAction={

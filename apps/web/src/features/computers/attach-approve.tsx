@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
-import { Ban, CircleCheck } from "kubai-icons/duotone";
+import { CheckCircle, SlashCircle01 } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { Select } from "#src/components/base/select/select";
 import { EmptyState } from "#src/components/ui/empty";
@@ -55,7 +55,7 @@ export function AttachApprovePage({
         <EmptyState
           size="page"
           headingLevel={1}
-          picture={<EmptyIcon icon={CircleCheck} muted />}
+          picture={<EmptyIcon icon={CheckCircle} muted />}
           title={m.empty_attach_done_title()}
           description={m.empty_attach_done_description({ machineName })}
         />
@@ -67,7 +67,7 @@ export function AttachApprovePage({
         <EmptyState
           size="page"
           headingLevel={1}
-          picture={<EmptyIcon icon={Ban} muted />}
+          picture={<EmptyIcon icon={SlashCircle01} muted />}
           title={m.empty_attach_refused_title()}
           description={m.empty_attach_refused_description()}
         />
@@ -114,16 +114,16 @@ export function AttachApprovePage({
           color="primary"
           className="flex-1"
           isDisabled={!workspaceId}
-          onClick={() => void decide(true)}
+          onPress={() => void decide(true)}
         >
           {m.computer_attach_approve()}
         </Button>
-        <Button color="secondary" className="flex-1" onClick={() => void decide(false)}>
+        <Button color="secondary" className="flex-1" onPress={() => void decide(false)}>
           {m.computer_attach_refuse()}
         </Button>
       </div>
       <p className="mt-4 text-center text-xs text-secondary">
-        <Button color="link-color" onClick={() => void navigate({ to: "/" })}>
+        <Button color="link-color" onPress={() => void navigate({ to: "/" })}>
           {m.controls_cancel()}
         </Button>
       </p>

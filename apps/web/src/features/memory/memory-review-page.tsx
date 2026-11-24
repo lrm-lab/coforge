@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
-import { CircleAlert, CircleCheck } from "kubai-icons/duotone";
+import { AlertCircle, CheckCircle } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { TextArea } from "#src/components/base/textarea/textarea";
@@ -120,7 +120,7 @@ export function MemoryReviewPage({ suggestions }: { suggestions: Response }) {
           <EmptyState
             size="page"
             role="alert"
-            picture={<EmptyIcon icon={CircleAlert} />}
+            picture={<EmptyIcon icon={AlertCircle} />}
             title={m.empty_memory_load_failed_title()}
             description={memoryError(suggestions.error)}
             primaryAction={
@@ -133,7 +133,7 @@ export function MemoryReviewPage({ suggestions }: { suggestions: Response }) {
             {!suggestions.rows.length && (
               <EmptyState
                 size="page"
-                picture={<EmptyIcon icon={CircleCheck} muted />}
+                picture={<EmptyIcon icon={CheckCircle} muted />}
                 title={m.empty_memory_review_caught_up_title()}
                 description={m.empty_memory_review_caught_up_description()}
               />

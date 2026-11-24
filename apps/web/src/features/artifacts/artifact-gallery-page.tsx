@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { SearchLg, XClose } from "@untitledui/icons";
-import { CircleAlert } from "kubai-icons/duotone";
+import { AlertCircle, SearchLg, XClose } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
@@ -140,7 +139,7 @@ export function ArtifactGalleryPage({
             <EmptyState
               size="page"
               role="alert"
-              picture={<EmptyIcon icon={CircleAlert} />}
+              picture={<EmptyIcon icon={AlertCircle} />}
               title={m.empty_artifacts_load_failed_title()}
               description={m.empty_load_failed_safe()}
               primaryAction={
@@ -180,7 +179,7 @@ export function ArtifactGalleryPage({
                     size="sm"
                     color="secondary"
                     isLoading={gallery.isFetchingNextPage}
-                    onClick={() => void gallery.fetchNextPage()}
+                    onPress={() => void gallery.fetchNextPage()}
                   >
                     {m.ag_load_more()}
                   </Button>
@@ -252,7 +251,7 @@ function EmptyGallery({
         title={m.ag_empty_related()}
         description={m.empty_artifacts_no_match_description()}
         primaryAction={
-          <Button size="sm" color="secondary" onClick={onSeeAll}>
+          <Button size="sm" color="secondary" onPress={onSeeAll}>
             {m.ag_see_all()}
           </Button>
         }
@@ -273,7 +272,7 @@ function EmptyGallery({
       title={title}
       description={m.empty_artifacts_no_match_description()}
       primaryAction={
-        <Button size="sm" color="secondary" iconLeading={XClose} onClick={onClear}>
+        <Button size="sm" color="secondary" iconLeading={XClose} onPress={onClear}>
           {state.kind === "no-match-search" && state.clearKind === "search"
             ? m.ag_clear_search()
             : m.ag_clear_filters()}
@@ -281,7 +280,7 @@ function EmptyGallery({
       }
       secondaryAction={
         state.kind === "no-match-filters" && state.showSeeAll ? (
-          <Button size="sm" color="tertiary" onClick={onSeeAll}>
+          <Button size="sm" color="tertiary" onPress={onSeeAll}>
             {m.ag_see_all()}
           </Button>
         ) : undefined

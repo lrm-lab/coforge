@@ -3,8 +3,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Plus, SearchLg } from "@untitledui/icons";
-import { CircleAlert } from "kubai-icons/duotone";
+import { AlertCircle, Plus, SearchLg } from "@untitledui/icons";
 import type { WorkbenchRuntime } from "@lrm/coforge-sdk/internal/pi-chat";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -204,7 +203,7 @@ function PiChatContent(props: Props) {
                 <EmptyState
                   size="card"
                   role="alert"
-                  picture={<EmptyIcon icon={CircleAlert} size="card" />}
+                  picture={<EmptyIcon icon={AlertCircle} size="card" />}
                   title={piChatFailureMessage("load")}
                   primaryAction={
                     <RetryButton

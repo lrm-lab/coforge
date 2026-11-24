@@ -2,7 +2,7 @@ import { useEffect, useId, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
-import { CircleAlert } from "kubai-icons/duotone";
+import { AlertCircle } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { Select } from "#src/components/base/select/select";
@@ -40,7 +40,7 @@ export function MemberOnboardingSettings() {
         size="card"
         role="alert"
         className="my-6"
-        picture={<EmptyIcon icon={CircleAlert} size="card" />}
+        picture={<EmptyIcon icon={AlertCircle} size="card" />}
         title={m.member_onboarding_load_error()}
         primaryAction={
           <RetryButton

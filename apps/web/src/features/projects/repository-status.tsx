@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useRouter } from "@tanstack/react-router";
-import { CircleAlert, Folder } from "kubai-icons/duotone";
+import { AlertCircle, Folder } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
@@ -56,7 +56,7 @@ export function RepositoryStatusMessage({
     <EmptyState
       className="min-h-52"
       role={status === "unavailable" ? "alert" : undefined}
-      picture={status === "denied" ? <LockedWireframe /> : <EmptyIcon icon={CircleAlert} />}
+      picture={status === "denied" ? <LockedWireframe /> : <EmptyIcon icon={AlertCircle} />}
       title={
         status === "denied" ? m.project_repository_denied() : m.project_repository_unavailable()
       }

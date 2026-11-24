@@ -1,5 +1,4 @@
-import { ArrowLeft, XClose as X } from "@untitledui/icons";
-import { CircleAlert } from "kubai-icons/duotone";
+import { AlertCircle, ArrowLeft, XClose as X } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -52,7 +51,7 @@ export function AgentProfileUnavailable({
           size="page"
           role="alert"
           headingLevel={2}
-          picture={<EmptyIcon icon={CircleAlert} />}
+          picture={<EmptyIcon icon={AlertCircle} />}
           title={m.empty_agent_profile_load_failed_title()}
           description={m.empty_load_failed_safe()}
           primaryAction={

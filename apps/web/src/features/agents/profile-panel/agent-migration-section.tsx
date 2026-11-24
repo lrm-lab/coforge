@@ -2,10 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, Check, SwitchHorizontal01 } from "@untitledui/icons";
+import { AlertCircle, Check, Monitor01, SwitchHorizontal01 } from "@untitledui/icons";
 import { Radio, RadioGroup } from "react-aria-components";
 
-import { CircleAlert, Laptop } from "kubai-icons/duotone";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { Skeleton } from "#src/components/ui/skeleton";
@@ -107,7 +106,7 @@ export function AgentMigrationForm({
         <EmptyState
           size="card"
           role="alert"
-          picture={<EmptyIcon icon={CircleAlert} size="card" />}
+          picture={<EmptyIcon icon={AlertCircle} size="card" />}
           title={m.empty_agent_migration_load_failed()}
           primaryAction={
             onRetry ? (
@@ -118,7 +117,7 @@ export function AgentMigrationForm({
       ) : computers.length === 0 ? (
         <EmptyState
           size="card"
-          picture={<EmptyIcon icon={Laptop} size="card" />}
+          picture={<EmptyIcon icon={Monitor01} size="card" />}
           title={m.empty_agent_migration_none()}
           primaryAction={
             connectHref ? (

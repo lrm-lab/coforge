@@ -1,78 +1,36 @@
-import type { CSSProperties } from "react";
-import { useEffect, useId, useMemo, useRef } from "react";
-import type { KubaiIconData } from "kubai-icons/duotone";
-import { animate } from "kubai-icons/runtime";
+import type { ComponentType, SVGProps } from "react";
 
 import { cn } from "#src/lib/utils";
 
-type EmptyIconStyle = CSSProperties & { "--kd-b"?: string };
+type EmptyIconComponent = ComponentType<SVGProps<SVGSVGElement>>;
 
 export function EmptyIcon({
-  icon,
+  icon: Icon,
   size = "page",
   muted = false,
   className,
 }: {
-  icon: KubaiIconData;
+  icon: EmptyIconComponent;
   size?: "page" | "card";
   muted?: boolean;
   className?: string;
 }) {
-  const uid = useId().replaceAll(":", "");
-  const svgRef = useRef<SVGSVGElement | null>(null);
-  const markup = useMemo(() => icon.markup.replaceAll("__K__", `ki-${uid}`), [icon.markup, uid]);
-
-  useEffect(() => {
-    const svg = svgRef.current;
-    if (!svg) return;
-    const controller = animate(svg, icon);
-    const onEnter = (event: PointerEvent) => {
-      if (!event.pointerType || event.pointerType === "mouse") controller.hover(true);
-    };
-    const onLeave = (event: PointerEvent) => {
-      if (!event.pointerType || event.pointerType === "mouse") controller.hover(false);
-    };
-    svg.addEventListener("pointerenter", onEnter);
-    svg.addEventListener("pointerleave", onLeave);
-    return () => {
-      svg.removeEventListener("pointerenter", onEnter);
-      svg.removeEventListener("pointerleave", onLeave);
-      controller.destroy();
-    };
-  }, [icon]);
-
-  const toneStyle: EmptyIconStyle = muted
-    ? {
-        color: "var(--color-empty-muted)",
-        "--kd-b": "var(--color-empty-muted-body)",
-      }
-    : {
-        color: "var(--color-empty-accent)",
-        "--kd-b": "var(--color-empty-icon-body)",
-      };
-
-  const svg = (
-    <svg
-      ref={svgRef}
+  const isCard = size === "card";
+  return (
+    <span
       aria-hidden="true"
-      focusable="false"
-      viewBox={icon.viewBox}
-      style={toneStyle}
-      className={cn("shrink-0", size === "card" ? "size-[1.375rem]" : "size-12", className)}
-      dangerouslySetInnerHTML={{ __html: markup }}
-    />
-  );
-
-  if (size === "card") {
-    return (
-      <span
+      className={cn(
+        "flex shrink-0 items-center justify-center bg-secondary ring-1 ring-secondary ring-inset",
+        isCard ? "size-10 rounded-lg" : "size-12 rounded-xl",
+        muted ? "text-empty-muted" : "text-empty-accent",
+        className,
+      )}
+    >
+      <Icon
         aria-hidden="true"
-        className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-secondary ring-1 ring-secondary ring-inset"
-      >
-        {svg}
-      </span>
-    );
-  }
-
-  return svg;
+        focusable="false"
+        className={cn("shrink-0", isCard ? "size-5" : "size-6")}
+      />
+    </span>
+  );
 }

@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { CircleAlert, Flask } from "kubai-icons/duotone";
+import { AlertCircle, Beaker01 } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { SettingsCard, SettingsField, SettingsPage } from "#src/components/settings-layout";
@@ -93,7 +93,7 @@ export function ExperimentsSettings({
     <EmptyState
       size="page"
       role="alert"
-      picture={<EmptyIcon icon={CircleAlert} />}
+      picture={<EmptyIcon icon={AlertCircle} />}
       title={m.experiments_load_error()}
       description={m.empty_load_failed_safe()}
       primaryAction={
@@ -107,7 +107,7 @@ export function ExperimentsSettings({
   ) : experiments.data.experiments.length === 0 ? (
     <EmptyState
       size="page"
-      picture={<EmptyIcon icon={Flask} />}
+      picture={<EmptyIcon icon={Beaker01} />}
       title={m.empty_experiments_none_title()}
       description={m.empty_experiments_none_description()}
     />

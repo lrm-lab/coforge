@@ -1,4 +1,4 @@
-import { CircleAlert } from "kubai-icons/duotone";
+import { AlertCircle } from "@untitledui/icons";
 
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
@@ -29,7 +29,7 @@ export function RecordSidePanelEmpty({
       <EmptyState
         size="card"
         role="alert"
-        picture={<EmptyIcon icon={CircleAlert} size="card" />}
+        picture={<EmptyIcon icon={AlertCircle} size="card" />}
         title={m.empty_records_side_chat_load_failed()}
         primaryAction={<RetryButton size="card" isRetrying={loading} onPress={onRetry} />}
       />

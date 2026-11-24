@@ -2,8 +2,14 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { Globe01, MessageTextSquare01, Monitor01, PauseCircle, Phone01 } from "@untitledui/icons";
-import { CircleAlert } from "kubai-icons/duotone";
+import {
+  AlertCircle,
+  Globe01,
+  MessageTextSquare01,
+  Monitor01,
+  PauseCircle,
+  Phone01,
+} from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
@@ -138,7 +144,7 @@ export function NotificationSettingsPanel({
       <EmptyState
         size="card"
         role="alert"
-        picture={<EmptyIcon icon={CircleAlert} size="card" />}
+        picture={<EmptyIcon icon={AlertCircle} size="card" />}
         title={m.notif_load_failed()}
         primaryAction={
           <RetryButton

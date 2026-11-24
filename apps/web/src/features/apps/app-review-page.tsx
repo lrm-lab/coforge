@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { Link, useHydrated, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft } from "@untitledui/icons";
-import { Inbox } from "kubai-icons/duotone";
+import { ArrowLeft, Inbox01 } from "@untitledui/icons";
 
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
@@ -48,7 +47,7 @@ export function AppReviewPage({ requests }: { requests: ReviewRequestSummary[] }
             size="page"
             headingLevel={2}
             className="max-w-none rounded-xl border border-dashed border-secondary px-4 py-10"
-            picture={<EmptyIcon icon={Inbox} muted />}
+            picture={<EmptyIcon icon={Inbox01} muted />}
             title={m.apps_review_empty_title()}
             description={m.apps_review_empty_description()}
           />

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useHydrated, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { ChartBar, CircleAlert } from "kubai-icons/duotone";
+import { AlertCircle, BarChart01 } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -304,7 +304,7 @@ export function WorkspaceAgentUsageView({
       <EmptyState
         size="page"
         role="alert"
-        picture={<EmptyIcon icon={CircleAlert} />}
+        picture={<EmptyIcon icon={AlertCircle} />}
         title={m.agent_usage_load_failed()}
         primaryAction={
           <RetryButton
@@ -460,7 +460,7 @@ export function WorkspaceAgentUsageView({
             <EmptyState
               size="card"
               headingLevel={3}
-              picture={<EmptyIcon icon={ChartBar} />}
+              picture={<EmptyIcon icon={BarChart01} />}
               title={m.agent_usage_empty_title()}
               description={m.agent_usage_team_empty_description()}
             />

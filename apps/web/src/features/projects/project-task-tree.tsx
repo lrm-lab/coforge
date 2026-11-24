@@ -11,8 +11,7 @@ import {
   TreeItemContent,
   type Key,
 } from "react-aria-components";
-import { ChevronRight } from "@untitledui/icons";
-import { CircleAlert } from "kubai-icons/duotone";
+import { AlertCircle, ChevronRight } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
@@ -96,7 +95,7 @@ export function ProjectTaskTreeView({
     return (
       <EmptyState
         role="alert"
-        picture={<EmptyIcon icon={CircleAlert} />}
+        picture={<EmptyIcon icon={AlertCircle} />}
         title={m.empty_tasks_load_failed_title()}
         description={m.empty_load_failed_safe()}
         primaryAction={

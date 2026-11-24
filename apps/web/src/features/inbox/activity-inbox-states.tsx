@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { CircleAlert } from "kubai-icons/duotone";
+import { AlertCircle } from "@untitledui/icons";
 
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
@@ -66,7 +66,7 @@ export function ActivityInboxLoadError({
       size="page"
       role="alert"
       className="h-full"
-      picture={<EmptyIcon icon={CircleAlert} />}
+      picture={<EmptyIcon icon={AlertCircle} />}
       title={m.empty_activity_load_failed_title()}
       description={m.empty_load_failed_safe()}
       primaryAction={<RetryButton size="page" isRetrying={retrying} onPress={onRetry} />}

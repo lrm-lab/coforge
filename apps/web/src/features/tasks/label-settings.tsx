@@ -1,7 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ChevronDown, ChevronRight, Plus, SearchLg } from "@untitledui/icons";
-import { CircleAlert, Tag } from "kubai-icons/duotone";
+import { AlertCircle, ChevronDown, ChevronRight, Plus, SearchLg, Tag01 } from "@untitledui/icons";
 import { useCallback, useState } from "react";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -174,7 +173,7 @@ export function LabelSettings() {
           <EmptyState
             size="page"
             role="alert"
-            picture={<EmptyIcon icon={CircleAlert} />}
+            picture={<EmptyIcon icon={AlertCircle} />}
             title={m.labels_settings_load_failed()}
             description={m.empty_load_failed_safe()}
             primaryAction={
@@ -200,7 +199,7 @@ export function LabelSettings() {
           ) : (
             <EmptyState
               size="page"
-              picture={<EmptyIcon icon={Tag} />}
+              picture={<EmptyIcon icon={Tag01} />}
               title={m.empty_labels_settings_title()}
               description={m.empty_labels_settings_description()}
               primaryAction={

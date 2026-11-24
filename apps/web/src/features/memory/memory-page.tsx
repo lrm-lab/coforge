@@ -1,8 +1,7 @@
 import { MemoryScopeLinks } from "./memory-scope-links";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useRouter } from "@tanstack/react-router";
-import { ArrowLeft, Plus } from "@untitledui/icons";
-import { BookOpen, CircleAlert, Search } from "kubai-icons/duotone";
+import { AlertCircle, ArrowLeft, BookOpen01, Plus, SearchLg } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
@@ -166,7 +165,7 @@ export function MemoryPage({
           <EmptyState
             size="page"
             role="alert"
-            picture={<EmptyIcon icon={CircleAlert} />}
+            picture={<EmptyIcon icon={AlertCircle} />}
             title={m.empty_memory_load_failed_title()}
             description={memoryError(list.error)}
             primaryAction={<RetryButton size="page" onPress={() => void refresh()} />}
@@ -223,7 +222,7 @@ export function MemoryPage({
                     <EmptyState
                       size="card"
                       live="polite"
-                      picture={<EmptyIcon icon={Search} size="card" />}
+                      picture={<EmptyIcon icon={SearchLg} size="card" />}
                       title={
                         search.q.trim()
                           ? m.empty_memory_no_match_query({ query: search.q.trim() })
@@ -330,7 +329,7 @@ export function MemoryPage({
             {!selected && (
               <EmptyState
                 size="page"
-                picture={<EmptyIcon icon={BookOpen} />}
+                picture={<EmptyIcon icon={BookOpen01} />}
                 title={m.empty_memory_none_selected_title()}
                 description={m.empty_memory_none_selected_description()}
               />
@@ -339,7 +338,7 @@ export function MemoryPage({
               <EmptyState
                 size="page"
                 role="alert"
-                picture={<EmptyIcon icon={CircleAlert} />}
+                picture={<EmptyIcon icon={AlertCircle} />}
                 title={m.empty_memory_load_failed_title()}
                 description={memoryError(detail.error)}
                 primaryAction={<RetryButton size="page" onPress={() => void refresh()} />}

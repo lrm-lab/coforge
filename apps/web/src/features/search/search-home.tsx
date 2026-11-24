@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { SearchLg, XClose } from "@untitledui/icons";
-import { Search } from "kubai-icons/duotone";
 import { Button as AriaButton } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -51,7 +50,7 @@ export function SearchHome({
       <EmptyState
         size="page"
         className="py-10"
-        picture={<EmptyIcon icon={Search} />}
+        picture={<EmptyIcon icon={SearchLg} />}
         title={channel ? m.search_empty_title_in({ channel }) : m.search_empty_title()}
         description={channel ? m.search_empty_description_in() : m.search_empty_description()}
       />
@@ -66,7 +65,7 @@ export function SearchHome({
             <h2 id="search-history-heading" className={SEARCH_HEADING_CLASS}>
               {m.search_history_heading()}
             </h2>
-            <Button size="sm" color="link-gray" onClick={onClearHistory}>
+            <Button size="sm" color="link-gray" onPress={onClearHistory}>
               {m.search_history_clear()}
             </Button>
           </div>

@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ChevronDown, Trash01 } from "@untitledui/icons";
+import { AlertCircle, ChevronDown, Trash01 } from "@untitledui/icons";
 import { Disclosure, DisclosurePanel } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
-import { CircleAlert } from "kubai-icons/duotone";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { Skeleton } from "#src/components/ui/skeleton";
@@ -201,7 +200,7 @@ export function AgentRuntimeConfigForm({
                   <EmptyState
                     size="card"
                     role="alert"
-                    picture={<EmptyIcon icon={CircleAlert} size="card" />}
+                    picture={<EmptyIcon icon={AlertCircle} size="card" />}
                     title={m.empty_agent_env_load_failed()}
                     primaryAction={
                       environment.onRetry ? (

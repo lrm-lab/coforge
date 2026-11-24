@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CircleAlert } from "kubai-icons/duotone";
+import { AlertCircle } from "@untitledui/icons";
 import type { TeamMemoryHead } from "@lrm/coforge-sdk/agent";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
@@ -149,7 +149,7 @@ export function MemoryHistory({
         <EmptyState
           size="card"
           role="alert"
-          picture={<EmptyIcon icon={CircleAlert} size="card" />}
+          picture={<EmptyIcon icon={AlertCircle} size="card" />}
           title={error}
           primaryAction={<RetryButton size="card" isRetrying={busy} onPress={() => void load()} />}
         />

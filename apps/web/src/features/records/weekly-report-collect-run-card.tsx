@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { ChevronDown, ChevronUp } from "@untitledui/icons";
-import { CircleAlert } from "kubai-icons/duotone";
+import { AlertCircle, ChevronDown, ChevronUp } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
@@ -95,7 +94,7 @@ export function WeeklyReportCollectRunCard(props: {
         <EmptyState
           size="card"
           role="alert"
-          picture={<EmptyIcon icon={CircleAlert} size="card" />}
+          picture={<EmptyIcon icon={AlertCircle} size="card" />}
           title={m.empty_records_collect_load_failed()}
           primaryAction={
             <RetryButton

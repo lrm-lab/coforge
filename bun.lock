@@ -99,7 +99,6 @@
         "input-otp": "^1.5.0",
         "jose": "^6.2.10",
         "katex": "^0.16.22",
-        "kubai-icons": "^0.13.1",
         "lowlight": "^3.3.0",
         "mermaid": "^11.6.0",
         "modern-screenshot": "4.7.0",
@@ -2000,8 +1999,6 @@
     "kind-of": ["kind-of@6.0.3", "", {}, "sha512-dcS1ul+9tmeD95T+x28/ehLgd9mENa3LsvDTtzm3vyBEO7RPptvAD+t44WVXaUjTBRcrpFeFlC8WCruUR456hw=="],
 
     "kitx": ["kitx@2.2.0", "", { "dependencies": { "@types/node": "^22.5.4" } }, "sha512-tBMwe6AALTBQJb0woQDD40734NKzb0Kzi3k7wQj9ar3AbP9oqhoVrdXPh7rk2r00/glIgd0YbToIUJsnxWMiIg=="],
-
-    "kubai-icons": ["kubai-icons@0.13.1", "", {}, "sha512-PrrrdbsyMQUXcIRvpc2LKr1ZUSX7D18+kyLvopNfg71+dGvhUPeE8EHWsgrXRgu6G+Sj3ieICWj8hyoBTsvx+g=="],
 
     "kysely": ["kysely@0.28.17", "", {}, "sha512-nbD8lB9EB3wNdMhOCdx5Li8DxnLbvKByylRLcJ1h+4SkrowVeECAyZlyiKMThF7xFdRz0jSQ2MoJr+wXux2y0Q=="],
 

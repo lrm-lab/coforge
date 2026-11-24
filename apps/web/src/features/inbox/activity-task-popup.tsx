@@ -1,6 +1,6 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { CatchBoundary, ClientOnly } from "@tanstack/react-router";
-import { CircleAlert } from "kubai-icons/duotone";
+import { AlertCircle } from "@untitledui/icons";
 import { Suspense, useMemo, useState } from "react";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
@@ -35,7 +35,7 @@ export function ActivityTaskPopup({
               <Dialog aria-label={m.empty_activity_task_load_failed_title()} className="p-4">
                 <EmptyState
                   role="alert"
-                  picture={<EmptyIcon icon={CircleAlert} />}
+                  picture={<EmptyIcon icon={AlertCircle} />}
                   title={m.empty_activity_task_load_failed_title()}
                   description={m.empty_load_failed_safe()}
                   primaryAction={

@@ -11,8 +11,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { conversationAt } from "#src/features/conversations/last-conversation";
-import { MessageTextSquare01 } from "@untitledui/icons";
-import { CircleAlert } from "kubai-icons/duotone";
+import { AlertCircle, MessageTextSquare01 } from "@untitledui/icons";
 
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
@@ -92,7 +91,7 @@ export function SearchResults({
         title={query ? m.search_no_results_title({ query }) : m.search_no_matching_messages()}
         description={query ? m.search_no_results_description() : m.search_try_different_filters()}
         primaryAction={
-          <Button size="sm" color="secondary" onClick={onClear}>
+          <Button size="sm" color="secondary" onPress={onClear}>
             {query ? m.search_clear() : m.search_clear_filters()}
           </Button>
         }
@@ -315,7 +314,7 @@ function MessageResults({
         size="page"
         role="alert"
         className="py-10"
-        picture={<EmptyIcon icon={CircleAlert} />}
+        picture={<EmptyIcon icon={AlertCircle} />}
         title={m.search_failed_title()}
         description={m.search_failed_description()}
         primaryAction={
@@ -350,7 +349,7 @@ function MessageResults({
           className="px-2"
           title={m.search_no_messages_match()}
           primaryAction={
-            <Button size="xs" color="link-gray" onClick={onClear}>
+            <Button size="xs" color="link-gray" onPress={onClear}>
               {clearLabel}
             </Button>
           }
@@ -380,7 +379,7 @@ function MessageResults({
           color="secondary"
           className="mt-2 self-center"
           isLoading={search.isFetchingNextPage}
-          onClick={() => void search.fetchNextPage()}
+          onPress={() => void search.fetchNextPage()}
         >
           {search.isFetchNextPageError ? m.search_retry() : m.search_load_more()}
         </Button>

@@ -1,9 +1,8 @@
 import { memo, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Download01 } from "@untitledui/icons";
+import { AlertCircle, ArrowLeft, Download01, File02 } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
 
-import { CircleAlert, FileText } from "kubai-icons/duotone";
 import { Button } from "#src/components/base/buttons/button";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
@@ -51,7 +50,7 @@ export function ArtifactFileView({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center gap-2 border-b border-secondary px-3 py-2">
-        <Button size="sm" color="tertiary" iconLeading={ArrowLeft} onClick={onBack}>
+        <Button size="sm" color="tertiary" iconLeading={ArrowLeft} onPress={onBack}>
           {m.av_file_back()}
         </Button>
         <span className="min-w-0 flex-1 truncate font-mono text-sm font-medium text-secondary">
@@ -149,7 +148,7 @@ function FileLoadError({
   return (
     <EmptyState
       role="alert"
-      picture={<EmptyIcon icon={CircleAlert} />}
+      picture={<EmptyIcon icon={AlertCircle} />}
       title={m.av_file_failed()}
       description={m.doc_load_failed_retry()}
       primaryAction={onRetry ? <RetryButton isRetrying={retrying} onPress={onRetry} /> : download}
@@ -259,7 +258,7 @@ function FileBody({
   const { commenting } = useArtifactCommenting();
   if (preview.text === null) {
     return (
-      <EmptyState picture={<EmptyIcon icon={FileText} muted />} title={m.av_file_no_preview()} />
+      <EmptyState picture={<EmptyIcon icon={File02} muted />} title={m.av_file_no_preview()} />
     );
   }
   if (kind === "markdown")

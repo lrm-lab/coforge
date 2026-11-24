@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileTrigger } from "react-aria-components";
 import {
+  AlertCircle,
   ArrowLeft,
   ChevronDown,
   ChevronRight,
@@ -16,7 +17,6 @@ import {
   PI_CHAT_UPLOAD_CHUNK_BYTES,
   type PiChatResult,
 } from "@lrm/coforge-sdk/internal/pi-chat";
-import { CircleAlert, Folder as FolderDuotone } from "kubai-icons/duotone";
 import { Button } from "#src/components/base/buttons/button";
 import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
@@ -129,14 +129,14 @@ export function PiChatFiles(props: Props) {
             color="tertiary"
             iconLeading={RefreshCw01}
             aria-label={m.pi_chat_retry()}
-            onClick={refresh}
+            onPress={refresh}
           />
           <Button
             size="sm"
             color="tertiary"
             iconLeading={XClose}
             aria-label={m.pi_chat_files_close()}
-            onClick={props.onClose}
+            onPress={props.onClose}
           />
         </div>
       </div>
@@ -182,13 +182,13 @@ export function PiChatFiles(props: Props) {
       ) : path ? (
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-secondary p-2">
-            <Button size="sm" color="tertiary" iconLeading={ArrowLeft} onClick={() => onPath()}>
+            <Button size="sm" color="tertiary" iconLeading={ArrowLeft} onPress={() => onPath()}>
               {m.pi_chat_files()}
             </Button>
             <Button
               size="sm"
               color="secondary"
-              onClick={() => onMention(preview.data?.file?.path ?? path)}
+              onPress={() => onMention(preview.data?.file?.path ?? path)}
             >
               {m.pi_chat_files_mention()}
             </Button>
@@ -208,7 +208,7 @@ export function PiChatFiles(props: Props) {
               <EmptyState
                 size="card"
                 role="alert"
-                picture={<EmptyIcon icon={CircleAlert} size="card" />}
+                picture={<EmptyIcon icon={AlertCircle} size="card" />}
                 title={m.empty_pi_chat_files_load_failed()}
                 primaryAction={
                   <RetryButton
@@ -240,7 +240,7 @@ export function PiChatFiles(props: Props) {
               <EmptyState
                 size="card"
                 role="alert"
-                picture={<EmptyIcon icon={CircleAlert} size="card" />}
+                picture={<EmptyIcon icon={AlertCircle} size="card" />}
                 title={m.empty_pi_chat_files_load_failed()}
                 primaryAction={
                   <RetryButton
@@ -256,7 +256,7 @@ export function PiChatFiles(props: Props) {
             <div className="p-1">
               <EmptyState
                 size="card"
-                picture={<EmptyIcon icon={FolderDuotone} size="card" />}
+                picture={<EmptyIcon icon={Folder} size="card" />}
                 title={m.agent_workspace_empty()}
               />
             </div>
@@ -342,7 +342,7 @@ function FileEntry({
         color="tertiary"
         className="w-full justify-start [&>span[data-text]]:min-w-0"
         aria-expanded={entry.directory ? expanded : undefined}
-        onClick={() => (entry.directory ? setExpanded(!expanded) : props.onPath(path))}
+        onPress={() => (entry.directory ? setExpanded(!expanded) : props.onPath(path))}
       >
         {entry.directory ? (
           <>

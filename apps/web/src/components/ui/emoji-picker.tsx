@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { CircleAlert } from "kubai-icons/duotone";
+import { AlertCircle } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
@@ -89,7 +89,7 @@ export function EmojiPicker({
       <div className="flex min-h-90 items-center justify-center p-4">
         <EmptyState
           size="page"
-          picture={<EmptyIcon icon={CircleAlert} />}
+          picture={<EmptyIcon icon={AlertCircle} />}
           title={m.empty_emoji_load_failed()}
           description={m.empty_load_failed_safe()}
           primaryAction={

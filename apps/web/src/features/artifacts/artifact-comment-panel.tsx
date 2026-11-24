@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button as AriaButton } from "react-aria-components";
-import { ChevronDown, ChevronRight, SearchLg, SwitchVertical01 } from "@untitledui/icons";
+import {
+  AlertCircle,
+  ChevronDown,
+  ChevronRight,
+  MessageSquare01,
+  SearchLg,
+  SwitchVertical01,
+} from "@untitledui/icons";
 
-import { CircleAlert, MessageSquare, Search } from "kubai-icons/duotone";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
@@ -244,7 +250,7 @@ export function ArtifactCommentPanel({
           <EmptyState
             size="card"
             role="alert"
-            picture={<EmptyIcon icon={CircleAlert} size="card" />}
+            picture={<EmptyIcon icon={AlertCircle} size="card" />}
             title={m.av_cm_load_failed()}
             primaryAction={
               <RetryButton
@@ -279,7 +285,7 @@ export function ArtifactCommentPanel({
                   size="sm"
                   color="tertiary"
                   isLoading={query.isFetchingNextPage}
-                  onClick={() => void query.fetchNextPage()}
+                  onPress={() => void query.fetchNextPage()}
                 >
                   {query.isFetchNextPageError ? m.av_cm_retry() : m.av_cm_older()}
                 </Button>
@@ -291,7 +297,7 @@ export function ArtifactCommentPanel({
                 live={searching && hasAnyPublished ? "polite" : undefined}
                 picture={
                   <EmptyIcon
-                    icon={searching && hasAnyPublished ? Search : MessageSquare}
+                    icon={searching && hasAnyPublished ? SearchLg : MessageSquare01}
                     size="card"
                     muted={!(searching && hasAnyPublished)}
                   />
