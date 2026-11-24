@@ -145,8 +145,7 @@ export function WorkspaceAgentUsageView({
     );
   }
 
-  const timeline = usageQuery.data.timeline;
-  const { timelineSummary } = view;
+  const { timelineBuckets, timelineSummary } = view;
   const hasAnyData = timelineSummary.hasAnyData || view.teamEffectiveTokens > 0;
 
   return (
@@ -243,21 +242,21 @@ export function WorkspaceAgentUsageView({
 
               {range === 1 ? (
                 <TodayHourlyChart
-                  buckets={timeline.buckets}
+                  buckets={timelineBuckets}
                   peak={timelineSummary.peakEffective}
                   selectedKey={selectedKey}
                   onToggleSelect={onToggleSelect}
                 />
               ) : range === 30 ? (
                 <CalendarHeatmapChart
-                  buckets={timeline.buckets}
+                  buckets={timelineBuckets}
                   peak={timelineSummary.peakEffective}
                   selectedKey={selectedKey}
                   onToggleSelect={onToggleSelect}
                 />
               ) : (
                 <DailyBarChart
-                  buckets={timeline.buckets}
+                  buckets={timelineBuckets}
                   peak={timelineSummary.peakEffective}
                   selectedKey={selectedKey}
                   onToggleSelect={onToggleSelect}

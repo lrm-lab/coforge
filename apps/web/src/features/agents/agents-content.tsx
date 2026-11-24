@@ -16,6 +16,7 @@ import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { localLayoutStorage } from "#src/features/conversations/local-layout-storage";
 import type { MemberDirectorySummary } from "#src/features/workspaces/workspaces.functions";
+import { isWorkspaceAdminRole } from "#src/features/workspaces/workspace-roles";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useEdgeSwipeBack } from "#src/hooks/use-edge-swipe-back";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
@@ -90,7 +91,8 @@ export function AgentsContent({
   }, [search]);
 
   const busyCount = useLiveWorkspaceAgents(pickBusyAgents).length;
-  const canInviteMember = summary.actorRole === "owner" || summary.actorRole === "admin";
+  const isWorkspaceAdmin = isWorkspaceAdminRole(summary.actorRole);
+  const canInviteMember = isWorkspaceAdmin;
   const canCreateAgent = canInviteMember;
   const onAllTab = memberType === "all";
   const onAgentTab = memberType === "agent";
@@ -240,7 +242,7 @@ export function AgentsContent({
           className="min-w-[12rem] flex-1"
         />
 
-        {onAgentTab && summary.agentCount > 0 && (
+        {onAgentTab && (summary.agentCount > 0 || onAgentUsage) && (
           <>
             <div
               role="group"
@@ -267,18 +269,20 @@ export function AgentsContent({
               })}
             </div>
 
-            <Select
-              aria-label={m.member_owner_filter()}
-              size="sm"
-              items={ownerItems}
-              selectedKey={owner}
-              onSelectionChange={(key) => {
-                if (key === "all" || key === "mine") onFiltersChange({ owner: key });
-              }}
-              className="w-36 shrink-0"
-            >
-              {(item) => <Select.Item id={item.id} label={item.label} />}
-            </Select>
+            {(!onAgentUsage || isWorkspaceAdmin) && (
+              <Select
+                aria-label={m.member_owner_filter()}
+                size="sm"
+                items={ownerItems}
+                selectedKey={owner}
+                onSelectionChange={(key) => {
+                  if (key === "all" || key === "mine") onFiltersChange({ owner: key });
+                }}
+                className="w-36 shrink-0"
+              >
+                {(item) => <Select.Item id={item.id} label={item.label} />}
+              </Select>
+            )}
           </>
         )}
 
@@ -363,12 +367,12 @@ export function AgentsContent({
           <WorkspaceAgentUsageView
             workspaceId={summary.workspaceId}
             viewerId={summary.viewerId}
-            owner={owner}
+            owner={isWorkspaceAdmin ? owner : "all"}
             query={query}
             profileAgentId={profileAgentId}
             onClearFilters={() => {
               clearSearch();
-              if (filtersActive) onFiltersChange({ owner: "all" });
+              if (isWorkspaceAdmin && filtersActive) onFiltersChange({ owner: "all" });
             }}
           />
         ) : (

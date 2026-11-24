@@ -2,7 +2,9 @@ import { resolveTimeZone } from "#src/lib/dates";
 import {
   aggregateAgentTokenUsageSlices,
   summarizeAgentTokenUsage,
+  type AgentTokenUsageBucket,
   type AgentTokenUsageBucketSlice,
+  type AgentTokenUsageModelEntry,
   type AgentTokenUsageRange,
   type AgentTokenUsageReport,
   type AgentTokenUsageSummary,
@@ -20,11 +22,13 @@ export type WorkspaceAgentUsageAgentMeta = Readonly<{
   model: string;
   ownerId: string;
   ownerDisplayName: string;
+  archived?: boolean;
 }>;
 
 export type WorkspaceAgentBucketEntry = {
   agentId: string;
   bucketKey: string;
+  provider: string;
   model: string;
   turns: number;
   newInputTokens: number;
@@ -39,6 +43,7 @@ export type WorkspaceAgentUsageRow = {
   avatarUrl: string | null;
   ownerId: string;
   ownerDisplayName: string;
+  archived: boolean;
   effectiveTokens: number;
   newInputTokens: number;
   outputTokens: number;
@@ -55,6 +60,7 @@ export type WorkspaceAgentUsageReport = {
 };
 
 export type WorkspaceAgentUsageViewSummary = {
+  timelineBuckets: AgentTokenUsageBucket[];
   timelineSummary: AgentTokenUsageSummary;
   teamEffectiveTokens: number;
   visibleEffectiveTokens: number;
@@ -98,7 +104,7 @@ export function buildWorkspaceAgentUsageReport(input: {
     const outputTokens = slice.outputTokens;
     const effectiveTokens = newInputTokens + outputTokens;
     const model = slice.model.trim();
-    const mapKey = `${slice.agentId}\u0000${bucketKey}\u0000${model}`;
+    const mapKey = `${slice.agentId}\u0000${bucketKey}\u0000${slice.provider}\u0000${model}`;
     const existing = merged.get(mapKey);
     if (existing) {
       existing.turns += slice.turns;
@@ -110,6 +116,7 @@ export function buildWorkspaceAgentUsageReport(input: {
       merged.set(mapKey, {
         agentId: slice.agentId,
         bucketKey,
+        provider: slice.provider,
         model,
         turns: slice.turns,
         newInputTokens,
@@ -136,6 +143,74 @@ type MutableAgentTotals = {
   models: Map<string, number>;
 };
 
+type MutableFilteredBucket = Omit<AgentTokenUsageBucket, "models"> & {
+  models: Map<string, AgentTokenUsageModelEntry>;
+};
+
+function buildFilteredTimelineBuckets(
+  report: WorkspaceAgentUsageReport,
+  matchedAgentIds: ReadonlySet<string>,
+): AgentTokenUsageBucket[] {
+  const byKey = new Map<string, MutableFilteredBucket>();
+  const orderedKeys: string[] = [];
+  for (const bucket of report.timeline.buckets) {
+    orderedKeys.push(bucket.key);
+    byKey.set(bucket.key, {
+      key: bucket.key,
+      dateKey: bucket.dateKey,
+      ...(bucket.hour !== undefined ? { hour: bucket.hour } : {}),
+      ...(bucket.dayOfWeek !== undefined ? { dayOfWeek: bucket.dayOfWeek } : {}),
+      isCurrent: bucket.isCurrent,
+      newInputTokens: 0,
+      cacheReadTokens: 0,
+      outputTokens: 0,
+      effectiveTokens: 0,
+      totalTokens: 0,
+      turns: 0,
+      models: new Map(),
+      lastContextUsed: null,
+      lastContextWindow: null,
+    });
+  }
+
+  for (const entry of report.agentBuckets) {
+    if (!matchedAgentIds.has(entry.agentId)) continue;
+    const bucket = byKey.get(entry.bucketKey);
+    if (!bucket) continue;
+    const total = entry.newInputTokens + entry.cacheReadTokens + entry.outputTokens;
+    bucket.newInputTokens += entry.newInputTokens;
+    bucket.cacheReadTokens += entry.cacheReadTokens;
+    bucket.outputTokens += entry.outputTokens;
+    bucket.effectiveTokens += entry.effectiveTokens;
+    bucket.totalTokens += total;
+    bucket.turns += entry.turns;
+
+    const modelKey = `${entry.provider}\u0000${entry.model}`;
+    const existing = bucket.models.get(modelKey);
+    if (existing) {
+      existing.effectiveTokens += entry.effectiveTokens;
+      existing.totalTokens += total;
+      existing.turns += entry.turns;
+    } else {
+      bucket.models.set(modelKey, {
+        provider: entry.provider,
+        model: entry.model,
+        effectiveTokens: entry.effectiveTokens,
+        totalTokens: total,
+        turns: entry.turns,
+      });
+    }
+  }
+
+  return orderedKeys.map((key) => {
+    const bucket = byKey.get(key)!;
+    return {
+      ...bucket,
+      models: [...bucket.models.values()].sort((a, b) => b.effectiveTokens - a.effectiveTokens),
+    };
+  });
+}
+
 export function summarizeWorkspaceAgentUsage(
   report: WorkspaceAgentUsageReport,
   filters: {
@@ -145,7 +220,27 @@ export function summarizeWorkspaceAgentUsage(
     query: string;
   },
 ): WorkspaceAgentUsageViewSummary {
-  const timelineSummary = summarizeAgentTokenUsage(report.timeline, filters.selectedKey);
+  const trimmedQuery = filters.query.trim().toLowerCase();
+  const filtersActive = filters.owner === "mine" || Boolean(trimmedQuery);
+  const matchedAgentIds = new Set<string>();
+  for (const agent of report.agents) {
+    if (filters.owner === "mine" && agent.ownerId !== filters.viewerId) continue;
+    if (trimmedQuery && !agent.displayName.toLowerCase().includes(trimmedQuery)) continue;
+    matchedAgentIds.add(agent.id);
+  }
+
+  const timelineBuckets = filtersActive
+    ? buildFilteredTimelineBuckets(report, matchedAgentIds)
+    : report.timeline.buckets;
+  const timelineReport = filtersActive
+    ? {
+        ...report.timeline,
+        buckets: timelineBuckets,
+        previousPeriod: { effectiveTokens: 0, totalTokens: 0, turns: 0 },
+      }
+    : report.timeline;
+  const timelineSummary = summarizeAgentTokenUsage(timelineReport, filters.selectedKey);
+
   const totalsByAgent = new Map<string, MutableAgentTotals>();
 
   for (const entry of report.agentBuckets) {
@@ -195,6 +290,7 @@ export function summarizeWorkspaceAgentUsage(
       avatarUrl: agent.avatarUrl,
       ownerId: agent.ownerId,
       ownerDisplayName: agent.ownerDisplayName,
+      archived: Boolean(agent.archived),
       effectiveTokens,
       newInputTokens: totals?.newInputTokens ?? 0,
       outputTokens: totals?.outputTokens ?? 0,
@@ -204,15 +300,14 @@ export function summarizeWorkspaceAgentUsage(
     };
   });
 
-  const trimmedQuery = filters.query.trim().toLowerCase();
   let visibleEffectiveTokens = 0;
   let visibleTurns = 0;
   let visibleActiveAgents = 0;
 
   const rows: WorkspaceAgentUsageRow[] = allRows
     .filter((row) => {
-      if (filters.owner === "mine" && row.ownerId !== filters.viewerId) return false;
-      if (trimmedQuery && !row.displayName.toLowerCase().includes(trimmedQuery)) return false;
+      if (!matchedAgentIds.has(row.agentId)) return false;
+      if (row.archived && row.effectiveTokens === 0 && row.turns === 0) return false;
       return true;
     })
     .map((row) => {
@@ -234,6 +329,7 @@ export function summarizeWorkspaceAgentUsage(
     });
 
   return {
+    timelineBuckets,
     timelineSummary,
     teamEffectiveTokens,
     visibleEffectiveTokens,
