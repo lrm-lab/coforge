@@ -3,6 +3,8 @@ import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { cardActor } from "./action-card-actor";
 import { ActorName } from "#src/features/avatars/actor-name";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { ActorAvatarStack, AVATAR_STACK_LIMIT } from "#src/features/avatars/actor-avatar-stack";
+import { AVATAR_STACK_RING } from "#src/features/avatars/avatar-stack-ring";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import type {
@@ -54,19 +56,22 @@ function faceOf(person: ActionCardPersonRef) {
 
 function Faces({ people, label }: { people: ActionCardPersonRef[]; label?: ReactNode }) {
   if (!people.length) return null;
+  const shown = people.slice(0, AVATAR_STACK_LIMIT);
+  const more = people.length - shown.length;
   return (
     <div className="flex items-center gap-1.5 pt-1">
-      <span className="flex shrink-0 gap-1">
-        {people.slice(0, 4).map((person) => (
+      <ActorAvatarStack more={more} className="shrink-0">
+        {shown.map((person) => (
           <ActorAvatar
             presence={false}
             key={person.id}
             size="xs"
             src={person.avatarUrl ?? undefined}
             name={person.displayName}
+            className={AVATAR_STACK_RING.outline}
           />
         ))}
-      </span>
+      </ActorAvatarStack>
       <span className="min-w-0 text-xs text-tertiary">{label ?? namesOf(people)}</span>
     </div>
   );

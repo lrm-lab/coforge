@@ -8,6 +8,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { useAppToast } from "#src/components/ui/toast";
 import { AgentStackFace } from "#src/features/agents/agent-display-avatar";
+import { ActorAvatarStack, AVATAR_STACK_LIMIT } from "#src/features/avatars/actor-avatar-stack";
 import {
   AgentListPopover,
   AgentListRow,
@@ -128,11 +129,11 @@ export function ThreadFollowingAgents({
           <AlertCircle aria-hidden="true" className="size-4 text-fg-quaternary" />
         ) : (
           <>
-            <span aria-hidden="true" className="flex -space-x-1">
-              {agents.slice(0, 3).map((agent) => (
-                <AgentStackFace key={agent.id} agent={agent} ring="outline" />
+            <ActorAvatarStack aria-hidden="true">
+              {agents.slice(0, AVATAR_STACK_LIMIT).map((agent) => (
+                <AgentStackFace key={agent.id} agent={agent} />
               ))}
-            </span>
+            </ActorAvatarStack>
             <span aria-hidden="true" className="tabular-nums">
               {count}
             </span>

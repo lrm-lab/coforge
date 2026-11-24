@@ -11,7 +11,7 @@ import {
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
-import { ActorAvatarStack } from "#src/features/avatars/actor-avatar-stack";
+import { ActorAvatarStack, AVATAR_STACK_LIMIT } from "#src/features/avatars/actor-avatar-stack";
 import { AVATAR_STACK_RING } from "#src/features/avatars/avatar-stack-ring";
 import { m } from "#src/paraglide/messages";
 import { POPOVER_MOTION } from "#src/utils/popover-motion";
@@ -24,7 +24,6 @@ import { artifactViewersQuery, type ArtifactViewers } from "./artifact-queries";
 import { loadArtifactViewers, markArtifactSeen, openArtifact } from "./artifact-viewer.functions";
 
 const SEEN_GAP_MS = 3_000;
-const STACK_FACES = 3;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function useKeepSeen(artifactId: string) {
@@ -138,7 +137,7 @@ export function ArtifactPresenceChip({
   if (!data) return null;
   const me = data.viewingNow.find((person) => person.userId === data.you);
   const othersViewing = data.viewingNow.filter((person) => person.userId !== data.you);
-  const shown = othersViewing.slice(0, me ? STACK_FACES - 1 : STACK_FACES);
+  const shown = othersViewing.slice(0, me ? AVATAR_STACK_LIMIT - 1 : AVATAR_STACK_LIMIT);
   const othersCount = present ? present.size - (present.has(data.you) ? 1 : 0) : 0;
   const summary = presenceSummary({
     othersViewing: othersCount,
@@ -166,7 +165,7 @@ export function ArtifactPresenceChip({
               data-viewer={person.userId}
               className="flex animate-in fade-in motion-enter-sm"
             >
-              <PersonFace person={person} className={cn("size-5", AVATAR_STACK_RING.regular)} />
+              <PersonFace person={person} className={AVATAR_STACK_RING.outline} />
               <span className="sr-only">{nameOf(person)}</span>
             </span>
           ))}

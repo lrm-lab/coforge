@@ -2,15 +2,20 @@ import { Button as AriaButton } from "react-aria-components";
 import { ChevronRight } from "@untitledui/icons";
 
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import {
+  ActorAvatarStack,
+  ActorAvatarStackMore,
+  AVATAR_STACK_LIMIT,
+} from "#src/features/avatars/actor-avatar-stack";
+import { AVATAR_STACK_RING } from "#src/features/avatars/avatar-stack-ring";
 import { AvatarAddButton } from "#src/components/base/avatar/base-components/avatar-add-button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { Skeleton } from "#src/components/ui/skeleton";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { useChannelMembers } from "./channel-members-query";
 import { SettingsCard } from "./settings-panel-parts";
-
-const MEMBER_STRIP_LIMIT = 14;
 
 export function MembersStrip({
   channelId,
@@ -30,7 +35,7 @@ export function MembersStrip({
     ...humans.map((human) => ({ key: `user:${human.id}`, ...human })),
     ...agents.map((agent) => ({ key: `agent:${agent.id}`, ...agent })),
   ];
-  const shown = entries.slice(0, MEMBER_STRIP_LIMIT);
+  const shown = entries.slice(0, AVATAR_STACK_LIMIT);
   const more = entries.length - shown.length;
   return (
     <SettingsCard className="p-3.5">
@@ -52,11 +57,14 @@ export function MembersStrip({
           </span>
         </AriaButton>
       </h3>
-      <div className="mt-3 flex flex-wrap items-center gap-2" aria-busy={members.isPending}>
-        {members.isPending &&
-          Array.from({ length: 3 }, (_, index) => (
-            <Skeleton key={index} className="size-[2.375rem] rounded-full" />
-          ))}
+      <div className="mt-3 flex items-center" aria-busy={members.isPending}>
+        {members.isPending && (
+          <div className="flex -space-x-1.5">
+            {Array.from({ length: AVATAR_STACK_LIMIT }, (_, index) => (
+              <Skeleton key={index} className="size-6 rounded-full" />
+            ))}
+          </div>
+        )}
         {members.isError && (
           <EmptyState
             size="row"
@@ -72,40 +80,47 @@ export function MembersStrip({
             }
           />
         )}
-        {shown.map((entry) => (
-          <Tooltip key={entry.key} title={entry.displayName}>
-            <TooltipTrigger className="shrink-0 rounded-full" onPress={onOpenMembers}>
-              <ActorAvatar
-                presence
-                userId={entry.key.startsWith("user:") ? entry.id : undefined}
-                agentId={entry.key.startsWith("agent:") ? entry.id : undefined}
-                size="sm"
-                alt=""
-                src={entry.avatarUrl ?? undefined}
-                name={entry.displayName}
-              />
-              <span className="sr-only">{entry.displayName}</span>
-            </TooltipTrigger>
-          </Tooltip>
-        ))}
-        {more > 0 && (
-          <Tooltip title={m.channel_settings_members_more({ count: more })}>
-            <TooltipTrigger className="shrink-0 rounded-full" onPress={onOpenMembers}>
-              <ActorAvatar
-                presence={false}
-                size="sm"
-                alt=""
-                initials={`+${more}`}
-                contentClassName="bg-avatar-more text-avatar-more-fg outline-none [&>span]:text-avatar-more-fg [&>span]:tabular-nums"
-              />
-              <span className="sr-only">{m.channel_settings_members_more({ count: more })}</span>
-            </TooltipTrigger>
-          </Tooltip>
+        {shown.length > 0 && (
+          <ActorAvatarStack aria-label={m.channel_settings_members()}>
+            {shown.map((entry) => (
+              <Tooltip key={entry.key} title={entry.displayName}>
+                <TooltipTrigger
+                  className="inline-flex shrink-0 items-center justify-center rounded-full p-0 leading-none hover:z-10 focus-visible:z-10"
+                  onPress={onOpenMembers}
+                >
+                  <ActorAvatar
+                    presence
+                    userId={entry.key.startsWith("user:") ? entry.id : undefined}
+                    agentId={entry.key.startsWith("agent:") ? entry.id : undefined}
+                    size="xs"
+                    alt=""
+                    src={entry.avatarUrl ?? undefined}
+                    name={entry.displayName}
+                    className={AVATAR_STACK_RING.outline}
+                  />
+                  <span className="sr-only">{entry.displayName}</span>
+                </TooltipTrigger>
+              </Tooltip>
+            ))}
+            {more > 0 && (
+              <Tooltip title={m.channel_settings_members_more({ count: more })}>
+                <TooltipTrigger
+                  className="inline-flex shrink-0 items-center justify-center rounded-full p-0 leading-none hover:z-10 focus-visible:z-10"
+                  onPress={onOpenMembers}
+                >
+                  <ActorAvatarStackMore more={more} />
+                  <span className="sr-only">
+                    {m.channel_settings_members_more({ count: more })}
+                  </span>
+                </TooltipTrigger>
+              </Tooltip>
+            )}
+          </ActorAvatarStack>
         )}
         {canAdd && members.data && (
           <AvatarAddButton
-            size="sm"
-            className="size-[2.375rem] rounded-full border-secondary text-avatar-add-fg"
+            size="xs"
+            className={cn("border-secondary text-avatar-add-fg", shown.length > 0 && "ms-2")}
             title={m.channel_settings_add_members()}
             onPress={onAddMembers}
           />

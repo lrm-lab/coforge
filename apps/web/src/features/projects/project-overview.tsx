@@ -7,7 +7,7 @@ import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { TaskBoardWireframe } from "#src/components/ui/empty-wireframes";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
-import { ActorAvatarStack } from "#src/features/avatars/actor-avatar-stack";
+import { ActorAvatarStack, AVATAR_STACK_LIMIT } from "#src/features/avatars/actor-avatar-stack";
 import { AVATAR_STACK_RING } from "#src/features/avatars/avatar-stack-ring";
 import { loadFinishedTasks } from "#src/features/tasks/tasks.functions";
 import { finishedSummaryQuery } from "#src/features/tasks/use-finished-tasks";
@@ -200,10 +200,12 @@ function Progress({ done, total }: { done: number; total: number }) {
 
 function People({ people }: { people: Overview["people"] }) {
   if (people.length === 0) return <span className="text-sm text-quaternary">—</span>;
+  const shown = people.slice(0, AVATAR_STACK_LIMIT);
+  const more = people.length - shown.length;
   return (
     <span className="flex items-center gap-2">
-      <ActorAvatarStack>
-        {people.slice(0, 5).map((person) => (
+      <ActorAvatarStack more={more}>
+        {shown.map((person) => (
           <ActorAvatar
             key={person.id}
             presence={false}
@@ -212,16 +214,14 @@ function People({ people }: { people: Overview["people"] }) {
             alt={person.name}
             src={person.avatarUrl ?? undefined}
             agentId={person.kind === "agent" ? person.id : undefined}
-            className={AVATAR_STACK_RING.regular}
+            userId={person.kind === "user" ? person.id : undefined}
+            className={AVATAR_STACK_RING.outline}
           />
         ))}
       </ActorAvatarStack>
       <span className="truncate text-sm text-secondary">
-        {people
-          .slice(0, 3)
-          .map((person) => person.name)
-          .join(", ")}
-        {people.length > 3 && ` +${people.length - 3}`}
+        {shown.map((person) => person.name).join(", ")}
+        {more > 0 && ` +${more}`}
       </span>
     </span>
   );

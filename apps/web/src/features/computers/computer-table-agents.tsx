@@ -1,10 +1,10 @@
-import { ActorAvatarStack } from "#src/features/avatars/actor-avatar-stack";
+import { ActorAvatarStack, AVATAR_STACK_LIMIT } from "#src/features/avatars/actor-avatar-stack";
 import { AVATAR_STACK_RING } from "#src/features/avatars/avatar-stack-ring";
 import { m } from "#src/paraglide/messages";
 import { ComputerCardAgentChip } from "./computer-card";
 import type { ComputerOverviewItem } from "./computer-overview-model";
 
-export const COMPUTER_TABLE_MAX_VISIBLE_AGENTS = 3;
+export const COMPUTER_TABLE_MAX_VISIBLE_AGENTS = AVATAR_STACK_LIMIT;
 export const COMPUTER_TABLE_COMPACT_OVERFLOW_VISIBLE_AGENTS = 2;
 
 export function computerTableVisibleAgentCount(total: number, compact: boolean): number {
@@ -37,8 +37,6 @@ export function ComputerTableAgentsCell({
   return (
     <div className="hidden min-w-0 items-center md:flex">
       <ActorAvatarStack
-        overlap="loose"
-        ring="outline"
         more={more}
         moreLabel={more > 0 ? `+${more}` : undefined}
         aria-label={m.computer_overview_agents_count({ count: agents.length })}

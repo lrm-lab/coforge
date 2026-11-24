@@ -12,6 +12,8 @@ import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-disp
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
 import { useLiveAgentDisplay } from "#src/features/agents/workspace-agents-realtime";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { ActorAvatarStack, AVATAR_STACK_LIMIT } from "#src/features/avatars/actor-avatar-stack";
+import { AVATAR_STACK_RING } from "#src/features/avatars/avatar-stack-ring";
 import { humanLabel } from "#src/lib/human-label";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -174,7 +176,7 @@ export function ComputerCard({
   const diskPercent = disk ? machineUsedPercent(disk) : null;
   const memoryPercent = memory ? machineUsedPercent(memory) : null;
   const diskLow = disk ? isMachineDiskLow(disk) : false;
-  const shownAgents = computer.agents.slice(0, 5);
+  const shownAgents = computer.agents.slice(0, AVATAR_STACK_LIMIT);
   const extraAgents = computer.agents.length - shownAgents.length;
   const cloud = computerKind(computer.kind) === "cloud";
 
@@ -296,16 +298,21 @@ export function ComputerCard({
         <div className="flex min-h-6 items-center gap-1.5">
           {shownAgents.length > 0 ? (
             <>
-              <div className="flex items-center gap-1">
+              <ActorAvatarStack
+                more={extraAgents}
+                moreLabel={extraAgents > 0 ? `+${extraAgents}` : undefined}
+                aria-label={m.computer_overview_agents_count({ count: computer.agents.length })}
+                className="relative z-10 inline-flex max-w-full"
+              >
                 {shownAgents.map((agent) => (
-                  <ComputerCardAgentChip key={agent.id} agent={agent} />
+                  <ComputerCardAgentChip
+                    key={agent.id}
+                    agent={agent}
+                    avatarClassName={AVATAR_STACK_RING.outline}
+                    triggerClassName="z-0 hover:z-10 focus-visible:z-10"
+                  />
                 ))}
-              </div>
-              {extraAgents > 0 ? (
-                <span className="text-xs font-medium text-tertiary tabular-nums">
-                  +{extraAgents}
-                </span>
-              ) : null}
+              </ActorAvatarStack>
               <span className="ms-auto shrink-0 text-xs text-tertiary tabular-nums">
                 {m.computer_overview_agents_count({ count: computer.agents.length })}
               </span>

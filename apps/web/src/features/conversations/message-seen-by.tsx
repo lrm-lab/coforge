@@ -7,7 +7,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
-import { ActorAvatarStack } from "#src/features/avatars/actor-avatar-stack";
+import { ActorAvatarStack, AVATAR_STACK_LIMIT } from "#src/features/avatars/actor-avatar-stack";
 import { AVATAR_STACK_RING } from "#src/features/avatars/avatar-stack-ring";
 import { formatMomentForDisplay } from "#src/lib/dates";
 import { cn } from "#src/lib/utils";
@@ -77,7 +77,15 @@ const SeenIcon = ({ large = false }: { large?: boolean; className?: string }) =>
   </span>
 );
 
-function ReaderAvatar({ reader, size = "xs" }: { reader: Reader; size?: "xs" | "sm" }) {
+function ReaderAvatar({
+  reader,
+  size = "xs",
+  className,
+}: {
+  reader: Reader;
+  size?: "xs" | "sm";
+  className?: string;
+}) {
   return reader.kind === "agent" ? (
     <AgentDisplayAvatar
       agentId={reader.id}
@@ -85,6 +93,7 @@ function ReaderAvatar({ reader, size = "xs" }: { reader: Reader; size?: "xs" | "
       src={reader.avatarUrl}
       size={size}
       cornerDot={false}
+      className={className}
     />
   ) : (
     <ActorAvatar
@@ -93,18 +102,20 @@ function ReaderAvatar({ reader, size = "xs" }: { reader: Reader; size?: "xs" | "
       src={reader.avatarUrl ?? undefined}
       userId={reader.id}
       name={reader.label}
+      className={className}
     />
   );
 }
 
-/** The first few readers' faces, overlapping, after the count. */
 function ReaderFaces({ readers }: { readers: readonly Reader[] }) {
   return (
     <ActorAvatarStack aria-hidden="true" className="ml-2 shrink-0">
-      {readers.slice(0, 3).map((reader) => (
-        <span key={mentionKey(reader)} className={cn("rounded-full", AVATAR_STACK_RING.regular)}>
-          <ReaderAvatar reader={reader} />
-        </span>
+      {readers.slice(0, AVATAR_STACK_LIMIT).map((reader) => (
+        <ReaderAvatar
+          key={mentionKey(reader)}
+          reader={reader}
+          className={AVATAR_STACK_RING.outline}
+        />
       ))}
     </ActorAvatarStack>
   );

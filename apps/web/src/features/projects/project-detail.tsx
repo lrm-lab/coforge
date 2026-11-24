@@ -10,6 +10,8 @@ import {
   XCircle,
 } from "@untitledui/icons";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { ActorAvatarStack, AVATAR_STACK_LIMIT } from "#src/features/avatars/actor-avatar-stack";
+import { AVATAR_STACK_RING } from "#src/features/avatars/avatar-stack-ring";
 import { Badge } from "#src/components/base/badges/badges";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { RelativeTime } from "#src/components/ui/relative-time";
@@ -182,14 +184,17 @@ function RepositoryContents({ data, projectSlug }: { data: Repository; projectSl
                 key={commit.sha}
                 className="relative flex min-w-0 items-center gap-3 px-4 py-3 hover:bg-primary_hover"
               >
-                <span className="relative z-10 flex shrink-0 -space-x-1.5">
+                <ActorAvatarStack
+                  more={Math.max(0, commit.coAuthors.length - (AVATAR_STACK_LIMIT - 1))}
+                  className="relative z-10 shrink-0"
+                >
                   <CommitIdentity
                     name={commit.author}
                     email={commit.authorEmail}
                     role={m.project_commit_role_author()}
                     avatarUrl={commit.authorAvatarUrl}
                   />
-                  {commit.coAuthors.slice(0, 2).map((coAuthor) => (
+                  {commit.coAuthors.slice(0, AVATAR_STACK_LIMIT - 1).map((coAuthor) => (
                     <CommitIdentity
                       key={coAuthor.name}
                       name={coAuthor.name}
@@ -198,7 +203,7 @@ function RepositoryContents({ data, projectSlug }: { data: Repository; projectSl
                       avatarUrl={coAuthor.avatarUrl}
                     />
                   ))}
-                </span>
+                </ActorAvatarStack>
                 <a
                   href={`${base}/commit/${commit.sha}`}
                   target="_blank"
@@ -380,13 +385,13 @@ function CommitIdentity({
       }
       description={email ?? undefined}
     >
-      <TooltipTrigger className="flex rounded-full">
+      <TooltipTrigger className="inline-flex shrink-0 rounded-full">
         <ActorAvatar
           presence={false}
           size="xs"
           src={avatarUrl ?? undefined}
           name={name}
-          className="ring-2 ring-primary"
+          className={AVATAR_STACK_RING.outline}
           alt=""
         />
       </TooltipTrigger>

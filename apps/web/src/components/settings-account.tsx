@@ -251,7 +251,7 @@ export function AccountSettings({
                   <dt className="text-sm font-semibold text-primary">
                     {m.settings_created_agents()}
                   </dt>
-                  <dd className="flex min-w-0 flex-wrap gap-2 text-sm text-primary">
+                  <dd className="min-w-0 text-sm text-primary">
                     <CreatedAgentFaces agents={createdAgents} />
                   </dd>
                 </div>

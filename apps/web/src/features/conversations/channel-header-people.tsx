@@ -1,5 +1,9 @@
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
-import { ActorAvatarStack } from "#src/features/avatars/actor-avatar-stack";
+import {
+  ActorAvatarStack,
+  ActorAvatarStackMore,
+  AVATAR_STACK_LIMIT,
+} from "#src/features/avatars/actor-avatar-stack";
 import { AVATAR_STACK_RING } from "#src/features/avatars/avatar-stack-ring";
 import { AvatarAddButton } from "#src/components/base/avatar/base-components/avatar-add-button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
@@ -14,7 +18,7 @@ import { m } from "#src/paraglide/messages";
 import { useChannelMembers } from "./channel-members-query";
 import { PersonHoverCard } from "./person-hover-card";
 
-export const CHANNEL_HEADER_FACE_LIMIT = 3;
+export const CHANNEL_HEADER_FACE_LIMIT = AVATAR_STACK_LIMIT;
 
 export type ChannelHeaderFace = {
   key: string;
@@ -48,11 +52,7 @@ export function ChannelHeaderFaces({
   return (
     <div className="flex shrink-0 items-center">
       {shown.length > 0 && (
-        <ActorAvatarStack
-          overlap="loose"
-          className="hidden md:flex"
-          aria-label={m.channel_settings_members()}
-        >
+        <ActorAvatarStack className="hidden md:flex" aria-label={m.channel_settings_members()}>
           {shown.map((entry) => {
             const isAgent = Boolean(entry.agentId) || entry.kind === "agent";
             const agentId = isAgent
@@ -117,22 +117,7 @@ export function ChannelHeaderFaces({
                 className="inline-flex shrink-0 items-center justify-center rounded-full p-0 leading-none"
                 onPress={onOpenMembers}
               >
-                <span dir="ltr" className="inline-flex">
-                  <ActorAvatar
-                    presence={false}
-                    size="xs"
-                    alt=""
-                    initials={`+${more}`}
-                    contentClassName={cn(
-                      "bg-avatar-more text-avatar-more-fg outline-none [&>span]:text-avatar-more-fg [&>span]:tabular-nums",
-                      more > 99 && "px-1.5",
-                    )}
-                    className={cn(
-                      more > 99 && "[&&]:w-auto [&&]:min-w-6",
-                      AVATAR_STACK_RING.outline,
-                    )}
-                  />
-                </span>
+                <ActorAvatarStackMore more={more} />
                 <span className="sr-only">{m.channel_settings_members_more({ count: more })}</span>
               </TooltipTrigger>
             </Tooltip>
@@ -172,8 +157,8 @@ export function ChannelHeaderMemberCluster({
         aria-label={m.channel_members_loading()}
         className="hidden shrink-0 -space-x-1.5 md:flex"
       >
-        {Array.from({ length: 3 }, (_, index) => (
-          <Skeleton key={index} className="size-8 rounded-full" />
+        {Array.from({ length: CHANNEL_HEADER_FACE_LIMIT }, (_, index) => (
+          <Skeleton key={index} className="size-6 rounded-full" />
         ))}
       </div>
     );

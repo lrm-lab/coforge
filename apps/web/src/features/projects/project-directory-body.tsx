@@ -7,6 +7,8 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { FileTypeIcon } from "#src/features/files/file-type-icon";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { ActorAvatarStack, AVATAR_STACK_LIMIT } from "#src/features/avatars/actor-avatar-stack";
+import { AVATAR_STACK_RING } from "#src/features/avatars/avatar-stack-ring";
 import { projectDirectoryCommitsQuery } from "./project-tree-queries";
 import { isBrowsable, type TreeEntry } from "./tree-index";
 import { githubUrl as buildGithubUrl } from "./project-file-urls";
@@ -50,18 +52,21 @@ export function DirectoryBody({
         >
           {latest ? (
             <>
-              <span className="flex shrink-0 -space-x-1.5">
-                {latest.people.slice(0, 3).map((person) => (
+              <ActorAvatarStack
+                more={Math.max(0, latest.people.length - AVATAR_STACK_LIMIT)}
+                className="shrink-0"
+              >
+                {latest.people.slice(0, AVATAR_STACK_LIMIT).map((person) => (
                   <ActorAvatar
                     presence={false}
                     key={person.name}
                     size="xs"
                     name={person.name}
                     src={person.avatarUrl}
-                    className="ring-2 ring-bg-secondary"
+                    className={AVATAR_STACK_RING.outline}
                   />
                 ))}
-              </span>
+              </ActorAvatarStack>
               <span className="min-w-0 flex-1 truncate text-sm text-tertiary">
                 <span className="font-medium text-primary">
                   {latest.people.map((person) => person.name).join(", ")}

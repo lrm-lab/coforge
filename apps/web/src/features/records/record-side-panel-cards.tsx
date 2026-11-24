@@ -2,8 +2,9 @@ import { CheckCircle, Link01 as LinkIcon } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { ActorAvatarStack, AVATAR_STACK_LIMIT } from "#src/features/avatars/actor-avatar-stack";
+import { AVATAR_STACK_RING } from "#src/features/avatars/avatar-stack-ring";
 import { m } from "#src/paraglide/messages";
-import { cx } from "#src/utils/cx";
 import type { RecordAssistantPayload } from "./weekly-highlight-extract";
 import { formatWeeklyReportCompletedAt } from "./records-content";
 import { useSendWindowCountdown } from "./use-send-window";
@@ -49,7 +50,7 @@ export function AssistantAttachmentCard({
       })
     : m.records_assistant_template_ready();
   const recipients = payload.recipients ?? [];
-  const shown = recipients.slice(0, 5);
+  const shown = recipients.slice(0, AVATAR_STACK_LIMIT);
   const overflow =
     typeof payload.recipientTotal === "number"
       ? Math.max(0, payload.recipientTotal - shown.length)
@@ -77,7 +78,15 @@ export function AssistantAttachmentCard({
             <span>{updatedLabel}</span>
           </p>
           {shown.length > 0 ? (
-            <div className="mt-2 flex items-center">
+            <ActorAvatarStack
+              more={overflow}
+              moreLabel={
+                overflow > 0
+                  ? m.records_assistant_recipients_overflow({ count: overflow })
+                  : undefined
+              }
+              className="mt-2"
+            >
               {shown.map((person, index) => (
                 <ActorAvatar
                   presence={false}
@@ -87,15 +96,10 @@ export function AssistantAttachmentCard({
                   alt={person.displayName}
                   userId={person.userId}
                   src={person.avatarUrl}
-                  className={cx("ring-2 ring-primary", index > 0 ? "-ms-1.5" : undefined)}
+                  className={AVATAR_STACK_RING.outline}
                 />
               ))}
-              {overflow > 0 ? (
-                <span className="ms-1.5 text-xs font-medium text-tertiary">
-                  {m.records_assistant_recipients_overflow({ count: overflow })}
-                </span>
-              ) : null}
-            </div>
+            </ActorAvatarStack>
           ) : null}
         </div>
       </div>
