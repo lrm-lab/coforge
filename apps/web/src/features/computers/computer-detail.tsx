@@ -331,51 +331,43 @@ export function ComputerDetail({
           />
         </div>
 
-        <div className="px-page py-4">
-          <div className="divide-y divide-secondary rounded-xl border border-secondary [&>*]:px-4">
-            <div className="py-2">
-              <ComputerDetailWorkspaceInventory
-                snapshot={onScanAgentWorkspaces ? agentWorkspaceScan : null}
-                status={workspaceScanStatus}
-                canScan={Boolean(onScanAgentWorkspaces)}
-                onScan={() => void scanWorkspaces()}
-                canDelete={Boolean(onDeleteAgentWorkspace)}
-                timeZone={timeZone}
-                onDelete={async (agentId) => {
-                  if (!onDeleteAgentWorkspace) return;
-                  const result = await onDeleteAgentWorkspace(agentId);
-                  if (result.status !== "ok" && result.status !== "missing")
-                    throw new Error("Workspace could not be deleted");
-                  await scanWorkspaces();
-                }}
-              />
-            </div>
-
-            {computer.ownedByCurrentUser ? (
-              <details className="group">
-                <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 py-3 text-sm font-semibold text-primary outline-none focus-visible:ring-2 focus-visible:ring-brand [&::-webkit-details-marker]:hidden">
-                  <Terminal aria-hidden="true" className="size-4 text-fg-quaternary" />
-                  <span className="flex-1">{m.computer_troubleshoot_terminal()}</span>
-                  <ChevronRight
-                    aria-hidden="true"
-                    className="size-4 text-fg-quaternary transition-transform duration-(--duration-sm) ease-in-out group-open:rotate-90 rtl:rotate-180 rtl:group-open:rotate-90 motion-reduce:transition-none"
-                  />
-                </summary>
-                <div className="space-y-2 pb-4">
-                  <p className="text-sm text-tertiary">
-                    {m.computer_verify_terminal_description()}
-                  </p>
-                  <TerminalCommand command="coforge-computer status" />
-                  <TerminalCommand command="coforge-computer logs" />
-                  <p className="pt-2 text-sm text-tertiary">{m.computer_restart_from_terminal()}</p>
-                  <TerminalCommand
-                    command={`coforge-computer restart --workspace ${workspaceSlug}`}
-                  />
-                </div>
-              </details>
-            ) : null}
-          </div>
+        <div className="border-b border-secondary px-page py-4">
+          <ComputerDetailWorkspaceInventory
+            snapshot={onScanAgentWorkspaces ? agentWorkspaceScan : null}
+            status={workspaceScanStatus}
+            canScan={Boolean(onScanAgentWorkspaces)}
+            onScan={() => void scanWorkspaces()}
+            canDelete={Boolean(onDeleteAgentWorkspace)}
+            timeZone={timeZone}
+            onDelete={async (agentId) => {
+              if (!onDeleteAgentWorkspace) return;
+              const result = await onDeleteAgentWorkspace(agentId);
+              if (result.status !== "ok" && result.status !== "missing")
+                throw new Error("Workspace could not be deleted");
+              await scanWorkspaces();
+            }}
+          />
         </div>
+
+        {computer.ownedByCurrentUser ? (
+          <details className="group border-b border-secondary px-page">
+            <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2.5 py-3 text-sm font-medium text-secondary transition-colors outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-brand [&::-webkit-details-marker]:hidden">
+              <Terminal aria-hidden="true" className="size-4 text-fg-quaternary" />
+              <span className="flex-1">{m.computer_troubleshoot_terminal()}</span>
+              <ChevronRight
+                aria-hidden="true"
+                className="size-4 text-fg-quaternary transition-transform duration-(--duration-sm) ease-in-out group-open:rotate-90 rtl:rotate-180 rtl:group-open:rotate-90 motion-reduce:transition-none"
+              />
+            </summary>
+            <div className="space-y-2 pb-4">
+              <p className="text-sm text-tertiary">{m.computer_verify_terminal_description()}</p>
+              <TerminalCommand command="coforge-computer status" />
+              <TerminalCommand command="coforge-computer logs" />
+              <p className="pt-2 text-sm text-tertiary">{m.computer_restart_from_terminal()}</p>
+              <TerminalCommand command={`coforge-computer restart --workspace ${workspaceSlug}`} />
+            </div>
+          </details>
+        ) : null}
       </div>
 
       {onFormatCloudComputer ? (
