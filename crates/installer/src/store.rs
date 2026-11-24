@@ -17,7 +17,7 @@
 
 use std::fmt::Display;
 use std::fs;
-use std::io;
+use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -211,6 +211,28 @@ impl VersionStore {
             })
     }
 
+    pub(crate) fn is_fixed_computer_copy(&self, version: &str, executable: &Path) -> Option<bool> {
+        let managed = self.running_computer_path(version);
+        if executable == managed {
+            return Some(false);
+        }
+        let executable = fs::canonicalize(executable).ok()?;
+        if executable == fs::canonicalize(managed).ok()? {
+            return Some(false);
+        }
+        if !fs::metadata(&executable).ok()?.is_file() {
+            return None;
+        }
+        let identity: InstalledIdentity = serde_json::from_slice(
+            &fs::read(self.version_directory(version).join("installation.json")).ok()?,
+        )
+        .ok()?;
+        if file_matches(&executable, Some(&identity.computer)).ok()? {
+            return Some(true);
+        }
+        has_linux_computer_bundle(&executable, self.target()).ok()
+    }
+
     fn computer_name(&self) -> &'static str {
         if self.windows {
             "coforge-computer.exe"
@@ -388,6 +410,24 @@ fn assert_version(version: &str) -> Result<(), UpdateError> {
             "version is invalid: {version:?}"
         )))
     }
+}
+
+fn has_linux_computer_bundle(path: &Path, target: &str) -> io::Result<bool> {
+    const BUNDLE_WINDOW: u64 = 16 * 1024 * 1024;
+
+    let mut file = fs::File::open(path)?;
+    let mut magic = [0; 4];
+    if file.read(&mut magic)? != magic.len() || &magic != b"\x7fELF" {
+        return Ok(false);
+    }
+    let entry = format!("\0/$bunfs/root/{target}-coforge-computer\0");
+    let offset = file.metadata()?.len().saturating_sub(BUNDLE_WINDOW);
+    file.seek(SeekFrom::Start(offset))?;
+    let mut tail = Vec::new();
+    file.take(BUNDLE_WINDOW).read_to_end(&mut tail)?;
+    Ok([entry.as_bytes(), b"coforge-computer __lifecycle"]
+        .iter()
+        .all(|marker| tail.windows(marker.len()).any(|bytes| bytes == *marker)))
 }
 
 /// Whether the file has exactly the recorded size and checksum; false when no valid identity was

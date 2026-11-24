@@ -89,6 +89,7 @@ impl Run<'_, '_> {
             .filter(|installed| installed.supervisor_running)
         {
             self.require_managed_supervisor()?;
+            self.require_upgradeable_start(&installed.version)?;
             from_definition = self.read_service_definition(&installed.version)?;
             to_definition = self.read_candidate_service_definition(&to, &probe)?;
         }
@@ -143,6 +144,23 @@ impl Run<'_, '_> {
             }
             Ok(_) => Ok(()),
         }
+    }
+
+    fn require_upgradeable_start(&self, version: &str) -> Result<(), Refusal> {
+        let service = self.ports.service;
+        let store = self.ports.store;
+        if let Some(executable) = service.external_start_executable()
+            && store.is_fixed_computer_copy(version, &executable) == Some(true)
+        {
+            return Err(refuse(format!(
+                "Cannot upgrade while systemd unit {} starts a fixed Computer executable at {}. \
+                 Set the unit's ExecStart to {} and reload systemd before retrying.",
+                service.display_name(),
+                executable.display(),
+                store.running_computer_path(version).display(),
+            )));
+        }
+        Ok(())
     }
 
     /// The service definition of `version`, read from its stored executable before anything

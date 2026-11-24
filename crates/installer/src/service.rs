@@ -16,7 +16,7 @@
 //! service (launchd), reports it inactive (systemd), or the task has no running instance
 //! (Windows). Whether a process of the product still lives is [`crate::processes`].
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::clock::Clock;
@@ -109,6 +109,10 @@ pub trait SupervisorService {
 
     /// Reads the manager's state. Changes nothing.
     fn state(&self) -> Result<ServiceState, ServiceError>;
+
+    fn external_start_executable(&self) -> Option<PathBuf> {
+        None
+    }
 
     /// Stops the service and waits, bounded, until the manager has really let go of it. A service
     /// that is not installed or not running is not an error: [`StopOutcome::before`] says so.

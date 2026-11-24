@@ -20,6 +20,13 @@ The commands, output and exit status of `coforge-installer`; what the crate does
   resolves and before anything changes; a version that is not SemVer cannot be ordered and is refused
   the same way. The same or a newer version and a machine with nothing installed are never gated.
   The flag is not in the request record, so a replay ignores it. Settling an unfinished upgrade and rollback are not gated.
+- Before waiting for workspaces or stopping a running Linux Computer under a self-managed systemd
+  unit, the installer reads the effective `ExecStart`, including drop-ins. If it can confirm
+  that the executable is a fixed copy of a Computer release, it refuses the upgrade
+  and reports the unit, its executable and the managed path to use. The unit administrator
+  updates the unit and reloads systemd before retrying. An executable path that follows the
+  managed installation through a symlink works as usual. If systemd cannot report the command
+  or the command is a wrapper the installer cannot identify, the existing upgrade checks apply.
 - There is no `recover` command. `install`, `upgrade`, `repair` and `start` settle an unfinished
   upgrade (the journal) first, with the same caller rules as their own work; one that cannot be
   settled ends the operation with exit 3, no receipt, and "Run the same command again". `start`

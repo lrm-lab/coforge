@@ -24,6 +24,8 @@ use crate::clock::{Clock, poll_until};
 use crate::contract::{CoordinatorService, LifecycleServiceDefinition};
 
 const SYSTEMCTL: &str = "systemctl";
+const SYSTEMD_BUS_NAME: &str = "org.freedesktop.systemd1";
+const EXEC_START_QUERY_BOUND: Duration = Duration::from_secs(2);
 
 const COMMAND_BOUND: Duration = Duration::from_secs(30);
 /// `systemctl stop` returns when the unit is down, and systemd's own `TimeoutStopSec` (90 s by
@@ -240,6 +242,22 @@ impl<'a> SystemdUser<'a> {
         parse_unit(&attempt)
     }
 
+    fn bus_query(&self, args: &[&str]) -> Option<serde_json::Value> {
+        let command = CommandLine::new(
+            "busctl",
+            self.scope_flag
+                .into_iter()
+                .chain(["--json=short"])
+                .chain(args.iter().copied()),
+        )
+        .with_env(self.bus_env.iter().cloned());
+        let output = self.runner.run(&command, EXEC_START_QUERY_BOUND).ok()?;
+        if output.code != 0 {
+            return None;
+        }
+        serde_json::from_str(&output.stdout).ok()
+    }
+
     /// systemd's refusal, turned into what a person should do next. Ported from `systemctlFailure`
     /// and `systemctlRemedy` (systemd-user.ts).
     fn refused(&self, attempt: &Attempt) -> ServiceError {
@@ -307,6 +325,36 @@ impl SupervisorService for SystemdUser<'_> {
 
     fn state(&self) -> Result<ServiceState, ServiceError> {
         Ok(self.read()?.state())
+    }
+
+    fn external_start_executable(&self) -> Option<PathBuf> {
+        if self.unit_file.is_some() {
+            return None;
+        }
+        let unit = self.bus_query(&[
+            "call",
+            SYSTEMD_BUS_NAME,
+            "/org/freedesktop/systemd1",
+            "org.freedesktop.systemd1.Manager",
+            "GetUnit",
+            "s",
+            &self.unit,
+        ])?;
+        let [object_path] = unit.get("data")?.as_array()?.as_slice() else {
+            return None;
+        };
+        let start = self.bus_query(&[
+            "get-property",
+            SYSTEMD_BUS_NAME,
+            object_path.as_str()?,
+            "org.freedesktop.systemd1.Service",
+            "ExecStart",
+        ])?;
+        let [command] = start.get("data")?.as_array()?.as_slice() else {
+            return None;
+        };
+        let executable = Path::new(command.as_array()?.first()?.as_str()?);
+        executable.is_absolute().then(|| executable.to_path_buf())
     }
 
     fn stop(&self) -> Result<StopOutcome, ServiceError> {

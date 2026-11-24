@@ -4,6 +4,10 @@
 use super::*;
 use crate::recover::{RecoverOutcome, recover};
 
+#[cfg(unix)]
+#[path = "systemd_preflight.rs"]
+mod systemd_preflight;
+
 const INSTALLING: &str = "Installing the Computer supervisor service definition";
 
 /// An upgrade from a running [`OLD`] to [`NEW`], both of which print their service definition. The
