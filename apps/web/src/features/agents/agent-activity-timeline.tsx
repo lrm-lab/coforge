@@ -19,6 +19,7 @@ import { cn } from "#src/lib/utils";
 import { getLocale } from "#src/paraglide/runtime";
 import { useActivityDays } from "#src/features/inbox/activity-inbox-days";
 import type { ActivityEntry } from "./agent-activity";
+import { computeModelResponseWaits } from "./agent-activity-waits";
 import { ACTIVITY_MARKER_CLASS, ActivityMarker } from "./activity-marker";
 import { ModelResponseWait } from "./model-response-wait";
 import {
@@ -59,15 +60,7 @@ export function AgentActivityTimeline({
     previous.current = next;
     return timeline;
   }, [activity, locale]);
-  const observations = useMemo(
-    () =>
-      new Map<string, { entry: ActivityEntry; index: number }>(
-        activity.map(
-          (entry, index) => [`${entry.launchId}:${entry.clientSeq}:0`, { entry, index }] as const,
-        ),
-      ),
-    [activity],
-  );
+  const modelWaits = useMemo(() => computeModelResponseWaits(activity), [activity]);
 
   // Opens on the newest row and stays there while the list grows (rows appended, a streamed row
   // growing, a row wrapping once it renders past its content-visibility estimate) until the reader
@@ -141,28 +134,9 @@ export function AgentActivityTimeline({
                 </li>,
               ]),
           ...day.items.map((row, index) => {
-            const observation = observations.get(row.key);
-            const entry = observation?.entry;
-            const entryIndex = observation?.index ?? -1;
-            const waiting =
-              entry?.detailKind === AGENT_ACTIVITY_DETAIL_KIND.MODEL_REQUEST_STARTED &&
-              entry.detail === "Waiting for model response";
-            // This is elapsed history, never a source of current Agent state. Only the cloud
-            // display authorizes a live clock; missing history yields a label without timing.
-            const next = waiting
-              ? activity
-                  .slice(0, entryIndex)
-                  .reverse()
-                  .find(
-                    (candidate) =>
-                      candidate.launchId === entry.launchId &&
-                      candidate.detailKind !== AGENT_ACTIVITY_DETAIL_KIND.MESSAGE_RECEIVED &&
-                      candidate.detailKind !== AGENT_ACTIVITY_DETAIL_KIND.TOOL_END,
-                  )
-              : undefined;
-            const expiresAt =
-              waiting &&
-              entryIndex === 0 &&
+            const wait = modelWaits.get(row.key);
+            const waitExpiresAt =
+              wait?.isHead &&
               display?.activityKind === "working" &&
               display.detailKind === AGENT_ACTIVITY_DETAIL_KIND.MODEL_REQUEST_STARTED
                 ? (display.expiresAt ?? undefined)
@@ -172,11 +146,9 @@ export function AgentActivityTimeline({
                 key={row.key}
                 row={row}
                 timeZone={timeZone}
-                modelWait={
-                  waiting
-                    ? { startedAtMs: entry.observedAtMs, endedAtMs: next?.observedAtMs, expiresAt }
-                    : undefined
-                }
+                waitStartedAtMs={wait?.startedAtMs}
+                waitEndedAtMs={wait?.endedAtMs}
+                waitExpiresAt={waitExpiresAt}
                 first={index === 0}
                 last={index === day.items.length - 1}
               />
@@ -200,14 +172,17 @@ const ROW_RENDER_COST: CSSProperties = {
 const ActivityTimelineRow = memo(function ActivityTimelineRow({
   row,
   timeZone,
-  modelWait,
+  waitStartedAtMs,
+  waitEndedAtMs,
+  waitExpiresAt,
   first,
   last,
 }: {
   row: PresentedActivityRow;
   timeZone: string | null;
-  modelWait?: { startedAtMs: number; endedAtMs?: number; expiresAt?: number };
-  /** The day's first and last rows: the connector runs within a day, not across its heading. */
+  waitStartedAtMs?: number;
+  waitEndedAtMs?: number;
+  waitExpiresAt?: number;
   first: boolean;
   last: boolean;
 }) {
@@ -256,7 +231,13 @@ const ActivityTimelineRow = memo(function ActivityTimelineRow({
       <div className="min-w-0">
         <div className="text-sm wrap-anywhere">
           {label}
-          {modelWait && <ModelResponseWait {...modelWait} />}
+          {waitStartedAtMs !== undefined && (
+            <ModelResponseWait
+              startedAtMs={waitStartedAtMs}
+              endedAtMs={waitEndedAtMs}
+              expiresAt={waitExpiresAt}
+            />
+          )}
           {row.subagent && (
             <Badge type="modern" size="sm" color="gray" className="ml-1.5 inline-flex">
               {subagentBadgeLabel(row.subagent)}
