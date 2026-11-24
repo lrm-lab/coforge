@@ -214,7 +214,7 @@ function ModelTableCard({
               />
               <div className="relative min-w-0 font-sans">
                 <div className="truncate text-xs font-medium text-primary">{modelName}</div>
-                <div className="truncate font-mono text-[0.6875rem] tabular-nums text-tertiary">
+                <div className="truncate font-mono text-xs tabular-nums text-tertiary">
                   {formatCompactTokens(entry.effectiveTokens, locale)} ·{" "}
                   {formatUsagePercent(entry.sharePercent, locale)}
                 </div>

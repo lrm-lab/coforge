@@ -171,7 +171,7 @@ export function UsageSingleRuntimeHeader({
               ? formatUsagePercent(summary.cacheHitPercent, locale)
               : "—"}
           </span>
-          <span className="mt-1.5 w-full truncate text-[0.6875rem] tabular-nums text-tertiary">
+          <span className="mt-1.5 w-full truncate text-xs tabular-nums text-tertiary">
             {m.agent_usage_cache_read_summary({
               tokens: formatCompactTokens(summary.cacheReadTokens, locale),
             })}
@@ -197,7 +197,7 @@ export function UsageSingleRuntimeHeader({
           <span className="mt-1.5 font-mono text-2xl font-bold leading-none tracking-tight tabular-nums text-primary">
             {formatCompactTokens(summary.effectiveTokens, locale)}
           </span>
-          <span className="mt-1.5 w-full truncate text-[0.6875rem] tabular-nums text-tertiary">
+          <span className="mt-1.5 w-full truncate text-xs tabular-nums text-tertiary">
             {m.agent_usage_input_output_summary({
               input: formatCompactTokens(summary.newInputTokens, locale),
               output: formatCompactTokens(summary.outputTokens, locale),
