@@ -34,7 +34,8 @@
 [data-phone-page-scroll] [data-phone-stack-root] {
   height: auto;
   min-height: 0;
-  overflow: visible;
+  overflow-x: clip;
+  overflow-y: visible;
 }
 
 [data-phone-page-scroll] [data-phone-stack-list] {
