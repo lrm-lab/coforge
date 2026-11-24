@@ -350,7 +350,8 @@ html[data-drag-cursor] [data-drop-blocked] * {
     background-color: var(--color-avatar-outline);
   }
 
-  [data-avatar].avatar-portrait {
+  [data-avatar].avatar-person,
+  [data-avatar].avatar-round {
     border-radius: 9999px;
   }
 
@@ -430,6 +431,10 @@ html[data-drag-cursor] [data-drop-blocked] * {
   [data-avatar].size-8 > .avatar-status-dot,
   [data-avatar].avatar-dm > span.ring-bg-primary,
   [data-avatar].avatar-dm > .avatar-status-dot,
+  [data-avatar].avatar-person > span.ring-bg-primary,
+  [data-avatar].avatar-person > .avatar-status-dot,
+  [data-avatar].avatar-round > span.ring-bg-primary,
+  [data-avatar].avatar-round > .avatar-status-dot,
   [data-avatar][data-avatar-sticker] > .avatar-status-dot {
     right: calc(var(--avatar-size) * 0.0214);
     bottom: calc(var(--avatar-size) * 0.0214);
@@ -655,7 +660,10 @@ html[data-drag-cursor] [data-drop-blocked] * {
     [data-avatar].avatar-dm,
     [data-avatar].avatar-header,
     [data-avatar][data-avatar-sticker],
-    [data-avatar].avatar-portrait,
+    [data-avatar].avatar-person,
+    [data-avatar].avatar-person > :first-child,
+    [data-avatar].avatar-round,
+    [data-avatar].avatar-round > :first-child,
     .avatar-group,
     .avatar-group-photo
   ) {

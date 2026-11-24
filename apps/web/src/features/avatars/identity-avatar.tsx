@@ -41,11 +41,18 @@ export function IdentityAvatar({
 
   if (!src || !sticker) {
     const portrait = isPersonPicture(activeSrc);
+    const person = Boolean(userId) || portrait;
+    const explicitRound = !person && props.rounded === true;
     return (
       <Avatar
         {...props}
-        rounded={portrait || props.rounded}
-        className={cx(props.className, portrait && "avatar-portrait")}
+        rounded={person || props.rounded}
+        className={cx(
+          props.className,
+          person && "avatar-person",
+          explicitRound && "avatar-round",
+          portrait && "avatar-portrait",
+        )}
         alt={alt}
         src={activeSrc}
         initials={initials}
