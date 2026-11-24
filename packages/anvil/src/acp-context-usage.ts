@@ -84,10 +84,22 @@ export function acpUsageRecordTokenUsage(
   let cacheWriteTokens: number;
 
   if (rawInput !== undefined) {
+    const thought = reasoning ?? 0;
+    const matchesInclusive =
+      totalTokens !== undefined &&
+      (totalTokens === rawInput + baseOutput ||
+        (thought > 0 && totalTokens === rawInput + baseOutput + thought));
+    const matchesExclusive =
+      totalTokens !== undefined &&
+      (totalTokens === rawInput + cacheSum + baseOutput ||
+        (thought > 0 && totalTokens === rawInput + cacheSum + baseOutput + thought));
     const inputExcludesCache =
       cacheSum > 0 &&
       (rawInput < cacheSum ||
-        (totalTokens !== undefined && totalTokens >= rawInput + cacheSum + baseOutput));
+        (!matchesInclusive &&
+          (matchesExclusive ||
+            (totalTokens !== undefined &&
+              totalTokens >= rawInput + cacheSum + baseOutput + thought))));
     if (inputExcludesCache) {
       uncachedInputTokens = rawInput;
       cacheReadTokens = cacheReadCandidate;

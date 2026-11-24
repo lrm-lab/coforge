@@ -195,6 +195,84 @@ test("acpPromptTokenUsage parses prompt usage payloads safely", () => {
   expect(acpPromptTokenUsage({ stopReason: "end_turn" })).toBeUndefined();
 });
 
+test("acpPromptTokenUsage resolves inclusive inputTokens with separate thoughtTokens via exact total equations", () => {
+  expect(
+    acpPromptTokenUsage({
+      stopReason: "end_turn",
+      usage: {
+        inputTokens: 10_000,
+        cachedReadTokens: 2_000,
+        outputTokens: 500,
+        thoughtTokens: 3_000,
+        totalTokens: 13_500,
+      },
+    }),
+  ).toEqual({
+    uncachedInputTokens: 8_000,
+    cacheReadTokens: 2_000,
+    cacheWriteTokens: 0,
+    outputTokens: 3_500,
+    reasoningOutputTokens: 3_000,
+  });
+
+  expect(
+    acpPromptTokenUsage({
+      stopReason: "end_turn",
+      usage: {
+        inputTokens: 10_000,
+        cachedReadTokens: 1_000,
+        outputTokens: 2_000,
+        thoughtTokens: 1_500,
+        totalTokens: 13_500,
+      },
+    }),
+  ).toEqual({
+    uncachedInputTokens: 9_000,
+    cacheReadTokens: 1_000,
+    cacheWriteTokens: 0,
+    outputTokens: 3_500,
+    reasoningOutputTokens: 1_500,
+  });
+
+  expect(
+    acpPromptTokenUsage({
+      stopReason: "end_turn",
+      usage: {
+        inputTokens: 5_000,
+        cachedReadTokens: 2_000,
+        outputTokens: 1_000,
+        thoughtTokens: 400,
+        totalTokens: 8_000,
+      },
+    }),
+  ).toEqual({
+    uncachedInputTokens: 5_000,
+    cacheReadTokens: 2_000,
+    cacheWriteTokens: 0,
+    outputTokens: 1_000,
+    reasoningOutputTokens: 400,
+  });
+
+  expect(
+    acpPromptTokenUsage({
+      stopReason: "end_turn",
+      usage: {
+        inputTokens: 5_000,
+        cachedReadTokens: 2_000,
+        outputTokens: 1_000,
+        thoughtTokens: 400,
+        totalTokens: 8_400,
+      },
+    }),
+  ).toEqual({
+    uncachedInputTokens: 5_000,
+    cacheReadTokens: 2_000,
+    cacheWriteTokens: 0,
+    outputTokens: 1_400,
+    reasoningOutputTokens: 400,
+  });
+});
+
 test("KiroSession emits TOKEN_USAGE only when session/prompt carries real ACP usage and never fabricates from usage_update", async () => {
   const dir = await realpath(await mkdtemp(join(tmpdir(), "coforge-kiro-token-usage-")));
   const provider = new KiroProvider({
