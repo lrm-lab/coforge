@@ -28,9 +28,6 @@ export function ConversationMessageList({
   openedSystemMessages,
   toggleSystemGroup,
   openBoundary,
-  jumpHighlightId,
-  expandedMessages,
-  toggleExpandedMessage,
   collapsible,
   dateLocale,
   timeZone,
@@ -59,9 +56,6 @@ export function ConversationMessageList({
   openedSystemMessages: ReadonlySet<string>;
   toggleSystemGroup: ComponentProps<typeof SystemMessageGroup>["onToggleExpanded"];
   openBoundary?: { sequence: number };
-  jumpHighlightId: string | undefined;
-  expandedMessages: ReadonlySet<string>;
-  toggleExpandedMessage: RowProps["onToggleExpanded"];
   collapsible: boolean;
   dateLocale: string;
   timeZone: Parameters<typeof groupsWithPrevious>[5];
@@ -77,7 +71,6 @@ export function ConversationMessageList({
   canCompose: boolean;
   quoteSelection: NonNullable<RowProps["onQuoteSelection"]>;
   readTicks: PaneConversation["readTicks"];
-  /** A thread pane's own replies offer who has seen them, where the conversation keeps reads. */
   threadSeenBy: boolean;
   shownOutbox: PaneOutbox["shownOutbox"];
   outbox: PaneOutbox["outbox"];
@@ -121,9 +114,7 @@ export function ConversationMessageList({
                     own={false}
                     dayChanged={false}
                     grouped={false}
-                    highlighted={message.id === jumpHighlightId}
                     expanded={false}
-                    onToggleExpanded={toggleExpandedMessage}
                     collapsible={collapsible}
                     dateLocale={dateLocale}
                   />
@@ -148,13 +139,8 @@ export function ConversationMessageList({
             message={message}
             own={own}
             dayChanged={dayChanged && !opensThread}
-            // The row under the divider starts a sender run, so the first unread names its
-            // sender even when the same sender wrote the message above (task #99).
             grouped={grouped && !unreadStartsHere}
             unreadStartsHere={unreadStartsHere}
-            highlighted={message.id === jumpHighlightId}
-            expanded={expandedMessages.has(message.id)}
-            onToggleExpanded={toggleExpandedMessage}
             collapsible={collapsible}
             dateLocale={dateLocale}
             onOpenThread={openThread}

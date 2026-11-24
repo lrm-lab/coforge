@@ -35,6 +35,8 @@ import { useMessageRowActions } from "./message-row-actions";
 import { useRowSelection } from "./message-selection";
 import { ForwardedMessageCard } from "./message-forward-card";
 import { ReviewLanding } from "./attachment-review-address";
+import { useMessageHighlighted } from "./conversation-ui-store";
+import { toggleExpanded, useMessageExpanded } from "./conversation-view-memory";
 import type { MessageView } from "./message-view";
 import type { ReadState } from "./conversation-pane-layout";
 
@@ -58,11 +60,11 @@ export const MessageRow = memo(function MessageRow({
   own,
   dayChanged,
   grouped,
-  expanded,
-  onToggleExpanded,
+  expanded: expandedProp,
+  onToggleExpanded = toggleExpanded,
   collapsible = true,
   unreadStartsHere,
-  highlighted,
+  highlighted: highlightedProp,
   dateLocale,
   onOpenThread,
   onToggleReaction,
@@ -82,8 +84,8 @@ export const MessageRow = memo(function MessageRow({
   own: boolean;
   dayChanged: boolean;
   grouped: boolean;
-  expanded: boolean;
-  onToggleExpanded: (messageId: string) => void;
+  expanded?: boolean;
+  onToggleExpanded?: (messageId: string) => void;
   collapsible?: boolean;
   unreadStartsHere?: boolean;
   highlighted?: boolean;
@@ -102,6 +104,12 @@ export const MessageRow = memo(function MessageRow({
   readState?: ReadState;
   seenBy?: boolean;
 }) {
+  const storedExpanded = useMessageExpanded(
+    expandedProp === undefined && collapsible ? message.id : undefined,
+  );
+  const expanded = expandedProp ?? storedExpanded;
+  const storeHighlighted = useMessageHighlighted(message.id);
+  const highlighted = highlightedProp ?? storeHighlighted;
   const timeFormat = useTimeFormat();
   const timeZone = useTimeZone();
   const displayName = own ? m.conversation_you() : message.senderName;

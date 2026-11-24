@@ -6,8 +6,16 @@ import {
   savedPosition,
   savePosition,
   setSendAsTask,
+  toggleExpanded,
+  useMessageExpanded,
   useSendAsTask,
 } from "#src/features/conversations/conversation-view-memory";
+import {
+  ConversationUiStoreProvider,
+  createConversationUiStore,
+  useMessageHighlighted,
+  useQuotedDraft,
+} from "#src/features/conversations/conversation-ui-store";
 import { useMessageExpansion } from "#src/features/conversations/use-message-expansion";
 
 function Pane() {
@@ -59,4 +67,48 @@ test("Send as Task stays armed for its own draft through a remount, and only for
   expect(renderToStaticMarkup(<Composer draftKey="c2" />)).toBe("<i>false</i>");
   setSendAsTask("c1", false);
   expect(renderToStaticMarkup(<Composer draftKey="c1" />)).toBe("<i>false</i>");
+});
+
+test("useMessageExpanded tracks only its own key", () => {
+  function Row({ id }: { id?: string }) {
+    return <i>{String(useMessageExpanded(id))}</i>;
+  }
+  toggleExpanded("m-single");
+  try {
+    expect(renderToStaticMarkup(<Row id="m-single" />)).toBe("<i>true</i>");
+    expect(renderToStaticMarkup(<Row id="m-other" />)).toBe("<i>false</i>");
+    expect(renderToStaticMarkup(<Row />)).toBe("<i>false</i>");
+  } finally {
+    toggleExpanded("m-single");
+  }
+});
+
+test("ConversationUiStore exposes quoted draft and per-message highlight slices", () => {
+  const store = createConversationUiStore();
+  function Probe() {
+    const quoted = useQuotedDraft();
+    const hit = useMessageHighlighted("m-1");
+    const miss = useMessageHighlighted("m-2");
+    return <i>{`${quoted?.text ?? ""}|${hit}|${miss}`}</i>;
+  }
+  expect(
+    renderToStaticMarkup(
+      <ConversationUiStoreProvider store={store}>
+        <Probe />
+      </ConversationUiStoreProvider>,
+    ),
+  ).toBe("<i>|false|false</i>");
+
+  store.setState((current) => ({
+    ...current,
+    quotedDraft: { id: 1, text: "> quote" },
+    jumpHighlightId: "m-1",
+  }));
+  expect(
+    renderToStaticMarkup(
+      <ConversationUiStoreProvider store={store}>
+        <Probe />
+      </ConversationUiStoreProvider>,
+    ),
+  ).toBe("<i>&gt; quote|true|false</i>");
 });

@@ -58,6 +58,17 @@ export function useExpandedMessages() {
   return useSyncExternalStore(subscribe, snapshot, snapshot);
 }
 
+const NOOP_SUBSCRIBE = () => () => {};
+const NOT_EXPANDED = () => false;
+
+export function useMessageExpanded(key: string | undefined): boolean {
+  return useSyncExternalStore(
+    key === undefined ? NOOP_SUBSCRIBE : subscribe,
+    key === undefined ? NOT_EXPANDED : () => expanded.has(key),
+    key === undefined ? NOT_EXPANDED : () => expanded.has(key),
+  );
+}
+
 const sendingAsTask = new Set<string>();
 const sendAsTaskListeners = new Set<() => void>();
 

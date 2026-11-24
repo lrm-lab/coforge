@@ -4,6 +4,7 @@ import { NotificationActivationBanner } from "#src/features/notifications/notifi
 import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
 import type { DirectConversationView } from "./conversation-types";
 import { ConversationUpdateNotice } from "./conversation-update-notice";
+import { useQuotedDraft } from "./conversation-ui-store";
 import { useMentionCandidates } from "./mention-candidates";
 import { MessageComposer } from "./message-composer";
 import { useSelectionIn } from "./message-selection";
@@ -48,6 +49,7 @@ export function ConversationComposerFooter({
   );
   const recentHandles = useRecentConversationHandles(conversation.messages);
   const selecting = useSelectionIn(conversation.conversationId) !== null && !root;
+  const storeQuotedDraft = useQuotedDraft();
   return (
     <div className={column ? MESSAGE_COLUMN_CLASS : undefined}>
       {!narrow && <ConversationUpdateNotice conversation={conversation} />}
@@ -70,7 +72,7 @@ export function ConversationComposerFooter({
             channels={channels}
             onSend={onSend}
             canSendAsTask={canSendAsTask}
-            quotedDraft={quotedDraft}
+            quotedDraft={quotedDraft ?? storeQuotedDraft}
             autoFocus={autoFocus}
             hostRef={hostRef}
           />

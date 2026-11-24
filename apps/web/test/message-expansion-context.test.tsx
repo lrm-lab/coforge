@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { toggleExpanded } from "#src/features/conversations/conversation-view-memory";
 import {
   MessageExpansionContext,
   useExpansion,
@@ -47,4 +48,19 @@ test("the viewer's preference reaches the card, and the card toggles its own key
 
 test("outside a conversation (the Forward dialog's preview) a card folds on its own", () => {
   expect(renderToStaticMarkup(<Probe />)).toBe("<i>false/true</i>");
+});
+
+test("when the provider omits an expanded set, useExpansion reads per-key expansion from view memory", () => {
+  toggleExpanded("m3:forward:1");
+  try {
+    const html = renderToStaticMarkup(
+      <MessageExpansionContext.Provider value={{ toggle: toggleExpanded, collapsible: true }}>
+        <Probe expansionKey="m3:forward:0" />
+        <Probe expansionKey="m3:forward:1" />
+      </MessageExpansionContext.Provider>,
+    );
+    expect(html).toBe("<i>false/true</i><i>true/true</i>");
+  } finally {
+    toggleExpanded("m3:forward:1");
+  }
 });

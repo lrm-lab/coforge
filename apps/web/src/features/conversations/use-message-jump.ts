@@ -1,11 +1,13 @@
 import { UUID_LIKE_SOURCE } from "@lrm/coforge-sdk/internal";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import type { Store } from "@tanstack/react-store";
 import { useAppToast } from "#src/components/ui/toast";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { scrollToMessageRow, scrollTwice } from "./conversation-scroll-anchor";
 import type { ConversationBottomPin } from "./conversation-bottom-pin";
 import { positionJumpDecision } from "./conversation-thread-search";
+import type { ConversationUiState } from "./conversation-ui-store";
 import { JUMP_HIGHLIGHT_MS } from "./message-jump-highlight";
 
 const UUID_LIKE = new RegExp(`^${UUID_LIKE_SOURCE}$`, "i");
@@ -39,23 +41,20 @@ export function useMessageJump({
   setFollowingLatest,
   scrollToLatest,
   bottomPin,
+  uiStore,
 }: {
   messages: readonly { id: string; sequence: number }[];
   openedSystemMessages: ReadonlySet<string>;
   revealSystemMessage: (messageId: string) => boolean;
   jumpMessage: string | undefined;
   onJumpMessageConsumed: (() => void) | undefined;
-  /** Reads the window around a message; resolves to its whole id (a link may name a short one). */
   onLoadMessageAround: ((messageId: string) => Promise<string>) | undefined;
   setFollowingLatest: (following: boolean) => void;
   scrollToLatest: (behavior: ScrollBehavior) => void;
   bottomPin: ConversationBottomPin;
-}): {
-  jumpHighlightId: string | undefined;
-} {
+  uiStore: Store<ConversationUiState>;
+}): void {
   const toast = useAppToast();
-  // What a jump told the viewer belongs to this conversation: leaving it takes the toast away, so
-  // it is never left over another page.
   useEffect(
     () => () => {
       toast.dismissShown(m.conversation_message_gone());
@@ -66,18 +65,25 @@ export function useMessageJump({
   );
   const firstSequence = messages[0]?.sequence;
   const pendingMessageIdRef = useRef<string | undefined>(undefined);
-  // The row a position jump just landed on, highlighted for a moment: `?message=` deliberately
-  // carries no hash (#713), so the landed row has no `:target` to take the anchor highlight from
-  // (message-row.tsx renders both treatments with the same classes).
-  const [jumpHighlightId, setJumpHighlightId] = useState<string | undefined>(undefined);
   const jumpHighlightTimer = useRef<number | undefined>(undefined);
-  const flashMessageRow = useCallback((messageId: string) => {
-    setJumpHighlightId(messageId);
-    window.clearTimeout(jumpHighlightTimer.current);
-    jumpHighlightTimer.current = window.setTimeout(() => {
-      setJumpHighlightId((current) => (current === messageId ? undefined : current));
-    }, JUMP_HIGHLIGHT_MS);
-  }, []);
+  const flashMessageRow = useCallback(
+    (messageId: string) => {
+      uiStore.setState((current) =>
+        current.jumpHighlightId === messageId
+          ? current
+          : { ...current, jumpHighlightId: messageId },
+      );
+      window.clearTimeout(jumpHighlightTimer.current);
+      jumpHighlightTimer.current = window.setTimeout(() => {
+        uiStore.setState((current) =>
+          current.jumpHighlightId === messageId
+            ? { ...current, jumpHighlightId: undefined }
+            : current,
+        );
+      }, JUMP_HIGHLIGHT_MS);
+    },
+    [uiStore],
+  );
   useEffect(() => () => window.clearTimeout(jumpHighlightTimer.current), []);
   /** A jump scrolled `row` into view: its history's place is the reader's now, and a row that
    * landed at the bottom follows the latest from there (`ConversationBottomPin.landed`). */
@@ -207,6 +213,4 @@ export function useMessageJump({
     if (decision.action === "show") void showMessageRef.current(decision.id, { opening: true });
     onJumpMessageConsumed?.();
   }, [jumpMessage, onJumpMessageConsumed]);
-
-  return { jumpHighlightId };
 }
