@@ -12,11 +12,27 @@ export function shouldCompleteSwipeBack(progress: number, velocityPxPerMs: numbe
   return progress >= COMPLETE_PROGRESS || velocityPxPerMs >= COMPLETE_VELOCITY;
 }
 
-export function useEdgeSwipeBack({ enabled, onBack }: { enabled: boolean; onBack: () => void }) {
+export function useEdgeSwipeBack({
+  enabled,
+  onBack,
+  onProgress,
+  onEnd,
+}: {
+  enabled: boolean;
+  onBack: () => void;
+  onProgress?: (progress: number) => void;
+  onEnd?: (completed: boolean) => void;
+}) {
   const [dragProgress, setDragProgress] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [settling, setSettling] = useState(false);
   const settleTimerRef = useRef<number | null>(null);
+  const onProgressRef = useRef(onProgress);
+  const onEndRef = useRef(onEnd);
+  useEffect(() => {
+    onProgressRef.current = onProgress;
+    onEndRef.current = onEnd;
+  }, [onProgress, onEnd]);
   const stateRef = useRef<{
     pointerId: number;
     startX: number;
@@ -35,13 +51,28 @@ export function useEdgeSwipeBack({ enabled, onBack }: { enabled: boolean; onBack
     }
   }, []);
 
-  useEffect(() => clearSettleTimer, [clearSettleTimer]);
+  useEffect(() => {
+    return () => {
+      clearSettleTimer();
+      if (stateRef.current?.committed) {
+        stateRef.current = null;
+        onEndRef.current?.(false);
+      }
+    };
+  }, [clearSettleTimer]);
 
-  const reset = useCallback(() => {
-    stateRef.current = null;
-    setDragging(false);
-    setDragProgress(0);
-  }, []);
+  useEffect(() => {
+    if (enabled) return;
+    if (stateRef.current) {
+      const wasCommitted = stateRef.current.committed;
+      stateRef.current = null;
+      if (wasCommitted) {
+        setDragging(false);
+        if (!onProgressRef.current) setDragProgress(0);
+        onEndRef.current?.(false);
+      }
+    }
+  }, [enabled]);
 
   const onPointerDown = useCallback(
     (event: PointerEvent<HTMLElement>) => {
@@ -88,7 +119,12 @@ export function useEdgeSwipeBack({ enabled, onBack }: { enabled: boolean; onBack
     state.velocity = (event.clientX - state.lastX) / dt;
     state.lastX = event.clientX;
     state.lastTime = now;
-    setDragProgress(Math.max(0, Math.min(1, dx / state.width)));
+    const progress = Math.max(0, Math.min(1, dx / state.width));
+    if (onProgressRef.current) {
+      onProgressRef.current(progress);
+    } else {
+      setDragProgress(progress);
+    }
   }, []);
 
   const finish = useCallback(
@@ -98,8 +134,14 @@ export function useEdgeSwipeBack({ enabled, onBack }: { enabled: boolean; onBack
       const committed = state.committed;
       const progress = Math.max(0, Math.min(1, (event.clientX - state.startX) / state.width));
       const velocity = state.velocity;
-      reset();
-      if (committed && !cancelled && shouldCompleteSwipeBack(progress, velocity)) {
+      stateRef.current = null;
+      const completed = committed && !cancelled && shouldCompleteSwipeBack(progress, velocity);
+      if (committed) {
+        setDragging(false);
+        if (!onProgressRef.current) setDragProgress(0);
+        onEndRef.current?.(completed);
+      }
+      if (completed) {
         onBack();
       } else if (committed) {
         clearSettleTimer();
@@ -110,7 +152,7 @@ export function useEdgeSwipeBack({ enabled, onBack }: { enabled: boolean; onBack
         }, SETTLE_DURATION_MS);
       }
     },
-    [clearSettleTimer, onBack, reset],
+    [clearSettleTimer, onBack],
   );
 
   const onPointerUp = useCallback(

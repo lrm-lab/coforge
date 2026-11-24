@@ -1,5 +1,6 @@
 import { OpenUnreadHintContext } from "./use-conversation-open";
 import {
+  useCallback,
   useContext,
   useEffect,
   useLayoutEffect,
@@ -196,6 +197,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
     lastSeed.current = seed.lists;
   }, [refresh, seed.key]);
   const reduced = usePrefersReducedMotion();
+  const rootRef = useRef<HTMLElement>(null);
   const detailRef = useRef<HTMLDivElement>(null);
   const prevShowListRef = useRef(showList);
   const [animatingStack, setAnimatingStack] = useState(false);
@@ -229,9 +231,17 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
     return () => window.clearTimeout(timer);
   }, [desktop, reduced, showList]);
 
+  const handleSwipeProgress = useCallback((progress: number) => {
+    rootRef.current?.style.setProperty("--edge-swipe-progress", String(progress));
+  }, []);
+  const handleSwipeEnd = useCallback(() => {
+    rootRef.current?.style.removeProperty("--edge-swipe-progress");
+  }, []);
   const swipe = useEdgeSwipeBack({
     enabled: !desktop && !showList && !reduced,
     onBack: () => setBrowsing(true),
+    onProgress: handleSwipeProgress,
+    onEnd: handleSwipeEnd,
   });
 
   const phone = !desktop;
@@ -244,7 +254,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
       : {
           transform: showList
             ? "translate3d(0, 0, 0) scale(1)"
-            : `translate3d(${(1 - swipe.dragProgress) * -10}%, 0, 0) scale(${0.95 + 0.05 * swipe.dragProgress})`,
+            : "translate3d(calc((1 - var(--edge-swipe-progress, 0)) * -10%), 0, 0) scale(calc(0.95 + 0.05 * var(--edge-swipe-progress, 0)))",
           transition:
             !swipe.dragging && (animatingStack || swipe.settling)
               ? swipe.settling
@@ -262,7 +272,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
       : {
           transform: showList
             ? "translate3d(100%, 0, 0)"
-            : `translate3d(${swipe.dragProgress * 100}%, 0, 0)`,
+            : "translate3d(calc(var(--edge-swipe-progress, 0) * 100%), 0, 0)",
           transition:
             !swipe.dragging && (animatingStack || swipe.settling)
               ? swipe.settling
@@ -271,7 +281,8 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
               : undefined,
         }
     : undefined;
-  const scrimOpacity = phone && !reduced && !showList ? 0.24 * (1 - swipe.dragProgress) : 0;
+  const scrimOpacity =
+    phone && !reduced && !showList ? "calc(0.24 * (1 - var(--edge-swipe-progress, 0)))" : 0;
 
   const detailVisible = desktop || !showList;
   useReportChatListOpen(showList);
@@ -293,6 +304,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
           <ConversationHostProvider channels={channelNames}>
             <UnreadStoreContext value={unread.store}>
               <main
+                ref={rootRef}
                 data-chat-cards
                 data-focus={focus.focused}
                 data-crowd-list={listCrowded ? "" : undefined}
@@ -367,8 +379,10 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
                       style={{
                         opacity: scrimOpacity,
                         transition:
-                          !swipe.dragging && animatingStack
-                            ? `opacity ${showList ? "var(--duration-lg-out) var(--ease-in)" : "var(--duration-lg) var(--ease-out)"}`
+                          !swipe.dragging && (animatingStack || swipe.settling)
+                            ? swipe.settling
+                              ? "opacity calc(var(--duration-md) * 1.5) var(--ease-spring)"
+                              : `opacity ${showList ? "var(--duration-lg-out) var(--ease-in)" : "var(--duration-lg) var(--ease-out)"}`
                             : undefined,
                       }}
                       className="pointer-events-none absolute inset-0 z-30 bg-black"

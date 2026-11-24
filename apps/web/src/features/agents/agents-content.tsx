@@ -1,14 +1,13 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { Group, Panel, Separator, useDefaultLayout } from "react-resizable-panels";
 import { useHydrated } from "@tanstack/react-router";
-import { AnimatePresence, motion } from "motion/react";
-import { AlertCircle, SearchLg as Search, UsersPlus } from "@untitledui/icons";
+import { AnimatePresence } from "motion/react";
+import { AlertCircle, UsersPlus } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
 
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
 import { Button } from "#src/components/base/buttons/button";
-import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
 import { PageBackButton } from "#src/components/layout/page-back-button";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
@@ -18,7 +17,6 @@ import { localLayoutStorage } from "#src/features/conversations/local-layout-sto
 import type { MemberDirectorySummary } from "#src/features/workspaces/workspaces.functions";
 import { isWorkspaceAdminRole } from "#src/features/workspaces/workspace-roles";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
-import { useEdgeSwipeBack } from "#src/hooks/use-edge-swipe-back";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { formatNumber } from "#src/lib/format-number";
 import {
@@ -29,10 +27,10 @@ import {
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
-import { DURATION_S, EASE_IN, EASE_OUT } from "#src/utils/motion-tokens";
 
 import { pickBusyAgents } from "./busy-agents";
 import { MemberDialogs, type MemberDialog } from "./member-dialogs";
+import { MembersSearchInput } from "./members-search-input";
 import { memberAgentsQuery, memberPeopleQuery } from "./member-directory-queries";
 import {
   AgentsTableView,
@@ -46,6 +44,7 @@ import { PersonProfilePanel } from "./person-profile-panel";
 import { AgentProfilePanel } from "./profile-panel/agent-profile-panel";
 import { useOpenAgentProfile } from "./profile-panel/open-agent-profile";
 import type { AgentProfileTab } from "./profile-panel/profile-panel-search";
+import { SwipeableProfileOverlay } from "./swipeable-profile-overlay";
 import { WorkspaceAgentUsageView } from "./workspace-agent-usage-view";
 import { useLiveWorkspaceAgents } from "./workspace-agents-realtime";
 
@@ -82,13 +81,13 @@ export function AgentsContent({
 }) {
   const { setAgentProfileTab, closeAgentProfile } = useOpenAgentProfile();
   const locale = getLocale();
-  const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
+  const [searchReset, setSearchReset] = useState(0);
   const [createAgentKind, setCreateAgentKind] = useState<AgentCreateKind | undefined>(undefined);
-  useEffect(() => {
-    const timer = setTimeout(() => setQuery(search.trim()), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [search]);
+  const handleQueryChange = useCallback(
+    (next: string) => setQuery((previous) => (previous === next ? previous : next)),
+    [],
+  );
 
   const busyCount = useLiveWorkspaceAgents(pickBusyAgents).length;
   const isWorkspaceAdmin = isWorkspaceAdminRole(summary.actorRole);
@@ -137,7 +136,7 @@ export function AgentsContent({
   };
 
   const clearSearch = () => {
-    setSearch("");
+    setSearchReset((count) => count + 1);
     setQuery("");
   };
 
@@ -231,14 +230,10 @@ export function AgentsContent({
           </Tab>
         </TabList>
 
-        <Input
-          type="search"
-          size="sm"
-          icon={Search}
-          aria-label={searchLabel}
-          placeholder={searchLabel}
-          value={search}
-          onChange={setSearch}
+        <MembersSearchInput
+          label={searchLabel}
+          resetSignal={searchReset}
+          onQueryChange={handleQueryChange}
           className="min-w-[12rem] flex-1"
         />
 
@@ -419,10 +414,6 @@ export function AgentsContent({
   const reduced = usePrefersReducedMotion();
   const profileWrapRef = useRef<HTMLDivElement>(null);
   const profileKey = profileAgentId ?? profilePersonId ?? "";
-  const swipe = useEdgeSwipeBack({
-    enabled: !splitOpen && profileOpen && !reduced,
-    onBack: closeAgentProfile,
-  });
 
   useLayoutEffect(() => {
     if (!splitOpen || !profileOpen || reduced || !profileWrapRef.current) return;
@@ -485,36 +476,13 @@ export function AgentsContent({
           </div>
           <AnimatePresence initial={false}>
             {profileOpen && (
-              <motion.div
+              <SwipeableProfileOverlay
                 key={profileKey}
-                ref={profileWrapRef}
-                {...swipe.bind}
-                initial={reduced ? { opacity: 0 } : { x: "100%" }}
-                animate={
-                  reduced
-                    ? { opacity: 1 }
-                    : swipe.dragging
-                      ? { x: `${swipe.dragProgress * 100}%` }
-                      : { x: 0 }
-                }
-                exit={
-                  reduced
-                    ? { opacity: 0, transition: { duration: DURATION_S.reduced } }
-                    : { x: "100%", transition: { duration: DURATION_S.lgOut, ease: EASE_IN } }
-                }
-                transition={
-                  swipe.dragging
-                    ? { duration: 0 }
-                    : reduced
-                      ? { duration: DURATION_S.reduced }
-                      : swipe.settling
-                        ? { type: "spring", stiffness: 380, damping: 32 }
-                        : { duration: DURATION_S.lg, ease: EASE_OUT }
-                }
-                className="absolute inset-0 z-20 flex min-h-0 min-w-0 touch-pan-y flex-col bg-primary will-change-transform"
+                reduced={reduced}
+                onBack={closeAgentProfile}
               >
                 {profile}
-              </motion.div>
+              </SwipeableProfileOverlay>
             )}
           </AnimatePresence>
         </div>
@@ -532,5 +500,3 @@ export function AgentsContent({
     </main>
   );
 }
-
-const SEARCH_DEBOUNCE_MS = 250;

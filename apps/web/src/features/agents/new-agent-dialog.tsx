@@ -95,7 +95,7 @@ function NewAgentForms({
   const [chosen, setChosen] = useState<AgentKind>();
   const [submitting, setSubmitting] = useState(false);
   const usernameDraft = useAgentUsernameDraft();
-  const heightRef = useDialogHeightTransition(chosen);
+  const panelRef = useKindSwitchTransition(chosen);
   useEffect(() => {
     if (!open) setChosen(undefined);
   }, [open]);
@@ -119,7 +119,7 @@ function NewAgentForms({
   const kind: AgentKind =
     chosen && availableKinds.some((option) => option.id === chosen) ? chosen : defaultKind;
   return (
-    <div ref={heightRef} className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <AgentCreateIntro
         illustration={kind}
         title={m.header_new_agent()}
@@ -154,36 +154,38 @@ function NewAgentForms({
           ))}
         </RadioGroup>
       </AgentCreateIntro>
-      {kind === "external" ? (
-        <ExternalAgentForm
-          onClose={onClose}
-          conversationReplacesPage={conversationReplacesPage}
-          onBusyChange={onBusyChange}
-          onSubmittingChange={setSubmitting}
-          autoFocus={chosen !== undefined}
-          usernameDraft={usernameDraft}
-        />
-      ) : kind === "cloud" && cloudComputer ? (
-        <CloudAgentForm
-          computer={cloudComputer}
-          open={open}
-          onClose={onClose}
-          conversationReplacesPage={conversationReplacesPage}
-          onBusyChange={onBusyChange}
-          onSubmittingChange={setSubmitting}
-          autoFocus={chosen === undefined}
-          usernameDraft={usernameDraft}
-        />
-      ) : (
-        <NewLocalAgent
-          onClose={onClose}
-          conversationReplacesPage={conversationReplacesPage}
-          onBusyChange={onBusyChange}
-          usernameDraft={usernameDraft}
-          computers={computers}
-          catalogs={catalogs}
-        />
-      )}
+      <div ref={panelRef} className="flex min-h-0 flex-1 flex-col">
+        {kind === "external" ? (
+          <ExternalAgentForm
+            onClose={onClose}
+            conversationReplacesPage={conversationReplacesPage}
+            onBusyChange={onBusyChange}
+            onSubmittingChange={setSubmitting}
+            autoFocus={chosen !== undefined}
+            usernameDraft={usernameDraft}
+          />
+        ) : kind === "cloud" && cloudComputer ? (
+          <CloudAgentForm
+            computer={cloudComputer}
+            open={open}
+            onClose={onClose}
+            conversationReplacesPage={conversationReplacesPage}
+            onBusyChange={onBusyChange}
+            onSubmittingChange={setSubmitting}
+            autoFocus={chosen === undefined}
+            usernameDraft={usernameDraft}
+          />
+        ) : (
+          <NewLocalAgent
+            onClose={onClose}
+            conversationReplacesPage={conversationReplacesPage}
+            onBusyChange={onBusyChange}
+            usernameDraft={usernameDraft}
+            computers={computers}
+            catalogs={catalogs}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -312,44 +314,28 @@ function useAgentCreateCatalogs(defaultComputerId: string | undefined) {
   };
 }
 
-const HEIGHT_TRANSITION = { duration: DURATION_MS.md, easing: EASE_CSS.inOut };
+const KIND_SWITCH_TRANSITION = { duration: DURATION_MS.md, easing: EASE_CSS.out };
 
-function useDialogHeightTransition(key: unknown) {
+function useKindSwitchTransition(key: unknown) {
   const ref = useRef<HTMLDivElement>(null);
-  const lastHeight = useRef<number>(undefined);
+  const previousKey = useRef(key);
   useLayoutEffect(() => {
-    const dialog = ref.current?.closest<HTMLElement>("[role=dialog]");
-    if (!dialog) return;
-    const from = lastHeight.current;
-    const to = dialog.getBoundingClientRect().height;
-    lastHeight.current = to;
-    const animate =
-      from !== undefined &&
-      Math.abs(from - to) > 1 &&
-      window.matchMedia("(min-width: 640px) and (prefers-reduced-motion: no-preference)").matches;
-    if (!animate) return;
-    const overflow = dialog.style.overflow;
-    dialog.style.overflow = "hidden";
-    const animation = dialog.animate(
-      [{ height: `${from}px` }, { height: `${to}px` }],
-      HEIGHT_TRANSITION,
+    if (previousKey.current === key) return;
+    previousKey.current = key;
+    const panel = ref.current;
+    if (!panel) return;
+    if (
+      !window.matchMedia("(min-width: 640px) and (prefers-reduced-motion: no-preference)").matches
+    )
+      return;
+    const animation = panel.animate(
+      [
+        { opacity: 0, transform: "translateY(4px)" },
+        { opacity: 1, transform: "translateY(0)" },
+      ],
+      KIND_SWITCH_TRANSITION,
     );
-    const restore = () => {
-      dialog.style.overflow = overflow;
-    };
-    animation.onfinish = restore;
-    animation.oncancel = restore;
     return () => animation.cancel();
   }, [key]);
-  useLayoutEffect(() => {
-    const dialog = ref.current?.closest<HTMLElement>("[role=dialog]");
-    if (!dialog) return;
-    const observer = new ResizeObserver(() => {
-      if (dialog.getAnimations().length === 0)
-        lastHeight.current = dialog.getBoundingClientRect().height;
-    });
-    observer.observe(dialog);
-    return () => observer.disconnect();
-  }, []);
   return ref;
 }
