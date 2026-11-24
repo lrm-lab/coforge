@@ -17,12 +17,13 @@ export function mentionCandidates(
   outsiders: readonly Mentionable[] | undefined,
   query: string,
   recentHandles: readonly string[] | undefined,
+  options?: { memberLimit?: number },
 ): Mentionable[] {
   const memberKeys = new Set((mentionables ?? []).map(mentionKey));
   const members = filterMentionables(
     (mentionables ?? []).filter((item) => !item.unmentionable),
     query,
-    { recentHandles },
+    { recentHandles, limit: options?.memberLimit },
   );
   return [
     ...members,
@@ -41,6 +42,7 @@ function referenceText(item: ReferenceSuggestion): string {
 type ReferenceCandidates = {
   mentionables: readonly Mentionable[] | undefined;
   mentionOutsiders?: readonly Mentionable[] | undefined;
+  mentionMemberLimit?: number | undefined;
   recentHandles?: readonly string[] | undefined;
   channels?: readonly ChannelSuggestion[] | undefined;
   currentChannelId?: string | undefined;
@@ -51,6 +53,7 @@ type ActiveReference = NonNullable<ReturnType<typeof activeReferenceQuery>>;
 export function useReferenceSuggestions({
   mentionables,
   mentionOutsiders,
+  mentionMemberLimit,
   recentHandles,
   channels,
   currentChannelId,
@@ -67,12 +70,12 @@ export function useReferenceSuggestions({
   const items: ReferenceSuggestion[] = !query
     ? []
     : query.trigger === "@"
-      ? mentionCandidates(mentionables, mentionOutsiders, query.query, recentHandles).map(
-          (mention) => ({
-            kind: "mention",
-            mention,
-          }),
-        )
+      ? mentionCandidates(mentionables, mentionOutsiders, query.query, recentHandles, {
+          memberLimit: mentionMemberLimit,
+        }).map((mention) => ({
+          kind: "mention",
+          mention,
+        }))
       : filterChannelSuggestions(channels ?? [], query.query, { currentChannelId }).map(
           (channel) => ({ kind: "channel", channel }),
         );

@@ -103,6 +103,8 @@ export type ConversationProps = {
   /** Whether the composer offers @-completion; off where a mention stays plain text (a DM between
    * members). The members still resolve names and fill a Task's assignee list. */
   mentionCompletion?: boolean;
+  /** Maximum in-conversation members returned by `@` completion; defaults to 8 when omitted. */
+  mentionMemberLimit?: number;
   onSend: (
     body: string,
     idempotencyKey: string,

@@ -308,6 +308,7 @@ export function ChannelConversation({
         />
       }
       channels={channels}
+      mentionMemberLimit={Number.POSITIVE_INFINITY}
       taskPopup={taskPopup}
       jumpMessage={jumpMessage}
       onJumpMessageConsumed={onJumpMessageConsumed}

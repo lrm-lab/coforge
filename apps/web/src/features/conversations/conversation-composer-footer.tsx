@@ -20,6 +20,7 @@ export function ConversationComposerFooter({
   column,
   readOnlyNotice,
   mentionCompletion,
+  mentionMemberLimit,
   composerTarget,
   channels,
   onSend,
@@ -33,6 +34,7 @@ export function ConversationComposerFooter({
   column: boolean;
   readOnlyNotice?: ReactNode;
   mentionCompletion: boolean;
+  mentionMemberLimit?: number;
   composerTarget?: string;
   channels?: ComposerProps["channels"];
   onSend: ComposerProps["onSend"];
@@ -66,6 +68,7 @@ export function ConversationComposerFooter({
             target={narrow ? undefined : composerTarget}
             mentionables={mentionCandidates}
             mentionOutsiders={conversation.mentionOutsiders}
+            mentionMemberLimit={mentionMemberLimit}
             recentHandles={recentHandles}
             channels={channels}
             onSend={onSend}

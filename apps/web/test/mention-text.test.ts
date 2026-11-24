@@ -477,3 +477,73 @@ test("private Agents stay resolvable in history while excluded from @ mention ca
     publicAgentId,
   ]);
 });
+
+test("channel mentionCandidates with memberLimit=Infinity lists every mentionable member while preserving outsider cap, ranking, and private Agent exclusion", async () => {
+  const { mentionCandidates } =
+    await import("#src/features/conversations/use-reference-completion");
+
+  const humans = [
+    person("alice-chen", "Alice Chen"),
+    person("bob-lin", "Bob Lin"),
+    person("clara-wu", "Clara Wu"),
+    person("david-zhou", "David Zhou"),
+    person("alex-wang-1", "Alex Wang"),
+    person("alex-wang-2", "Alex Wang"),
+    person("elena-sun", "Elena Sun"),
+    person("felix-gao", "Felix Gao"),
+    person("hannah-li", "Hannah Li"),
+    person("zoe-zhang", "Zoe Zhang"),
+  ];
+  const publicAgents = [
+    agent("alpha-bot", "Alpha Bot"),
+    agent("helper-bot", "Helper Bot"),
+    agent("zulu-bot", "Zulu Bot"),
+  ];
+  const privateAgent = {
+    ...agent("secret-private", "Secret Private"),
+    unmentionable: true as const,
+  };
+  const channelMembers = [...humans, ...publicAgents, privateAgent];
+
+  const outsiders = Array.from({ length: 10 }, (_, index) => ({
+    ...person(
+      `outsider-${String(index + 1).padStart(2, "0")}`,
+      `Outsider ${String(index + 1).padStart(2, "0")}`,
+    ),
+    outsider: true as const,
+  }));
+
+  // Default (DM / artifact comments / attachment comments) keeps the 8-item member cap.
+  expect(mentionCandidates(channelMembers, [], "", undefined)).toHaveLength(8);
+
+  // Channel mode (memberLimit: Infinity) with outsiders: all 13 mentionable members + capped 8 outsiders, private excluded.
+  const withOutsiders = mentionCandidates(channelMembers, outsiders, "", undefined, {
+    memberLimit: Number.POSITIVE_INFINITY,
+  });
+  const insiders = withOutsiders.filter((entry) => !entry.outsider);
+  const outsideGroup = withOutsiders.filter((entry) => entry.outsider);
+  expect(insiders).toHaveLength(13);
+  expect(insiders.map((entry) => entry.handle)).toContain("zoe-zhang");
+  expect(insiders.map((entry) => entry.handle)).toContain("zulu-bot");
+  expect(insiders.map((entry) => entry.handle)).not.toContain("secret-private");
+  expect(insiders.at(-1)?.handle).toBe("zulu-bot");
+  expect(outsideGroup).toHaveLength(8);
+
+  // Channel mode without outsiders: all 13 mentionable members, no outsiders.
+  const withoutOutsiders = mentionCandidates(channelMembers, [], "", undefined, {
+    memberLimit: Number.POSITIVE_INFINITY,
+  });
+  expect(withoutOutsiders).toHaveLength(13);
+  expect(withoutOutsiders.at(-1)?.handle).toBe("zulu-bot");
+
+  // Query filtering and recency/score ranking stay intact.
+  const rankedByRecency = mentionCandidates(channelMembers, outsiders, "", ["zoe-zhang"], {
+    memberLimit: Number.POSITIVE_INFINITY,
+  });
+  expect(rankedByRecency[0]?.handle).toBe("zoe-zhang");
+  expect(
+    mentionCandidates(channelMembers, outsiders, "zulu", undefined, {
+      memberLimit: Number.POSITIVE_INFINITY,
+    }).map((entry) => entry.handle),
+  ).toEqual(["zulu-bot"]);
+});

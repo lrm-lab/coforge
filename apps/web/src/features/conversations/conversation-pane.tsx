@@ -71,6 +71,7 @@ export function ConversationPane({
   jumpMessage,
   onJumpMessageConsumed,
   mentionCompletion = true,
+  mentionMemberLimit,
   keepsReadCursor = true,
 }: ConversationPaneProps) {
   const timeZone = useTimeZone();
@@ -352,6 +353,7 @@ export function ConversationPane({
               column={column}
               readOnlyNotice={readOnlyNotice}
               mentionCompletion={mentionCompletion}
+              mentionMemberLimit={mentionMemberLimit}
               composerTarget={composerTarget}
               channels={channels}
               onSend={onSend}

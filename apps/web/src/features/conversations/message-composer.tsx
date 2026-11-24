@@ -72,6 +72,7 @@ export function MessageComposer({
   target,
   mentionables,
   mentionOutsiders,
+  mentionMemberLimit,
   recentHandles,
   channels,
   quotedDraft,
@@ -86,6 +87,7 @@ export function MessageComposer({
   target?: string;
   mentionables?: readonly Mentionable[];
   mentionOutsiders?: readonly Mentionable[];
+  mentionMemberLimit?: number;
   recentHandles?: readonly string[];
   channels?: readonly ChannelSuggestion[];
   quotedDraft?: { id: number; text: string };
@@ -131,6 +133,7 @@ export function MessageComposer({
   const completion = useReferenceCompletion({
     mentionables,
     mentionOutsiders,
+    mentionMemberLimit,
     recentHandles,
     channels,
     currentChannelId: conversationId,
