@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "@tanstack/react-router";
-import { Copy01, DotsHorizontal, FlipForward, Image01, XClose } from "@untitledui/icons";
+import { Copy01, DotsHorizontal, FlipForward, Image01 } from "@untitledui/icons";
 
-import { Button } from "#src/components/base/buttons/button";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import {
+  SelectionActionBar,
+  SelectionActionButton,
+  SelectionActionIconButton,
+  SelectionActionPrimaryButton,
+} from "#src/components/ui/selection-action-bar";
 import { useAppToast } from "#src/components/ui/toast";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { copyText } from "#src/lib/clipboard";
@@ -15,15 +19,8 @@ import { useSelectionIn } from "./message-selection";
 import { selectedInOrder, selectedLinks, selectedMarkdown } from "./message-selection-model";
 import { MessageShareDialog } from "./message-share-dialog";
 
-/** How long "Copy link" reads "Copied" after a copy. */
 const COPIED_MS = 2000;
 
-/**
- * Select mode's bar, in the composer's place: how many are picked, then copy their
- * links, forward them as one card, and under "…" an image of them or their Markdown; × leaves.
- * Everything acts on the picked messages oldest first. Copying keeps select mode; a forward that
- * reached every destination ends it.
- */
 export function MessageSelectionBar({ conversationId }: { conversationId: string }) {
   const selection = useSelectionIn(conversationId);
   const router = useRouter();
@@ -66,50 +63,36 @@ export function MessageSelectionBar({ conversationId }: { conversationId: string
       then?.();
     });
   return (
-    <div className="flex justify-center px-4 pt-2 pb-[max(0.75rem,var(--spacing-safe-bottom))]">
-      <div
-        role="toolbar"
-        aria-label={m.message_select_toolbar()}
-        data-selection-bar
-        className="flex max-w-full min-w-0 items-center gap-1 rounded-xl bg-primary py-1 pr-1 pl-3 shadow-lg ring-1 ring-secondary"
+    <>
+      <SelectionActionBar
+        label={m.message_select_toolbar()}
+        countLabel={m.message_select_count({ count })}
+        clearLabel={m.message_select_exit()}
+        onClear={selection.exit}
       >
-        <span
-          aria-live="polite"
-          className="shrink-0 text-sm font-semibold whitespace-nowrap text-primary tabular-nums"
+        <SelectionActionPrimaryButton
+          iconLeading={FlipForward}
+          isDisabled={count === 0 || !openForward}
+          onPress={() => openForward?.({ messages, conversationId, onForwarded: selection.exit })}
         >
-          {m.message_select_count({ count })}
-        </span>
-        <Button
-          size="sm"
-          color="tertiary"
+          {m.message_forward_action()}
+        </SelectionActionPrimaryButton>
+        <SelectionActionButton
           iconLeading={Copy01}
           isDisabled={count === 0}
-          onClick={() =>
+          onPress={() =>
             copy(selectedLinks(messages, linkOf), m.message_select_links_copied({ count }), () =>
               setCopied(true),
             )
           }
-          // On a phone the bar holds its icon only, so the whole bar fits the width.
-          className="ml-1 shrink-0 max-sm:*:data-text:sr-only"
+          className="max-sm:w-8 max-sm:px-0 max-sm:*:data-text:sr-only"
         >
           {copied ? m.message_select_copied() : m.message_select_copy_links()}
-        </Button>
-        <Button
-          size="sm"
-          iconLeading={FlipForward}
-          isDisabled={count === 0 || !openForward}
-          onClick={() => openForward?.({ messages, conversationId, onForwarded: selection.exit })}
-          className="shrink-0"
-        >
-          {m.message_forward_action()}
-        </Button>
+        </SelectionActionButton>
         <Dropdown.Root>
-          <ButtonUtility
-            size="sm"
-            color="tertiary"
+          <SelectionActionIconButton
             icon={DotsHorizontal}
             tooltip={m.message_select_more()}
-            aria-label={m.message_select_more()}
             isDisabled={count === 0}
           />
           <Dropdown.Popover placement="top end" className="w-max min-w-40">
@@ -129,21 +112,13 @@ export function MessageSelectionBar({ conversationId }: { conversationId: string
             </Dropdown.Menu>
           </Dropdown.Popover>
         </Dropdown.Root>
-        <ButtonUtility
-          size="sm"
-          color="tertiary"
-          icon={XClose}
-          tooltip={m.message_select_exit()}
-          aria-label={m.message_select_exit()}
-          onClick={selection.exit}
-        />
-      </div>
+      </SelectionActionBar>
       {sharing && (
         <MessageShareDialog
           messages={messages.map(({ message }) => message)}
           onClose={() => setSharing(false)}
         />
       )}
-    </div>
+    </>
   );
 }
