@@ -67,9 +67,7 @@ import { AgentUsageTab } from "./agent-usage-tab";
 import { useAgentPanelLoaders } from "./agent-profile-loaders";
 import { AgentProfileSkeleton } from "./agent-profile-skeleton";
 import { AgentProfileStatus } from "./agent-profile-status";
-import type { AgentReadinessNoteData } from "./agent-readiness-note";
-import { runtimeProviderLabel } from "../runtime-provider-display";
-import { humanLabel } from "#src/lib/human-label";
+import { agentProfileReadinessData } from "./agent-profile-readiness";
 import {
   resolveAgentProfileTab,
   type AgentProfileTab as ProfileTabId,
@@ -263,36 +261,12 @@ export function AgentProfilePanel({
   }
 
   const diagnosticFacts = profile && profileDiagnosticFacts(profile);
-  const needsManualStart =
-    !!profile && "needsManualStart" in profile && profile.needsManualStart === true;
-  const readiness =
-    profile?.readiness.state === "ready" && needsManualStart
-      ? { state: "launch_failed", detail: profile.failureReason }
-      : profile?.readiness;
-  const readinessData: AgentReadinessNoteData | undefined =
-    profile && !deleted && readiness && readiness.state !== "ready"
-      ? {
-          readiness,
-          failureReason: profile.failureReason,
-          computer: profile.computer
-            ? {
-                id: profile.computer.id,
-                label: profile.computer.label,
-                ownerLabel: profile.computer.ownerLabel,
-                ownedByViewer: profile.computer.ownedByViewer,
-              }
-            : null,
-          canManageAgentRole: profile.canManageAgentRole,
-          canManageLogin: profile.canManageRuntimeLogin,
-          canStartAgent: profile.canControlAgentRuntime,
-          canManage,
-          agentOwnerLabel: humanLabel(profile.owner),
-          runtimeLabel: profile.runtimeConfig
-            ? runtimeProviderLabel(profile.runtimeConfig.runtime)
-            : "",
-          workspaceSlug,
-        }
-      : undefined;
+  const { needsManualStart, readinessData } = agentProfileReadinessData(
+    profile,
+    deleted,
+    canManage,
+    workspaceSlug,
+  );
 
   return (
     <div ref={root} className="flex h-full min-h-0 min-w-0 flex-col">
