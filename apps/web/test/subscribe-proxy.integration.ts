@@ -1,19 +1,22 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { Centrifuge, State, SubscriptionState, type Subscription } from "centrifuge";
-import { exportJWK, generateKeyPair } from "jose";
+import { State, SubscriptionState } from "centrifuge";
 
 import {
   answerSubscriptionProxy,
   SUBSCRIPTION_LIFETIME_S,
   type BrowserSubscriptionAccess,
 } from "#src/server/centrifugo/subscribe-proxy.server";
-import { issueBrowserRealtimeToken } from "#src/server/auth/browser-realtime-token.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { chatStreamPositions } from "#src/server/conversations/chat-stream-positions.server";
 import { streamMovedSince, type StreamPosition } from "#src/features/realtime/subscription-gap";
+import {
+  SUBSCRIBE_PROXY_API_KEY,
+  settled,
+  startSubscribeProxyHarness,
+  until,
+  watched,
+  type SubscribeProxyHarness,
+} from "./helpers/subscribe-proxy-harness";
 
 // A page subscribes without a token and Centrifugo asks the Web, through the subscribe and
 // sub-refresh proxies exactly as `infra/centrifugo/config.yaml` declares them: a refusal is final,
@@ -22,7 +25,7 @@ import { streamMovedSince, type StreamPosition } from "#src/features/realtime/su
 // meta Centrifugo must hand the proxy. It also checks the stream positions a page compares to
 // tell whether a subscribe missed anything (task #348). Docker required: `mise run test:centrifugo`.
 
-const API_KEY = "subscribe-proxy-integration";
+const API_KEY = SUBSCRIBE_PROXY_API_KEY;
 const ADA = "33333333-3333-4333-8333-333333333333";
 const GRACE = "44444444-4444-4444-8444-444444444444";
 const CONVERSATION = "55555555-5555-4555-8555-555555555555";
@@ -53,172 +56,24 @@ const access: BrowserSubscriptionAccess = {
   },
 };
 
-let root: string;
-let containerName: string;
+let harness: SubscribeProxyHarness;
 let centrifugoPort: number;
-let proxy: ReturnType<typeof Bun.serve>;
-const clients: Centrifuge[] = [];
-let signing: Record<string, string>;
+const connected = (user: string, daemon = false) => harness.connected(user, daemon);
 
 beforeAll(async () => {
-  root = await mkdtemp(join(tmpdir(), "coforge-subscribe-proxy-"));
-  const { privateKey, publicKey } = await generateKeyPair("EdDSA", { extractable: true });
-  const kid = "subscribe-proxy-test";
-  signing = {
-    COFORGE_WORKER_JWT_PRIVATE_JWK: JSON.stringify(await exportJWK(privateKey)),
-    COFORGE_WORKER_JWT_KEY_ID: kid,
-  };
-  const jwks = { keys: [{ ...(await exportJWK(publicKey)), kid, use: "sig", alg: "EdDSA" }] };
-  proxy = Bun.serve({
-    hostname: "0.0.0.0",
-    port: 0,
-    async fetch(request) {
-      const path = new URL(request.url).pathname;
-      if (path === "/jwks") return Response.json(jwks);
-      // A daemon connects through the connect proxy as its owner, its meta naming its Computer.
-      if (path === "/connect") {
-        const { data } = (await request.json()) as { data: { user: string } };
-        return Response.json({
-          result: { user: data.user, meta: { workspace_id: "w", computer_id: "computer" } },
-        });
-      }
-      if (path === "/sub-refresh") refreshes++;
-      return answerSubscriptionProxy(request, access, {
-        refresh: path === "/sub-refresh",
-        now: () => Date.now() - shortenBy * 1000,
-      });
-    },
+  harness = await startSubscribeProxyHarness((request, refresh) => {
+    if (refresh) refreshes++;
+    return answerSubscriptionProxy(request, access, {
+      refresh,
+      now: () => Date.now() - shortenBy * 1000,
+    });
   });
-  const portProbe = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });
-  centrifugoPort = portProbe.port!;
-  portProbe.stop(true);
-  type Shipped = {
-    channel: {
-      proxy: Record<"subscribe" | "sub_refresh", Record<string, unknown>>;
-      namespaces: { name: string }[];
-    };
-  };
-  const shipped = Bun.YAML.parse(
-    await Bun.file(join(import.meta.dir, "../../../infra/centrifugo/config.yaml")).text(),
-  ) as Shipped;
-  const shippedNamespaces = ["chat", "agent", "agentstatus"].map((name) => {
-    const namespace = shipped.channel.namespaces.find((declared) => declared.name === name);
-    if (!namespace) throw new Error(`infra/centrifugo/config.yaml declares no ${name} namespace`);
-    // The publish proxy is not under test here.
-    return { ...namespace, publish_proxy_enabled: false };
-  });
-  const origin = `http://host.docker.internal:${proxy.port}`;
-  const configPath = join(root, "config.json");
-  await writeFile(
-    configPath,
-    JSON.stringify({
-      health: { enabled: true },
-      http_api: { key: API_KEY },
-      log: { level: "error" },
-      client: {
-        allowed_origins: ["*"],
-        token: {
-          jwks_public_endpoint: `${origin}/jwks`,
-          issuer: "coforge",
-          audience: "coforge-centrifugo",
-        },
-        proxy: { connect: { enabled: true, endpoint: `${origin}/connect`, timeout: "5s" } },
-      },
-      channel: {
-        proxy: {
-          subscribe: {
-            ...shipped.channel.proxy.subscribe,
-            http: {},
-            endpoint: `${origin}/subscribe`,
-          },
-          sub_refresh: {
-            ...shipped.channel.proxy.sub_refresh,
-            http: {},
-            endpoint: `${origin}/sub-refresh`,
-          },
-        },
-        namespaces: shippedNamespaces,
-      },
-    }),
-    { mode: 0o644 },
-  );
-  containerName = `coforge-subscribe-proxy-${crypto.randomUUID()}`;
-  const docker = Bun.spawnSync([
-    "docker",
-    "run",
-    "--detach",
-    "--rm",
-    "--name",
-    containerName,
-    "--publish",
-    `127.0.0.1:${centrifugoPort}:8000`,
-    "--add-host",
-    "host.docker.internal:host-gateway",
-    "--volume",
-    `${configPath}:/centrifugo/config.json:ro`,
-    "centrifugo/centrifugo:v6.9.2",
-    "centrifugo",
-    "--config",
-    "/centrifugo/config.json",
-  ]);
-  if (docker.exitCode !== 0) throw new Error(docker.stderr.toString());
-  const deadline = Date.now() + 30_000;
-  while (
-    (await fetch(`http://127.0.0.1:${centrifugoPort}/health`).catch(() => null))?.ok !== true
-  ) {
-    if (Date.now() > deadline) throw new Error("Centrifugo did not become healthy");
-    await Bun.sleep(100);
-  }
+  centrifugoPort = harness.centrifugoPort;
 }, 60_000);
 
 afterAll(async () => {
-  for (const client of clients) client.disconnect();
-  if (containerName) Bun.spawnSync(["docker", "rm", "--force", containerName]);
-  proxy?.stop(true);
-  if (root) await rm(root, { recursive: true, force: true });
+  await harness?.stop();
 });
-
-/** A page's connection with the Web's connection token, or a daemon's through the connect proxy. */
-async function connected(user: string, daemon = false) {
-  const client = new Centrifuge(
-    `ws://127.0.0.1:${centrifugoPort}/connection/websocket`,
-    daemon
-      ? { data: { user } }
-      : { token: await issueBrowserRealtimeToken({ userId: user, workspaceId: "w" }, signing) },
-  );
-  clients.push(client);
-  client.connect();
-  await client.ready(10_000);
-  return client;
-}
-
-/** A subscription with every state it went through: `subscribed`, or `subscribing`/`unsubscribed`
- * with Centrifugo's code. */
-function watched(client: Centrifuge, channel: string) {
-  const subscription = client.newSubscription(channel, {
-    minResubscribeDelay: 100,
-    maxResubscribeDelay: 500,
-  });
-  const states: string[] = [];
-  subscription.on("subscribed", () => states.push("subscribed"));
-  subscription.on("subscribing", ({ code }) => states.push(`subscribing ${code}`));
-  subscription.on("unsubscribed", ({ code }) => states.push(`unsubscribed ${code}`));
-  subscription.on("error", ({ error }) => states.push(`error ${error.code}`));
-  subscription.subscribe();
-  return { subscription, states };
-}
-
-async function until(done: () => boolean, timeout: number) {
-  const deadline = Date.now() + timeout;
-  while (!done()) {
-    if (Date.now() > deadline) throw new Error("timed out");
-    await Bun.sleep(50);
-  }
-}
-
-const settled = (subscription: Subscription) => () =>
-  subscription.state === SubscriptionState.Subscribed ||
-  subscription.state === SubscriptionState.Unsubscribed;
 
 test("a reader is granted; anyone else is refused once and not retried", async () => {
   const ada = await connected(ADA);
