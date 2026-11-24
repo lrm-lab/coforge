@@ -234,7 +234,7 @@ export function ActivityInboxView({
     useActivityListKeyboard(rowKeys, rows, actions, selected, setSelected, listFlow);
   const hadPane = useRef(false);
   useLayoutEffect(() => {
-    if (hadPane.current && !pane) focusSelected();
+    if (hadPane.current && !pane) focusSelected({ preventScroll: true });
     hadPane.current = Boolean(pane);
   }, [pane, focusSelected]);
   const selectedDone = rows.some((item) => item.key === tabStopKey);
@@ -247,7 +247,7 @@ export function ActivityInboxView({
             composerRef,
             onListKey: actOnSelected,
             onKeyDown: paneProps.onKeyDown,
-            onBackToList: focusSelected,
+            onBackToList: () => focusSelected(),
           }
         : undefined,
     [flowing, selectedDone, actOnSelected, paneProps.onKeyDown, focusSelected],

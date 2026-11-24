@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useRouter } from "@tanstack/react-router";
+import { useIsPresent } from "motion/react";
 
 import { usePanelTabOrder } from "#src/features/panel-tabs/panel-tab-order-context";
 import { conversationSearchWithoutDetails } from "./conversation-details-search";
@@ -19,9 +20,10 @@ type ConversationSearch = {
  */
 export function useShownConversationTab(view: ConversationTab | undefined): ConversationTab {
   const router = useRouter();
+  const isPresent = useIsPresent();
   const { tabs } = usePanelTabOrder("conversation", CONVERSATION_TABS);
   const shown = view ?? tabs[0] ?? "chat";
-  const pinned = view !== undefined;
+  const pinned = view !== undefined || !isPresent;
   useEffect(() => {
     if (pinned) return;
     void router.navigate({

@@ -1,6 +1,7 @@
 import { type KeyboardEvent, type RefObject, useCallback, useMemo, useRef } from "react";
 import { useHotkeys, type HotkeyChord } from "@tanstack/react-hotkeys";
 import { getRouteApi } from "@tanstack/react-router";
+import { useIsPresent } from "motion/react";
 
 import {
   MountedListControls,
@@ -70,10 +71,14 @@ export function ActivityConversationPane({
     select: pickConversationPageSearch,
     structuralSharing: true,
   });
+  const isPresent = useIsPresent();
+  const isPresentRef = useRef(isPresent);
+  isPresentRef.current = isPresent;
   const navigate = activityRoute.useNavigate();
   // A conversation landing is one-shot. Leaving `msg` set makes the pane jump back to it every
   // time Chat/Tasks remounts the stream. A standalone thread keeps `msg`: it is the root.
   const clearLanding = useCallback(() => {
+    if (!isPresentRef.current) return;
     void navigate({
       replace: true,
       resetScroll: false,

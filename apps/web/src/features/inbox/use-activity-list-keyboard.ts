@@ -175,7 +175,8 @@ export function useActivityListKeyboard(
   );
 
   const focusSelected = useCallback(
-    () => selectedRow(document, tabStop.current)?.querySelector<HTMLElement>("a")?.focus(),
+    (options?: FocusOptions) =>
+      selectedRow(document, tabStop.current)?.querySelector<HTMLElement>("a")?.focus(options),
     [],
   );
 
