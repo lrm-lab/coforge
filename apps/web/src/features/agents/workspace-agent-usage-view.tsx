@@ -22,6 +22,7 @@ import {
   type AgentTokenUsageRange,
 } from "./agent-token-usage-model";
 import { getWorkspaceAgentTokenUsage } from "./agent-token-usage.functions";
+import { agentTokenUsageKeys } from "./agent-token-usage-queries";
 import {
   CalendarHeatmapChart,
   DailyBarChart,
@@ -85,10 +86,11 @@ export function WorkspaceAgentUsageView({
   const loadUsage = useServerFn(getWorkspaceAgentTokenUsage);
 
   const usageQuery = useQuery({
-    queryKey: ["workspace-agent-token-usage", workspaceId, range, timeZone],
+    queryKey: agentTokenUsageKeys.workspaceRange(workspaceId, range, timeZone),
     queryFn: () => loadUsage({ data: { range, timeZone } }),
     enabled: hydrated,
     staleTime: 30_000,
+    refetchOnReconnect: "always",
   });
 
   const view = useMemo(

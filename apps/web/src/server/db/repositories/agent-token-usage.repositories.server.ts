@@ -23,7 +23,7 @@ export type AgentTokenUsageTurnInput = Readonly<{
 }>;
 
 export interface AgentTokenUsageRepository {
-  recordTurn(input: AgentTokenUsageTurnInput): Promise<void>;
+  recordTurn(input: AgentTokenUsageTurnInput): Promise<boolean>;
   aggregateTurnsInRange(scope: {
     workspaceId: string;
     agentId: string;
@@ -81,8 +81,8 @@ function toSafeNumber(value: bigint): number {
 export class PrismaAgentTokenUsageRepository implements AgentTokenUsageRepository {
   constructor(private readonly db: PrismaClient) {}
 
-  async recordTurn(input: AgentTokenUsageTurnInput): Promise<void> {
-    await this.db.agentTokenUsageTurn.createMany({
+  async recordTurn(input: AgentTokenUsageTurnInput): Promise<boolean> {
+    const result = await this.db.agentTokenUsageTurn.createMany({
       data: [
         {
           workspaceId: input.workspaceId,
@@ -106,6 +106,7 @@ export class PrismaAgentTokenUsageRepository implements AgentTokenUsageRepositor
       ],
       skipDuplicates: true,
     });
+    return result.count > 0;
   }
 
   async aggregateTurnsInRange(scope: {

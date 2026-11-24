@@ -111,6 +111,23 @@ export function isAgentDirectoryChangedEvent(value: unknown): value is AgentDire
   );
 }
 
+export type AgentTokenUsageRecordedEvent = {
+  type: typeof REALTIME_EVENTS.agentTokenUsageRecorded;
+  agentId: string;
+};
+
+export function isAgentTokenUsageRecordedEvent(
+  value: unknown,
+): value is AgentTokenUsageRecordedEvent {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const agentId = Reflect.get(value, "agentId");
+  return (
+    Reflect.get(value, "type") === REALTIME_EVENTS.agentTokenUsageRecorded &&
+    typeof agentId === "string" &&
+    agentId.length > 0
+  );
+}
+
 export function isAgentVisibilityChangedEvent(
   value: unknown,
 ): value is AgentVisibilityChangedEvent {

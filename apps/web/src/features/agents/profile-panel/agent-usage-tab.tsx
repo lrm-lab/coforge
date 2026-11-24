@@ -10,6 +10,11 @@ import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { getAgentTokenUsage } from "#src/features/agents/agent-token-usage.functions";
 import {
+  agentTokenUsageKeys,
+  mergeLiveContextUsage,
+} from "#src/features/agents/agent-token-usage-queries";
+import { useLiveAgentProfileMetrics } from "#src/features/agents/workspace-agents-realtime";
+import {
   AGENT_TOKEN_USAGE_RANGES,
   formatCompactTokens,
   formatExactTokens,
@@ -74,9 +79,10 @@ export function AgentUsageTab({ agentId, timeZone }: { agentId: string; timeZone
 
   const effectiveTimeZone = resolveTimeZone(timeZone, hydrated ? browserTimeZone() : undefined);
   const loadUsage = useServerFn(getAgentTokenUsage);
+  const liveMetrics = useLiveAgentProfileMetrics(agentId);
 
   const query = useQuery({
-    queryKey: ["agent-token-usage", agentId, range, effectiveTimeZone],
+    queryKey: agentTokenUsageKeys.agentRange(agentId, range, effectiveTimeZone),
     queryFn: () =>
       loadUsage({
         data: {
@@ -87,11 +93,17 @@ export function AgentUsageTab({ agentId, timeZone }: { agentId: string; timeZone
       }),
     enabled: hydrated || Boolean(timeZone),
     staleTime: 30_000,
+    refetchOnReconnect: "always",
   });
 
+  const report = useMemo(
+    () => (query.data ? mergeLiveContextUsage(query.data, liveMetrics.contextUsage) : null),
+    [query.data, liveMetrics.contextUsage],
+  );
+
   const summary = useMemo(
-    () => (query.data ? summarizeAgentTokenUsage(query.data, selectedKey) : null),
-    [query.data, selectedKey],
+    () => (report ? summarizeAgentTokenUsage(report, selectedKey) : null),
+    [report, selectedKey],
   );
 
   const selectedIndex = useMemo(() => {

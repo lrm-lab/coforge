@@ -1,11 +1,21 @@
 import { decodeAgentTokenUsage, type AgentTokenUsage } from "@lrm/coforge-sdk/internal";
+import { agentStatusChannelFor } from "#src/features/agents/agent-status-channel";
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import type { AgentTokenUsageRepository } from "#src/server/db/repositories/agent-token-usage.repositories.server";
 import { errorType } from "#src/server/errors/error-type.server";
 import { rejectNonDaemonPrincipal } from "./daemon-principal.server";
 import type { CentrifugoRpcMethod } from "./rpc-handler.server";
+import type { CentrifugoServerApi } from "./server-api.server";
 
 export type AgentTokenUsageAgentLookup = {
-  get(agentId: string): Promise<{ workspaceId: string; computerId: string | null } | undefined>;
+  get(agentId: string): Promise<
+    | {
+        workspaceId: string;
+        computerId: string | null;
+        visibility?: string;
+      }
+    | undefined
+  >;
 };
 
 const MAX_PAST_SKEW_MS = 30 * 24 * 60 * 60 * 1000;
@@ -24,7 +34,10 @@ function clampOptionalInt32(value: number | undefined): number | null {
 }
 
 function logTokenUsageOutcome(
-  event: "agent_token_usage:dropped" | "agent_token_usage:rejected",
+  event:
+    | "agent_token_usage:dropped"
+    | "agent_token_usage:rejected"
+    | "agent_token_usage:publish_failed",
   details: {
     requestId?: string;
     agentId?: string;
@@ -53,6 +66,7 @@ export function createAgentTokenUsageMethod(
   agents: AgentTokenUsageAgentLookup,
   repository: Pick<AgentTokenUsageRepository, "recordTurn">,
   now: () => number = Date.now,
+  events?: Pick<CentrifugoServerApi, "publishJson">,
 ): CentrifugoRpcMethod {
   return async (payload, metadata) => {
     const rejection = rejectNonDaemonPrincipal(metadata.principal);
@@ -76,7 +90,10 @@ export function createAgentTokenUsageMethod(
       return { code: 400, message: "invalid Agent token usage" };
     }
     const logMessageOutcome = (
-      event: "agent_token_usage:dropped" | "agent_token_usage:rejected",
+      event:
+        | "agent_token_usage:dropped"
+        | "agent_token_usage:rejected"
+        | "agent_token_usage:publish_failed",
       reason: string,
     ) => {
       logTokenUsageOutcome(event, {
@@ -110,7 +127,7 @@ export function createAgentTokenUsageMethod(
         logMessageOutcome("agent_token_usage:dropped", "turn_seq_overflow");
         return new Uint8Array();
       }
-      await repository.recordTurn({
+      const inserted = await repository.recordTurn({
         workspaceId: message.workspaceId,
         agentId: message.agentId,
         computerId: message.computerId,
@@ -128,6 +145,21 @@ export function createAgentTokenUsageMethod(
         contextWindowTokens: clampOptionalInt32(message.contextWindowTokens),
         recordedAt: clampRecordedAt(message.observedAtMs, now()),
       });
+      if (inserted && events && agent.visibility !== undefined) {
+        const channel = agentStatusChannelFor(
+          message.workspaceId,
+          message.agentId,
+          agent.visibility,
+        );
+        try {
+          await events.publishJson(channel, {
+            type: REALTIME_EVENTS.agentTokenUsageRecorded,
+            agentId: message.agentId,
+          });
+        } catch (error) {
+          logMessageOutcome("agent_token_usage:publish_failed", `unexpected: ${errorType(error)}`);
+        }
+      }
       return new Uint8Array();
     } catch (error) {
       logMessageOutcome("agent_token_usage:rejected", `unexpected: ${errorType(error)}`);

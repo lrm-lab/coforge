@@ -32,6 +32,7 @@ import {
   type RecentActivityByAgent,
 } from "./agent-activity-queries";
 import { agentModelsQueryKey } from "./agent-models";
+import { useAgentTokenUsageInvalidator } from "./agent-token-usage-queries";
 import type { AgentMascot } from "./agent-mascot";
 import type { ExtraAgent } from "./extra-agent";
 import { loadExtraAgents } from "./extra-agents.functions";
@@ -155,6 +156,7 @@ export function WorkspaceAgentsProvider({
     [loadExtras, watched],
   );
   const directoryInvalidator = useAgentDirectoryInvalidator();
+  const tokenUsageInvalidator = useAgentTokenUsageInvalidator(workspaceId);
 
   // The Agents visible to this viewer beyond their own `listAgents` roster (another member's
   // public Agents, and, for an owner/admin or a private Agent's creator, private ones): each is a
@@ -227,6 +229,12 @@ export function WorkspaceAgentsProvider({
         }
       : undefined,
     onDirectoryChangedEvent: directoryInvalidator.schedule,
+    onTokenUsageRecordedEvent: workspaceId
+      ? (agentId) => {
+          if (agentId) tokenUsageInvalidator.schedule(agentId);
+          else tokenUsageInvalidator.scheduleAll();
+        }
+      : undefined,
   });
 
   useLayoutEffect(() => {

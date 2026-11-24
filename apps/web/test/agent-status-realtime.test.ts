@@ -15,6 +15,7 @@ const {
   agentStatusChannelForAgent,
   decodeAgentStatusEvent,
   isAgentDirectoryChangedEvent,
+  isAgentTokenUsageRecordedEvent,
   isAgentVisibilityChangedEvent,
 } = await import("#src/features/agents/agent-status-channel");
 import { ACTIVITY_PROBE_TIMEOUT_MS } from "#src/features/agents/activity-probe-timeout";
@@ -74,6 +75,28 @@ test("isAgentDirectoryChangedEvent accepts only id and supported change kinds", 
   expect(isAgentDirectoryChangedEvent({ type: "agent.changed.v1", agentId: "agent-1" })).toBe(
     false,
   );
+});
+
+test("isAgentTokenUsageRecordedEvent recognizes valid id-only usage events", () => {
+  expect(
+    isAgentTokenUsageRecordedEvent({
+      type: "agent.token_usage.recorded.v1",
+      agentId: "agent-1",
+    }),
+  ).toBe(true);
+  expect(
+    isAgentTokenUsageRecordedEvent({
+      type: "agent.token_usage.recorded.v1",
+      agentId: "",
+    }),
+  ).toBe(false);
+  expect(
+    isAgentTokenUsageRecordedEvent({
+      type: "agent:display",
+      agentId: "agent-1",
+    }),
+  ).toBe(false);
+  expect(isAgentTokenUsageRecordedEvent(null)).toBe(false);
 });
 
 // Realtime gap: an owner/admin (or a private Agent's creator) can see private Agents

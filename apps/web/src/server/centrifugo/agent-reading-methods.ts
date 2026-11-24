@@ -35,7 +35,7 @@ export function agentReadingMethods(options: {
     get: async (agentId: string) => {
       const agent = await db.agent.findUnique({
         where: { id: agentId },
-        select: { workspaceId: true, computerId: true },
+        select: { workspaceId: true, computerId: true, visibility: true },
       });
       return agent ?? undefined;
     },
@@ -50,6 +50,8 @@ export function agentReadingMethods(options: {
     [AGENT_TOKEN_USAGE_METHOD]: createAgentTokenUsageMethod(
       tokenUsageAgentLookup,
       new PrismaAgentTokenUsageRepository(db),
+      Date.now,
+      events,
     ),
     [AGENT_SERVICE_TIER_METHOD]: createAgentServiceTierMethod(
       agents,

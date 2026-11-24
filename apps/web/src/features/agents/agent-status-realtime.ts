@@ -12,6 +12,7 @@ import {
   agentStatusChannelForAgent,
   decodeAgentStatusEvent,
   isAgentDirectoryChangedEvent,
+  isAgentTokenUsageRecordedEvent,
   isAgentVisibilityChangedEvent,
 } from "./agent-status-channel";
 import {
@@ -72,6 +73,7 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
   extraAgents = [],
   onVisibilityChangedEvent,
   onDirectoryChangedEvent,
+  onTokenUsageRecordedEvent,
   readPositions,
   statusOnlyAgentIds,
 }: {
@@ -92,6 +94,7 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
   /** Called whenever an Agent directory event arrives. The caller can invalidate other
    * Workspace-scoped projections (for example channel mention directories). */
   onDirectoryChangedEvent?: () => void;
+  onTokenUsageRecordedEvent?: (agentId?: string) => void;
   /** Where `agents` and `extraAgents` were read in each status channel's stream, by channel: a
    * channel's first subscribe reads them again only if its stream moved past it. */
   readPositions?: StreamPositions;
@@ -245,6 +248,8 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
         catchUp();
         onVisibilityChangedEvent?.();
         onDirectoryChangedEvent?.();
+      } else if (isAgentTokenUsageRecordedEvent(value)) {
+        onTokenUsageRecordedEvent?.(value.agentId);
       } else if (Reflect.get(value as object, "type") === "agent:display") {
         const snapshot = parseAgentDisplaySnapshot(value);
         if (snapshot.statusOnly === true) {
@@ -282,7 +287,10 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
       const readPosition = readPositions?.[channel];
       void statusSubscribeCatchUp(recovery, readPosition, first)
         .then(({ roster, directories }) => {
-          if (roster) catchUp();
+          if (roster) {
+            catchUp();
+            onTokenUsageRecordedEvent?.();
+          }
           if (directories) {
             onVisibilityChangedEvent?.();
             onDirectoryChangedEvent?.();
@@ -303,7 +311,14 @@ export function useAgentStatuses<T extends StatusTrackedAgent>({
       : [],
     onSubscribed: (channel, recovery) => {
       void missedBySubscribe(recovery, () => readPositions?.[channel])
-        .then((missed) => missed && catchUp())
+        .then((missed) => {
+          if (!missed) return;
+          catchUp();
+          const missedAgentId = privateAgentIds.find(
+            (id) => workspaceId && agentStatusChannelForAgent(workspaceId, id) === channel,
+          );
+          onTokenUsageRecordedEvent?.(missedAgentId);
+        })
         .catch(() => {});
     },
     onPublication: (_channel, publication) => handleStatusPublication(publication.data),

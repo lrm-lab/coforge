@@ -80,6 +80,7 @@ test("persists valid token usage across changed launches, stopped/archived agent
     {
       recordTurn: async (input) => {
         recorded.push(input);
+        return true;
       },
     },
     () => nowMs,
@@ -184,6 +185,7 @@ test("logs structured warnings on every rejected or dropped path with zero silen
       {
         recordTurn: async (input) => {
           recorded.push(input);
+          return true;
         },
       },
     );
@@ -246,6 +248,99 @@ test("logs structured warnings on every rejected or dropped path with zero silen
     expect(failed).toEqual({ code: 500, message: "Agent token usage could not be recorded" });
     expect(warnings.at(-1)).toMatchObject({
       event: "agent_token_usage:rejected",
+      reason: "unexpected: Error",
+    });
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
+test("publishes visibility-routed realtime invalidation only when a new turn is inserted and tolerates publish failure", async () => {
+  const published: { channel: string; data: unknown }[] = [];
+  const agentsById = new Map<
+    string,
+    { workspaceId: string; computerId: string | null; visibility?: string }
+  >([
+    ["a-public", { workspaceId: "w-1", computerId: "c-1", visibility: "public" }],
+    ["a-private", { workspaceId: "w-1", computerId: "c-1", visibility: "private" }],
+    ["a-unknown-vis", { workspaceId: "w-1", computerId: "c-1" }],
+  ]);
+  const seen = new Set<string>();
+  const method = createAgentTokenUsageMethod(
+    { get: async (id) => agentsById.get(id) },
+    {
+      recordTurn: async (input) => {
+        const key = `${input.agentId}:${input.launchId}:${input.turnSeq}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      },
+    },
+    () => Date.parse("2026-11-24T02:00:00.000Z"),
+    {
+      publishJson: async (channel, data) => {
+        published.push({ channel, data });
+      },
+    },
+  );
+
+  const pubRes = await method(encodeAgentTokenUsage(sample({ agentId: "a-public", turnSeq: 1 })), {
+    principal: daemonPrincipal,
+  });
+  expect(pubRes).toBeInstanceOf(Uint8Array);
+
+  const dupRes = await method(encodeAgentTokenUsage(sample({ agentId: "a-public", turnSeq: 1 })), {
+    principal: daemonPrincipal,
+  });
+  expect(dupRes).toBeInstanceOf(Uint8Array);
+
+  const privRes = await method(
+    encodeAgentTokenUsage(sample({ agentId: "a-private", turnSeq: 1 })),
+    { principal: daemonPrincipal },
+  );
+  expect(privRes).toBeInstanceOf(Uint8Array);
+
+  const unknownVisRes = await method(
+    encodeAgentTokenUsage(sample({ agentId: "a-unknown-vis", turnSeq: 1 })),
+    { principal: daemonPrincipal },
+  );
+  expect(unknownVisRes).toBeInstanceOf(Uint8Array);
+
+  expect(published).toEqual([
+    {
+      channel: "agentstatus:w-1",
+      data: { type: "agent.token_usage.recorded.v1", agentId: "a-public" },
+    },
+    {
+      channel: "agentstatus:w-1:a-private",
+      data: { type: "agent.token_usage.recorded.v1", agentId: "a-private" },
+    },
+  ]);
+
+  const warnings: Record<string, unknown>[] = [];
+  const originalWarn = console.warn;
+  console.warn = (line?: unknown) => {
+    if (typeof line === "string") warnings.push(JSON.parse(line) as Record<string, unknown>);
+  };
+  try {
+    const publishFailing = createAgentTokenUsageMethod(
+      { get: async () => ({ workspaceId: "w-1", computerId: "c-1", visibility: "public" }) },
+      { recordTurn: async () => true },
+      () => Date.parse("2026-11-24T02:00:00.000Z"),
+      {
+        publishJson: async () => {
+          throw new Error("centrifugo down");
+        },
+      },
+    );
+    const answer = await publishFailing(
+      encodeAgentTokenUsage(sample({ agentId: "a-public", turnSeq: 9 })),
+      { principal: daemonPrincipal },
+    );
+    expect(answer).toBeInstanceOf(Uint8Array);
+    expect(warnings.at(-1)).toMatchObject({
+      event: "agent_token_usage:publish_failed",
+      agent_id: "a-public",
       reason: "unexpected: Error",
     });
   } finally {
