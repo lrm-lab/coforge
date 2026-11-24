@@ -2,6 +2,7 @@ import { createContext, useContext } from "react";
 import { createStore, useSelector, type Store } from "@tanstack/react-store";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
+import type { AgentMascot } from "./agent-mascot";
 import type { LiveAgent } from "./workspace-agents-realtime";
 import { useWatchAgentDisplay } from "./watched-agent-displays";
 
@@ -103,12 +104,135 @@ export function useVisibleAgentDisplay(agentId: string): AgentDisplaySnapshot | 
   return resolveAgentDisplay(display, floor);
 }
 
-/**
- * One Agent's display, for its avatar's status dot: repaints when that Agent's display changes
- * and not on another Agent's change or on a status lease refresh. Resolves by id across every
- * Agent the viewer may see — a full display first, the status floor for an Agent outside them —
- * so a private Agent's name surfaces (a channel member, a message sender) get its status too.
- */
 export function useLiveAgentDisplay(agentId: string): AgentDisplaySnapshot | undefined {
   return useVisibleAgentDisplay(agentId);
+}
+
+export function selectHasLiveRosterAgent(
+  agents: readonly { id: string; isExtra?: true }[],
+  agentId: string | null | undefined,
+): boolean {
+  return Boolean(agentId && agents.some((agent) => agent.id === agentId && !agent.isExtra));
+}
+
+export function useHasLiveAgent(agentId: string | null | undefined): boolean {
+  return useSelector(useContext(LiveAgentStoreContext), (agents) =>
+    selectHasLiveRosterAgent(agents, agentId),
+  );
+}
+
+export type LiveAgentIdentity = {
+  displayName: string;
+  avatarUrl?: string | null;
+  mascot?: AgentMascot;
+};
+
+export function selectLiveAgentIdentity(
+  agents: readonly Pick<LiveAgent, "id" | "displayName" | "avatarUrl" | "mascot">[],
+  agentId: string,
+): LiveAgentIdentity | undefined {
+  if (!agentId) return undefined;
+  const agent = agents.find((entry) => entry.id === agentId);
+  if (!agent) return undefined;
+  return {
+    displayName: agent.displayName,
+    avatarUrl: agent.avatarUrl,
+    mascot: agent.mascot,
+  };
+}
+
+function sameAgentIdentity(
+  a: LiveAgentIdentity | undefined,
+  b: LiveAgentIdentity | undefined,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.displayName === b.displayName && a.avatarUrl === b.avatarUrl && a.mascot === b.mascot;
+}
+
+export function useLiveAgentIdentity(agentId: string): LiveAgentIdentity | undefined {
+  return useSelector(
+    useContext(LiveAgentStoreContext),
+    (agents) => selectLiveAgentIdentity(agents, agentId),
+    { compare: sameAgentIdentity },
+  );
+}
+
+export function selectDisplayOnline(
+  display: Pick<AgentDisplaySnapshot, "activityKind"> | undefined,
+  stopped?: boolean,
+): boolean | undefined {
+  if (!display) return stopped === true ? false : undefined;
+  return display.activityKind !== "offline";
+}
+
+export function useLiveAgentOnline(
+  agentId: string,
+  fallbackDisplay?: AgentDisplaySnapshot,
+  stopped?: boolean,
+): boolean | undefined {
+  const liveStore = useContext(LiveAgentStoreContext);
+  const floorStore = useContext(StatusOnlyDisplaysContext);
+  const liveOnline = useSelector(liveStore, (agents) =>
+    selectDisplayOnline(selectLiveAgentDisplay(agents, agentId)),
+  );
+  const floorOnline = useSelector(floorStore, (displays) =>
+    selectDisplayOnline(agentId ? displays.get(agentId) : undefined),
+  );
+  return liveOnline ?? floorOnline ?? selectDisplayOnline(fallbackDisplay, stopped);
+}
+
+export type LiveAgentProfileMetrics = {
+  contextUsage: AgentDisplaySnapshot["contextUsage"] | null;
+  fastMode: AgentDisplaySnapshot["fastMode"] | null;
+};
+
+function sameContextUsage(
+  a: AgentDisplaySnapshot["contextUsage"] | null | undefined,
+  b: AgentDisplaySnapshot["contextUsage"] | null | undefined,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.usedTokens === b.usedTokens &&
+    a.windowTokens === b.windowTokens &&
+    a.observedAtMs === b.observedAtMs
+  );
+}
+
+function sameFastMode(
+  a: AgentDisplaySnapshot["fastMode"] | null | undefined,
+  b: AgentDisplaySnapshot["fastMode"] | null | undefined,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.requested === b.requested && a.observed === b.observed && a.observedAtMs === b.observedAtMs
+  );
+}
+
+function sameProfileMetrics(a: LiveAgentProfileMetrics, b: LiveAgentProfileMetrics): boolean {
+  return sameContextUsage(a.contextUsage, b.contextUsage) && sameFastMode(a.fastMode, b.fastMode);
+}
+
+export function selectDisplayProfileMetrics(
+  display: AgentDisplaySnapshot | undefined,
+): LiveAgentProfileMetrics {
+  return {
+    contextUsage: display?.contextUsage ?? null,
+    fastMode: display?.fastMode ?? null,
+  };
+}
+
+export function useLiveAgentProfileMetrics(
+  agentId: string,
+  fallbackDisplay?: AgentDisplaySnapshot,
+): LiveAgentProfileMetrics {
+  const liveStore = useContext(LiveAgentStoreContext);
+  return useSelector(
+    liveStore,
+    (agents) =>
+      selectDisplayProfileMetrics(selectLiveAgentDisplay(agents, agentId) ?? fallbackDisplay),
+    { compare: sameProfileMetrics },
+  );
 }

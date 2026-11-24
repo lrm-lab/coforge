@@ -151,3 +151,37 @@ test("the faces stop at three, typing first, while the count covers everyone", (
 test("nobody typing or working leaves nothing to say", () => {
   expect(agentsLineSummary([], [])).toBeUndefined();
 });
+
+test("replyingNames caches Intl.ListFormat instances by resolved locale", () => {
+  const originalDescriptor = Object.getOwnPropertyDescriptor(Intl, "ListFormat")!;
+  const OriginalListFormat = Intl.ListFormat;
+  let constructed = 0;
+  function SpyListFormat(
+    this: Intl.ListFormat,
+    locales?: Intl.LocalesArgument,
+    options?: Intl.ListFormatOptions,
+  ) {
+    constructed += 1;
+    return new OriginalListFormat(locales, options);
+  }
+  Object.defineProperty(Intl, "ListFormat", {
+    value: SpyListFormat,
+    configurable: true,
+    writable: true,
+  });
+  try {
+    expect(replyingNames(["Atlas", "Ben"], "fr-FR")).toEqual({
+      kind: "list",
+      text: "Atlas et Ben",
+      plural: true,
+    });
+    expect(replyingNames(["Atlas", "Ben", "Cam"], "fr-FR")).toEqual({
+      kind: "list",
+      text: "Atlas, Ben et Cam",
+      plural: true,
+    });
+    expect(constructed).toBe(1);
+  } finally {
+    Object.defineProperty(Intl, "ListFormat", originalDescriptor);
+  }
+});

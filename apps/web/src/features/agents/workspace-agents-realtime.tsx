@@ -49,13 +49,15 @@ import { createReplyIntentStore } from "./reply-intents";
 import { ReplyIntentStoreProvider } from "./reply-intents-context";
 import { useUserChannelReplyIntents } from "./reply-intents-realtime";
 
-// The display-resolution hooks and the two stores they read live in `agent-status-floor`;
-// re-exported here so callers keep one import site for Agent state.
 export {
   resolveAgentDisplay,
   selectExtraWatchId,
   selectLiveAgentDisplay,
+  useHasLiveAgent,
   useLiveAgentDisplay,
+  useLiveAgentIdentity,
+  useLiveAgentOnline,
+  useLiveAgentProfileMetrics,
   useVisibleAgentDisplay,
 } from "./agent-status-floor";
 

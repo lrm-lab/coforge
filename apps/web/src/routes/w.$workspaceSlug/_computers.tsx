@@ -38,14 +38,17 @@ import { computerLabel } from "#src/features/computers/computer-identity";
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
 export const Route = createFileRoute("/w/$workspaceSlug/_computers")({
-  loader: async ({ context }) => {
-    await ensureCloudComputer();
-    const [computers, preferences, installOrigin, desktopOrigin] = await Promise.all([
-      listComputers(),
-      getUserPreferences(),
+  loader: async ({ context, parentMatchPromise }) => {
+    const [computers, parentMatch, installOrigin, desktopOrigin] = await Promise.all([
+      ensureCloudComputer().then(() => listComputers()),
+      parentMatchPromise,
       getInstallOrigin(),
       getCloudDesktopOrigin(),
     ]);
+    const timeZone =
+      parentMatch.loaderData !== undefined
+        ? parentMatch.loaderData.timeZone
+        : (await getUserPreferences()).timeZone;
     for (const computer of computers) {
       const activeId =
         computer.upgrade && upgradeRunning(computer.upgrade)
@@ -69,7 +72,7 @@ export const Route = createFileRoute("/w/$workspaceSlug/_computers")({
     }
     return {
       computers,
-      timeZone: preferences.timeZone,
+      timeZone,
       installOrigin,
       desktopOrigin,
     };

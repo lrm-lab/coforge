@@ -43,11 +43,17 @@ export type ReplyingNames =
   | { kind: "list"; text: string; plural: boolean }
   | { kind: "overflow"; first: string; second: string; rest: number; total: number };
 
-/**
- * The names as a list for up to three Agents, as Raft writes it: "Atlas, Ben and Cam" (no serial
- * comma) and "Atlas、Ben 和 Cam". More than three name the first two and count the others; how
- * that reads is the message's ("Atlas, Ben and 2 other agents", "Atlas、Ben 等 4 个 Agent").
- */
+const listFormats = new Map<string, Intl.ListFormat>();
+
+function conjunctionFormat(locale: string): Intl.ListFormat {
+  const tag = locale === "en" ? "en-GB" : locale;
+  const cached = listFormats.get(tag);
+  if (cached) return cached;
+  const created = new Intl.ListFormat(tag, { type: "conjunction" });
+  listFormats.set(tag, created);
+  return created;
+}
+
 export function replyingNames(names: readonly string[], locale: string): ReplyingNames {
   if (names.length > MAX_NAMES_SPELLED)
     return {
@@ -61,10 +67,7 @@ export function replyingNames(names: readonly string[], locale: string): Replyin
     kind: "list",
     text: locale.startsWith("zh")
       ? chineseNameList(names)
-      : // en-GB lists without the serial comma; en-US would add it.
-        new Intl.ListFormat(locale === "en" ? "en-GB" : locale, { type: "conjunction" }).format(
-          names,
-        ),
+      : conjunctionFormat(locale).format(names),
     plural: names.length > 1,
   };
 }

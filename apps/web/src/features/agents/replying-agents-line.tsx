@@ -41,7 +41,7 @@ import {
   useCurrentWorkspaceId,
   useLiveAgent,
   useLiveWorkspaceAgents,
-  useVisibleLiveAgents,
+  useVisibleAgentDirectory,
 } from "./workspace-agents-realtime";
 import "./replying-agents-line.css";
 
@@ -169,7 +169,7 @@ function AgentFaces({ agents }: { agents: readonly ReplyingAgent[] }) {
 }
 
 function ThreadReplyingAgents({ replyingIds }: { replyingIds: string }) {
-  const agents = useVisibleLiveAgents();
+  const agents = useVisibleAgentDirectory();
   const replying = useMemo(
     () => replyingAgentsAmong(agents, idsOf(replyingIds)),
     [agents, replyingIds],
@@ -454,7 +454,7 @@ function ComposerAgentsPill({
   leaving: boolean;
   onLeft: () => void;
 }) {
-  const agents = useVisibleLiveAgents();
+  const agents = useVisibleAgentDirectory();
   const typing = useMemo(() => replyingAgentsAmong(agents, idsOf(typingIds)), [agents, typingIds]);
   const working = useMemo(
     () => replyingAgentsAmong(agents, idsOf(workingIds)),

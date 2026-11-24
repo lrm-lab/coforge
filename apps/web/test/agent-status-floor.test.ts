@@ -4,8 +4,14 @@ import { parseAgentDisplaySnapshot, type AgentDisplaySnapshot } from "@lrm/cofor
 
 const { agentStatusOnlySnapshot } = await import("#src/features/agents/agent-status-channel");
 const { applyAgentDisplaySnapshot } = await import("#src/features/agents/agent-status-realtime");
-const { dropStatusOnlyDisplay, mergeStatusOnlyDisplaySnapshot } =
-  await import("#src/features/agents/agent-status-floor");
+const {
+  dropStatusOnlyDisplay,
+  mergeStatusOnlyDisplaySnapshot,
+  selectDisplayOnline,
+  selectDisplayProfileMetrics,
+  selectHasLiveRosterAgent,
+  selectLiveAgentIdentity,
+} = await import("#src/features/agents/agent-status-floor");
 
 function display(overrides: Partial<AgentDisplaySnapshot> = {}): AgentDisplaySnapshot {
   return {
@@ -127,7 +133,41 @@ test("status floors keep the newest revision per Agent and a full display path i
     },
   ];
   expect(applyAgentDisplaySnapshot(tracked, floor(3), "workspace-1")).toBe(tracked);
-  // A full display drops the floor it supersedes.
   expect(dropStatusOnlyDisplay(newer, "agent-1").has("agent-1")).toBe(false);
   expect(dropStatusOnlyDisplay(newer, "nobody")).toBe(newer);
+});
+
+test("live store selectors isolate roster presence, static identity, online state, and profile metrics", () => {
+  const agents = [
+    { id: "a1", displayName: "Atlas", avatarUrl: null, mascot: "blue" as const },
+    { id: "a2", displayName: "Extra", isExtra: true as const },
+  ];
+  expect(selectHasLiveRosterAgent(agents, "a1")).toBe(true);
+  expect(selectHasLiveRosterAgent(agents, "a2")).toBe(false);
+  expect(selectHasLiveRosterAgent(agents, "missing")).toBe(false);
+  expect(selectHasLiveRosterAgent(agents, null)).toBe(false);
+
+  expect(selectLiveAgentIdentity(agents, "a1")).toEqual({
+    displayName: "Atlas",
+    avatarUrl: null,
+    mascot: "blue",
+  });
+  expect(selectLiveAgentIdentity(agents, "missing")).toBeUndefined();
+
+  expect(selectDisplayOnline(undefined, false)).toBeUndefined();
+  expect(selectDisplayOnline(undefined, true)).toBe(false);
+  expect(selectDisplayOnline(display({ activityKind: "offline" }), false)).toBe(false);
+  expect(selectDisplayOnline(display({ activityKind: "working" }), true)).toBe(true);
+
+  const metrics = selectDisplayProfileMetrics(
+    display({
+      contextUsage: { usedTokens: 100, windowTokens: 1000, observedAtMs: 5 },
+      fastMode: { requested: true, observed: "on", observedAtMs: 6 },
+    }),
+  );
+  expect(metrics).toEqual({
+    contextUsage: { usedTokens: 100, windowTokens: 1000, observedAtMs: 5 },
+    fastMode: { requested: true, observed: "on", observedAtMs: 6 },
+  });
+  expect(selectDisplayProfileMetrics(undefined)).toEqual({ contextUsage: null, fastMode: null });
 });

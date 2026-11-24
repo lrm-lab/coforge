@@ -6,7 +6,7 @@ import { PageLoadError } from "#src/features/errors/page-load-error";
 import { AgentsContent } from "#src/features/agents/agents-content";
 import { AgentsPending } from "#src/features/agents/agents-pending";
 import { ensureWeeklyReportAssistantMember } from "#src/features/agents/agents.functions";
-import { useLiveAgents } from "#src/features/agents/workspace-agents-realtime";
+import { useHasLiveAgent } from "#src/features/agents/workspace-agents-realtime";
 import { loadMemberDirectorySummary } from "#src/features/workspaces/workspaces.functions";
 import {
   memberAgentsQuery,
@@ -32,28 +32,41 @@ export const Route = createFileRoute("/w/$workspaceSlug/members")({
     memberType: search.memberType,
     owner: search.owner,
   }),
-  loader: async ({ context, deps }) => {
-    const assistant = await ensureWeeklyReportAssistantMember();
-    const summary = await loadMemberDirectorySummary();
-    if (deps.memberType === "all") {
-      await Promise.all([
-        context.queryClient.ensureInfiniteQueryData(memberPeopleQuery(summary.workspaceId, "")),
-        context.queryClient.ensureInfiniteQueryData(
-          memberAgentsQuery(summary.workspaceId, {
-            owner: "all",
+  loader: async ({ context, deps, parentMatchPromise }) => {
+    const ensurePage = (workspaceId: string) => {
+      if (deps.memberType === "all") {
+        return Promise.all([
+          context.queryClient.ensureInfiniteQueryData(memberPeopleQuery(workspaceId, "")),
+          context.queryClient.ensureInfiniteQueryData(
+            memberAgentsQuery(workspaceId, {
+              owner: "all",
+              query: "",
+            }),
+          ),
+        ]);
+      }
+      if (deps.memberType === "agent") {
+        return context.queryClient.ensureInfiniteQueryData(
+          memberAgentsQuery(workspaceId, {
+            owner: deps.owner,
             query: "",
           }),
-        ),
-      ]);
-    } else if (deps.memberType === "agent") {
-      await context.queryClient.ensureInfiniteQueryData(
-        memberAgentsQuery(summary.workspaceId, {
-          owner: deps.owner,
-          query: "",
-        }),
-      );
-    } else {
-      await context.queryClient.ensureInfiniteQueryData(memberPeopleQuery(summary.workspaceId, ""));
+        );
+      }
+      return context.queryClient.ensureInfiniteQueryData(memberPeopleQuery(workspaceId, ""));
+    };
+    const [assistant, summary, prefetchedWorkspaceId] = await Promise.all([
+      ensureWeeklyReportAssistantMember(),
+      loadMemberDirectorySummary(),
+      parentMatchPromise.then(async (parent) => {
+        const workspaceId = parent.loaderData?.currentWorkspace?.id;
+        if (!workspaceId) return undefined;
+        await ensurePage(workspaceId);
+        return workspaceId;
+      }),
+    ]);
+    if (prefetchedWorkspaceId !== summary.workspaceId) {
+      await ensurePage(summary.workspaceId);
     }
     return { summary, weeklyReportAssistantAgentId: assistant.agentId };
   },
@@ -67,13 +80,12 @@ function AgentsPage() {
   const { memberType, owner, agentView, profile, agentTab, setup } = Route.useSearch();
   const navigate = Route.useNavigate();
   const router = useRouter();
-  const visibleAgents = useLiveAgents();
+  const hasWeeklyReportAssistant = useHasLiveAgent(weeklyReportAssistantAgentId);
 
   useEffect(() => {
-    if (!weeklyReportAssistantAgentId) return;
-    if (visibleAgents.some((agent) => agent.id === weeklyReportAssistantAgentId)) return;
+    if (!weeklyReportAssistantAgentId || hasWeeklyReportAssistant) return;
     void router.invalidate({ sync: true });
-  }, [weeklyReportAssistantAgentId, visibleAgents, router]);
+  }, [weeklyReportAssistantAgentId, hasWeeklyReportAssistant, router]);
 
   return (
     <AgentsContent
