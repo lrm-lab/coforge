@@ -64,6 +64,7 @@ export type ComputerDetailView = ComputerIdentity & {
     /** `undefined` for an Agent whose stored config the server could not read; the roster
      * keeps its row and hides its runtime column value. */
     provider?: RuntimeProvider;
+    runtimeAuthSource?: "shared" | "own" | "unknown";
     runtimeConfig?: { model?: string; modelProvider?: string };
     runtimeConfigInvalid?: boolean;
     display?: AgentDisplaySnapshot;

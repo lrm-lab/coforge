@@ -80,6 +80,7 @@ export type ComputerOverviewItem = ComputerIdentity &
       displayName: string;
       avatarUrl: string | null;
       provider?: RuntimeProvider;
+      runtimeAuthSource?: "shared" | "own" | "unknown";
       display?: AgentDisplaySnapshot;
     }[];
   };
@@ -154,21 +155,37 @@ function snapshotPrimaryUsedPercent(snapshot: UsageSnapshot): {
   return null;
 }
 
+export function computerUsesSharedRuntimeAuth(
+  computer: Pick<ComputerOverviewItem, "agents">,
+  provider: RuntimeProvider,
+): boolean {
+  return computer.agents.some(
+    (agent) =>
+      agent.provider === provider &&
+      (agent.runtimeAuthSource === undefined || agent.runtimeAuthSource === "shared"),
+  );
+}
+
 export function computerRuntimeMeter(
-  computer: Pick<ComputerOverviewItem, "runtimeAuth" | "runtimeUsages">,
+  computer: Pick<ComputerOverviewItem, "runtimeAuth" | "runtimeUsages" | "agents">,
   provider: RuntimeProvider,
 ): RuntimeMeterView {
+  const usedBySharedAuth = computerUsesSharedRuntimeAuth(computer, provider);
   const rawUsage = computer.runtimeUsages?.[provider];
   const rawAccount = isSignableRuntimeProvider(provider)
     ? computer.runtimeAuth?.[provider]?.state
     : undefined;
   const account = shownAccount(rawAccount, rawUsage);
-  if (accountProblem(account)) return { kind: "attention" };
+  if (accountProblem(account)) {
+    return usedBySharedAuth ? { kind: "attention" } : { kind: "unmeasured" };
+  }
   const usage = usageReadForAuth(rawUsage, account);
   const result = usage?.result;
   if (!result) return { kind: "unmeasured" };
   const status = usageStatus(result);
-  if (result.status === "reauth") return { kind: "attention" };
+  if (result.status === "reauth") {
+    return usedBySharedAuth ? { kind: "attention" } : { kind: "unmeasured" };
+  }
   if (result.snapshot) {
     const primary = snapshotPrimaryUsedPercent(result.snapshot);
     if (primary) {
@@ -183,13 +200,16 @@ export function computerRuntimeMeter(
       };
     }
   }
-  if (status && !status.ok) return { kind: "attention" };
+  if (status && !status.ok) {
+    return usedBySharedAuth ? { kind: "attention" } : { kind: "unmeasured" };
+  }
   return { kind: "unmeasured" };
 }
 
 export function computerHasRuntimeAttention(computer: ComputerOverviewItem): boolean {
   return computer.runtimes.some((runtime) => {
     if (!isMeteredRuntime(runtime)) return false;
+    if (!computerUsesSharedRuntimeAuth(computer, runtime.provider)) return false;
     const meter = computerRuntimeMeter(computer, runtime.provider);
     return meter.kind === "attention" || (meter.kind === "meter" && meter.level === "empty");
   });

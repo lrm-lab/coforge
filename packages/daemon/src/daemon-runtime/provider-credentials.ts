@@ -1,4 +1,5 @@
 import { join, resolve } from "node:path";
+import { hasOwnRuntimeLogin } from "@lrm/coforge-anvil";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 
 /** Where a runtime's login is kept and what moves it elsewhere: the one table the credential
@@ -78,10 +79,7 @@ const value = (env: CredentialEnv, name: string): string | undefined =>
 /** Whether an environment gives the runtime a login of its own: another home directory, another
  * login directory, or a key in place of the login. */
 export function hasOwnLogin(provider: string, env: CredentialEnv): boolean {
-  const known = PROVIDER_CREDENTIALS[provider];
-  return ["HOME", ...(known ? [known.dirEnv] : []), ...(known?.keyEnv ? [known.keyEnv] : [])].some(
-    (name) => value(env, name),
-  );
+  return hasOwnRuntimeLogin(provider, env);
 }
 
 const homeOf = (home: CredentialHome): string =>

@@ -10,6 +10,20 @@ import {
   type RuntimeAuthStatus,
 } from "./contract";
 
+const OWN_LOGIN_ENV_VARS: Readonly<Record<string, readonly string[]>> = {
+  "claude-code": ["CLAUDE_CONFIG_DIR", "ANTHROPIC_AUTH_TOKEN"],
+  codex: ["CODEX_HOME", "OPENAI_API_KEY"],
+  grok: ["GROK_HOME"],
+};
+
+export function hasOwnRuntimeLogin(
+  provider: string,
+  env: Readonly<Record<string, string | undefined>>,
+): boolean {
+  const vars = OWN_LOGIN_ENV_VARS[provider];
+  return ["HOME", ...(vars ?? [])].some((name) => Boolean(env[name]?.trim()));
+}
+
 const STATES: readonly RuntimeAuthStatus["state"][] = [
   "logged_in",
   "logged_out",

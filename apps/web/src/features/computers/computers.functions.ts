@@ -44,6 +44,10 @@ import { PrismaAgentControlStore } from "#src/server/db/repositories/agent-contr
 import { getAgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.server";
 import { getComputerUpgradeStore } from "#src/server/computers/computer-upgrade-store.server";
 import { getComputerReleaseState } from "#src/server/computers/computer-release-state-composition.server";
+import {
+  agentRuntimeAuthSource,
+  lazyRuntimeCredentialKeyReader,
+} from "#src/server/computers/agent-shared-runtime-auth.server";
 import { runtimeAuthView } from "#src/server/computers/computer-runtime-auth.server";
 import { runUpgradeComputerAction } from "#src/server/computers/upgrade-computer-action.server";
 import { readAgentWorkspaceScan } from "#src/server/computers/computer-workspace-scan.server";
@@ -199,9 +203,31 @@ export const listComputers = createServerFn({ method: "GET" })
     const agentDisplayById = new Map(
       agentScopes.map((scope, index) => [scope.agentId, agentDisplays[index]] as const),
     );
+    const readCredentialKey = lazyRuntimeCredentialKeyReader();
     return Promise.all(
       connections.map(async ({ id: bindingId, computer, createdAt }, index) => {
         const computerRuntimes = runtimes.filter((runtime) => runtime.computerId === computer.id);
+        const agents = await Promise.all(
+          computer.agents.map(async (agent) => {
+            const config = readableRuntimeConfig(agent.runtimeConfig, agent.id);
+            const runtimeAuthSource = await agentRuntimeAuthSource(
+              agent.id,
+              config,
+              readCredentialKey,
+            );
+            return {
+              id: agent.id,
+              name: agent.name,
+              displayName: agent.displayName,
+              avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
+              provider: config?.runtime,
+              runtimeAuthSource,
+              runtimeConfig: config ? publicAgentRuntimeConfig(config) : undefined,
+              runtimeConfigInvalid: agent.runtimeConfig != null && !config,
+              display: agentDisplayById.get(agent.id),
+            };
+          }),
+        );
         return {
           id: computer.id,
           name: computer.name,
@@ -234,19 +260,7 @@ export const listComputers = createServerFn({ method: "GET" })
           connectRefusal: refusals[index] ?? null,
           releaseChannel: releaseChannels[index],
           runtimeDetecting: detecting[index] ?? false,
-          agents: computer.agents.map((agent) => {
-            const config = readableRuntimeConfig(agent.runtimeConfig, agent.id);
-            return {
-              id: agent.id,
-              name: agent.name,
-              displayName: agent.displayName,
-              avatarUrl: agentAvatarUrl(agent.id, agent.avatarMascot),
-              provider: config?.runtime,
-              runtimeConfig: config ? publicAgentRuntimeConfig(config) : undefined,
-              runtimeConfigInvalid: agent.runtimeConfig != null && !config,
-              display: agentDisplayById.get(agent.id),
-            };
-          }),
+          agents,
           runtimes: computerRuntimes.map(({ ownerId: _ownerId, ...runtime }) => runtime),
         };
       }),
