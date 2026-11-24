@@ -76,7 +76,16 @@ for await (const line of console) {
           entries: [],
           runningPromptId: "background-early",
         });
-        terminal("background-early");
+        note("_x.ai/session_notification", {
+          sessionId,
+          _meta: { eventId: "evt-background-early" },
+          update: {
+            sessionUpdate: "turn_completed",
+            prompt_id: "background-early",
+            stop_reason: "end_turn",
+            usage: { input_tokens: 100, output_tokens: 20 },
+          },
+        });
       }
       reply({});
       break;

@@ -18,8 +18,6 @@ const COMPLETED_STOP_REASONS = new Set<unknown>([
   "refusal",
 ]);
 
-const SEEN_EVENT_ID_LIMIT = 256;
-
 export async function createGrokSession(
   options: AgentSessionOptions,
   command: readonly string[],
@@ -52,7 +50,6 @@ function grokSessionProfile(
     argv.push("--model", options.runtime.model);
   if (options.runtime?.reasoning) argv.push("--reasoning-effort", options.runtime.reasoning);
   argv.push("stdio");
-  const seenTurnEvents = new Set<string>();
   return {
     label: "Grok",
     openTransport: (sink) =>
@@ -104,7 +101,7 @@ function grokSessionProfile(
       );
     },
     promptNotificationTokenUsage: (method, params, promptId) =>
-      grokPromptNotificationTokenUsage(method, params, promptId, seenTurnEvents),
+      grokPromptNotificationTokenUsage(method, params, promptId),
     stopStatus: (reason) =>
       COMPLETED_STOP_REASONS.has(reason)
         ? { status: "completed" }
@@ -120,8 +117,7 @@ function grokSessionProfile(
       accepted: (response) => ({
         accepted: asRecord(asRecord(response)?.result)?.status === "queued",
       }),
-      nativeTurn: (method, params, ownPromptId) =>
-        grokNativeTurn(method, params, ownPromptId, seenTurnEvents),
+      nativeTurn: (method, params, ownPromptId) => grokNativeTurn(method, params, ownPromptId),
     },
   };
 }
@@ -218,31 +214,6 @@ function isGrokReplay(
   );
 }
 
-function grokNotificationEventId(
-  params: Readonly<Record<string, unknown>>,
-  update: Readonly<Record<string, unknown>>,
-): string | undefined {
-  const paramsMeta = asRecord(params._meta);
-  const updateMeta = asRecord(update._meta);
-  return (
-    nonEmptyString(paramsMeta?.eventId) ??
-    nonEmptyString(paramsMeta?.event_id) ??
-    nonEmptyString(updateMeta?.eventId) ??
-    nonEmptyString(updateMeta?.event_id) ??
-    nonEmptyString(params.eventId) ??
-    nonEmptyString(params.event_id) ??
-    nonEmptyString(update.eventId) ??
-    nonEmptyString(update.event_id)
-  );
-}
-
-function rememberSeenEventId(seen: Set<string>, eventId: string): boolean {
-  if (seen.has(eventId)) return false;
-  seen.add(eventId);
-  if (seen.size > SEEN_EVENT_ID_LIMIT) seen.delete(seen.values().next().value!);
-  return true;
-}
-
 function grokTurnCompletedTokenUsage(
   params: Readonly<Record<string, unknown>>,
   update: Readonly<Record<string, unknown>>,
@@ -254,7 +225,6 @@ export function grokPromptNotificationTokenUsage(
   method: string,
   params: Readonly<Record<string, unknown>>,
   ownPromptId: string,
-  seenEventIds?: Set<string>,
 ): AgentTurnTokenUsage | undefined {
   if (method !== "_x.ai/session_notification") return undefined;
   const update = asRecord(params.update);
@@ -262,8 +232,6 @@ export function grokPromptNotificationTokenUsage(
   if (isGrokReplay(params, update)) return undefined;
   const promptId = nonEmptyString(update.prompt_id);
   if (!promptId || promptId !== ownPromptId) return undefined;
-  const eventId = grokNotificationEventId(params, update);
-  if (eventId && seenEventIds && !rememberSeenEventId(seenEventIds, eventId)) return undefined;
   return grokTurnCompletedTokenUsage(params, update);
 }
 
@@ -271,7 +239,6 @@ export function grokNativeTurn(
   method: string,
   params: Readonly<Record<string, unknown>>,
   ownPromptId: string | undefined,
-  seenEventIds?: Set<string>,
 ): AcpNativeTurn | undefined {
   if (method === "_x.ai/queue/changed") {
     const running = nonEmptyString(params.runningPromptId);
@@ -283,8 +250,6 @@ export function grokNativeTurn(
   if (isGrokReplay(params, update)) return undefined;
   const promptId = nonEmptyString(update.prompt_id);
   if (!promptId || promptId === ownPromptId) return undefined;
-  const eventId = grokNotificationEventId(params, update);
-  if (eventId && seenEventIds && !rememberSeenEventId(seenEventIds, eventId)) return undefined;
   const reason = update.stop_reason;
   const detail = nonEmptyString(update.agent_result);
   const tokenUsage = grokTurnCompletedTokenUsage(params, update);

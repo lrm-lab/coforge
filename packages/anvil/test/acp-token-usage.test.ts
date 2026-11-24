@@ -189,14 +189,12 @@ test("AcpSession emits TOKEN_USAGE from steered session/prompt responses before 
 });
 
 test("AcpSession emits TOKEN_USAGE from native Grok turns with eventId dedup and replay skip", async () => {
-  const seenEventIds = new Set<string>();
   const harness = await openTestAcpSession({
     promptMeta: (turnId) => ({ promptId: turnId }),
     steer: {
       request: (text, sessionId) => ({ method: "_x.ai/interject", params: { sessionId, text } }),
       accepted: () => ({ accepted: true }),
-      nativeTurn: (method, params, ownPromptId) =>
-        grokNativeTurn(method, params, ownPromptId, seenEventIds),
+      nativeTurn: (method, params, ownPromptId) => grokNativeTurn(method, params, ownPromptId),
     },
   });
   try {
@@ -344,11 +342,10 @@ test("AcpSession captures usage carried on RequestError data without losing fail
 });
 
 test("AcpSession uses Grok turn_completed usage on failed prompt and avoids double-counting when prompt reply also has usage", async () => {
-  const seenEventIds = new Set<string>();
   const harness = await openTestAcpSession({
     promptMeta: (turnId) => ({ promptId: turnId }),
     promptNotificationTokenUsage: (method, params, promptId) =>
-      grokPromptNotificationTokenUsage(method, params, promptId, seenEventIds),
+      grokPromptNotificationTokenUsage(method, params, promptId),
   });
   try {
     const failedAdmission = harness.session.notify("fail-with-notification-usage");
