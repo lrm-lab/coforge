@@ -127,9 +127,9 @@ EOF
   chmod 600 "${stage}/installation.json"
   rm -rf "${dest}"
   mv "${stage}" "${dest}"
-  # mktemp makes its directory 0700, and mv keeps that. An agent uid only has to traverse this
-  # directory to exec the copy inside it, never to list it, so it is created traversable: 0711.
-  chmod 711 "${dest}"
+  # mktemp makes its directory 0700, and mv keeps that. An agent uid has to traverse this
+  # directory to exec the copy inside it, so the tree stays unreachable until the mode is fixed.
+  chmod 755 "${dest}"
   ln -sfn "versions/${version}" "${INSTALL}/active"
   cat > "${INSTALL}/active.json" <<EOF
 {"schema_version":1,"current":"${version}","previous":${previous_json}}
@@ -175,6 +175,15 @@ promote_image_if_newer() {
   log "promoted image ${image_version} over active ${current}"
 }
 
+# A version seeded by an image built before the staging mode was fixed still carries 0700 and
+# hides its copy from every uid but root. Repair it here, where the path is about to be handed out.
+make_reachable() {
+  local directory="$1"
+  if [[ -d "${directory}" ]]; then
+    chmod 755 "${directory}" 2>/dev/null || true
+  fi
+}
+
 activated="${INSTALL}/active/coforge-computer"
 if [[ -d "${VOLUME}" && -x "${IMAGE_BIN}" && -f "${VERSION_FILE}" ]]; then
   version="$(tr -d '[:space:]' < "${VERSION_FILE}")"
@@ -190,6 +199,7 @@ if [[ -d "${VOLUME}" && -x "${IMAGE_BIN}" && -f "${VERSION_FILE}" ]]; then
 fi
 
 if [[ -x "${activated}" && -f "${INSTALL}/active.json" ]]; then
+  make_reachable "$(dirname "${activated}")"
   printf '%s\n' "${activated}"
   exit 0
 fi
