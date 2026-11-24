@@ -79,13 +79,17 @@ export function AgentActivityTimeline({
   // The row at the top of the view while the reader is scrolled up, and how far down it sits.
   const reading = useRef<ReadingRow>(undefined);
   const empty = rows.length === 0;
+  function holdReadingRow(container: HTMLElement) {
+    if (following.current) return;
+    if (reading.current?.scrollTop === container.scrollTop)
+      restoreReadingRow(container, reading.current);
+    reading.current = readingRowOf(container, listRef.current);
+  }
   useLayoutEffect(() => {
     const container = scrollRef.current;
     if (!container) return;
-    // A list that (re)appears opens on its newest row, whatever an earlier one was scrolled to.
     following.current = true;
     bottomPin.pin(container, "instant");
-    // Judged from where the reader stood before this resize: the callback runs after layout.
     const observer = new ResizeObserver(() => {
       const wasAtBottom = bottomPin.beforeResize(container);
       if (following.current && wasAtBottom) bottomPin.pin(container, "instant");
@@ -95,16 +99,6 @@ export function AgentActivityTimeline({
     if (listRef.current) observer.observe(listRef.current);
     return () => observer.disconnect();
   }, [bottomPin, empty]);
-  // Rows come and go above the reader too: the feed keeps only its newest frames, so new ones push
-  // the oldest out, and a statement's rows merge as it streams. Hold the row the reader is looking
-  // at where it was, rather than a distance from either end; Safari has no native scroll anchoring.
-  function holdReadingRow(container: HTMLElement) {
-    if (following.current) return;
-    // A scroll the pane has not handled yet is the reader's: theirs is the row to hold now.
-    if (reading.current?.scrollTop === container.scrollTop)
-      restoreReadingRow(container, reading.current);
-    reading.current = readingRowOf(container, listRef.current);
-  }
   useLayoutEffect(() => {
     if (scrollRef.current) holdReadingRow(scrollRef.current);
   }, [rows]);

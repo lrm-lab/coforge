@@ -133,18 +133,6 @@ export function OnboardingWizard({
   if (finished || !hydrated) return null;
   const { assistant } = initial;
 
-  const skip = (
-    <Button
-      type="button"
-      color="link-gray"
-      size="sm"
-      isDisabled={finishing}
-      onPress={() => void finish(undefined)}
-    >
-      {m.onboarding_wizard_skip()}
-    </Button>
-  );
-
   async function finish(chosen: PersonRole | undefined) {
     await guard(async () => {
       setFinishError(null);
@@ -159,6 +147,18 @@ export function OnboardingWizard({
       }
     });
   }
+
+  const skip = (
+    <Button
+      type="button"
+      color="link-gray"
+      size="sm"
+      isDisabled={finishing}
+      onPress={() => void finish(undefined)}
+    >
+      {m.onboarding_wizard_skip()}
+    </Button>
+  );
 
   async function saveAssistant(picked: AssistantChoice) {
     if (!selected) return;

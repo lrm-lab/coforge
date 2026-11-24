@@ -22,12 +22,14 @@ export function WorkspacePresenceProvider({
   );
 }
 
-export function useMemberOnline(userId: string): boolean | undefined {
+const NOOP_SUBSCRIBE = () => () => {};
+const SERVER_SNAPSHOT = () => undefined;
+
+export function useMemberOnline(userId?: string): boolean | undefined {
   const presence = useContext(WorkspacePresenceContext);
-  if (!presence) return undefined;
   return useSyncExternalStore(
-    presence.subscribe,
-    () => presence.isPresent(userId),
-    () => undefined,
+    presence && userId ? presence.subscribe : NOOP_SUBSCRIBE,
+    () => (presence && userId ? presence.isPresent(userId) : undefined),
+    SERVER_SNAPSHOT,
   );
 }

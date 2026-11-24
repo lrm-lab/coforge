@@ -130,7 +130,7 @@ function MemberProfileCard({
   userId?: string;
   name: string;
 }) {
-  const online = userId ? useMemberOnline(userId) : undefined;
+  const online = useMemberOnline(userId);
 
   const roleText =
     serverRole || channelRole

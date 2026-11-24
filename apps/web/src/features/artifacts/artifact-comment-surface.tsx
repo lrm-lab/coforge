@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { setCssHighlight } from "#src/lib/css-highlight";
@@ -12,8 +12,8 @@ import {
 import { useArtifactCommenting, useCommentRequests, useShownThreads } from "./artifact-commenting";
 import { useCommentDrafts } from "./artifact-comment-drafts-context";
 import { DraftAffordance } from "./artifact-draft-affordance";
-import { linesAdapter, type LineIndex } from "./artifact-line-ranges";
-import { textAdapter, type TextIndex } from "./artifact-text-ranges";
+import { linesAdapter } from "./artifact-line-ranges";
+import { textAdapter } from "./artifact-text-ranges";
 import { useAnchorDraft } from "./use-anchor-draft";
 import { useFlash } from "./use-flash";
 import { useSurfaceIndex } from "./use-surface-index";
@@ -32,34 +32,58 @@ export function ArtifactCommentSurface({
   contentClassName?: string;
   children: ReactNode;
 }) {
-  const shared = { path, contentClassName, children };
   return kind === "text" ? (
-    <Surface<TextIndex> {...shared} adapter={textAdapter} useOffer={useTextOffer} alwaysOffer />
+    <TextSurface path={path} contentClassName={contentClassName}>
+      {children}
+    </TextSurface>
   ) : (
-    <Surface<LineIndex>
-      {...shared}
-      adapter={linesAdapter}
-      useOffer={useLinesOffer}
-      alwaysOffer={false}
-    />
+    <LinesSurface path={path} contentClassName={contentClassName}>
+      {children}
+    </LinesSurface>
   );
 }
 
-function Surface<Index>({
+function TextSurface({
   path,
-  adapter,
-  useOffer,
-  alwaysOffer,
   contentClassName,
   children,
 }: {
   path: string;
-  adapter: Pick<SurfaceAdapter<Index, never>, "build" | "locate">;
-  useOffer: (input: OfferInput<Index>) => Offer;
-  alwaysOffer: boolean;
   contentClassName?: string;
   children: ReactNode;
 }) {
+  const base = useSurfaceBase(path, textAdapter, true);
+  const offers = useTextOffer(base.offerInput);
+  return (
+    <SurfaceView base={base} offers={offers} contentClassName={contentClassName}>
+      {children}
+    </SurfaceView>
+  );
+}
+
+function LinesSurface({
+  path,
+  contentClassName,
+  children,
+}: {
+  path: string;
+  contentClassName?: string;
+  children: ReactNode;
+}) {
+  const base = useSurfaceBase(path, linesAdapter, false);
+  const offers = useLinesOffer(base.offerInput);
+  return (
+    <SurfaceView base={base} offers={offers} contentClassName={contentClassName}>
+      {children}
+    </SurfaceView>
+  );
+}
+
+function useSurfaceBase<Index>(
+  path: string,
+  adapter: Pick<SurfaceAdapter<Index, never>, "build" | "locate">,
+  alwaysOffer: boolean,
+) {
   const { version, commenting, panelOpen, publishPlaces } = useArtifactCommenting();
   const { reveal, consumeReveal } = useCommentRequests();
   const anchored = useShownThreads();
@@ -102,10 +126,6 @@ function Surface<Index>({
   }, [publishPlaces, path, places]);
   useEffect(() => () => publishPlaces(path, null), [publishPlaces, path]);
 
-  const offers = useOffer({ get, revision, content, key, composing: composingRef });
-  const draft = useAnchorDraft({ key, frame, ...offers });
-  composingRef.current = draft.composing !== null;
-
   const focus = useCallback(
     (location: AnchorLocation) => {
       location.element.scrollIntoView({
@@ -139,13 +159,41 @@ function Surface<Index>({
     focus(place.location);
   }, [reveal, path, version, get, settled, revision, adapter, consumeReveal, focus]);
 
+  const offerInput: OfferInput<Index> = {
+    get,
+    revision,
+    content,
+    key,
+    composing: composingRef,
+  };
+
+  return { path, frame, content, composingRef, offerActive, key, offerInput };
+}
+
+function SurfaceView<Index>({
+  base,
+  offers,
+  contentClassName,
+  children,
+}: {
+  base: ReturnType<typeof useSurfaceBase<Index>>;
+  offers: Offer;
+  contentClassName?: string;
+  children: ReactNode;
+}) {
+  const draft = useAnchorDraft({ key: base.key, frame: base.frame, ...offers });
+  const isComposing = draft.composing !== null;
+  useLayoutEffect(() => {
+    base.composingRef.current = isComposing;
+  }, [base.composingRef, isComposing]);
+
   return (
     <div className="min-h-0 flex-1 overflow-auto">
-      <div ref={frame} className="relative min-h-full">
-        <div ref={content} className={contentClassName} onClickCapture={offers.onContentClick}>
+      <div ref={base.frame} className="relative min-h-full">
+        <div ref={base.content} className={contentClassName} onClickCapture={offers.onContentClick}>
           {children}
         </div>
-        {offerActive && <DraftAffordance draft={draft} path={path} />}
+        {base.offerActive && <DraftAffordance draft={draft} path={base.path} />}
       </div>
     </div>
   );

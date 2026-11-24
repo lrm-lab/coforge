@@ -193,6 +193,10 @@ export function MessageComposer({
     useComposerAttachments(draftKey, scope?.uploadTo ?? (() => Promise.resolve(conversationId)));
   const [asTask, setAsTask] = useSendAsTask(draftKey);
   const [taskPriority, setTaskPriority] = useLastTaskPriority();
+  function focusComposer() {
+    focusDraftEnd(completion.textareaRef.current);
+  }
+
   const consumedQuoteIdRef = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (!quotedDraft || quotedDraft.id === consumedQuoteIdRef.current) return;
@@ -223,10 +227,6 @@ export function MessageComposer({
 
   function returnFocusToComposer() {
     completion.textareaRef.current?.focus({ preventScroll: true });
-  }
-
-  function focusComposer() {
-    focusDraftEnd(completion.textareaRef.current);
   }
 
   useEffect(() => {

@@ -200,6 +200,14 @@ function SettingsPage() {
     await router.invalidate({ sync: true });
   }
 
+  function applyTheme(nextTheme: Theme) {
+    const dark =
+      nextTheme === "dark" ||
+      (nextTheme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.classList.toggle("dark-mode", dark);
+    syncThemeColor(dark);
+  }
+
   useEffect(() => {
     const storedTheme = localStorage.getItem("coforge-theme");
     const initialTheme =
@@ -229,14 +237,6 @@ function SettingsPage() {
     colorScheme.addEventListener("change", handleChange);
     return () => colorScheme.removeEventListener("change", handleChange);
   }, [theme]);
-
-  function applyTheme(nextTheme: Theme) {
-    const dark =
-      nextTheme === "dark" ||
-      (nextTheme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-    document.documentElement.classList.toggle("dark-mode", dark);
-    syncThemeColor(dark);
-  }
 
   function changeHideEmptySidebarSections(hide: boolean) {
     setHideEmptySidebarSections(hide);
