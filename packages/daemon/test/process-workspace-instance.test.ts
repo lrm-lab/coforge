@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 
 import {
   ProcessWorkspaceInstance,
+  spawnWithGroupFallback,
   writeWorkspaceInstanceRecord,
 } from "#src/supervisor/process-workspace-instance";
 import type { WorkspaceInstanceConfig } from "#src/supervisor/workspace-instance";
@@ -464,4 +465,46 @@ test("a record file that exists but is still empty reads as no record", async ()
   await mkdir(base.stateDirectory, { recursive: true });
   await writeFile(join(base.stateDirectory, "process-instance.json"), "");
   expect(await instance.identity()).toBeNull();
+});
+
+test("a rejected shared group is retried once on the Workspace's own gid", async () => {
+  const attempts: (number | undefined)[] = [];
+  const warnings: { message: string; details: Record<string, unknown> }[] = [];
+  const result = await spawnWithGroupFallback({
+    workspaceId: "workspace-a",
+    uid: 20_101,
+    sharedGid: 20_100,
+    spawn: async (gid) => {
+      attempts.push(gid);
+      if (attempts.length === 1)
+        throw Object.assign(new Error("setgid failed"), { code: "EINVAL" });
+      return { pid: 42 };
+    },
+    warn: (message, details) => warnings.push({ message, details }),
+  });
+  expect(result).toEqual({ pid: 42 });
+  expect(attempts).toEqual([20_100, undefined]);
+  expect(warnings[0]?.details).toEqual({
+    workspaceId: "workspace-a",
+    sharedGid: 20_100,
+    uid: 20_101,
+    code: "EINVAL",
+  });
+});
+
+test("any other spawn failure is not retried, so the cause stays single", async () => {
+  const attempts: (number | undefined)[] = [];
+  await expect(
+    spawnWithGroupFallback({
+      workspaceId: "workspace-a",
+      uid: 20_101,
+      sharedGid: 20_100,
+      spawn: async (gid) => {
+        attempts.push(gid);
+        throw Object.assign(new Error("spawn failed"), { code: "EACCES" });
+      },
+      warn: () => undefined,
+    }),
+  ).rejects.toThrow(/spawn failed/);
+  expect(attempts).toEqual([20_100]);
 });

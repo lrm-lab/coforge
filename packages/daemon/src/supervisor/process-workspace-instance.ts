@@ -11,6 +11,7 @@ import {
   openTraversalForIdentity,
   resolveSpawnIdentity,
   workspaceDirectory,
+  workspaceSharedGid,
   type WorkspaceIdentity,
 } from "./workspace-identity";
 import { CONTAINER_BINDING_ENV_KEYS } from "./container-binding-env";
@@ -114,6 +115,10 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
           })
         : this.config.executablePath;
     if (spawnIdentity && !executable) spawnIdentity = undefined;
+    const sharedGid =
+      spawnIdentity && volumeRoot
+        ? await workspaceSharedGid(this.config.stateRoot, volumeRoot)
+        : undefined;
     if (spawnIdentity && volumeRoot) {
       // The child reads, traverses and writes under these paths; each one it cannot reach shows up
       // as "failed process readiness" instead of a clear permission error.
@@ -162,25 +167,41 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
     // to the uid *before* it starts; creating it here keeps that write a no-op for ownership.
     if (spawnIdentity) await this.#prepareRecord(spawnIdentity.identity);
     if (beforeLaunch) await beforeLaunch();
-    const child = await this.spawnChild({
-      command: [
-        executable ?? this.config.executablePath,
-        "__workspace-daemon",
-        "--socket",
-        reachable(this.config.socketPath),
-        "--state-directory",
-        reachable(this.config.stateDirectory),
-      ],
-      cwd: reachable(this.config.stateDirectory),
-      ...(spawnIdentity ? { identity: spawnIdentity.identity } : {}),
-      env: {
-        ...env,
-        // The child rewrites this record itself once it holds the binding lock, so a Coordinator
-        // that dies between spawn and the write below still leaves a discoverable live instance
-        // for the next Coordinator to adopt instead of spawning a duplicate beside it.
-        COFORGE_WORKSPACE_INSTANCE_RECORD: reachable(this.#recordPath),
-        COFORGE_WORKSPACE_INVOCATION_ID: invocationId,
-      },
+    const launch = (gid: number | undefined) =>
+      this.spawnChild({
+        command: [
+          executable ?? this.config.executablePath,
+          "__workspace-daemon",
+          "--socket",
+          reachable(this.config.socketPath),
+          "--state-directory",
+          reachable(this.config.stateDirectory),
+        ],
+        cwd: reachable(this.config.stateDirectory),
+        ...(spawnIdentity
+          ? {
+              identity: {
+                uid: spawnIdentity.identity.uid,
+                // The shared group carries the `/workspace` write permission; the uid stays this
+                // Workspace's own, so the shared area is the only place two Agents can meet.
+                gid: gid ?? spawnIdentity.identity.gid,
+              },
+            }
+          : {}),
+        env: {
+          ...env,
+          // The child rewrites this record itself once it holds the binding lock, so a Coordinator
+          // that dies between spawn and the write below still leaves a discoverable live instance
+          // for the next Coordinator to adopt instead of spawning a duplicate beside it.
+          COFORGE_WORKSPACE_INSTANCE_RECORD: reachable(this.#recordPath),
+          COFORGE_WORKSPACE_INVOCATION_ID: invocationId,
+        },
+      });
+    const child = await spawnWithGroupFallback({
+      workspaceId: this.config.workspaceId,
+      uid: spawnIdentity?.identity.uid ?? 0,
+      sharedGid: spawnIdentity ? sharedGid : undefined,
+      spawn: launch,
     });
     if (!Number.isSafeInteger(child.pid) || child.pid <= 0)
       throw new Error(`Workspace ${this.config.workspaceId} did not start`);
@@ -337,4 +358,30 @@ async function defaultSpawn(input: {
 
 function defaultSignal(pid: number, signal?: NodeJS.Signals): void {
   process.kill(pid, signal);
+}
+
+/**
+ * A recorded shared group can outlive the container it came from, and `setgid` on a gid the
+ * container no longer has fails the spawn. That permission only widens `/workspace`, so it is not
+ * worth a dead Workspace: retry once on the Workspace's own group. Any other failure is a real
+ * startup failure and must not be retried, or the log would carry two contradictory causes.
+ */
+export async function spawnWithGroupFallback<T>(input: {
+  workspaceId: string;
+  uid: number;
+  sharedGid: number | undefined;
+  spawn: (gid: number | undefined) => Promise<T>;
+  warn?: (message: string, details: Record<string, unknown>) => void;
+}): Promise<T> {
+  try {
+    return await input.spawn(input.sharedGid);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (input.sharedGid === undefined || (code !== "EPERM" && code !== "EINVAL")) throw error;
+    (input.warn ?? logger.warn.bind(logger))(
+      "Shared group cannot be used; starting on the Workspace's own group",
+      { workspaceId: input.workspaceId, sharedGid: input.sharedGid, uid: input.uid, code },
+    );
+    return input.spawn(undefined);
+  }
 }

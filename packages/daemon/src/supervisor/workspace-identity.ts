@@ -344,3 +344,26 @@ async function inspectPath(path: string): Promise<Entry> {
 async function grantTraverse(path: string, mode: number): Promise<void> {
   await chmod(path, mode);
 }
+
+/** Group that owns the shared `/workspace` tree. Each Workspace keeps its own uid; this group is
+ * what lets an Agent write the shared area without becoming another Workspace's uid. The gid is a
+ * fact the provisioning script recorded, never a guess: a gid that does not exist in the container
+ * would fail `setgid` and take the whole Workspace down with an error that says nothing about
+ * isolation. */
+export const WORKSPACE_SHARED_GROUP_FILE = "workspace-shared-group.json";
+
+export async function workspaceSharedGid(
+  stateRoot: string,
+  volumeRoot: string,
+): Promise<number | undefined> {
+  try {
+    const parsed: unknown = JSON.parse(
+      await readFile(join(profileRoot(stateRoot, volumeRoot), WORKSPACE_SHARED_GROUP_FILE), "utf8"),
+    );
+    const gid = (parsed as { gid?: unknown }).gid;
+    if (typeof gid !== "number" || !Number.isInteger(gid)) return undefined;
+    return gid >= MIN_AGENT_UID && gid <= MAX_AGENT_UID ? gid : undefined;
+  } catch {
+    return undefined;
+  }
+}
