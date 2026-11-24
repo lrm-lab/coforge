@@ -74,7 +74,7 @@ async function search(
   return db.$queryRaw<Row[]>(Prisma.sql`
     SELECT id, workspace_id AS "workspaceId", title, left(ltrim(content, ${PREVIEW_WHITESPACE}), 600) AS content, left(ltrim(source, ${PREVIEW_WHITESPACE}), 200) AS source, kind, applicability, status,
       revision, author_agent_id AS "authorAgentId", author_user_id AS "authorUserId", project_id AS "projectId", pinned, updated_at AS "updatedAt",
-      relations, effective_at AS "effectiveAt"
+      evidence, relations, effective_at AS "effectiveAt"
     FROM team_memory_entries AS candidate WHERE workspace_id = ${workspaceId}::uuid AND status = ${archived ? "archived" : "active"}
     AND (${Prisma.join(matches, " OR ")})
     ${includeHumanAuthors ? Prisma.empty : Prisma.sql`AND author_agent_id IS NOT NULL`}
@@ -90,14 +90,22 @@ async function search(
       (${Prisma.join(ranks, " + ")}) DESC, updated_at DESC, id ASC LIMIT 11 OFFSET ${offset}`);
 }
 
-function page(rows: Row[], offset: number, snippets = false): TeamMemoryResult {
+function page(rows: Row[], offset: number): TeamMemoryResult {
   const entries = rows.slice(0, 10).map((row) => {
-    const entry = head(row);
-    return snippets
-      ? { ...entry, content: entry.content.slice(0, 600), source: entry.source.slice(0, 200) }
-      : entry;
+    const entry = head({ ...row, evidence: undefined });
+    return { ...entry, content: entry.content.slice(0, 600), source: entry.source.slice(0, 200) };
   });
   return { status: "ok", entries, ...(rows.length > 10 ? { nextOffset: offset + 10 } : {}) };
+}
+
+async function rowsWithReadableEvidence(db: Database, workspaceId: string, rows: Row[]) {
+  const candidates = rows.map((row) => ({ row, evidence: head(row).evidence ?? [] }));
+  const references = candidates.flatMap(({ evidence }) => evidence);
+  if (!references.length) return rows;
+  const readable = new Set(await readableMemoryEvidence(db, workspaceId, references));
+  return candidates
+    .filter(({ evidence }) => evidence.every((reference) => readable.has(reference)))
+    .map(({ row }) => row);
 }
 
 function conflictLinks(row: Row) {
@@ -124,7 +132,7 @@ async function expandConflicts(
     SELECT id, workspace_id AS "workspaceId", title, left(ltrim(content, ${PREVIEW_WHITESPACE}), 600) AS content,
       left(ltrim(source, ${PREVIEW_WHITESPACE}), 200) AS source, kind, applicability, status, revision,
       author_agent_id AS "authorAgentId", author_user_id AS "authorUserId", project_id AS "projectId",
-      pinned, updated_at AS "updatedAt", relations, effective_at AS "effectiveAt"
+      pinned, updated_at AS "updatedAt", evidence, relations, effective_at AS "effectiveAt"
     FROM team_memory_entries AS candidate
     WHERE workspace_id = ${actor.workspaceId}::uuid AND status = 'active'
       ${includeSuperseded ? Prisma.empty : effectiveSearchHeads(includeHumanAuthors)}
@@ -139,12 +147,17 @@ async function expandConflicts(
       AND (${Prisma.join(match, " OR ")})
     ORDER BY updated_at DESC, id ASC LIMIT 10`;
   const primaryIds = new Set(primary.map(({ id }) => id));
-  const supplements = linked.filter(({ id }) => !primaryIds.has(id)).slice(0, 5);
-  const visible = [...primary, ...supplements];
+  const supplements = linked.filter(({ id }) => !primaryIds.has(id));
+  const eligible = includeSuperseded
+    ? supplements
+    : await rowsWithReadableEvidence(db, actor.workspaceId, supplements);
+  const visible = [...primary, ...eligible.slice(0, 5)];
+  const visibleIds = new Set(visible.map(({ id }) => id));
+  const related = [...visible, ...supplements.filter(({ id }) => !visibleIds.has(id))];
   const expanded = new Map<string, Row>();
   for (const row of visible) {
     const outgoing = conflictLinks(row);
-    const paired = visible.filter(
+    const paired = related.filter(
       (peer) =>
         peer.id !== row.id &&
         (outgoing.some((link) => link.id === peer.id && link.revision === peer.revision) ||
@@ -156,7 +169,8 @@ async function expandConflicts(
       relations.push({ kind: "conflicts_with", id, revision });
     }
     expanded.set(row.id, { ...row, relations });
-    for (const peer of paired) if (!expanded.has(peer.id)) expanded.set(peer.id, peer);
+    for (const peer of paired)
+      if (visibleIds.has(peer.id) && !expanded.has(peer.id)) expanded.set(peer.id, peer);
   }
   return [...expanded.values()];
 }
@@ -203,19 +217,31 @@ export class TeamMemoryReads {
             command.includeWorkspace,
           );
           const offset = command.offset ?? 0;
-          if (!command.includeConflicts || command.archived) return page(rows, offset, true);
-          const pageSize = 5;
-          const expanded = await expandConflicts(
-            tx,
-            actor,
-            rows.slice(0, pageSize),
-            command.projectId,
-            command.includeWorkspace,
-            command.includeSuperseded,
-          );
+          const includeConflicts = command.includeConflicts && !command.archived;
+          const pageSize = includeConflicts ? 5 : 10;
+          const candidates = rows.slice(0, 10);
+          const eligible =
+            command.archived || command.includeSuperseded
+              ? candidates
+              : await rowsWithReadableEvidence(tx, actor.workspaceId, candidates);
+          const primary = eligible.slice(0, pageSize);
+          const inspected =
+            primary.length === pageSize
+              ? candidates.indexOf(primary[pageSize - 1]!) + 1
+              : candidates.length;
+          const matches = includeConflicts
+            ? await expandConflicts(
+                tx,
+                actor,
+                primary,
+                command.projectId,
+                command.includeWorkspace,
+                command.includeSuperseded,
+              )
+            : primary;
           return {
-            ...page(expanded, offset, true),
-            ...(rows.length > pageSize ? { nextOffset: offset + pageSize } : {}),
+            ...page(matches, offset),
+            ...(rows.length > inspected ? { nextOffset: offset + inspected } : {}),
           };
         }
         if (command.operation === "list")
@@ -224,7 +250,6 @@ export class TeamMemoryReads {
               Prisma.sql`SELECT id, workspace_id AS "workspaceId", title, left(ltrim(content, ${PREVIEW_WHITESPACE}),600) AS content, left(ltrim(source, ${PREVIEW_WHITESPACE}),200) AS source, kind, applicability, status, revision, author_agent_id AS "authorAgentId", author_user_id AS "authorUserId", project_id AS "projectId", pinned, updated_at AS "updatedAt" FROM team_memory_entries WHERE workspace_id = ${actor.workspaceId}::uuid AND status = ${command.archived ? "archived" : "active"} ${actor.agentId && actor.includeHumanAuthors === false ? Prisma.sql`AND author_agent_id IS NOT NULL` : Prisma.empty} ${command.projectId ? Prisma.sql`AND project_id = ${command.projectId}::uuid` : Prisma.empty} ORDER BY updated_at DESC, id ASC LIMIT 11 OFFSET ${command.offset ?? 0}`,
             ),
             command.offset ?? 0,
-            true,
           );
         const target = await readTarget(tx, actor, command.id);
         if (command.operation === "get") {
@@ -290,7 +315,7 @@ export class TeamMemoryReads {
         true,
       ),
     ]);
-    const related = page(rows, 0, true);
+    const related = page(rows, 0);
     return { ...related, status: "ok", reviewRevision: state?.revision ?? 0 };
   }
 }
