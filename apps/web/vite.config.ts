@@ -2,9 +2,10 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
 import { paraglideVitePlugin } from "@inlang/paraglide-js";
+import babel from "@rolldown/plugin-babel";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import tailwindcss from "@tailwindcss/vite";
-import viteReact from "@vitejs/plugin-react";
+import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { nitro } from "nitro/vite";
 
 import { paraglideOptions } from "./paraglide.config.ts";
@@ -28,6 +29,21 @@ const workspaceAliases = [
 ];
 
 const buildId = process.env.COFORGE_BUILD_ID?.trim() || "development";
+
+const compilerPreset = reactCompilerPreset();
+compilerPreset.rolldown.filter = {
+  ...compilerPreset.rolldown.filter,
+  id: {
+    exclude: [
+      "**/node_modules/**",
+      "**/src/server/**",
+      "**/src/generated/**",
+      "**/src/routes/api/**",
+      "**/src/paraglide/**",
+      "**/packages/**",
+    ],
+  },
+};
 
 const config = defineConfig({
   define: {
@@ -177,6 +193,7 @@ const config = defineConfig({
     }),
     tailwindcss(),
     viteReact(),
+    babel({ presets: [compilerPreset] }),
   ],
 });
 
