@@ -60,7 +60,7 @@ export function RecordSideChatHeader({
   const locale = getLocale();
   return (
     <>
-      <div className="flex items-center gap-1 border-b border-secondary px-3 py-2.5">
+      <div className="flex h-12 shrink-0 items-center gap-1 border-b border-secondary px-3">
         <ButtonUtility
           size="sm"
           color="tertiary"

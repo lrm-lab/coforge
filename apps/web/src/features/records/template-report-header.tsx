@@ -53,13 +53,13 @@ export function TemplateReportHeader({
   onResetPage: () => void;
 }) {
   return (
-    <header className="flex min-h-12 shrink-0 items-center gap-3 border-b border-secondary px-4 py-2 sm:px-6">
+    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-4 sm:px-6">
       <span className="flex shrink-0 items-center gap-2">
         {returnTo ? <RecordsKeyPointReturnBack returnTo={returnTo} /> : <BackToRecords />}
         <WeekBadge week={week} />
       </span>
       {isOverview ? (
-        <h1 className="min-w-0 flex-1 text-md font-semibold wrap-anywhere text-primary">
+        <h1 className="min-w-0 flex-1 truncate text-md font-semibold text-primary">
           <bdi>{title}</bdi>
         </h1>
       ) : (
