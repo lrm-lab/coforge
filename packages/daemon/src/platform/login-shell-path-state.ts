@@ -43,12 +43,9 @@ export async function writeLoginShellPath(
         durationMs: result.durationMs,
         at: at.toISOString(),
       };
-  // Read by every Workspace daemon, including ones running as their own uid: it holds a PATH, not
-  // a secret, and a `0600 root` file made those daemons silently lose the login shell PATH.
   await writePrivateFileAtomic(
     join(stateDirectory, LOGIN_SHELL_PATH_FILE),
     `${JSON.stringify({ version: 1, ...record })}\n`,
-    0o644,
   );
 }
 

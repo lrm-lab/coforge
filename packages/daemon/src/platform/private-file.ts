@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { chmod, mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 /**
@@ -11,10 +11,9 @@ import { dirname } from "node:path";
  * `mode` is applied unconditionally: an existing file is `chmod`-ed to it, so a file written by
  * an older build with a narrower mode is widened (or narrowed) on the next write.
  */
-export async function writePrivateFile(path: string, content: string, mode = 0o600): Promise<void> {
+export async function writePrivateFile(path: string, content: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  await writeFile(path, content, { encoding: "utf8", mode });
-  await chmod(path, mode);
+  await writeFile(path, content, { encoding: "utf8", mode: 0o600 });
 }
 
 /**
@@ -22,14 +21,10 @@ export async function writePrivateFile(path: string, content: string, mode = 0o6
  * temporary file with `mode` applied, which is then renamed over `path` - the rename carries that
  * mode to the final file, so no `chmod` is needed after it.
  */
-export async function writePrivateFileAtomic(
-  path: string,
-  content: string,
-  mode = 0o600,
-): Promise<void> {
+export async function writePrivateFileAtomic(path: string, content: string): Promise<void> {
   const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
   try {
-    await writePrivateFile(temporary, content, mode);
+    await writePrivateFile(temporary, content);
     await rename(temporary, path);
   } catch (error) {
     await rm(temporary, { force: true });
