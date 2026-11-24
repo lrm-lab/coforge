@@ -1,10 +1,9 @@
-import { memo, useRef, type Ref } from "react";
+import { memo, type Ref } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { BellOff01, Check, Hash01, Mail01 } from "@untitledui/icons";
 import { Link as AriaLink } from "react-aria-components";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { rememberSharedRect } from "#src/lib/shared-element-rect";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { ActorName } from "#src/features/avatars/actor-name";
 import { channelGlyph, ChannelTitle } from "#src/features/conversations/channel-name";
@@ -72,8 +71,6 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
 }) {
   const router = useRouter();
   const workspaceSlug = useWorkspaceSlug();
-  const iconRef = useRef<HTMLSpanElement>(null);
-  const titleRef = useRef<HTMLSpanElement>(null);
   const { read: readShortcut, done: doneShortcut } = useActivityRowShortcuts();
   const target = activityOpenTarget(item);
   const link = activityChatLink(workspaceSlug, target);
@@ -149,9 +146,6 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
                 onClick={(event) => {
                   if (event.button === 0 && !isModified(event)) {
                     event.preventDefault();
-                    if (iconRef.current) rememberSharedRect("activity-row-avatar", iconRef.current);
-                    if (titleRef.current)
-                      rememberSharedRect("activity-row-title", titleRef.current);
                     onOpen(target);
                   }
                   props.onClick?.(event);
@@ -166,7 +160,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
             current ? "bg-active" : "group-hover:bg-primary_hover focus-visible:bg-primary_hover",
           )}
         >
-          <span ref={iconRef} className="relative flex shrink-0">
+          <span className="relative flex shrink-0">
             <ActivityItemIcon item={item} />
             {unread && <ActivityUnreadDot current={current} />}
           </span>
@@ -191,7 +185,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
                   ) : null}
                 </span>
               )}
-              <span ref={titleRef} className="flex min-w-0 flex-1">
+              <span className="flex min-w-0 flex-1">
                 <ActivityRowTitle unread={unread}>
                   {task ? (
                     task.title

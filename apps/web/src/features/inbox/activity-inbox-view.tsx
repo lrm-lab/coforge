@@ -26,7 +26,6 @@ import { LIST_BESIDE_CLASSES } from "#src/features/conversations/conversation-li
 import { ConversationListResizeHandle } from "#src/features/conversations/conversation-list-resize-handle";
 import { LIST_COLUMN } from "#src/features/conversations/conversation-list-width";
 import { useActivityFilterPrefetch } from "./use-activity-filter-prefetch";
-import { animateFlipFromRect, consumeSharedRect } from "#src/lib/shared-element-rect";
 import { DURATION_S, EASE_IN, EASE_OUT } from "#src/utils/motion-tokens";
 import { cn } from "#src/lib/utils";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
@@ -352,28 +351,10 @@ export function ActivityInboxView({
     );
   const reduced = usePrefersReducedMotion();
   const phone = !desktop;
-  const paneWrapRef = useRef<HTMLDivElement>(null);
   const swipe = useEdgeSwipeBack({
     enabled: phone && Boolean(pane) && !reduced,
     onBack: onClose,
   });
-
-  useLayoutEffect(() => {
-    if (!phone || !pane || reduced || !paneWrapRef.current) return;
-    const header = paneWrapRef.current.querySelector("header");
-    const avatarRect = consumeSharedRect("activity-row-avatar");
-    const titleRect = consumeSharedRect("activity-row-title");
-    if (header && avatarRect) {
-      const avatarTarget = header.querySelector<HTMLElement>("[data-avatar], .avatar-group");
-      if (avatarTarget)
-        animateFlipFromRect(avatarTarget, avatarRect, { duration: 420, mode: "uniform" });
-    }
-    if (header && titleRect) {
-      const titleTarget = header.querySelector<HTMLElement>("h1, h2");
-      if (titleTarget)
-        animateFlipFromRect(titleTarget, titleRect, { duration: 420, mode: "uniform" });
-    }
-  }, [pane, phone, reduced]);
 
   const phoneListStyle: CSSProperties | undefined = phone
     ? reduced
@@ -493,7 +474,6 @@ export function ActivityInboxView({
         <AnimatePresence initial={false}>
           {pane && (
             <motion.div
-              ref={paneWrapRef}
               key={`${pane.kind}:${pane.id}`}
               {...swipe.bind}
               initial={reduced ? { opacity: 0 } : { x: "100%" }}

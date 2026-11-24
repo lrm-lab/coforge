@@ -21,8 +21,9 @@ export function shouldStackTabbedHeader({
   actionsWidth: number;
   hasActions: boolean;
 }) {
-  if (headerWidth <= 0 || contentWidth <= 0 || tabsWidth <= 0) return false;
+  if (headerWidth <= 0) return false;
   if (headerWidth < SINGLE_ROW_MIN_HEADER_PX) return true;
+  if (contentWidth <= 0 || tabsWidth <= 0) return false;
   const gaps = hasActions ? SINGLE_ROW_COLUMN_GAP_PX * 2 : SINGLE_ROW_COLUMN_GAP_PX;
   const required = SINGLE_ROW_MIN_IDENTITY_PX + tabsWidth + actionsWidth + gaps;
   return contentWidth < required;
@@ -61,15 +62,22 @@ export function TabbedHeader({
     if (!header || !tabsMeasure) return;
 
     const measure = () => {
+      const headerWidth = header.clientWidth;
+      if (headerWidth <= 0) return;
+      if (headerWidth < SINGLE_ROW_MIN_HEADER_PX) {
+        setLayoutMode((prev) => (prev === "stacked" ? prev : "stacked"));
+        return;
+      }
       const style = getComputedStyle(header);
       const paddingX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
-      const contentWidth = header.clientWidth - paddingX;
+      const contentWidth = headerWidth - paddingX;
       const tabsWidth = Math.ceil(tabsMeasure.getBoundingClientRect().width);
+      if (contentWidth <= 0 || tabsWidth <= 0) return;
       const actionsWidth = actionsRef.current
         ? Math.ceil(actionsRef.current.getBoundingClientRect().width)
         : 0;
       const next: HeaderLayoutMode = shouldStackTabbedHeader({
-        headerWidth: header.clientWidth,
+        headerWidth,
         contentWidth,
         tabsWidth,
         actionsWidth,
