@@ -6,6 +6,10 @@ import { workspaceRedisKey } from "#src/server/redis-keys.server";
 
 const RESTART_TIMEOUT_MS = 60_000;
 const RESTART_TTL_SECONDS = 5 * 60;
+/** How long a process stays known as "reported ready for this Computer". A Workspace runtime
+ * re-reports on every reconnect, so a live daemon keeps refreshing it; the window only has to cover
+ * a session report that arrives shortly after ready. */
+const REPORTER_TTL_SECONDS = 30 * 60;
 const REPLACE_IF_CURRENT = `
 if redis.call("GET", KEYS[1]) == ARGV[1] then
   redis.call("SET", KEYS[1], ARGV[2], "EX", ARGV[3])
@@ -37,6 +41,11 @@ type StoredRestart = ComputerRestartStatus & { previousWorkerInstanceId?: string
 
 export interface ComputerRestartStore {
   identity?(scope: Scope): Promise<ComputerProcessIdentity | undefined>;
+  /** Whether this process reported "runtime ready" for the Computer recently. Only one process can
+   * hold the single `identity` slot, but an isolated Computer runs more than one daemon - the
+   * Computer-level Coordinator plus one runtime per Workspace - and the ones that lost the slot still
+   * own the Agent sessions they started. Reporting those sessions must not be gated on the slot. */
+  reportedRecently?(scope: Scope, workerInstanceId: string): Promise<boolean>;
   begin(
     scope: Scope,
     requestId: string,
@@ -62,6 +71,11 @@ export class RedisComputerRestartStore implements ComputerRestartStore {
 
   async identity(scope: Scope): Promise<ComputerProcessIdentity | undefined> {
     return this.parseIdentity(await this.redis.get(computerRestartIdentityKey(scope)));
+  }
+
+  async reportedRecently(scope: Scope, workerInstanceId: string): Promise<boolean> {
+    if (!workerInstanceId) return false;
+    return (await this.redis.get(this.reporterKey(scope, workerInstanceId))) !== null;
   }
 
   async begin(scope: Scope, requestId: string) {
@@ -146,6 +160,15 @@ export class RedisComputerRestartStore implements ComputerRestartStore {
       computerRestartIdentityKey(scope),
       JSON.stringify(identity),
     ]);
+    // Recorded next to the slot, not instead of it: the slot answers "who receives the next start
+    // request", this answers "who was actually running here", and they differ once a Computer runs
+    // one daemon per Workspace.
+    await this.redis.set(
+      this.reporterKey(scope, identity.workerInstanceId),
+      String(identity.startedAt),
+      "EX",
+      String(REPORTER_TTL_SECONDS),
+    );
   }
 
   private async replaceRestart(scope: Scope, current: string, record: StoredRestart) {
@@ -188,6 +211,9 @@ export class RedisComputerRestartStore implements ComputerRestartStore {
     }
   }
 
+  private reporterKey(scope: Scope, workerInstanceId: string) {
+    return `${this.scopeKey(scope)}:reporter:${encodeURIComponent(workerInstanceId)}`;
+  }
   private requestKey(scope: Scope, requestId: string) {
     return `${this.scopeKey(scope)}:request:${encodeURIComponent(requestId)}`;
   }

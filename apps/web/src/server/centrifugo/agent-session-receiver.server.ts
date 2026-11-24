@@ -103,7 +103,12 @@ export function createAgentSessionMethod(
         if (error.category === "superseded") {
           return reject("superseded", "Agent session launch was superseded");
         }
-        return reject("session_mismatch", "Agent Session snapshot is not authorized");
+        // Name the check that refused: the daemon logs this message verbatim, and "not authorized"
+        // alone cannot tell an expired launch from a mismatched daemon instance.
+        return reject(
+          "session_mismatch",
+          `Agent Session snapshot is not authorized (field=${error.field})`,
+        );
       }
       const isKnown = error instanceof Error && KNOWN_REJECTION_REASONS.has(error.message);
       console.warn(
