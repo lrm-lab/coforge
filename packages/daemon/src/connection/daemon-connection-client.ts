@@ -228,6 +228,7 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   sendSessionInvalidate?(message: AgentSessionInvalidate): void;
   sendAgentContextUsage?(message: AgentContextUsage): void;
   sendAgentTokenUsage?(message: AgentTokenUsage): void;
+  flushTokenUsage?(timeoutMs?: number): Promise<void>;
   sendAgentServiceTier?(message: AgentServiceTier): void;
   sendAgentContextViewAvailability?(message: AgentContextViewAvailability): void;
   sendAgentDeliveryAck?(ack: AgentMessageDeliveryAck): Promise<void>;

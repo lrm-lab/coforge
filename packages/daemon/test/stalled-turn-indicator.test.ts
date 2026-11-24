@@ -217,6 +217,20 @@ test("work under way is never read as the turn's end, however stale the session 
   expect(
     endsStalledTurn(
       {
+        type: "token-usage",
+        usage: {
+          uncachedInputTokens: 10,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          outputTokens: 5,
+        },
+      },
+      false,
+    ),
+  ).toBe(false);
+  expect(
+    endsStalledTurn(
+      {
         type: "activity",
         activity: { detailKind: "idle", level: "info", detail: "Idle" } as never,
       },

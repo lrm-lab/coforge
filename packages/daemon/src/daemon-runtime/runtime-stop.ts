@@ -40,7 +40,8 @@ export type RuntimeStopPorts = {
   phaseBookkeeping: Pick<PhaseBookkeeping, "disposeAll">;
   runtimeErrorHold: Pick<RuntimeErrorDeliveryHold, "disposeAll">;
   upgradeResults: Pick<UpgradeResultReporter, "stop">;
-  usageReport: Pick<AgentUsageReport, "clear">;
+  usageReport: Pick<AgentUsageReport, "clear"> &
+    Partial<Pick<AgentUsageReport, "flushAllTokenUsage">>;
   fastModeWarned: Set<string>;
   inputDrain: AgentInputDrain;
   agentLaunches: Map<string, Promise<unknown>>;
@@ -108,11 +109,12 @@ export class RuntimeStop {
       launch.startupAbort?.abort();
       launch.startup?.dispose();
       launch.stalled?.dispose(agentId);
+      if (launch.provider)
+        ports.usageReport.flushAllTokenUsage?.(agentId, launch, launch.provider, launch.model);
     }
     ports.phaseBookkeeping.disposeAll();
     ports.runtimeErrorHold.disposeAll();
     ports.upgradeResults.stop();
-    ports.usageReport.clear();
     ports.fastModeWarned.clear();
     for (const agentId of new Set([
       ...[...ports.inputDrain.entries()].map(([agentId]) => agentId),
@@ -240,17 +242,18 @@ export class RuntimeStop {
     } catch (error) {
       shutdownError ??= error;
     }
+    for (const [agentId, launch] of ports.currentActivityLaunches) {
+      if (launch.provider)
+        ports.usageReport.flushAllTokenUsage?.(agentId, launch, launch.provider, launch.model);
+    }
+    ports.usageReport.clear();
     for (const agentId of activeAgentIds) ports.sendAgentStatus(agentId, "inactive");
     ports.currentActivityLaunches.clear();
-    // Every Agent process is down now. Each key they were using gets its one revoke request,
-    // best-effort: a failure is logged, never fails teardown, and is not retried. The shutdown
-    // notice goes out alongside, never ahead of them: its own bound must not push the revokes
-    // past the service manager's grace period. The transport bounds it and never throws. Reminder
-    // work already running settles alongside too, on the same bound, before the transport closes.
     await Promise.all([
       this.#settleReminders(),
       piChatClosed,
       this.#settleMigrations(),
+      ports.transport().flushTokenUsage?.(DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS),
       ports.connection.computerId
         ? ports.transport().sendShutdownNotice?.({
             ...ports.envelope(),

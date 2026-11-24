@@ -136,6 +136,7 @@ import {
 } from "@lrm/coforge-sdk/internal/app-registration-notice";
 import { RejectedControl } from "./control-rejection-log";
 import { sendShutdownNoticeOver } from "./shutdown-notice";
+import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "./shutdown-notice-timeout";
 import { reportAgentSessionWithRetry } from "./agent-session-report";
 import { getLogger } from "@logtape/logtape";
 import { AGENT_RPC_TIMEOUT_MS } from "./agent-http-wire";
@@ -182,22 +183,13 @@ export { COMPUTER_STATUS_REFRESH_MS } from "./daemon-status-refresh";
 import { DaemonStatusRefresh } from "./daemon-status-refresh";
 const logger = getLogger(["coforge", "daemon", "connection"]);
 
-/** The Daemon's single connection for its configured Workspace. */
 export class DaemonConnection extends DaemonConnectionAgentHttp implements DaemonConnectionClient {
-  /** The client, and the one fact that makes it usable, in a single record: the connection cannot
-   * be up with no client, because "up" is read from this record. Held separately, the two drifted
-   * apart once — the object stayed "connected" with no client, so every HTTP path kept working
-   * while every RPC answered "not connected" for three days (2026-11-16). */
   #link: { readonly client: CentrifugeWorkspaceClient; open: boolean } | undefined;
 
-  /** The client this connection owns right now, if any. */
   get #client(): CentrifugeWorkspaceClient | undefined {
     return this.#link?.client;
   }
 
-  /** Up means a client exists and reports open — nothing else, and there is no second field that
-   * could say otherwise. The client's own `state` is the authority where the transport publishes
-   * one; on a transport that reports through events alone, the last of those is. */
   get #connected(): boolean {
     const link = this.#link;
     if (!link) return false;
@@ -207,8 +199,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
   #hasConnected = false;
   #token = "";
   #serverHttpUrl = "";
-  /** The config `start` was last given. Kept so the status refresh can rebuild a connection that
-   * lost its client: nothing else is left running to retry it. */
   #startConfig: DaemonConnectionConfig | undefined;
   readonly #rebuild = new LostClientRebuild(
     () => (this.#startConfig ? { token: this.#token, config: this.#startConfig } : undefined),
@@ -282,7 +272,12 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
   readonly #pendingSessionInvalidate = new Map<string, AgentSessionInvalidate>();
   readonly #latestObservedLaunchByAgent = new Map<string, string>();
   #loggedUnknownSessionInvalidateMethod = false;
-  readonly #observations = new AgentObservationPublisher();
+  readonly #observations = new AgentObservationPublisher(undefined, {
+    timing: {
+      schedule: (callback, delayMs) => this.timing.schedule(callback, delayMs),
+      cancel: (timer) => this.timing.cancel(timer),
+    },
+  });
   readonly #latestStatuses = new Map<string, AgentStatus>();
   readonly #computerLifecycle = new ComputerLifecyclePublications((method, bytes) =>
     this.#rpc(method, bytes),
@@ -335,6 +330,7 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
       const link = this.#link;
       if (link?.client !== client) return;
       link.open = false;
+      this.#observations.resetConnectionLifetime();
       this.#cancelReadyRecovery();
       const refusal = context ? daemonConnectRejectionReason(context) : undefined;
       if (!refusal) {
@@ -585,6 +581,9 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
   }
   sendAgentTokenUsage(message: AgentTokenUsage): void {
     this.#observations.sendTokenUsage(message, this.#activeClient());
+  }
+  flushTokenUsage(timeoutMs = DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS): Promise<void> {
+    return this.#observations.drainAdditive(this.#activeClient(), timeoutMs);
   }
   sendAgentServiceTier(message: AgentServiceTier): void {
     this.#observations.sendServiceTier(message, this.#activeClient());

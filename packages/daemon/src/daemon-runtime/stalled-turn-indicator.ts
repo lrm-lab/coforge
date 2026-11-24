@@ -137,18 +137,12 @@ export function showsTurnWork(event: AgentRuntimeEvent): boolean {
   }
 }
 
-/**
- * Provider events that say nothing about whether the turn is running: the session's own identity,
- * plan usage, a context-window reading, the service tier. Codex emits them mid-turn (a
- * `context-usage` lands between a command's start and its output, and a `session` frame arrives
- * with `hasLiveTurn` still false), so reading one as the turn's end or as fresh progress moved or
- * cancelled a running command's watchdog (task #41, s144).
- */
 export function isTurnNeutralEvent(event: Readonly<{ type: string }>): boolean {
   switch (event.type) {
     case "session":
     case "usage":
     case "context-usage":
+    case "token-usage":
     case "service-tier":
       return true;
     default:

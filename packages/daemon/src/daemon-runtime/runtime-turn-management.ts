@@ -135,6 +135,7 @@ export function reconcileIdleTurn(
   launch.trajectory?.flush();
   launch.stalled?.finish(agentId, "turn_idle_reconciled");
   ports.phaseBookkeeping.dispose(agentId);
+  launch.flushTokenUsage?.();
   if (ports.isWorking(agentId)) {
     showQuietTurn(ports, agentId, launch, (id, source, activity) =>
       ports.activityPublisher.publish(id, source, activity),

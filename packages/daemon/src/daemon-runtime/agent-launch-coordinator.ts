@@ -295,10 +295,6 @@ export class AgentLaunchCoordinator {
     request: LaunchRequest,
   ): Promise<AgentRuntime> {
     const { control } = request;
-    // A daemon-initiated launch (no `control` — a wake, never a server Start) reuses
-    // the last server-supplied launch identity remembered alongside this Agent's restart config,
-    // instead of minting a fresh one. An Agent with no remembered identity (never brought under
-    // AgentControl, or already forgotten by an explicit Stop) keeps minting, unchanged.
     const serverLaunch = control ? undefined : this.ports.agentProcessManager.serverLaunch(agentId);
     const { requestId, reference, previousLaunchId, launchId, reused, managedScope } =
       resolveLaunchIdentity({
@@ -314,6 +310,15 @@ export class AgentLaunchCoordinator {
       clientSeq: reused ? this.ports.agentProcessManager.lastClientSeq(agentId) : 0,
       stopping: false,
       provider: config.provider,
+      model: config.model,
+      flushTokenUsage: (conversationId) =>
+        this.ports.usageReport.flushTokenUsage(
+          agentId,
+          launch,
+          config.provider,
+          config.model,
+          conversationId,
+        ),
     };
     if (!control)
       logger.info("Agent self-initiated launch resolved its launch identity", {
@@ -324,6 +329,14 @@ export class AgentLaunchCoordinator {
         epoch: managedScope?.controlEpoch,
         outcome: reused ? "reused" : "minted",
       });
+    const previousLaunch = this.ports.currentActivityLaunches.get(agentId);
+    if (previousLaunch?.provider)
+      this.ports.usageReport.flushAllTokenUsage(
+        agentId,
+        previousLaunch,
+        previousLaunch.provider,
+        previousLaunch.model,
+      );
     this.ports.currentActivityLaunches.set(agentId, launch);
     this.ports.activityPublisher.forgetBusy(agentId);
     this.ports.phaseBookkeeping.dispose(agentId);
@@ -333,16 +346,9 @@ export class AgentLaunchCoordinator {
       launch.launchId,
       this.ports.contexts.contextGeneration(agentId),
     );
-    // This launch's delivery mode, read by AgentMessageAttentionIndex.receive via
-    // #deliveryGate.shouldHold on every delivery for this Agent from now on.
     this.ports.deliveryGate.setProvider(agentId, config.provider);
     this.ports.usageReport.forget(agentId);
     this.ports.fastModeWarned.delete(agentId);
-    // AgentControl's fresh retry after a kiro/pi AgentSessionRecoveryError: the invalidate was
-    // already reported before this launch (see `invalidateSession` above); narrate the cold
-    // start here, where the real launch's ActivityLaunch now exists. `invalidateReason` is
-    // threaded explicitly through this one launch's request (see `LaunchRequest`), never a
-    // side channel: it can neither outlive this launch nor attach to a later unrelated one.
     if (request.replacedSessionId && request.invalidateReason)
       this.ports.narrateUnavailable(
         agentId,

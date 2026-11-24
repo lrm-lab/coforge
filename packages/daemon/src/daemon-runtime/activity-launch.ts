@@ -17,40 +17,24 @@ import type { ProviderProgress } from "./stalled-recovery";
 import type { StalledTurnTracker } from "./stalled-turn-indicator";
 import type { LaunchPhaseTiming } from "./launch-phase-timing";
 
-/** What the runtime tracks about one Agent launch's Activity, from start-up to exit. */
 export type ActivityLaunch = PublishedActivityLaunch & {
+  model?: string;
+  flushTokenUsage?: (conversationId?: string) => boolean;
   startup?: AgentStartup;
   startupAbort?: AbortController;
   trajectory?: Pick<ActivityTrajectory, "flush" | "dispose">;
-  /** When the provider last reported anything (`stalled-recovery.ts`). */
   progress?: ProviderProgress;
-  /** This launch's phase clock: one elapsed-time log per stage (`launch-phase-timing.ts`). */
   timing?: LaunchPhaseTiming;
-  /** The launch's open tool calls, and the outcome each one's end reports. */
   toolCalls?: ToolCallLedger;
-  /** Tracks assistant text and tool calls per turn so zero-evidence completions retry. */
   turnEvidence?: TurnEvidenceLedger;
   idleCompaction?: boolean;
-  /** Most recent input context token reading observed on this launch. */
   lastContextTokens?: number;
-  /** The busy turn's silence clock: one visible stalled notice per turn. */
   stalled?: StalledTurnTracker;
-  /** Reply intents this launch announced; a turn interrupt clears them. */
   replyIntents?: ReplyIntentTracker;
   backgroundTasks?: OutstandingBackgroundTasks;
-  /** Subagent wake bookkeeping, only for a provider that wakes after subagents (Codex). */
   subagentWake?: SubagentWakeTracker;
-  /** Raft's `lastTurnEndInterrupted`: an interrupted last turn suppresses the subagent wake. */
   lastTurnInterrupted?: boolean;
-  // The most recent `error` event not yet resolved by a `completed` event, if any (cleared on
-  // `completed`). Read by the process-exit handler to decide `runtime_crashed` vs `idle` wording
-  // — `AgentSession.onExit` itself carries no exit code or signal, so this is the only fact the
-  // core has for it (see agent-runtime/runtime-error-activity.ts).
   crashDetail?: RuntimeErrorEvent;
   runtimeErrorClassFence?: RuntimeErrorClassFence;
-  /** Set when a runtime error took this launch's Agent offline (`#takeAgentOffline`): the exit
-   * handler republishes this Activity — never a bare `runtime_crashed` — a launch that then
-   * fails reports it instead of a generic launch failure, and a delivery to the offline Agent is
-   * kept (queued and ACKed) with this Activity restated. */
   offlineError?: ReturnType<typeof buildRuntimeErrorActivity>;
 };

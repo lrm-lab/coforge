@@ -52,6 +52,14 @@ export function observeRuntimeEvent(
           }
         : {}),
     });
+  const flushTokenUsage = () =>
+    ports.usageReport?.flushTokenUsage(
+      agentId,
+      launch,
+      config.provider,
+      config.model,
+      event.conversation?.conversationId,
+    );
   if (
     event.type !== "session" &&
     event.type !== "usage" &&
@@ -99,7 +107,7 @@ export function observeRuntimeEvent(
     return;
   }
   if (event.type === AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE) {
-    if (!event.conversation) ports.usageReport.recordTokenUsage(agentId, event.usage);
+    ports.usageReport.recordTokenUsage(agentId, event.usage, event.conversation?.conversationId);
     return;
   }
   if (event.type === AGENT_RUNTIME_EVENT_TYPE.SERVICE_TIER) {
@@ -155,6 +163,7 @@ export function observeRuntimeEvent(
     });
     if (activity.detailKind === AGENT_ACTIVITY_DETAIL_KIND.IDLE)
       void ports.drainAppInboxNotices(agentId).catch(() => {});
+    if (endsStalledTurn(event, runtime.session.hasLiveTurn)) flushTokenUsage();
     return;
   }
   if (event.type === "tool-end") {
@@ -252,12 +261,16 @@ export function observeRuntimeEvent(
     return;
   }
   if (event.type === "error") {
-    if (launch.stopping) return;
+    if (launch.stopping) {
+      flushTokenUsage();
+      return;
+    }
     launch.crashDetail = event;
     ports.phaseBookkeeping.compactionError(agentId, launch, event.message);
     const classification = classifyRuntimeError(event);
     const credentialInvalid = credentialInvalidReason(classification);
     if (credentialInvalid || classification.takesAgentOffline) {
+      flushTokenUsage();
       const built = ports.offlineResidency.buildActivity(
         config,
         runtimeDisplayName(config.provider),
@@ -289,6 +302,7 @@ export function observeRuntimeEvent(
       classification,
     );
     if (fence) {
+      flushTokenUsage();
       ports.offlineResidency.takeOffline(
         agentId,
         launch,
@@ -302,6 +316,7 @@ export function observeRuntimeEvent(
       );
       return;
     }
+    if (runtime.session.hasLiveTurn !== true) flushTokenUsage();
     publish(
       agentId,
       launch,
@@ -349,9 +364,9 @@ export function observeRuntimeEvent(
       launch.turnEvidence?.reset();
     }
     if (!launch.stopping) ports.sessionSummary?.turnCompleted(agentId, config.provider);
-    ports.usageReport.flushTokenUsage(agentId, launch, config.provider, config.model);
     ports.deliveryGate?.wakeLoop?.noteTurnCompleted(agentId, { status: effectiveStatus });
   }
+  flushTokenUsage();
   noteTurnFinished(agentId, effectiveStatus, event.conversation?.conversationId);
   launch.lastTurnInterrupted = effectiveStatus === "interrupted";
   const collectorFailReason =

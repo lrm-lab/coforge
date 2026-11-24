@@ -144,14 +144,14 @@ export class AgentStartup {
     return error instanceof AgentSessionRecoveryError || this.#responses === since;
   }
 
-  /** Track readiness and response for the launch's lifetime, after the timer clears too; a
-   * disposed or failed startup ignores events. */
   observe(event: AgentRuntimeEvent): void {
     if (
       this.#closed ||
       event.type === "session" ||
       event.type === "usage" ||
       event.type === "context-usage" ||
+      event.type === "token-usage" ||
+      event.type === "service-tier" ||
       event.type === "progress" ||
       event.type === "reconnecting" ||
       event.type === "notice-undelivered" ||

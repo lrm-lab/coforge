@@ -10,6 +10,7 @@ import {
 import { AgentObservationPublisher } from "#src/connection/agent-observation-publisher";
 import type { CentrifugeWorkspaceClient } from "#src/connection/centrifuge-workspace-client";
 import { AgentUsageReport } from "#src/daemon-runtime/agent-usage-report";
+import { captureDaemonLogs } from "./log-capture";
 
 test("AgentUsageReport accumulates deltas within a turn and increments turnSeq per launch", () => {
   const sent: AgentTokenUsage[] = [];
@@ -237,5 +238,136 @@ test("AgentObservationPublisher delivers queued token-usage turns onto a reconne
   await new Promise((r) => setTimeout(r, 20));
 
   expect(client1Calls).toEqual([1]);
-  expect(client2Calls).toEqual([2]);
+  expect(client2Calls).toEqual([1, 2]);
+});
+
+test("AgentUsageReport logs a structured warning when token usage sending throws", async () => {
+  const launch = { launchId: "launch-1", clientSeq: 0, stopping: false };
+  const throwing = new AgentUsageReport({
+    sessionId: () => "native-sess",
+    envelope: () => ({
+      protocolMajor: 1,
+      requestId: "req-err",
+      workspaceId: "w-1",
+      computerId: "c-1",
+    }),
+    daemonInstanceId: () => "daemon-1",
+    recordClientSeq: () => {},
+    sendContextUsage: () => {},
+    sendServiceTier: () => {},
+    sendTokenUsage: () => {
+      throw new RangeError("invalid token usage");
+    },
+  });
+  throwing.recordTokenUsage("a-1", {
+    uncachedInputTokens: 10,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    outputTokens: 5,
+  });
+
+  const { result, records } = await captureDaemonLogs(async () =>
+    throwing.flushTokenUsage("a-1", launch, "codex", "gpt-5.4"),
+  );
+  expect(result).toBe(false);
+  expect(records).toContainEqual(
+    expect.objectContaining({
+      level: "warning",
+      properties: expect.objectContaining({
+        event: "agent_token_usage:encode_failed",
+        request_id: "req-err",
+        workspace_id: "w-1",
+        computer_id: "c-1",
+        agent_id: "a-1",
+        launch_id: "launch-1",
+        turn_seq: 1,
+        provider: "codex",
+        error_code: "RangeError",
+        outcome: "failed",
+      }),
+    }),
+  );
+});
+
+test("AgentUsageReport isolates conversation buckets, flushes all buckets, and preserves turnSeq across forget for the same launch", () => {
+  const sent: AgentTokenUsage[] = [];
+  const report = new AgentUsageReport({
+    sessionId: () => "native-sess",
+    envelope: () => ({
+      protocolMajor: 1,
+      requestId: "req",
+      workspaceId: "w-1",
+      computerId: "c-1",
+    }),
+    daemonInstanceId: () => "daemon-1",
+    recordClientSeq: () => {},
+    sendContextUsage: () => {},
+    sendServiceTier: () => {},
+    sendTokenUsage: (msg) => sent.push(msg),
+  });
+  const launch = { launchId: "launch-1", clientSeq: 0, stopping: false };
+  report.contextUsage("a-1", launch, "codex", 12_000, 200_000);
+  report.recordTokenUsage("a-1", {
+    uncachedInputTokens: 1_000,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    outputTokens: 200,
+  });
+  report.recordTokenUsage(
+    "a-1",
+    {
+      uncachedInputTokens: 300,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 50,
+    },
+    "conv-side",
+  );
+
+  expect(report.flushTokenUsage("a-1", launch, "codex", "gpt-5.4", "conv-side")).toBe(true);
+  expect(sent).toHaveLength(1);
+  expect(sent[0]).toMatchObject({
+    turnSeq: 1,
+    uncachedInputTokens: 300,
+    outputTokens: 50,
+  });
+  expect(sent[0]?.contextUsedTokens).toBeUndefined();
+
+  report.recordTokenUsage(
+    "a-1",
+    {
+      uncachedInputTokens: 400,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 60,
+    },
+    "conv-2",
+  );
+  expect(report.flushAllTokenUsage("a-1", launch, "codex", "gpt-5.4")).toBe(2);
+  expect(sent.map((entry) => [entry.turnSeq, entry.uncachedInputTokens])).toEqual([
+    [1, 300],
+    [2, 1_000],
+    [3, 400],
+  ]);
+  expect(sent[1]?.contextUsedTokens).toBe(12_000);
+
+  report.forget("a-1");
+  report.recordTokenUsage("a-1", {
+    uncachedInputTokens: 50,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    outputTokens: 10,
+  });
+  expect(report.flushTokenUsage("a-1", launch, "codex", "gpt-5.4")).toBe(true);
+  expect(sent[3]?.turnSeq).toBe(4);
+
+  const nextLaunch = { launchId: "launch-2", clientSeq: 0, stopping: false };
+  report.recordTokenUsage("a-1", {
+    uncachedInputTokens: 70,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    outputTokens: 20,
+  });
+  expect(report.flushTokenUsage("a-1", nextLaunch, "codex", "gpt-5.4")).toBe(true);
+  expect(sent[4]?.turnSeq).toBe(1);
 });

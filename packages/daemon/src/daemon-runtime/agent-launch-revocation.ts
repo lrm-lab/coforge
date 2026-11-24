@@ -1,3 +1,5 @@
+import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import type { PublishedActivityLaunch } from "./agent-activity-publisher";
 import type { AgentProxy } from "./runtime-launch-types";
 
 /** Drops the Agent's issued local context and proxy token, only when the maps still hold exactly
@@ -43,19 +45,33 @@ export function restoreSupersededProxyToken(
 type LaunchDisposables = {
   dispose(agentId: string): void;
 };
-type LaunchForget = { forget(agentId: string): void };
+type LaunchUsageReport = {
+  forget(agentId: string): void;
+  flushAllTokenUsage?(
+    agentId: string,
+    launch: PublishedActivityLaunch,
+    provider: RuntimeProvider,
+    fallbackModel?: string,
+  ): number;
+};
 
-/** Drops every observation bookkeeping an ended launch left behind: its stall watchers, turn
- * phases, usage-window reading, and the one-time fast-mode hint, for exactly this Agent. */
+type DisposableLaunch = PublishedActivityLaunch & {
+  model?: string;
+  stalled?: LaunchDisposables;
+};
+
 export function disposeLaunchObservations(
   agentId: string,
-  launches: Map<string, { stalled?: LaunchDisposables } | undefined>,
+  launches: Map<string, DisposableLaunch | undefined>,
   phaseBookkeeping: LaunchDisposables,
-  usageReport: LaunchForget,
+  usageReport: LaunchUsageReport,
   fastModeWarned: Set<string>,
 ): void {
-  launches.get(agentId)?.stalled?.dispose(agentId);
+  const launch = launches.get(agentId);
+  launch?.stalled?.dispose(agentId);
   phaseBookkeeping.dispose(agentId);
+  if (launch?.provider)
+    usageReport.flushAllTokenUsage?.(agentId, launch, launch.provider, launch.model);
   usageReport.forget(agentId);
   fastModeWarned.delete(agentId);
 }

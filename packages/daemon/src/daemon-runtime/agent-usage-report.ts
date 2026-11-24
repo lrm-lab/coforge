@@ -1,7 +1,14 @@
+import { getLogger } from "@logtape/logtape";
 import type { AgentTurnTokenUsage } from "@lrm/coforge-anvil";
-import type { AgentServiceTierObserved, RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import {
+  diagnosticErrorCode,
+  type AgentServiceTierObserved,
+  type RuntimeProvider,
+} from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { PublishedActivityLaunch } from "./agent-activity-publisher";
+
+const logger = getLogger(["coforge", "daemon", "runtime"]);
 
 type PendingTurnTokens = {
   uncachedInputTokens: number;
@@ -37,7 +44,7 @@ export class AgentUsageReport {
     { usedTokens: number; windowTokens: number; observedAtMs: number }
   >();
   readonly #lastServiceTier = new Map<string, AgentServiceTierObserved>();
-  readonly #pendingTurnTokens = new Map<string, PendingTurnTokens>();
+  readonly #pendingTurnTokens = new Map<string, Map<string, PendingTurnTokens>>();
   readonly #turnSeqByAgent = new Map<string, { launchId: string; seq: number }>();
 
   constructor(ports: AgentUsageReportPorts) {
@@ -54,8 +61,6 @@ export class AgentUsageReport {
     this.#ports.recordClientSeq(agentId, clientSeq);
   }
 
-  /** A context-usage reading: skipped until the launch's native session id is known. Whether the
-   * reading was recorded, so the caller knows a compaction may be waiting for it. */
   contextUsage(
     agentId: string,
     launch: PublishedActivityLaunch,
@@ -66,13 +71,8 @@ export class AgentUsageReport {
   ): boolean {
     const sessionId = this.#ports.sessionId(agentId);
     if (!sessionId) return false;
-    // When the reading was taken rides along, the runtime's own sampling time when it gave one: a
-    // compaction tells a reading it saw before it started from one that arrived after, and the
-    // daemon's receipt time would say the second happened whenever it happened to be parsed.
     const observedAtMs = observedAt(occurredAt);
     const last = this.#lastContextUsage.get(agentId);
-    // An unchanged count is not re-sent, but it is still a newer sample: the reading on record
-    // takes the newer time, so a held compaction line can see that one arrived.
     this.#lastContextUsage.set(agentId, { usedTokens, windowTokens, observedAtMs });
     if (last && last.usedTokens === usedTokens && last.windowTokens === windowTokens) return true;
     this.#report(agentId, launch, (clientSeq) =>
@@ -92,15 +92,12 @@ export class AgentUsageReport {
     return true;
   }
 
-  /** The last context-usage reading for an Agent, for the compaction log: a compaction's token
-   * numbers come from these readings, and a missing one stays missing rather than invented. */
   lastContextUsage(
     agentId: string,
   ): { usedTokens: number; windowTokens: number; observedAtMs: number } | undefined {
     return this.#lastContextUsage.get(agentId);
   }
 
-  /** An observed service-tier reading: the same session-id gate and unchanged-reading skip. */
   serviceTier(
     agentId: string,
     launch: PublishedActivityLaunch,
@@ -127,8 +124,10 @@ export class AgentUsageReport {
     );
   }
 
-  recordTokenUsage(agentId: string, usage: AgentTurnTokenUsage): void {
-    const current = this.#pendingTurnTokens.get(agentId) ?? {
+  recordTokenUsage(agentId: string, usage: AgentTurnTokenUsage, conversationId?: string): void {
+    const buckets = this.#pendingTurnTokens.get(agentId) ?? new Map<string, PendingTurnTokens>();
+    const key = conversationId ?? "";
+    const current = buckets.get(key) ?? {
       uncachedInputTokens: 0,
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
@@ -151,7 +150,8 @@ export class AgentUsageReport {
     const contextWindow = sanitizePositiveInt(usage.contextWindowTokens);
     if (contextWindow !== undefined) current.contextWindowTokens = contextWindow;
     if (usage.occurredAt) current.occurredAt = usage.occurredAt;
-    this.#pendingTurnTokens.set(agentId, current);
+    buckets.set(key, current);
+    this.#pendingTurnTokens.set(agentId, buckets);
   }
 
   flushTokenUsage(
@@ -159,10 +159,43 @@ export class AgentUsageReport {
     launch: PublishedActivityLaunch,
     provider: RuntimeProvider,
     fallbackModel?: string,
+    conversationId?: string,
   ): boolean {
-    const pending = this.#pendingTurnTokens.get(agentId);
-    this.#pendingTurnTokens.delete(agentId);
+    const buckets = this.#pendingTurnTokens.get(agentId);
+    if (!buckets) return false;
+    const key = conversationId ?? "";
+    const pending = buckets.get(key);
     if (!pending) return false;
+    buckets.delete(key);
+    if (buckets.size === 0) this.#pendingTurnTokens.delete(agentId);
+    return this.#flushBucket(agentId, launch, provider, pending, fallbackModel, key === "");
+  }
+
+  flushAllTokenUsage(
+    agentId: string,
+    launch: PublishedActivityLaunch,
+    provider: RuntimeProvider,
+    fallbackModel?: string,
+  ): number {
+    const buckets = this.#pendingTurnTokens.get(agentId);
+    if (!buckets || buckets.size === 0) return 0;
+    this.#pendingTurnTokens.delete(agentId);
+    let flushed = 0;
+    for (const [key, pending] of buckets) {
+      if (this.#flushBucket(agentId, launch, provider, pending, fallbackModel, key === ""))
+        flushed += 1;
+    }
+    return flushed;
+  }
+
+  #flushBucket(
+    agentId: string,
+    launch: PublishedActivityLaunch,
+    provider: RuntimeProvider,
+    pending: PendingTurnTokens,
+    fallbackModel: string | undefined,
+    isMainConversation: boolean,
+  ): boolean {
     if (
       pending.uncachedInputTokens +
         pending.cacheReadTokens +
@@ -175,17 +208,18 @@ export class AgentUsageReport {
     const turnSeq = prev && prev.launchId === launch.launchId ? prev.seq + 1 : 1;
     this.#turnSeqByAgent.set(agentId, { launchId: launch.launchId, seq: turnSeq });
     const sessionId = this.#ports.sessionId(agentId) ?? launch.launchId;
-    const lastContext = this.#lastContextUsage.get(agentId);
+    const lastContext = isMainConversation ? this.#lastContextUsage.get(agentId) : undefined;
     const contextUsedTokens = sanitizeNonNegativeInt(
       pending.contextUsedTokens ?? lastContext?.usedTokens,
     );
     const contextWindowTokens = sanitizePositiveInt(
       pending.contextWindowTokens ?? lastContext?.windowTokens,
     );
+    const envelope = this.#ports.envelope();
     try {
       this.#report(agentId, launch, (clientSeq) =>
         this.#ports.sendTokenUsage?.({
-          ...this.#ports.envelope(),
+          ...envelope,
           agentId,
           provider,
           launchId: launch.launchId,
@@ -207,7 +241,19 @@ export class AgentUsageReport {
         }),
       );
       return true;
-    } catch {
+    } catch (error) {
+      logger.warning("Agent token usage could not be sent", {
+        event: "agent_token_usage:encode_failed",
+        request_id: envelope.requestId,
+        workspace_id: envelope.workspaceId,
+        computer_id: envelope.computerId,
+        agent_id: agentId,
+        launch_id: launch.launchId,
+        turn_seq: turnSeq,
+        provider,
+        error_code: diagnosticErrorCode(error),
+        outcome: "failed",
+      });
       return false;
     }
   }
@@ -216,7 +262,6 @@ export class AgentUsageReport {
     this.#lastContextUsage.delete(agentId);
     this.#lastServiceTier.delete(agentId);
     this.#pendingTurnTokens.delete(agentId);
-    this.#turnSeqByAgent.delete(agentId);
   }
 
   clear(): void {

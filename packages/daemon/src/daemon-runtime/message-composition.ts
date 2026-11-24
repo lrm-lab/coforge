@@ -144,7 +144,10 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
       queued: (agentId) => ports.deliveryGate.pending(agentId),
       enqueue: (agentId, message) => ports.deliveryGate.enqueue(agentId, message),
       busy: (agentId) => {
-        if (!ports.deliveryGate.isBusy(agentId))
+        if (
+          !ports.deliveryGate.isBusy(agentId) ||
+          ports.processManager.session(agentId)?.hasLiveTurn === false
+        )
           ports.launchCustody().noteTurnStarted(agentId, "delivery");
         ports.deliveryGate.busy(agentId);
       },

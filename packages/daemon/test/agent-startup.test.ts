@@ -551,3 +551,23 @@ test("a bare startup error alone cancels the 120-second deadline", async () => {
     await h.runtime.stop();
   }
 });
+
+test("token-usage and service-tier events do not satisfy startup readiness or clear the deadline", () => {
+  const startup = new AgentStartup(() => {});
+  try {
+    startup.observe({
+      type: "token-usage",
+      usage: {
+        uncachedInputTokens: 100,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        outputTokens: 20,
+      },
+    });
+    startup.observe({ type: "service-tier", state: "on" });
+    expect(startup.waiting).toBe(true);
+    expect(startup.responses).toBe(0);
+  } finally {
+    startup.dispose();
+  }
+});

@@ -13,8 +13,6 @@ import { isOrdinaryNotice, noticeMessageKey } from "./accepted-message-notices";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
-/** The custody helpers' reach into the runtime: the collaborators it reconciles, plus the two
- * held-state releases `recover` runs regardless of recovery content. */
 export type AgentLaunchCustodyPorts = Readonly<{
   messageAttention: AgentMessageAttentionIndex;
   deliveryGate: AgentDeliveryGate;
@@ -160,11 +158,10 @@ export class AgentLaunchCustody {
     this.noteTurnStarted(agentId, "startup");
   }
 
-  /** Marks a turn as open for `agentId`, and logs the boundary: with `agent.turn.finished` this
-   * lets a log reader measure how long an accepted notice waited before its turn started. */
   noteTurnStarted(agentId: string, via: "delivery" | "prompt" | "startup"): void {
-    noteTurnStarted(agentId, via);
     const launch = this.ports.currentActivityLaunches.get(agentId);
+    launch?.flushTokenUsage?.();
+    noteTurnStarted(agentId, via);
     if (!launch?.progress) return;
     launch.turnEvidence?.markOpened();
     launch.progress.noteTurnStarted();
