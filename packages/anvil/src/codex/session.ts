@@ -25,7 +25,7 @@ import {
   acceptsCompactingTurnItem,
   runCodexCompactRequest,
 } from "./compaction";
-import { scrubError } from "./provider-support";
+import { scrubError, type CodexSessionState } from "./provider-support";
 import { CodexTurnControl } from "./turn-control";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.CODEX]);
@@ -39,7 +39,9 @@ export class CodexAgentSession implements AgentSession {
   readonly #agentId: string | undefined;
   readonly #runtimeId: string | undefined;
   readonly #model: string | undefined;
-  readonly #tokenUsage = new CodexTokenUsageTracker();
+  readonly #tokenUsage: CodexTokenUsageTracker;
+  readonly #resumed: boolean;
+  #startingUsageTurn: { state: CodexSessionState; id: string } | undefined;
   readonly #secondaryTokenUsage = new Map<string, CodexTokenUsageTracker>();
   readonly #listeners = new Set<(event: AgentRuntimeEvent) => void>();
   readonly #commandOutputBytes = new Map<string, number>();
@@ -61,9 +63,12 @@ export class CodexAgentSession implements AgentSession {
     replacementWarning?: string,
     model?: string,
     readonly readUsage?: AgentSession["readUsage"],
+    tokenUsage = new CodexTokenUsageTracker(),
   ) {
     this.#process = process;
     this.#threadId = threadId;
+    this.#tokenUsage = tokenUsage;
+    this.#resumed = resumed;
     this.#subagentThreads = new CodexSubagentThreads(threadId);
     this.#agentId = agentId;
     this.#runtimeId = runtimeId;
@@ -235,10 +240,13 @@ export class CodexAgentSession implements AgentSession {
         }
         if (usage) this.#emitAll([{ type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE, ...usage }]);
       }
+      const resumedTurnId = this.#resumed ? this.#resumedUsageTurnId(params) : undefined;
+      if (this.#resumed && resumedTurnId === undefined) return;
       const tokenDelta = this.#tokenUsage.accept(
         params,
         usage,
         nonEmptyString(params?.model) ?? this.#model,
+        resumedTurnId,
       );
       if (tokenDelta)
         this.#emitAll([{ type: AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE, usage: tokenDelta }]);
@@ -279,6 +287,7 @@ export class CodexAgentSession implements AgentSession {
         lastCompletedTurnId: this.#lastCompletedTurnId,
         noteCompletedTurn: (turnId) => {
           this.#lastCompletedTurnId = turnId;
+          this.#completeResumedUsage(turnId);
           this.#itemEvents.reset();
         },
         beginIdle: () => this.#turns.beginIdle(),
@@ -292,12 +301,14 @@ export class CodexAgentSession implements AgentSession {
     }
     if (record.method === "turn/started") {
       const turn = asRecord(params?.turn);
-      // Same fence as an item: only this thread's live turn opens a run.
       if (
         typeof turn?.id !== "string" ||
         !this.#acceptsTurnItem({ threadId: params?.threadId, turnId: turn.id })
       )
         return;
+      const state = this.#turns.state;
+      if (this.#resumed && (state.type === "starting" || state.type === "compacting"))
+        this.#startingUsageTurn = { state, id: turn.id };
       this.#signals.reset();
       this.#emitAll(this.#itemEvents.accept(record, params));
       return;
@@ -373,6 +384,7 @@ export class CodexAgentSession implements AgentSession {
       this.#commandOutputBytes.clear();
       this.#itemEvents.reset();
       this.#lastCompletedTurnId = turn.id;
+      this.#completeResumedUsage(turn.id);
       const { status, failure } = codexTurnOutcome(turn);
       if (failure) {
         // The raw message goes to the Activity (the daemon core redacts and truncates it); this
@@ -423,6 +435,30 @@ export class CodexAgentSession implements AgentSession {
     }
     this.#secondaryTokenUsage.set(threadId, tracker);
     return tracker;
+  }
+
+  #completeResumedUsage(turnId: string): void {
+    if (!this.#resumed) return;
+    for (const usage of this.#tokenUsage.completeResumedTurn(turnId))
+      this.#emit({ type: AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE, usage });
+  }
+
+  #resumedUsageTurnId(params: Record<string, unknown> | undefined): string | undefined {
+    if (params?.threadId !== this.#threadId || typeof params.turnId !== "string") return;
+    const state = this.#turns.state;
+    if (state.type === "disposed") return;
+    if (state.type === "idle") {
+      if (!this.#lastCompletedTurnId && !this.#startingUsageTurn)
+        this.#tokenUsage.seedBaseline(params);
+      return params.turnId === this.#lastCompletedTurnId ? params.turnId : undefined;
+    }
+    const scheduledTurnId =
+      this.#startingUsageTurn?.state === state ? this.#startingUsageTurn.id : undefined;
+    const activeTurnId =
+      state.type === "starting" ? scheduledTurnId : (state.turnId ?? scheduledTurnId);
+    if (params.turnId === activeTurnId) return activeTurnId;
+    this.#tokenUsage.noteLatePreviousTurn(activeTurnId, params);
+    return undefined;
   }
 
   #acceptsTurnItem(params: Record<string, unknown> | undefined): boolean {

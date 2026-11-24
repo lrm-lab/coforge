@@ -2,6 +2,7 @@ import type { AgentSession, AgentSessionOptions, UsageSnapshot } from "@coforge/
 import { asRecord, type CodeAgentProvider } from "@lrm/coforge-anvil";
 import { JsonlProcess } from "@lrm/coforge-anvil/execution";
 import { CodexAgentSession } from "./session";
+import { CodexTokenUsageTracker } from "./context-usage";
 import { rejectServerRequests } from "./server-requests";
 import { codexAccountModel } from "./account-model";
 import { codexVersion } from "./app-server-session";
@@ -70,6 +71,7 @@ export class CodexProvider implements CodeAgentProvider {
       this.#host.processTreeSpawner,
     );
     rejectServerRequests(process, options.agentId, options.runtimeId);
+    let stopReadingBaseline: (() => void) | undefined;
     try {
       const initialized = await process.request({
         method: "initialize",
@@ -85,6 +87,14 @@ export class CodexProvider implements CodeAgentProvider {
       });
       assertSkillsLoaded(skillsResponse, options.agentWorkspaceDirectory);
       const reasoningSummary = await codexReasoningSummary(environment, this.#host);
+      const resumedUsage = options.sessionId ? new CodexTokenUsageTracker() : undefined;
+      if (resumedUsage) {
+        stopReadingBaseline = process.onRecord((record) => {
+          if (record.method !== "thread/tokenUsage/updated") return;
+          const params = asRecord(record.params);
+          if (params?.threadId === options.sessionId) resumedUsage.seedBaseline(params);
+        });
+      }
       const { threadId, result, replacedSessionId, replacementWarning } = await openCodexThread(
         process,
         options,
@@ -116,10 +126,13 @@ export class CodexProvider implements CodeAgentProvider {
         model,
         (timeoutMs) =>
           readCodexLiveUsage(process, (label) => this.#host.maskAccountLabel(label), timeoutMs),
+        replacedSessionId === undefined ? resumedUsage : undefined,
       );
     } catch (error) {
       await process.dispose();
       throw error;
+    } finally {
+      stopReadingBaseline?.();
     }
   }
 }

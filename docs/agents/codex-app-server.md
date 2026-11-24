@@ -42,3 +42,8 @@ Part of [the documentation index](../../README.md). The Codex adapter talks to t
   internal rollout format (`RolloutLine` / `RolloutItemWire`, openai/codex main on 2026-10-28).
 - Context usage (`context-usage.ts`): `thread/tokenUsage/updated`'s `tokenUsage.last.totalTokens`
   against `modelContextWindow`, as Raft 1.0.59 reads it. Never `total`, which is cumulative.
+- Per-turn usage for a resumed main thread prefers `last` tied to the current turn. A cumulative
+  delta requires a pre-turn baseline. During an active turn, hold cumulative-only deltas until
+  completion. Discard them if the baseline's turn advances or a counter reset is observed across
+  turns. Older readings cannot replace a newer baseline or discard pending deltas. A new turn with
+  a matching `last` can establish a new baseline after a counter reset.

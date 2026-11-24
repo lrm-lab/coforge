@@ -103,6 +103,28 @@ async function handle(message: Message): Promise<void> {
         },
       });
     } else {
+      if (scenarios.has("resume-usage-baseline")) {
+        write({
+          method: "thread/tokenUsage/updated",
+          params: {
+            threadId: resumed,
+            turnId: "historical",
+            tokenUsage: {
+              total: { inputTokens: 502_000, cachedInputTokens: 480_000, outputTokens: 12_500 },
+            },
+          },
+        });
+        write({
+          method: "thread/tokenUsage/updated",
+          params: {
+            threadId: resumed,
+            turnId: "historical",
+            tokenUsage: {
+              total: { inputTokens: 500_000, cachedInputTokens: 478_000, outputTokens: 12_000 },
+            },
+          },
+        });
+      }
       write({
         id,
         result: {
@@ -263,6 +285,32 @@ function turnScenario(input: string | undefined, turnId: string): void {
   const notify = (method: string, params: Record<string, unknown>) =>
     write({ method, params: { threadId, ...params } });
   const say = (delta: string) => notify("item/agentMessage/delta", { turnId, itemId: "m1", delta });
+  if (input === "resume-usage-reset" || input === "resume-usage-after-reset") {
+    const count = (inputTokens: number, outputTokens: number) => ({
+      inputTokens,
+      outputTokens,
+      cachedInputTokens: 0,
+    });
+    if (input === "resume-usage-reset") {
+      for (const total of [count(100, 10), count(200, 20)])
+        notify("thread/tokenUsage/updated", {
+          turnId,
+          tokenUsage: { total, last: count(100, 10) },
+        });
+    } else {
+      notify("thread/tokenUsage/updated", { turnId, tokenUsage: { total: count(300, 30) } });
+    }
+    say("Done");
+  }
+  if (input === "resume-usage-delta") {
+    notify("thread/tokenUsage/updated", {
+      turnId,
+      tokenUsage: {
+        total: { inputTokens: 505_000, cachedInputTokens: 482_400, outputTokens: 13_100 },
+      },
+    });
+    say("Done");
+  }
   if (input === "token-usage-only") notify("thread/tokenUsage/updated", { turnId, tokenUsage: {} });
   if (input === "token-usage") {
     // A real reading: the last request against the window, the cumulative total far past it.
