@@ -27,10 +27,12 @@ COPY scripts/release/cli-install.sh scripts/release/cli-install.sh
 COPY scripts/release/cli-install.ps1 scripts/release/cli-install.ps1
 
 # Generated outputs are gitignored but required for the build: buf-generated
-# protobuf modules (packages/coforge-sdk/gen) and the prisma client
-# (apps/web/src/generated).
+# protobuf modules (packages/coforge-sdk/gen), the prisma client
+# (apps/web/src/generated), and physical Paraglide i18n modules
+# (apps/web/src/paraglide) used by the bundled operational scripts.
 RUN bun run --cwd packages/coforge-sdk generate \
-  && bun run --cwd apps/web db:generate
+  && bun run --cwd apps/web db:generate \
+  && bun run --cwd apps/web generate-i18n
 
 RUN bun run --cwd apps/web build
 

@@ -93,4 +93,15 @@ describe("Web image workspace closure", () => {
     expect(embedded.length).toBeGreaterThan(0);
     expect(embedded.filter((path) => !covered(path))).toEqual([]);
   });
+
+  test("the build stage generates physical Paraglide i18n modules before bundling ops scripts", async () => {
+    const dockerfile = await Bun.file(new URL("../../apps/web/Dockerfile", import.meta.url)).text();
+    const buildStage = dockerfile.slice(0, dockerfile.indexOf(" AS migrate"));
+    const generateI18nIndex = buildStage.indexOf("bun run --cwd apps/web generate-i18n");
+    const firstOpsBundleIndex = buildStage.indexOf("bun build apps/web/scripts/");
+
+    expect(firstOpsBundleIndex).toBeGreaterThan(-1);
+    expect(generateI18nIndex).toBeGreaterThan(-1);
+    expect(generateI18nIndex).toBeLessThan(firstOpsBundleIndex);
+  });
 });
