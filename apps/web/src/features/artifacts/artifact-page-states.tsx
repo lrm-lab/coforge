@@ -27,11 +27,15 @@ export function LoadingBody() {
 export function ArtifactUnavailable({
   gone,
   retrying = false,
+  description,
+  retryLabel,
   onRetry,
   onClose,
 }: {
   gone: boolean;
   retrying?: boolean;
+  description?: string;
+  retryLabel?: string;
   onRetry?: () => void;
   onClose?: () => void;
 }) {
@@ -57,10 +61,14 @@ export function ArtifactUnavailable({
         role={gone ? undefined : "alert"}
         picture={gone ? <LockedWireframe /> : <EmptyIcon icon={AlertCircle} />}
         title={gone ? m.doc_unavailable_title() : m.doc_load_failed_title()}
-        description={gone ? m.doc_load_failed() : m.doc_load_failed_retry()}
+        description={description ?? (gone ? m.doc_load_failed() : m.doc_load_failed_retry())}
         primaryAction={
           !gone && onRetry ? (
-            <RetryButton isRetrying={retrying} label={m.doc_retry()} onPress={onRetry} />
+            <RetryButton
+              isRetrying={retrying}
+              label={retryLabel ?? m.doc_retry()}
+              onPress={onRetry}
+            />
           ) : (
             backAction
           )

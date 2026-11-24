@@ -18,9 +18,8 @@ export const Route = createFileRoute("/w/$workspaceSlug/_chat/channel/$channelId
     ...conversationPageSearchShape,
     message: chatMessageParamSchema,
   }),
-  // A document link opens beside the chat (Frank, 11-05); where artifacts are off, it is dropped.
-  beforeLoad: ({ params, search, location }) =>
-    redirectDocLink(params.workspaceSlug, search, location, { besideChat: true }),
+  beforeLoad: ({ params, search, location, cause }) =>
+    redirectDocLink(params.workspaceSlug, search, location, { besideChat: true, cause }),
   loaderDeps: ({ search }) => conversationPageLoaderDeps(search),
   remountDeps: ({ params }) => params.channelId,
   loader: ({ context, params, deps, parentMatchPromise, cause }) =>

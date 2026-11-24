@@ -1,6 +1,8 @@
 import { redirect, useLocation, useRouter } from "@tanstack/react-router";
 import { z } from "zod";
 
+import { preloadArtifactPage } from "./artifact-page-lazy";
+
 export const artifactSearchShape = {
   doc: z.uuid().optional().catch(undefined),
   docFull: z.boolean().optional().catch(undefined),
@@ -73,9 +75,18 @@ export function redirectDocLink(
   workspaceSlug: string,
   search: ArtifactSearch,
   _location: { href: string },
-  { besideChat = false } = {},
+  {
+    besideChat = false,
+    cause,
+  }: { besideChat?: boolean; cause?: "enter" | "stay" | "preload" } = {},
 ) {
-  if (search.doc === undefined || besideChat) return;
+  if (search.doc === undefined) return;
+  if (besideChat) {
+    if (cause === "enter" && typeof window !== "undefined") {
+      void preloadArtifactPage().catch(() => undefined);
+    }
+    return;
+  }
   throw redirect({
     ...artifactPageRoute(workspaceSlug, search.doc),
     replace: true,

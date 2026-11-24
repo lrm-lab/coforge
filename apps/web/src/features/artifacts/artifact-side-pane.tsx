@@ -1,4 +1,13 @@
-import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
+import { CatchBoundary } from "@tanstack/react-router";
 import { Group, Panel, Separator, useDefaultLayout, useGroupRef } from "react-resizable-panels";
 
 import {
@@ -7,13 +16,29 @@ import {
 } from "#src/features/conversations/conversation-split";
 import { localLayoutStorage } from "#src/features/conversations/local-layout-storage";
 import { cn } from "#src/lib/utils";
+import { hasUnsavedTemporaryState } from "#src/features/updates/build-update";
+import { isChunkLoadError, reportChunkLoadError } from "#src/features/updates/build-update-watcher";
 import { m } from "#src/paraglide/messages";
-import { ArtifactPage } from "./artifact-page";
+import { ArtifactUnavailable, LoadingBody } from "./artifact-page-states";
+import {
+  clearArtifactPagePreload,
+  getLoadedArtifactPage,
+  preloadArtifactPage,
+} from "./artifact-page-lazy";
 import {
   closedArtifactSearch,
   useArtifactNavigation,
   type ArtifactSearch,
 } from "./artifact-search";
+
+const loadArtifactPage = () => preloadArtifactPage().then((mod) => ({ default: mod.ArtifactPage }));
+
+let LazyArtifactPage = lazy(loadArtifactPage);
+
+function resetLazyArtifactPage() {
+  clearArtifactPagePreload();
+  LazyArtifactPage = lazy(loadArtifactPage);
+}
 
 const CHAT_MIN_REM = 24;
 const ARTIFACT_MIN_REM = 26;
@@ -149,6 +174,13 @@ export function ConversationArtifactSplit({
   );
 }
 
+function LazyMountObserver({ onMount }: { onMount: () => void }) {
+  useEffect(() => {
+    onMount();
+  }, [onMount]);
+  return null;
+}
+
 export function ConversationArtifactPane({
   conversationId,
   search,
@@ -157,7 +189,19 @@ export function ConversationArtifactPane({
   search: ArtifactSearch;
 }) {
   const navigate = useArtifactNavigation();
+  const [LoadedArtifactPage] = useState(() => getLoadedArtifactPage());
+  const [prevDoc, setPrevDoc] = useState(search.doc);
+  const [retryAttempt, setRetryAttempt] = useState(0);
+  const [chunkRetryCount, setChunkRetryCount] = useState(0);
+  const clearChunkRetry = useCallback(() => setChunkRetryCount(0), []);
+
+  if (prevDoc !== search.doc) {
+    setPrevDoc(search.doc);
+    if (chunkRetryCount !== 0) setChunkRetryCount(0);
+  }
+
   if (search.doc === undefined) return null;
+  const Page = LoadedArtifactPage ?? LazyArtifactPage;
   const pane = {
     full: Boolean(search.docFull),
     onToggleFull: () => navigate({ docFull: search.docFull ? undefined : true }, { replace: true }),
@@ -165,5 +209,52 @@ export function ConversationArtifactPane({
     conversationId,
     onSwitchArtifact: (artifactId: string) => navigate({ doc: artifactId }, { replace: true }),
   };
-  return <ArtifactPage artifactId={search.doc} pane={pane} />;
+  return (
+    <CatchBoundary
+      getResetKey={() => `${search.doc}:${retryAttempt}`}
+      onCatch={(error) => {
+        if (isChunkLoadError(error)) {
+          resetLazyArtifactPage();
+          reportChunkLoadError();
+        } else {
+          setChunkRetryCount(0);
+        }
+      }}
+      errorComponent={({ error, reset }) => {
+        const isChunkError = isChunkLoadError(error);
+        const needsReload = chunkRetryCount > 0 && isChunkError;
+        return (
+          <ArtifactUnavailable
+            gone={false}
+            description={
+              needsReload && hasUnsavedTemporaryState()
+                ? m.app_updated_unsaved_warning()
+                : undefined
+            }
+            retryLabel={needsReload ? m.agent_workspace_reload() : undefined}
+            onClose={pane.onClose}
+            onRetry={
+              needsReload
+                ? () => window.location.reload()
+                : () => {
+                    if (isChunkError) {
+                      resetLazyArtifactPage();
+                      setChunkRetryCount((count) => count + 1);
+                    } else {
+                      setChunkRetryCount(0);
+                    }
+                    setRetryAttempt((attempt) => attempt + 1);
+                    reset();
+                  }
+            }
+          />
+        );
+      }}
+    >
+      <Suspense fallback={<LoadingBody />}>
+        <Page key={retryAttempt} artifactId={search.doc} pane={pane} />
+        <LazyMountObserver onMount={clearChunkRetry} />
+      </Suspense>
+    </CatchBoundary>
+  );
 }
