@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { Cursor02 } from "@untitledui/icons";
 
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
@@ -7,17 +7,20 @@ import { m } from "#src/paraglide/messages";
 import { useCommentDraftActions, useCommentDrafts } from "./artifact-comment-drafts-context";
 import { hasImages, type CommentDraftView } from "./artifact-comment-drafts-queries";
 import { useArtifactCommenting } from "./artifact-commenting";
-import {
-  ArtifactInlineEditor,
-  segmentsFromDraft,
-  type ArtifactInlineEditorHandle,
-} from "./artifact-inline-editor";
+import type { ArtifactInlineEditorHandle } from "./artifact-inline-editor";
 import {
   elementAnchorsFromSegments,
   firstElementAnchorFromSegments,
+  segmentsFromDraft,
   serializeInlineSegments,
   type InlineSegment,
 } from "./artifact-inline-refs";
+
+const ArtifactInlineEditor = lazy(() =>
+  import("./artifact-inline-editor").then((module) => ({
+    default: module.ArtifactInlineEditor,
+  })),
+);
 import {
   AnchorChip,
   ArtifactReviewBar,
@@ -66,7 +69,12 @@ export function ArtifactReviewPill({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [focusedIdx, setFocusedIdx] = useState(-1);
   const [confirmDeleteDraft, setConfirmDeleteDraft] = useState<CommentDraftView | null>(null);
-  const editorRef = useRef<ArtifactInlineEditorHandle>(null);
+  const [editorReady, setEditorReady] = useState(false);
+  const editorRef = useRef<ArtifactInlineEditorHandle | null>(null);
+  const attachEditor = useCallback((handle: ArtifactInlineEditorHandle | null) => {
+    editorRef.current = handle;
+    setEditorReady(handle !== null);
+  }, []);
   const pickedPathRef = useRef<string | undefined>(undefined);
   const hydratedEditRef = useRef<string | null>(null);
   const savingRef = useRef(false);
@@ -89,17 +97,18 @@ export function ArtifactReviewPill({
       pickBus.setHighlightedAnchors([]);
       return;
     }
+    if (!editorReady || !editorRef.current) return;
     if (editingDraft && hydratedEditRef.current !== editingDraft.id) {
       hydratedEditRef.current = editingDraft.id;
       pickedPathRef.current = editingDraft.path ?? activePath;
-      editorRef.current?.setSegments(segmentsFromDraft(editingDraft));
+      editorRef.current.setSegments(segmentsFromDraft(editingDraft));
       return;
     }
     if (!editingDraft) {
       hydratedEditRef.current = null;
-      editorRef.current?.focus();
+      editorRef.current.focus();
     }
-  }, [showCard, isCompose, editingDraft, activePath, pickBus]);
+  }, [showCard, isCompose, editorReady, editingDraft, activePath, pickBus]);
 
   useEffect(() => {
     if (!showCard || !isCompose) {
@@ -425,23 +434,25 @@ export function ArtifactReviewPill({
                     <AnchorChip label={formatAnchorTag(editingDraft.anchor, editingDraft.path)} />
                   </div>
                 )}
-                <ArtifactInlineEditor
-                  ref={editorRef}
-                  label={m.av_cm_field_label()}
-                  placeholder={m.av_dr_compose_placeholder()}
-                  disabled={saving || locked}
-                  onSegmentsChange={handleSegmentsChange}
-                  onSubmit={() => {
-                    if (editingDraft || preferDraft) void saveForm(false);
-                    else void sendImmediate();
-                  }}
-                  onSubmitAndSend={() => {
-                    if (editingDraft) void saveForm(true);
-                    else if (preferDraft) void sendImmediate();
-                    else void saveForm(false);
-                  }}
-                  onCancel={exitComposeToList}
-                />
+                <Suspense fallback={<div className="min-h-11" />}>
+                  <ArtifactInlineEditor
+                    ref={attachEditor}
+                    label={m.av_cm_field_label()}
+                    placeholder={m.av_dr_compose_placeholder()}
+                    disabled={saving || locked}
+                    onSegmentsChange={handleSegmentsChange}
+                    onSubmit={() => {
+                      if (editingDraft || preferDraft) void saveForm(false);
+                      else void sendImmediate();
+                    }}
+                    onSubmitAndSend={() => {
+                      if (editingDraft) void saveForm(true);
+                      else if (preferDraft) void sendImmediate();
+                      else void saveForm(false);
+                    }}
+                    onCancel={exitComposeToList}
+                  />
+                </Suspense>
                 {saveError && (
                   <p role="alert" className="mt-1.5 text-xs text-error-primary">
                     {saveError}

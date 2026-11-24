@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react";
+import { Suspense, lazy, memo, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, ArrowLeft, Download01, File02 } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
@@ -16,11 +16,15 @@ import { parseCsv } from "./artifact-csv";
 import { artifactDownloadUrl } from "./artifact-download-url";
 import { ArtifactCommentSurface } from "./artifact-comment-surface";
 import { useArtifactCommenting } from "./artifact-commenting";
-import { ArtifactMarkdown } from "./artifact-markdown";
+import { LoadingBody } from "./artifact-page-states";
 import { artifactKindOfPath } from "./artifact-path-kind";
 import { artifactFilePreviewQuery } from "./artifact-queries";
 import { ArtifactPdfFrame, ArtifactWebPage } from "./artifact-web-page";
 import { framedKind } from "./use-open-file";
+
+const ArtifactMarkdown = lazy(() =>
+  import("./artifact-markdown").then((module) => ({ default: module.ArtifactMarkdown })),
+);
 
 const CSV_ROWS_SHOWN = 1000;
 
@@ -263,12 +267,14 @@ function FileBody({
   }
   if (kind === "markdown")
     return (
-      <ArtifactMarkdown
-        path={path}
-        text={preview.text}
-        findOpen={finding}
-        onFindClose={() => onFindingChange?.(false)}
-      />
+      <Suspense fallback={<LoadingBody />}>
+        <ArtifactMarkdown
+          path={path}
+          text={preview.text}
+          findOpen={finding}
+          onFindClose={() => onFindingChange?.(false)}
+        />
+      </Suspense>
     );
   return (
     <ArtifactCommentSurface

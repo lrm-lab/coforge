@@ -11,7 +11,6 @@ import { copyText } from "#src/lib/clipboard";
 import { m } from "#src/paraglide/messages";
 import { deleteArtifact } from "./artifacts.functions";
 import { ArtifactDeleteConfirm } from "./artifact-delete-confirm";
-import { ArtifactFile, ArtifactFileView } from "./artifact-file-view";
 import { ArtifactCommentPanel } from "./artifact-comment-panel";
 import { ArtifactDraftsProvider } from "./artifact-drafts-provider";
 import { ArtifactReviewPill } from "./artifact-review-pill";
@@ -35,7 +34,7 @@ import { useShownVersion } from "./use-shown-version";
 import { useRevealOnArrival, useThreadReveal } from "./use-thread-reveal";
 import { useCommentMode, type ArtifactPanelName } from "./use-comment-mode";
 import { ArtifactFilesPanel } from "./artifact-files-panel";
-import { ArtifactMarkdown } from "./artifact-markdown";
+import { ArtifactPageBody } from "./artifact-page-body";
 import type { ArtifactOverlayControls, ArtifactPaneControls } from "./artifact-page-header";
 import {
   ArtifactPageHost,
@@ -50,11 +49,10 @@ import { ArtifactSendDialog } from "./artifact-send-dialog";
 import { ArtifactUpdateBanner, ViewingVersionNotice } from "./artifact-update-banner";
 import { artifactKindOfPath } from "./artifact-path-kind";
 import { PaneFrame } from "./artifact-parts";
-import { ArtifactUnavailable, LoadingBody, isGone } from "./artifact-page-states";
+import { ArtifactUnavailable, isGone } from "./artifact-page-states";
 import { artifactHomeConversation, refreshArtifact } from "./artifact-queries";
 import { artifactPageRoute } from "./artifact-search";
 import { encodeArtifactShortId, publicArtifactPath } from "./artifact-short-id";
-import { ArtifactWebPage } from "./artifact-web-page";
 import { useConversationName } from "./use-conversation-name";
 import { useArtifactActions } from "./use-artifact-actions";
 import { useArtifactPageRealtime } from "./use-artifact-page-realtime";
@@ -426,45 +424,22 @@ function ArtifactPageFor({
                         onBack={unpin}
                       />
                     )}
-                    {!current ? (
-                      <LoadingBody />
-                    ) : openPath ? (
-                      <ArtifactFileView
-                        artifactId={artifactId}
-                        version={shownVersion}
-                        title={title}
-                        entryPath={shownEntry(current)}
-                        path={openPath}
-                        source={source}
-                        finding={finding}
-                        onFindingChange={setFinding}
-                        onBack={() => openFile(null)}
-                      />
-                    ) : webPage ? (
-                      <ArtifactWebPage
-                        key={shownVersion}
-                        artifactId={artifactId}
-                        version={shownVersion}
-                        title={title}
-                        entryPath={shownEntry(current)}
-                        path={shownEntry(current)}
-                        finding={finding}
-                        onFindingChange={setFinding}
-                      />
-                    ) : entryKind === "markdown" ? (
-                      <ArtifactMarkdown
-                        path={shownEntry(current)}
-                        text={current.text}
-                        findOpen={shell.markdownFindOpen}
-                        onFindClose={shell.closeMarkdownFind}
-                      />
-                    ) : (
-                      <ArtifactFile
-                        artifactId={artifactId}
-                        version={shownVersion}
-                        path={shownEntry(current)}
-                      />
-                    )}
+                    <ArtifactPageBody
+                      artifactId={artifactId}
+                      shownVersion={shownVersion}
+                      title={title}
+                      entryPath={entryPath}
+                      entryKind={entryKind}
+                      text={current?.text}
+                      openPath={openPath}
+                      source={source}
+                      webPage={webPage}
+                      finding={finding}
+                      markdownFindOpen={shell.markdownFindOpen}
+                      onFindingChange={setFinding}
+                      onCloseMarkdownFind={shell.closeMarkdownFind}
+                      onCloseFile={() => openFile(null)}
+                    />
                     {current && (
                       <ArtifactReviewPill
                         activePath={shownPath}
