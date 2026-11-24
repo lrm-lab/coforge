@@ -2,9 +2,11 @@ import { getLogger } from "@logtape/logtape";
 import type {
   DaemonHoldResponse,
   HeldBusyAgent,
+  ManagedRuntimeIdentity,
   RunnerHoldReason,
 } from "@lrm/coforge-sdk/internal";
-import { thrownMessage } from "@lrm/coforge-sdk/internal";
+import { RUNNER_HOLD_REASONS, thrownMessage } from "@lrm/coforge-sdk/internal";
+import type { DaemonHoldReport } from "#src/local-rpc";
 
 /**
  * How long a lifecycle operation lets in-flight Agent work finish after the runner hold is
@@ -119,6 +121,42 @@ export type RunnerHoldSnapshot = {
   busyAgents: readonly HeldBusyAgent[];
   unreachableWorkspaceIds: readonly string[];
 };
+
+export function workspaceRunnerHoldFanOut(
+  runtimes: () => Promise<readonly ManagedRuntimeIdentity[]>,
+  holdWorkspaceRunners: (
+    workspaceId: string,
+    operation: "hold" | "release",
+    reason: RunnerHoldReason | undefined,
+    eventPrefix: string,
+    timeoutMs?: number,
+  ) => Promise<RunnerHoldSnapshot>,
+) {
+  return async (
+    operation: "hold" | "release",
+    reason?: RunnerHoldReason,
+    options?: { timeoutMs?: number; workspaceIds?: readonly string[]; eventPrefix?: string },
+  ): Promise<DaemonHoldReport> => {
+    const workspaceIds =
+      options?.workspaceIds ??
+      (await runtimes())
+        .filter((runtime) => runtime.processId > 0)
+        .map((runtime) => runtime.workspaceId);
+    const eventPrefix =
+      options?.eventPrefix ??
+      (reason === RUNNER_HOLD_REASONS.COMPUTER_UPGRADE ? "upgrade" : "restart");
+    const reports = await Promise.all(
+      workspaceIds.map((workspaceId) =>
+        holdWorkspaceRunners(workspaceId, operation, reason, eventPrefix, options?.timeoutMs),
+      ),
+    );
+    return {
+      held: operation === "hold",
+      busyAgents: reports.flatMap((report) => report.busyAgents),
+      unreachableWorkspaceIds: reports.flatMap((report) => report.unreachableWorkspaceIds),
+    };
+  };
+}
 
 export type RunnerHoldOutcome = RunnerHoldSnapshot & {
   /** True when every Agent reached an idle/terminal Activity before the bound elapsed. */

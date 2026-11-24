@@ -3,12 +3,8 @@ import { resolveComputerInstallDirectory } from "#src/platform/computer-install-
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import {
-  RUNNER_HOLD_REASONS,
-  type RunnerHoldReason,
-  thrownMessage,
-} from "@lrm/coforge-sdk/internal";
-import { startDaemonLocalRpcServer, type DaemonHoldReport } from "#src/local-rpc";
+import { type RunnerHoldReason, thrownMessage } from "@lrm/coforge-sdk/internal";
+import { startDaemonLocalRpcServer } from "#src/local-rpc";
 import { captureStopSignal } from "#src/platform/stop-signal";
 import { FileDaemonCredentialStore } from "#src/credentials/credential-store";
 import { createComputerSelfClient } from "#src/connection/computer-self-client";
@@ -32,7 +28,7 @@ import { workspaceUpgradeRecovery } from "./workspace-upgrade-recovery";
 import { startWorkspaceReconcileLoop } from "./windows-workspace-reconcile";
 import { workspaceStateDirectory, type WorkspaceInstance } from "./workspace-instance";
 import { WorkspaceHealthJournal, workspaceHealthJournalPath } from "./workspace-health-journal";
-import { askWorkspaceRunnerHold } from "./runner-hold";
+import { askWorkspaceRunnerHold, workspaceRunnerHoldFanOut } from "./runner-hold";
 import { workspaceDaemonConfig } from "./workspace-daemon-config";
 import { startSupervisorWorkspace } from "./start-supervisor-workspace";
 import { workspaceRuntimeView } from "./workspace-runtime-view";
@@ -332,30 +328,10 @@ async function runWithSupervisorLock(
   /** The pending `retire-session` per Workspace — a new start for the same one cancels the one
    * it left, and the Coordinator's shutdown cancels them all (task #417). */
   const retireSessions = new Map<string, { stop(): void }>();
-  const fanOutRunnerHold = async (
-    operation: "hold" | "release",
-    reason?: RunnerHoldReason,
-    options?: { timeoutMs?: number; workspaceIds?: readonly string[]; eventPrefix?: string },
-  ): Promise<DaemonHoldReport> => {
-    const workspaceIds =
-      options?.workspaceIds ??
-      (await runtimes(await supervisor.view()))
-        .filter((runtime) => runtime.processId > 0)
-        .map((runtime) => runtime.workspaceId);
-    const eventPrefix =
-      options?.eventPrefix ??
-      (reason === RUNNER_HOLD_REASONS.COMPUTER_UPGRADE ? "upgrade" : "restart");
-    const reports = await Promise.all(
-      workspaceIds.map((workspaceId) =>
-        holdWorkspaceRunners(workspaceId, operation, reason, eventPrefix, options?.timeoutMs),
-      ),
-    );
-    return {
-      held: operation === "hold",
-      busyAgents: reports.flatMap((report) => report.busyAgents),
-      unreachableWorkspaceIds: reports.flatMap((report) => report.unreachableWorkspaceIds),
-    };
-  };
+  const fanOutRunnerHold = workspaceRunnerHoldFanOut(
+    async () => runtimes(await supervisor.view()),
+    holdWorkspaceRunners,
+  );
   let rpc: Awaited<ReturnType<typeof startDaemonLocalRpcServer>> | undefined;
   try {
     try {
