@@ -5,6 +5,7 @@ import {
   type AgentTokenUsageBucket,
   type AgentTokenUsageBucketSlice,
   type AgentTokenUsageModelEntry,
+  type AgentTokenUsageModelShare,
   type AgentTokenUsageRange,
   type AgentTokenUsageReport,
   type AgentTokenUsageSummary,
@@ -428,5 +429,121 @@ export function summarizeWorkspaceAgentUsage(
     visibleTurns,
     visibleActiveAgents,
     rows,
+  };
+}
+
+export const WORKSPACE_MODEL_DONUT_PRIMARY_LIMIT = 4;
+
+export type ModelDistributionSliceTone = "rank-1" | "rank-2" | "rank-3" | "rank-4" | "other";
+
+export type ModelDistributionModelSlice = Readonly<{
+  key: string;
+  kind: "model";
+  provider: string;
+  model: string;
+  effectiveTokens: number;
+  turns: number;
+  sharePercent: number;
+  tone: ModelDistributionSliceTone;
+}>;
+
+export type ModelDistributionOtherSlice = Readonly<{
+  key: "__other__";
+  kind: "other";
+  otherCount: number;
+  effectiveTokens: number;
+  turns: number;
+  sharePercent: number;
+  tone: "other";
+}>;
+
+export type ModelDistributionSlice = ModelDistributionModelSlice | ModelDistributionOtherSlice;
+
+export type ModelDistributionSummary = Readonly<{
+  totalEffectiveTokens: number;
+  totalModelCount: number;
+  slices: readonly ModelDistributionSlice[];
+  allModels: readonly ModelDistributionModelSlice[];
+  otherModels: readonly ModelDistributionModelSlice[];
+}>;
+
+const PRIMARY_SLICE_TONES: readonly ModelDistributionSliceTone[] = [
+  "rank-1",
+  "rank-2",
+  "rank-3",
+  "rank-4",
+];
+
+function computeSharePercent(part: number, total: number): number {
+  if (total <= 0 || part <= 0) return 0;
+  return Math.round((part / total) * 1000) / 10;
+}
+
+export function summarizeModelDistribution(
+  models: readonly AgentTokenUsageModelShare[],
+  primaryLimit: number = WORKSPACE_MODEL_DONUT_PRIMARY_LIMIT,
+): ModelDistributionSummary {
+  const limit = Math.max(1, Math.min(primaryLimit, PRIMARY_SLICE_TONES.length));
+  const sorted = models
+    .filter((entry) => entry.effectiveTokens > 0)
+    .sort((a, b) => {
+      if (b.effectiveTokens !== a.effectiveTokens) return b.effectiveTokens - a.effectiveTokens;
+      if (b.turns !== a.turns) return b.turns - a.turns;
+      if (a.model !== b.model) return a.model < b.model ? -1 : 1;
+      return a.provider < b.provider ? -1 : a.provider > b.provider ? 1 : 0;
+    });
+
+  if (sorted.length === 0) {
+    return {
+      totalEffectiveTokens: 0,
+      totalModelCount: 0,
+      slices: [],
+      allModels: [],
+      otherModels: [],
+    };
+  }
+
+  const totalEffectiveTokens = sorted.reduce((sum, entry) => sum + entry.effectiveTokens, 0);
+  const allModels: ModelDistributionModelSlice[] = sorted.map((entry, index) => ({
+    key: `${entry.provider}:${entry.model}`,
+    kind: "model",
+    provider: entry.provider,
+    model: entry.model,
+    effectiveTokens: entry.effectiveTokens,
+    turns: entry.turns,
+    sharePercent: computeSharePercent(entry.effectiveTokens, totalEffectiveTokens),
+    tone: index < limit ? PRIMARY_SLICE_TONES[index]! : "other",
+  }));
+
+  if (allModels.length <= limit) {
+    return {
+      totalEffectiveTokens,
+      totalModelCount: allModels.length,
+      slices: allModels,
+      allModels,
+      otherModels: [],
+    };
+  }
+
+  const primary = allModels.slice(0, limit);
+  const otherModels = allModels.slice(limit);
+  const otherEffectiveTokens = otherModels.reduce((sum, entry) => sum + entry.effectiveTokens, 0);
+  const otherTurns = otherModels.reduce((sum, entry) => sum + entry.turns, 0);
+  const otherSlice: ModelDistributionOtherSlice = {
+    key: "__other__",
+    kind: "other",
+    otherCount: otherModels.length,
+    effectiveTokens: otherEffectiveTokens,
+    turns: otherTurns,
+    sharePercent: computeSharePercent(otherEffectiveTokens, totalEffectiveTokens),
+    tone: "other",
+  };
+
+  return {
+    totalEffectiveTokens,
+    totalModelCount: allModels.length,
+    slices: [...primary, otherSlice],
+    allModels,
+    otherModels,
   };
 }

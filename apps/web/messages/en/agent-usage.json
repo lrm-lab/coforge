@@ -53,5 +53,13 @@
   "agent_usage_sort_active_asc": "{column}, sorted ascending",
   "agent_usage_sort_active_desc": "{column}, sorted descending",
   "agent_usage_sort_asc": "Asc",
-  "agent_usage_sort_desc": "Desc"
+  "agent_usage_sort_desc": "Desc",
+  "agent_usage_models_other": "Other ({count})",
+  "agent_usage_models_show_all": "Show all ({count})",
+  "agent_usage_models_show_less": "Show less",
+  "agent_usage_models_center_one": "model",
+  "agent_usage_models_center_other": "models",
+  "agent_usage_models_tooltip_tokens": "{exact} tokens ({percent})",
+  "agent_usage_models_chart_label": "Model token distribution",
+  "agent_usage_models_all_heading": "All models"
 }

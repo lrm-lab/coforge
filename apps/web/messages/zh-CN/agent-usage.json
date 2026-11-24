@@ -53,5 +53,13 @@
   "agent_usage_sort_active_asc": "{column}，当前升序",
   "agent_usage_sort_active_desc": "{column}，当前降序",
   "agent_usage_sort_asc": "升序",
-  "agent_usage_sort_desc": "降序"
+  "agent_usage_sort_desc": "降序",
+  "agent_usage_models_other": "其他 ({count})",
+  "agent_usage_models_show_all": "查看全部 ({count})",
+  "agent_usage_models_show_less": "收起",
+  "agent_usage_models_center_one": "个模型",
+  "agent_usage_models_center_other": "个模型",
+  "agent_usage_models_tooltip_tokens": "{exact} Token ({percent})",
+  "agent_usage_models_chart_label": "模型 Token 分布",
+  "agent_usage_models_all_heading": "全部模型"
 }

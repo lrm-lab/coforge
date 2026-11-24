@@ -99,7 +99,9 @@
 
   --color-chart-input: var(--color-blue-600);
   --color-chart-output: var(--color-sky-500);
+  --color-chart-series-3: var(--color-blue-300);
   --color-chart-cache: var(--color-neutral-400);
+  --color-chart-other: var(--color-neutral-300);
   --color-chart-slot: var(--color-neutral-200);
   --color-chart-heat-1: var(--color-blue-100);
   --color-chart-heat-2: var(--color-blue-200);
@@ -220,7 +222,9 @@
 
     --color-chart-input: var(--color-blue-500);
     --color-chart-output: var(--color-sky-400);
+    --color-chart-series-3: var(--color-blue-700);
     --color-chart-cache: var(--color-neutral-500);
+    --color-chart-other: var(--color-neutral-600);
     --color-chart-slot: var(--color-neutral-800);
     --color-chart-heat-1: var(--color-blue-950);
     --color-chart-heat-2: var(--color-blue-900);

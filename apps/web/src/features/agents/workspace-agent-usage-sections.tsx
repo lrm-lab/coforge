@@ -18,7 +18,6 @@ import {
   formatCompactTokens,
   formatExactTokens,
   formatUsagePercent,
-  type AgentTokenUsageModelShare,
 } from "./agent-token-usage-model";
 import { formatAgentProfileParam } from "./profile-panel/profile-panel-search";
 import { useAgentModelName } from "./use-agent-model-name";
@@ -191,68 +190,6 @@ export function UsageRankingSortMenu({
           </Dropdown.Menu>
         </Dropdown.Popover>
       </Dropdown.Root>
-    </div>
-  );
-}
-
-const MODEL_SWATCH_CLASSES = [
-  "bg-chart-input",
-  "bg-chart-output",
-  "bg-chart-cache",
-  "bg-quaternary",
-] as const;
-
-export function ModelDistributionStrip({
-  models,
-  locale,
-}: {
-  models: readonly AgentTokenUsageModelShare[];
-  locale: string;
-}) {
-  const nonZero = models.filter((entry) => entry.effectiveTokens > 0);
-  if (nonZero.length === 0) return null;
-
-  return (
-    <div className="border-t border-secondary px-4 py-3.5 sm:px-5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs font-medium text-tertiary">
-          {m.agent_usage_team_models_heading()}
-        </span>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-          {nonZero.slice(0, 4).map((entry, index) => (
-            <span
-              key={`${entry.provider}:${entry.model}`}
-              className="inline-flex items-center gap-1.5 text-secondary tabular-nums"
-            >
-              <span
-                aria-hidden="true"
-                className={cn(
-                  "size-2 shrink-0 rounded-full",
-                  MODEL_SWATCH_CLASSES[index % MODEL_SWATCH_CLASSES.length],
-                )}
-              />
-              <span className="max-w-40 truncate font-mono text-primary">
-                {entry.model || m.agent_usage_model_unknown()}
-              </span>
-              <span className="text-tertiary">
-                {formatUsagePercent(entry.sharePercent, locale)}
-              </span>
-            </span>
-          ))}
-        </div>
-      </div>
-      <div className="mt-2.5 flex h-1.5 w-full gap-0.5 overflow-hidden rounded-full bg-secondary">
-        {nonZero.slice(0, 4).map((entry, index) => (
-          <span
-            key={`${entry.provider}:${entry.model}`}
-            className={cn(
-              "block h-full min-w-1 rounded-xs",
-              MODEL_SWATCH_CLASSES[index % MODEL_SWATCH_CLASSES.length],
-            )}
-            style={{ width: `${entry.sharePercent}%` }}
-          />
-        ))}
-      </div>
     </div>
   );
 }

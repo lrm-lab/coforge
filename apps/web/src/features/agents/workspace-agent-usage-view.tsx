@@ -36,8 +36,8 @@ import {
   type WorkspaceAgentUsageSort,
   type WorkspaceAgentUsageSortKey,
 } from "./workspace-agent-usage-model";
+import { WorkspaceAgentUsageModelDonutCard } from "./workspace-agent-usage-model-donut";
 import {
-  ModelDistributionStrip,
   UsageRankingHeader,
   UsageRankingSortMenu,
   UsageRow,
@@ -60,6 +60,235 @@ function formatSelectedLabel(dateKey: string, hour: number | undefined, locale: 
     weekday: "short",
     timeZone: "UTC",
   }).format(utc);
+}
+
+function WorkspaceAgentUsageSkeleton() {
+  return (
+    <div role="status" aria-label={m.agents_loading()} className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-4 @4xl/members:grid-cols-[minmax(0,1.45fr)_minmax(18rem,1fr)]">
+        <div className="rounded-xl border border-secondary bg-primary p-4 sm:p-5">
+          <div className="flex items-center justify-between gap-2">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-8 w-44 rounded-lg" />
+          </div>
+          <Skeleton className="mt-3 h-8 w-32" />
+          <Skeleton className="mt-2 h-3.5 w-64" />
+          <Skeleton className="mt-5 h-24 w-full" />
+        </div>
+        <div className="rounded-xl border border-secondary bg-primary p-4 sm:p-5">
+          <Skeleton className="h-4 w-24" />
+          <div className="mt-4 flex flex-col items-center gap-4 sm:flex-row">
+            <Skeleton className="size-36 shrink-0 rounded-full" />
+            <div className="flex w-full flex-1 flex-col gap-2.5">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-5/6" />
+              <Skeleton className="h-4 w-2/3" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="overflow-hidden rounded-xl border border-secondary bg-primary divide-y divide-secondary">
+        <Skeleton className="h-14 w-full rounded-none" />
+        <Skeleton className="h-14 w-full rounded-none" />
+      </div>
+    </div>
+  );
+}
+
+function UsageRangeTabs({
+  range,
+  onChangeRange,
+}: {
+  range: AgentTokenUsageRange;
+  onChangeRange: (next: AgentTokenUsageRange) => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={m.agent_usage_range_label()}
+      className="inline-flex shrink-0 rounded-lg bg-secondary p-0.5"
+    >
+      {AGENT_TOKEN_USAGE_RANGES.map((option) => {
+        const active = range === option;
+        return (
+          <AriaButton
+            key={option}
+            aria-pressed={active}
+            onPress={() => onChangeRange(option)}
+            className={cn(
+              "min-h-8 cursor-pointer rounded-md px-2.5 text-xs font-medium outline-none transition-colors data-focus-visible:ring-2 data-focus-visible:ring-brand",
+              active
+                ? "bg-primary font-semibold text-primary shadow-xs"
+                : "text-tertiary hover:text-primary",
+            )}
+          >
+            {RANGE_LABELS[option]()}
+          </AriaButton>
+        );
+      })}
+    </div>
+  );
+}
+
+function UsageDeltaBadge({ deltaPercent }: { deltaPercent: number }) {
+  const toneClass =
+    deltaPercent > 0
+      ? "bg-warning-primary text-warning-primary"
+      : deltaPercent < 0
+        ? "bg-success-primary text-success-primary"
+        : "bg-secondary text-tertiary";
+
+  return (
+    <span
+      className={cn(
+        "rounded-full px-2 py-0.5 font-mono text-xs font-semibold tabular-nums",
+        toneClass,
+      )}
+    >
+      {deltaPercent > 0 ? `+${deltaPercent}%` : `${deltaPercent}%`}
+    </span>
+  );
+}
+
+function UsageTimelinePlot({
+  range,
+  buckets,
+  peak,
+  selectedKey,
+  onToggleSelect,
+}: {
+  range: AgentTokenUsageRange;
+  buckets: ReturnType<typeof summarizeWorkspaceAgentUsage>["timelineBuckets"];
+  peak: number;
+  selectedKey: string | null;
+  onToggleSelect: (key: string) => void;
+}) {
+  if (range === 1) {
+    return (
+      <TodayHourlyChart
+        buckets={buckets}
+        peak={peak}
+        selectedKey={selectedKey}
+        onToggleSelect={onToggleSelect}
+      />
+    );
+  }
+  if (range === 30) {
+    return (
+      <CalendarHeatmapChart
+        buckets={buckets}
+        peak={peak}
+        selectedKey={selectedKey}
+        onToggleSelect={onToggleSelect}
+      />
+    );
+  }
+  return (
+    <DailyBarChart
+      buckets={buckets}
+      peak={peak}
+      selectedKey={selectedKey}
+      onToggleSelect={onToggleSelect}
+    />
+  );
+}
+
+function WorkspaceAgentUsageTrendCard({
+  range,
+  selectedKey,
+  locale,
+  filtersActive,
+  hasAnyData,
+  avgPerTurn,
+  view,
+  onChangeRange,
+  onClearSelected,
+  onToggleSelect,
+}: {
+  range: AgentTokenUsageRange;
+  selectedKey: string | null;
+  locale: string;
+  filtersActive: boolean;
+  hasAnyData: boolean;
+  avgPerTurn: number | null;
+  view: ReturnType<typeof summarizeWorkspaceAgentUsage>;
+  onChangeRange: (next: AgentTokenUsageRange) => void;
+  onClearSelected: () => void;
+  onToggleSelect: (key: string) => void;
+}) {
+  const { timelineBuckets, timelineSummary } = view;
+  const heading = timelineSummary.selectedBucket
+    ? formatSelectedLabel(
+        timelineSummary.selectedBucket.dateKey,
+        timelineSummary.selectedBucket.hour,
+        locale,
+      )
+    : m.agent_usage_team_heading();
+
+  return (
+    <section className="min-w-0 overflow-hidden rounded-xl border border-secondary bg-primary p-4 sm:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h2 className="text-xs font-semibold text-tertiary">{heading}</h2>
+          {timelineSummary.selectedBucket && (
+            <Button size="xs" color="link-color" onPress={onClearSelected}>
+              {m.agent_usage_selected_clear()}
+            </Button>
+          )}
+        </div>
+        <UsageRangeTabs range={range} onChangeRange={onChangeRange} />
+      </div>
+
+      {hasAnyData ? (
+        <>
+          <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span className="font-mono text-2xl font-bold tracking-tight text-primary tabular-nums">
+              {formatCompactTokens(view.visibleEffectiveTokens, locale)}
+            </span>
+            {!filtersActive && timelineSummary.deltaPercent !== null && (
+              <UsageDeltaBadge deltaPercent={timelineSummary.deltaPercent} />
+            )}
+          </div>
+
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-tertiary tabular-nums">
+            <span>
+              {m.agent_usage_team_summary_active({
+                count: formatNumber(view.visibleActiveAgents, locale),
+              })}
+            </span>
+            <span>
+              {m.agent_usage_team_summary_turns({
+                turns: formatNumber(view.visibleTurns, locale),
+              })}
+            </span>
+            {avgPerTurn !== null && (
+              <span>
+                {m.agent_usage_team_avg_turn({
+                  tokens: formatCompactTokens(avgPerTurn, locale),
+                })}
+              </span>
+            )}
+          </div>
+
+          <UsageTimelinePlot
+            range={range}
+            buckets={timelineBuckets}
+            peak={timelineSummary.peakEffective}
+            selectedKey={selectedKey}
+            onToggleSelect={onToggleSelect}
+          />
+        </>
+      ) : (
+        <EmptyState
+          size="card"
+          headingLevel={3}
+          picture={<EmptyIcon icon={BarChart01} />}
+          title={m.agent_usage_empty_title()}
+          description={m.agent_usage_team_empty_description()}
+        />
+      )}
+    </section>
+  );
 }
 
 export function WorkspaceAgentUsageView({
@@ -150,156 +379,40 @@ export function WorkspaceAgentUsageView({
   }
 
   if (usageQuery.isPending || !usageQuery.data || !view) {
-    return (
-      <div role="status" aria-label={m.agents_loading()} className="flex flex-col gap-4">
-        <div className="rounded-xl border border-secondary bg-primary p-4 sm:p-5">
-          <div className="flex items-center justify-between gap-2">
-            <Skeleton className="h-4 w-28" />
-            <Skeleton className="h-8 w-44 rounded-lg" />
-          </div>
-          <Skeleton className="mt-3 h-8 w-32" />
-          <Skeleton className="mt-2 h-3.5 w-64" />
-          <Skeleton className="mt-5 h-24 w-full" />
-        </div>
-        <div className="overflow-hidden rounded-xl border border-secondary bg-primary divide-y divide-secondary">
-          <Skeleton className="h-14 w-full rounded-none" />
-          <Skeleton className="h-14 w-full rounded-none" />
-        </div>
-      </div>
-    );
+    return <WorkspaceAgentUsageSkeleton />;
   }
 
-  const { timelineBuckets, timelineSummary } = view;
+  const { timelineSummary } = view;
   const hasAnyData = timelineSummary.hasAnyData || view.teamEffectiveTokens > 0;
+  const hasModelDistribution =
+    hasAnyData && timelineSummary.models.some((entry) => entry.effectiveTokens > 0);
 
   return (
     <div className="flex flex-col gap-4">
-      <section className="overflow-hidden rounded-xl border border-secondary bg-primary">
-        <div className="p-4 sm:p-5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <h2 className="text-xs font-semibold text-tertiary">
-                {timelineSummary.selectedBucket
-                  ? formatSelectedLabel(
-                      timelineSummary.selectedBucket.dateKey,
-                      timelineSummary.selectedBucket.hour,
-                      locale,
-                    )
-                  : m.agent_usage_team_heading()}
-              </h2>
-              {timelineSummary.selectedBucket && (
-                <Button size="xs" color="link-color" onPress={() => setSelectedKey(null)}>
-                  {m.agent_usage_selected_clear()}
-                </Button>
-              )}
-            </div>
+      <div
+        className={cn(
+          "grid grid-cols-1 gap-4",
+          hasModelDistribution &&
+            "@4xl/members:grid-cols-[minmax(0,1.45fr)_minmax(18rem,1fr)] @4xl/members:items-stretch",
+        )}
+      >
+        <WorkspaceAgentUsageTrendCard
+          range={range}
+          selectedKey={selectedKey}
+          locale={locale}
+          filtersActive={filtersActive}
+          hasAnyData={hasAnyData}
+          avgPerTurn={avgPerTurn}
+          view={view}
+          onChangeRange={onChangeRange}
+          onClearSelected={() => setSelectedKey(null)}
+          onToggleSelect={onToggleSelect}
+        />
 
-            <div
-              role="group"
-              aria-label={m.agent_usage_range_label()}
-              className="inline-flex shrink-0 rounded-lg bg-secondary p-0.5"
-            >
-              {AGENT_TOKEN_USAGE_RANGES.map((option) => {
-                const active = range === option;
-                return (
-                  <AriaButton
-                    key={option}
-                    aria-pressed={active}
-                    onPress={() => onChangeRange(option)}
-                    className={cn(
-                      "min-h-8 cursor-pointer rounded-md px-2.5 text-xs font-medium outline-none transition-colors data-focus-visible:ring-2 data-focus-visible:ring-brand",
-                      active
-                        ? "bg-primary font-semibold text-primary shadow-xs"
-                        : "text-tertiary hover:text-primary",
-                    )}
-                  >
-                    {RANGE_LABELS[option]()}
-                  </AriaButton>
-                );
-              })}
-            </div>
-          </div>
-
-          {hasAnyData ? (
-            <>
-              <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <span className="font-mono text-2xl font-bold tracking-tight text-primary tabular-nums">
-                  {formatCompactTokens(view.visibleEffectiveTokens, locale)}
-                </span>
-                {!filtersActive && timelineSummary.deltaPercent !== null && (
-                  <span
-                    className={cn(
-                      "rounded-full px-2 py-0.5 font-mono text-xs font-semibold tabular-nums",
-                      timelineSummary.deltaPercent > 0
-                        ? "bg-warning-primary text-warning-primary"
-                        : timelineSummary.deltaPercent < 0
-                          ? "bg-success-primary text-success-primary"
-                          : "bg-secondary text-tertiary",
-                    )}
-                  >
-                    {timelineSummary.deltaPercent > 0
-                      ? `+${timelineSummary.deltaPercent}%`
-                      : `${timelineSummary.deltaPercent}%`}
-                  </span>
-                )}
-              </div>
-
-              <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-tertiary tabular-nums">
-                <span>
-                  {m.agent_usage_team_summary_active({
-                    count: formatNumber(view.visibleActiveAgents, locale),
-                  })}
-                </span>
-                <span>
-                  {m.agent_usage_team_summary_turns({
-                    turns: formatNumber(view.visibleTurns, locale),
-                  })}
-                </span>
-                {avgPerTurn !== null && (
-                  <span>
-                    {m.agent_usage_team_avg_turn({
-                      tokens: formatCompactTokens(avgPerTurn, locale),
-                    })}
-                  </span>
-                )}
-              </div>
-
-              {range === 1 ? (
-                <TodayHourlyChart
-                  buckets={timelineBuckets}
-                  peak={timelineSummary.peakEffective}
-                  selectedKey={selectedKey}
-                  onToggleSelect={onToggleSelect}
-                />
-              ) : range === 30 ? (
-                <CalendarHeatmapChart
-                  buckets={timelineBuckets}
-                  peak={timelineSummary.peakEffective}
-                  selectedKey={selectedKey}
-                  onToggleSelect={onToggleSelect}
-                />
-              ) : (
-                <DailyBarChart
-                  buckets={timelineBuckets}
-                  peak={timelineSummary.peakEffective}
-                  selectedKey={selectedKey}
-                  onToggleSelect={onToggleSelect}
-                />
-              )}
-            </>
-          ) : (
-            <EmptyState
-              size="card"
-              headingLevel={3}
-              picture={<EmptyIcon icon={BarChart01} />}
-              title={m.agent_usage_empty_title()}
-              description={m.agent_usage_team_empty_description()}
-            />
-          )}
-        </div>
-
-        {hasAnyData && <ModelDistributionStrip models={timelineSummary.models} locale={locale} />}
-      </section>
+        {hasModelDistribution && (
+          <WorkspaceAgentUsageModelDonutCard models={timelineSummary.models} locale={locale} />
+        )}
+      </div>
 
       {hasAnyData &&
         (sortedRows.length > 0 ? (
