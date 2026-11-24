@@ -16,6 +16,12 @@ export const WHATS_NEW_ENTRIES = [
     announce: true,
     includeNewcomers: true,
   },
+  {
+    id: "agent-usage",
+    releasedAt: "2026-11-24T05:00:00Z",
+    announce: true,
+    includeNewcomers: true,
+  },
 ] as const satisfies readonly WhatsNewEntryData[];
 
 export type WhatsNewId = (typeof WHATS_NEW_ENTRIES)[number]["id"];

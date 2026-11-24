@@ -62,6 +62,7 @@ test("What's new keeps a row in the sidebar with a dot while entries wait, on ev
   const titles: Record<string, string> = {
     "task-labels": "Labels for tasks",
     artifacts: "Meet Artifacts",
+    "agent-usage": "Agent token usage in Profiles",
   };
 
   // The sidebar, the rail and the Me page's row can all be in the page; the one meant is the one on

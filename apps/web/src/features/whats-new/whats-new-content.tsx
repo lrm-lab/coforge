@@ -3,6 +3,7 @@ import { LABEL_DOT, LABEL_PALETTE } from "#src/features/tasks/label-colors";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import { ArtifactsScene } from "./whats-new-artifacts-scene";
+import { AgentUsageScene } from "./whats-new-agent-usage-scene";
 import type { WhatsNewId } from "./whats-new-entries";
 
 type WhatsNewContent = {
@@ -65,5 +66,12 @@ export const WHATS_NEW_CONTENT: Record<WhatsNewId, WhatsNewContent> = {
     illustration: ArtifactsScene,
     heroTone: "dark",
     action: { label: m.whats_new_artifacts_cta, path: "/artifacts" },
+  },
+  "agent-usage": {
+    title: m.whats_new_agent_usage_title,
+    body: m.whats_new_agent_usage_body,
+    illustration: AgentUsageScene,
+    heroTone: "dark",
+    action: { label: m.whats_new_agent_usage_cta, path: "/members" },
   },
 };

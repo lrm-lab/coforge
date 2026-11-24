@@ -1,0 +1,7 @@
+.dark-mode .whats-new-usage-light {
+  display: none;
+}
+
+:root:not(.dark-mode) .whats-new-usage-dark {
+  display: none;
+}
