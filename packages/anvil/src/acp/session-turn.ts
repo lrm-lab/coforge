@@ -1,5 +1,5 @@
-import type { AgentNoticeOptions, AgentTurnTokenUsage } from "@coforge/agent";
-import type { AcpSessionProfile, AcpTurnReader } from "./profile";
+import type { AgentNoticeOptions, AgentRuntimeEvent, AgentTurnTokenUsage } from "@coforge/agent";
+import type { AcpNativeTurn, AcpSessionProfile, AcpTurnReader } from "./profile";
 
 export type AcpSessionInput = {
   text: string;
@@ -55,5 +55,41 @@ export function acpCancelPendingNotices(
         ? `${label} input cancelled; delivery outcome is unknown`
         : `${label} input cancelled before submission`,
     ),
+  );
+}
+
+export function acpReplayOpeningFrames(
+  frames: [string, Readonly<Record<string, unknown>>][],
+  sessionId: string | undefined,
+  nativeTurn:
+    | ((
+        method: string,
+        params: Readonly<Record<string, unknown>>,
+        ownPromptId: string | undefined,
+      ) => AcpNativeTurn | undefined)
+    | undefined,
+  dispatch: (method: string, params: Readonly<Record<string, unknown>>) => void,
+) {
+  const ended = new Set<string>();
+  for (const [method, params] of frames) {
+    const native = nativeTurn?.(method, params, undefined);
+    if (native?.end) ended.add(native.promptId);
+  }
+  for (const [method, params] of frames) {
+    if (typeof params.sessionId === "string" && params.sessionId !== sessionId) continue;
+    const native = nativeTurn?.(method, params, undefined);
+    if (native && !native.end && ended.has(native.promptId)) continue;
+    dispatch(method, params);
+  }
+}
+
+export function acpHasAcceptanceActivity(events: readonly AgentRuntimeEvent[]): boolean {
+  return events.some(
+    (event) =>
+      event.type === "text-delta" ||
+      event.type === "thinking-delta" ||
+      event.type === "tool-start" ||
+      event.type === "tool-output" ||
+      event.type === "tool-end",
   );
 }

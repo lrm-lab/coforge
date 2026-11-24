@@ -19,7 +19,9 @@ import type { AcpNativeTurn, AcpSessionProfile } from "./profile";
 import { acpPromptFailure, acpSteerResponseFailure, acpStopStatus } from "./prompt-failure";
 import {
   acpCancelPendingNotices,
+  acpHasAcceptanceActivity,
   acpRejectInput,
+  acpReplayOpeningFrames,
   type AcpNativeTurnState,
   type AcpSessionInput,
   rememberCompletedPrompt,
@@ -344,19 +346,12 @@ export class AcpSession implements AgentSession {
 
   #ready() {
     this.#opening = false;
-    const frames = this.#openingFrames.splice(0);
-    const ended = new Set<string>();
-    for (const [method, params] of frames) {
-      const native = this.profile.steer?.nativeTurn?.(method, params, undefined);
-      if (native?.end) ended.add(native.promptId);
-    }
-    for (const [method, params] of frames) {
-      if (typeof params.sessionId === "string" && params.sessionId !== this.#identity?.sessionId)
-        continue;
-      const native = this.profile.steer?.nativeTurn?.(method, params, undefined);
-      if (native && !native.end && ended.has(native.promptId)) continue;
-      this.#dispatch(method, params);
-    }
+    acpReplayOpeningFrames(
+      this.#openingFrames.splice(0),
+      this.#identity?.sessionId,
+      this.profile.steer?.nativeTurn,
+      (method, params) => this.#dispatch(method, params),
+    );
   }
 
   #project(update: Readonly<Record<string, unknown>>) {
@@ -378,17 +373,7 @@ export class AcpSession implements AgentSession {
     }
     const events = turn.updates.read(update);
     if (input) {
-      if (
-        events.some(
-          (event) =>
-            event.type === "text-delta" ||
-            event.type === "thinking-delta" ||
-            event.type === "tool-start" ||
-            event.type === "tool-output" ||
-            event.type === "tool-end",
-        )
-      )
-        this.#accept(input);
+      if (acpHasAcceptanceActivity(events)) this.#accept(input);
     } else if (events.length) this.#markResumable();
     for (const event of events) this.#emit(event, input?.options);
   }
