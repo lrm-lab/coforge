@@ -1,12 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
-import type { AgentTokenUsageReport } from "#src/features/agents/agent-token-usage-model";
 import {
   AGENT_TOKEN_USAGE_INVALIDATE_WINDOW_MS,
   agentTokenUsageKeys,
   createAgentTokenUsageInvalidator,
   invalidateAgentTokenUsageQueries,
-  mergeLiveContextUsage,
 } from "#src/features/agents/agent-token-usage-queries";
 
 function manualScheduler() {
@@ -191,32 +189,5 @@ describe("invalidateAgentTokenUsageQueries", () => {
       unsub2();
       unsubWs();
     }
-  });
-});
-
-describe("mergeLiveContextUsage", () => {
-  const baseReport: AgentTokenUsageReport = {
-    range: 7,
-    timeZone: "UTC",
-    asOf: "2026-11-24T02:00:00.000Z",
-    trackingStartedAt: null,
-    todayDateKey: "2026-11-24",
-    buckets: [],
-    previousPeriod: { effectiveTokens: 0, totalTokens: 0, turns: 0 },
-    liveContextUsage: { usedTokens: 10_000, windowTokens: 200_000, observedAtMs: 1_000 },
-  };
-
-  test("prefers newer live context usage and keeps the report reference when unchanged", () => {
-    expect(mergeLiveContextUsage(baseReport, null)).toBe(baseReport);
-    expect(
-      mergeLiveContextUsage(baseReport, {
-        usedTokens: 5_000,
-        windowTokens: 200_000,
-        observedAtMs: 900,
-      }),
-    ).toBe(baseReport);
-
-    const newer = { usedTokens: 45_000, windowTokens: 200_000, observedAtMs: 2_000 };
-    expect(mergeLiveContextUsage(baseReport, newer).liveContextUsage).toEqual(newer);
   });
 });

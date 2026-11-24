@@ -1,12 +1,10 @@
 import { parseRuntimeProvider } from "@lrm/coforge-sdk/internal";
-import { ProgressBarBase } from "#src/components/base/progress-indicators/progress-indicators";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { Skeleton } from "#src/components/ui/skeleton";
 import {
   formatCompactTokens,
   formatExactTokens,
   formatUsagePercent,
-  type AgentTokenUsageRange,
   type AgentTokenUsageSummary,
 } from "#src/features/agents/agent-token-usage-model";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
@@ -117,69 +115,6 @@ export function UsageBreakdownSection({
   );
 }
 
-export function UsageContextSection({
-  summary,
-  range,
-  locale,
-}: {
-  summary: AgentTokenUsageSummary;
-  range: AgentTokenUsageRange;
-  locale: string;
-}) {
-  return (
-    <section className="border-b border-secondary px-5 py-5 sm:px-6">
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="text-xs font-semibold text-tertiary">{m.agent_usage_context_heading()}</p>
-        {(range === 7 || range === 14) && (
-          <span className="text-xs text-quaternary">{m.agent_usage_partial_day()}</span>
-        )}
-      </div>
-      <div className="mt-3 flex flex-col gap-2.5 text-sm">
-        <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-baseline gap-3">
-          <span className="text-xs text-tertiary">{m.agent_usage_per_turn()}</span>
-          <div className="min-w-0 font-mono text-xs tabular-nums text-primary">
-            {summary.avgEffectivePerTurn !== null ? (
-              <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                <span className="font-semibold text-primary">
-                  {formatCompactTokens(summary.avgEffectivePerTurn, locale)}
-                </span>
-                <span className="text-tertiary">
-                  {m.agent_usage_per_turn_turns({
-                    turns: formatExactTokens(summary.turns, locale),
-                  })}
-                </span>
-                {summary.avgTotalPerTurn !== null &&
-                  summary.avgTotalPerTurn > summary.avgEffectivePerTurn && (
-                    <span className="text-quaternary">
-                      {m.agent_usage_per_turn_total({
-                        total: formatCompactTokens(summary.avgTotalPerTurn, locale),
-                      })}
-                    </span>
-                  )}
-              </span>
-            ) : (
-              <span className="text-quaternary">—</span>
-            )}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-center gap-3">
-          <span className="text-xs text-tertiary">{m.agent_usage_context_window()}</span>
-          {summary.contextUsage ? (
-            <ContextWindowMeter
-              usedTokens={summary.contextUsage.usedTokens}
-              windowTokens={summary.contextUsage.windowTokens}
-              locale={locale}
-            />
-          ) : (
-            <span className="font-mono text-xs text-quaternary">—</span>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 export function UsageModelsSection({
   summary,
   locale,
@@ -276,34 +211,6 @@ function BreakdownRow({
           {formatUsagePercent(sharePercent, locale)}
         </span>
       </div>
-    </div>
-  );
-}
-
-function ContextWindowMeter({
-  usedTokens,
-  windowTokens,
-  locale,
-}: {
-  usedTokens: number;
-  windowTokens: number;
-  locale: string;
-}) {
-  const percent =
-    windowTokens > 0 ? Math.min(100, Math.round((usedTokens / windowTokens) * 100)) : 0;
-  return (
-    <div className="flex min-w-0 items-center gap-2.5">
-      <div className="min-w-0 flex-1">
-        <ProgressBarBase
-          value={percent}
-          className="h-1.5 rounded-full bg-secondary"
-          progressClassName="rounded-full bg-chart-input"
-        />
-      </div>
-      <span className="shrink-0 font-mono text-xs tabular-nums text-secondary">
-        {formatCompactTokens(usedTokens, locale)} / {formatCompactTokens(windowTokens, locale)}{" "}
-        <span className="text-quaternary">{percent}%</span>
-      </span>
     </div>
   );
 }

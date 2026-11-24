@@ -9,11 +9,7 @@ import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { getAgentTokenUsage } from "#src/features/agents/agent-token-usage.functions";
-import {
-  agentTokenUsageKeys,
-  mergeLiveContextUsage,
-} from "#src/features/agents/agent-token-usage-queries";
-import { useLiveAgentProfileMetrics } from "#src/features/agents/workspace-agents-realtime";
+import { agentTokenUsageKeys } from "#src/features/agents/agent-token-usage-queries";
 import {
   AGENT_TOKEN_USAGE_RANGES,
   formatCompactTokens,
@@ -23,6 +19,7 @@ import {
   type AgentTokenUsageRange,
 } from "#src/features/agents/agent-token-usage-model";
 import { browserTimeZone, dateTimeFormat, resolveTimeZone } from "#src/lib/dates";
+import { formatNumber } from "#src/lib/format-number";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
@@ -30,7 +27,6 @@ import { AgentTabEmpty } from "./agent-tab-empty";
 import { CalendarHeatmapChart, DailyBarChart, TodayHourlyChart } from "./agent-usage-charts";
 import {
   UsageBreakdownSection,
-  UsageContextSection,
   UsageModelsSection,
   UsageTabSkeleton,
 } from "./agent-usage-sections";
@@ -79,7 +75,6 @@ export function AgentUsageTab({ agentId, timeZone }: { agentId: string; timeZone
 
   const effectiveTimeZone = resolveTimeZone(timeZone, hydrated ? browserTimeZone() : undefined);
   const loadUsage = useServerFn(getAgentTokenUsage);
-  const liveMetrics = useLiveAgentProfileMetrics(agentId);
 
   const query = useQuery({
     queryKey: agentTokenUsageKeys.agentRange(agentId, range, effectiveTimeZone),
@@ -96,14 +91,9 @@ export function AgentUsageTab({ agentId, timeZone }: { agentId: string; timeZone
     refetchOnReconnect: "always",
   });
 
-  const report = useMemo(
-    () => (query.data ? mergeLiveContextUsage(query.data, liveMetrics.contextUsage) : null),
-    [query.data, liveMetrics.contextUsage],
-  );
-
   const summary = useMemo(
-    () => (report ? summarizeAgentTokenUsage(report, selectedKey) : null),
-    [report, selectedKey],
+    () => (query.data ? summarizeAgentTokenUsage(query.data, selectedKey) : null),
+    [query.data, selectedKey],
   );
 
   const selectedIndex = useMemo(() => {
@@ -263,6 +253,23 @@ export function AgentUsageTab({ agentId, timeZone }: { agentId: string; timeZone
               })}
             </p>
 
+            {summary.turns > 0 && (
+              <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs text-tertiary tabular-nums">
+                <span>
+                  {m.agent_usage_team_summary_turns({
+                    turns: formatNumber(summary.turns, locale),
+                  })}
+                </span>
+                {summary.avgEffectivePerTurn !== null && (
+                  <span>
+                    {m.agent_usage_team_avg_turn({
+                      tokens: formatCompactTokens(summary.avgEffectivePerTurn, locale),
+                    })}
+                  </span>
+                )}
+              </div>
+            )}
+
             {query.data.range === 1 ? (
               <TodayHourlyChart
                 buckets={query.data.buckets}
@@ -288,7 +295,6 @@ export function AgentUsageTab({ agentId, timeZone }: { agentId: string; timeZone
           </section>
 
           <UsageBreakdownSection summary={summary} selectedIndex={selectedIndex} locale={locale} />
-          <UsageContextSection summary={summary} range={query.data.range} locale={locale} />
           <UsageModelsSection summary={summary} locale={locale} />
         </>
       )}

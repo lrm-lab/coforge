@@ -224,6 +224,9 @@ export function DailyBarChart({
           <span>{m.agent_usage_today_short()}</span>
         </div>
       )}
+      {buckets.some((bucket) => bucket.isCurrent) && (
+        <p className="mt-2 text-xs text-quaternary">{m.agent_usage_partial_day()}</p>
+      )}
     </div>
   );
 }

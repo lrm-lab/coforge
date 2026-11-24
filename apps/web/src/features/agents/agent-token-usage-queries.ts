@@ -1,10 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import type {
-  AgentTokenUsageLiveContext,
-  AgentTokenUsageRange,
-  AgentTokenUsageReport,
-} from "./agent-token-usage-model";
+import type { AgentTokenUsageRange } from "./agent-token-usage-model";
 
 export const AGENT_TOKEN_USAGE_INVALIDATE_WINDOW_MS = 250;
 
@@ -119,14 +115,4 @@ export function useAgentTokenUsageInvalidator(workspaceId: string | undefined) {
   );
   useEffect(() => () => invalidator.cancel(), [invalidator]);
   return invalidator;
-}
-
-export function mergeLiveContextUsage(
-  report: AgentTokenUsageReport,
-  liveContextUsage: AgentTokenUsageLiveContext | null | undefined,
-): AgentTokenUsageReport {
-  if (!liveContextUsage) return report;
-  const current = report.liveContextUsage;
-  if (current && current.observedAtMs >= liveContextUsage.observedAtMs) return report;
-  return { ...report, liveContextUsage };
 }
