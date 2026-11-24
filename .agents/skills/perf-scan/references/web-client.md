@@ -23,6 +23,20 @@ Scope: `apps/web/src/features`, `components`, `routes`.
   `lazy` or dynamic imports before reporting.
 - Resize or drag handlers that set state on every pointermove.
 
+## Static scan (`react-doctor`)
+
+Run `bunx react-doctor@latest . --yes --scope full` (or `--scope changed --base origin/main`
+when reviewing a diff) from `apps/web` on-demand via `bunx` — do not add `react-doctor`
+to `package.json`.
+
+- Focus on client and shared files (`src/features`, `src/components`, `src/routes`,
+  `src/hooks`, `src/lib`). Ignore `src/server/` diagnostics (such as server helpers
+  named `use*` or server-only async loops) and generated directories (`src/generated/`,
+  `src/paraglide/`).
+- Treat every diagnostic as a candidate and verify against the code before reporting:
+  check for deliberate decisions, official Untitled UI component internals, or
+  high-level cleanup handles (e.g. `disconnect()`) that static analysis misses.
+
 ## Before flagging
 
 Before suggesting virtualization or `content-visibility`, look for a comment

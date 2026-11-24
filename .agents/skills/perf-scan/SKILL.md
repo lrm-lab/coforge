@@ -54,11 +54,15 @@ Default: the three named areas. Several paths may be requested at once.
    committed). Remove the worktree when the scan ends.
 2. **Scan in parallel, read-only.** Launch one read-only search agent per area in
    a single message. Its brief is the area's checklist plus the report format
-   below. Scanners never edit files, run tests, or build.
+   below. Scanners never edit files, run tests, or build. For `web-client`, also
+   run `bunx react-doctor@latest . --yes --scope full` inside `apps/web`
+   (on-demand via `bunx`; never add it to `package.json`) as a read-only static
+   signal, filtering to client/shared files (`src/features`, `src/components`,
+   `src/routes`, `src/hooks`, `src/lib`) and excluding `src/server/` noise.
 3. **Verify.** The coordinator re-reads the code behind at least each area's top
-   candidate, or hands it to an independent agent without the scanner's
-   conclusion. Drop or downgrade whatever does not hold. A scanner's confident
-   claim is not evidence.
+   candidate (and every `react-doctor` finding worth citing), or hands it to an
+   independent agent without the scanner's conclusion. Drop or downgrade whatever
+   does not hold. A scanner's confident claim or linter diagnostic is not evidence.
 4. **Synthesize.** One table across areas: direction, evidence (`file:line`),
    impact and confidence, rough size. State plainly that nothing was measured.
    Give one recommendation and why. Prefer a place with clear verified waste,
