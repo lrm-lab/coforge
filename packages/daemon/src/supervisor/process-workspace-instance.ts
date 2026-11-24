@@ -3,13 +3,7 @@ import { join } from "node:path";
 import { isPidAlive } from "#src/platform/process-liveness";
 
 import { WorkspaceHealthJournal, workspaceHealthJournalPath } from "./workspace-health-journal";
-import {
-  aliasPath,
-  ensureWorkspaceIdentity,
-  resolveSpawnIdentity,
-  workspaceDirectory,
-  type WorkspaceIdentity,
-} from "./workspace-identity";
+import { aliasPath, resolveSpawnIdentity, type WorkspaceIdentity } from "./workspace-identity";
 import { CONTAINER_BINDING_ENV_KEYS } from "./container-binding-env";
 import {
   validateWorkspaceEndpoint,
@@ -79,18 +73,6 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
 
     await mkdir(this.config.stateDirectory, { recursive: true, mode: 0o700 });
     const volumeRoot = Bun.env.COFORGE_WORKSPACE_VOLUME_ROOT;
-    if (volumeRoot) {
-      await ensureWorkspaceIdentity({
-        stateRoot: this.config.stateRoot,
-        workspaceId: this.config.workspaceId,
-        volumeRoot,
-        directories: [
-          workspaceDirectory(volumeRoot, this.config.workspaceId),
-          join(volumeRoot, "agent-workspaces", this.config.workspaceId),
-          aliasPath(this.config.stateDirectory, volumeRoot),
-        ],
-      });
-    }
     const spawnIdentity = await resolveSpawnIdentity({
       stateRoot: this.config.stateRoot,
       workspaceId: this.config.workspaceId,

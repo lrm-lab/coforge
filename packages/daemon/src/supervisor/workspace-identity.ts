@@ -1,4 +1,4 @@
-import { chmod, chown, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 export type WorkspaceIdentity = { uid: number; gid: number };
@@ -90,89 +90,5 @@ async function ownerOf(path: string): Promise<number | undefined> {
     return (await stat(path)).uid;
   } catch {
     return undefined;
-  }
-}
-
-export type IdentityProvisioning = {
-  stateRoot: string;
-  workspaceId: string;
-  volumeRoot: string;
-  directories: string[];
-  getuid?: () => number | undefined;
-  allocateUid?: (taken: number[]) => number;
-  writeProfile?: (path: string, contents: string) => Promise<void>;
-  ownDirectory?: (path: string, identity: WorkspaceIdentity) => Promise<void>;
-};
-
-function nextAgentUid(taken: number[]): number {
-  const used = new Set(taken);
-  const start = used.size > 0 ? Math.max(...used) + 1 : MIN_AGENT_UID + 1;
-  for (let candidate = start; candidate < MAX_AGENT_UID; candidate += 1)
-    if (!used.has(candidate)) return candidate;
-  throw new Error("workspace uid range exhausted");
-}
-
-async function readProfileFile(path: string): Promise<Record<string, unknown>> {
-  try {
-    const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
-    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
-  } catch {
-    return {};
-  }
-}
-
-/**
- * A Computer learns about Workspaces after it starts, and the state directories are
- * created on demand, so the boot script alone cannot cover every case: this decides
- * and records the identity at the moment the Workspace is about to be spawned.
- */
-export async function ensureWorkspaceIdentity(
-  input: IdentityProvisioning,
-): Promise<WorkspaceIdentity | undefined> {
-  if (!canDropPrivileges(input.getuid ?? (() => process.getuid?.()))) return undefined;
-  const profilePath = join(profileRoot(input.stateRoot, input.volumeRoot), WORKSPACE_IDENTITY_FILE);
-  const profile = await readProfileFile(profilePath);
-  const known = profile[input.workspaceId];
-  const identity = isUsableIdentity(known)
-    ? { uid: known.uid, gid: known.gid }
-    : (() => {
-        const taken = Object.values(profile)
-          .filter(isUsableIdentity)
-          .map((entry) => entry.uid);
-        const uid = (input.allocateUid ?? nextAgentUid)(taken);
-        return { uid, gid: uid };
-      })();
-  if (!isUsableIdentity(known)) {
-    profile[input.workspaceId] = identity;
-    const ordered = Object.fromEntries(
-      Object.keys(profile)
-        .sort()
-        .map((key) => [key, profile[key]]),
-    );
-    await (input.writeProfile ?? writeProfileFile)(
-      profilePath,
-      `${JSON.stringify(ordered, null, 2)}\n`,
-    );
-  }
-  const own = input.ownDirectory ?? ownDirectory;
-  for (const directory of input.directories) await own(directory, identity);
-  return identity;
-}
-
-async function writeProfileFile(path: string, contents: string): Promise<void> {
-  const temporary = `${path}.${crypto.randomUUID()}.tmp`;
-  await writeFile(temporary, contents, { mode: 0o644 });
-  await rename(temporary, path);
-}
-
-async function ownDirectory(path: string, identity: WorkspaceIdentity): Promise<void> {
-  for (const target of [path, join(path, "work"), join(path, "home"), join(path, "cache")]) {
-    try {
-      await mkdir(target, { recursive: true, mode: 0o700 });
-      await chmod(target, 0o700);
-      await chown(target, identity.uid, identity.gid);
-    } catch {
-      continue;
-    }
   }
 }
