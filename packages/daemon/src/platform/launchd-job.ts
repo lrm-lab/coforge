@@ -2,7 +2,10 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { getLogger } from "@logtape/logtape";
 
-import type { NativeProcessIdentity } from "#src/supervisor/workspace-instance";
+import type {
+  NativeProcessIdentity,
+  UpgradeWorkspaceInstance,
+} from "#src/supervisor/workspace-instance";
 import { LAUNCHD_EXIT_TIMEOUT_SECONDS } from "./daemon-stop-wait";
 import { nativeCommandDiagnostic, type NativeCommandResult } from "./native-command";
 import { escapePlistValue } from "./xml-escape";
@@ -12,9 +15,12 @@ import { escapePlistValue } from "./xml-escape";
  * creating, signalling, or removing real user jobs.
  */
 export type LaunchdJobPlatform = {
-  jobs(): Promise<Map<string, number>>;
+  jobs(timeoutMs?: number): Promise<Map<string, number>>;
+  records?(timeoutMs?: number): Promise<Map<string, LaunchdJobRecord>>;
   run(args: string[]): Promise<NativeCommandResult>;
 };
+
+type LaunchdJobRecord = { pid: number; exitStatus?: number };
 
 export type LaunchdJobConfig = {
   label: string;
@@ -64,28 +70,41 @@ export class LaunchdJob {
   }
 
   async identity(): Promise<NativeProcessIdentity | null> {
-    const pid = (await this.#platform.jobs()).get(this.config.label);
-    if (!pid) return null;
-    const observed = await capture([
-      "/bin/ps",
-      "-p",
-      String(pid),
-      "-o",
-      "lstart=",
-      "-o",
-      "pgid=",
-      "-o",
-      "stat=",
-    ]);
-    if (observed.code === 1 && !observed.stdout.trim()) return null;
+    const observed = await this.upgradeInstance();
+    return observed === "pending" ? null : observed;
+  }
+
+  async upgradeInstance(
+    timeoutMs?: number,
+    confirmsTerminalExit?: () => Promise<boolean>,
+  ): Promise<UpgradeWorkspaceInstance> {
+    const job = await this.#jobRecord(timeoutMs);
+    if (!job) return null;
+    const { pid } = job;
+    if (!pid) {
+      if (job.exitStatus !== 0 || !(await confirmsTerminalExit?.())) return "pending";
+      const current = await this.#jobRecord(timeoutMs);
+      return !current || (current.pid === 0 && current.exitStatus === 0) ? null : "pending";
+    }
+    const observed = await capture(
+      ["/bin/ps", "-p", String(pid), "-o", "lstart=", "-o", "pgid=", "-o", "stat="],
+      timeoutMs,
+    );
+    if (observed.code === 1 && !observed.stdout.trim()) return "pending";
     const match = observed.stdout.trim().match(/^(.{24})\s+(\d+)\s+(\S+)$/);
     if (observed.code || !match) throw new Error("invalid launchd process identity");
     // launchd can publish the PID before its child has established its process
     // group. This is not a ready identity and must never be adopted or signalled.
-    if (Number(match[2]) !== pid) return null;
-    if (match[3]!.startsWith("Z")) return null;
-    if ((await this.#platform.jobs()).get(this.config.label) !== pid) return null;
+    if (Number(match[2]) !== pid || match[3]!.startsWith("Z")) return "pending";
+    if ((await this.#jobRecord(timeoutMs))?.pid !== pid) return "pending";
     return { mainPid: pid, active: true, invocationId: `${pid}:${match[1]}` };
+  }
+
+  async #jobRecord(timeoutMs?: number): Promise<LaunchdJobRecord | undefined> {
+    if (this.#platform.records)
+      return (await this.#platform.records(timeoutMs)).get(this.config.label);
+    const pid = (await this.#platform.jobs(timeoutMs)).get(this.config.label);
+    if (pid !== undefined) return { pid };
   }
 
   async stop(): Promise<void> {
@@ -135,15 +154,27 @@ export class LaunchdJob {
   }
 }
 
-export async function launchdJobs(): Promise<Map<string, number>> {
-  const result = await capture(["/bin/launchctl", "list"]);
+export async function launchdJobs(timeoutMs?: number): Promise<Map<string, number>> {
+  return new Map(
+    [...(await queryLaunchdJobRecords(timeoutMs))].map(([label, record]) => [label, record.pid]),
+  );
+}
+
+async function queryLaunchdJobRecords(timeoutMs?: number): Promise<Map<string, LaunchdJobRecord>> {
+  const result = await capture(["/bin/launchctl", "list"], timeoutMs);
   if (result.code) throw new Error("launchd user manager is unavailable");
-  const jobs = new Map<string, number>();
-  for (const line of result.stdout.trim().split("\n").slice(1)) {
+  const [header, ...lines] = result.stdout.trim().split("\n");
+  if (!/^PID\s+Status\s+Label$/.test(header ?? "")) throw new Error("invalid launchd job list");
+  const jobs = new Map<string, LaunchdJobRecord>();
+  for (const line of lines) {
     const fields = line.trim().split(/\s+/);
     if (fields.length !== 3 || !/^(\d+|-)$/.test(fields[0]!) || !/^-?\d+$/.test(fields[1]!))
       throw new Error("invalid launchd job list");
-    jobs.set(fields[2]!, fields[0] === "-" ? 0 : Number(fields[0]));
+    const pid = fields[0] === "-" ? 0 : Number(fields[0]);
+    const exitStatus = Number(fields[1]);
+    if (!Number.isSafeInteger(pid) || !Number.isSafeInteger(exitStatus))
+      throw new Error("invalid launchd job list");
+    jobs.set(fields[2]!, { pid, exitStatus });
   }
   return jobs;
 }
@@ -172,13 +203,13 @@ export async function processGroupExists(pid: number): Promise<boolean> {
   });
 }
 
-async function capture(command: string[]) {
+async function capture(command: string[], timeout = 10_000) {
   const child = Bun.spawn(command, {
     env: { LC_ALL: "C" },
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
-    timeout: 10_000,
+    timeout,
   });
   const [code, stdout, stderr] = await Promise.all([
     child.exited,
@@ -199,6 +230,7 @@ async function launchctlCommand(args: string[]): Promise<NativeCommandResult> {
 
 const nativeLaunchd: LaunchdJobPlatform = {
   jobs: launchdJobs,
+  records: queryLaunchdJobRecords,
   run: launchctlCommand,
 };
 

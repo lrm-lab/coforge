@@ -25,6 +25,51 @@ test("a relaunch throttle adds only its ThrottleInterval key", () => {
   );
 });
 
+test("a loaded launchd job awaiting a PID is pending until the job is removed", async () => {
+  let jobs = new Map([[keptAlive.label, 0]]);
+  const job = new LaunchdJob({
+    ...keptAlive,
+    platform: {
+      jobs: async (timeoutMs) => {
+        expect(timeoutMs).toBe(750);
+        return jobs;
+      },
+      run: async () => ({ code: 0, stdout: "", stderr: "" }),
+    },
+  });
+  expect(await job.upgradeInstance(750)).toBe("pending");
+  jobs = new Map();
+  expect(await job.upgradeInstance(750)).toBeNull();
+});
+
+test.each([
+  { exitStatus: -9, nextPid: 0, checks: 0 },
+  { exitStatus: 0, nextPid: 43, checks: 1 },
+])(
+  "a failed launchd job or replacement stays pending even with a terminal journal",
+  async ({ exitStatus, nextPid, checks }) => {
+    const first = { pid: 0, exitStatus };
+    const next = { pid: nextPid, exitStatus: 0 };
+    let records = 0;
+    let confirmed = 0;
+    const job = new LaunchdJob({
+      ...keptAlive,
+      platform: {
+        jobs: async () => new Map(),
+        records: async () => new Map([[keptAlive.label, records++ === 0 ? first : next]]),
+        run: async () => ({ code: 0, stdout: "", stderr: "" }),
+      },
+    });
+    expect(
+      await job.upgradeInstance(750, async () => {
+        confirmed++;
+        return true;
+      }),
+    ).toBe("pending");
+    expect(confirmed).toBe(checks);
+  },
+);
+
 // Regression: the 09:17 coordinator crash reported only `exit_code: 125`, because
 // launchctl's own explanation was discarded before it could be logged.
 test("a failed bootout reports what launchctl said and still fails the stop", async () => {

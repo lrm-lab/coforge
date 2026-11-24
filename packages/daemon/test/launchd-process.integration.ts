@@ -10,7 +10,16 @@ import {
   LaunchdProcessOwner,
   stopLaunchdAgents,
 } from "#src/platform/launchd-process";
-import { workspaceLaunchdIdentity } from "#src/supervisor/launchd-workspace-instance";
+import {
+  LaunchdWorkspaceInstance,
+  workspaceLaunchdIdentity,
+  workspaceLaunchdJob,
+} from "#src/supervisor/launchd-workspace-instance";
+import { LaunchdJob } from "#src/platform/launchd-job";
+import {
+  WorkspaceHealthJournal,
+  workspaceHealthJournalPath,
+} from "#src/supervisor/workspace-health-journal";
 import { agentLaunchTag } from "#src/platform/agent-launch-tag";
 import { sweepAgentLaunchTags } from "#src/platform/agent-launch-tag-sweep";
 import { readLines } from "./fixtures/read-lines";
@@ -20,6 +29,43 @@ import { readLines } from "./fixtures/read-lines";
 // Every case bootstraps real launchd user jobs and binds relay sockets under /private/tmp, so the
 // default `bun test` run does not pick this file up.
 beforeAll(() => expect(process.platform).toBe("darwin"));
+
+test("a clean launchd Workspace exit is settled only with durable terminal evidence", async () => {
+  const root = await mkdtemp("/private/tmp/coforge-drain-clean-exit-");
+  const finish = join(root, "finish");
+  const config = {
+    stateRoot: root,
+    workspaceId: "launchd-drain-test",
+    stateDirectory: root,
+    executablePath: "/unused",
+    socketPath: join(root, "daemon.sock"),
+    unitDirectory: root,
+  };
+  const health = new WorkspaceHealthJournal(workspaceHealthJournalPath(root));
+  const workspace = new LaunchdWorkspaceInstance(config);
+  const job = new LaunchdJob({
+    ...workspaceLaunchdJob(config),
+    command: ["/bin/sh", "-c", 'while [ ! -f "$1" ]; do sleep .02; done', "_", finish],
+  });
+  try {
+    const live = await job.ensureStarted();
+    await health.markParked("credential_revoked");
+    expect(await workspace.upgradeInstance(750)).toEqual(live);
+    await Bun.write(finish, "");
+    const deadline = Date.now() + 2_000;
+    while ((await job.identity()) && Date.now() < deadline) await Bun.sleep(25);
+    expect(await job.identity()).toBeNull();
+    expect(await job.upgradeInstance(750)).toBe("pending");
+    expect(await workspace.upgradeInstance(750)).toBeNull();
+    await health.clearParked();
+    expect(await workspace.upgradeInstance(750)).toBe("pending");
+    await health.markTerminal("fixture degraded");
+    expect(await workspace.upgradeInstance(750)).toBeNull();
+  } finally {
+    await job.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+}, 15_000);
 
 /** This test's own Agent job prefix: its state root is a fresh directory no Workspace shares. */
 function agentPrefix(root: string): string {

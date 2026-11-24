@@ -1,12 +1,10 @@
 import { lstat, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { snapshotUpgradeBindings } from "#src/platform/computer-upgrade-progress";
 import { getLogger } from "@logtape/logtape";
 import {
   isRunnerHoldReason,
   thrownMessage,
   type RunnerHoldReason,
-  type ManagedRuntimeIdentity,
 } from "@lrm/coforge-sdk/internal";
 
 export const UPGRADE_DRAIN_SCHEMA_VERSION = 1;
@@ -27,7 +25,11 @@ export type UpgradeDrainHoldResult = {
 
 export type UpgradeDrainWatcherOptions = {
   stateDirectory: string;
-  hold: (reason: RunnerHoldReason, drainId: string) => Promise<UpgradeDrainHoldResult>;
+  hold: (
+    reason: RunnerHoldReason,
+    drainId: string,
+    publishPending: () => Promise<void>,
+  ) => Promise<UpgradeDrainHoldResult>;
   release: () => Promise<void>;
   pollMs?: number;
   heartbeatMs?: number;
@@ -92,7 +94,7 @@ function isErrnoCode(error: unknown, code: string): boolean {
 export class UpgradeDrainWatcher {
   readonly #requestPath: string;
   readonly #statePath: string;
-  readonly #hold: (reason: RunnerHoldReason, drainId: string) => Promise<UpgradeDrainHoldResult>;
+  readonly #hold: UpgradeDrainWatcherOptions["hold"];
   readonly #release: () => Promise<void>;
   readonly #pollMs: number;
   readonly #heartbeatMs: number;
@@ -190,7 +192,9 @@ export class UpgradeDrainWatcher {
   async #engage(request: UpgradeDrainRequest, nowMs: number): Promise<void> {
     let result: UpgradeDrainHoldResult;
     try {
-      result = await this.#hold(request.reason, request.drainId);
+      result = await this.#hold(request.reason, request.drainId, async () => {
+        if (this.#lastWritten?.drainId !== request.drainId) await this.#publish(request, 1, nowMs);
+      });
     } catch (error) {
       logger.warn("Upgrade drain hold fan-out failed", {
         event: "upgrade:drain_hold_failed",
@@ -199,8 +203,13 @@ export class UpgradeDrainWatcher {
       });
       return;
     }
+    await this.#publish(request, Math.max(0, Math.trunc(result.busyCount)), this.#now());
+  }
+
+  async #publish(request: UpgradeDrainRequest, busyCount: number, nowMs: number): Promise<void> {
     if (this.#stopped) return;
-    const busyCount = Math.max(0, Math.trunc(result.busyCount));
+    const current = await this.#readRequest(nowMs);
+    if (this.#stopped || current?.drainId !== request.drainId) return;
     const isNewDrain = this.#activeDrainId !== request.drainId;
     this.#activeDrainId = request.drainId;
     if (isNewDrain)
@@ -215,7 +224,6 @@ export class UpgradeDrainWatcher {
       this.#lastWritten.busyCount !== busyCount ||
       nowMs - this.#lastWritten.updatedAtMs >= this.#heartbeatMs;
     if (!shouldWrite) return;
-    if (!(await Bun.file(this.#requestPath).exists()) || this.#stopped) return;
     const nextState: UpgradeDrainState = {
       schemaVersion: UPGRADE_DRAIN_SCHEMA_VERSION,
       drainId: request.drainId,
@@ -285,50 +293,4 @@ export class UpgradeDrainWatcher {
       });
     }
   }
-}
-
-export function supervisorUpgradeDrainWatcher(options: {
-  stateDirectory: string;
-  installRoot: string;
-  runtimes: () => Promise<ManagedRuntimeIdentity[]>;
-  fanOut: (
-    operation: "hold" | "release",
-    reason: RunnerHoldReason | undefined,
-    options: { eventPrefix: string; timeoutMs: number; workspaceIds?: readonly string[] },
-  ) => Promise<{ busyAgents: readonly unknown[] }>;
-}) {
-  let workspaceIds: readonly string[] | undefined;
-  let sampledAt = 0;
-  return new UpgradeDrainWatcher({
-    stateDirectory: options.stateDirectory,
-    hold: async (reason, requestId) => {
-      const now = Date.now();
-      if (!workspaceIds || now - sampledAt >= 2_000) {
-        const runtimes = await options.runtimes();
-        await snapshotUpgradeBindings(options.installRoot, requestId, async () => runtimes).catch(
-          () => {},
-        );
-        workspaceIds = runtimes
-          .filter((runtime) => runtime.processId > 0)
-          .map((runtime) => runtime.workspaceId);
-        sampledAt = now;
-      }
-      const report = await options.fanOut("hold", reason, {
-        eventPrefix: "upgrade",
-        timeoutMs: 2_000,
-        workspaceIds,
-      });
-      return { busyCount: report.busyAgents.length };
-    },
-    release: async () => {
-      const released = workspaceIds;
-      workspaceIds = undefined;
-      sampledAt = 0;
-      await options.fanOut("release", undefined, {
-        eventPrefix: "upgrade",
-        timeoutMs: 2_000,
-        workspaceIds: released,
-      });
-    },
-  });
 }

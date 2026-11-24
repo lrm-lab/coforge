@@ -17,7 +17,7 @@ export type ProcessWorkspaceSpawn = (input: {
   env: Record<string, string>;
 }) => Promise<{ pid: number }>;
 
-export type ProcessProbe = (pid: number) => boolean;
+export type ProcessProbe = typeof isPidAlive;
 
 export type ProcessSignal = (pid: number, signal?: NodeJS.Signals) => void;
 
@@ -167,11 +167,20 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
     };
   }
 
-  async #readRecord(): Promise<InstanceRecord | null> {
-    return (await this.#readAt(this.#recordPath)) ?? (await this.#readAt(this.#legacyRecordPath));
+  async upgradeInstance(): Promise<NativeProcessIdentity | null> {
+    const current = await this.#readRecord(true);
+    if (!current || !this.isAlive(current.mainPid, { probeError: "throw" })) return null;
+    return { ...current, active: true };
   }
 
-  async #readAt(path: string): Promise<InstanceRecord | null> {
+  async #readRecord(strict = false): Promise<InstanceRecord | null> {
+    return (
+      (await this.#readAt(this.#recordPath, strict)) ??
+      (await this.#readAt(this.#legacyRecordPath, strict))
+    );
+  }
+
+  async #readAt(path: string, strict: boolean): Promise<InstanceRecord | null> {
     try {
       const bytes = await Bun.file(path).arrayBuffer();
       // Keep UTF-8 bytes explicit: BunFile.text() strips BOMs and detects UTF-16 records.
@@ -181,8 +190,10 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
         (value.mainPid as number) <= 0 ||
         typeof value.invocationId !== "string" ||
         !/^[0-9a-f]{32}$/i.test(value.invocationId)
-      )
+      ) {
+        if (strict) throw new Error("invalid Workspace instance record");
         return null;
+      }
       return { mainPid: value.mainPid as number, invocationId: value.invocationId.toLowerCase() };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;

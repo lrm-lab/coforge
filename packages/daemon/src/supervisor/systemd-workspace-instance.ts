@@ -5,13 +5,17 @@ import { writePrivateFile } from "#src/platform/private-file";
 import {
   validateWorkspaceEndpoint,
   WORKSPACE_RELAUNCH_SECONDS,
+  type UpgradeWorkspaceInstance,
   type WorkspaceInstanceConfig,
   type WorkspaceLaunchAttribution,
 } from "./workspace-instance";
 export type { WorkspaceInstanceConfig } from "./workspace-instance";
 
 export type SystemdUserCommand = (args: string[]) => Promise<number>;
-export type SystemdUserCapture = (args: string[]) => Promise<{ code: number; stdout: string }>;
+export type SystemdUserCapture = (
+  args: string[],
+  timeoutMs?: number,
+) => Promise<{ code: number; stdout: string }>;
 
 const serviceProperties = [
   "Restart=on-failure",
@@ -31,11 +35,12 @@ export class SystemdWorkspaceInstance {
     private readonly config: WorkspaceInstanceConfig,
     private readonly run: SystemdUserCommand,
     private readonly write: (path: string, content: string) => Promise<void> = writePrivateFile,
-    private readonly capture: SystemdUserCapture = async (args) => {
+    private readonly capture: SystemdUserCapture = async (args, timeoutMs) => {
       const process = Bun.spawn(["systemctl", "--user", ...args], {
         stdin: "ignore",
         stdout: "pipe",
         stderr: "ignore",
+        timeout: timeoutMs,
       });
       return { code: await process.exited, stdout: await new Response(process.stdout).text() };
     },
@@ -119,24 +124,37 @@ export class SystemdWorkspaceInstance {
       : null;
   }
 
-  async #show(): Promise<{
+  async upgradeInstance(timeoutMs: number): Promise<UpgradeWorkspaceInstance> {
+    const { exists, active, activeState, mainPid, invocationId } = await this.#show(timeoutMs);
+    if (!exists || (!mainPid && (activeState === "inactive" || activeState === "failed")))
+      return null;
+    if (active && mainPid > 0 && invocationId !== "0".repeat(32))
+      return { active, mainPid, invocationId };
+    return "pending";
+  }
+
+  async #show(timeoutMs?: number): Promise<{
     exists: boolean;
     active: boolean;
+    activeState: string;
     mainPid: number;
     invocationId: string;
     description: string;
     transient: boolean;
   }> {
-    const result = await this.capture([
-      "show",
-      this.unitName,
-      "--property=ActiveState",
-      "--property=MainPID",
-      "--property=LoadState",
-      "--property=InvocationID",
-      "--property=Description",
-      "--property=Transient",
-    ]);
+    const result = await this.capture(
+      [
+        "show",
+        this.unitName,
+        "--property=ActiveState",
+        "--property=MainPID",
+        "--property=LoadState",
+        "--property=InvocationID",
+        "--property=Description",
+        "--property=Transient",
+      ],
+      timeoutMs,
+    );
     const properties = new Map<string, string>();
     for (const line of result.stdout.trim().split("\n")) {
       const separator = line.indexOf("=");
@@ -149,26 +167,28 @@ export class SystemdWorkspaceInstance {
       return {
         exists: false,
         active: false,
+        activeState: "inactive",
         mainPid: 0,
         invocationId: "",
         description: "",
         transient: false,
       };
     const pid = properties.get("MainPID") ?? "";
+    const activeState = properties.get("ActiveState") ?? "";
     const invocationId = properties.get("InvocationID") ?? "";
     if (
       result.code !== 0 ||
       !properties.get("LoadState") ||
-      !properties.get("ActiveState") ||
+      !activeState ||
       !/^\d+$/.test(pid) ||
       !Number.isSafeInteger(Number(pid)) ||
-      ((Number(pid) > 0 || properties.get("ActiveState") === "active") &&
-        !/^[0-9a-f]{32}$/.test(invocationId))
+      ((Number(pid) > 0 || activeState === "active") && !/^[0-9a-f]{32}$/.test(invocationId))
     )
       throw new Error(`could not query systemd state for ${this.unitName}`);
     return {
       exists: true,
-      active: properties.get("ActiveState") === "active",
+      active: activeState === "active",
+      activeState,
       mainPid: Number(pid),
       invocationId,
       description: properties.get("Description") ?? "",

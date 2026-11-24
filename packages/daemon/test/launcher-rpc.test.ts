@@ -140,6 +140,69 @@ const connectionOperations = [
   },
 ];
 
+test.each([
+  { peerPid: 42, replyId: "hold-1", expected: "accepted" },
+  { peerPid: 43, replyId: "hold-1", expected: "different Workspace process" },
+  { peerPid: 42, replyId: "earlier-hold", expected: "invalid hold response" },
+])(
+  "upgrade hold checks the peer PID and request ID on one connection",
+  async ({ peerPid, replyId, expected }) => {
+    const methods: string[] = [];
+    let connections = 0;
+    let closed = 0;
+    const launcher = new LocalDaemonLauncher({
+      executablePath: "/unused",
+      socketPath: "/unused.sock",
+      serverUrl: "https://coforge.test",
+      connect: async () => {
+        connections++;
+        return {
+          async request(frame, timeoutMs) {
+            expect(timeoutMs).toBeGreaterThan(0);
+            expect(timeoutMs).toBeLessThanOrEqual(2_000);
+            const { method, payload } = decodeLocalRpcRequest(readLocalRpcFrame(frame)!);
+            methods.push(method);
+            const response =
+              method === LOCAL_RPC_METHODS.HANDSHAKE
+                ? encodeDaemonHandshakeResponse({
+                    protocolMajor: 1,
+                    requestId: decodeDaemonHandshakeRequest(payload).requestId,
+                    accepted: true,
+                    daemonId: "fixture-daemon",
+                    serverUrl: "https://coforge.test",
+                    processId: peerPid,
+                  })
+                : encodeDaemonHoldResponse({
+                    protocolMajor: 1,
+                    requestId: replyId,
+                    accepted: true,
+                    held: true,
+                    busyAgents: [],
+                    unreachableWorkspaceIds: [],
+                  });
+            if (method === LOCAL_RPC_METHODS.HOLD)
+              expect(decodeDaemonHoldRequest(payload).requestId).toBe("hold-1");
+            return encodeLocalRpcResponse({ method, payload: response });
+          },
+          close() {
+            closed++;
+          },
+        };
+      },
+    });
+    const hold = launcher.hold("hold", "upgrade", "hold-1", { processId: 42, timeoutMs: 2_000 });
+    if (expected === "accepted") expect(await hold).toMatchObject({ accepted: true, held: true });
+    else await expect(hold).rejects.toThrow(expected);
+    expect(connections).toBe(1);
+    expect(closed).toBe(1);
+    expect(methods).toEqual(
+      peerPid === 42
+        ? [LOCAL_RPC_METHODS.HANDSHAKE, LOCAL_RPC_METHODS.HOLD]
+        : [LOCAL_RPC_METHODS.HANDSHAKE],
+    );
+  },
+);
+
 test.each(connectionOperations)(
   "$name keeps its connection open until the response settles, then closes on success or failure",
   async ({ method, invoke, respond, expected }) => {

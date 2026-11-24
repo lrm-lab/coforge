@@ -51,7 +51,7 @@ import {
   type ComputerUpgradeReceipt,
 } from "#src/platform/computer-upgrade-receipts";
 import { supervisorUpgradeReceipts } from "./supervisor-upgrade-receipts";
-import { supervisorUpgradeDrainWatcher } from "./upgrade-drain-watcher";
+import { supervisorUpgradeDrainWatcher, UPGRADE_HOLD_TIMEOUT_MS } from "./upgrade-drain-workspaces";
 
 export async function runMachineSupervisor(
   args: string[],
@@ -365,8 +365,16 @@ async function runWithSupervisorLock(
     const upgradeDrainWatcher = supervisorUpgradeDrainWatcher({
       stateDirectory,
       installRoot,
-      runtimes: () => runtimes(supervisor.view()),
-      fanOut: fanOutRunnerHold,
+      bindings: () => supervisor.bindingView(),
+      observe: (id, timeoutMs) => workspaceInstance(id).upgradeInstance(timeoutMs),
+      hold: (id, reason, processId, timeoutMs) =>
+        childClient(id).hold("hold", reason, undefined, { processId, timeoutMs }),
+      release: (workspaceIds) =>
+        fanOutRunnerHold("release", undefined, {
+          eventPrefix: "upgrade",
+          timeoutMs: UPGRADE_HOLD_TIMEOUT_MS,
+          workspaceIds,
+        }),
     });
     upgradeDrainWatcher.start();
     try {

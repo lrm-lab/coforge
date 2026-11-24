@@ -1,6 +1,7 @@
 import { join } from "node:path";
 
 export type NativeProcessIdentity = { mainPid: number; active: boolean; invocationId: string };
+export type UpgradeWorkspaceInstance = NativeProcessIdentity | "pending" | null;
 
 /** The bound, on every platform, within which a Workspace daemon that exited unexpectedly is
  * started again. It governs Workspace daemons only, never the Computer daemon's own service. It
@@ -53,4 +54,5 @@ export interface WorkspaceInstance {
   ): Promise<number>;
   stop(): Promise<void>;
   identity(): Promise<NativeProcessIdentity | null>;
+  upgradeInstance(timeoutMs: number): Promise<UpgradeWorkspaceInstance>;
 }

@@ -288,17 +288,26 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
     });
   }
 
-  /**
-   * Engages (`"hold"`) or lifts (`"release"`) this daemon's runner hold and returns the busy set.
-   * Idempotent at both ends, so the quiescence poll is just a repeated `hold`.
-   */
   async hold(
     operation: "hold" | "release" = "hold",
     reason?: RunnerHoldReason,
     requestId: string = crypto.randomUUID(),
+    identity?: { processId: number; timeoutMs: number },
   ): Promise<DaemonHoldResponse> {
     const method = operation === "hold" ? LOCAL_RPC_METHODS.HOLD : LOCAL_RPC_METHODS.RELEASE;
+    const deadline = identity ? performance.now() + identity.timeoutMs : undefined;
+    const remaining = () => {
+      if (deadline === undefined) return;
+      const timeoutMs = Math.ceil(deadline - performance.now());
+      if (timeoutMs <= 0) throw new Error("local runner hold timed out");
+      return timeoutMs;
+    };
     return this.#withConnection(async (connection) => {
+      if (identity) {
+        const peer = await this.#verifyHandshake(connection, remaining());
+        if (peer.processId !== identity.processId)
+          throw new Error("local runner hold connected to a different Workspace process");
+      }
       const envelope = await this.#request(
         connection,
         method,
@@ -308,6 +317,7 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
           expectedServerUrl: this.#serverUrl,
           reason,
         }),
+        remaining(),
       );
       const response = decodeDaemonHoldResponse(envelope.payload);
       if (
@@ -431,8 +441,8 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
     }
   }
 
-  async #verifyHandshake(connection: LocalDaemonConnection): Promise<void> {
-    const { envelope, requestId } = await this.#requestHandshake(connection);
+  async #verifyHandshake(connection: LocalDaemonConnection, timeoutMs?: number) {
+    const { envelope, requestId } = await this.#requestHandshake(connection, timeoutMs);
     if (envelope.method !== LOCAL_RPC_METHODS.HANDSHAKE)
       throw new Error("coforge-daemon returned an invalid handshake");
     const response = decodeDaemonHandshakeResponse(envelope.payload);
@@ -443,6 +453,7 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
     ) {
       throw new Error("coforge-daemon server does not match this Computer build");
     }
+    return response;
   }
 }
 

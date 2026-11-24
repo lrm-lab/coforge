@@ -18,6 +18,33 @@ const config: WorkspaceInstanceConfig = {
   unitDirectory: "/tmp/user-systemd",
 };
 
+test("upgrade observation distinguishes a stopped unit from a zero-PID unit that is restarting", async () => {
+  let activeState = "activating";
+  let pid = 0;
+  const invocationId = "a".repeat(32);
+  const instance = new SystemdWorkspaceInstance(
+    config,
+    async () => 0,
+    async () => {},
+    async (_args, timeoutMs) => {
+      expect(timeoutMs).toBe(750);
+      return {
+        code: 0,
+        stdout: `LoadState=loaded\nActiveState=${activeState}\nMainPID=${pid}\nInvocationID=${invocationId}\n`,
+      };
+    },
+  );
+  expect(await instance.upgradeInstance(750)).toBe("pending");
+  activeState = "active";
+  pid = 42;
+  expect(await instance.upgradeInstance(750)).toEqual({ active: true, mainPid: 42, invocationId });
+  activeState = "deactivating";
+  expect(await instance.upgradeInstance(750)).toBe("pending");
+  activeState = "inactive";
+  pid = 0;
+  expect(await instance.upgradeInstance(750)).toBeNull();
+});
+
 test("Workspace unit explicitly carries only scoped non-secret connection environment", () => {
   const unit = workspaceUnit({
     ...config,
