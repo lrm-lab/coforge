@@ -12,11 +12,7 @@ export class DaemonConfigStore {
   }
   async load(): Promise<DaemonConfig | null> {
     try {
-      const persisted = JSON.parse(await Bun.file(this.#path).text()) as DaemonConfig;
-      const config = {
-        ...persisted,
-        workspaceRoot: reachableWorkspaceRoot(persisted.workspaceRoot),
-      };
+      const config = JSON.parse(await Bun.file(this.#path).text()) as DaemonConfig;
       if (!this.#serverHttpUrl) return config;
       if (!config.serverHttpUrl) {
         throw new Error("Persisted daemon configuration does not identify its server");
@@ -61,19 +57,4 @@ export class DaemonConfigStore {
     await rename(temporary, this.#path);
     await chmod(this.#path, 0o600);
   }
-}
-
-/** The binding names the state mount as the launcher sees it (`/root/.coforge/...`). A Workspace
- * daemon that runs as its own uid cannot traverse `/root`, so when the container also mounts the
- * volume where that uid can reach it, the same tree is addressed through that path instead. */
-export function reachableWorkspaceRoot(
-  workspaceRoot: string,
-  volumeRoot: string | undefined = process.env.COFORGE_WORKSPACE_VOLUME_ROOT,
-): string {
-  const legacy = "/root/.coforge";
-  if (!volumeRoot || volumeRoot === legacy) return workspaceRoot;
-  if (workspaceRoot === legacy) return volumeRoot;
-  return workspaceRoot.startsWith(`${legacy}/`)
-    ? `${volumeRoot}${workspaceRoot.slice(legacy.length)}`
-    : workspaceRoot;
 }
