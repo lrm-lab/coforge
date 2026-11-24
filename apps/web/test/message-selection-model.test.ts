@@ -6,6 +6,7 @@ import {
 } from "#src/features/conversations/message-forward-model";
 import {
   MESSAGE_SELECTION_MAX,
+  MessageSelectionStore,
   selectedInOrder,
   selectedLinks,
   selectedMarkdown,
@@ -84,4 +85,145 @@ test("the dialog preview names each original's sender for the card's avatar", ()
   const [one, two] = forwardedPreview({ ...where, messages: [person, agent] });
   expect(one!.sourceSender).toEqual({ kind: "user", id: "u1", avatarUrl: "/a/u1.png" });
   expect(two!.sourceSender).toEqual({ kind: "agent", id: "a1", avatarUrl: null });
+});
+
+test("MessageSelectionStore notifies only affected conversation active and message selected listeners", () => {
+  const store = new MessageSelectionStore();
+  let anyCalls = 0;
+  let c1ActiveCalls = 0;
+  let c2ActiveCalls = 0;
+  let c1StateCalls = 0;
+  let m1Calls = 0;
+  let m2Calls = 0;
+  let m3Calls = 0;
+
+  store.subscribeAnyActive(() => {
+    anyCalls += 1;
+  });
+  store.subscribeConversationActive("c1", () => {
+    c1ActiveCalls += 1;
+  });
+  store.subscribeConversationActive("c2", () => {
+    c2ActiveCalls += 1;
+  });
+  store.subscribeConversationState("c1", () => {
+    c1StateCalls += 1;
+  });
+  store.subscribeMessageSelected("c1", "m1", () => {
+    m1Calls += 1;
+  });
+  store.subscribeMessageSelected("c1", "m2", () => {
+    m2Calls += 1;
+  });
+  store.subscribeMessageSelected("c1", "m3", () => {
+    m3Calls += 1;
+  });
+
+  expect(store.toggle("c1", early)).toEqual({ full: false });
+  expect(store.anyActive).toBe(true);
+  expect(store.isConversationActive("c1")).toBe(true);
+  expect(store.isConversationActive("c2")).toBe(false);
+  expect(store.isMessageSelected("c1", "m1")).toBe(true);
+  expect(store.isMessageSelected("c1", "m2")).toBe(false);
+  expect({
+    anyCalls,
+    c1ActiveCalls,
+    c2ActiveCalls,
+    c1StateCalls,
+    m1Calls,
+    m2Calls,
+    m3Calls,
+  }).toEqual({
+    anyCalls: 1,
+    c1ActiveCalls: 1,
+    c2ActiveCalls: 0,
+    c1StateCalls: 1,
+    m1Calls: 1,
+    m2Calls: 0,
+    m3Calls: 0,
+  });
+
+  expect(store.toggle("c1", late)).toEqual({ full: false });
+  expect(store.isMessageSelected("c1", "m2")).toBe(true);
+  expect({
+    anyCalls,
+    c1ActiveCalls,
+    c2ActiveCalls,
+    c1StateCalls,
+    m1Calls,
+    m2Calls,
+    m3Calls,
+  }).toEqual({
+    anyCalls: 1,
+    c1ActiveCalls: 1,
+    c2ActiveCalls: 0,
+    c1StateCalls: 2,
+    m1Calls: 1,
+    m2Calls: 1,
+    m3Calls: 0,
+  });
+
+  expect(store.toggle("c1", late)).toEqual({ full: false });
+  expect(store.isMessageSelected("c1", "m2")).toBe(false);
+  expect({
+    anyCalls,
+    c1ActiveCalls,
+    c2ActiveCalls,
+    c1StateCalls,
+    m1Calls,
+    m2Calls,
+    m3Calls,
+  }).toEqual({
+    anyCalls: 1,
+    c1ActiveCalls: 1,
+    c2ActiveCalls: 0,
+    c1StateCalls: 3,
+    m1Calls: 1,
+    m2Calls: 2,
+    m3Calls: 0,
+  });
+
+  expect(store.toggle("c2", late)).toEqual({ full: false });
+  expect(store.isConversationActive("c1")).toBe(false);
+  expect(store.isConversationActive("c2")).toBe(true);
+  expect(store.isMessageSelected("c1", "m1")).toBe(false);
+  expect(store.isMessageSelected("c2", "m2")).toBe(true);
+  expect({
+    anyCalls,
+    c1ActiveCalls,
+    c2ActiveCalls,
+    c1StateCalls,
+    m1Calls,
+    m2Calls,
+    m3Calls,
+  }).toEqual({
+    anyCalls: 1,
+    c1ActiveCalls: 2,
+    c2ActiveCalls: 1,
+    c1StateCalls: 4,
+    m1Calls: 2,
+    m2Calls: 2,
+    m3Calls: 0,
+  });
+
+  store.exit();
+  expect(store.anyActive).toBe(false);
+  expect(store.stateFor("c2")).toBeNull();
+  expect({
+    anyCalls,
+    c1ActiveCalls,
+    c2ActiveCalls,
+    c1StateCalls,
+    m1Calls,
+    m2Calls,
+    m3Calls,
+  }).toEqual({
+    anyCalls: 2,
+    c1ActiveCalls: 2,
+    c2ActiveCalls: 2,
+    c1StateCalls: 4,
+    m1Calls: 2,
+    m2Calls: 2,
+    m3Calls: 0,
+  });
 });

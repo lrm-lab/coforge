@@ -7,7 +7,7 @@ import { ConversationUpdateNotice } from "./conversation-update-notice";
 import { useQuotedDraft } from "./conversation-ui-store";
 import { useMentionCandidates } from "./mention-candidates";
 import { MessageComposer } from "./message-composer";
-import { useSelectionIn } from "./message-selection";
+import { useIsSelectingIn } from "./message-selection";
 import { MessageSelectionBar } from "./message-selection-bar";
 import { useRecentConversationHandles } from "./use-recent-conversation-handles";
 
@@ -48,7 +48,7 @@ export function ConversationComposerFooter({
     mentionCompletion,
   );
   const recentHandles = useRecentConversationHandles(conversation.messages);
-  const selecting = useSelectionIn(conversation.conversationId) !== null && !root;
+  const selecting = useIsSelectingIn(root ? undefined : conversation.conversationId);
   const quotedDraft = useQuotedDraft();
   return (
     <div className={column ? MESSAGE_COLUMN_CLASS : undefined}>
