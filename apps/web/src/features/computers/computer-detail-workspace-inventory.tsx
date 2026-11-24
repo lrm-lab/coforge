@@ -1,20 +1,19 @@
 import { useRef, useState } from "react";
 import { useHydrated } from "@tanstack/react-router";
-import { FolderSearch, Trash01 } from "@untitledui/icons";
+import { RefreshCw01, Trash01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { formatDisplayPath } from "#src/features/agents/display-path";
-import { m } from "#src/paraglide/messages";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { formatCalendarDate } from "#src/lib/dates";
+import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
-import { formatWorkspaceSize } from "./workspace-size";
-import { DetailGroup } from "./computer-detail-rows";
-import type { ComputerAgentWorkspaceScan } from "./computer.schemas";
 import type { AgentWorkspaceScanSnapshot } from "./agent-workspace-scan.query";
+import type { ComputerAgentWorkspaceScan } from "./computer.schemas";
+import { formatWorkspaceSize } from "./workspace-size";
 
 export function ComputerDetailWorkspaceInventory({
   snapshot,
@@ -45,18 +44,25 @@ export function ComputerDetailWorkspaceInventory({
 
   return (
     <>
-      <DetailGroup
-        heading={m.computer_agent_workspaces()}
-        headingId="computer-agent-workspaces"
-        action={
-          canScan ? (
+      <section aria-labelledby="computer-agent-workspaces">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <h3 id="computer-agent-workspaces" className="text-xs font-semibold text-primary">
+              {m.computer_detail_cleanup_title()}
+            </h3>
+            <p className="mt-0.5 text-xs text-tertiary">
+              {m.computer_detail_cleanup_description()}
+            </p>
+          </div>
+          {canScan ? (
             <Button
               type="button"
-              size="sm"
+              size="xs"
               color="secondary"
-              iconLeading={FolderSearch}
+              iconLeading={RefreshCw01}
               isLoading={status === "scanning"}
               showTextWhileLoading
+              className="shrink-0"
               onPress={onScan}
             >
               {status === "scanning"
@@ -65,44 +71,42 @@ export function ComputerDetailWorkspaceInventory({
                   ? m.computer_agent_workspaces_rescan()
                   : m.computer_agent_workspaces_scan()}
             </Button>
-          ) : undefined
-        }
-      >
+          ) : null}
+        </div>
+
         {hasBody ? (
-          <div ref={listRef} tabIndex={-1} className="outline-hidden">
-            {status === "scanning" && (
+          <div ref={listRef} tabIndex={-1} className="mt-2.5 outline-hidden">
+            {status === "scanning" ? (
               <p role="status" className="sr-only">
                 {m.computer_agent_workspaces_scanning()}
               </p>
-            )}
-            {status === "error" && (
-              <p role="alert" className="py-2 text-sm text-error-primary">
+            ) : null}
+            {status === "error" ? (
+              <p role="alert" className="py-1 text-xs text-error-primary">
                 {m.computer_agent_workspaces_error()}
               </p>
-            )}
-            {snapshot &&
-              (snapshot.workspaces.length ? (
+            ) : null}
+            {snapshot ? (
+              snapshot.workspaces.length ? (
                 <>
                   {unanswered ? (
-                    <p className="py-3 text-sm text-tertiary">
+                    <p className="py-1.5 text-xs text-tertiary">
                       {m.computer_agent_workspace_unavailable()}
                     </p>
-                  ) : (
-                    deletedCount > 0 && (
-                      <p className="py-3 text-sm text-tertiary tabular-nums">
-                        {m.computer_agent_workspaces_deleted_summary({
-                          count: deletedCount,
-                        })}
-                      </p>
-                    )
-                  )}
+                  ) : deletedCount > 0 ? (
+                    <p className="py-1.5 text-xs text-tertiary tabular-nums">
+                      {m.computer_agent_workspaces_deleted_summary({
+                        count: deletedCount,
+                      })}
+                    </p>
+                  ) : null}
                   <ul className="divide-y divide-secondary">
                     {snapshot.workspaces.map((workspace) => {
                       const shownRootPath = formatDisplayPath(workspace.rootPath);
                       return (
                         <li
                           key={workspace.agentId}
-                          className="flex min-w-0 items-center justify-between gap-4 py-3 text-sm"
+                          className="flex min-w-0 items-center justify-between gap-4 py-2.5 text-sm"
                         >
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
@@ -115,7 +119,7 @@ export function ComputerDetailWorkspaceInventory({
                                   : m.computer_agent_workspace_active()}
                               </span>
                             </div>
-                            {workspace.status === "present" && (
+                            {workspace.status === "present" ? (
                               <>
                                 <p className="mt-1 min-w-0 font-mono text-xs text-tertiary">
                                   {shownRootPath !== workspace.rootPath ? (
@@ -134,7 +138,7 @@ export function ComputerDetailWorkspaceInventory({
                                 </p>
                                 <p className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs text-tertiary tabular-nums">
                                   <span>{workspaceStatistics(workspace)}</span>
-                                  {hydrated && workspace.modifiedAtMs > 0 && (
+                                  {hydrated && workspace.modifiedAtMs > 0 ? (
                                     <span>
                                       {m.computer_agent_workspace_modified({
                                         date: formatCalendarDate(
@@ -144,30 +148,31 @@ export function ComputerDetailWorkspaceInventory({
                                         ),
                                       })}
                                     </span>
-                                  )}
+                                  ) : null}
                                 </p>
                               </>
-                            )}
+                            ) : null}
                           </div>
-                          {canDelete && (
+                          {canDelete ? (
                             <ButtonUtility
                               color="secondary"
                               icon={Trash01}
                               tooltip={m.computer_agent_workspace_delete()}
                               onClick={() => setDeleting(workspace)}
                             />
-                          )}
+                          ) : null}
                         </li>
                       );
                     })}
                   </ul>
                 </>
               ) : (
-                <p className="py-2 text-sm text-tertiary">{m.computer_agent_workspaces_none()}</p>
-              ))}
+                <p className="py-1 text-xs text-tertiary">{m.computer_agent_workspaces_none()}</p>
+              )
+            ) : null}
           </div>
         ) : null}
-      </DetailGroup>
+      </section>
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(open) => {

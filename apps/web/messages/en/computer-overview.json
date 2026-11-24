@@ -45,7 +45,6 @@
   "computer_detail_collapse": "Restore split",
   "computer_detail_close": "Close",
   "computer_detail_resize": "Resize computer details",
-  "computer_detail_info_section": "Information",
   "computer_upgrade_all_action": "Upgrade all ({count})",
   "computer_upgrade_all_title": "Upgrade {count} Computers?",
   "computer_upgrade_all_confirm": "Upgrade all",
@@ -56,5 +55,18 @@
   "computer_overview_column_agents": "Agents",
   "computer_overview_column_version": "Version & upgrade",
   "computer_overview_disk_short": "Disk {percent}%",
-  "computer_overview_memory_short": "Mem {percent}%"
+  "computer_overview_memory_short": "Mem {percent}%",
+  "computer_detail_free_capacity": "{amount} free",
+  "computer_detail_offline_hint": "This Computer is offline. Make sure it is powered on and connected, or use Advanced & troubleshooting below to reconnect.",
+  "computer_detail_offline_hint_viewer": "This Computer is currently offline.",
+  "computer_detail_ai_tools": "Available AI tools",
+  "computer_detail_advanced_section": "Advanced & troubleshooting",
+  "computer_detail_advanced_hint": "Workspace cleanup · Terminal",
+  "computer_detail_advanced_hint_cleanup": "Workspace cleanup",
+  "computer_detail_advanced_hint_terminal": "Terminal",
+  "computer_detail_advanced_auto_opened": "Opened automatically",
+  "computer_detail_cleanup_title": "Clean up leftover workspaces",
+  "computer_detail_cleanup_description": "Scan and remove local folders left behind by deleted Agents to free disk space.",
+  "computer_detail_kind_cloud": "Cloud",
+  "computer_detail_kind_local": "Local"
 }

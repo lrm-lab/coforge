@@ -45,7 +45,6 @@
   "computer_detail_collapse": "恢复分栏",
   "computer_detail_close": "关闭",
   "computer_detail_resize": "调整电脑详情宽度",
-  "computer_detail_info_section": "信息",
   "computer_upgrade_all_action": "升级全部 ({count})",
   "computer_upgrade_all_title": "升级 {count} 台电脑？",
   "computer_upgrade_all_confirm": "全部升级",
@@ -56,5 +55,18 @@
   "computer_overview_column_agents": "Agent",
   "computer_overview_column_version": "版本与升级",
   "computer_overview_disk_short": "盘 {percent}%",
-  "computer_overview_memory_short": "存 {percent}%"
+  "computer_overview_memory_short": "存 {percent}%",
+  "computer_detail_free_capacity": "剩 {amount}",
+  "computer_detail_offline_hint": "这台电脑当前未连接。确认电脑已开机联网后，可在下方「高级与排查」按指引重启连接。",
+  "computer_detail_offline_hint_viewer": "这台电脑当前未连接，暂时无法使用上面的 Agent。",
+  "computer_detail_ai_tools": "可用的 AI 工具",
+  "computer_detail_advanced_section": "高级与排查",
+  "computer_detail_advanced_hint": "清理残留目录 · 终端命令",
+  "computer_detail_advanced_hint_cleanup": "清理残留目录",
+  "computer_detail_advanced_hint_terminal": "终端命令",
+  "computer_detail_advanced_auto_opened": "已自动展开",
+  "computer_detail_cleanup_title": "清理残留工作目录",
+  "computer_detail_cleanup_description": "扫描并清理已删除 Agent 留下的本地文件夹，释放空间。",
+  "computer_detail_kind_cloud": "云电脑",
+  "computer_detail_kind_local": "本地电脑"
 }

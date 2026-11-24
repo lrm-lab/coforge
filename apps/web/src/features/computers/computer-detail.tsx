@@ -1,21 +1,21 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, RefreshCw01 as RotateCw, Terminal } from "@untitledui/icons";
+import { RefreshCw01 as RotateCw } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
+import { AgentCreateDialog } from "#src/features/agents/agent-create-dialog";
+import type { AgentControlExecute } from "#src/features/agents/agent-runtime-controls";
+import type { RuntimeCatalog } from "#src/features/agents/agent-runtime-fields";
+import type { CreateAgentInput } from "#src/features/agents/agent.schemas";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { humanLabel } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
-import { AgentCreateDialog } from "#src/features/agents/agent-create-dialog";
-import type { CreateAgentInput } from "#src/features/agents/agent.schemas";
-import type { RuntimeCatalog } from "#src/features/agents/agent-runtime-fields";
-import type { AgentControlExecute } from "#src/features/agents/agent-runtime-controls";
 import type { AgentWorkspaceScanSnapshot } from "./agent-workspace-scan.query";
+import { ComputerDetailAdvanced } from "./computer-detail-advanced";
 import { ComputerDetailAgentRoster } from "./computer-detail-agent-roster";
 import { ComputerDetailHeader } from "./computer-detail-header";
 import { ComputerDetailHero } from "./computer-detail-hero";
 import { ComputerDetailMenu } from "./computer-detail-menu";
 import { ComputerDetailStats } from "./computer-detail-stats";
-import { ComputerDetailNameBand } from "./computer-detail-title";
 import {
   RESTART_MAX_POLLS,
   RESTART_POLL_INTERVAL_MS,
@@ -30,10 +30,9 @@ import { nextProgressDeadline, runtimeUpgradePresentation } from "./computer-upg
 import { CloudImageUpdateDialog, ComputerUpgradeConfirmDialog } from "./computer-upgrade-slot";
 import type { ComputerRestartStatus, ComputerUpgradeStatus } from "./computer.schemas";
 import { FormatCloudComputerDialog } from "./format-cloud-computer-dialog";
-import { runtimeDetectionStatus, runtimeRescanNotice } from "./runtime-rescan-notice";
 import type { RuntimeCatalogRefreshResult } from "./runtime-catalog-refresh-poll";
 import { RuntimeRescanFeedback } from "./runtime-rescan-feedback";
-import { TerminalCommand } from "./terminal-command";
+import { runtimeDetectionStatus, runtimeRescanNotice } from "./runtime-rescan-notice";
 import { useComputerDetailLifecycle } from "./use-computer-detail-lifecycle";
 
 export { RESTART_MAX_POLLS, RESTART_POLL_INTERVAL_MS, type ComputerDetailView };
@@ -193,6 +192,37 @@ export function ComputerDetail({
   };
 
   const refusal = activeRefusal(computer);
+  const isLatestVersion = Boolean(
+    currentVersion &&
+    latestComputerVersion &&
+    !runtimeOffer &&
+    !runtimePresentation.versionNotice &&
+    computer.online,
+  );
+  const restartAction =
+    onRestart && (computer.ownedByCurrentUser || computer.canManageAgents) && computer.online
+      ? {
+          pending: restartState === "pending",
+          disabled: computerRestartBusy({ upgrading, restartState }),
+          onPress: runRestart,
+        }
+      : undefined;
+  const autoOpenAdvanced = !computer.online || runtimePresentation.versionNotice?.kind === "issue";
+
+  const runtimesAction = canRescan ? (
+    <Button
+      type="button"
+      size="xs"
+      color="link-gray"
+      iconLeading={RotateCw}
+      isLoading={rescanning}
+      showTextWhileLoading
+      isDisabled={rescanning}
+      onPress={() => void rescan()}
+    >
+      {rescanning ? m.computer_runtime_rescanning() : m.computer_runtime_rescan()}
+    </Button>
+  ) : undefined;
 
   const runtimesNode = (
     <>
@@ -219,22 +249,7 @@ export function ComputerDetail({
           {m.computer_runtime_detection_rescanning()}
         </p>
       ) : null}
-      {!rescanning && <RuntimeRescanFeedback notice={rescanNotice} />}
-      {canRescan ? (
-        <Button
-          type="button"
-          size="xs"
-          color="link-gray"
-          iconLeading={RotateCw}
-          isLoading={rescanning}
-          showTextWhileLoading
-          isDisabled={rescanning}
-          className="mt-2"
-          onPress={() => void rescan()}
-        >
-          {rescanning ? m.computer_runtime_rescanning() : m.computer_runtime_rescan()}
-        </Button>
-      ) : null}
+      {!rescanning ? <RuntimeRescanFeedback notice={rescanNotice} /> : null}
     </>
   );
 
@@ -243,6 +258,7 @@ export function ComputerDetail({
       <ComputerDetailHeader
         computer={computer}
         title={label}
+        onUpdateDisplayName={onUpdateDisplayName}
         menu={
           <ComputerDetailMenu
             name={label}
@@ -257,17 +273,14 @@ export function ComputerDetail({
         <ComputerDetailHero
           computer={computer}
           label={label}
+          isCloud={isCloud}
+          currentVersion={currentVersion}
+          isLatestVersion={isLatestVersion}
           showDesktop={isCloud && computer.ownedByCurrentUser}
+          showOfflineHint={!computer.online && !refusal}
+          canTroubleshoot={computer.ownedByCurrentUser}
           upgrade={heroUpgrade}
-          restart={
-            onRestart && (computer.ownedByCurrentUser || computer.canManageAgents)
-              ? {
-                  pending: restartState === "pending",
-                  disabled: computerRestartBusy({ upgrading, restartState }),
-                  onPress: runRestart,
-                }
-              : undefined
-          }
+          restart={restartAction}
         />
 
         {refusal ? (
@@ -276,40 +289,7 @@ export function ComputerDetail({
           </div>
         ) : null}
 
-        <ComputerDetailNameBand
-          key={computer.id}
-          computer={computer}
-          label={label}
-          onUpdateDisplayName={onUpdateDisplayName}
-        />
-
-        <ComputerDetailStats
-          computer={computer}
-          label={label}
-          timeZone={timeZone}
-          creatorName={creatorName}
-          isCloud={isCloud}
-          currentVersion={currentVersion}
-          currentImageVersion={currentImageVersion}
-          isLatestVersion={Boolean(
-            latestComputerVersion &&
-            !runtimeOffer &&
-            !runtimePresentation.versionNotice &&
-            computer.online,
-          )}
-          versionNotice={runtimePresentation.versionNotice}
-          showRecoveryAdvice={
-            runtimePresentation.headerAction !== undefined &&
-            runtimePresentation.headerAction.kind !== "upgrading"
-          }
-          imageSlot={computer.ownedByCurrentUser ? imageSlot : null}
-          canUpgrade={canUpgrade}
-          upgradeInFlight={upgrading}
-          onImageUpgrade={() => setImageUpdateOpen(true)}
-          runtimes={runtimesNode}
-        />
-
-        <div className="border-b border-secondary px-page py-4">
+        <div className="border-b border-secondary px-page py-4 last:border-b-0">
           <ComputerDetailAgentRoster
             agents={computer.agents}
             onCreateAgent={
@@ -323,43 +303,53 @@ export function ComputerDetail({
           />
         </div>
 
-        <div className="border-b border-secondary px-page py-4">
-          <ComputerDetailWorkspaceInventory
-            snapshot={onScanAgentWorkspaces ? agentWorkspaceScan : null}
-            status={workspaceScanStatus}
-            canScan={Boolean(onScanAgentWorkspaces)}
-            onScan={() => void scanWorkspaces()}
-            canDelete={Boolean(onDeleteAgentWorkspace)}
-            timeZone={timeZone}
-            onDelete={async (agentId) => {
-              if (!onDeleteAgentWorkspace) return;
-              const result = await onDeleteAgentWorkspace(agentId);
-              if (result.status !== "ok" && result.status !== "missing")
-                throw new Error("Workspace could not be deleted");
-              await scanWorkspaces();
-            }}
-          />
-        </div>
+        <ComputerDetailStats
+          computer={computer}
+          label={label}
+          timeZone={timeZone}
+          creatorName={creatorName}
+          isCloud={isCloud}
+          currentVersion={currentVersion}
+          currentImageVersion={currentImageVersion}
+          isLatestVersion={isLatestVersion}
+          versionNotice={runtimePresentation.versionNotice}
+          showRecoveryAdvice={
+            runtimePresentation.headerAction !== undefined &&
+            runtimePresentation.headerAction.kind !== "upgrading"
+          }
+          imageSlot={computer.ownedByCurrentUser ? imageSlot : null}
+          canUpgrade={canUpgrade}
+          upgradeInFlight={upgrading}
+          onImageUpgrade={() => setImageUpdateOpen(true)}
+          runtimesAction={runtimesAction}
+          runtimes={runtimesNode}
+        />
 
-        {computer.ownedByCurrentUser ? (
-          <details className="group border-b border-secondary px-page">
-            <summary className="flex min-h-12 cursor-pointer list-none items-center gap-2.5 py-3 text-sm font-medium text-secondary transition-colors outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-brand [&::-webkit-details-marker]:hidden">
-              <Terminal aria-hidden="true" className="size-4 text-fg-quaternary" />
-              <span className="flex-1">{m.computer_troubleshoot_terminal()}</span>
-              <ChevronRight
-                aria-hidden="true"
-                className="size-4 text-fg-quaternary transition-transform duration-(--duration-sm) ease-in-out group-open:rotate-90 rtl:rotate-180 rtl:group-open:rotate-90 motion-reduce:transition-none"
+        <ComputerDetailAdvanced
+          key={computer.id}
+          autoOpen={autoOpenAdvanced}
+          workspaceSlug={workspaceSlug}
+          showTerminal={computer.ownedByCurrentUser}
+          workspaceInventory={
+            onScanAgentWorkspaces ? (
+              <ComputerDetailWorkspaceInventory
+                snapshot={agentWorkspaceScan}
+                status={workspaceScanStatus}
+                canScan
+                onScan={() => void scanWorkspaces()}
+                canDelete={Boolean(onDeleteAgentWorkspace)}
+                timeZone={timeZone}
+                onDelete={async (agentId) => {
+                  if (!onDeleteAgentWorkspace) return;
+                  const result = await onDeleteAgentWorkspace(agentId);
+                  if (result.status !== "ok" && result.status !== "missing")
+                    throw new Error("Workspace could not be deleted");
+                  await scanWorkspaces();
+                }}
               />
-            </summary>
-            <div className="space-y-2 pb-4">
-              <p className="text-sm text-tertiary">{m.computer_verify_terminal_description()}</p>
-              <TerminalCommand command="coforge-computer status" />
-              <TerminalCommand command="coforge-computer logs" />
-              <p className="pt-2 text-sm text-tertiary">{m.computer_restart_from_terminal()}</p>
-              <TerminalCommand command={`coforge-computer restart --workspace ${workspaceSlug}`} />
-            </div>
-          </details>
-        ) : null}
+            ) : undefined
+          }
+        />
       </div>
 
       {onFormatCloudComputer ? (

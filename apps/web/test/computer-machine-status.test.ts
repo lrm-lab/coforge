@@ -10,6 +10,7 @@ import {
 import { createMachineStatusMethod } from "#src/server/centrifugo/machine-status-receiver.server";
 import {
   isMachineDiskLow,
+  machineAvailableLabel,
   machineStatusView,
   machineUsageLabel,
   MACHINE_DISK_LOW_BYTES,
@@ -81,7 +82,6 @@ test("another Computer's report, or one that does not add up, is refused", async
     }),
   ).toMatchObject({ code: 403 });
   expect(calls).toEqual([]);
-  // The codec refuses a sample that does not add up before it reaches the wire.
   expect(() => encodeMachineDiskStatusReport({ ...report(), availableBytes: 600 * GIB })).toThrow(
     "invalid machine status report",
   );
@@ -120,7 +120,6 @@ test("a reading is shown while fresh, and reads as unknown once stale or absent"
   });
   expect(fresh.memory?.availableBytes).toBe(12 * GIB);
 
-  // One kind may have a fresh report while the other's is older than its window.
   const partial = machineStatusView(row, at.getTime() + MEMORY_STALE_AFTER_MS + 1);
   expect(partial.memory).toBeNull();
   expect(partial.disk).not.toBeNull();
@@ -135,17 +134,12 @@ test("a reading is shown while fresh, and reads as unknown once stale or absent"
 });
 
 test("a disk is low only when it is nearly full and nearly out of absolute room", () => {
-  // Under both thresholds.
   expect(isMachineDiskLow({ availableBytes: 10 * GIB, totalBytes: 1_000 * GIB })).toBe(true);
-  // Plenty of absolute room left, even at a small percentage.
   expect(
     isMachineDiskLow({ availableBytes: MACHINE_DISK_LOW_BYTES, totalBytes: 2_000 * GIB }),
   ).toBe(false);
-  // A large fraction of a small volume.
   expect(isMachineDiskLow({ availableBytes: 15 * GIB, totalBytes: 100 * GIB })).toBe(false);
-  // Small volume, a large share free: not low.
   expect(isMachineDiskLow({ availableBytes: 15 * GIB, totalBytes: 120 * GIB })).toBe(false);
-  // Under a tenth of a larger volume: low.
   expect(isMachineDiskLow({ availableBytes: 15 * GIB, totalBytes: 200 * GIB })).toBe(true);
 });
 
@@ -163,4 +157,10 @@ test("usage reads used / total: disks in powers of 1000, memory in powers of 102
     "1.5 GB / 8 GB",
   );
   expect(machineUsageLabel({ availableBytes: 0.4e9, totalBytes: 1e12 }, 1000)).toBe("1 TB / 1 TB");
+});
+
+test("available capacity formats in powers of 1000 for disk and 1024 for memory", () => {
+  expect(machineAvailableLabel({ availableBytes: 41e9 }, 1000)).toBe("41 GB");
+  expect(machineAvailableLabel({ availableBytes: 10.6 * GIB }, 1024)).toBe("11 GB");
+  expect(machineAvailableLabel({ availableBytes: 6.5 * GIB }, 1024)).toBe("6.5 GB");
 });

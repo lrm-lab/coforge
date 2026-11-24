@@ -80,11 +80,15 @@ provider)`, with its count and account label fixed when it opens.
   fails and then idles stops the follow; opening Computers starts it again. That recovery fetch
   still reports the old error while `isFetching` is true, and the follow stays until it returns.
 - Every member is told an update is waiting on the list tile's badge, while the owner's detail
-  panel surfaces runtime upgrades without a full-width card: the top bar carries only the Computer
-  icon, title, more menu, and split Expand/Close controls, the Identity Hero carries the primary
-  actions (Open desktop, in-place Upgrade / Upgrading / Retry, Restart), followed by Raft-aligned
-  divided bands (Name edit, Information with OS / Version status + details modal / Disk & Memory /
-  Runtimes + Rescan / Added & Creator, Agents roster, and Workspace inventory), and `ComputerUpgradeWatcher` drives one aggregated cross-route `toast.progress`
+  panel keeps a clean user-first hierarchy without a full-width upgrade card: the 48px top bar
+  (`computer-detail-header.tsx`) carries the Computer icon with corner presence dot, inline-editable
+  title (`computer-detail-title.tsx`), more menu (`···` for Format / Remove / Delete), and split
+  Expand/Close controls; the Hero (`computer-detail-hero.tsx`) shows single-line metadata, offline
+  guidance when disconnected, primary actions (Open desktop, in-place Upgrade / Upgrading / Retry,
+  Restart), and frameless vertical Disk & Memory rows; next come the Agents roster, Available AI
+  tools + compact 2-column specs (`computer-detail-stats.tsx`), and a single collapsible
+  `computer-detail-advanced.tsx` band (workspace cleanup + terminal troubleshooting — collapsed by
+  default when online and healthy, auto-opened when offline or on an upgrade issue). `ComputerUpgradeWatcher` drives one aggregated cross-route `toast.progress`
   capsule across concurrent runtime upgrades (naming the Computer for one, or the count for many)
   that morphs to done on success (resuming remaining active upgrades after the done window) or
   surfaces per-Computer `appNotice` cards on failure (§13). `useComputerDetailLifecycle` also reads
