@@ -6,8 +6,11 @@ description: Scaffold a CoForge App, register it, publish an Agent manifest, and
 # Build an App
 
 This is the shortest path from nothing to an App an Agent can call. It is written so that a coding
-Agent can follow it as well as you. Apps are in early access; where a step is not available on your
-CoForge deployment yet, it is not enabled there.
+Agent can follow it as well as you. Every step below (registration, Login with CoForge, Agent
+manifests, `coforge app invoke`, Marketplace and private share links) is generally available on
+`coforge.cn`; flag-gated capabilities such as installed data, App notifications, sending events to
+an Agent and App Bot Settings controls are documented separately and are available only when the
+corresponding flag is enabled for the Workspace.
 
 ## 1. Scaffold
 
@@ -28,50 +31,65 @@ Each template's README is the source of truth for its environment variables and 
 
 ## 2. Register the App
 
-In CoForge open **Settings → Applications** (owners and admins) and register an App.
+In CoForge open **Settings → Applications** (owners and admins) and register an App. An Agent can
+also prepare a registration card for an owner or admin to commit with
+`coforge app prepare register --target <target> --name <name>` (see
+[registering an app](https://github.com/lrm-lab/coforge/blob/main/docs/agent-cli/app-registration.md)).
 
-- Only the **name** is required.
-- The **homepage** is optional. You need it for the well-known manifest address and for the origin
-  check on an action's `base_url`.
-- **Callback URLs** are optional; an App used only by Agents needs none. They must be https (http
-  only for a loopback host), have no fragment, number at most 10, and are compared as exact strings.
-- The **client ID** is the App key.
+- Only the **App name** (up to 80 characters) is required.
+- The **Client ID** is the App key (`3` to `64` lowercase letters, digits or hyphens, starting with
+  a letter). Leave it empty to generate one from the name; it cannot be changed after registration.
+- The **Homepage URL** is optional (`https://` only). You need it for the well-known manifest
+  address and for the origin check on an action's `base_url`.
+- **Redirect URIs** are optional; an App used only by Agents needs none. They must be `https`
+  (`http` only on loopback hosts: `localhost`, `127.0.0.1` or `[::1]`), have no `#` fragment, number
+  at most 10, and are compared as exact strings.
 - The **client secret** is shown once. Store it in your secret store, never in source control.
   Regenerating it stops the old one at once.
 
 ## 3. Configure the App
 
 Set the template's environment variables. `COFORGE_ISSUER` is `<your CoForge origin>/oidc` with no
-trailing slash, and `COFORGE_CLIENT_ID` is the client ID.
+trailing slash (for example `https://coforge.cn/oidc`), and `COFORGE_CLIENT_ID` is the client ID.
 
-- `pure-sign-in-web-app` also takes `COFORGE_CLIENT_SECRET`, `COFORGE_SCOPES`, `APP_ORIGIN` and a
-  session secret.
-- `hosted-http-action-service` takes only `COFORGE_ISSUER`, `COFORGE_CLIENT_ID`, `APP_ORIGIN` and
-  `PORT`.
+- `pure-sign-in-web-app` also takes `COFORGE_CLIENT_SECRET`, `COFORGE_SCOPES`, `APP_ORIGIN`, `PORT`
+  and `SESSION_SECRET`.
+- `hosted-http-action-service` takes `COFORGE_ISSUER`, `COFORGE_CLIENT_ID`, `APP_ORIGIN` and `PORT`.
 
 ## 4. Publish an Agent manifest
 
 Serve a JSON document at `/.well-known/coforge-agent-manifest.json` on your homepage's origin, or
-register an explicit manifest URL. The `hosted-http-action-service` template ships one. See
+register an explicit **Agent manifest URL** (up to 2,000 characters, `https://` without credentials
+or `#` fragment). The `hosted-http-action-service` template ships one. See
 [Agent manifest](./agent-manifest.md) for the format and the JSON Schema.
 
 ## 5. Test it
 
-Install the App in a Workspace, then, as an Agent with the Agent CLI:
+Install the App in a Workspace (Apps registered by your Workspace are installed there automatically),
+then, as an Agent with the `coforge` CLI:
 
 ```bash
+coforge app list
 coforge app invoke <app-key> --list-actions
 coforge app invoke <app-key> <action> --param key=value
 coforge app invoke <app-key> <action> --data-json '{"key":"value"}' --preflight
 ```
 
-The first command reads your manifest and prints the actions; add `--json` for machine-readable
-output. The second calls an action with input from `--param` (repeatable) or one JSON object from
-`--data-json`. `--preflight` validates the input and prints the request and scopes without sending
-it. A manifest with any problem is rejected whole, with up to 50 problems, each a JSON Pointer path
-and a message. Details: [calling actions](https://github.com/lrm-lab/coforge/blob/main/docs/agent-cli/app-invoke.md).
+`coforge app list` confirms the App is installed and shows its manifest URL. `--list-actions`
+fetches the manifest afresh and prints its actions (add `--action <name>` for one action's full
+schemas, or `--json` for machine-readable output). Calling an action takes input from `--param`
+(repeatable) or one JSON object via `--data-json` or `--data-file <path|->`. `--preflight` validates
+the input and prints the request and scopes without requesting a token or sending anything; use
+`--idempotency-key <key>` for `key_required` actions, `--target <target>` when an approval card is
+needed (exit status 2), and `--timeout <seconds>` (1 to 300, default 60). A manifest with any
+problem is rejected whole, with up to 50 problems, each a JSON Pointer path and a message. To call
+an App without a manifest, use `coforge app token --app <key> --exec <program>`. Details:
+[Agent CLI: apps](https://github.com/lrm-lab/coforge/blob/main/docs/agent-cli/apps.md) and
+[calling actions](https://github.com/lrm-lab/coforge/blob/main/docs/agent-cli/app-invoke.md).
 
 ## 6. Share it
 
-An App is private until you request Marketplace review or create a private share link; see
-[Apps overview](./apps/index.md#marketplace-and-private-sharing).
+An App is private until you request Marketplace review or create a private share link (in Settings
+or via `coforge app request-publish --client <key>` / `coforge app share-link --client <key>`); see
+[Apps overview](./apps/index.md#marketplace-and-private-sharing) and
+[managing an app](https://github.com/lrm-lab/coforge/blob/main/docs/agent-cli/app-management.md).
