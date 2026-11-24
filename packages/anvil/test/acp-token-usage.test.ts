@@ -469,3 +469,81 @@ test("AcpSession captures post-settlement usage_update tokens once and never fab
     await harness.session.dispose();
   }
 });
+
+test("AcpSession emits TOKEN_USAGE before error when an error listener synchronously disposes the session", async () => {
+  const rpcHarness = await openTestAcpSession();
+  try {
+    rpcHarness.session.subscribe((event) => {
+      if (event.type === "error") void rpcHarness.session.dispose();
+    });
+    const admission = rpcHarness.session.notify("fatal-rpc-error");
+    const prompt = await rpcHarness.nextRequest("session/prompt");
+    rpcHarness.promptWritten();
+    prompt.reject(
+      new RequestError(-32603, "Quota exceeded", {
+        usage: { inputTokens: 900, outputTokens: 110, totalTokens: 1_010 },
+      }),
+    );
+    await admission;
+
+    const tokenEvents = rpcHarness.events.filter(
+      (event) => event.type === AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE,
+    );
+    const tokenIndex = rpcHarness.events.findIndex(
+      (event) => event.type === AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE,
+    );
+    const errorIndex = rpcHarness.events.findIndex((event) => event.type === "error");
+    expect(tokenEvents).toEqual([
+      {
+        type: AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE,
+        usage: {
+          uncachedInputTokens: 900,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          outputTokens: 110,
+        },
+      },
+    ]);
+    expect(tokenIndex).toBeGreaterThanOrEqual(0);
+    expect(errorIndex).toBeGreaterThan(tokenIndex);
+  } finally {
+    await rpcHarness.session.dispose();
+  }
+
+  const stopHarness = await openTestAcpSession();
+  try {
+    stopHarness.session.subscribe((event) => {
+      if (event.type === "error") void stopHarness.session.dispose();
+    });
+    const admission = stopHarness.session.notify("fatal-stop-reason");
+    const prompt = await stopHarness.nextRequest("session/prompt");
+    prompt.resolve({
+      stopReason: "refusal",
+      usage: { inputTokens: 600, cachedReadTokens: 200, outputTokens: 40, totalTokens: 640 },
+    });
+    await admission;
+
+    const tokenEvents = stopHarness.events.filter(
+      (event) => event.type === AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE,
+    );
+    const tokenIndex = stopHarness.events.findIndex(
+      (event) => event.type === AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE,
+    );
+    const errorIndex = stopHarness.events.findIndex((event) => event.type === "error");
+    expect(tokenEvents).toEqual([
+      {
+        type: AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE,
+        usage: {
+          uncachedInputTokens: 400,
+          cacheReadTokens: 200,
+          cacheWriteTokens: 0,
+          outputTokens: 40,
+        },
+      },
+    ]);
+    expect(tokenIndex).toBeGreaterThanOrEqual(0);
+    expect(errorIndex).toBeGreaterThan(tokenIndex);
+  } finally {
+    await stopHarness.session.dispose();
+  }
+});

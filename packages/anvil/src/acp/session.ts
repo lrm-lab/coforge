@@ -206,6 +206,17 @@ export class AcpSession implements AgentSession {
     let promptResponse: unknown;
     let completedResponse: unknown;
     let errorTokenUsage: AgentTurnTokenUsage | undefined;
+    let emittedPromptTokenUsage = false;
+    const resolvePromptTokenUsage = () =>
+      acpPromptTokenUsage(promptResponse) ??
+      errorTokenUsage ??
+      input.notificationTokenUsage ??
+      input.updateTokenUsage;
+    const emitPromptTokenUsage = (usage: AgentTurnTokenUsage | undefined) => {
+      if (!usage || emittedPromptTokenUsage || this.#disposed) return;
+      emittedPromptTokenUsage = true;
+      this.#emitTokenUsage(usage, input.options);
+    };
     try {
       const meta = input.promptId ? this.profile.promptMeta?.(input.promptId) : undefined;
       const response = await this.#requireTransport().connection.agent.request("session/prompt", {
@@ -221,6 +232,7 @@ export class AcpSession implements AgentSession {
           : undefined;
       if (inBand !== undefined) {
         this.#accept(input);
+        emitPromptTokenUsage(resolvePromptTokenUsage());
         this.#emit(
           typeof inBand === "string" ? { type: "error", message: inBand } : inBand,
           input.options,
@@ -236,6 +248,7 @@ export class AcpSession implements AgentSession {
         status = "interrupted";
       } else {
         this.#accept(input);
+        emitPromptTokenUsage(resolvePromptTokenUsage());
         this.#emit(
           {
             type: "error",
@@ -257,6 +270,7 @@ export class AcpSession implements AgentSession {
           ),
         );
       if (!rpcFailure && this.#transport) attachStderrExcerpt(this.#transport.process, error);
+      emitPromptTokenUsage(resolvePromptTokenUsage());
       if (!this.#disposed && !(this.#interrupting && !rpcFailure))
         this.#emit(acpPromptFailure(error, this.profile), input.options);
       if (!(error instanceof RequestError))
@@ -268,11 +282,7 @@ export class AcpSession implements AgentSession {
           const steered = await this.#steering?.drain(completedResponse, input.options);
           if (steered && status === "completed") status = steered;
         }
-        let promptTokenUsage =
-          acpPromptTokenUsage(promptResponse) ??
-          errorTokenUsage ??
-          input.notificationTokenUsage ??
-          input.updateTokenUsage;
+        let promptTokenUsage = emittedPromptTokenUsage ? undefined : resolvePromptTokenUsage();
         if (
           !promptTokenUsage &&
           !this.#turnEmittedTokenUsage &&
@@ -291,8 +301,7 @@ export class AcpSession implements AgentSession {
         if (input.promptId) rememberCompletedPrompt(this.#completedPrompts, input.promptId);
         this.#steering?.settle();
         for (const event of input.updates.end()) this.#emit(event, input.options);
-        if (promptTokenUsage && !this.#disposed)
-          this.#emitTokenUsage(promptTokenUsage, input.options);
+        emitPromptTokenUsage(promptTokenUsage);
         if (!this.#disposed) this.#emit({ type: "completed", status }, input.options);
         this.#startNext();
         if (this.#failed && !this.#disposed) void this.#terminate();
