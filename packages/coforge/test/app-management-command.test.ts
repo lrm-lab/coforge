@@ -175,7 +175,7 @@ async function run(args: string[], io: Record<string, unknown> = {}) {
       client,
       prepare: async (target, action) => {
         prepared.push({ target, action });
-        return { messageId: "m1" };
+        return { messageId: "0196ed00-0000-7000-8000-000000000022" };
       },
     },
     { stdout: (text) => out.push(text), ...io },
@@ -242,6 +242,9 @@ test("prepare recover-owner posts the card and changes nothing itself", async ()
     },
   ]);
   expect(result.out).toContain("Nothing changed yet");
+  expect(result.out.split("\n")).toContain(
+    "coforge action withdraw --message 0196ed00-0000-7000-8000-000000000022",
+  );
 });
 
 test("the client posts the operation and its fields to the registration route", async () => {

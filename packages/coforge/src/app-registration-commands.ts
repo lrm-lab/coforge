@@ -2,6 +2,7 @@ import { foldUntrustedLine } from "@lrm/coforge-sdk/internal";
 import { unlink } from "node:fs/promises";
 import type { AppOwnedListResponse, AppRegistrationStatusResponse } from "@lrm/coforge-sdk/agent";
 import { toActionCardAction } from "./action-prepare-input";
+import { actionWithdrawHint } from "./action-prepare-run";
 import type { AppRegistrationClient } from "./app-registration-client";
 import type { AppRegistrationInvocation } from "./app-registration-args";
 import { CliError } from "./cli-error";
@@ -83,6 +84,7 @@ export async function runAppRegistrationCommand(
         `Posted the register card${messageId ? ` ${messageId}` : ""} in ${invocation.target}. Nothing is registered yet.`,
         "Ask a Workspace owner or admin to commit it (members cannot).",
         `Then run: coforge app status ${messageId ? `--card ${messageId}` : "--client <key>"}`,
+        ...actionWithdrawHint(messageId),
         "When it is committed, you become the app's owner Agent and its client secret arrives once in your inbox (coforge inbox check). Store it in a file; never post it in chat. If you miss it, run coforge app rotate-secret --client <key> --output <new file>.",
       ].join("\n") + "\n",
     );

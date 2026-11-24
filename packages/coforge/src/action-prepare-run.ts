@@ -1,3 +1,4 @@
+import { UUID_LIKE_PATTERN } from "@lrm/coforge-sdk/internal";
 import type { ActionPrepareInvocation, MessageTransport } from "../index";
 import { CliError } from "#src/cli-error";
 import {
@@ -14,6 +15,19 @@ export type ActionPrepareResult = {
   /** The server's note on the card (a recommended option moved first, say). */
   warning?: string;
 };
+
+export function actionWithdrawHint(messageId: string | undefined): string[] {
+  if (
+    typeof messageId !== "string" ||
+    messageId.length !== 36 ||
+    !UUID_LIKE_PATTERN.test(messageId)
+  )
+    return [];
+  return [
+    "To withdraw this pending card, run the command below.",
+    `coforge action withdraw --message ${messageId}`,
+  ];
+}
 
 /** `coforge action prepare`: reads the action JSON from stdin, posts the card, says where. */
 export async function runActionPrepare(
@@ -37,6 +51,9 @@ export async function runActionPrepare(
     });
   const shortId = result.messageId.slice(0, 13);
   const posted = `Action card posted to ${invocation.target} as message ${result.messageId} (short ${shortId}). The human can click the action verb to commit.`;
-  // The server's note on the card it posted (a recommended option moved first, say).
-  return result.warning ? `${posted}\nWarning: ${result.warning}` : posted;
+  return [
+    posted,
+    ...actionWithdrawHint(result.messageId),
+    ...(result.warning ? [`Warning: ${result.warning}`] : []),
+  ].join("\n");
 }

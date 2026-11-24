@@ -228,6 +228,17 @@ test("the manual always includes the artifacts topic, command line and search hi
   expect(search.body.results.map((result) => result.slug)).toContain("artifacts");
 });
 
+test("action-cards manual explains how to settle a clear chat answer", () => {
+  const outcome = resolveManualGet({ topic: "action-cards" });
+  if (outcome.status !== 200) throw new Error("expected a hit");
+  const content = outcome.body.content;
+  expect(content).toContain("read the card message again first");
+  expect(content).toContain("If you prepared the card and it is still pending");
+  expect(content).toContain("coforge action withdraw --message <message-id>");
+  expect(content).toContain("If withdrawal reports a conflict (HTTP 409)");
+  expect(content).toContain("keep the submitted result");
+});
+
 test("action-cards manual and search omit cloud-desktop cards unless cloudDesktop is enabled", () => {
   const localTopic = resolveManualGet({
     topic: "action-cards",

@@ -116,6 +116,9 @@ test("prepare register builds the card from its flags and says what happens next
   expect(result.stdout).toContain("11111111-1111-4111-8111-111111111111");
   expect(result.stdout).toContain("owner or admin");
   expect(result.stdout).toContain("coforge app status --card 11111111");
+  expect(result.stdout.split("\n")).toContain(
+    "coforge action withdraw --message 11111111-1111-4111-8111-111111111111",
+  );
 });
 
 test("prepare register refuses a missing target or name, an unknown flag and a bad scope", () => {

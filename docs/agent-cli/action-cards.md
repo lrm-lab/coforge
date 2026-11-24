@@ -94,7 +94,9 @@ for `message send`, `DM_PEER_NOT_IN_WORKSPACE` and `TARGET_NOT_ACCESSIBLE`. The
 CLI reports its reason, code and next step. On success the CLI prints:
 
 ```
-Action card posted to <target> as message <uuid> (short id: first twelve hex digits). The human can click the action verb to commit.
+Action card posted to <target> as message <uuid> (short <short-id>). The human can click the action verb to commit.
+To withdraw this pending card, run the command below.
+coforge action withdraw --message <uuid>
 ```
 
 A card made by an older Computer (a `choice` without `to`) asks the Agent's owner; tell the owner
@@ -122,6 +124,11 @@ specific person — that person. A card dismissed by the asked person is a
 decision, not a lost message (the Agent is woken when the asked person dismisses it): do not post the same question again; open a new card worded
 differently if a follow-up is truly needed. An `app:grant_agent` card has no dismiss here: it is
 denied through the app approval flow instead.
+
+When a person clearly answers a choice or questions card in chat, first read the card with the command above.
+If you prepared it and it is still pending, withdraw it using the command from the posting receipt.
+If the card has already been submitted, use its submitted result. On a conflict (HTTP 409), read again and keep any
+result submitted while you were withdrawing. A settled card needs no follow-up about clicking it.
 
 ## App approval cards
 
