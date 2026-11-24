@@ -8,6 +8,7 @@ import {
   resolveBunCompileTarget,
   type ReleaseTarget,
 } from "../../../scripts/release/compile-targets";
+import type { DarwinReleaseSigner } from "../../../scripts/release/darwin-signing";
 import { buildCliExecutable } from "../../coforge/scripts/build-executable";
 import { buildComputerExecutable } from "./build-executable";
 
@@ -18,10 +19,7 @@ export type CompileTargetOptions = {
   /** Directory the unified binary is written into; each target's compile call needs its
    * own directory or scratch file name to avoid two targets racing on the same output path. */
   outputDirectory: string;
-  /** Signs a `darwin-*` output in place before its bytes are read, so every checksum computed
-   * later is of the signed bytes. Never called for other targets; without it (local and test
-   * builds) the output keeps Bun's ad-hoc signature. */
-  sign?: (executable: string) => Promise<void>;
+  sign?: DarwinReleaseSigner;
 };
 
 export type CompiledArtifacts = { computer: Uint8Array; cli: Uint8Array };
@@ -41,8 +39,10 @@ export async function compileTargetArtifacts(
     outfile: join(options.outputDirectory, `${options.target}-coforge`),
     target,
   });
-  // Signing rewrites the file, so it comes before the bytes are read.
-  if (isDarwinTarget(options.target)) await options.sign?.(computerPath);
+  if (isDarwinTarget(options.target) && options.sign) {
+    await options.sign(computerPath, "computer");
+    await options.sign(cliPath, "cli");
+  }
   return {
     computer: new Uint8Array(await Bun.file(computerPath).arrayBuffer()),
     cli: new Uint8Array(await Bun.file(cliPath).arrayBuffer()),

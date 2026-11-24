@@ -1,8 +1,4 @@
 /**
- * Signs one darwin executable with the Computer's long-lived self-signed code-signing identity and
- * verifies the result. Nothing else: which targets are signed is compile-targets.ts's decision,
- * when a publish requires it is publish.ts's.
- *
  * Why: macOS keys a privacy (TCC) grant to the executable's designated requirement. Bun's ad-hoc
  * signature has `cdhash H"..."` as its requirement, which differs for every build, so every upgrade
  * lost the user's grants. Signed with one certificate under one identifier, every version has the
@@ -27,6 +23,7 @@ import { join } from "node:path";
 import { isDarwinTarget } from "./compile-targets";
 
 export const DARWIN_SIGNING_IDENTIFIER = "cn.coforge.computer";
+const DARWIN_CLI_SIGNING_IDENTIFIER = "cn.coforge.cli";
 export const DARWIN_SIGNING_KEY_ENV = "COFORGE_DARWIN_SIGNING_KEY";
 export const DARWIN_SIGNING_CERTIFICATE_PATH = join(
   import.meta.dir,
@@ -117,6 +114,11 @@ export async function requireDarwinSigningIdentity(
   assertKeyMatchesCertificate(keyPem, await Bun.file(certificatePath).text());
   return { keyPem, certificatePath };
 }
+
+export type DarwinReleaseSigner = (
+  executable: string,
+  artifact: "computer" | "cli",
+) => Promise<void>;
 
 type Output = { stdout: string; stderr: string };
 
@@ -255,13 +257,37 @@ async function userKeychains(): Promise<string[]> {
     .filter(Boolean);
 }
 
+export async function verifyDarwinCliExecutable(executable: string): Promise<void> {
+  await run(CODESIGN, [
+    "--verify",
+    "--strict",
+    `-R=identifier "${DARWIN_CLI_SIGNING_IDENTIFIER}"`,
+    executable,
+  ]);
+}
+
+async function signDarwinCliExecutable(executable: string): Promise<void> {
+  await run(CODESIGN, [
+    "--force",
+    "--sign",
+    "-",
+    "--identifier",
+    DARWIN_CLI_SIGNING_IDENTIFIER,
+    executable,
+  ]);
+  await verifyDarwinCliExecutable(executable);
+}
+
 /** The `sign` callback a publish of `targets` compiles with, or undefined when none is a darwin
  * target. Resolving the identity first fails a publish that cannot sign before it compiles. */
 export async function darwinSignerFor(
   targets: readonly string[],
   resolveIdentity: () => Promise<DarwinSigningIdentity> = requireDarwinSigningIdentity,
-): Promise<((executable: string) => Promise<void>) | undefined> {
+): Promise<DarwinReleaseSigner | undefined> {
   if (!targets.some(isDarwinTarget)) return undefined;
   const identity = await resolveIdentity();
-  return (executable) => signDarwinExecutable(executable, identity);
+  return (executable, artifact) =>
+    artifact === "computer"
+      ? signDarwinExecutable(executable, identity)
+      : signDarwinCliExecutable(executable);
 }

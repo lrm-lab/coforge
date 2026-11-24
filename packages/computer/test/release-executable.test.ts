@@ -200,46 +200,92 @@ test("published unified Computer runs management, Daemon, and Agent modes from o
   }
 }, 60_000);
 
-test("a darwin build given a signer returns the bytes of its signed executable", async () => {
-  if (process.platform !== "darwin") return;
-  const target = `darwin-${process.arch}`;
-  const directory = await mkdtemp(join(temporaryRoot(), "coforge-signed-executable-"));
-  try {
-    const identity = await createThrowawayIdentity(directory, "compile");
-    const outputDirectory = join(directory, "artifacts");
-    // The key reaches the build through its environment, like a publish's; the build prints the
-    // digest of the bytes it returned, which a checksum computed later would cover.
-    const build = Bun.spawnSync(
-      [
-        process.execPath,
-        join(import.meta.dir, "fixtures/compile-signed-computer.ts"),
-        target,
-        "9.8.7-rc.6",
-        "https://releases-staging.coforge.cn",
-        outputDirectory,
-        identity.certificatePath,
-      ],
-      {
-        env: { ...Bun.env, [DARWIN_SIGNING_KEY_ENV]: identity.keyPem },
-        stdout: "pipe",
-        stderr: "pipe",
-      },
-    );
-    expect(build.stderr.toString()).toBe("");
-    expect(build.exitCode).toBe(0);
-    const executable = join(outputDirectory, `${target}-coforge-computer`);
-    await verifyDarwinExecutable(executable, identity.certificatePem);
-    const digest = new Bun.CryptoHasher("sha256")
-      .update(new Uint8Array(await Bun.file(executable).arrayBuffer()))
-      .digest("hex");
-    expect(build.stdout.toString().trim()).toBe(digest);
-    const version = Bun.spawnSync([executable, "--cli-version"], {
+async function signedReleaseBuild(target: string, directory: string, failure?: string) {
+  const identity = await createThrowawayIdentity(directory, "compile");
+  const outputDirectory = join(directory, "artifacts");
+  const build = Bun.spawnSync(
+    [
+      process.execPath,
+      join(import.meta.dir, "fixtures/compile-signed-computer.ts"),
+      target,
+      "9.8.7-rc.6",
+      "https://releases-staging.coforge.cn",
+      outputDirectory,
+      identity.certificatePath,
+      ...(failure ? [failure] : []),
+    ],
+    {
+      env: { ...Bun.env, [DARWIN_SIGNING_KEY_ENV]: identity.keyPem },
       stdout: "pipe",
       stderr: "pipe",
-    });
-    expect(version.exitCode).toBe(0);
-    expect(version.stdout.toString()).toBe("9.8.7-rc.6\n");
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-}, 60_000);
+    },
+  );
+  return {
+    build,
+    identity,
+    computer: join(outputDirectory, `${target}-coforge-computer`),
+    cli: join(outputDirectory, `${target}-coforge`),
+  };
+}
+
+test.each(["darwin-arm64", "darwin-x64"])(
+  "a signed %s release returns strictly valid Computer and standalone CLI bytes",
+  async (target) => {
+    if (process.platform !== "darwin") return;
+    const directory = await mkdtemp(join(temporaryRoot(), "coforge-signed-executable-"));
+    try {
+      const { build, identity, computer, cli } = await signedReleaseBuild(target, directory);
+      expect(build.stderr.toString()).toBe("");
+      expect(build.exitCode).toBe(0);
+      await verifyDarwinExecutable(computer, identity.certificatePem);
+      expectValidMacOsSignature(cli);
+      const signature = Bun.spawnSync(["/usr/bin/codesign", "-dv", cli], {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      expect(signature.exitCode).toBe(0);
+      expect(signature.stderr.toString()).toContain("Identifier=cn.coforge.cli");
+      expect(signature.stderr.toString()).toContain("Signature=adhoc");
+      await expect(verifyDarwinExecutable(cli, identity.certificatePem)).rejects.toThrow(
+        /wrong designated requirement/,
+      );
+
+      const sha256 = async (path: string) =>
+        new Bun.CryptoHasher("sha256").update(await Bun.file(path).arrayBuffer()).digest("hex");
+      expect(JSON.parse(build.stdout.toString())).toEqual({
+        computer: await sha256(computer),
+        cli: await sha256(cli),
+      });
+      if (target === `darwin-${process.arch}`) {
+        for (const [executable, flag] of [
+          [computer, "--cli-version"],
+          [cli, "--version"],
+        ] as const) {
+          const current = Bun.spawnSync([executable, flag], { stdout: "pipe", stderr: "pipe" });
+          expect(current.exitCode).toBe(0);
+          expect(current.stdout.toString()).toBe("9.8.7-rc.6\n");
+        }
+      }
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+  100_000,
+);
+
+test.each(["sign", "verify"])(
+  "a standalone CLI %s error prevents release artifacts from being returned",
+  async (failure) => {
+    if (process.platform !== "darwin") return;
+    const directory = await mkdtemp(join(temporaryRoot(), "coforge-failed-signature-"));
+    try {
+      const { build } = await signedReleaseBuild(`darwin-${process.arch}`, directory, failure);
+      expect(build.exitCode).toBe(1);
+      expect(build.stdout.toString()).toBe("");
+      expect(build.stderr.toString()).toContain("codesign failed");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+  100_000,
+);
