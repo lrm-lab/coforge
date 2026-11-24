@@ -7,11 +7,10 @@ import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import {
   useCurrentWorkspaceId,
-  useLiveAgent,
-  useLiveAgentDisplay,
+  useLiveAgentIdentity,
+  useLiveAgentOnline,
   usePrefetchAgentActivityFeed,
 } from "#src/features/agents/workspace-agents-realtime";
-import { agentDisplay } from "#src/features/agents/agent-status-display";
 import { AgentReminders } from "#src/features/agents/agent-reminders";
 import { useAgentRuntimeControls } from "#src/features/agents/agent-runtime-controls";
 import { executeAgentControl } from "#src/features/agents/agent-control.functions";
@@ -48,11 +47,9 @@ import { AgentProfileConfirmationDialogs } from "./agent-profile-confirmation-di
 import type { AgentVisibility } from "#src/features/agents/agent-visibility";
 import { agentModelsQueryKey } from "#src/features/agents/agent-models";
 import { OPEN_OVERLAY_SELECTOR } from "#src/lib/open-overlay";
-import { AgentProfileHeader } from "./agent-profile-header";
 import { AgentProfileUnavailable } from "./agent-profile-unavailable";
 import { AgentProfileTabs, useAgentProfileTabsForProfile } from "./agent-profile-tabs";
 import { setupComputerOptions } from "./setup-computers";
-import { AgentProfileTab } from "./agent-profile-tab";
 import {
   agentMigrationRuntime,
   profileDiagnosticFacts,
@@ -60,13 +57,17 @@ import {
   profileUpdateInput,
 } from "./agent-profile-runtime";
 import { AgentWorkspaceTab } from "./agent-workspace-tab";
-import { AgentActivityTab } from "./agent-activity-tab";
 import { AgentAppsTab } from "./agent-apps-tab";
 import { AgentChatTab } from "./agent-chat-tab";
 import { AgentUsageTab } from "./agent-usage-tab";
 import { useAgentPanelLoaders } from "./agent-profile-loaders";
 import { AgentProfileSkeleton } from "./agent-profile-skeleton";
-import { AgentProfileStatus } from "./agent-profile-status";
+import {
+  LiveAgentActivityTab,
+  LiveAgentProfileHeader,
+  LiveAgentProfileStatus,
+  LiveAgentProfileTab,
+} from "./agent-profile-live-sections";
 import { agentProfileReadinessData } from "./agent-profile-readiness";
 import {
   resolveAgentProfileTab,
@@ -111,14 +112,14 @@ export function AgentProfilePanel({
     },
     { ignoreInputs: true, preventDefault: false },
   );
-  const liveAgent = useLiveAgent(agentId);
+  const liveAgent = useLiveAgentIdentity(agentId);
   const present = useIsPresent();
   const { profile, unavailable, loadFailed, retrying, retry, notVisible } = useAgentProfile(
     agentId,
     visible && present,
   );
   const invalidate = useInvalidateAgentProfile(agentId);
-  const display = useLiveAgentDisplay(agentId) ?? profile?.display;
+  const agentIsOnline = useLiveAgentOnline(agentId, profile?.display, profile?.stopped);
 
   const knownName = profile?.displayName ?? liveAgent?.displayName ?? "";
   const deleted = Boolean(profile?.deletedAt);
@@ -172,7 +173,6 @@ export function AgentProfilePanel({
     : undefined;
 
   const executeControl = useServerFn(executeAgentControl);
-  const agentIsOnline = agentDisplay(display, { stopped: profile?.stopped }).isOnline;
   const controls = useAgentRuntimeControls({
     agentId,
     agentName: knownName || agentId,
@@ -270,7 +270,7 @@ export function AgentProfilePanel({
 
   return (
     <div ref={root} className="flex h-full min-h-0 min-w-0 flex-col">
-      <AgentProfileHeader
+      <LiveAgentProfileHeader
         pageHeading={pageHeading}
         canMessage={Boolean(profile?.canMessage)}
         deleted={deleted}
@@ -282,7 +282,7 @@ export function AgentProfilePanel({
         }}
         mascot={profile?.mascot ?? liveAgent?.mascot}
         appBot={Boolean(profile?.appBot)}
-        display={display}
+        fallbackDisplay={profile?.display}
         controls={controls}
         onClose={onClose}
         back={back}
@@ -305,10 +305,10 @@ export function AgentProfilePanel({
       ) : (
         diagnosticFacts &&
         !deleted && (
-          <AgentProfileStatus
+          <LiveAgentProfileStatus
             key={agentId}
             agent={diagnosticFacts}
-            display={display}
+            fallbackDisplay={profile?.display}
             onActivityTab={tab === "activity"}
             retry={{
               onRetry: () => controls.submitStart(),
@@ -347,7 +347,11 @@ export function AgentProfilePanel({
         {!profile || !diagnosticFacts ? (
           <AgentProfileSkeleton />
         ) : tab === "activity" ? (
-          <AgentActivityTab agent={diagnosticFacts} display={display} timeZone={timeZone} />
+          <LiveAgentActivityTab
+            agent={diagnosticFacts}
+            fallbackDisplay={profile.display}
+            timeZone={timeZone}
+          />
         ) : tab === "chat" ? (
           <AgentChatTab agentId={agentId} timeZone={timeZone} />
         ) : tab === "reminders" ? (
@@ -370,13 +374,11 @@ export function AgentProfilePanel({
             onReadFile={onReadWorkspaceFile}
           />
         ) : (
-          <AgentProfileTab
+          <LiveAgentProfileTab
             profile={profile}
             timeZone={timeZone}
             canManage={canManage}
             controls={controls}
-            contextUsage={display?.contextUsage ?? null}
-            fastMode={display?.fastMode ?? null}
             onSaveDisplayName={async (value) => {
               if (profile.hosting === "external")
                 await updateExternal({ data: { agentId, displayName: value } });
