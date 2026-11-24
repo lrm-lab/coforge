@@ -17,6 +17,8 @@ SHARED="${VOLUME_ROOT}/shared"
 PROFILE="${WS_ROOT}/workspace-identities.json"
 BINDINGS="${COFORGE_BINDINGS_FILE:-/root/.coforge/daemon/bindings.json}"
 UID_BASE=20100
+# Provider config baked at image build time; copied into each Workspace home below.
+PI_AGENT_SRC="${PI_AGENT_SRC:-/root/.pi/agent}"
 UID_MAX=20250
 
 mkdir -p "${WS_ROOT}"
@@ -91,6 +93,40 @@ while IFS= read -r wsid; do
   # The daemon child and the Agents it spawns also own their own state: the socket,
   # the instance record and the session store must be writable by that uid, and
   # unreadable by the other Workspaces on this Computer.
+  # The Agent used to run as root and read the provider config baked into /root/.pi/agent
+  # (models.json with the ModelFactory key, model-factory.env, the CA cert). It now runs as its own
+  # uid with HOME=${WS_ROOT}/${wsid}, so `~/.pi/agent` was empty and every launch failed with
+  # "No API key found for the selected model" - the key was never missing, only unreachable.
+  # Seed a copy per Workspace: same content as before isolation, still unreadable across Workspaces.
+  ws_agent="${WS_ROOT}/${wsid}/.pi/agent"
+  if [[ -d "${PI_AGENT_SRC}" ]]; then
+    mkdir -p "${ws_agent}/certs"
+    for provider_file in models.json model-factory.env; do
+      [[ -f "${PI_AGENT_SRC}/${provider_file}" ]] || continue
+      install -o "${uid}" -g "${gid}" -m 600 "${PI_AGENT_SRC}/${provider_file}" \
+        "${ws_agent}/.${provider_file}.new" &&
+        mv -f "${ws_agent}/.${provider_file}.new" "${ws_agent}/${provider_file}"
+    done
+    for provider_file in APPEND_SYSTEM.md; do
+      [[ -f "${PI_AGENT_SRC}/${provider_file}" ]] || continue
+      install -o "${uid}" -g "${gid}" -m 644 "${PI_AGENT_SRC}/${provider_file}" \
+        "${ws_agent}/.${provider_file}.new" &&
+        mv -f "${ws_agent}/.${provider_file}.new" "${ws_agent}/${provider_file}"
+    done
+    for cert in "${PI_AGENT_SRC}"/certs/*.pem; do
+      [[ -f "${cert}" ]] || continue
+      install -o "${uid}" -g "${gid}" -m 644 "${cert}" "${ws_agent}/certs/"
+    done
+    chown -R "${uid}:${gid}" "${ws_agent}/certs"
+    # settings.json carries the Agent's own choices (model, thinking level, theme) once it runs, so
+    # only seed it when the Workspace has none.
+    if [[ ! -f "${ws_agent}/settings.json" && -f "${PI_AGENT_SRC}/settings.json" ]]; then
+      install -o "${uid}" -g "${gid}" -m 600 "${PI_AGENT_SRC}/settings.json" \
+        "${ws_agent}/settings.json"
+    fi
+    chown "$(id -u):$(id -g)" "${ws_agent}" 2>/dev/null || true
+  fi
+
   state_dir="${VOLUME_ROOT}/daemon/workspaces/$(node -e 'process.stdout.write(Buffer.from(process.argv[1]).toString("base64url"))' "${wsid}")"
   agent_dir="${VOLUME_ROOT}/agent-workspaces/${wsid}"
   for owned in "${state_dir}" "${agent_dir}"; do
