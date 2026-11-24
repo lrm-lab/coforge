@@ -12,5 +12,10 @@
   "computer_upgrade_failed_notice_title": "{name} 升级失败",
   "computer_upgrade_issue_notice_title": "{name} 升级需要确认",
   "computer_upgrade_notice_view_computer": "前往电脑",
-  "computer_upgrade_notice_dismiss": "知道了"
+  "computer_upgrade_notice_dismiss": "知道了",
+  "computer_upgrade_running_named": "{name} 正在升级到 {version}",
+  "computer_upgrade_running_named_generic": "{name} 正在升级…",
+  "computer_upgrade_running_multiple": "正在升级 {count} 台电脑",
+  "computer_upgrade_succeeded_named_toast": "{name} 已升级到 {version}",
+  "computer_upgrade_succeeded_multiple_toast": "{count} 台电脑已升级完成"
 }

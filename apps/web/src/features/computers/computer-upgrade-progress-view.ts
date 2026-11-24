@@ -9,6 +9,7 @@ import type {
 import {
   computerUpgradeNoticeId,
   computerUpgradeSettledToastable,
+  describeComputerUpgradeSuccess,
   type FollowedComputerUpgrade,
 } from "./computer-upgrade-status";
 import type { ComputerUpgradeSlotState } from "./computer-upgrade-slot-state";
@@ -363,4 +364,34 @@ export function describeComputerUpgradeFailureNotice(input: {
       ? m.computer_upgrade_progress_title({ version: upgrade.version })
       : m.computer_upgrade_failed_title_generic();
   return { id, title, body: m.computer_upgrade_progress_uncertain_detail() };
+}
+
+export function describeComputerUpgradeProgressToast(
+  active: readonly FollowedComputerUpgrade[],
+): string | null {
+  if (active.length === 0) return null;
+  if (active.length > 1) {
+    return m.computer_upgrade_running_multiple({ count: String(active.length) });
+  }
+  const only = active[0]!;
+  if (only.computerName && only.version) {
+    return m.computer_upgrade_running_named({ name: only.computerName, version: only.version });
+  }
+  if (only.computerName) {
+    return m.computer_upgrade_running_named_generic({ name: only.computerName });
+  }
+  return only.version
+    ? m.computer_upgrade_running_title({ version: only.version })
+    : m.computer_upgrade_in_progress();
+}
+
+export function describeComputerUpgradeSuccessBatch(
+  succeeded: readonly { version: string; computerName?: string }[],
+): string | null {
+  if (succeeded.length === 0) return null;
+  if (succeeded.length > 1) {
+    return m.computer_upgrade_succeeded_multiple_toast({ count: String(succeeded.length) });
+  }
+  const only = succeeded[0]!;
+  return describeComputerUpgradeSuccess(only.version, only.computerName);
 }

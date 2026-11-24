@@ -127,9 +127,10 @@ export const appToast = {
     });
   },
   progress(title: string, options?: { key?: string }) {
-    const id = toastId("progress", title, options?.key);
+    const id = options?.key === undefined ? toastId("progress", title) : `progress:${options.key}`;
     show(id, title, "progress", Infinity);
     return {
+      update: (nextTitle: string) => show(id, nextTitle, "progress", Infinity),
       done: (result: string) => show(id, result, "done", RESULT_TOAST_MS),
       fail: (result: string) => show(id, result, "error"),
       dismiss: () => toastStore.dismiss(id),

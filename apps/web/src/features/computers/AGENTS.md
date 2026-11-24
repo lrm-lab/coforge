@@ -81,8 +81,11 @@ provider)`, with its count and account label fixed when it opens.
   panel surfaces runtime upgrades without a full-width card: the header carries the Upgrade /
   Upgrading / Retry upgrade action, the Version stat carries a borderless status line (available
   release + "What's new", `current → target` while upgrading, or a single-line issue notice with
-  a details modal), and `ComputerUpgradeWatcher` drives a cross-route `toast.progress` capsule
-  that morphs to done on success or dismisses into a persistent `appNotice` card on failure (§13).
+  a details modal), and `ComputerUpgradeWatcher` drives one aggregated cross-route `toast.progress`
+  capsule across concurrent runtime upgrades (naming the Computer for one, or the count for many)
+  that morphs to done on success (resuming remaining active upgrades after the done window) or
+  surfaces per-Computer `appNotice` cards on failure (§13). `useComputerDetailLifecycle` also reads
+  `followedComputerUpgradesQuery` so switching between Computers preserves in-flight upgrade state.
   A local Computer owner also sees pending `InstallerRecoveryAdvice` under Version when an
   upgrade or retry is offered. A newer cloud node image stays on its own Image row and bordered
   `ComputerUpgradeSlot`. Versions always show in full (`0.1.4-dev.2`, never `dev.2`).

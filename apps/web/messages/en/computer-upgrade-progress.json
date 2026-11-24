@@ -12,5 +12,10 @@
   "computer_upgrade_failed_notice_title": "{name} upgrade failed",
   "computer_upgrade_issue_notice_title": "{name} upgrade needs attention",
   "computer_upgrade_notice_view_computer": "View computer",
-  "computer_upgrade_notice_dismiss": "Got it"
+  "computer_upgrade_notice_dismiss": "Got it",
+  "computer_upgrade_running_named": "Upgrading {name} to {version}",
+  "computer_upgrade_running_named_generic": "Upgrading {name}…",
+  "computer_upgrade_running_multiple": "Upgrading {count} Computers",
+  "computer_upgrade_succeeded_named_toast": "{name} upgraded to {version}",
+  "computer_upgrade_succeeded_multiple_toast": "Upgraded {count} Computers"
 }

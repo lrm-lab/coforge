@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useQueries, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useAppToast } from "#src/components/ui/toast";
 import { m } from "#src/paraglide/messages";
@@ -9,9 +9,11 @@ import { computerDetailUpgradeSlotsFor } from "./computer-detail-upgrade-slots";
 import { submitComputerDetailUpgrade } from "./computer-detail-submit-upgrade";
 import {
   computerUpgradeStatusQuery,
+  followedComputerUpgradesQuery,
   hasTrustedUpgradeProgress,
   upgradeProgressActive,
   upgradeRunning,
+  type FollowedComputerUpgrade,
 } from "./computer-upgrade-status";
 import type { ComputerUpgradeRequest } from "./computer-upgrade-slot";
 import type { ComputerRestartStatus, ComputerUpgradeStatus } from "./computer.schemas";
@@ -107,6 +109,24 @@ export function isUpgradeStatusCheckPending(input: {
   );
 }
 
+export function resolveDetailUpgradeRequest(
+  localRequest: ComputerUpgradeRequest,
+  followedUpgrades: readonly FollowedComputerUpgrade[],
+  computerId: string,
+): ComputerUpgradeRequest {
+  if (localRequest.state !== "idle") return localRequest;
+  const active = followedUpgrades.find(
+    (item) => item.computerId === computerId && item.startedHere,
+  );
+  if (!active) return localRequest;
+  return {
+    state: "accepted",
+    requestId: active.requestId,
+    version: active.version,
+    target: active.target ?? "runtime",
+  };
+}
+
 /** Upgrade slots and restart polling for one Computer detail panel. */
 export function useComputerDetailLifecycle(input: {
   computerId: string;
@@ -131,7 +151,6 @@ export function useComputerDetailLifecycle(input: {
   const mountedRef = useRef(true);
   const mountedAtRef = useRef(Date.now());
   useEffect(() => {
-    // Set again on mount: StrictMode unmounts and remounts once in development.
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
@@ -139,11 +158,17 @@ export function useComputerDetailLifecycle(input: {
   }, []);
   const [restartState, setRestartState] = useState<ComputerRestartState>("idle");
   const [upgradeRequest, setUpgradeRequest] = useState<ComputerUpgradeRequest>({ state: "idle" });
+  const followedUpgrades = useQuery(followedComputerUpgradesQuery).data ?? [];
+  const effectiveUpgradeRequest = resolveDetailUpgradeRequest(
+    upgradeRequest,
+    followedUpgrades,
+    input.computerId,
+  );
   const storedUpgrade = input.upgrade ?? undefined;
   const isLocalOwner = computerKind(input.kind) === "local" && Boolean(input.ownedByCurrentUser);
   const followedUpgradeId =
-    upgradeRequest.state === "accepted"
-      ? upgradeRequest.requestId
+    effectiveUpgradeRequest.state === "accepted"
+      ? effectiveUpgradeRequest.requestId
       : storedUpgrade && upgradeRunning(storedUpgrade)
         ? storedUpgrade.requestId
         : isLocalOwner &&
@@ -160,7 +185,7 @@ export function useComputerDetailLifecycle(input: {
   const storedOutcome = storedUpgrade ? upgradeOutcome(storedUpgrade) : undefined;
   const liveUpgrade = resolveLiveUpgradeOutcome({
     liveStatus,
-    upgradeRequestState: upgradeRequest.state,
+    upgradeRequestState: effectiveUpgradeRequest.state,
     storedOutcome,
     storedUpgrade,
     mountedAt: mountedAtRef.current,
@@ -168,16 +193,15 @@ export function useComputerDetailLifecycle(input: {
   const statusCheckPending = isUpgradeStatusCheckPending({
     followedUpgradeId,
     liveStatus,
-    upgradeRequestState: upgradeRequest.state,
+    upgradeRequestState: effectiveUpgradeRequest.state,
     mountedAt: mountedAtRef.current,
   });
   const liveNotFound = liveStatus?.data === null;
-  // A stored success is history: the loader's version already includes it.
   const upgrade: ComputerUpgradeOutcome | { state: "idle" } =
-    upgradeRequest.state === "requesting"
+    effectiveUpgradeRequest.state === "requesting"
       ? { state: "running" }
-      : upgradeRequest.state === "refused"
-        ? { state: "failed", failure: upgradeRequest }
+      : effectiveUpgradeRequest.state === "refused"
+        ? { state: "failed", failure: effectiveUpgradeRequest }
         : liveNotFound
           ? { state: "idle" }
           : (liveUpgrade ??
@@ -189,7 +213,11 @@ export function useComputerDetailLifecycle(input: {
   const activeLiveStatus =
     (liveStatus?.isError && !liveStatus.isFetching) ||
     isStaleCachedAcceptedForTerminalStored(liveStatus?.data, storedUpgrade) ||
-    isUnconfirmedPriorCachedAccepted(liveStatus, upgradeRequest.state, mountedAtRef.current)
+    isUnconfirmedPriorCachedAccepted(
+      liveStatus,
+      effectiveUpgradeRequest.state,
+      mountedAtRef.current,
+    )
       ? undefined
       : (liveStatus?.data ?? undefined);
   const slots = computerDetailUpgradeSlotsFor(
@@ -201,7 +229,7 @@ export function useComputerDetailLifecycle(input: {
     },
     {
       upgrade,
-      request: upgradeRequest,
+      request: effectiveUpgradeRequest,
       liveStatus: activeLiveStatus,
       storedUpgrade,
       latestComputerVersion: input.latestComputerVersion,

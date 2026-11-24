@@ -173,6 +173,8 @@ export function settleComputerUpgradeFollow(
  * the version itself belongs to the meta line (the page re-reads it once the status is completed);
  * this is only the courtesy that the action the user took succeeded.
  */
-export function describeComputerUpgradeSuccess(version: string): string {
-  return m.computer_upgrade_succeeded_toast({ version });
+export function describeComputerUpgradeSuccess(version: string, computerName?: string): string {
+  return computerName
+    ? m.computer_upgrade_succeeded_named_toast({ name: computerName, version })
+    : m.computer_upgrade_succeeded_toast({ version });
 }

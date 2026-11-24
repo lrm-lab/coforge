@@ -4,9 +4,13 @@ import { computerDetailUpgradeSlots } from "#src/features/computers/computer-det
 import {
   buildComputerUpgradeProgressView,
   describeComputerUpgradeFailureNotice,
+  describeComputerUpgradeProgressToast,
+  describeComputerUpgradeSuccessBatch,
   resolveProgressComputerVersion,
   runtimeUpgradePresentation,
 } from "#src/features/computers/computer-upgrade-progress-view";
+import { describeComputerUpgradeSuccess } from "#src/features/computers/computer-upgrade-status";
+import { resolveDetailUpgradeRequest } from "#src/features/computers/use-computer-detail-lifecycle";
 import type {
   ComputerUpgradeProgress,
   ComputerUpgradeStatus,
@@ -398,4 +402,91 @@ test("describeComputerUpgradeFailureNotice builds system notices for rolled-back
   expect(missingStatus).not.toBeNull();
   expect(missingStatus?.id).toBe("computer-upgrade:c1");
   expect(missingStatus?.title).toContain("s144");
+});
+
+test("multi-computer upgrade toast helpers name a single computer and aggregate concurrent upgrades", () => {
+  expect(describeComputerUpgradeProgressToast([])).toBeNull();
+
+  const single = describeComputerUpgradeProgressToast([
+    {
+      computerId: "c1",
+      requestId: "r1",
+      startedHere: true,
+      computerName: "s144",
+      version: "0.1.34-dev.8",
+      target: "runtime",
+    },
+  ]);
+  expect(single).toContain("s144");
+  expect(single).toContain("0.1.34-dev.8");
+
+  const multi = describeComputerUpgradeProgressToast([
+    {
+      computerId: "c1",
+      requestId: "r1",
+      startedHere: true,
+      computerName: "s144",
+      version: "0.1.34-dev.8",
+      target: "runtime",
+    },
+    {
+      computerId: "c2",
+      requestId: "r2",
+      startedHere: true,
+      computerName: "s145",
+      version: "0.1.34-dev.8",
+      target: "runtime",
+    },
+  ]);
+  expect(multi).toContain("2");
+
+  expect(describeComputerUpgradeSuccess("0.1.34-dev.8", "s144")).toContain("s144");
+  expect(describeComputerUpgradeSuccess("0.1.34-dev.8", "s144")).toContain("0.1.34-dev.8");
+
+  const singleDone = describeComputerUpgradeSuccessBatch([
+    { computerName: "s144", version: "0.1.34-dev.8" },
+  ]);
+  expect(singleDone).toContain("s144");
+  expect(singleDone).toContain("0.1.34-dev.8");
+
+  const multiDone = describeComputerUpgradeSuccessBatch([
+    { computerName: "s144", version: "0.1.34-dev.8" },
+    { computerName: "s145", version: "0.1.34-dev.8" },
+  ]);
+  expect(multiDone).toContain("2");
+});
+
+test("resolveDetailUpgradeRequest restores an in-flight followed upgrade after switching computers", () => {
+  const followed = [
+    {
+      computerId: "c1",
+      requestId: "r1",
+      startedHere: true,
+      version: "0.1.34-dev.8",
+      target: "runtime" as const,
+      computerName: "s144",
+    },
+    {
+      computerId: "c2",
+      requestId: "r2",
+      startedHere: false,
+      version: "0.1.34-dev.8",
+    },
+  ];
+
+  expect(resolveDetailUpgradeRequest({ state: "idle" }, followed, "c1")).toEqual({
+    state: "accepted",
+    requestId: "r1",
+    version: "0.1.34-dev.8",
+    target: "runtime",
+  });
+  expect(resolveDetailUpgradeRequest({ state: "idle" }, followed, "c2")).toEqual({ state: "idle" });
+  expect(resolveDetailUpgradeRequest({ state: "idle" }, followed, "c3")).toEqual({ state: "idle" });
+  expect(
+    resolveDetailUpgradeRequest(
+      { state: "requesting", version: "0.1.35", target: "runtime" },
+      followed,
+      "c1",
+    ),
+  ).toEqual({ state: "requesting", version: "0.1.35", target: "runtime" });
 });
