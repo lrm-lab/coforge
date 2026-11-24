@@ -3,6 +3,7 @@ import { stat } from "node:fs/promises";
 import { extname } from "node:path";
 import { APP_LOGO_MAX_BYTES, type AppManagedSummary } from "@lrm/coforge-sdk/agent";
 import { toActionCardAction } from "./action-prepare-input";
+import { actionWithdrawHint } from "./action-prepare-run";
 import type { AppManagementClient } from "./app-management-client";
 import type { AppManagementInvocation } from "./app-management-args";
 import { CliError } from "./cli-error";
@@ -74,6 +75,7 @@ export async function runAppManagementCommand(
         [
           `Posted the recover-owner card${messageId ? ` ${messageId}` : ""} in ${invocation.target}. Nothing changed yet.`,
           "Ask a Workspace owner or admin to commit it (members cannot). It only works while the app has no live owner Agent.",
+          ...actionWithdrawHint(messageId),
         ].join("\n") + "\n",
       );
       return 0;

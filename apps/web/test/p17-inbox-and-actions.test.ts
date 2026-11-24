@@ -35,6 +35,7 @@ describe("P1-7 action withdraw and richer choice/questions cards", () => {
   test("withdrawActionCard retracts own pending card idempotently, rejects foreign/settled cards, and route maps refusals", async () => {
     let state = "pending";
     let committedByUserId: string | null = null;
+    let commitDuringWithdraw = false;
     let publishedUpdates = 0;
 
     const db = {
@@ -67,6 +68,10 @@ describe("P1-7 action withdraw and richer choice/questions cards", () => {
           return null;
         },
         updateMany: async () => {
+          if (commitDuringWithdraw) {
+            state = "executed";
+            committedByUserId = USER_ALICE;
+          }
           if (state !== "pending") return { count: 0 };
           state = "cancelled";
           committedByUserId = null;
@@ -138,6 +143,27 @@ describe("P1-7 action withdraw and richer choice/questions cards", () => {
       (principal, id) => withdrawActionCard(db, undefined, principal, id),
     );
     expect(conflict.status).toBe(409);
+
+    state = "pending";
+    committedByUserId = null;
+    commitDuringWithdraw = true;
+    const raced = await handleAgentActionWithdraw(
+      new Request("https://coforge.example/api/agent/v1/actions/withdraw", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ messageId: CARD_MSG_ID }),
+      }),
+      { workspaceId: WORKSPACE_ID, agentId: AGENT_ID },
+      (principal, id) => withdrawActionCard(db, undefined, principal, id),
+    );
+    expect(raced.status).toBe(409);
+    expect(await raced.json()).toMatchObject({ code: "CONFLICT" });
+    expect(
+      await db.actionCard.findUnique({
+        where: { messageId: CARD_MSG_ID },
+        select: { state: true, committedByUserId: true },
+      }),
+    ).toMatchObject({ state: "executed", committedByUserId: USER_ALICE });
 
     expect(externalAgentFeature("POST", "/api/agent/v1/actions/withdraw")).toBe("actions");
   });

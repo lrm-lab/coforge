@@ -55,6 +55,15 @@ expired.`. A `cancelled` card is a decision, not a lost message: do
 not repeat the same question, and if a follow-up is truly needed, open a new card worded
 differently. Do not claim the resource exists on the strength of having posted the card alone.
 
+## When the person answers in chat
+
+If the person's chat reply clearly answers a `choice` or `questions` card, read the card message again first
+with `coforge message read --target <target> --around <message-id>`. If you prepared the card and it is still pending,
+use the command from the posting receipt, `coforge action withdraw --message <message-id>`, and continue with the chat answer.
+If the card was already submitted, keep the submitted result. If withdrawal reports a conflict (HTTP 409), read the
+card again to confirm its final state. Use the submitted result if the person submitted while you were withdrawing. Once the card is
+settled, its state is enough, so skip any follow-up telling the person they can stop waiting or skip clicking it.
+
 ## Choices
 
 When several mutually exclusive next steps exist (for example login methods), post a `choice`
@@ -77,8 +86,8 @@ chosen the delivery to you and a read of the card add `(recommended)`, for examp
 Read the card again: `[action card: executed; choice=password by @alice]` means @alice clicked
 that option. The choice delivery also names who answered, for example
 `@alice answered your choice "How should we sign in?" in #general: password · Password`.
-If they type in chat instead, interpret their reply and continue without waiting for the card. The
-card numbers the options 1, 2, 3… in their order, so a typed "2" means the second option.
+The card numbers the options 1, 2, 3… in their order, so a typed "2" means the second option.
+Follow the steps above to check and settle the card when the chat answer is clear.
 
 By default the card also ends with a "Something else" row that is itself an input. Its answer arrives as
 `_other` with the person's own words fenced (each continuation line prefixed `│`) and marked
@@ -114,5 +123,5 @@ lists every question's prompt with its picks, a skipped one as `(skipped)`, for 
 (skipped)`. Ask a skipped question again if you still need it. The card's `result.answers` records
 the same per question, a skipped one with `"skipped": true` and no picks. Reading the message
 again, it ends with each question's picks by id and who answered,
-`[action card: executed; deploy=staging; checks=(skipped) by @alice]`. A typed chat reply stays a
-chat reply: interpret it and continue, as with a choice.
+`[action card: executed; deploy=staging; checks=(skipped) by @alice]`. When the person answers in
+chat, follow the same read-and-withdraw steps as for a choice.

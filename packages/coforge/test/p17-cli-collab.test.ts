@@ -152,7 +152,12 @@ describe("P1-7 CLI collaboration commands", () => {
 
     const out = await run(["action", "withdraw", "--message", messageId], local);
     expect(received).toEqual([{ path: "/api/agent/v1/actions/withdraw", body: { messageId } }]);
-    expect(String(out)).toContain(messageId);
+    expect(out).toBe(`Action card ${messageId} withdrawn.`);
+    expect(await run(["action", "withdraw", "--message", messageId, "--json"], local)).toEqual({
+      ok: true,
+      messageId,
+      state: "cancelled",
+    });
 
     const parsedCard = toActionCardAction({
       type: "questions",

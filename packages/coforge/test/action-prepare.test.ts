@@ -127,6 +127,50 @@ test("run() surfaces MISSING_ACTION when stdin is empty", async () => {
   expect(calls).toEqual([]);
 });
 
+test.each(["choice", "questions"] as const)(
+  "a posted %s receipt gives a withdraw command with the full card id",
+  async (type) => {
+    const messageId = "0196ed00-0000-7000-8000-000000000021";
+    const options = [
+      { id: "yes", label: "Yes" },
+      { id: "no", label: "No" },
+    ];
+    const to = "@example";
+    const prompt = "Continue?";
+    const action =
+      type === "choice"
+        ? { type, to, prompt, options }
+        : { type, to, questions: [{ id: "confirm", prompt, options }] };
+    spyOn(Bun.stdin, "stream").mockReturnValue(new Blob([JSON.stringify(action)]).stream());
+    const receipt = await run(["action", "prepare", "--target", to], {
+      ...noopTransport,
+      actionPrepare: async (_target, prepared) => {
+        expect(prepared.type).toBe(type);
+        return { messageId, warning: "Recommended option moved first." };
+      },
+    });
+    expect(receipt).toBe(
+      [
+        `Action card posted to ${to} as message ${messageId} (short ${messageId.slice(0, 13)}). The human can click the action verb to commit.`,
+        "To withdraw this pending card, run the command below.",
+        `coforge action withdraw --message ${messageId}`,
+        "Warning: Recommended option moved first.",
+      ].join("\n"),
+    );
+  },
+);
+
+test("a receipt only offers to withdraw a full UUID", async () => {
+  spyOn(Bun.stdin, "stream").mockReturnValue(
+    new Blob(['{"type":"channel:create","name":"demo","visibility":"public"}']).stream(),
+  );
+  const receipt = await run(["action", "prepare", "--target", "#general"], {
+    ...noopTransport,
+    actionPrepare: async () => ({ messageId: "not-a-message-id" }),
+  });
+  expect(receipt).not.toContain("coforge action withdraw");
+});
+
 // --- connectLocal().actionPrepare(): the local daemon proxy transport ------
 
 test("actionPrepare posts {target, action} to the registered local proxy route", async () => {
