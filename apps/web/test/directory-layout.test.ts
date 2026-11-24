@@ -7,6 +7,8 @@ import {
   directEntries,
   directoryLayout,
   recentConversationIds,
+  recentConversationIdsByKind,
+  retainDirectoryLayout,
 } from "#src/features/conversations/directory-layout";
 import type { ListedDirect } from "#src/features/conversations/sidebar-rows";
 
@@ -316,4 +318,103 @@ test("joinedChannelsOnly hides unjoined channels from Channels and omits them fr
       joinedChannelsOnly: true,
     }).sort(),
   ).toEqual(["alpha", "zeta"]);
+});
+
+test("recentConversationIdsByKind splits channel and DM ids cleanly", () => {
+  const channels = [channel("pinned-ch", { pinned: true, pinSortOrder: 0 }), channel("open-ch")];
+  const directRows = [
+    direct("pinned-dm", 0, { pinned: true, pinSortOrder: 1 }),
+    direct("open-dm", 1),
+    direct("closed-dm", 2, { hidden: true }),
+  ];
+
+  expect(
+    recentConversationIdsByKind({
+      channels,
+      directRows,
+      sections: [],
+      builtInSortModes: { pinned: "manual", channels: "alpha", agents: "recent" },
+    }),
+  ).toEqual({
+    channelIds: [],
+    directIds: ["pinned-dm", "open-dm"],
+  });
+
+  const customRecent: ChatSection = {
+    id: "focus",
+    name: "Focus",
+    emoji: null,
+    collapsed: false,
+    sortOrder: 0,
+    sortMode: "recent",
+    conversationIds: ["open-ch", "open-dm", "missing-id"],
+  };
+  const split = recentConversationIdsByKind({
+    channels,
+    directRows,
+    sections: [customRecent],
+    builtInSortModes: { pinned: "recent", channels: "alpha", agents: "alpha" },
+  });
+  expect(split.channelIds.sort()).toEqual(["open-ch", "pinned-ch"]);
+  expect(split.directIds.sort()).toEqual(["open-dm", "pinned-dm"]);
+});
+
+test("retainDirectoryLayout preserves unchanged array and object references when order is unchanged", () => {
+  const channels = [channel("alpha"), channel("beta")];
+  const directRows = [direct("dm-1", 0), direct("dm-2", 1)];
+  const first = directoryLayout({
+    channels,
+    agents: [],
+    directRows,
+    sections: [],
+    builtInSortModes: { pinned: "manual", channels: "alpha", agents: "recent" },
+    lastMessageTimes: new Map([
+      ["dm-1", "2026-10-05T00:00:00Z"],
+      ["dm-2", "2026-10-01T00:00:00Z"],
+    ]),
+    locale: "en",
+  });
+  const firstKeys = { base: first.base, natural: first.natural };
+
+  const sameOrder = directoryLayout({
+    channels,
+    agents: [],
+    directRows,
+    sections: [],
+    builtInSortModes: { pinned: "manual", channels: "alpha", agents: "recent" },
+    lastMessageTimes: new Map([
+      ["dm-1", "2026-10-06T00:00:00Z"],
+      ["dm-2", "2026-10-01T00:00:00Z"],
+    ]),
+    locale: "en",
+  });
+  const retainedSame = retainDirectoryLayout(firstKeys, {
+    base: sameOrder.base,
+    natural: sameOrder.natural,
+  });
+  expect(retainedSame).toBe(firstKeys);
+  expect(retainedSame.base).toBe(firstKeys.base);
+  expect(retainedSame.natural).toBe(firstKeys.natural);
+
+  const swappedOrder = directoryLayout({
+    channels,
+    agents: [],
+    directRows,
+    sections: [],
+    builtInSortModes: { pinned: "manual", channels: "alpha", agents: "recent" },
+    lastMessageTimes: new Map([
+      ["dm-1", "2026-10-06T00:00:00Z"],
+      ["dm-2", "2026-10-07T00:00:00Z"],
+    ]),
+    locale: "en",
+  });
+  const retainedSwapped = retainDirectoryLayout(firstKeys, {
+    base: swappedOrder.base,
+    natural: swappedOrder.natural,
+  });
+  expect(retainedSwapped).not.toBe(firstKeys);
+  expect(retainedSwapped.base.channels).toBe(firstKeys.base.channels);
+  expect(retainedSwapped.base.pinned).toBe(firstKeys.base.pinned);
+  expect(retainedSwapped.natural.channels).toBe(firstKeys.natural.channels);
+  expect(retainedSwapped.base.agents).toEqual(["direct:dm-2", "direct:dm-1"]);
 });

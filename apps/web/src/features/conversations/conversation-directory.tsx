@@ -202,42 +202,46 @@ export function ConversationDirectory({
     () => ({ sections: groups.sections, sectionsReady, onSectionError: sectionFailed }),
     [groups.sections, sectionsReady, sectionFailed],
   );
-  const rows = new Map<string, { node: ReactNode; draggable: boolean; label: string }>([
-    ...sortedChannels.map(
-      (channel) =>
-        [
-          channelRowKey(channel.id),
-          {
-            node: (
-              <ChannelDirectoryRow
-                channel={channel}
-                current={channel.id === selectedChannelId}
-                menu={rowMenu}
-              />
-            ),
-            draggable: conversationRowMenuEnabled(channel),
-            label: channel.name,
-          },
-        ] as const,
-    ),
-    ...directRows.map(
-      (row) =>
-        [
-          directRowKey(row.conversationId),
-          {
-            node: (
-              <DirectDirectoryRow
-                {...row}
-                current={row.conversationId === selectedDmId}
-                menu={rowMenu}
-              />
-            ),
-            draggable: true,
-            label: row.name,
-          },
-        ] as const,
-    ),
-  ]);
+  const rows = useMemo(
+    () =>
+      new Map<string, { node: ReactNode; draggable: boolean; label: string }>([
+        ...sortedChannels.map(
+          (channel) =>
+            [
+              channelRowKey(channel.id),
+              {
+                node: (
+                  <ChannelDirectoryRow
+                    channel={channel}
+                    current={channel.id === selectedChannelId}
+                    menu={rowMenu}
+                  />
+                ),
+                draggable: conversationRowMenuEnabled(channel),
+                label: channel.name,
+              },
+            ] as const,
+        ),
+        ...directRows.map(
+          (row) =>
+            [
+              directRowKey(row.conversationId),
+              {
+                node: (
+                  <DirectDirectoryRow
+                    {...row}
+                    current={row.conversationId === selectedDmId}
+                    menu={rowMenu}
+                  />
+                ),
+                draggable: true,
+                label: row.name,
+              },
+            ] as const,
+        ),
+      ]),
+    [sortedChannels, directRows, selectedChannelId, selectedDmId, rowMenu],
+  );
   const list = (section: DirectorySectionId) =>
     base[section].map((key) => {
       const row = rows.get(key);
