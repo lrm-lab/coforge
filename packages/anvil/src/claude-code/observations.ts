@@ -4,7 +4,11 @@ import {
   RUNTIME_PROVIDER,
   type AgentServiceTierObserved,
 } from "@lrm/coforge-sdk/internal";
-import { AGENT_RUNTIME_EVENT_TYPE, type AgentRuntimeEvent } from "#src/contract";
+import {
+  AGENT_RUNTIME_EVENT_TYPE,
+  type AgentRuntimeEvent,
+  type AgentTurnTokenUsage,
+} from "#src/contract";
 import { asRecord, eventTime, nonEmptyString } from "#src/json-record";
 import {
   buildPromptCacheUsage,
@@ -95,6 +99,59 @@ export function claudeContextUsage(
   return { usedTokens, windowTokens, occurredAt: eventTime(record) };
 }
 
+export function claudeTurnTokenUsage(
+  record: Readonly<Record<string, unknown>>,
+  configuredModel?: string,
+  contextUsage?: { usedTokens: number; windowTokens: number; occurredAt: string },
+): AgentTurnTokenUsage | undefined {
+  const usage = asRecord(record.usage);
+  if (!usage) return undefined;
+  const uncachedInputTokens = Math.round(nonNegativeNumber(usage.input_tokens));
+  const cacheReadTokens = Math.round(nonNegativeNumber(usage.cache_read_input_tokens));
+  const cacheWriteTokens = Math.round(nonNegativeNumber(usage.cache_creation_input_tokens));
+  const outputTokens = Math.round(nonNegativeNumber(usage.output_tokens));
+  if (uncachedInputTokens + cacheReadTokens + cacheWriteTokens + outputTokens <= 0)
+    return undefined;
+  const modelUsage = asRecord(record.modelUsage);
+  let model = configuredModel;
+  if (modelUsage) {
+    const entries = Object.entries(modelUsage).flatMap(([name, raw]) => {
+      const value = asRecord(raw);
+      return value ? [{ name, value }] : [];
+    });
+    if (entries.length > 0) {
+      const matched = configuredModel
+        ? entries.find(
+            ({ name, value }) =>
+              name === configuredModel || value.canonicalModel === configuredModel,
+          )
+        : undefined;
+      const selected =
+        matched ??
+        entries.reduce((largest, candidate) =>
+          claudeModelUsageWeight(candidate.value) > claudeModelUsageWeight(largest.value)
+            ? candidate
+            : largest,
+        );
+      model = nonEmptyString(selected.value.canonicalModel) ?? selected.name;
+    }
+  }
+  return {
+    uncachedInputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+    outputTokens,
+    ...(model ? { model } : {}),
+    ...(contextUsage
+      ? {
+          contextUsedTokens: contextUsage.usedTokens,
+          contextWindowTokens: contextUsage.windowTokens,
+          occurredAt: contextUsage.occurredAt,
+        }
+      : { occurredAt: eventTime(record) }),
+  };
+}
+
 export function claudePromptCacheUsage(
   record: Readonly<Record<string, unknown>>,
 ): PromptCacheUsage | undefined {
@@ -174,6 +231,12 @@ export class ClaudeSessionObservations {
         usedTokens: contextUsage.usedTokens,
         windowTokens: contextUsage.windowTokens,
         occurredAt: contextUsage.occurredAt,
+      };
+    const turnTokenUsage = claudeTurnTokenUsage(record, this.configuredModel, contextUsage);
+    if (turnTokenUsage)
+      yield {
+        type: AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE,
+        usage: turnTokenUsage,
       };
     const cacheUsage = claudePromptCacheUsage(record);
     if (cacheUsage) {

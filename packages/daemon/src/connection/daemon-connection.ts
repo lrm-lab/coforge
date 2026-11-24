@@ -63,15 +63,13 @@ import {
   AGENT_CONTROL_RESULT_METHOD,
   AGENT_TURN_INTERRUPT_RESULT_METHOD,
   AGENT_SESSION_INVALIDATE_METHOD,
-  AGENT_CONTEXT_USAGE_METHOD,
-  AGENT_SERVICE_TIER_METHOD,
-  AGENT_CONTEXT_VIEW_AVAILABILITY_METHOD,
   type AgentWorkspaceResetRequest,
   type AgentControlResult,
   type AgentTurnInterruptResult,
   type AgentSessionReport,
   type AgentSessionInvalidate,
   type AgentContextUsage,
+  type AgentTokenUsage,
   type AgentServiceTier,
   type AgentContextViewAvailability,
   decodeAgentStartIntent,
@@ -284,11 +282,7 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
   readonly #pendingSessionInvalidate = new Map<string, AgentSessionInvalidate>();
   readonly #latestObservedLaunchByAgent = new Map<string, string>();
   #loggedUnknownSessionInvalidateMethod = false;
-  readonly #observations = new AgentObservationPublisher({
-    contextUsage: AGENT_CONTEXT_USAGE_METHOD,
-    serviceTier: AGENT_SERVICE_TIER_METHOD,
-    contextViewAvailability: AGENT_CONTEXT_VIEW_AVAILABILITY_METHOD,
-  });
+  readonly #observations = new AgentObservationPublisher();
   readonly #latestStatuses = new Map<string, AgentStatus>();
   readonly #computerLifecycle = new ComputerLifecyclePublications((method, bytes) =>
     this.#rpc(method, bytes),
@@ -588,6 +582,9 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
   }
   sendAgentContextUsage(message: AgentContextUsage): void {
     this.#observations.sendContextUsage(message, this.#activeClient());
+  }
+  sendAgentTokenUsage(message: AgentTokenUsage): void {
+    this.#observations.sendTokenUsage(message, this.#activeClient());
   }
   sendAgentServiceTier(message: AgentServiceTier): void {
     this.#observations.sendServiceTier(message, this.#activeClient());

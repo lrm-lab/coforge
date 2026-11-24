@@ -31,6 +31,7 @@ import type {
   AgentSessionReport,
   AgentSessionInvalidate,
   AgentContextUsage,
+  AgentTokenUsage,
   AgentServiceTier,
   AgentSkillsListRequest,
   AgentSkillsListResult,
@@ -226,6 +227,7 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   reportAgentSession?(report: AgentSessionReport): Promise<void>;
   sendSessionInvalidate?(message: AgentSessionInvalidate): void;
   sendAgentContextUsage?(message: AgentContextUsage): void;
+  sendAgentTokenUsage?(message: AgentTokenUsage): void;
   sendAgentServiceTier?(message: AgentServiceTier): void;
   sendAgentContextViewAvailability?(message: AgentContextViewAvailability): void;
   sendAgentDeliveryAck?(ack: AgentMessageDeliveryAck): Promise<void>;

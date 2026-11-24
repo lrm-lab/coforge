@@ -1,12 +1,22 @@
+import type { AgentTurnTokenUsage } from "@lrm/coforge-anvil";
 import type { AgentServiceTierObserved, RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { PublishedActivityLaunch } from "./agent-activity-publisher";
 
+type PendingTurnTokens = {
+  uncachedInputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens?: number;
+  model?: string;
+  contextUsedTokens?: number;
+  contextWindowTokens?: number;
+  occurredAt?: string;
+};
+
 export type AgentUsageReportPorts = Readonly<{
-  /** The Agent's current native session id, once the daemon has reported this launch's first
-   * identity — a reading with none has nothing to attach to. */
   sessionId(agentId: string): string | undefined;
-  /** The fields every daemon -> server report opens with. */
   envelope(): {
     protocolMajor: number;
     requestId: string;
@@ -14,20 +24,12 @@ export type AgentUsageReportPorts = Readonly<{
     computerId: string;
   };
   daemonInstanceId(): string;
-  /** The launch's shared clientSeq counter is recorded after every send on it. */
   recordClientSeq(agentId: string, clientSeq: number): void;
   sendContextUsage: DaemonConnectionClient["sendAgentContextUsage"];
+  sendTokenUsage?: DaemonConnectionClient["sendAgentTokenUsage"];
   sendServiceTier: DaemonConnectionClient["sendAgentServiceTier"];
 }>;
 
-/**
- * The fire-and-forget per-launch readings the daemon reports to the cloud: context usage and the
- * observed service tier. Never blocks or fails the turn it observed; an unchanged reading is not
- * re-sent (the last reading is forgotten on launch end/dispose, so a new launch always sends its
- * first). Reuses Activity's own `clientSeq` counter on the launch — the same ordering fence
- * `AgentActivityPublisher.publish` advances — and records it so a wake reusing the launchId can
- * continue the counter.
- */
 export class AgentUsageReport {
   readonly #ports: AgentUsageReportPorts;
   readonly #lastContextUsage = new Map<
@@ -35,6 +37,8 @@ export class AgentUsageReport {
     { usedTokens: number; windowTokens: number; observedAtMs: number }
   >();
   readonly #lastServiceTier = new Map<string, AgentServiceTierObserved>();
+  readonly #pendingTurnTokens = new Map<string, PendingTurnTokens>();
+  readonly #turnSeqByAgent = new Map<string, { launchId: string; seq: number }>();
 
   constructor(ports: AgentUsageReportPorts) {
     this.#ports = ports;
@@ -123,23 +127,121 @@ export class AgentUsageReport {
     );
   }
 
-  /** Forgets an Agent's last readings (launch end/dispose). */
+  recordTokenUsage(agentId: string, usage: AgentTurnTokenUsage): void {
+    const current = this.#pendingTurnTokens.get(agentId) ?? {
+      uncachedInputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      outputTokens: 0,
+    };
+    current.uncachedInputTokens = boundedSum(
+      current.uncachedInputTokens,
+      usage.uncachedInputTokens,
+    );
+    current.cacheReadTokens = boundedSum(current.cacheReadTokens, usage.cacheReadTokens);
+    current.cacheWriteTokens = boundedSum(current.cacheWriteTokens, usage.cacheWriteTokens);
+    current.outputTokens = boundedSum(current.outputTokens, usage.outputTokens);
+    const reasoning = sanitizeNonNegativeInt(usage.reasoningOutputTokens);
+    if (reasoning !== undefined) {
+      current.reasoningOutputTokens = boundedSum(current.reasoningOutputTokens ?? 0, reasoning);
+    }
+    if (usage.model) current.model = usage.model;
+    const contextUsed = sanitizeNonNegativeInt(usage.contextUsedTokens);
+    if (contextUsed !== undefined) current.contextUsedTokens = contextUsed;
+    const contextWindow = sanitizePositiveInt(usage.contextWindowTokens);
+    if (contextWindow !== undefined) current.contextWindowTokens = contextWindow;
+    if (usage.occurredAt) current.occurredAt = usage.occurredAt;
+    this.#pendingTurnTokens.set(agentId, current);
+  }
+
+  flushTokenUsage(
+    agentId: string,
+    launch: PublishedActivityLaunch,
+    provider: RuntimeProvider,
+    fallbackModel?: string,
+  ): boolean {
+    const pending = this.#pendingTurnTokens.get(agentId);
+    this.#pendingTurnTokens.delete(agentId);
+    if (!pending) return false;
+    if (
+      pending.uncachedInputTokens +
+        pending.cacheReadTokens +
+        pending.cacheWriteTokens +
+        pending.outputTokens <=
+      0
+    )
+      return false;
+    const prev = this.#turnSeqByAgent.get(agentId);
+    const turnSeq = prev && prev.launchId === launch.launchId ? prev.seq + 1 : 1;
+    this.#turnSeqByAgent.set(agentId, { launchId: launch.launchId, seq: turnSeq });
+    const sessionId = this.#ports.sessionId(agentId) ?? launch.launchId;
+    const lastContext = this.#lastContextUsage.get(agentId);
+    const contextUsedTokens = sanitizeNonNegativeInt(
+      pending.contextUsedTokens ?? lastContext?.usedTokens,
+    );
+    const contextWindowTokens = sanitizePositiveInt(
+      pending.contextWindowTokens ?? lastContext?.windowTokens,
+    );
+    try {
+      this.#report(agentId, launch, (clientSeq) =>
+        this.#ports.sendTokenUsage?.({
+          ...this.#ports.envelope(),
+          agentId,
+          provider,
+          launchId: launch.launchId,
+          sessionId,
+          turnSeq,
+          model: (pending.model ?? fallbackModel ?? "").slice(0, 256),
+          uncachedInputTokens: pending.uncachedInputTokens,
+          cacheReadTokens: pending.cacheReadTokens,
+          cacheWriteTokens: pending.cacheWriteTokens,
+          outputTokens: pending.outputTokens,
+          ...(pending.reasoningOutputTokens !== undefined
+            ? { reasoningOutputTokens: pending.reasoningOutputTokens }
+            : {}),
+          ...(contextUsedTokens !== undefined ? { contextUsedTokens } : {}),
+          ...(contextWindowTokens !== undefined ? { contextWindowTokens } : {}),
+          observedAtMs: observedAt(pending.occurredAt),
+          daemonInstanceId: this.#ports.daemonInstanceId(),
+          clientSeq,
+        }),
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   forget(agentId: string): void {
     this.#lastContextUsage.delete(agentId);
     this.#lastServiceTier.delete(agentId);
+    this.#pendingTurnTokens.delete(agentId);
+    this.#turnSeqByAgent.delete(agentId);
   }
 
-  /** Daemon shutdown. */
   clear(): void {
     this.#lastContextUsage.clear();
     this.#lastServiceTier.clear();
+    this.#pendingTurnTokens.clear();
+    this.#turnSeqByAgent.clear();
   }
 }
 
-/** When the runtime sampled a reading, from the `occurredAt` its adapter forwards; the daemon's own
- * clock stands in for a runtime that gave no time, an unparseable one, or one that parses to zero —
- * the wire format rejects a non-positive `observedAtMs`, and this is a fire-and-forget report that
- * must never fail the event it observed. */
+function sanitizeNonNegativeInt(value: number | undefined): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return undefined;
+  return Math.min(Math.round(value), Number.MAX_SAFE_INTEGER);
+}
+
+function sanitizePositiveInt(value: number | undefined): number | undefined {
+  const sanitized = sanitizeNonNegativeInt(value);
+  return sanitized !== undefined && sanitized > 0 ? sanitized : undefined;
+}
+
+function boundedSum(base: number, delta: number): number {
+  const next = sanitizeNonNegativeInt(delta) ?? 0;
+  return Math.min(base + next, Number.MAX_SAFE_INTEGER);
+}
+
 function observedAt(occurredAt: string | undefined): number {
   const parsed = occurredAt === undefined ? Number.NaN : Date.parse(occurredAt);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : Date.now();

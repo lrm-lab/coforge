@@ -170,7 +170,7 @@ describe("piSessionEvents", () => {
     expect(events({ type: "agent_settled", aborted: false })).toEqual([]);
   });
 
-  test("reports context usage from assistant message_end when windowTokens is known", () => {
+  test("reports context usage and token usage from assistant message_end", () => {
     expect(
       piSessionEvents(
         {
@@ -189,7 +189,20 @@ describe("piSessionEvents", () => {
         } as unknown as PiSessionEvent,
         200_000,
       ),
-    ).toEqual([{ type: "context-usage", usedTokens: 150_000, windowTokens: 200_000 }]);
+    ).toEqual([
+      { type: "context-usage", usedTokens: 150_000, windowTokens: 200_000 },
+      {
+        type: "token-usage",
+        usage: {
+          uncachedInputTokens: 100_000,
+          cacheReadTokens: 40_000,
+          cacheWriteTokens: 8_000,
+          outputTokens: 2_000,
+          contextUsedTokens: 150_000,
+          contextWindowTokens: 200_000,
+        },
+      },
+    ]);
 
     expect(
       piSessionEvents(
@@ -209,7 +222,20 @@ describe("piSessionEvents", () => {
         } as unknown as PiSessionEvent,
         200_000,
       ),
-    ).toEqual([{ type: "context-usage", usedTokens: 102_000, windowTokens: 200_000 }]);
+    ).toEqual([
+      { type: "context-usage", usedTokens: 102_000, windowTokens: 200_000 },
+      {
+        type: "token-usage",
+        usage: {
+          uncachedInputTokens: 80_000,
+          cacheReadTokens: 20_000,
+          cacheWriteTokens: 500,
+          outputTokens: 1_500,
+          contextUsedTokens: 102_000,
+          contextWindowTokens: 200_000,
+        },
+      },
+    ]);
 
     expect(
       piSessionEvents(
@@ -237,7 +263,17 @@ describe("piSessionEvents", () => {
         } as unknown as PiSessionEvent,
         undefined,
       ),
-    ).toEqual([]);
+    ).toEqual([
+      {
+        type: "token-usage",
+        usage: {
+          uncachedInputTokens: 50_000,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          outputTokens: 100,
+        },
+      },
+    ]);
 
     expect(
       piSessionEvents(

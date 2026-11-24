@@ -40,3 +40,19 @@ export function acpRejectInput(
     `${profile.label} input is too large (${bytes} bytes exceeds the maximum of ${profile.maxInputBytes} bytes)`,
   );
 }
+
+export function acpCancelPendingNotices(
+  label: string,
+  queue: AcpSessionInput[],
+  active: AcpSessionInput | undefined,
+) {
+  for (const input of queue.splice(0))
+    input.admission.reject(new Error(`${label} queued input cancelled before submission`));
+  active?.admission.reject(
+    new Error(
+      active.attempted
+        ? `${label} input cancelled; delivery outcome is unknown`
+        : `${label} input cancelled before submission`,
+    ),
+  );
+}

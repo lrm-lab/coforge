@@ -9,12 +9,15 @@ import type {
   AgentTurnProcessWindow,
 } from "@coforge/agent";
 import { RequestError } from "@agentclientprotocol/sdk/unstable";
+import { acpPromptTokenUsage } from "#src/acp-context-usage";
+import { AGENT_RUNTIME_EVENT_TYPE } from "#src/contract";
 import { asRecord } from "#src/json-record";
 import { attachStderrExcerpt } from "#src/stderr-excerpt";
 import type { AcpConnection } from "./connection";
 import type { AcpNativeTurn, AcpSessionProfile } from "./profile";
 import { acpPromptFailure, acpSteerResponseFailure, acpStopStatus } from "./prompt-failure";
 import {
+  acpCancelPendingNotices,
   acpRejectInput,
   type AcpNativeTurnState,
   type AcpSessionInput,
@@ -283,6 +286,12 @@ export class AcpSession implements AgentSession {
         if (input.promptId) rememberCompletedPrompt(this.#completedPrompts, input.promptId);
         this.#steering?.settle();
         for (const event of input.updates.end()) this.#emit(event, input.options);
+        const promptTokenUsage = acpPromptTokenUsage(settledResponse);
+        if (promptTokenUsage && !this.#disposed)
+          this.#emit(
+            { type: AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE, usage: promptTokenUsage },
+            input.options,
+          );
         if (!this.#disposed) this.#emit({ type: "completed", status }, input.options);
         this.#startNext();
         if (this.#failed && !this.#disposed) void this.#terminate();
@@ -416,17 +425,7 @@ export class AcpSession implements AgentSession {
 
   cancelPendingNotices() {
     this.#generation++;
-    for (const input of this.#queue.splice(0))
-      input.admission.reject(
-        new Error(`${this.profile.label} queued input cancelled before submission`),
-      );
-    this.#active?.admission.reject(
-      new Error(
-        this.#active.attempted
-          ? `${this.profile.label} input cancelled; delivery outcome is unknown`
-          : `${this.profile.label} input cancelled before submission`,
-      ),
-    );
+    acpCancelPendingNotices(this.profile.label, this.#queue, this.#active);
     this.#steering?.rejectPending(`${this.profile.label} notice cancelled`);
   }
 

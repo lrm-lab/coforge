@@ -2,19 +2,32 @@ import type { CentrifugeWorkspaceClient } from "./centrifuge-workspace-client";
 import type {
   AgentContextUsage,
   AgentServiceTier,
+  AgentTokenUsage,
   AgentContextViewAvailability,
 } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import {
+  AGENT_CONTEXT_USAGE_METHOD,
+  AGENT_CONTEXT_VIEW_AVAILABILITY_METHOD,
+  AGENT_SERVICE_TIER_METHOD,
+  AGENT_TOKEN_USAGE_METHOD,
+  diagnosticErrorCode,
   encodeAgentContextUsage,
   encodeAgentServiceTier,
+  encodeAgentTokenUsage,
   encodeAgentContextViewAvailability,
 } from "@lrm/coforge-sdk/internal";
-import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
+
+const DEFAULT_OBSERVATION_METHODS = {
+  contextUsage: AGENT_CONTEXT_USAGE_METHOD,
+  tokenUsage: AGENT_TOKEN_USAGE_METHOD,
+  serviceTier: AGENT_SERVICE_TIER_METHOD,
+  contextViewAvailability: AGENT_CONTEXT_VIEW_AVAILABILITY_METHOD,
+} as const;
 
 const logger = getLogger(["coforge", "daemon", "connection"]);
+const MAX_PENDING_TOKEN_USAGE_EVENTS = 128;
 
-/** One buffered observation, with the RPC method and encoder it goes out on. */
 type PendingObservation = {
   agentId: string;
   method: string;
@@ -22,27 +35,33 @@ type PendingObservation = {
   log: Record<string, unknown>;
 };
 
-/**
- * The daemon's per-launch observations (a context-window reading, the applied service tier):
- * fire-and-forget, buffered latest per method and Agent while disconnected, flushed on reconnect,
- * and never retried or surfaced to a caller. A rejection from an old server that does not know the
- * RPC is logged once per connection lifetime rather than on every send.
- */
 export class AgentObservationPublisher {
-  readonly #methods: { contextUsage: string; serviceTier: string; contextViewAvailability: string };
+  readonly #methods: {
+    contextUsage: string;
+    tokenUsage?: string;
+    serviceTier: string;
+    contextViewAvailability: string;
+  };
   readonly #pending = new Map<string, PendingObservation>();
+  readonly #pendingAdditive: PendingObservation[] = [];
   readonly #loggedUnknownMethod = new Set<string>();
   readonly #inFlight = new Set<string>();
   readonly #queued = new Map<
     string,
     { client: CentrifugeWorkspaceClient; observation: PendingObservation }
   >();
+  readonly #additiveInFlight = new Set<string>();
+  readonly #additiveQueued = new Map<string, PendingObservation[]>();
+  #liveAdditiveClient: CentrifugeWorkspaceClient | undefined;
 
-  constructor(methods: {
-    contextUsage: string;
-    serviceTier: string;
-    contextViewAvailability: string;
-  }) {
+  constructor(
+    methods: {
+      contextUsage: string;
+      tokenUsage?: string;
+      serviceTier: string;
+      contextViewAvailability: string;
+    } = DEFAULT_OBSERVATION_METHODS,
+  ) {
     this.#methods = methods;
   }
 
@@ -104,21 +123,94 @@ export class AgentObservationPublisher {
     );
   }
 
+  sendTokenUsage(message: AgentTokenUsage, client?: CentrifugeWorkspaceClient): void {
+    const method = this.#methods.tokenUsage;
+    if (!method) return;
+    const observation: PendingObservation = {
+      agentId: message.agentId,
+      method,
+      payload: encodeAgentTokenUsage(message),
+      log: {
+        event: "agent_token_usage:rejected",
+        request_id: message.requestId,
+        workspace_id: message.workspaceId,
+        computer_id: message.computerId,
+        agent_id: message.agentId,
+        launch_id: message.launchId,
+        turn_seq: message.turnSeq,
+      },
+    };
+    if (!client) {
+      if (this.#pendingAdditive.length >= MAX_PENDING_TOKEN_USAGE_EVENTS)
+        this.#pendingAdditive.shift();
+      this.#pendingAdditive.push(observation);
+      return;
+    }
+    this.#liveAdditiveClient = client;
+    this.#publishAdditive(client, observation);
+  }
+
   flush(client: CentrifugeWorkspaceClient): void {
+    this.#liveAdditiveClient = client;
     const pending = [...this.#pending.values()];
     this.#pending.clear();
     for (const observation of pending) this.#publish(client, observation);
+    const additive = this.#pendingAdditive.splice(0);
+    for (const observation of additive) this.#publishAdditive(client, observation);
   }
 
-  /** A new connection lifetime starts with its own unknown-method suppression. */
   resetConnectionLifetime(): void {
     this.#loggedUnknownMethod.clear();
+    this.#liveAdditiveClient = undefined;
   }
 
-  /** Drops buffered observations; used when the connection is torn down for good. */
   clear(): void {
     this.#pending.clear();
     this.#queued.clear();
+    this.#pendingAdditive.length = 0;
+    this.#additiveQueued.clear();
+    this.#liveAdditiveClient = undefined;
+  }
+
+  #publishAdditive(client: CentrifugeWorkspaceClient, observation: PendingObservation): void {
+    const key = `${observation.method}\0${observation.agentId}`;
+    if (this.#additiveInFlight.has(key)) {
+      const list = this.#additiveQueued.get(key) ?? [];
+      if (list.length >= MAX_PENDING_TOKEN_USAGE_EVENTS) list.shift();
+      list.push(observation);
+      this.#additiveQueued.set(key, list);
+      return;
+    }
+    this.#additiveInFlight.add(key);
+    void client
+      .rpc(observation.method, observation.payload)
+      .catch((error) => {
+        const errorCode = diagnosticErrorCode(error);
+        if (errorCode === "404" && this.#loggedUnknownMethod.has(observation.method)) return;
+        if (errorCode === "404") this.#loggedUnknownMethod.add(observation.method);
+        logger.warning("Agent observation was not accepted", {
+          ...observation.log,
+          error_code: errorCode,
+          outcome: "failed",
+        });
+      })
+      .finally(() => {
+        this.#additiveInFlight.delete(key);
+        const list = this.#additiveQueued.get(key);
+        const next = list?.shift();
+        if (!next) {
+          this.#additiveQueued.delete(key);
+          return;
+        }
+        if (list && list.length === 0) this.#additiveQueued.delete(key);
+        if (!this.#liveAdditiveClient) {
+          if (this.#pendingAdditive.length >= MAX_PENDING_TOKEN_USAGE_EVENTS)
+            this.#pendingAdditive.shift();
+          this.#pendingAdditive.push(next);
+          return;
+        }
+        this.#publishAdditive(this.#liveAdditiveClient, next);
+      });
   }
 
   #send(observation: PendingObservation, client: CentrifugeWorkspaceClient | undefined): void {

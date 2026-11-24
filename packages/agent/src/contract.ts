@@ -123,6 +123,17 @@ export type AgentConversationScope = Readonly<{
   conversationId: string;
   target: string;
 }>;
+export type AgentTurnTokenUsage = Readonly<{
+  uncachedInputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens?: number;
+  model?: string;
+  contextUsedTokens?: number;
+  contextWindowTokens?: number;
+  occurredAt?: string;
+}>;
 export type AgentRuntimeEvent = {
   readonly conversation?: AgentConversationScope;
 } & (
@@ -139,6 +150,10 @@ export type AgentRuntimeEvent = {
       usedTokens: number;
       windowTokens: number;
       occurredAt?: string;
+    }
+  | {
+      type: "token-usage";
+      usage: AgentTurnTokenUsage;
     }
   | {
       type: "text-delta" | "thinking-delta";

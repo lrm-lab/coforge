@@ -98,6 +98,10 @@ export function observeRuntimeEvent(
     if (recorded) ports.phaseBookkeeping.contextUsageObserved(agentId);
     return;
   }
+  if (event.type === AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE) {
+    if (!event.conversation) ports.usageReport.recordTokenUsage(agentId, event.usage);
+    return;
+  }
   if (event.type === AGENT_RUNTIME_EVENT_TYPE.SERVICE_TIER) {
     if (config.fastMode !== true) return;
     ports.usageReport.serviceTier(agentId, launch, config.provider, event.state);
@@ -345,6 +349,7 @@ export function observeRuntimeEvent(
       launch.turnEvidence?.reset();
     }
     if (!launch.stopping) ports.sessionSummary?.turnCompleted(agentId, config.provider);
+    ports.usageReport.flushTokenUsage(agentId, launch, config.provider, config.model);
     ports.deliveryGate?.wakeLoop?.noteTurnCompleted(agentId, { status: effectiveStatus });
   }
   noteTurnFinished(agentId, effectiveStatus, event.conversation?.conversationId);

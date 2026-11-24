@@ -18,6 +18,7 @@ export type {
   AgentSessionOptions,
   AgentSubagentTaskKind,
   AgentTurnProcessWindow,
+  AgentTurnTokenUsage,
 } from "@coforge/agent";
 export type {
   UsageOfficialBucket,
@@ -244,11 +245,8 @@ export interface CodeAgentProbe {
 }
 export const AGENT_RUNTIME_EVENT_TYPE = {
   USAGE: "usage",
-  // A provider-observed context-window reading, distinct from the plan-usage
-  // `USAGE` event above. Claude Code and Codex today; a provider with no such signal never emits it.
   CONTEXT_USAGE: "context-usage",
-  // A provider-observed service-tier reading for the launch (Claude Code's `fast_mode_state`),
-  // normalized by the adapter to the SDK's closed vocabulary. Claude Code only today.
+  TOKEN_USAGE: "token-usage",
   SERVICE_TIER: "service-tier",
 } as const;
 /** The account is authenticated but its quota cannot be represented safely. */

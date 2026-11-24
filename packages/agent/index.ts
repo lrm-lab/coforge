@@ -70,6 +70,7 @@ export type {
   AgentSessionOptions,
   AgentSubagentTaskKind,
   AgentTurnProcessWindow,
+  AgentTurnTokenUsage,
   UsageOfficialBucket,
   UsageOfficialGroup,
   UsageQuotaLevel,

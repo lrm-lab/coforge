@@ -63,12 +63,38 @@ export function piSessionEvents(event: PiSessionEvent, windowTokens?: number): A
         event.message.stopReason === "aborted"
       )
         return [];
-      if (windowTokens === undefined || !Number.isFinite(windowTokens) || windowTokens <= 0)
-        return [];
+      const events: AgentRuntimeEvent[] = [];
       const usedTokens = piMessageContextTokens(event.message.usage);
-      return usedTokens > 0
-        ? [{ type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE, usedTokens, windowTokens }]
-        : [];
+      const hasWindow =
+        windowTokens !== undefined && Number.isFinite(windowTokens) && windowTokens > 0;
+      if (hasWindow && usedTokens > 0) {
+        events.push({ type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE, usedTokens, windowTokens });
+      }
+      const cacheUsage = piPromptCacheUsage(event.message.usage);
+      const outputTokens = Math.round(nonNegativeFinite(asRecord(event.message.usage)?.output));
+      const model =
+        typeof event.message.model === "string" && event.message.model.trim()
+          ? event.message.model.trim()
+          : undefined;
+      if (cacheUsage || outputTokens > 0) {
+        events.push({
+          type: AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE,
+          usage: {
+            uncachedInputTokens: Math.round(cacheUsage?.uncachedInputTokens ?? 0),
+            cacheReadTokens: Math.round(cacheUsage?.cachedInputTokens ?? 0),
+            cacheWriteTokens: Math.round(cacheUsage?.cacheWriteInputTokens ?? 0),
+            outputTokens: Math.round(cacheUsage?.outputTokens ?? outputTokens),
+            ...(model ? { model } : {}),
+            ...(hasWindow && usedTokens > 0
+              ? {
+                  contextUsedTokens: Math.round(usedTokens),
+                  contextWindowTokens: Math.round(windowTokens),
+                }
+              : {}),
+          },
+        });
+      }
+      return events;
     }
     case "turn_start":
     case "message_start":

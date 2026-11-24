@@ -6,7 +6,7 @@ import type {
   AgentTurnProcessWindow,
 } from "@coforge/agent";
 import { AGENT_RUNTIME_EVENT_TYPE, asRecord, eventTime, nonEmptyString } from "@lrm/coforge-anvil";
-import { codexContextUsage, codexPromptCacheUsage } from "./context-usage";
+import { codexContextUsage, codexPromptCacheUsage, CodexTokenUsageTracker } from "./context-usage";
 import { promptCacheLogFields } from "#src/prompt-cache-usage";
 import { JsonlProcess } from "@lrm/coforge-anvil/execution";
 import { CodexItemEvents } from "./item-events";
@@ -40,6 +40,8 @@ export class CodexAgentSession implements AgentSession {
   readonly #threadId: string;
   readonly #agentId: string | undefined;
   readonly #runtimeId: string | undefined;
+  readonly #model: string | undefined;
+  readonly #tokenUsage = new CodexTokenUsageTracker();
   readonly #listeners = new Set<(event: AgentRuntimeEvent) => void>();
   readonly #commandOutputBytes = new Map<string, number>();
   readonly #itemEvents = new CodexItemEvents();
@@ -66,6 +68,7 @@ export class CodexAgentSession implements AgentSession {
     this.#subagentThreads = new CodexSubagentThreads(threadId);
     this.#agentId = agentId;
     this.#runtimeId = runtimeId;
+    this.#model = model;
     this.#signals = new CodexTurnSignals(threadId, agentId, runtimeId);
     this.#replacementWarning = replacementWarning;
     this.#identity = {
@@ -226,6 +229,9 @@ export class CodexAgentSession implements AgentSession {
           });
         }
         if (usage) this.#emitAll([{ type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE, ...usage }]);
+        const tokenDelta = this.#tokenUsage.accept(params, usage, this.#model);
+        if (tokenDelta)
+          this.#emitAll([{ type: AGENT_RUNTIME_EVENT_TYPE.TOKEN_USAGE, usage: tokenDelta }]);
         return;
       }
     }

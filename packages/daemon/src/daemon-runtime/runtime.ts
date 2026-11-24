@@ -368,8 +368,7 @@ export class DaemonRuntime {
     () => this.#env(),
     () => this.#runtimeInstanceId,
     (agentId, clientSeq) => this.#agentProcessManager.recordClientSeq(agentId, clientSeq),
-    (message) => this.#transport.sendAgentContextUsage?.(message),
-    (message) => this.#transport.sendAgentServiceTier?.(message),
+    () => this.#transport,
   );
 
   readonly #fastModeWarned = new Set<string>();
