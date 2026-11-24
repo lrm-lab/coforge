@@ -32,6 +32,7 @@ import {
 } from "#src/server/centrifugo/server-api.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 import { getComputerConnectRefusals } from "#src/server/centrifugo/computer-connect-refusals.server";
+import { readListRuntimeUsages } from "#src/server/computers/computer-list-usage.server";
 import { getComputerRuntimeDetection } from "#src/server/computers/computer-runtime-detection.server";
 import { computerCreatorAvatarUrl } from "#src/server/computers/computer-creator-avatar.server";
 import { isWorkspaceMemberComputer } from "#src/server/computers/computer-membership.server";
@@ -140,7 +141,6 @@ export const listComputers = createServerFn({ method: "GET" })
       .filter(({ computer }) => computer.kind === "cloud")
       .map(({ computer }) => computer.id);
     const runtimeDetection = getComputerRuntimeDetection();
-    // Each read needs only the connections, so they run side by side.
     const [
       statuses,
       agentDisplays,
@@ -150,20 +150,17 @@ export const listComputers = createServerFn({ method: "GET" })
       refusals,
       releaseChannels,
       progressIds,
+      usageByComputer,
     ] = await Promise.all([
-      // One round trip for every Computer's online lease, not one per Computer.
       computerStatus.getMany(computerScopes),
       getAgentDisplay().snapshotMany(agentScopes),
       Promise.all(
         computerScopes.map((scope) => runtimeDetection.detecting(scope).catch(() => false)),
       ),
-      // Each Computer's latest upgrade, so a reload resumes one still running, and keeps the
-      // reason one failed, instead of offering Upgrade again.
       getComputerUpgradeStore()
         .latestMany(computerScopes)
         .catch(() => []),
       readCloudComputerImages(cloudIds),
-      // Why the connect proxy last refused this binding for good, cleared by the next connect.
       getComputerConnectRefusals()
         .getMany(computerScopes)
         .catch(() => computerScopes.map(() => null)),
@@ -175,6 +172,13 @@ export const listComputers = createServerFn({ method: "GET" })
           .filter(({ computer }) => computer.kind === "local" && computer.ownerId === user.id)
           .map(({ id }) => id),
       ).catch(() => new Map<string, string>()),
+      readListRuntimeUsages({
+        workspaceId,
+        userId: user.id,
+        canManage,
+        computers: connections.map(({ computer }) => computer),
+        runtimes,
+      }),
     ]);
     const progressToVerify = connections.flatMap(({ id: bindingId, computer }, index) => {
       const requestId = progressIds.get(bindingId);
@@ -225,6 +229,7 @@ export const listComputers = createServerFn({ method: "GET" })
             showAccount: computer.ownerId === user.id || canManage,
             runtimes: computerRuntimes,
           }),
+          runtimeUsages: usageByComputer.get(computer.id) ?? {},
           online: statuses[index] ?? false,
           connectRefusal: refusals[index] ?? null,
           releaseChannel: releaseChannels[index],

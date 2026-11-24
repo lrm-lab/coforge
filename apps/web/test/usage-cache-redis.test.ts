@@ -162,3 +162,132 @@ describe.skipIf(!redisServer)("RedisUsageCache scans against a real Redis", () =
     expect((await cache.read(key(computer))).result).toBeUndefined();
   });
 });
+
+test("RedisUsageCache.readMany reads multiple scopes in one mget and matches read()", async () => {
+  const store = new Map<string, string>();
+  let mgetCalls = 0;
+  const nowMs = Date.parse("2026-11-24T00:10:00Z");
+  const fakeRedis = {
+    async set(k: string, v: string) {
+      store.set(k, v);
+      return "OK";
+    },
+    async get(k: string) {
+      return store.get(k) ?? null;
+    },
+    async mget(...ks: string[]) {
+      mgetCalls += 1;
+      return ks.map((k) => store.get(k) ?? null);
+    },
+    async del(...ks: string[]) {
+      let removed = 0;
+      for (const k of ks) if (store.delete(k)) removed += 1;
+      return removed;
+    },
+    async eval() {
+      return null;
+    },
+  };
+  const unitCache = new RedisUsageCache(fakeRedis, undefined, undefined, () => nowMs);
+  expect(await unitCache.readMany([])).toEqual([]);
+  expect(mgetCalls).toBe(0);
+
+  const k1 = { workspaceId: "w", computerId: "c1", provider: "codex" as const };
+  const k2 = { workspaceId: "w", computerId: "c1", provider: "claude-code" as const };
+  const k3 = { workspaceId: "w", computerId: "c2", provider: "codex" as const };
+  store.set(
+    "coforge:workspace:w:computer:c1:usage:v2:codex:result",
+    JSON.stringify({
+      ...k1,
+      scanId: "s1",
+      status: "available",
+      collectedAt: "2026-11-24T00:05:00Z",
+      snapshot: { provider: "codex", primary: { usedPercent: 72, windowDurationMinutes: 300 } },
+    }),
+  );
+  store.set(
+    "coforge:workspace:w:computer:c1:usage:v2:codex:attempt",
+    JSON.stringify({ scanId: "s1", status: "available", occurredAt: "2026-11-24T00:05:00Z" }),
+  );
+  store.set(
+    "coforge:workspace:w:computer:c1:usage:v2:claude-code:scan",
+    JSON.stringify({ ...k2, scanId: "s2", status: "pending" }),
+  );
+
+  const batch = await unitCache.readMany([k1, k2, k3]);
+  expect(mgetCalls).toBe(1);
+  expect(batch).toEqual([
+    await unitCache.read(k1),
+    await unitCache.read(k2),
+    await unitCache.read(k3),
+  ]);
+  expect(batch[0]?.state).toBe("fresh");
+  expect(batch[0]?.result?.snapshot?.primary?.usedPercent).toBe(72);
+  expect(batch[1]).toEqual({ state: "missing", pendingScanId: "s2" });
+  expect(batch[2]).toEqual({ state: "missing", pendingScanId: undefined });
+});
+
+test("readListRuntimeUsages enforces owner/admin permissions and redacts non-owner readings", async () => {
+  const { readListRuntimeUsages } =
+    await import("#src/server/computers/computer-list-usage.server");
+  const fullReading = {
+    state: "fresh" as const,
+    result: {
+      workspaceId: "w",
+      computerId: "c-theirs",
+      provider: "codex" as const,
+      scanId: "s1",
+      status: "available" as const,
+      message: "raw debug",
+      collectedAt: "2026-11-24T00:05:00Z",
+      snapshot: {
+        provider: "codex" as const,
+        primary: { usedPercent: 80, windowDurationMinutes: 300 },
+        credits: { hasCredits: true, unlimited: false, balance: "99.00" },
+      },
+    },
+  };
+  let requestedCount = 0;
+  const memberResult = await readListRuntimeUsages({
+    workspaceId: "w",
+    userId: "u-member",
+    canManage: false,
+    computers: [{ id: "c-theirs", ownerId: "u-owner", kind: "local" }],
+    runtimes: [
+      { computerId: "c-theirs", provider: "codex", isPublic: true, unavailableCode: null },
+    ],
+    readMany: async (keys) => {
+      requestedCount += keys.length;
+      return [fullReading];
+    },
+  });
+  expect(requestedCount).toBe(0);
+  expect(memberResult.size).toBe(0);
+
+  const adminResult = await readListRuntimeUsages({
+    workspaceId: "w",
+    userId: "u-admin",
+    canManage: true,
+    computers: [
+      { id: "c-theirs", ownerId: "u-owner", kind: "local" },
+      { id: "c-default-cloud", ownerId: "u-owner", kind: "cloud", cloudSlot: "default" },
+    ],
+    runtimes: [
+      { computerId: "c-theirs", provider: "codex", isPublic: true, unavailableCode: null },
+      { computerId: "c-theirs", provider: "claude-code", isPublic: false, unavailableCode: null },
+      { computerId: "c-theirs", provider: "pi", isPublic: true, unavailableCode: null },
+      { computerId: "c-default-cloud", provider: "codex", isPublic: true, unavailableCode: null },
+    ],
+    readMany: async (keys) => {
+      expect(keys).toHaveLength(1);
+      expect(keys[0]?.computerId).toBe("c-theirs");
+      expect(keys[0]?.provider).toBe("codex");
+      return [fullReading];
+    },
+  });
+  expect(adminResult.get("c-default-cloud")).toBeUndefined();
+  expect(adminResult.get("c-theirs")?.["claude-code"]).toBeUndefined();
+  expect(adminResult.get("c-theirs")?.codex?.result?.snapshot?.credits?.balance).toBeUndefined();
+  expect(adminResult.get("c-theirs")?.codex?.result?.message).toBeUndefined();
+  expect(adminResult.get("c-theirs")?.codex?.result?.snapshot?.primary?.usedPercent).toBe(80);
+});

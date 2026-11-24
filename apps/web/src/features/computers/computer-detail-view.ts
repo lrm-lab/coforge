@@ -9,6 +9,7 @@ import type { RuntimeAuthProvider, RuntimeAuthStatus } from "@lrm/coforge-anvil"
 import type { ComputerIdentity } from "./computer-identity";
 import type { MachineStatusView } from "./computer-machine-status";
 import type { ComputerUpgradeStatus } from "./computer.schemas";
+import type { UsageReadResult } from "#src/server/centrifugo/usage-cache.server";
 
 /** What a rescan the page asked for came back with: the daemon answered, or it did not in time,
  * or it answered with a failure of its own. */
@@ -49,6 +50,7 @@ export type ComputerDetailView = ComputerIdentity & {
   };
   /** Each visible login-capable runtime's status, account fields only for those allowed them. */
   runtimeAuth?: Partial<Record<RuntimeAuthProvider, RuntimeAuthStatus>>;
+  runtimeUsages?: Partial<Record<RuntimeProvider, UsageReadResult>>;
   runtimes: {
     id: string;
     provider: RuntimeProvider;

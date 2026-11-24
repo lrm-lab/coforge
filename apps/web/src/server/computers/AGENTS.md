@@ -134,8 +134,11 @@ These rules apply to `src/server/computers/`.
   - Whether a runtime can start (`unavailableCode`) is not part of it: the Computer page withholds
     usage and sign-in from such a runtime, and only the Agent profile's `usageOffer` repeats that.
 - `runtime-usage-access.server.ts` is the gate for reading and scanning one runtime's usage
-  (`readUsage` / `scanUsage`): `canManage`, on a runtime the Computer reported. Usage carries the
-  account and plan, so never read the usage cache outside it for a viewer. What offers the usage
+  (`readUsage` / `scanUsage`): `canManage`, on a runtime the Computer reported. `computer-list-usage.server.ts`
+  is the matching cache-only batch reader for `listComputers` (`RedisUsageCache.readMany`, zero daemon
+  RPCs), enforcing `defaultCloudComputerHiddenFromViewer`, `canManage`, `runtimeVisibleToViewer`, and
+  `drawnReading`. Usage carries the account and plan, so never read the usage cache outside these two
+  gates for a viewer. What offers the usage
   asks `usageOffer`, never its own rule: the Agent profile's `runtimeUsageVisible` (readable and
   able to start, as the Computer page) and runtime version come from it (`runtime-usage-composition.server.ts` builds it for both).
   - Only the Computer's owner (the runtime row's `ownerId`) reads the cached reading whole. Anyone
@@ -143,8 +146,9 @@ These rules apply to `src/server/computers/`.
     Computer reports reaches them only once the popover draws it and it is added there. The credit
     balance, `lastAttemptAt` and the snapshot's own `collectedAt` never go, and a failure's
     `message` only as the one line the popover compares it with.
-  - The snapshot reaches a browser only through `readUsage`: `scanUsage` returns the scan id,
-    `readResetCredit` the outcome, and the reset reading goes to the usage cache.
+  - The snapshot reaches a browser only through `readUsage` or `listComputers` (`readListRuntimeUsages`):
+    `scanUsage` returns the scan id, `readResetCredit` the outcome, and the reset reading goes to the
+    usage cache.
   - A scan already in flight for the runtime is joined, not started again
     (`createUsageScan`, `../centrifugo/AGENTS.md`). The id it hands back reads nothing by itself:
     `readUsage` is keyed by the caller's own authorized Workspace, Computer and runtime.

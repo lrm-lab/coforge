@@ -4,7 +4,6 @@ import {
   SCAN_RESULT_STALE_AFTER_MS,
   SCAN_RESULT_TTL_SECONDS,
   SCAN_TTL_SECONDS,
-  readScanResult,
   scanResultKeys,
   type ScanResultRedisPort,
 } from "./scan-result-cache.server";
@@ -180,10 +179,11 @@ export interface UsageCache {
   endScan(key: UsageCacheKey): Promise<void>;
   putResult(record: UsageResultRecord): Promise<void>;
   read(key: UsageCacheKey): Promise<UsageReadResult>;
+  readMany?(keys: readonly UsageCacheKey[]): Promise<UsageReadResult[]>;
 }
 
-/** This cache writes several keys per result, so its port carries `eval`. */
 type UsageCacheRedis = ScanResultRedisPort & {
+  mget?(...keys: string[]): Promise<Array<string | null>>;
   eval(
     script: string,
     numberOfKeys: number,
@@ -265,33 +265,34 @@ export class RedisUsageCache implements UsageCache {
   async read(key: UsageCacheKey): Promise<UsageReadResult> {
     const scope = this.scopeKey(key);
     const keys = scanResultKeys(scope);
-    const [reading, attemptRaw] = await Promise.all([
-      readScanResult<UsageResultRecord>(this.redis, keys, USAGE_STALE_AFTER_MS, this.now()),
+    const [resultRaw, scanRaw, attemptRaw] = await Promise.all([
+      this.redis.get(keys.result),
+      this.redis.get(keys.scan),
       this.redis.get(`${scope}:attempt`),
     ]);
-    const attempt = parseJson<UsageAttempt>(attemptRaw);
-    const pendingScanId = reading.pendingScanId;
-    const lastSuccess = reading.result;
-    if (!attempt) {
-      // A cache written before attempts were recorded: judge the reading on its own time.
-      return lastSuccess
-        ? withState(
-            lastSuccess.collectedAt,
-            USAGE_STALE_AFTER_MS,
-            this.now(),
-            lastSuccess,
-            pendingScanId,
-          )
-        : { state: "missing", pendingScanId };
+    return assembleUsageRead(key, resultRaw, scanRaw, attemptRaw, this.now());
+  }
+
+  async readMany(keys: readonly UsageCacheKey[]): Promise<UsageReadResult[]> {
+    if (keys.length === 0) return [];
+    if (!this.redis.mget) {
+      return Promise.all(keys.map((key) => this.read(key)));
     }
-    const window =
-      attempt.status === "available" ? USAGE_STALE_AFTER_MS : FAILED_USAGE_STALE_AFTER_MS;
-    return withState(
-      attempt.occurredAt,
-      window,
-      this.now(),
-      mergedResult(key, attempt, lastSuccess),
-      pendingScanId,
+    const redisKeys = keys.flatMap((key) => {
+      const scope = this.scopeKey(key);
+      const scanKeys = scanResultKeys(scope);
+      return [scanKeys.result, scanKeys.scan, `${scope}:attempt`];
+    });
+    const values = await this.redis.mget(...redisKeys);
+    const now = this.now();
+    return keys.map((key, index) =>
+      assembleUsageRead(
+        key,
+        values[index * 3] ?? null,
+        values[index * 3 + 1] ?? null,
+        values[index * 3 + 2] ?? null,
+        now,
+      ),
     );
   }
 
@@ -303,6 +304,33 @@ export class RedisUsageCache implements UsageCache {
       version: "v2",
     })}:${encodeURIComponent(key.provider)}`;
   }
+}
+
+function assembleUsageRead(
+  key: UsageCacheKey,
+  resultRaw: string | null,
+  scanRaw: string | null,
+  attemptRaw: string | null,
+  now: number,
+): UsageReadResult {
+  const lastSuccess = parseJson<UsageResultRecord>(resultRaw);
+  const scan = parseJson<{ status: "pending"; scanId: string }>(scanRaw);
+  const pendingScanId = scan?.status === "pending" ? scan.scanId : undefined;
+  const attempt = parseJson<UsageAttempt>(attemptRaw);
+  if (!attempt) {
+    return lastSuccess
+      ? withState(lastSuccess.collectedAt, USAGE_STALE_AFTER_MS, now, lastSuccess, pendingScanId)
+      : { state: "missing", pendingScanId };
+  }
+  const window =
+    attempt.status === "available" ? USAGE_STALE_AFTER_MS : FAILED_USAGE_STALE_AFTER_MS;
+  return withState(
+    attempt.occurredAt,
+    window,
+    now,
+    mergedResult(key, attempt, lastSuccess),
+    pendingScanId,
+  );
 }
 
 function withState(
@@ -352,7 +380,9 @@ function mergedResult(
 function parseJson<T>(value: string | null): T | undefined {
   if (!value) return undefined;
   try {
-    return JSON.parse(value) as T;
+    const parsed: unknown = JSON.parse(value);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
+    return parsed as T;
   } catch {
     return undefined;
   }
