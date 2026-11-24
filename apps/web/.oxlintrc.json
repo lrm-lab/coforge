@@ -7,6 +7,8 @@
     "coforge/no-native-button": "error",
     "coforge/no-native-select": "error",
     "coforge/no-native-title": "error",
-    "coforge/one-avatar": "error"
+    "coforge/one-avatar": "error",
+    "coforge/no-handrolled-toolbar": "warn",
+    "coforge/prefer-on-press": "warn"
   }
 }

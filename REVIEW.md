@@ -13,6 +13,7 @@ Report a finding only when the change, as written, can produce one of these:
 - **Rule squeeze:** comments, documentation or assertions deleted, tests skipped, or `--no-verify` used to get past the size ratchet or another hard rule.
 - **Unverified claim:** the commit message reports a check, screenshot or measurement that the evidence does not support, or UI evidence taken from a different revision than the one under review.
 - **Performance regression:** one of these four kinds — a new N+1 on a hot path, an unbounded `findMany` or an over-fetch, work inside a lock or transaction that belongs outside it, or serial awaits that could run in parallel — found by applying the [perf-scan](.agents/skills/perf-scan/SKILL.md) checklist for the area the change touches to the changed code only. Other patterns on that checklist are suggestions, not failures.
+- **Official-docs drift:** hand-rolling a widget role or keyboard interaction an installed React Aria or Untitled UI primitive already ships, using a deprecated or discouraged API/handler when the official one is directly supported (such as `onClick` on React Aria `Button`), or violating a documented framework SSR/theme/accessibility/motion contract — found by checking the changed code against current official docs and installed version-pinned skills via [official-docs-review](.agents/skills/official-docs-review/SKILL.md).
 
 ## What to check, by kind of change
 

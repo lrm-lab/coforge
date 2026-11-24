@@ -34,7 +34,8 @@ Every item below must be completed before committing a visual `feat` or `fix` UI
    - Record both **what scenarios ran** and **what was fixed or verified clean**.
 4. **Skills used**:
    - Name each skill used (`ui-delivery`, `modern-web-guidance`, `emil-design-eng` / `apple-design`, `unslop`, `animate`, `break-ui`, etc.) and the specific problem each solved.
-5. **Local checks, test policy & branch `web-e2e`**:
+5. **Local checks, official-docs review, test policy & branch `web-e2e`**:
+   - Run [`official-docs-review`](../official-docs-review/SKILL.md) over the diff (React Aria primitives, `onPress`, Tailwind v4 tokens/motion, WAI-ARIA) before pushing.
    - Run `mise run test`, `mise run check` and `mise run build` locally before pushing the branch.
    - **UI 改动不新增浏览器 e2e（Frank 11-17）**：do not add browser e2e specs or component-render unit tests ([`docs/agents/testing.md`](../../../docs/agents/testing.md#ui-verification-policy)) for ordinary UI changes. Cover logic and interactions with pure unit tests, server/DB integration tests or `ui:sweep`, and run existing `web-e2e` on the branch to verify nothing regressed. New browser e2e specs are reserved strictly for critical end-to-end user flows (`E2E-Flow:` commit description).
    - Push the feature branch and report the affected existing browser e2e specs in the task reply so the coordinator (`@coforge-raft`) schedules `web-e2e` (workflows share one pending slot; do not self-dispatch unless asked). Read every e2e result line before reporting pass or pushing to `main`.

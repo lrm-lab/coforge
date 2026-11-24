@@ -146,3 +146,9 @@ files the area checklist's "Read first" names, against the
 `web-client`, else `generic`). Fix before pushing a new N+1 on a hot path, an unbounded `findMany` or
 over-fetch, work inside a lock or transaction that belongs outside it, and serial awaits that could run
 in parallel; every other finding goes in the task thread and does not block the push.
+
+It also includes an official-docs best-practices pass over the same diff using
+[official-docs-review](../../.agents/skills/official-docs-review/SKILL.md): check every touched framework
+or library surface (React Aria, Untitled UI, Tailwind CSS v4, TanStack, Prisma, Bun, Web/WAI-ARIA)
+against its current official documentation or installed version-pinned skill, and fix hand-rolled
+primitives, deprecated/discouraged APIs, or documented contract violations before pushing.

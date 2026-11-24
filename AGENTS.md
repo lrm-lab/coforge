@@ -52,7 +52,7 @@ Details and the incidents behind these rules are in [delivery](docs/agents/deliv
 - A CR or direct-push commit message records scope, decisions, sources, checks, risks, follow-ups and the Agent session. Read [the commit message rules](docs/agents/git-hooks/hard-rules.md) when splitting commits or touching a high-risk path ([the list](scripts/ci/high-risk-paths.txt)).
 - Keep required CI short; a task is complete only after the checks pass and the change is on `main`.
 - Remove an export or mechanism completely: implementation, tests and every assertion that pins it.
-- Run `simplify` and an independent review (including the performance pass) before pushing.
+- Run `simplify` and an independent review (including the performance pass and official-docs pass) before pushing.
 
 ## Testing
 
