@@ -34,7 +34,7 @@ export const memorySuggestionCommand = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const { db, workspaceId, user } = context;
     if (Bun.env.COFORGE_TEAM_MEMORY_REVIEW !== "true")
-      return { kind: "error" as const, error: "disabled" as const };
+      return { kind: "error" as const, error: "review_disabled" as const };
     try {
       const actor = { workspaceId, userId: user.id };
       if (data.operation === "list")

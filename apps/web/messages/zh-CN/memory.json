@@ -66,6 +66,7 @@
   "memory_historical": "历史版本",
   "memory_choose_agent": "选择你自己的一个 Agent，管理它的个人记忆。",
   "memory_review_tab": "待审",
+  "memory_review_disabled": "当前环境未启用团队记忆审核。",
   "memory_review_submit": "提交审阅",
   "memory_review_scan": "检查积压",
   "memory_review_scan_result": "已检查 {inspected} 条记忆，发现 {suggested} 条新建议。",

@@ -38,11 +38,11 @@ coforge memory history --key preview-domain
 coforge memory get --key preview-domain --revision '<historical hash>'
 ```
 
-Search covers MEMORY.md and Markdown under notes, excluding history and symlinks. It uses exact
-terms and Chinese character pairs, not an embedding service. Results are short excerpts, not whole
-files. Read the named file for full evidence. Search ranks up to 1,024 files per page within a
-bounded read budget. If `nextOffset`
-is returned, continue with `--offset`. An incomplete search is not evidence that nothing was saved.
+Search uses exact terms and Chinese character pairs over MEMORY.md and Markdown under notes,
+excluding history and symlinks. Read the named file for full evidence. Search ranks up to 1,024 files
+per page within a bounded read budget. Continue with `--offset` when `nextOffset` is returned.
+Malformed files in `notes/knowledge/` make search incomplete and are preserved on save. Keep plain
+Markdown elsewhere under `notes/`. An incomplete search cannot establish that nothing was saved.
 Files over 512 KiB and a directory scan exceeding its bound require a narrower/reorganized source.
 
 The startup block contains partial excerpts, not an inventory of everything remembered. Missing

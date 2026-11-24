@@ -43,3 +43,32 @@ test("non-conflict memory errors do not suggest overwriting an entry", async () 
     suggestedNextAction: undefined,
   });
 });
+
+test("a malformed memory file names the blocked path and keeps the original text", async () => {
+  spyOn(globalThis, "fetch").mockResolvedValue(
+    Response.json(
+      { errorCode: "memory_invalid_file", error: "memory_invalid_file" },
+      { status: 400 },
+    ),
+  );
+  const invocation = parseMemoryArgs([
+    "save",
+    "--key",
+    "lesson",
+    "--title",
+    "Lesson",
+    "--content",
+    "Confirmed",
+    "--source",
+    "Task 1",
+  ]);
+  if (invocation.scope === "team") throw new Error("Expected local command");
+  const failure = await client().memory!(invocation.request).catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(CliError);
+  const error = failure as CliError;
+  expect(error.code).toBe("MEMORY_INVALID_FILE");
+  expect(error.retryable).toBe(false);
+  expect(error.suggestedNextAction).toContain("notes/knowledge/lesson.md");
+  expect(error.suggestedNextAction).toContain("Preserve the original text");
+  expect(error.suggestedNextAction).not.toContain("--revision");
+});

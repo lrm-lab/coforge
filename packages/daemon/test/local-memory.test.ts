@@ -90,6 +90,21 @@ test("simultaneous updates cannot both replace the same version", async () => {
   expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
 });
 
+test("plain Markdown in the knowledge directory makes search incomplete and is preserved on save", async () => {
+  const { root, memory } = await subject();
+  const path = join(root, "notes/knowledge", `${purchased.key}.md`);
+  const original = "# Preview domain\nRemember filing status.\n";
+  await mkdir(join(root, "notes/knowledge"), { recursive: true });
+  await Bun.write(path, original);
+
+  expect(await memory.execute({ operation: "search", query: "filing status" })).toEqual({
+    entries: [],
+    incomplete: true,
+  });
+  await expect(memory.execute(purchased)).rejects.toThrow("memory_invalid_file");
+  expect(await Bun.file(path).text()).toBe(original);
+});
+
 test("search sees manual edits and long legacy notes without loading code or history", async () => {
   const { root, memory } = await subject();
   await mkdir(join(root, "notes"));

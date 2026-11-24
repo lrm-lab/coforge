@@ -28,12 +28,17 @@ export function memoryRequests(endpoint: (path: string) => URL, context: string,
           return { errorCode: value.errorCode, error: value.error };
         },
         "memory",
-        (code) =>
-          code === "memory_conflict"
-            ? body.operation === "save"
+        (code) => {
+          if (
+            code === "memory_invalid_file" &&
+            (body.operation === "save" || body.operation === "archive")
+          )
+            return `Preserve the original text at notes/knowledge/${body.key}.md. For an ordinary note, move it under notes/ outside the knowledge directory before saving a verified entry with coforge memory save. For a damaged entry, inspect its file and revision history before editing.`;
+          if (code === "memory_conflict")
+            return body.operation === "save"
               ? `Run coforge memory get --key ${body.key}, read the full entry and compare sources. Update it with coforge memory save --key ${body.key} --revision '<returned revision>' and the full --title, --content and --source fields; preserve its kind and applicability. Do not delete the file or retry with a guessed revision.`
-              : "Read the current memory and compare before updating it."
-            : undefined,
+              : "Read the current memory and compare before updating it.";
+        },
       ),
   };
 }
