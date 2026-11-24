@@ -1,6 +1,34 @@
-import type { ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { cx } from "#src/utils/cx";
+
+const SINGLE_ROW_MIN_HEADER_PX = 512;
+const SINGLE_ROW_MIN_IDENTITY_PX = 120;
+const SINGLE_ROW_COLUMN_GAP_PX = 20;
+
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+export function shouldStackTabbedHeader({
+  headerWidth,
+  contentWidth,
+  tabsWidth,
+  actionsWidth,
+  hasActions,
+}: {
+  headerWidth: number;
+  contentWidth: number;
+  tabsWidth: number;
+  actionsWidth: number;
+  hasActions: boolean;
+}) {
+  if (headerWidth <= 0 || contentWidth <= 0 || tabsWidth <= 0) return false;
+  if (headerWidth < SINGLE_ROW_MIN_HEADER_PX) return true;
+  const gaps = hasActions ? SINGLE_ROW_COLUMN_GAP_PX * 2 : SINGLE_ROW_COLUMN_GAP_PX;
+  const required = SINGLE_ROW_MIN_IDENTITY_PX + tabsWidth + actionsWidth + gaps;
+  return contentWidth < required;
+}
+
+type HeaderLayoutMode = "auto" | "single" | "stacked";
 
 export function TabbedHeader({
   identity,
@@ -15,16 +43,81 @@ export function TabbedHeader({
   tabsStart?: boolean;
   className?: string;
 }) {
+  const headerRef = useRef<HTMLElement>(null);
+  const actionsRef = useRef<HTMLDivElement>(null);
+  const tabsMeasureRef = useRef<HTMLDivElement>(null);
+  const [layoutMode, setLayoutMode] = useState<HeaderLayoutMode>("auto");
+
+  const hasTabs = Boolean(tabs);
+  const hasActions = Boolean(actions);
+
+  useIsomorphicLayoutEffect(() => {
+    if (!hasTabs) {
+      setLayoutMode("auto");
+      return;
+    }
+    const header = headerRef.current;
+    const tabsMeasure = tabsMeasureRef.current;
+    if (!header || !tabsMeasure) return;
+
+    const measure = () => {
+      const style = getComputedStyle(header);
+      const paddingX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
+      const contentWidth = header.clientWidth - paddingX;
+      const tabsWidth = Math.ceil(tabsMeasure.getBoundingClientRect().width);
+      const actionsWidth = actionsRef.current
+        ? Math.ceil(actionsRef.current.getBoundingClientRect().width)
+        : 0;
+      const next: HeaderLayoutMode = shouldStackTabbedHeader({
+        headerWidth: header.clientWidth,
+        contentWidth,
+        tabsWidth,
+        actionsWidth,
+        hasActions,
+      })
+        ? "stacked"
+        : "single";
+      setLayoutMode((prev) => (prev === next ? prev : next));
+    };
+
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(header);
+    observer.observe(tabsMeasure);
+    if (actionsRef.current) observer.observe(actionsRef.current);
+    return () => observer.disconnect();
+  }, [hasTabs, hasActions]);
+
+  const singleRow = layoutMode === "single";
+  const stacked = layoutMode === "stacked";
+
   return (
     <div className="@container/tabbed-header shrink-0">
       <header
+        ref={headerRef}
+        data-header-layout={layoutMode}
         className={cx(
-          "relative grid grid-cols-[minmax(0,1fr)_auto] border-b border-secondary px-4 md:px-6 @lg/tabbed-header:gap-x-5",
-          tabs &&
-            "before:pointer-events-none before:absolute before:inset-x-0 before:top-[calc(--spacing(12)-1px)] before:border-t before:border-secondary @lg/tabbed-header:before:hidden",
-          tabsStart
-            ? "@lg/tabbed-header:grid-cols-[auto_minmax(0,1fr)_auto]"
-            : "@lg/tabbed-header:grid-cols-[minmax(0,auto)_auto_minmax(max-content,1fr)]",
+          "relative grid border-b border-secondary px-4 md:px-6",
+          singleRow && [
+            "gap-x-5",
+            tabsStart
+              ? "grid-cols-[auto_minmax(0,1fr)_auto]"
+              : "grid-cols-[minmax(0,auto)_max-content_minmax(max-content,1fr)]",
+          ],
+          stacked && [
+            "grid-cols-[minmax(0,1fr)_auto]",
+            hasTabs &&
+              "before:pointer-events-none before:absolute before:inset-x-0 before:top-[calc(--spacing(12)-1px)] before:border-t before:border-secondary",
+          ],
+          layoutMode === "auto" && [
+            "grid-cols-[minmax(0,1fr)_auto] @lg/tabbed-header:gap-x-5",
+            hasTabs &&
+              "before:pointer-events-none before:absolute before:inset-x-0 before:top-[calc(--spacing(12)-1px)] before:border-t before:border-secondary @lg/tabbed-header:before:hidden",
+            tabsStart
+              ? "@lg/tabbed-header:grid-cols-[auto_minmax(0,1fr)_auto]"
+              : "@lg/tabbed-header:grid-cols-[minmax(0,auto)_max-content_minmax(max-content,1fr)]",
+          ],
           className,
         )}
       >
@@ -32,20 +125,41 @@ export function TabbedHeader({
           {identity}
         </div>
         {actions && (
-          <div className="col-start-2 row-start-1 flex items-center justify-self-end @lg/tabbed-header:col-start-3">
+          <div
+            ref={actionsRef}
+            className={cx(
+              "row-start-1 flex items-center justify-self-end",
+              singleRow && "col-start-3",
+              stacked && "col-start-2",
+              layoutMode === "auto" && "col-start-2 @lg/tabbed-header:col-start-3",
+            )}
+          >
             {actions}
           </div>
         )}
         {tabs && (
           <div
             className={cx(
-              "col-span-2 row-start-2 flex min-w-0 max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden @lg/tabbed-header:col-span-1 @lg/tabbed-header:col-start-2 @lg/tabbed-header:row-start-1",
-              tabsStart
-                ? "items-center py-2 @lg/tabbed-header:py-0"
-                : "-mb-px items-end pt-2 @lg/tabbed-header:pt-0",
+              "flex min-w-0 max-w-full",
+              singleRow && [
+                "col-span-1 col-start-2 row-start-1",
+                tabsStart ? "items-center py-0" : "-mb-px items-end pt-0",
+              ],
+              stacked && [
+                "col-span-2 row-start-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+                tabsStart ? "items-center py-2" : "-mb-px items-end pt-2",
+              ],
+              layoutMode === "auto" && [
+                "col-span-2 row-start-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden @lg/tabbed-header:col-span-1 @lg/tabbed-header:col-start-2 @lg/tabbed-header:row-start-1",
+                tabsStart
+                  ? "items-center py-2 @lg/tabbed-header:py-0"
+                  : "-mb-px items-end pt-2 @lg/tabbed-header:pt-0",
+              ],
             )}
           >
-            {tabs}
+            <div ref={tabsMeasureRef} className="w-max shrink-0">
+              {tabs}
+            </div>
           </div>
         )}
       </header>
