@@ -56,6 +56,10 @@ export function reasoningFieldState(
   return { visible: efforts.length > 0, submitted: efforts.includes(reasoning) ? reasoning : "" };
 }
 
+export function runtimeRequiresModel(provider: RuntimeProvider): boolean {
+  return provider === RUNTIME_PROVIDER.ANTIGRAVITY;
+}
+
 /**
  * Whether the Fast mode choice renders and what the form submits for it. The runtime alone
  * decides: the ones whose adapters apply a service tier (Claude Code, Codex) offer it

@@ -61,6 +61,9 @@ export function ModelComboBox({
   selectedKey,
   onSelectionChange,
   isDisabled,
+  isRequired,
+  isInvalid,
+  hint,
   className,
   popoverClassName,
   refresh,
@@ -71,12 +74,16 @@ export function ModelComboBox({
   selectedKey: string;
   onSelectionChange: (key: string) => void;
   isDisabled?: boolean;
+  isRequired?: boolean;
+  isInvalid?: boolean;
+  hint?: string;
   className?: string;
   popoverClassName?: string;
   refresh?: ModelListRefresh;
 }) {
   const controlSize = useDialogControlSize();
-  const selectedLabel = choices.find((choice) => choice.id === selectedKey)?.label ?? "";
+  const selectedChoice = choices.find((choice) => choice.id === selectedKey);
+  const selectedLabel = selectedChoice?.label ?? "";
   const [query, setQuery] = useState<string | null>(null);
   const shown = useMemo(() => {
     const matches = searchModelChoices(choices, query ?? "", pinned).map(({ id, label }) => ({
@@ -111,11 +118,15 @@ export function ModelComboBox({
       className={className}
       popoverClassName={popoverClassName}
       isDisabled={isDisabled}
+      isRequired={isRequired}
+      validationBehavior={isRequired ? "aria" : undefined}
+      isInvalid={isInvalid}
+      hint={hint}
       items={shown}
       defaultFilter={showEverything}
       inputValue={query ?? selectedLabel}
       onInputChange={(value) => setQuery(value === selectedLabel ? null : value)}
-      selectedKey={selectedKey}
+      selectedKey={selectedChoice ? selectedKey : null}
       onSelectionChange={(key: Key | null) => {
         setQuery(null);
         if (key === EMPTY_KEY) return;

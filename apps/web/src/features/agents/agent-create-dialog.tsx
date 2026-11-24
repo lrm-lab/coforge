@@ -21,7 +21,7 @@ import {
 import { m } from "#src/paraglide/messages";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { AGENT_VISIBILITY } from "./agent-visibility";
-import { agentCreateErrorMessage, sizesFromForm } from "./agent-form";
+import { agentCreateErrorMessage, agentCreateModelError, sizesFromForm } from "./agent-form";
 import { AgentOptionCard } from "./agent-option-card";
 import { AgentRuntimeFields, type RuntimeCatalog } from "./agent-runtime-fields";
 import { AgentRuntimeSignInNotice } from "./agent-runtime-sign-in-notice";
@@ -109,6 +109,7 @@ export function LocalAgentForm({
   const workspaceSlug = useWorkspaceSlug();
   const router = useRouter();
   const [error, setError] = useState("");
+  const [modelError, setModelError] = useState("");
   const [initialComputerId] = useState(defaults?.computerId ?? computers[0]?.id ?? "");
   const [computerId, setComputerId] = useState(initialComputerId);
   const [isPrivate, setIsPrivate] = useState(false);
@@ -138,11 +139,19 @@ export function LocalAgentForm({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setModelError("");
     const form = new FormData(event.currentTarget);
     const name = finishedAgentUsername(String(form.get("name") ?? ""));
     const description = String(form.get("description") ?? "").trim();
+    const provider = parseRuntimeProvider(form.get("provider")) ?? RUNTIME_PROVIDER.COFORGE;
+    const model = String(form.get("model") ?? "").trim();
     if (!name) {
       setError(m.agent_form_username_required());
+      return;
+    }
+    const nextModelError = agentCreateModelError(provider, model);
+    if (nextModelError) {
+      setModelError(nextModelError);
       return;
     }
     await guard(async () => {
@@ -150,8 +159,8 @@ export function LocalAgentForm({
         await onCreate({
           name,
           description,
-          provider: parseRuntimeProvider(form.get("provider")) ?? RUNTIME_PROVIDER.COFORGE,
-          model: String(form.get("model") ?? "").trim() || undefined,
+          provider,
+          model: model || undefined,
           modelProvider: String(form.get("modelProvider") ?? "").trim() || undefined,
           reasoning: String(form.get("reasoning") ?? "").trim(),
           fastMode: form.get("fastMode") === "true",
@@ -243,7 +252,10 @@ export function LocalAgentForm({
                 });
                 return;
               }
-              if (key !== null) setComputerId(String(key));
+              if (key !== null) {
+                setComputerId(String(key));
+                setModelError("");
+              }
             }}
           >
             {computers.map((computer) => (
@@ -281,6 +293,9 @@ export function LocalAgentForm({
             open
             computerId={computerId}
             initial={preferredRuntime(computer)}
+            enforceRequiredModel
+            modelError={modelError}
+            onModelErrorClear={() => setModelError("")}
             onDirtyChange={setRuntimeChanged}
             providerNotice={(provider) =>
               computer &&

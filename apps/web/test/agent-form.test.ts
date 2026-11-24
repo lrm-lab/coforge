@@ -1,11 +1,14 @@
 import { expect, test } from "bun:test";
+import { RUNTIME_PROVIDER, RUNTIME_PROVIDER_VALUES } from "@lrm/coforge-sdk/internal";
 import { AppError, isAppError } from "#src/lib/app-error";
 import {
+  agentCreateModelError,
   agentEnvironmentNameError,
   agentUpdateErrorMessage,
   agentEnvironmentRowsChanged,
   parseAgentEnvironmentFromForm,
 } from "#src/features/agents/agent-form";
+import { runtimeRequiresModel } from "#src/features/agents/agent-runtime-fields";
 import { m } from "#src/paraglide/messages";
 
 function formWithEnvRows(rows: { key: string; value: string }[]) {
@@ -158,4 +161,30 @@ test("AppError details round-trip through the wire message", () => {
   expect(isAppError(wire)).toBe(true);
   expect((wire as unknown as AppError).details).toEqual({ reason: "not_connected" });
   expect(agentUpdateErrorMessage(wire)).toMatch(/not connected|未连接/i);
+});
+
+test("runtimeRequiresModel is true only for Antigravity", () => {
+  expect(runtimeRequiresModel(RUNTIME_PROVIDER.ANTIGRAVITY)).toBe(true);
+  for (const provider of RUNTIME_PROVIDER_VALUES) {
+    if (provider === RUNTIME_PROVIDER.ANTIGRAVITY) continue;
+    expect(runtimeRequiresModel(provider)).toBe(false);
+  }
+});
+
+test("agentCreateModelError blocks empty Antigravity model and leaves other runtimes unchanged", () => {
+  expect(agentCreateModelError(RUNTIME_PROVIDER.ANTIGRAVITY, "")).toBe(
+    m.agent_form_model_required(),
+  );
+  expect(agentCreateModelError(RUNTIME_PROVIDER.ANTIGRAVITY, "   ")).toBe(
+    m.agent_form_model_required(),
+  );
+  expect(
+    agentCreateModelError(RUNTIME_PROVIDER.ANTIGRAVITY, "gemini-3.1-pro-high"),
+  ).toBeUndefined();
+  expect(agentCreateModelError(RUNTIME_PROVIDER.ANTIGRAVITY, " gemini-3-flash ")).toBeUndefined();
+  for (const provider of RUNTIME_PROVIDER_VALUES) {
+    if (provider === RUNTIME_PROVIDER.ANTIGRAVITY) continue;
+    expect(agentCreateModelError(provider, "")).toBeUndefined();
+    expect(agentCreateModelError(provider, "   ")).toBeUndefined();
+  }
 });

@@ -25,6 +25,7 @@ interface ComboBoxProps extends Omit<AriaComboBoxProps<SelectItemType>, "childre
 interface ComboBoxValueProps extends AriaGroupProps {
     size: "sm" | "md" | "lg";
     shortcut: boolean;
+    isInvalid?: boolean;
     placeholder?: string;
     shortcutClassName?: string;
     icon?: FC | ReactNode;
@@ -33,7 +34,7 @@ interface ComboBoxValueProps extends AriaGroupProps {
     ref?: Ref<HTMLDivElement>;
 }
 
-const ComboBoxValue = ({ size, shortcut, placeholder, shortcutClassName, icon: IconProp, ref, ...otherProps }: ComboBoxValueProps) => {
+const ComboBoxValue = ({ size, shortcut, isInvalid, placeholder, shortcutClassName, icon: IconProp, ref, ...otherProps }: ComboBoxValueProps) => {
     const state = useContext(ComboBoxStateContext);
 
     const value = state?.selectedItem?.value || null;
@@ -45,13 +46,16 @@ const ComboBoxValue = ({ size, shortcut, placeholder, shortcutClassName, icon: I
     return (
         <AriaGroup
             ref={ref}
+            isInvalid={isInvalid}
             {...otherProps}
-            className={({ isFocusWithin, isDisabled }) =>
+            className={({ isFocusWithin, isDisabled, isInvalid }) =>
                 cx(
                     "relative flex w-full items-center gap-2 outline-hidden",
                     FIELD_STATES.box,
                     isDisabled && FIELD_STATES.disabled,
                     isFocusWithin && !isDisabled && FIELD_STATES.typing,
+                    isInvalid && FIELD_STATES.invalid,
+                    isInvalid && isFocusWithin && !isDisabled && FIELD_STATES.invalidTyping,
 
                     // Icon styles
                     "*:data-icon:shrink-0 *:data-icon:text-fg-quaternary",
@@ -140,13 +144,14 @@ export const ComboBox = ({
                 {(state) => (
                     <div className="flex flex-col gap-1.5">
                         {otherProps.label && (
-                            <Label isRequired={hideRequiredIndicator ? false : state.isRequired} tooltip={otherProps.tooltip}>
+                            <Label isRequired={hideRequiredIndicator ? false : state.isRequired} isInvalid={state.isInvalid} tooltip={otherProps.tooltip}>
                                 {otherProps.label}
                             </Label>
                         )}
 
                         <ComboBoxValue
                             ref={placeholderRef}
+                            isInvalid={state.isInvalid}
                             placeholder={placeholder}
                             shortcut={shortcut}
                             shortcutClassName={shortcutClassName}

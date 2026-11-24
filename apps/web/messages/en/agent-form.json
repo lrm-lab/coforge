@@ -9,6 +9,7 @@
   "agent_form_provider": "Runtime",
   "agent_form_computer": "Computer",
   "agent_form_model": "Model",
+  "agent_form_model_required": "Select a model.",
   "agent_form_model_refresh": "Refresh model catalog",
   "agent_form_model_refresh_failed": "Refresh failed. Try again.",
   "agent_form_model_refresh_latest": [

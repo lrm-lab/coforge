@@ -6,12 +6,23 @@ import {
   type AgentEnvironmentViolation,
   parseRuntimeProvider,
   RUNTIME_PROVIDER,
+  type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
 
 import { isAppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import type { UpdateAgentInput } from "./agent.schemas";
 import { submittedModelSize } from "./agent-model-sizes";
+import { runtimeRequiresModel } from "./agent-runtime-fields-state";
+
+export function agentCreateModelError(
+  provider: RuntimeProvider,
+  model: string,
+): string | undefined {
+  return runtimeRequiresModel(provider) && model.trim() === ""
+    ? m.agent_form_model_required()
+    : undefined;
+}
 
 /**
  * Builds `UpdateAgentInput` from a runtime-edit form. `displayName`/`description` are only

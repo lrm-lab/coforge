@@ -32,6 +32,7 @@ import {
   piInitialProviderChoice,
   reasoningFieldState,
   runtimeModels,
+  runtimeRequiresModel,
   splitCustomModel,
   submittedRuntimeModel,
   type RuntimeOptions,
@@ -46,12 +47,16 @@ export * from "./agent-runtime-fields-state";
 
 const CUSTOM_MODEL_KEY = "custom-model";
 const PINNED_MODEL_CHOICES: ReadonlySet<string> = new Set(["", CUSTOM_MODEL_KEY]);
+const EMPTY_PINNED_MODEL_CHOICES: ReadonlySet<string> = new Set();
 
 export function AgentRuntimeFields({
   open,
   computerId,
   initial,
   credentialConfigured = false,
+  enforceRequiredModel = false,
+  modelError,
+  onModelErrorClear,
   onLoad,
   initialOptions,
   onDirtyChange,
@@ -61,6 +66,9 @@ export function AgentRuntimeFields({
   computerId: string;
   initial?: RuntimeSelection;
   credentialConfigured?: boolean;
+  enforceRequiredModel?: boolean;
+  modelError?: string;
+  onModelErrorClear?: () => void;
   onLoad: (computerId: string) => Promise<RuntimeOptions>;
   initialOptions?: RuntimeOptions;
   onDirtyChange?: (dirty: boolean) => void;
@@ -199,15 +207,23 @@ export function AgentRuntimeFields({
     credentialConfigured &&
     initial?.provider === provider &&
     initial.modelProvider === submittedModelProvider;
+  const modelRequired = enforceRequiredModel && runtimeRequiresModel(provider);
+  const pinnedModelChoices = modelRequired ? EMPTY_PINNED_MODEL_CHOICES : PINNED_MODEL_CHOICES;
   const visibleModels = catalogModels.filter((model) => {
     if (provider === RUNTIME_PROVIDER.COFORGE) return model.modelProvider === modelProvider;
     return true;
   });
   const modelChoices: ModelChoice[] = [
-    {
-      id: "",
-      label: piConfigured ? m.agent_form_pi_provider_configured() : m.agent_form_provider_default(),
-    },
+    ...(!modelRequired
+      ? [
+          {
+            id: "",
+            label: piConfigured
+              ? m.agent_form_pi_provider_configured()
+              : m.agent_form_provider_default(),
+          },
+        ]
+      : []),
     ...(configuredModelSelected && !selectedModel && !(piConfigured && customModelActive)
       ? [{ id: initialModelKey, label: configuredModelLabel ?? "" }]
       : []),
@@ -275,6 +291,7 @@ export function AgentRuntimeFields({
           setModelProvider("");
           setPiProviderChoice("");
           resetModelFields();
+          onModelErrorClear?.();
         }}
       />
       {providerNotice?.(provider)}
@@ -335,10 +352,16 @@ export function AgentRuntimeFields({
           name="model"
           size={controlSize}
           isRequired
+          validationBehavior={modelRequired ? "aria" : undefined}
+          isInvalid={Boolean(modelError)}
+          hint={modelError || undefined}
           maxLength={200}
           defaultValue={initial?.model}
           className="min-w-0"
-          onChange={() => setManualDirty(true)}
+          onChange={() => {
+            setManualDirty(true);
+            onModelErrorClear?.();
+          }}
         />
       ) : (
         <>
@@ -349,15 +372,19 @@ export function AgentRuntimeFields({
               className="min-w-0"
               popoverClassName="min-w-(--trigger-width) w-max max-w-[min(36rem,calc(100vw-3rem))]"
               isDisabled={!options}
+              isRequired={modelRequired}
+              isInvalid={Boolean(modelError)}
+              hint={modelError || undefined}
               refresh={{
                 run: () => void catalogRefresh.refresh(),
                 busy: catalogRefresh.busy,
                 refreshing: catalogRefresh.refreshing,
               }}
               choices={modelChoices}
-              pinned={PINNED_MODEL_CHOICES}
+              pinned={pinnedModelChoices}
               selectedKey={piConfigured && customModelActive ? CUSTOM_MODEL_KEY : modelKey}
               onSelectionChange={(value) => {
+                onModelErrorClear?.();
                 if (piConfigured && value === CUSTOM_MODEL_KEY) {
                   setCustomModelActive(true);
                   setModelKey("");
