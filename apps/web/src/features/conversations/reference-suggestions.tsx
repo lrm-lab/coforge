@@ -3,7 +3,7 @@ import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Badge } from "#src/components/base/badges/badges";
 import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
-import { channelGlyph } from "./channel-name";
+import { ChannelGlyph } from "./channel-name";
 import { GroupAvatar } from "./group-avatar";
 import { mentionKey, mentionKeysShowingHandle, type Mentionable } from "./mention-text";
 import type { ChannelSuggestion, ReferenceTrigger } from "./reference-completion";
@@ -193,14 +193,16 @@ function MentionRow({ mention, showHandle }: { mention: Mentionable; showHandle:
 }
 
 function ChannelRow({ channel }: { channel: ChannelSuggestion }) {
-  const Glyph = channelGlyph(channel);
   return (
     <>
       <span aria-hidden="true" className="flex size-6 shrink-0 items-center justify-center">
         {channel.members?.length ? (
           <GroupAvatar members={channel.members} className="avatar-group-xs" />
         ) : (
-          <Glyph className={cx("size-4", channel.archived ? "text-quaternary" : "text-tertiary")} />
+          <ChannelGlyph
+            visibility={channel.visibility}
+            className={cx("size-4", channel.archived ? "text-quaternary" : "text-tertiary")}
+          />
         )}
       </span>
       <span className="grid min-w-0 flex-1 grid-cols-[minmax(0,auto)_minmax(0,1fr)] items-center gap-2">

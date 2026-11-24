@@ -149,7 +149,7 @@ export function useComputerDetailLifecycle(input: {
   const toast = useAppToast();
   const queryClient = useQueryClient();
   const mountedRef = useRef(true);
-  const mountedAtRef = useRef(Date.now());
+  const [mountedAt] = useState(() => Date.now());
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -188,13 +188,13 @@ export function useComputerDetailLifecycle(input: {
     upgradeRequestState: effectiveUpgradeRequest.state,
     storedOutcome,
     storedUpgrade,
-    mountedAt: mountedAtRef.current,
+    mountedAt,
   });
   const statusCheckPending = isUpgradeStatusCheckPending({
     followedUpgradeId,
     liveStatus,
     upgradeRequestState: effectiveUpgradeRequest.state,
-    mountedAt: mountedAtRef.current,
+    mountedAt,
   });
   const liveNotFound = liveStatus?.data === null;
   const upgrade: ComputerUpgradeOutcome | { state: "idle" } =
@@ -213,11 +213,7 @@ export function useComputerDetailLifecycle(input: {
   const activeLiveStatus =
     (liveStatus?.isError && !liveStatus.isFetching) ||
     isStaleCachedAcceptedForTerminalStored(liveStatus?.data, storedUpgrade) ||
-    isUnconfirmedPriorCachedAccepted(
-      liveStatus,
-      effectiveUpgradeRequest.state,
-      mountedAtRef.current,
-    )
+    isUnconfirmedPriorCachedAccepted(liveStatus, effectiveUpgradeRequest.state, mountedAt)
       ? undefined
       : (liveStatus?.data ?? undefined);
   const slots = computerDetailUpgradeSlotsFor(

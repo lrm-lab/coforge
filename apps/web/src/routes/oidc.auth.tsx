@@ -22,7 +22,6 @@ export const Route = createFileRoute("/oidc/auth")({
       POST: ({ request }) => answerAuthorizationForm(request),
     },
   },
-  headers: () => AUTHORIZATION_PAGE_HEADERS,
   loader: async ({ location }) => {
     const result = await getAuthorizationPage({
       data: { search: location.searchStr.replace(/^\?/, "") },
@@ -37,6 +36,7 @@ export const Route = createFileRoute("/oidc/auth")({
       });
     return { page: result.page, account: result.account, search: result.query };
   },
+  headers: () => AUTHORIZATION_PAGE_HEADERS,
   component: AppAuthorization,
 });
 

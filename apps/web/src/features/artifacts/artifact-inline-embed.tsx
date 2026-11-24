@@ -76,16 +76,16 @@ export function ArtifactInlineEmbed({
   const heightKey = `${card.id}:${resolvedVersion}`;
   const title = card.title || m.doc_untitled();
 
-  const initialHeightState = (): InlineHeightState => {
+  const [initialHeightState] = useState<InlineHeightState>(() => {
     const cached = pool.cachedHeight(heightKey);
     return {
       height: cached ?? INLINE_DEFAULT_HEIGHT_PX,
       settled: cached !== undefined,
       hostWidth: null,
     };
-  };
-  const heightStateRef = useRef<InlineHeightState>(initialHeightState());
-  const [height, setHeight] = useState(() => heightStateRef.current.height);
+  });
+  const heightStateRef = useRef<InlineHeightState>(initialHeightState);
+  const [height, setHeight] = useState(initialHeightState.height);
 
   useEffect(() => {
     const cached = pool.cachedHeight(heightKey);
@@ -287,7 +287,6 @@ function ActiveInlineEmbed({
   const handleReload = useCallback(() => {
     if (reusedFrame) {
       claimedRef.current = null;
-      reusedFrame.blocked = true;
       pool.discardFrame(reusedFrame);
       setReusedFrame(null);
       return;

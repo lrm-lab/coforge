@@ -12,7 +12,7 @@ import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-rea
 import { overviewTaskQuery } from "#src/features/tasks/use-finished-tasks";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
-import { channelGlyph } from "./channel-name";
+import { ChannelGlyph } from "./channel-name";
 import { GroupAvatar } from "./group-avatar";
 import { draftRoute, type DraftRow } from "./drafts-model";
 import { useDraftRows } from "./use-drafts";
@@ -140,10 +140,13 @@ function DraftFace({ row }: { row: DraftRow }) {
   }
   if (home.channel.members?.length)
     return <GroupAvatar members={home.channel.members} className="avatar-group-row" />;
-  const Glyph = channelGlyph(home.channel);
   return (
     <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary">
-      <Glyph aria-hidden="true" className="size-4 text-tertiary" />
+      <ChannelGlyph
+        visibility={home.channel.visibility}
+        aria-hidden="true"
+        className="size-4 text-tertiary"
+      />
     </span>
   );
 }

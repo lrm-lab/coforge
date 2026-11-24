@@ -7,7 +7,7 @@ import { m } from "#src/paraglide/messages";
 import { BackToComputers, ComputerDetailPaneActions } from "./back-to-computers";
 import { ComputerDetailInlineTitle } from "./computer-detail-title";
 import type { ComputerDetailView } from "./computer-detail-view";
-import { computerIcon } from "./computer-identity";
+import { ComputerGlyph } from "./computer-status-icon";
 
 export function ComputerDetailHeader({
   computer,
@@ -20,7 +20,6 @@ export function ComputerDetailHeader({
   onUpdateDisplayName?: (displayName: string) => Promise<void>;
   menu?: ReactNode;
 }) {
-  const Icon = computerIcon(computer);
   const statusLabel = computer.online ? m.computer_status_online() : m.computer_status_offline();
 
   return (
@@ -38,7 +37,7 @@ export function ComputerDetailHeader({
               computer.online ? "text-secondary" : "text-quaternary opacity-80",
             )}
           >
-            <Icon className="size-3.5" />
+            <ComputerGlyph kind={computer.kind} className="size-3.5" />
           </span>
           <StatusDot
             tone={computer.online ? "online" : "offline"}

@@ -1,4 +1,4 @@
-import { createContext, use, useCallback, useEffect, useRef } from "react";
+import { createContext, use, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearch } from "@tanstack/react-router";
 import { z } from "zod";
 
@@ -56,7 +56,7 @@ export function useAttachmentReviewAddress(attachmentId: string) {
 export function useAttachmentReviewAddressAmong(attachmentIds: readonly string[]) {
   const router = useRouter();
   const landing = use(ReviewLanding);
-  const token = useRef(Symbol("attachment review"));
+  const [token] = useState(() => Symbol("attachment review"));
   // Each a string or `undefined`, so an unrelated change re-renders nothing.
   const fileId = useSearch({
     strict: false,
@@ -72,8 +72,8 @@ export function useAttachmentReviewAddressAmong(attachmentIds: readonly string[]
   // Whether the landing in the address was there before this review, so closing leaves it.
   const keepsLanding = useRef(false);
   const release = useCallback(() => {
-    for (const [id, owner] of following) if (owner === token.current) following.delete(id);
-  }, []);
+    for (const [id, owner] of following) if (owner === token) following.delete(id);
+  }, [token]);
   useEffect(() => release, [release]);
   const clear = useCallback(
     () =>
@@ -93,7 +93,7 @@ export function useAttachmentReviewAddressAmong(attachmentIds: readonly string[]
   const show = useCallback(
     (attachmentId: string) => {
       release();
-      following.set(attachmentId, token.current);
+      following.set(attachmentId, token);
       const current = router.state.location.search as AttachmentReviewSearch & {
         open?: unknown;
         task?: unknown;
@@ -125,8 +125,8 @@ export function useAttachmentReviewAddressAmong(attachmentIds: readonly string[]
     follow: () => {
       if (!fileId) return false;
       const owner = following.get(fileId);
-      if (owner && owner !== token.current) return false;
-      following.set(fileId, token.current);
+      if (owner && owner !== token) return false;
+      following.set(fileId, token);
       // A link's landing is the review's: closing takes it off.
       keepsLanding.current = false;
       return true;

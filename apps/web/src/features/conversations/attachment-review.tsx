@@ -57,7 +57,7 @@ export function AttachmentReviewDialog({
   const [surface, setSurface] = useState<AnchorSurface | null>(null);
   const [jumpTo, setJumpTo] = useState<AttachmentCommentAnchor | null>(null);
   const [focusRequest, setFocusRequest] = useState(0);
-  const showComments = useEffectEvent(comments.show);
+  const showComments = comments.show;
   const anchoring = useMemo<Anchoring>(
     () => ({
       onSurface: setSurface,
@@ -67,7 +67,7 @@ export function AttachmentReviewDialog({
         showComments();
       },
     }),
-    [],
+    [showComments],
   );
   useEffect(() => {
     if (!jumpTo || !surface || comments.onPhone) return;

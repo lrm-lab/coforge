@@ -6,13 +6,13 @@ import { decodeArtifactShortId } from "#src/features/artifacts/artifact-short-id
 import { PageLoadError } from "#src/features/errors/page-load-error";
 
 export const Route = createFileRoute("/w/$workspaceSlug/artifacts/")({
-  ssr: "data-only",
   validateSearch: z.object({
     artifact: z.string().min(1).optional().catch(undefined),
     version: z.coerce.number().int().positive().optional().catch(undefined),
     comment: z.uuid().optional().catch(undefined),
     review: z.uuid().optional().catch(undefined),
   }),
+  ssr: "data-only",
   errorComponent: PageLoadError,
   component: ArtifactGalleryRoute,
 });

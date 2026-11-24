@@ -177,16 +177,19 @@ function SettingsPage() {
   const locale = savedLanguage ?? getLocale();
   const saveLanguage = useServerFn(saveLanguagePreference);
 
-  function selectSection(next: SettingsSection) {
-    if (next === "team-memory") {
-      void navigate({
-        to: "/w/$workspaceSlug/settings/memory",
-        search: { q: "", archived: false, offset: 0 },
-      });
-      return;
-    }
-    void navigate({ to: "/w/$workspaceSlug/settings", search: { section: next }, replace: true });
-  }
+  const selectSection = useCallback(
+    (next: SettingsSection) => {
+      if (next === "team-memory") {
+        void navigate({
+          to: "/w/$workspaceSlug/settings/memory",
+          search: { q: "", archived: false, offset: 0 },
+        });
+        return;
+      }
+      void navigate({ to: "/w/$workspaceSlug/settings", search: { section: next }, replace: true });
+    },
+    [navigate],
+  );
 
   const dropBindArrival = useCallback(
     () => void navigate({ search: { section }, replace: true }),
@@ -337,15 +340,17 @@ function SettingsPage() {
     await router.invalidate({ sync: true });
   }
 
-  // The page moves to the Workspace's new URL; the loaders for that URL then read it fresh.
-  async function changeWorkspaceUrl(slug: string) {
-    const workspace = await saveWorkspaceSlug({ data: { slug } });
-    await navigate({
-      to: "/w/$workspaceSlug/settings",
-      params: { workspaceSlug: workspace.slug },
-      search: { section: "workspace-profile" },
-    });
-  }
+  const changeWorkspaceUrl = useCallback(
+    async (slug: string) => {
+      const workspace = await saveWorkspaceSlug({ data: { slug } });
+      await navigate({
+        to: "/w/$workspaceSlug/settings",
+        params: { workspaceSlug: workspace.slug },
+        search: { section: "workspace-profile" },
+      });
+    },
+    [navigate, saveWorkspaceSlug],
+  );
 
   async function changeWorkspaceIcon(file: File) {
     const form = new FormData();

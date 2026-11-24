@@ -12,10 +12,12 @@ import { isAppErrorCode } from "#src/lib/app-error";
  * unknown, revoked or expired loads as `shared: null`.
  */
 export const Route = createFileRoute("/apps/share/$token")({
-  loader: async ({ params, location }) => {
+  beforeLoad: async ({ location }) => {
     const viewer = await getSignedInAccount();
     if (viewer === null) throw redirect({ to: "/login", search: { returnTo: location.href } });
     if (!viewer.named) throw nameStepRedirect(location.href);
+  },
+  loader: async ({ params }) => {
     const shared = await loadSharedApp({ data: { token: params.token } }).catch(
       (error: unknown) => {
         if (isAppErrorCode(error, "NOT_FOUND")) return null;

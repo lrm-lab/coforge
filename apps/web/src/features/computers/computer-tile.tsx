@@ -3,7 +3,8 @@ import { AlertCircle, ArrowUp } from "@untitledui/icons";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { computerIcon, type ComputerIdentity } from "./computer-identity";
+import type { ComputerIdentity } from "./computer-identity";
+import { ComputerGlyph } from "./computer-status-icon";
 
 const dims = {
   tile: "size-9",
@@ -30,8 +31,6 @@ export function ComputerTile({
   upgrading?: boolean;
   upgradeFailed?: boolean;
 }) {
-  const Icon = computerIcon(computer);
-
   return (
     <span className="relative flex shrink-0">
       <span
@@ -42,7 +41,7 @@ export function ComputerTile({
           dims.radius,
         )}
       >
-        <Icon className={dims.icon} />
+        <ComputerGlyph kind={computer.kind} className={dims.icon} />
       </span>
       {upgrading ? null : upgradeFailed ? (
         <span className={cn("absolute", dims.badgeOffset)}>

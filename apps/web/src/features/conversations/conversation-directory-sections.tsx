@@ -109,6 +109,7 @@ export function ConversationDirectorySections({
 }) {
   const pinnedEmpty = base.pinned.length === 0;
   const reordering = savingSections.has("section-order") || !orderReady;
+  const collapsedSet = new Set(collapsed);
 
   return (
     <SortableContext
@@ -150,7 +151,7 @@ export function ConversationDirectorySections({
                     count={base.pinned.length}
                     empty={pinnedEmpty}
                     headingProps={headingProps}
-                    expanded={!drag.sortingSections && !collapsed.includes("pinned")}
+                    expanded={!drag.sortingSections && !collapsedSet.has("pinned")}
                     onToggle={() => onToggleBuiltIn("pinned")}
                     trailing={sectionTrailing(base.pinned.length, pinnedMenu)}
                     wrapTitle={(toggleButton) => (
@@ -207,7 +208,7 @@ export function ConversationDirectorySections({
                     count={base.channels.length}
                     empty={base.channels.length === 0}
                     headingProps={headingProps}
-                    expanded={!drag.sortingSections && !collapsed.includes("channels")}
+                    expanded={!drag.sortingSections && !collapsedSet.has("channels")}
                     onToggle={() => onToggleBuiltIn("channels")}
                     trailing={sectionTrailing(base.channels.length, channelsMenu)}
                     wrapTitle={(toggleButton) => (
@@ -259,7 +260,7 @@ export function ConversationDirectorySections({
                     count={base.agents.length}
                     empty={base.agents.length === 0}
                     headingProps={headingProps}
-                    expanded={!drag.sortingSections && !collapsed.includes("agents")}
+                    expanded={!drag.sortingSections && !collapsedSet.has("agents")}
                     onToggle={() => onToggleBuiltIn("agents")}
                     trailing={sectionTrailing(base.agents.length, agentsMenu)}
                     wrapTitle={(toggleButton) => (

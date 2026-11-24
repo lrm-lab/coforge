@@ -30,19 +30,21 @@ function useKatexHtml(expression: string, displayMode: boolean): string {
   useEffect(() => {
     let alive = true;
     if (expression.trim()) {
-      void import("katex").then((katexMod) => {
-        if (!alive) return;
-        setRendered({
-          expression,
-          displayMode,
-          html: katexMod.default.renderToString(expression, {
+      void import("katex")
+        .then((katexMod) => {
+          if (!alive) return;
+          setRendered({
+            expression,
             displayMode,
-            output: "htmlAndMathml",
-            strict: "warn",
-            throwOnError: false,
-          }),
-        });
-      });
+            html: katexMod.default.renderToString(expression, {
+              displayMode,
+              output: "htmlAndMathml",
+              strict: "warn",
+              throwOnError: false,
+            }),
+          });
+        })
+        .catch(() => {});
     }
     return () => {
       alive = false;

@@ -1,3 +1,4 @@
+import { numberFormat } from "#src/lib/intl";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { formatFileSize } from "#src/features/files/file-meta";
@@ -16,7 +17,8 @@ export type ArtifactEntryFacts = {
 
 export function entryFactsLine(kind: ArtifactPathKind, facts: ArtifactEntryFacts | null) {
   if (!facts) return null;
-  const number = new Intl.NumberFormat(getLocale()).format;
+  const formatter = numberFormat(getLocale());
+  const number = (value: number) => formatter.format(value);
   const parts: string[] = [];
   if (kind === "pdf" && facts.pages !== undefined)
     parts.push(m.doc_facts_pages({ count: facts.pages, shown: number(facts.pages) }));

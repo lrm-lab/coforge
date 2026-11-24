@@ -6,7 +6,7 @@ import { Link as AriaLink } from "react-aria-components";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { ActorName } from "#src/features/avatars/actor-name";
-import { channelGlyph, ChannelTitle } from "#src/features/conversations/channel-name";
+import { ChannelGlyph, ChannelTitle } from "#src/features/conversations/channel-name";
 import { collageLayout } from "#src/features/conversations/collage-layout";
 import { GroupAvatar } from "#src/features/conversations/group-avatar";
 import { MessagePreview } from "#src/features/conversations/message-preview";
@@ -284,10 +284,17 @@ export function ActivityItemIcon({ item }: { item: ActivityConversationItem }) {
         <GroupAvatar members={place.members} className="avatar-group-sm" />
       </span>
     );
-  const Glyph = place.kind === "channel" ? channelGlyph(place) : Hash01;
   return (
     <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-tertiary">
-      <Glyph aria-hidden="true" className="size-4 text-fg-quaternary" />
+      {place.kind === "channel" ? (
+        <ChannelGlyph
+          visibility={place.visibility}
+          aria-hidden="true"
+          className="size-4 text-fg-quaternary"
+        />
+      ) : (
+        <Hash01 aria-hidden="true" className="size-4 text-fg-quaternary" />
+      )}
     </span>
   );
 }

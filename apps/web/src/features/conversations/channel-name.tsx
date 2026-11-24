@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from "react";
+import { Fragment, type ComponentProps, type ReactNode } from "react";
 import { Hash01, Lock01 } from "@untitledui/icons";
 import { isPrivateChannel, type ChannelVisibility } from "./channel-visibility";
 import { useChannelMembers, useChannelName } from "./channel-members";
@@ -10,6 +10,13 @@ import { cx } from "#src/utils/cx";
  * marks it. */
 export function channelGlyph(channel: { visibility: ChannelVisibility }) {
   return isPrivateChannel(channel) ? Lock01 : Hash01;
+}
+
+export function ChannelGlyph({
+  visibility,
+  ...props
+}: { visibility: ChannelVisibility } & ComponentProps<typeof Hash01>) {
+  return isPrivateChannel({ visibility }) ? <Lock01 {...props} /> : <Hash01 {...props} />;
 }
 
 /**

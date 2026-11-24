@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Copy01, Download01 } from "@untitledui/icons";
 
@@ -61,6 +61,10 @@ function pageMaxHeight(ratio: ShareRatio, width: number, stage: HTMLElement, row
  * real height, captured once, and shown as the images they became, so what is previewed is what is
  * copied or downloaded.
  */
+const noopSubscribe = () => () => {};
+const readDocumentBody = () => document.body;
+const serverDocumentBody = () => null;
+
 export function MessageShareDialog({
   messages,
   onClose,
@@ -68,6 +72,7 @@ export function MessageShareDialog({
   messages: readonly MessageView[];
   onClose: () => void;
 }) {
+  const portalRoot = useSyncExternalStore(noopSubscribe, readDocumentBody, serverDocumentBody);
   const controlSize = useDialogControlSize();
   const toast = useAppToast();
   const workspaceId = useCurrentWorkspaceId() ?? "";
@@ -238,9 +243,8 @@ export function MessageShareDialog({
           </Dialog>
         </Modal>
       </ModalOverlay>
-      {/* Out of sight, not hidden: a capture needs laid-out boxes. On the body, as the dialog's
-          opening animation would scale everything inside it, and so what is measured and drawn. */}
-      {(step.name === "measuring" || step.name === "capturing") &&
+      {portalRoot &&
+        (step.name === "measuring" || step.name === "capturing") &&
         createPortal(
           <div ref={stage} inert aria-hidden="true" className="fixed top-0 -left-[10000px]">
             {step.name === "capturing" ? (
@@ -256,7 +260,7 @@ export function MessageShareDialog({
               <MessageShareCard width={step.width} messages={messages} />
             )}
           </div>,
-          document.body,
+          portalRoot,
         )}
     </>
   );

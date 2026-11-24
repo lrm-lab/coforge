@@ -8,6 +8,7 @@ import { FileTrigger } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { useLatestCallback } from "#src/hooks/use-latest-callback";
+import { listFormat } from "#src/lib/intl";
 import { localId, composerPlaceholder } from "./composer-behavior";
 import { ComposerField, focusDraftEnd } from "./composer-field";
 import { COMPOSER_FOCUS_CLASS, COMPOSER_FRAME_CLASS } from "./composer-frame";
@@ -238,9 +239,7 @@ export function MessageComposer({
   const pendingMentions = current?.pendingMentions ?? [];
   const unresolvedNotice = unresolvedHandles.length
     ? m.conversation_unresolved_mentions({
-        handles: new Intl.ListFormat(getLocale(), { type: "conjunction" }).format(
-          unresolvedHandles.map((handle) => `@${handle}`),
-        ),
+        handles: listFormat(getLocale()).format(unresolvedHandles.map((handle) => `@${handle}`)),
       })
     : "";
   const outbox = useMessageOutbox({
@@ -418,19 +417,18 @@ export function MessageComposer({
         <PendingMentionStrip
           key={current?.sequence}
           mentions={pendingMentions}
-          onSettle={(resolutionIds, outcome) =>
+          onSettle={(resolutionIds, outcome) => {
+            const settledIds = new Set(resolutionIds);
             setUnresolved(
               (report) =>
                 report && {
                   ...report,
                   pendingMentions: report.pendingMentions.map((mention) =>
-                    resolutionIds.includes(mention.resolutionId)
-                      ? { ...mention, outcome }
-                      : mention,
+                    settledIds.has(mention.resolutionId) ? { ...mention, outcome } : mention,
                   ),
                 },
-            )
-          }
+            );
+          }}
           onRemove={(resolutionId) =>
             setUnresolved(
               (report) =>

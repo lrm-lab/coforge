@@ -51,7 +51,7 @@ export function SearchDialog({
 }) {
   const memory = useSearchMemory(workspaceId, viewerId);
   const [text, setText] = useState(intent.query ?? "");
-  const [query, setQuery] = useState(text.trim());
+  const [query, setQuery] = useState(() => text.trim());
   const [filters, setFilters] = useState<SearchFilters>(intent.filters ?? {});
   const [deferred, setDeferred] = useState(Boolean(intent.deferred));
   const scopedChannel = useSearchChannel(workspaceId, filters.channelId);

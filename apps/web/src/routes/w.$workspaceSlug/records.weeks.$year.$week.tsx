@@ -4,9 +4,6 @@ import { PageLoadError } from "#src/features/errors/page-load-error";
 import { loadMemberWeekAt } from "#src/features/records/records-member-weeks.functions";
 
 export const Route = createFileRoute("/w/$workspaceSlug/records/weeks/$year/$week")({
-  ssr: "data-only",
-  staleTime: 0,
-  errorComponent: PageLoadError,
   params: {
     parse: (raw) => {
       const year = Number(raw.year);
@@ -24,6 +21,9 @@ export const Route = createFileRoute("/w/$workspaceSlug/records/weeks/$year/$wee
       return { year: String(year), week: String(week) };
     },
   },
+  ssr: "data-only",
+  staleTime: 0,
+  errorComponent: PageLoadError,
   loader: async ({ params, parentMatchPromise }) => {
     const year = Number(params.year);
     const week = Number(params.week);

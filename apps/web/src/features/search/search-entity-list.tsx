@@ -1,4 +1,4 @@
-import { channelGlyph } from "#src/features/conversations/channel-name";
+import { ChannelGlyph } from "#src/features/conversations/channel-name";
 import { GroupAvatar } from "#src/features/conversations/group-avatar";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Link } from "@tanstack/react-router";
@@ -14,7 +14,7 @@ import {
 import { useLiveAgentDisplay } from "#src/features/agents/workspace-agents-realtime";
 import { Badge } from "#src/components/base/badges/badges";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import { computerIcon } from "#src/features/computers/computer-identity";
+import { ComputerGlyph } from "#src/features/computers/computer-status-icon";
 import { conversationRoute } from "#src/features/conversations/last-conversation";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { DURATION_S, EASE_IN, EASE_IN_OUT, EASE_OUT } from "#src/utils/motion-tokens";
@@ -194,20 +194,16 @@ function EntityMark({ entity }: { entity: SearchEntity }) {
         <GroupAvatar members={entity.members} className="avatar-group-xs" />
       </span>
     );
-  const Icon =
-    entity.kind === "channel"
-      ? channelGlyph(entity)
-      : computerIcon({
-          kind: entity.computerKind,
-          name: entity.hostname,
-          displayName: entity.name,
-        });
   return (
     <span
       aria-hidden="true"
       className="flex size-6 shrink-0 items-center justify-center rounded-md bg-secondary text-fg-quaternary"
     >
-      <Icon className="size-4" />
+      {entity.kind === "channel" ? (
+        <ChannelGlyph visibility={entity.visibility} className="size-4" />
+      ) : (
+        <ComputerGlyph kind={entity.computerKind} className="size-4" />
+      )}
     </span>
   );
 }

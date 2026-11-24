@@ -2,6 +2,7 @@ import { useHydrated } from "@tanstack/react-router";
 
 import { ProgressBarBase } from "#src/components/base/progress-indicators/progress-indicators";
 import { RelativeTime } from "#src/components/ui/relative-time";
+import { numberFormat } from "#src/lib/intl";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
@@ -151,17 +152,14 @@ export function UsageWindow({
   );
 }
 
-/** A used share as a whole percentage ("76%"): the exact credit amounts, when there are any, sit
- * under the bar, so the header does not need decimals. */
 function formatPercent(value: number) {
-  return new Intl.NumberFormat(getLocale(), { style: "percent", maximumFractionDigits: 0 }).format(
+  return numberFormat(getLocale(), { style: "percent", maximumFractionDigits: 0 }).format(
     value / 100,
   );
 }
 
-/** Credits as the locale writes numbers: grouped, at most two decimals ("7,517.29"). */
 function formatCredits(value: number) {
-  return new Intl.NumberFormat(getLocale(), { maximumFractionDigits: 2 }).format(value);
+  return numberFormat(getLocale(), { maximumFractionDigits: 2 }).format(value);
 }
 
 function creditAmounts(creditUsage: { used: number; limit: number }) {

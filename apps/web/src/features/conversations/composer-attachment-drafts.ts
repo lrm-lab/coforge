@@ -47,11 +47,10 @@ export function wasRemoved(localId: string): boolean {
 }
 
 export function removeDraftAttachments(key: string, localIds: readonly string[]): void {
-  for (const id of localIds) {
+  const removedIds = new Set(localIds);
+  for (const id of removedIds) {
     removed.add(id);
     inFlight.get(id)?.abort();
   }
-  updateDraftAttachments(key, (current) =>
-    current.filter((item) => !localIds.includes(item.localId)),
-  );
+  updateDraftAttachments(key, (current) => current.filter((item) => !removedIds.has(item.localId)));
 }

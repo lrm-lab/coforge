@@ -41,15 +41,18 @@ export const Route = createFileRoute("/w/$workspaceSlug/settings/memory_/persona
   },
   pendingComponent: MemoryPending,
   errorComponent: ({ error }) => <PageLoadError error={error} embedded />,
-  component: () => {
-    const data = Route.useLoaderData();
-    return (
-      <PersonalMemoryPage
-        search={Route.useSearch()}
-        agents={data.agents}
-        list={data.list}
-        detail={data.detail}
-      />
-    );
-  },
+  component: PersonalMemoryRoutePage,
 });
+
+function PersonalMemoryRoutePage() {
+  const data = Route.useLoaderData();
+  const search = Route.useSearch();
+  return (
+    <PersonalMemoryPage
+      search={search}
+      agents={data.agents}
+      list={data.list}
+      detail={data.detail}
+    />
+  );
+}

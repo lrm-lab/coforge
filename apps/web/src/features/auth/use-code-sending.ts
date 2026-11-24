@@ -30,7 +30,7 @@ export function useCodeSending<Problem extends string = SendProblem>({
 
   useEffect(() => {
     if (secondsLeft <= 0) return;
-    const timer = setTimeout(() => setSecondsLeft(secondsLeft - 1), 1_000);
+    const timer = setTimeout(() => setSecondsLeft((prev) => prev - 1), 1_000);
     return () => clearTimeout(timer);
   }, [secondsLeft]);
 

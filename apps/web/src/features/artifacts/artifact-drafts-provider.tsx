@@ -20,7 +20,8 @@ export function ArtifactDraftsProvider({
   children: ReactNode;
 }) {
   const { artifactId, openPanel, openThread } = useArtifactCommenting();
-  const clientKey = useRef(crypto.randomUUID());
+  const [initialClientKey] = useState(() => crypto.randomUUID());
+  const clientKey = useRef(initialClientKey);
   const [focus, setFocus] = useState<string | null>(null);
   const renewKey = useCallback(() => {
     clientKey.current = crypto.randomUUID();

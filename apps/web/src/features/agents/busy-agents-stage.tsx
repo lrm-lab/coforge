@@ -43,7 +43,7 @@ function StageMascot({
         onOpenProfile={onOpenAgent}
         triggerClassName="relative flex size-6 shrink-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-brand"
         trigger={
-          <span data-mascot-body className="block size-6 origin-[50%_94%] will-change-transform">
+          <span data-mascot-body className="block size-6 origin-[50%_94%]">
             <AvatarSticker size="xs">
               <AgentMascotView
                 mascot={agent.mascot}

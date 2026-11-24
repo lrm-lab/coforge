@@ -7,7 +7,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { cn } from "#src/lib/utils";
-import { ChannelFace, ChannelTitle, channelGlyph } from "./channel-name";
+import { ChannelFace, ChannelGlyph, ChannelTitle } from "./channel-name";
 import { ChannelSettingsPanel } from "./channel-settings-panel";
 import { channelLabel, isPrivateChannel, type ChannelVisibility } from "./channel-visibility";
 import { ChannelHeaderMemberCluster } from "./channel-header-people";
@@ -277,7 +277,6 @@ export function ChannelConversation({
     [conversationWithFreshDirectory.mentionables],
   );
   const priv = isPrivateChannel(conversation);
-  const Glyph = channelGlyph(conversation);
   const threaded = (
     <ThreadedConversation
       conversation={conversationWithFreshDirectory}
@@ -343,7 +342,12 @@ export function ChannelConversation({
           <ChannelFace
             channelId={conversation.conversationId}
             fallback={
-              <Glyph aria-hidden="true" className="size-12 text-tertiary" strokeWidth={1.5} />
+              <ChannelGlyph
+                visibility={conversation.visibility}
+                aria-hidden="true"
+                className="size-12 text-tertiary"
+                strokeWidth={1.5}
+              />
             }
           />
         ),

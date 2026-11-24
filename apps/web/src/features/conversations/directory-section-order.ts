@@ -35,14 +35,18 @@ export function directorySectionOrder(
     "agents",
   ];
   const known = new Set(defaults);
+  const seen = new Set<DirectorySectionId>();
   const order: DirectorySectionId[] = [];
   for (const entry of saved) {
     const key = keyOfStored(entry);
-    if (known.has(key) && !order.includes(key)) order.push(key);
+    if (known.has(key) && !seen.has(key)) {
+      seen.add(key);
+      order.push(key);
+    }
   }
   defaults.forEach((key, index) => {
-    if (order.includes(key)) return;
-    // After every section that precedes it by default, wherever the member moved those.
+    if (seen.has(key)) return;
+    seen.add(key);
     const after = Math.max(-1, ...defaults.slice(0, index).map((before) => order.indexOf(before)));
     order.splice(after + 1, 0, key);
   });

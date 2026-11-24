@@ -412,24 +412,31 @@ function FilePreview({ file }: { file: NonNullable<PiChatResult["file"]> }) {
               ? "image/webp"
               : undefined;
     return {
-      url: URL.createObjectURL(new Blob([bytes], { type: raster ?? "application/octet-stream" })),
+      blob: new Blob([bytes], { type: raster ?? "application/octet-stream" }),
       image: !!raster,
       text: file.status === "ok" ? new TextDecoder().decode(bytes) : null,
     };
   }, [file]);
-  useEffect(() => () => URL.revokeObjectURL(content.url), [content.url]);
+  const [url, setUrl] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    const nextUrl = URL.createObjectURL(content.blob);
+    setUrl(nextUrl);
+    return () => {
+      URL.revokeObjectURL(nextUrl);
+    };
+  }, [content.blob]);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-secondary p-3">
         <p className="min-w-0 break-all text-xs text-secondary">
           {file.path} · {formatFileSize(file.size)}
         </p>
-        {file.status !== "too_large" && (
+        {file.status !== "too_large" && url && (
           <Button
             size="sm"
             color="tertiary"
             iconLeading={Download01}
-            href={content.url}
+            href={url}
             download={file.path.split("/").at(-1)}
           >
             {m.pi_chat_files_download()}
@@ -440,7 +447,7 @@ function FilePreview({ file }: { file: NonNullable<PiChatResult["file"]> }) {
         <p className="p-3 text-sm text-tertiary">{m.pi_chat_files_large()}</p>
       ) : content.image ? (
         <div className="min-h-0 flex-1 overflow-auto p-3">
-          <img src={content.url} alt={file.path} className="max-w-full" />
+          {url && <img src={url} alt={file.path} className="max-w-full" />}
         </div>
       ) : content.text !== null ? (
         <Suspense

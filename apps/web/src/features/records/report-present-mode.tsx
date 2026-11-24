@@ -35,7 +35,8 @@ export function ReportPresentMode({
   const page = pages[index];
   const scrollerRef = useRef<HTMLDivElement>(null);
   const contentEndRef = useRef<HTMLDivElement>(null);
-  const gestureRef = useRef(initialReadingWheelGesture());
+  const [initialGesture] = useState(initialReadingWheelGesture);
+  const gestureRef = useRef(initialGesture);
   const scrollEdgeRef = useRef<ReadingEdge | null>(null);
   const indexRef = useRef(index);
   indexRef.current = index;

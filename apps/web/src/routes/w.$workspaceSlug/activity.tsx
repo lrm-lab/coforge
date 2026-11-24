@@ -47,14 +47,13 @@ export const Route = createFileRoute("/w/$workspaceSlug/activity")({
     // The open conversation's tab, Task board view and what it has open, as Chat keeps them.
     ...conversationPageSearchShape,
   }),
-  // A document link from before its own page goes there first (task #514).
-  beforeLoad: ({ params, search, location }) =>
-    redirectDocLink(params.workspaceSlug, search, location),
   loaderDeps: ({ search }) => ({
     filter: search.filter ?? "all",
     open: search.open,
     ...conversationPageLoaderDeps({ ...search, message: search.msg }),
   }),
+  beforeLoad: ({ params, search, location }) =>
+    redirectDocLink(params.workspaceSlug, search, location),
   // The list lives in the Query cache (live refreshes and paging); the loader only makes the
   // first page of this view ready. Switching views on the page does not wait for it: the cards
   // on screen stay until the next view has loaded.

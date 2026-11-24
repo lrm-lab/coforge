@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react";
 import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { formatMonthDayTime } from "#src/lib/dates";
@@ -15,6 +16,10 @@ import { groupsWithPrevious, type MessageView } from "./message-view";
  * and at the foot, quietly, where they come from. It follows the viewer's theme, as the image is
  * what they see. `height` is the least it fills, for an image of a fixed ratio.
  */
+const noopSubscribe = () => () => {};
+const readLocationHost = () => window.location.host;
+const serverLocationHost = () => "";
+
 export function MessageShareCard({
   messages,
   width,
@@ -24,6 +29,7 @@ export function MessageShareCard({
   width: number;
   height?: number;
 }) {
+  const host = useSyncExternalStore(noopSubscribe, readLocationHost, serverLocationHost);
   return (
     <div data-share-page className="flex flex-col bg-primary" style={{ width, minHeight: height }}>
       <div className="flex-1 px-6 pt-6 pb-2">
@@ -40,7 +46,7 @@ export function MessageShareCard({
           <CoForgeMark className="h-3.5" />
           CoForge
         </span>
-        <span className="truncate text-xs text-quaternary">{window.location.host}</span>
+        <span className="truncate text-xs text-quaternary">{host}</span>
       </div>
     </div>
   );

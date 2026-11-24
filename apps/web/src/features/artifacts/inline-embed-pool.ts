@@ -300,6 +300,7 @@ export function createInlineEmbedPool(
       return parkFrameInternal(frame);
     },
     discardFrame(frame) {
+      frame.blocked = true;
       const existingIndex = parked.indexOf(frame);
       if (existingIndex >= 0) parked.splice(existingIndex, 1);
       transientParked.delete(frame);

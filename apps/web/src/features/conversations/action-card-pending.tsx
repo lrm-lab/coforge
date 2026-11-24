@@ -11,7 +11,7 @@ import {
   actionCardTitle,
   type ToolActionCardView,
 } from "./action-card-labels";
-import { actionCardIcon } from "./action-card-icons";
+import { ActionCardGlyph } from "./action-card-icons";
 import { ActionCardObject } from "./action-card-object";
 
 export type ActionCardFailure = {
@@ -152,7 +152,6 @@ export function ActionCardFrame({
   minHeight?: number;
   children: ReactNode;
 }) {
-  const Icon = actionCardIcon(view.kind);
   const title = actionCardTitle(view);
   return (
     <div
@@ -165,7 +164,7 @@ export function ActionCardFrame({
     >
       <div className="flex items-center gap-2">
         <span className="flex size-6.5 shrink-0 items-center justify-center rounded-md bg-tertiary text-secondary">
-          <Icon aria-hidden="true" className="size-4" />
+          <ActionCardGlyph kind={view.kind} aria-hidden="true" className="size-4" />
         </span>
         <span className="min-w-0 flex-1 text-sm font-semibold wrap-anywhere text-primary">
           {title}

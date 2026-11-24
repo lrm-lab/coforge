@@ -14,7 +14,7 @@ import { m } from "#src/paraglide/messages";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
 import { AgentDesktopThumbnail } from "#src/features/computers/agent-desktop-thumbnail";
-import { computerIcon } from "#src/features/computers/computer-identity";
+import { ComputerGlyph } from "#src/features/computers/computer-status-icon";
 import { canOfferAgentResetCredit } from "#src/features/computers/runtime-reset-credit-state";
 import { RuntimeUsage, UsageHealthDot } from "#src/features/computers/runtime-usage";
 import { type AgentRuntimeControls } from "#src/features/agents/agent-runtime-controls";
@@ -167,13 +167,6 @@ function AgentProfileTabBody({
       size="xl"
     />
   );
-  const ComputerIcon = profile.computer
-    ? computerIcon({
-        kind: profile.computer.kind,
-        name: profile.computer.label,
-        displayName: profile.computer.label,
-      })
-    : undefined;
   return (
     // `relative` keeps absolutely positioned `sr-only` labels inside this scroll box; without
     // it they escape it and stretch the page.
@@ -248,8 +241,12 @@ function AgentProfileTabBody({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="flex items-center gap-1.5">
-                    {ComputerIcon && (
-                      <ComputerIcon className="size-4 shrink-0 text-tertiary" aria-hidden="true" />
+                    {profile.computer && (
+                      <ComputerGlyph
+                        kind={profile.computer.kind}
+                        className="size-4 shrink-0 text-tertiary"
+                        aria-hidden="true"
+                      />
                     )}
                     <span className="truncate">
                       {profile.computer?.label || m.agent_profile_computer_unassigned()}

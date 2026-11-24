@@ -18,15 +18,15 @@ export const Route = createFileRoute("/w/$workspaceSlug/_chat/channel/$channelId
     ...conversationPageSearchShape,
     message: chatMessageParamSchema,
   }),
+  loaderDeps: ({ search }) => conversationPageLoaderDeps(search),
   beforeLoad: ({ params, search, location, cause }) =>
     redirectDocLink(params.workspaceSlug, search, location, { besideChat: true, cause }),
-  loaderDeps: ({ search }) => conversationPageLoaderDeps(search),
-  remountDeps: ({ params }) => params.channelId,
   loader: ({ context, params, deps, parentMatchPromise, cause }) =>
     loadConversationPage(context.queryClient, { kind: "channel", id: params.channelId }, deps, {
       cause,
       workspaceId: () => parentMatchPromise.then(({ loaderData }) => loaderData?.workspaceId ?? ""),
     }),
+  remountDeps: ({ params }) => params.channelId,
   pendingComponent: ConversationPending,
   errorComponent: ConversationLoadError,
   component: ChannelConversationRoute,

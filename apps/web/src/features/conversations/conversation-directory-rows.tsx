@@ -8,7 +8,7 @@ import { useTimeZone } from "#src/lib/time-zone-context";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { cx } from "#src/utils/cx";
-import { ChannelTitle, channelGlyph } from "./channel-name";
+import { ChannelGlyph, ChannelTitle } from "./channel-name";
 import { channelPreviewLine } from "./channel-preview-line";
 import { isPrivateChannel, type ChannelVisibility } from "./channel-visibility";
 import type { ChatSection } from "./chat-section.schemas";
@@ -120,7 +120,6 @@ export const ChannelDirectoryRow = memo(function ChannelDirectoryRow({
   // Its members' faces when it has some, else its `#` or, private, its lock; a private channel
   // shown by its faces carries the lock before its name.
   const faces = collageLayout(channel.members.length).length > 0;
-  const Glyph = channelGlyph(channel);
   return (
     <ConversationRowMenu
       target={{
@@ -162,7 +161,8 @@ export const ChannelDirectoryRow = memo(function ChannelDirectoryRow({
             <GroupAvatar members={channel.members} />
           ) : (
             <span className="flex size-5 items-center justify-center">
-              <Glyph
+              <ChannelGlyph
+                visibility={channel.visibility}
                 aria-hidden="true"
                 className={cx("size-4", current ? "text-brand-secondary" : "text-tertiary")}
               />

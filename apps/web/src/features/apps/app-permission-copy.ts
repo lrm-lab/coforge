@@ -1,3 +1,4 @@
+import { listFormat } from "#src/lib/intl";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import type { AppPermissionGroup } from "./app-permissions";
@@ -26,9 +27,8 @@ export const APP_PERMISSION_GROUP_COPY: Record<
   },
 };
 
-/** `groups` named and joined as a sentence in the page's language. */
 export function permissionGroupList(groups: readonly AppPermissionGroup[]): string {
-  return new Intl.ListFormat(getLocale(), { type: "conjunction" }).format(
+  return listFormat(getLocale()).format(
     groups.map((group) => APP_PERMISSION_GROUP_COPY[group].label()),
   );
 }

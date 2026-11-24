@@ -181,7 +181,7 @@ export function ActivityInboxTabs({
           ref={indicator.indicatorRef}
           aria-hidden="true"
           style={indicator.style}
-          className="pointer-events-none absolute bottom-0 left-0 z-20 h-0.5 rounded-full bg-fg-brand-primary_alt will-change-transform"
+          className="pointer-events-none absolute bottom-0 left-0 z-20 h-0.5 rounded-full bg-fg-brand-primary_alt"
         />
       )}
     </div>

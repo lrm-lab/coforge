@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { getRouteApi } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { Check, Copy01 as Copy } from "@untitledui/icons";
@@ -117,6 +117,10 @@ export function InviteLinkPanel({
 
 type Action = "update" | "revoke" | "create";
 
+const noopSubscribe = () => () => {};
+const readWindowOrigin = () => window.location.origin;
+const serverWindowOrigin = () => "";
+
 function InviteLinkForm({
   inviteLink,
   link,
@@ -143,7 +147,8 @@ function InviteLinkForm({
     return () => clearTimeout(timer);
   }, [copied]);
 
-  const url = link ? `${window.location.origin}/join/${link.token}` : "";
+  const origin = useSyncExternalStore(noopSubscribe, readWindowOrigin, serverWindowOrigin);
+  const url = link && origin ? `${origin}/join/${link.token}` : "";
   const preparing = inviteLink.state.status === "idle" || inviteLink.state.status === "loading";
   const prepareFailed = inviteLink.state.status === "failed";
   const status = link

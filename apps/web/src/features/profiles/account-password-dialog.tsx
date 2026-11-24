@@ -201,7 +201,7 @@ function PasswordForm({
   const requestCode = useServerFn(requestAccountPasswordCode);
   const setPassword = useServerFn(setAccountPasswordFn);
   const toast = useAppToast();
-  const [contact, setContact] = useState(defaultContact(contacts));
+  const [contact, setContact] = useState(() => defaultContact(contacts));
   const [code, setCode] = useState("");
   const [password, setPasswordValue] = useState("");
   const [problem, setProblem] = useState<AccountPasswordProblem | null>(null);

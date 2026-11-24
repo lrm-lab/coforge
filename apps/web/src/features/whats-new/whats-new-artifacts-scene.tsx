@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ArrowRight, Check, Globe01, MessageSquare01 } from "@untitledui/icons";
 import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
@@ -20,7 +20,8 @@ export function ArtifactsScene() {
   const reducedMotion = usePrefersReducedMotion();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
-  const refs = useRef<SceneRefs>(createSceneRefs());
+  const [initialRefs] = useState(createSceneRefs);
+  const refs = useRef<SceneRefs>(initialRefs);
   const bind =
     <K extends keyof SceneRefs>(key: K) =>
     (node: SceneRefs[K]) => {

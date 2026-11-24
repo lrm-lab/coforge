@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { MessageSquare01 } from "@untitledui/icons";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { cn } from "#src/lib/utils";
@@ -11,14 +11,15 @@ export function useReviewComments(open = false) {
   const [expanded, setExpanded] = useState(open);
   const [onPhone, setOnPhone] = useState(open);
   const shown = expanded || onPhone;
+  const show = useCallback(() => {
+    setExpanded(true);
+    setOnPhone(true);
+  }, []);
   return {
     expanded,
     onPhone,
     shown,
-    show: () => {
-      setExpanded(true);
-      setOnPhone(true);
-    },
+    show,
     toggle: () => {
       setExpanded(!shown);
       setOnPhone(!shown);

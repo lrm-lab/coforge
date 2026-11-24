@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
 export const chatSectionFields = z.object({
   name: z.string().trim().min(1).max(18),
   emoji: z
@@ -10,7 +12,7 @@ export const chatSectionFields = z.object({
     .refine(
       (value) =>
         /\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20e3/u.test(value) &&
-        [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(value)].length === 1,
+        [...graphemeSegmenter.segment(value)].length === 1,
     )
     .nullable(),
 });

@@ -18,16 +18,16 @@ export const Route = createFileRoute("/w/$workspaceSlug/_chat/dm/$dmId")({
     ...conversationPageSearchShape,
     message: chatMessageParamSchema,
   }),
+  loaderDeps: ({ search }) => conversationPageLoaderDeps(search),
   beforeLoad: ({ params, search, location, cause }) =>
     redirectDocLink(params.workspaceSlug, search, location, { besideChat: true, cause }),
-  loaderDeps: ({ search }) => conversationPageLoaderDeps(search),
-  remountDeps: ({ params }) => params.dmId,
   loader: async ({ context, params, deps, parentMatchPromise, cause }) => {
     await loadConversationPage(context.queryClient, { kind: "dm", id: params.dmId }, deps, {
       cause,
       workspaceId: () => parentMatchPromise.then(({ loaderData }) => loaderData?.workspaceId ?? ""),
     });
   },
+  remountDeps: ({ params }) => params.dmId,
   pendingComponent: ConversationPending,
   errorComponent: ConversationLoadError,
   component: DirectConversationRoute,

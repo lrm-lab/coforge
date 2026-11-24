@@ -1,3 +1,4 @@
+import { listFormat } from "#src/lib/intl";
 import { agentMascot, type AgentMascot } from "./agent-mascot";
 import type { LiveAgent } from "./workspace-agents-realtime";
 
@@ -43,15 +44,8 @@ export type ReplyingNames =
   | { kind: "list"; text: string; plural: boolean }
   | { kind: "overflow"; first: string; second: string; rest: number; total: number };
 
-const listFormats = new Map<string, Intl.ListFormat>();
-
 function conjunctionFormat(locale: string): Intl.ListFormat {
-  const tag = locale === "en" ? "en-GB" : locale;
-  const cached = listFormats.get(tag);
-  if (cached) return cached;
-  const created = new Intl.ListFormat(tag, { type: "conjunction" });
-  listFormats.set(tag, created);
-  return created;
+  return listFormat(locale === "en" ? "en-GB" : locale, { type: "conjunction" });
 }
 
 export function replyingNames(names: readonly string[], locale: string): ReplyingNames {

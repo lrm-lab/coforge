@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { z } from "zod";
 import { workbenchRuntimeSchema } from "@lrm/coforge-sdk/internal/pi-chat";
@@ -38,6 +39,12 @@ function Page() {
   const { workspaceSlug } = Route.useParams();
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
+  const handleSelect = useCallback(
+    (computer: string | undefined, session: string | undefined, runtime: typeof search.runtime) => {
+      void navigate({ search: { computer, session, runtime } });
+    },
+    [navigate],
+  );
   return (
     <PiChatPage
       {...data}
@@ -45,9 +52,7 @@ function Page() {
       computerId={search.computer}
       sessionId={search.session}
       runtime={search.runtime}
-      select={(computer, session, runtime) => {
-        void navigate({ search: { computer, session, runtime } });
-      }}
+      select={handleSelect}
     />
   );
 }

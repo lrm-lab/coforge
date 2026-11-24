@@ -102,13 +102,14 @@ export function useCommentDraft(
   const wire = useMemo(() => rewriteMentionPins(body, pins), [body, pins]);
   const [sending, setSending] = useState(false);
   const [sendFailed, setSendFailed] = useState(false);
-  const idempotencyKey = useRef(crypto.randomUUID());
+  const idempotencyKey = useRef<string | null>(null);
   async function submit() {
     if (!body.trim() || sending || !canComment) return;
     setSending(true);
     setSendFailed(false);
     try {
-      await send(wire.body, idempotencyKey.current, wire.mentions);
+      const key = (idempotencyKey.current ??= crypto.randomUUID());
+      await send(wire.body, key, wire.mentions);
       setBody("");
       idempotencyKey.current = crypto.randomUUID();
     } catch {

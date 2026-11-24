@@ -151,7 +151,7 @@ export function DesktopStreamSurface({
     if (!autoHideChrome || !chromeOpen) return;
     const id = window.setTimeout(() => hideChrome(), DESKTOP_CHROME_AUTOHIDE_MS);
     return () => window.clearTimeout(id);
-  }, [autoHideChrome, chromeOpen, chromeIdleToken, hideChrome]);
+  }, [autoHideChrome, chromeOpen, chromeIdleToken]);
 
   const bumpChromeIdle = () => setChromeIdleToken((n) => n + 1);
 
@@ -182,7 +182,7 @@ export function DesktopStreamSurface({
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [phoneFabChrome, collapseDesktop, onSleep, toggleLandscape]);
+  }, [phoneFabChrome, onSleep]);
 
   const streamUrl = phone ? withCloudDesktopPhoneView(url) : url;
   const frameStyle =

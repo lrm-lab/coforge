@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useHydrated, useNavigate, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
@@ -52,6 +52,10 @@ export type OnboardingWizardInitial = NonNullable<Awaited<ReturnType<typeof load
  * `onboardingPendingSince` is set (`docs/design/onboarding-wizard.md`). Everything its first paint
  * needs arrives with the page (`initial`).
  */
+const noopSubscribe = () => () => {};
+const readWindowOrigin = () => window.location.origin;
+const serverWindowOrigin = () => "";
+
 export function OnboardingWizard({
   workspaceId,
   workspaceSlug,
@@ -62,6 +66,7 @@ export function OnboardingWizard({
   initial: OnboardingWizardInitial;
 }) {
   const hydrated = useHydrated();
+  const installOrigin = useSyncExternalStore(noopSubscribe, readWindowOrigin, serverWindowOrigin);
   const router = useRouter();
   const navigate = useNavigate();
   const loadComputers = useServerFn(loadOnboardingComputers);
@@ -198,7 +203,7 @@ export function OnboardingWizard({
             onChoice={setChoice}
             onLocal={setLocalId}
             approved={approval.data?.approved === true}
-            installOrigin={window.location.origin}
+            installOrigin={installOrigin}
             workspaceSlug={workspaceSlug}
           />
         </WizardShell>

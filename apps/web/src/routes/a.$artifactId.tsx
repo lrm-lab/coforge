@@ -12,9 +12,6 @@ import { PublicArtifactShell } from "#src/features/artifacts/public-artifact-she
 import { isAppErrorCode } from "#src/lib/app-error";
 
 export const Route = createFileRoute("/a/$artifactId")({
-  head: () => ({
-    meta: [{ name: "robots", content: "noindex" }],
-  }),
   loader: async ({ params, location }) => {
     const artifactId = decodeArtifactShortId(params.artifactId);
     if (!artifactId) throw notFound();
@@ -62,6 +59,9 @@ export const Route = createFileRoute("/a/$artifactId")({
       throw error;
     }
   },
+  head: () => ({
+    meta: [{ name: "robots", content: "noindex" }],
+  }),
   staleTime: 0,
   gcTime: 0,
   component: PublicArtifactRoute,

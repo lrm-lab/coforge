@@ -84,7 +84,7 @@ export const Route = createFileRoute("/w/$workspaceSlug/_computers")({
 
 function ComputersPage() {
   const { computers, installOrigin, desktopOrigin } = Route.useLoaderData();
-  const mountedAtRef = useRef(Date.now());
+  const [mountedAt] = useState(() => Date.now());
   const followedUpgrades = useQuery(followedComputerUpgradesQuery).data ?? [];
   const followedStatuses = useQueries({
     queries: followedUpgrades.map(({ computerId, requestId }) => ({
@@ -113,9 +113,9 @@ function ComputersPage() {
       Date.now(),
       terminalUpgradeRequestIds,
       followedStatuses.map((query) => query.dataUpdatedAt),
-      mountedAtRef.current,
+      mountedAt,
     );
-  }, [computers, upgradingKey]);
+  }, [computers, mountedAt, upgradingKey]);
   const router = useRouter();
   const requestUpgrade = useServerFn(upgradeComputer);
   const requestRestart = useServerFn(restartComputer);

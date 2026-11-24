@@ -126,7 +126,7 @@ export function ConversationSplit({
                   ? { duration: DURATION_S.reduced }
                   : { duration: DURATION_S.lg, ease: EASE_OUT }
               }
-              className="absolute inset-0 z-20 flex min-h-0 min-w-0 flex-col bg-primary shadow-xl will-change-transform"
+              className="absolute inset-0 z-20 flex min-h-0 min-w-0 flex-col bg-primary shadow-xl"
             >
               {side}
             </motion.div>

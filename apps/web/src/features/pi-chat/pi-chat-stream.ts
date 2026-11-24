@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   piChatEventSchema,
@@ -17,8 +17,10 @@ import { userConversationChannel } from "#src/features/conversations/conversatio
 /** Use the shared browser connection; native cursors reconcile reads against in-flight live events. */
 export function usePiChatStream(scope: PiChatScope, workspaceSlug: string, sessionId: string) {
   const queries = useQueryClient();
-  const live = useRef(new PiChatLiveHistory(sessionId));
-  const assemblies = useRef(new Map<string, PiChatFrameAssembly>());
+  const [initialLive] = useState(() => new PiChatLiveHistory(sessionId));
+  const live = useRef(initialLive);
+  const [initialAssemblies] = useState(() => new Map<string, PiChatFrameAssembly>());
+  const assemblies = useRef(initialAssemblies);
   const queryKey = ["pi-chat", workspaceSlug, scope.computerId, "session", sessionId];
   const listKey = ["pi-chat", workspaceSlug, scope.computerId, "sessions"];
   const recover = () => {

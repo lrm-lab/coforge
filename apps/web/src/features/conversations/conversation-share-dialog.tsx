@@ -13,6 +13,7 @@ import {
 } from "#src/components/ui/unsaved-changes-dialog";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { listFormat } from "#src/lib/intl";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
@@ -320,9 +321,7 @@ export function ConversationShareDialog({
                   joinNotice={
                     unjoined.length > 0
                       ? copy.joinNotice(
-                          new Intl.ListFormat(getLocale(), { type: "conjunction" }).format(
-                            unjoined.map(forwardTargetLabel),
-                          ),
+                          listFormat(getLocale()).format(unjoined.map(forwardTargetLabel)),
                         )
                       : undefined
                   }

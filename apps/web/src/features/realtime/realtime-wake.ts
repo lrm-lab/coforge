@@ -28,7 +28,9 @@ const TOKEN_MARGIN_MS = 30_000;
 export function tokenExpiring(token: string | undefined, now: number, marginMs = TOKEN_MARGIN_MS) {
   if (!token) return false;
   try {
-    const payload = token.split(".")[1]!.replaceAll("-", "+").replaceAll("_", "/");
+    const segment = token.split(".")[1];
+    if (!segment) return true;
+    const payload = segment.replaceAll("-", "+").replaceAll("_", "/");
     const { exp } = JSON.parse(atob(payload)) as { exp?: unknown };
     return typeof exp !== "number" || exp * 1000 - now < marginMs;
   } catch {

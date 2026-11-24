@@ -24,6 +24,7 @@ import { Skeleton } from "#src/components/ui/skeleton";
 import { useAppToast } from "#src/components/ui/toast";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { isAppError } from "#src/lib/app-error";
+import { dateTimeFormat } from "#src/lib/dates";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import type { TestDelivery } from "#src/server/notifications/web-push-notifications.server";
@@ -89,9 +90,7 @@ function failureReason(reason: string | null): string {
 }
 
 const when = (iso: string) =>
-  new Intl.DateTimeFormat(getLocale(), { dateStyle: "medium", timeStyle: "short" }).format(
-    new Date(iso),
-  );
+  dateTimeFormat(getLocale(), { dateStyle: "medium", timeStyle: "short" }).format(new Date(iso));
 
 function deviceName(device: { deviceKind: string | null; deviceLabel: string | null }): string {
   if (device.deviceLabel && device.deviceLabel !== "Browser") return device.deviceLabel;

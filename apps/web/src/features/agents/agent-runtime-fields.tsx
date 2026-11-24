@@ -77,7 +77,7 @@ export function AgentRuntimeFields({
   const controlSize = useDialogControlSize();
   const [provider, setProvider] = useState(initial?.provider ?? RUNTIME_PROVIDER.COFORGE);
   const [modelProvider, setModelProvider] = useState(initial?.modelProvider ?? "");
-  const [piProviderChoice, setPiProviderChoice] = useState(
+  const [piProviderChoice, setPiProviderChoice] = useState(() =>
     piInitialProviderChoice(initial, credentialConfigured),
   );
   const piExtraProvider = piExtraProviderOption(initial, credentialConfigured);
@@ -89,7 +89,7 @@ export function AgentRuntimeFields({
   const [customModelText, setCustomModelText] = useState("");
   const [reasoning, setReasoning] = useState(initial?.reasoning ?? "");
   const [fastMode, setFastMode] = useState(initial?.fastMode ?? false);
-  const [sizes, setSizes] = useState(initialModelSizes(initial));
+  const [sizes, setSizes] = useState(() => initialModelSizes(initial));
   const [apiKey, setApiKey] = useState("");
   const [manualDirty, setManualDirty] = useState(false);
   const [optionsByComputer, setOptionsByComputer] = useState<

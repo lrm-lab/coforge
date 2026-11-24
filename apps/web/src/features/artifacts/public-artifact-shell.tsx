@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   AlertCircle,
@@ -26,9 +26,9 @@ import { publicArtifactPath } from "./artifact-short-id";
 import { PublicArtifactReportDialog } from "./public-artifact-dialogs";
 
 const BANNER_DISMISSED_KEY = "coforge.artifacts.publicBannerDismissed";
+const noopSubscribe = () => () => {};
 
 function readBannerDismissed(): boolean {
-  if (typeof window === "undefined") return false;
   try {
     return window.localStorage.getItem(BANNER_DISMISSED_KEY) === "1";
   } catch {
@@ -68,7 +68,9 @@ export function PublicArtifactShell({
   const toast = useAppToast();
   const navigate = useNavigate();
   const [reporting, setReporting] = useState(false);
-  const [phonePromptOpen, setPhonePromptOpen] = useState(() => !readBannerDismissed());
+  const dismissedInitially = useSyncExternalStore(noopSubscribe, readBannerDismissed, () => false);
+  const [dismissedLocally, setDismissedLocally] = useState(false);
+  const phonePromptOpen = !dismissedInitially && !dismissedLocally;
 
   const openSignIn = () => {
     void navigate({
@@ -79,7 +81,7 @@ export function PublicArtifactShell({
 
   const dismissPhonePrompt = () => {
     saveBannerDismissed();
-    setPhonePromptOpen(false);
+    setDismissedLocally(true);
   };
 
   if (!artifact) {

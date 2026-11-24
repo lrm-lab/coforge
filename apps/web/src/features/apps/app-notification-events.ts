@@ -80,63 +80,68 @@ export const requiredGroupsOf = (event: AppNotificationEventName): readonly AppP
 export const eventGroupOf = (event: AppNotificationEventName): AppPermissionGroup =>
   APP_NOTIFICATION_EVENT_GROUPS[event][0];
 
-/** Whether `groups` hold everything the event needs. */
+const NOTIFICATION_EVENT_NAME_SET = new Set<unknown>(APP_NOTIFICATION_EVENT_NAMES);
+
 export const eventAllowedBy = (
   event: AppNotificationEventName,
   groups: readonly AppPermissionGroup[],
-) => requiredGroupsOf(event).every((group) => groups.includes(group));
+) => {
+  const groupSet = new Set(groups);
+  return requiredGroupsOf(event).every((group) => groupSet.has(group));
+};
 
-/** The events `value` names, once each and in catalog order, or `undefined` when it is not a list
- * of catalog names. */
 export function checkNotificationEvents(value: unknown): AppNotificationEventName[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const known: readonly unknown[] = APP_NOTIFICATION_EVENT_NAMES;
-  if (!value.every((event) => known.includes(event))) return undefined;
-  return APP_NOTIFICATION_EVENT_NAMES.filter((event) => value.includes(event));
+  if (!value.every((event) => NOTIFICATION_EVENT_NAME_SET.has(event))) return undefined;
+  const valueSet = new Set<unknown>(value);
+  return APP_NOTIFICATION_EVENT_NAMES.filter((event) => valueSet.has(event));
 }
 
-/** Whether both lists name the same events, whatever their order. */
 export const sameNotificationEvents = (
   a: readonly AppNotificationEventName[],
   b: readonly AppNotificationEventName[],
-) => a.length === b.length && a.every((event) => b.includes(event));
+) => {
+  if (a.length !== b.length) return false;
+  const bSet = new Set(b);
+  return a.every((event) => bSet.has(event));
+};
 
-/** `events` kept in catalog order, without those `groups` do not cover. */
 export const eventsAllowedBy = (
   events: readonly AppNotificationEventName[],
   groups: readonly AppPermissionGroup[],
-) => APP_NOTIFICATION_EVENT_NAMES.filter((e) => events.includes(e) && eventAllowedBy(e, groups));
+) => {
+  const eventSet = new Set(events);
+  return APP_NOTIFICATION_EVENT_NAMES.filter((e) => eventSet.has(e) && eventAllowedBy(e, groups));
+};
 
-/**
- * What an installation is delivered: the events the app subscribes to and the installation
- * approved, whose data groups it also approved and the app still declares. Dropping a group stops
- * its events at once; a group or event the app adds waits for approval.
- */
 export const effectiveNotificationEvents = (input: {
   subscribed: readonly AppNotificationEventName[];
   approvedEvents: readonly AppNotificationEventName[];
   declaredGroups: readonly AppPermissionGroup[];
   approvedGroups: readonly AppPermissionGroup[];
-}) =>
-  eventsAllowedBy(
-    input.subscribed.filter((event) => input.approvedEvents.includes(event)),
+}) => {
+  const approvedSet = new Set(input.approvedEvents);
+  return eventsAllowedBy(
+    input.subscribed.filter((event) => approvedSet.has(event)),
     effectivePermissionGroups(input.declaredGroups, input.approvedGroups),
   );
+};
 
-/** What waits for approval: the subscribed events not approved. */
 export const pendingNotificationEvents = (
   subscribed: readonly AppNotificationEventName[],
   approvedEvents: readonly AppNotificationEventName[],
-) =>
-  APP_NOTIFICATION_EVENT_NAMES.filter((e) => subscribed.includes(e) && !approvedEvents.includes(e));
+) => {
+  const subscribedSet = new Set(subscribed);
+  const approvedSet = new Set(approvedEvents);
+  return APP_NOTIFICATION_EVENT_NAMES.filter((e) => subscribedSet.has(e) && !approvedSet.has(e));
+};
 
-/** The events the editor offers, grouped under the group each is listed by, in
- * `APP_PERMISSION_GROUPS` order; only the groups in `groups` (the ones the app declares) and only
- * the events recorded today. */
-export const offeredNotificationEvents = (groups: readonly AppPermissionGroup[]) =>
-  APP_PERMISSION_GROUPS.filter((group) => groups.includes(group))
+export const offeredNotificationEvents = (groups: readonly AppPermissionGroup[]) => {
+  const groupSet = new Set(groups);
+  return APP_PERMISSION_GROUPS.filter((group) => groupSet.has(group))
     .map((group) => ({
       group,
       events: APP_NOTIFICATION_EMITTED_EVENTS.filter((event) => eventGroupOf(event) === group),
     }))
     .filter(({ events }) => events.length > 0);
+};

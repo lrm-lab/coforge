@@ -22,7 +22,7 @@ import { useBreakpoint } from "#src/hooks/use-breakpoint";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
-import { channelGlyph } from "#src/features/conversations/channel-name";
+import { ChannelGlyph } from "#src/features/conversations/channel-name";
 import type { ChannelVisibility } from "#src/features/conversations/channel-visibility";
 import { ProjectImage } from "#src/features/projects/project-image";
 import { formatNumber } from "#src/lib/format-number";
@@ -62,13 +62,12 @@ export function Face({ face }: { face: PickerFace }) {
   if (face.kind === "channel" && face.members?.length)
     return <GroupAvatar members={face.members} className="avatar-group-xs" />;
   if (face.kind === "channel") {
-    const Glyph = channelGlyph(face);
     return (
       <span
         aria-hidden="true"
         className="flex size-5 shrink-0 items-center justify-center rounded-md bg-tertiary text-fg-quaternary"
       >
-        <Glyph className="size-3.5" />
+        <ChannelGlyph visibility={face.visibility} className="size-3.5" />
       </span>
     );
   }

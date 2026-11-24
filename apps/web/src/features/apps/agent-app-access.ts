@@ -19,34 +19,31 @@ export function withFixedScopes(scopes: readonly string[]): string[] {
   return allowedGrantScopes(scopes, scopes);
 }
 
-/**
- * The scopes a grant carries for `requested`: the fixed ones (`openid`, `profile`, `identity`) and
- * the requested ones, in `APP_IDENTITY_SCOPES` order; `undefined` when one is not in `allowed`, the app's
- * allowed scopes.
- */
+const IDENTITY_SCOPE_SET = new Set<string>(APP_IDENTITY_SCOPES);
+
 export function agentGrantScopes(
   requested: readonly string[],
   allowed: readonly string[],
 ): string[] | undefined {
-  const identity: readonly string[] = APP_IDENTITY_SCOPES;
-  if (requested.some((scope) => !allowed.includes(scope) || !identity.includes(scope)))
+  const allowedSet = new Set(allowed);
+  if (requested.some((scope) => !allowedSet.has(scope) || !IDENTITY_SCOPE_SET.has(scope)))
     return undefined;
   return allowedGrantScopes(requested, allowed);
 }
 
-/** The fixed scopes and those of `scopes` that `allowed` still has, in `APP_IDENTITY_SCOPES` order. */
 export function allowedGrantScopes(
   scopes: readonly string[],
   allowed: readonly string[],
 ): string[] {
+  const allowedSet = new Set(allowed);
   const wanted = new Set<string>([
     ...APP_FIXED_SCOPES,
-    ...scopes.filter((scope) => allowed.includes(scope)),
+    ...scopes.filter((scope) => allowedSet.has(scope)),
   ]);
   return APP_IDENTITY_SCOPES.filter((scope) => wanted.has(scope));
 }
 
-/** Whether a grant of `granted` scopes covers every one of `requested`. */
 export function grantCovers(granted: readonly string[], requested: readonly string[]): boolean {
-  return requested.every((scope) => granted.includes(scope));
+  const grantedSet = new Set(granted);
+  return requested.every((scope) => grantedSet.has(scope));
 }

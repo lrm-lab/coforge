@@ -60,7 +60,7 @@ export function SharedAppPage({ token, shared }: { token: string; shared: Shared
   const router = useRouter();
   const hydrated = useHydrated();
   const [target, setTarget] = useState<string | null>(
-    shared?.targets.find((t) => !t.installed)?.workspaceId ?? null,
+    () => shared?.targets.find((t) => !t.installed)?.workspaceId ?? null,
   );
   const [installing, setInstalling] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);

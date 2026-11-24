@@ -50,7 +50,30 @@ function AgentPlus({ className }: ComponentProps<"svg">) {
 /** A new app: the grid the app settings and an Agent's Apps tab show apps by. */
 const AppPlus = withPlus(Grid01);
 
-/** Icon for the card header by kind (task #449; Frank picked from candidates in light and dark). */
+export function ActionCardGlyph({
+  kind,
+  ...props
+}: { kind: ActionCardView["kind"] } & ComponentProps<"svg">) {
+  switch (kind) {
+    case "channel:create":
+      return <Hash {...props} />;
+    case "agent:create":
+      return <AgentPlus {...props} />;
+    case "desktop:takeover":
+      return <Monitor {...props} />;
+    case "page:fill":
+      return <Edit05 {...props} />;
+    case "app:grant_agent":
+      return <ShieldTick {...props} />;
+    case "app:register":
+      return <AppPlus {...props} />;
+    case "app:recover_owner":
+      return <UserCheck01 {...props} />;
+    default:
+      return <UserPlus {...props} />;
+  }
+}
+
 export function actionCardIcon(kind: ActionCardView["kind"]): Glyph {
   switch (kind) {
     case "channel:create":

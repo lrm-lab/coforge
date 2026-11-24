@@ -20,9 +20,12 @@ export function useFootBarFold({
   activeKey: string;
 }) {
   const [folded, setFolded] = useState(false);
-  const stateRef = useRef<FootBarFoldState>(createFootBarFoldState());
+  const [initialFoldState] = useState(createFootBarFoldState);
+  const stateRef = useRef<FootBarFoldState>(initialFoldState);
   const activeScrollerRef = useRef<HTMLElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => () => clearTimeout(timerRef.current), []);
 
   const commit = useCallback((next: FootBarFoldState) => {
     const prevFolded = stateRef.current.folded;

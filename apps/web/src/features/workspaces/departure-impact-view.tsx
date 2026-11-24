@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { Button } from "#src/components/base/buttons/button";
+import { listFormat } from "#src/lib/intl";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import {
@@ -72,7 +73,7 @@ function departureCopy(): DepartureCopy {
     list: (names) =>
       locale.startsWith("zh")
         ? names.join(m.departure_list_separator())
-        : new Intl.ListFormat(locale, { type: "conjunction" }).format(names),
+        : listFormat(locale).format(names),
   };
 }
 

@@ -47,16 +47,17 @@ export const Route = createFileRoute("/w/$workspaceSlug/settings/memory")({
   },
   pendingComponent: MemoryPending,
   errorComponent: ({ error }) => <PageLoadError error={error} embedded />,
-  component: () => {
-    const data = Route.useLoaderData();
-    const search = Route.useSearch();
-    const { workspaceSlug } = Route.useParams();
-    if (data.kind === "version")
-      return <MemoryVersionPage detail={data.detail} graph={data.graph} />;
-    return data.kind === "review" ? (
-      <MemoryReviewPage key={workspaceSlug} suggestions={data.suggestions} />
-    ) : (
-      <MemoryPage search={search} list={data.list} detail={data.detail} graph={data.graph} />
-    );
-  },
+  component: MemoryRoutePage,
 });
+
+function MemoryRoutePage() {
+  const data = Route.useLoaderData();
+  const search = Route.useSearch();
+  const { workspaceSlug } = Route.useParams();
+  if (data.kind === "version") return <MemoryVersionPage detail={data.detail} graph={data.graph} />;
+  return data.kind === "review" ? (
+    <MemoryReviewPage key={workspaceSlug} suggestions={data.suggestions} />
+  ) : (
+    <MemoryPage search={search} list={data.list} detail={data.detail} graph={data.graph} />
+  );
+}
