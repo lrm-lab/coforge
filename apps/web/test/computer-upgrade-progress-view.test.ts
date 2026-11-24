@@ -4,7 +4,6 @@ import { computerDetailUpgradeSlots } from "#src/features/computers/computer-det
 import {
   buildComputerUpgradeProgressView,
   describeComputerUpgradeFailureNotice,
-  describeComputerUpgradeProgressToast,
   describeComputerUpgradeSuccessBatch,
   resolveProgressComputerVersion,
   runtimeUpgradePresentation,
@@ -404,42 +403,7 @@ test("describeComputerUpgradeFailureNotice builds system notices for rolled-back
   expect(missingStatus?.title).toContain("s144");
 });
 
-test("multi-computer upgrade toast helpers name a single computer and aggregate concurrent upgrades", () => {
-  expect(describeComputerUpgradeProgressToast([])).toBeNull();
-
-  const single = describeComputerUpgradeProgressToast([
-    {
-      computerId: "c1",
-      requestId: "r1",
-      startedHere: true,
-      computerName: "s144",
-      version: "0.1.34-dev.8",
-      target: "runtime",
-    },
-  ]);
-  expect(single).toContain("s144");
-  expect(single).toContain("0.1.34-dev.8");
-
-  const multi = describeComputerUpgradeProgressToast([
-    {
-      computerId: "c1",
-      requestId: "r1",
-      startedHere: true,
-      computerName: "s144",
-      version: "0.1.34-dev.8",
-      target: "runtime",
-    },
-    {
-      computerId: "c2",
-      requestId: "r2",
-      startedHere: true,
-      computerName: "s145",
-      version: "0.1.34-dev.8",
-      target: "runtime",
-    },
-  ]);
-  expect(multi).toContain("2");
-
+test("multi-computer upgrade success batch helper names a single computer and aggregates concurrent upgrades", () => {
   expect(describeComputerUpgradeSuccess("0.1.34-dev.8", "s144")).toContain("s144");
   expect(describeComputerUpgradeSuccess("0.1.34-dev.8", "s144")).toContain("0.1.34-dev.8");
 

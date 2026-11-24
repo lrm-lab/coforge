@@ -88,10 +88,7 @@ provider)`, with its count and account label fixed when it opens.
   Restart), and frameless vertical Disk & Memory rows; next come the Agents roster, Available AI
   tools + compact 2-column specs (`computer-detail-stats.tsx`), and a single collapsible
   `computer-detail-advanced.tsx` band (workspace cleanup + terminal troubleshooting — collapsed by
-  default when online and healthy, auto-opened when offline or on an upgrade issue). `ComputerUpgradeWatcher` drives one aggregated cross-route `toast.progress`
-  capsule across concurrent runtime upgrades (naming the Computer for one, or the count for many)
-  that morphs to done on success (resuming remaining active upgrades after the done window) or
-  surfaces per-Computer `appNotice` cards on failure (§13). `useComputerDetailLifecycle` also reads
+  default when online and healthy, auto-opened when offline or on an upgrade issue). `ComputerUpgradeWatcher` polls upgrades in the background across routes without a floating progress toast (the upgrade button itself shows loading in place) and surfaces one-shot `toast.success` notifications on completion or per-Computer `appNotice` cards on failure (§13). `useComputerDetailLifecycle` also reads
   `followedComputerUpgradesQuery` so switching between Computers preserves in-flight upgrade state.
   A local Computer owner also sees pending `InstallerRecoveryAdvice` under Version when an
   upgrade or retry is offered. A newer cloud node image stays on its own Image row and bordered

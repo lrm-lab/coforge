@@ -265,7 +265,6 @@ export function ComputerLayout({
           layout={layout}
           onLayoutChange={setLayout}
           batchUpgradeCount={batchCandidates.length}
-          upgradingCount={effectiveUpgradingIds?.size ?? 0}
           onBatchUpgrade={() => overviewActions.setBatchUpgradeOpen(true)}
           onAdd={onAdd}
           compact={splitOpen}

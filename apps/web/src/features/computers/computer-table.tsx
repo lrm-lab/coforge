@@ -4,7 +4,6 @@ import { ArrowUp, Monitor01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ProgressBarBase } from "#src/components/base/progress-indicators/progress-indicators";
-import { Spinner } from "#src/components/ui/spinner";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
@@ -351,16 +350,12 @@ export function ComputerTable({
                   ) : null}
                   {upgrading ? (
                     <>
-                      <span className="inline-flex items-center gap-1 text-secondary md:hidden">
-                        <Spinner className="size-3 text-fg-brand-primary" />
+                      <span className="text-tertiary md:hidden">
                         {m.computer_upgrade_in_progress()}
                       </span>
                       {runtimeOffer ? (
-                        <span className="hidden items-center gap-1 text-secondary md:inline-flex">
-                          <StatusDot tone="working" pulse className="size-1.5" />
-                          <span dir="ltr" className="font-mono">
-                            → {runtimeOffer}
-                          </span>
+                        <span dir="ltr" className="hidden font-mono text-tertiary md:inline">
+                          → {runtimeOffer}
                         </span>
                       ) : null}
                     </>
@@ -411,8 +406,8 @@ export function ComputerTable({
                       type="button"
                       size="xs"
                       color="secondary"
-                      iconLeading={ArrowUp}
-                      isLoading={upgrading}
+                      iconLeading={upgrading ? undefined : ArrowUp}
+                      isLoading={upgrading && !selected}
                       showTextWhileLoading
                       isDisabled={!computer.online || upgrading}
                       onPress={() => {

@@ -183,13 +183,10 @@ export function ComputerCard({
           ? computer.upgrade.expectedVersion
           : undefined) ?? runtimeOffer;
       return (
-        <span className="flex min-w-0 items-center gap-1.5 text-xs text-secondary">
-          <StatusDot tone="working" pulse className="size-1.5" />
-          <span className="truncate font-mono" dir="ltr">
-            {targetVersion && computer.computerVersion
-              ? `${computer.computerVersion} → ${targetVersion}`
-              : (targetVersion ?? m.computer_upgrade_in_progress())}
-          </span>
+        <span className="min-w-0 truncate font-mono text-xs text-tertiary" dir="ltr">
+          {targetVersion && computer.computerVersion
+            ? `${computer.computerVersion} → ${targetVersion}`
+            : (targetVersion ?? m.computer_upgrade_in_progress())}
         </span>
       );
     }
@@ -434,8 +431,8 @@ export function ComputerCard({
                 type="button"
                 size="xs"
                 color="secondary"
-                iconLeading={ArrowUp}
-                isLoading={upgrading}
+                iconLeading={upgrading ? undefined : ArrowUp}
+                isLoading={upgrading && !selected}
                 showTextWhileLoading
                 isDisabled={!computer.online || upgrading}
                 onPress={() => {

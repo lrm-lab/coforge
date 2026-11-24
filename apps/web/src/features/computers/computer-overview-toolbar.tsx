@@ -44,7 +44,6 @@ export type ComputerOverviewToolbarProps = {
   layout: ComputersOverviewLayout;
   onLayoutChange: (layout: ComputersOverviewLayout) => void;
   batchUpgradeCount: number;
-  upgradingCount?: number;
   onBatchUpgrade: () => void;
   onAdd: () => void;
   compact: boolean;
@@ -117,7 +116,6 @@ export function ComputerOverviewToolbar({
   layout,
   onLayoutChange,
   batchUpgradeCount,
-  upgradingCount = 0,
   onBatchUpgrade,
   onAdd,
   compact,
@@ -282,20 +280,6 @@ export function ComputerOverviewToolbar({
             {compact
               ? String(batchUpgradeCount)
               : m.computer_upgrade_all_action({ count: batchUpgradeCount })}
-          </Button>
-        ) : upgradingCount >= 2 ? (
-          <Button
-            type="button"
-            size="sm"
-            color="secondary"
-            isLoading
-            showTextWhileLoading
-            isDisabled
-            aria-label={m.computer_upgrade_running_multiple({ count: String(upgradingCount) })}
-          >
-            {compact
-              ? String(upgradingCount)
-              : m.computer_upgrade_running_multiple({ count: String(upgradingCount) })}
           </Button>
         ) : null}
 

@@ -1,6 +1,4 @@
-import { ProgressBar } from "react-aria-components";
 import { AlertCircle, ArrowUp } from "@untitledui/icons";
-import { Spinner } from "#src/components/ui/spinner";
 
 import { StatusDot } from "#src/components/ui/status-dot";
 import { cn } from "#src/lib/utils";
@@ -17,7 +15,6 @@ const dims = {
   badge: "size-4",
   badgeOffset: "-top-1 -end-1",
   badgeIcon: "size-2.5",
-  loading: "size-3",
 } as const;
 
 export function ComputerTile({
@@ -47,20 +44,7 @@ export function ComputerTile({
       >
         <Icon className={dims.icon} />
       </span>
-      {upgrading ? (
-        <ProgressBar
-          isIndeterminate
-          aria-label={m.computer_upgrade_in_progress()}
-          className={cn(
-            "inline-flex shrink-0",
-            "absolute text-fg-tertiary",
-            dims.badgeOffset,
-            dims.loading,
-          )}
-        >
-          <Spinner className="size-full" />
-        </ProgressBar>
-      ) : upgradeFailed ? (
+      {upgrading ? null : upgradeFailed ? (
         <span className={cn("absolute", dims.badgeOffset)}>
           <span
             aria-hidden="true"
