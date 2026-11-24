@@ -7,7 +7,6 @@ import {
   aliasPath,
   canDropPrivileges,
   ensureWorkspaceIdentity,
-  executableForIdentity,
   profileRoot,
   isUsableIdentity,
   resolveSpawnIdentity,
@@ -207,30 +206,4 @@ test("files an earlier run left behind are handed over too", async () => {
   });
   expect(changed).toContain(join(ws, "work", "process-instance.json"));
   expect(changed).toContain(join(ws, "daemon.sock"));
-});
-
-test("the child only keeps the drop when it can exec the copy it is handed", async () => {
-  const volumeRoot = "/srv/coforge";
-  const executable = "/root/.coforge/computer/install/active/coforge-computer";
-  const modes: Record<string, { mode: number; directory: boolean }> = {
-    "/": { mode: 0o755, directory: true },
-    "/srv": { mode: 0o755, directory: true },
-    "/srv/coforge": { mode: 0o755, directory: true },
-    "/srv/coforge/computer": { mode: 0o755, directory: true },
-    "/srv/coforge/computer/install": { mode: 0o755, directory: true },
-    "/srv/coforge/computer/install/active": { mode: 0o755, directory: true },
-    "/srv/coforge/computer/install/active/coforge-computer": { mode: 0o755, directory: false },
-  };
-  const inspect = async (path: string) => {
-    const entry = modes[path];
-    if (!entry) throw new Error(`ENOENT ${path}`);
-    return entry;
-  };
-  expect(
-    await executableForIdentity(executable, { uid: 20_101, gid: 20_101 }, volumeRoot, inspect),
-  ).toBe("/srv/coforge/computer/install/active/coforge-computer");
-  modes["/srv/coforge/computer/install/active"] = { mode: 0o700, directory: true };
-  expect(
-    await executableForIdentity(executable, { uid: 20_101, gid: 20_101 }, volumeRoot, inspect),
-  ).toBeUndefined();
 });

@@ -6,7 +6,6 @@ import { WorkspaceHealthJournal, workspaceHealthJournalPath } from "./workspace-
 import {
   aliasPath,
   ensureWorkspaceIdentity,
-  executableForIdentity,
   resolveSpawnIdentity,
   workspaceDirectory,
   type WorkspaceIdentity,
@@ -92,19 +91,13 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
         ],
       });
     }
-    let spawnIdentity = await resolveSpawnIdentity({
+    const spawnIdentity = await resolveSpawnIdentity({
       stateRoot: this.config.stateRoot,
       workspaceId: this.config.workspaceId,
       volumeRoot,
     });
     const reachable = (path: string): string =>
       spawnIdentity ? aliasPath(path, volumeRoot) : path;
-    // A child that cannot exec the binary dies at spawn and takes the Workspace with it, so the
-    // drop only stands if the copy it will exec is reachable for that uid.
-    const executable = spawnIdentity
-      ? await executableForIdentity(this.config.executablePath, spawnIdentity.identity, volumeRoot)
-      : this.config.executablePath;
-    if (spawnIdentity && !executable) spawnIdentity = undefined;
     const env: Record<string, string> = {
       ...Object.fromEntries(
         Object.entries(Bun.env).filter(
@@ -131,7 +124,7 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
     if (beforeLaunch) await beforeLaunch();
     const child = await this.spawnChild({
       command: [
-        executable ?? this.config.executablePath,
+        this.config.executablePath,
         "__workspace-daemon",
         "--socket",
         reachable(this.config.socketPath),
