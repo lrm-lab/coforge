@@ -174,7 +174,7 @@ for (const width of [1440, 390]) {
               workspaceId,
               conversationId: channel.id,
               id: message.id,
-              messageId: message.id,
+              sourceMessageId: message.id,
               number: n - 80,
               title: `Task entry ${n}`,
               description: "Entry regression",
