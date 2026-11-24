@@ -1,9 +1,12 @@
 import { decodeAgentTokenUsage, type AgentTokenUsage } from "@lrm/coforge-sdk/internal";
-import type { AgentControlStore } from "#src/server/agents/agent-control.server";
 import type { AgentTokenUsageRepository } from "#src/server/db/repositories/agent-token-usage.repositories.server";
 import { errorType } from "#src/server/errors/error-type.server";
 import { rejectNonDaemonPrincipal } from "./daemon-principal.server";
 import type { CentrifugoRpcMethod } from "./rpc-handler.server";
+
+export type AgentTokenUsageAgentLookup = {
+  get(agentId: string): Promise<{ workspaceId: string; computerId: string | null } | undefined>;
+};
 
 const MAX_PAST_SKEW_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
@@ -20,36 +23,93 @@ function clampOptionalInt32(value: number | undefined): number | null {
   return Math.min(Math.max(0, Math.trunc(value)), MAX_INT32);
 }
 
+function logTokenUsageOutcome(
+  event: "agent_token_usage:dropped" | "agent_token_usage:rejected",
+  details: {
+    requestId?: string;
+    agentId?: string;
+    workspaceId?: string;
+    computerId?: string;
+    launchId?: string;
+    turnSeq?: number;
+    reason: string;
+  },
+): void {
+  console.warn(
+    JSON.stringify({
+      event,
+      request_id: details.requestId,
+      agent_id: details.agentId,
+      workspace_id: details.workspaceId,
+      computer_id: details.computerId,
+      launch_id: details.launchId,
+      turn_seq: details.turnSeq,
+      reason: details.reason,
+    }),
+  );
+}
+
 export function createAgentTokenUsageMethod(
-  agents: Pick<AgentControlStore, "get">,
+  agents: AgentTokenUsageAgentLookup,
   repository: Pick<AgentTokenUsageRepository, "recordTurn">,
   now: () => number = Date.now,
 ): CentrifugoRpcMethod {
   return async (payload, metadata) => {
     const rejection = rejectNonDaemonPrincipal(metadata.principal);
-    if (rejection) return rejection;
+    if (rejection) {
+      logTokenUsageOutcome("agent_token_usage:rejected", {
+        workspaceId: metadata.principal.workspaceId,
+        computerId: metadata.principal.computerId,
+        reason: "non_daemon_principal",
+      });
+      return rejection;
+    }
     let message: AgentTokenUsage | undefined;
     try {
       message = decodeAgentTokenUsage(payload);
     } catch {
+      logTokenUsageOutcome("agent_token_usage:rejected", {
+        workspaceId: metadata.principal.workspaceId,
+        computerId: metadata.principal.computerId,
+        reason: "invalid_payload",
+      });
       return { code: 400, message: "invalid Agent token usage" };
     }
+    const logMessageOutcome = (
+      event: "agent_token_usage:dropped" | "agent_token_usage:rejected",
+      reason: string,
+    ) => {
+      logTokenUsageOutcome(event, {
+        requestId: message.requestId,
+        agentId: message.agentId,
+        workspaceId: metadata.principal.workspaceId,
+        computerId: metadata.principal.computerId,
+        launchId: message.launchId,
+        turnSeq: message.turnSeq,
+        reason,
+      });
+    };
     if (
       metadata.principal.workspaceId !== message.workspaceId ||
       metadata.principal.computerId !== message.computerId
-    )
+    ) {
+      logMessageOutcome("agent_token_usage:rejected", "scope_mismatch");
       return { code: 403, message: "Agent token usage scope is not authorized" };
+    }
     try {
       const agent = await agents.get(message.agentId);
-      if (
-        !agent ||
-        agent.workspaceId !== message.workspaceId ||
-        agent.computerId !== message.computerId ||
-        agent.runtimeConfig.runtime !== message.provider ||
-        agent.state?.launchId !== message.launchId
-      )
+      if (!agent) {
+        logMessageOutcome("agent_token_usage:dropped", "agent_not_found");
         return new Uint8Array();
-      if (message.turnSeq > MAX_INT32) return new Uint8Array();
+      }
+      if (agent.workspaceId !== message.workspaceId || agent.computerId !== message.computerId) {
+        logMessageOutcome("agent_token_usage:dropped", "agent_scope_mismatch");
+        return new Uint8Array();
+      }
+      if (message.turnSeq > MAX_INT32) {
+        logMessageOutcome("agent_token_usage:dropped", "turn_seq_overflow");
+        return new Uint8Array();
+      }
       await repository.recordTurn({
         workspaceId: message.workspaceId,
         agentId: message.agentId,
@@ -70,18 +130,7 @@ export function createAgentTokenUsageMethod(
       });
       return new Uint8Array();
     } catch (error) {
-      console.warn(
-        JSON.stringify({
-          event: "agent_token_usage:rejected",
-          request_id: message.requestId,
-          agent_id: message.agentId,
-          workspace_id: metadata.principal.workspaceId,
-          computer_id: metadata.principal.computerId,
-          launch_id: message.launchId,
-          turn_seq: message.turnSeq,
-          reason: `unexpected: ${errorType(error)}`,
-        }),
-      );
+      logMessageOutcome("agent_token_usage:rejected", `unexpected: ${errorType(error)}`);
       return { code: 500, message: "Agent token usage could not be recorded" };
     }
   };

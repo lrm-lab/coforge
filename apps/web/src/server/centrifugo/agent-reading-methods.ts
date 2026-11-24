@@ -12,17 +12,11 @@ import { createAgentServiceTierMethod } from "./agent-service-tier-receiver.serv
 import { createAgentTokenUsageMethod } from "./agent-token-usage-receiver.server";
 import type { CentrifugoServerApi } from "./server-api.server";
 
-/** The Agent's current visibility, read fresh (no cache); `undefined` fails the push closed. */
 export type AgentVisibilityLookup = (
   workspaceId: string,
   agentId: string,
 ) => Promise<string | undefined>;
 
-/**
- * The two per-launch observation receivers, wired once: both are fire-and-forget display facts
- * gated by the same daemon principal, launch fence and visibility lookup, so they differ only in
- * the method name and the display field they write.
- */
 export function agentReadingMethods(options: {
   agents: Pick<AgentControlStore, "get">;
   display: Pick<AgentDisplay, "putContextUsage" | "putServiceTier">;
@@ -37,6 +31,15 @@ export function agentReadingMethods(options: {
     });
     return agent?.workspaceId === workspaceId ? agent.visibility : undefined;
   };
+  const tokenUsageAgentLookup = {
+    get: async (agentId: string) => {
+      const agent = await db.agent.findUnique({
+        where: { id: agentId },
+        select: { workspaceId: true, computerId: true },
+      });
+      return agent ?? undefined;
+    },
+  };
   return {
     [AGENT_CONTEXT_USAGE_METHOD]: createAgentContextUsageMethod(
       agents,
@@ -45,7 +48,7 @@ export function agentReadingMethods(options: {
       agentVisibility,
     ),
     [AGENT_TOKEN_USAGE_METHOD]: createAgentTokenUsageMethod(
-      agents,
+      tokenUsageAgentLookup,
       new PrismaAgentTokenUsageRepository(db),
     ),
     [AGENT_SERVICE_TIER_METHOD]: createAgentServiceTierMethod(
