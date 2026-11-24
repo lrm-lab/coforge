@@ -17,9 +17,12 @@ export function QuestionOptions({
   hi = -1,
   kbd = false,
   otherRef,
+  otherEnterKeyHint = "send",
   onHover,
   onPick,
   onDraft,
+  onListFocus,
+  onListBlur,
   sizer = false,
 }: {
   id: string;
@@ -29,9 +32,12 @@ export function QuestionOptions({
   hi?: number;
   kbd?: boolean;
   otherRef?: Ref<HTMLInputElement>;
+  otherEnterKeyHint?: "next" | "send";
   onHover?: (row: number) => void;
   onPick?: (row: number) => void;
   onDraft?: (draft: Draft) => void;
+  onListFocus?: (fromOtherInput: boolean) => void;
+  onListBlur?: () => void;
   sizer?: boolean;
 }) {
   const many = question.select === "many";
@@ -40,7 +46,8 @@ export function QuestionOptions({
   const listed = !sizer && (interactiveMode || mode === "view");
   const otherRow = question.options.length;
   const ownWords = draft?.text.trim() ?? "";
-  const lit = (row: number) => live && kbd && row === hi && "pointer-fine:bg-secondary";
+  const lit = (row: number) =>
+    live && kbd && row === hi && "border-primary bg-secondary ring-2 ring-focus-ring ring-inset";
   const muted = mode === "off" || mode === "view";
   return (
     <div
@@ -51,6 +58,29 @@ export function QuestionOptions({
       aria-multiselectable={sizer ? undefined : many || undefined}
       aria-readonly={sizer ? undefined : !live || undefined}
       aria-activedescendant={live && kbd && hi >= 0 ? `${id}-${hi}` : undefined}
+      onFocus={
+        listed
+          ? (event) => {
+              if (event.target !== event.currentTarget) return;
+              const fromOther =
+                event.relatedTarget instanceof Element &&
+                event.relatedTarget.hasAttribute("data-question-other-input");
+              onListFocus?.(fromOther);
+            }
+          : undefined
+      }
+      onBlur={
+        listed
+          ? (event) => {
+              if (
+                event.relatedTarget instanceof Node &&
+                event.currentTarget.contains(event.relatedTarget)
+              )
+                return;
+              onListBlur?.();
+            }
+          : undefined
+      }
       onMouseDown={
         listed
           ? (event) => {
@@ -65,7 +95,12 @@ export function QuestionOptions({
             }
           : undefined
       }
-      className="flex flex-col gap-1.5 px-1 outline-none"
+      className={cn(
+        "flex flex-col gap-1.5 rounded-lg px-1 outline-none",
+        listed &&
+          !kbd &&
+          "focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:ring-inset",
+      )}
     >
       {question.options.map((option, row) => {
         const on = Boolean(draft?.selection.includes(option.id));
@@ -146,16 +181,21 @@ export function QuestionOptions({
             onPointerMove={(event) =>
               event.pointerType === "mouse" && hi !== otherRow && onHover?.(otherRow)
             }
-            onClick={(event) =>
-              event.currentTarget.querySelector("input")?.focus({ preventScroll: true })
-            }
-            className={cn(OPTION_ROW, "cursor-text border-secondary", lit(otherRow))}
+            onClick={(event) => {
+              const input = event.currentTarget.querySelector("input");
+              if (input && event.target !== input) input.focus();
+            }}
+            className={cn(
+              OPTION_ROW,
+              "cursor-text border-secondary pointer-fine:hover:border-primary focus-within:border-primary focus-within:ring-2 focus-within:ring-focus-ring focus-within:ring-inset",
+            )}
           >
-            <Mark on={Boolean(ownWords)} many={many} />
+            <Mark on={Boolean(ownWords)} many={many} className="pointer-coarse:mt-[3px]" />
             <input
               ref={otherRef}
               data-question-other-input=""
               type="text"
+              enterKeyHint={otherEnterKeyHint}
               value={draft?.text ?? ""}
               maxLength={CHOICE_OTHER_TEXT_MAX_LENGTH}
               aria-label={question.other.label || m.question_card_own_words()}
@@ -168,13 +208,13 @@ export function QuestionOptions({
                   text,
                 });
               }}
-              className="h-5 min-w-0 flex-1 bg-transparent text-primary outline-none placeholder:text-placeholder pointer-coarse:text-base"
+              className="min-h-5 min-w-0 flex-1 bg-transparent leading-5 text-primary outline-none placeholder:text-placeholder pointer-coarse:min-h-6 pointer-coarse:text-base pointer-coarse:leading-6"
             />
           </div>
         ) : sizer && interactiveMode ? (
           <div className={cn(OPTION_ROW, "border-secondary")}>
-            <Mark on={false} many={many} />
-            <span className="h-5 min-w-0 flex-1" />
+            <Mark on={false} many={many} className="pointer-coarse:mt-[3px]" />
+            <span className="min-h-5 min-w-0 flex-1 leading-5 pointer-coarse:min-h-6 pointer-coarse:leading-6" />
           </div>
         ) : (
           <div

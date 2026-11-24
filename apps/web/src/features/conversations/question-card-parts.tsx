@@ -3,20 +3,31 @@ import { Check } from "@untitledui/icons";
 
 import { cn } from "#src/lib/utils";
 
-export function Mark({ on, many, dim }: { on: boolean; many: boolean; dim?: boolean }) {
+export function Mark({
+  on,
+  many,
+  dim,
+  className,
+}: {
+  on: boolean;
+  many: boolean;
+  dim?: boolean;
+  className?: string;
+}) {
   return (
     <span
       aria-hidden="true"
       className={cn(
-        "mt-0.5 grid size-4.5 shrink-0 place-items-center text-white transition-[background-color,box-shadow] duration-100 ease-out",
+        "mt-0.5 grid size-4.5 shrink-0 place-items-center transition-[background-color,box-shadow] duration-100 ease-out",
         many ? "rounded-[0.3125rem]" : "rounded-full",
         on
           ? dim
-            ? "bg-fg-quaternary"
-            : "bg-fg-primary"
+            ? "bg-fg-quaternary text-white"
+            : "bg-fg-primary text-bg-primary"
           : dim
-            ? "shadow-[inset_0_0_0_1.5px_var(--color-border-secondary)]"
-            : "shadow-[inset_0_0_0_1.5px_var(--color-border-primary)]",
+            ? "text-white shadow-[inset_0_0_0_1.5px_var(--color-border-secondary)]"
+            : "text-bg-primary shadow-[inset_0_0_0_1.5px_var(--color-border-primary)]",
+        className,
       )}
     >
       <Check
@@ -35,7 +46,7 @@ export const OPTION_ROW =
   "flex w-full items-start gap-2.5 rounded-lg border border-transparent px-2.5 py-2 text-left text-sm min-h-10 max-sm:min-h-12 max-sm:py-3";
 
 export const OPTION_ROW_LIVE =
-  "cursor-pointer border-secondary pointer-fine:hover:bg-secondary active:bg-secondary";
+  "cursor-pointer border-secondary pointer-fine:hover:border-primary pointer-fine:hover:bg-secondary active:bg-secondary";
 
 export function QuestionPageStack<T extends { id: string }>({
   items,

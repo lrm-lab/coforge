@@ -77,14 +77,18 @@ export function QuestionAsk({
   const otherRow = question.other ? question.options.length : -1;
   const listId = `${useId()}-q${tab}`;
   const showSend = several ? last : question.select === "many" || Boolean(draft?.text.trim());
+  const hasFooterAction = !readOnly && (showSend || several);
   const showFooter = several || showSend || Boolean(due) || Boolean(error) || readOnly;
 
   useLayoutEffect(() => {
     if (!kbd) return;
     const active = document.activeElement;
     if (hi === otherRow) otherRef.current?.focus({ preventScroll: true });
-    else if (active instanceof HTMLInputElement && rootRef.current?.contains(active))
-      list()?.focus({ preventScroll: true });
+    else {
+      const optionsList = list();
+      if (optionsList && active !== optionsList && rootRef.current?.contains(active))
+        optionsList.focus({ preventScroll: true });
+    }
     rootRef.current
       ?.querySelector("[data-question-options] [data-hi]")
       ?.scrollIntoView({ block: "nearest" });
@@ -139,7 +143,12 @@ export function QuestionAsk({
   function pick(row: number) {
     if (sendingRef.current) return;
     setHi(row);
-    if (readOnly || row >= question.options.length) return;
+    if (readOnly) return;
+    if (row === otherRow) {
+      otherRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    if (row >= question.options.length) return;
     const id = question.options[row]!.id;
     if (question.select === "many") {
       const selection = draft?.selection ?? [];
@@ -308,15 +317,39 @@ export function QuestionAsk({
           hi={hi}
           kbd={kbd}
           otherRef={otherRef}
+          otherEnterKeyHint={several && !last ? "next" : "send"}
           onHover={setHi}
           onPick={pick}
           onDraft={(next) => setDraft(question.id, next)}
+          onListFocus={(fromOtherInput) => {
+            if (hi === otherRow && question.options.length > 0) {
+              setHi(
+                fromOtherInput
+                  ? question.options.length - 1
+                  : firstPick({ questions, drafts }, tab),
+              );
+            }
+          }}
+          onListBlur={() => {
+            if (kbd) setKbd(false);
+          }}
         />
       </QuestionPageStack>
       {showFooter && (
-        <div className="mt-auto flex flex-wrap items-center gap-x-3 pt-1 pl-3 text-xs text-quaternary">
+        <div
+          className={cn(
+            "mt-auto flex flex-wrap items-center gap-x-3 pt-1 pl-3 text-xs text-quaternary",
+            !hasFooterAction && "gap-y-1 py-2 pr-3 sm:min-h-10",
+          )}
+        >
           {due && (
-            <span data-question-due="" className="whitespace-nowrap max-sm:basis-full max-sm:pt-1">
+            <span
+              data-question-due=""
+              className={cn(
+                "whitespace-nowrap",
+                hasFooterAction && "max-sm:basis-full max-sm:pt-1",
+              )}
+            >
               {due}
             </span>
           )}
@@ -331,7 +364,7 @@ export function QuestionAsk({
               {error}
             </p>
           )}
-          {!readOnly && (showSend || several) ? (
+          {hasFooterAction && (
             <span className="ml-auto flex min-h-10 items-center py-1 pr-1 max-sm:min-h-13">
               {showSend ? (
                 <Button
@@ -356,8 +389,6 @@ export function QuestionAsk({
                 </Button>
               )}
             </span>
-          ) : (
-            <span className="min-h-10 max-sm:min-h-13" />
           )}
         </div>
       )}
