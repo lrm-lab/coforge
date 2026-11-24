@@ -27,10 +27,18 @@ import {
   DailyBarChart,
   TodayHourlyChart,
 } from "./profile-panel/agent-usage-charts";
-import { summarizeWorkspaceAgentUsage } from "./workspace-agent-usage-model";
+import {
+  DEFAULT_WORKSPACE_AGENT_USAGE_SORT,
+  sortWorkspaceAgentUsageRows,
+  summarizeWorkspaceAgentUsage,
+  toggleWorkspaceAgentUsageSort,
+  type WorkspaceAgentUsageSort,
+  type WorkspaceAgentUsageSortKey,
+} from "./workspace-agent-usage-model";
 import {
   ModelDistributionStrip,
-  USAGE_TABLE_GRID_CLASS,
+  UsageRankingHeader,
+  UsageRankingSortMenu,
   UsageRow,
 } from "./workspace-agent-usage-sections";
 
@@ -72,6 +80,7 @@ export function WorkspaceAgentUsageView({
   const locale = getLocale();
   const [range, setRange] = useState<AgentTokenUsageRange>(7);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [sort, setSort] = useState<WorkspaceAgentUsageSort>(DEFAULT_WORKSPACE_AGENT_USAGE_SORT);
   const timeZone = resolveTimeZone(hydrated ? browserTimeZone() : undefined);
   const loadUsage = useServerFn(getWorkspaceAgentTokenUsage);
 
@@ -95,6 +104,11 @@ export function WorkspaceAgentUsageView({
     [usageQuery.data, selectedKey, owner, viewerId, query],
   );
 
+  const sortedRows = useMemo(
+    () => (view ? sortWorkspaceAgentUsageRows(view.rows, sort, locale) : []),
+    [view, sort, locale],
+  );
+
   const trimmedQuery = query.trim();
   const filtersActive = owner === "mine" || Boolean(trimmedQuery);
   const avgPerTurn =
@@ -109,6 +123,10 @@ export function WorkspaceAgentUsageView({
 
   function onToggleSelect(key: string) {
     setSelectedKey((prev) => (prev === key ? null : key));
+  }
+
+  function onSortColumn(key: WorkspaceAgentUsageSortKey) {
+    setSort((prev) => toggleWorkspaceAgentUsageSort(prev, key));
   }
 
   if (usageQuery.isError && !usageQuery.data) {
@@ -282,30 +300,21 @@ export function WorkspaceAgentUsageView({
       </section>
 
       {hasAnyData &&
-        (view.rows.length > 0 ? (
+        (sortedRows.length > 0 ? (
           <section className="space-y-2">
-            <h2 className="text-xs font-medium text-tertiary">
-              {m.agent_usage_team_ranking_heading()}
-            </h2>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-xs font-medium text-tertiary">
+                {m.agent_usage_team_ranking_heading()}
+              </h2>
+              <UsageRankingSortMenu sort={sort} onSort={onSortColumn} />
+            </div>
             <div className="overflow-hidden rounded-xl border border-secondary bg-primary">
-              <div
-                aria-hidden="true"
-                className={cn(
-                  "hidden border-b border-secondary px-4 py-2.5 text-xs font-medium text-tertiary",
-                  USAGE_TABLE_GRID_CLASS,
-                )}
-              >
-                <span>{m.member_table_col_agent()}</span>
-                <span className="text-end">{m.agent_usage_col_tokens()}</span>
-                <span className="text-end">{m.agent_usage_col_turns()}</span>
-                <span className="hidden @4xl/members:block">{m.agent_usage_col_model()}</span>
-                <span className="hidden @4xl/members:block">{m.member_table_col_owner()}</span>
-              </div>
+              <UsageRankingHeader sort={sort} onSort={onSortColumn} />
               <ul
                 aria-label={m.agent_usage_team_ranking_heading()}
                 className="divide-y divide-secondary"
               >
-                {view.rows.map((row) => (
+                {sortedRows.map((row) => (
                   <UsageRow
                     key={row.agentId}
                     row={row}

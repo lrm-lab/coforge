@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
+  DEFAULT_WORKSPACE_AGENT_USAGE_SORT,
   buildWorkspaceAgentUsageReport,
+  sortWorkspaceAgentUsageRows,
   summarizeWorkspaceAgentUsage,
+  toggleWorkspaceAgentUsageSort,
+  type WorkspaceAgentUsageRow,
 } from "#src/features/agents/workspace-agent-usage-model";
 
 describe("buildWorkspaceAgentUsageReport & summarizeWorkspaceAgentUsage", () => {
@@ -337,5 +341,278 @@ describe("buildWorkspaceAgentUsageReport & summarizeWorkspaceAgentUsage", () => 
     expect(summary.teamEffectiveTokens).toBe(0);
     expect(summary.visibleActiveAgents).toBe(0);
     expect(summary.rows.every((r) => r.teamSharePercent === 0)).toBe(true);
+  });
+});
+
+function makeUsageRow(
+  overrides: Partial<WorkspaceAgentUsageRow> &
+    Pick<WorkspaceAgentUsageRow, "agentId" | "displayName">,
+): WorkspaceAgentUsageRow {
+  return {
+    avatarUrl: null,
+    ownerId: "user-1",
+    ownerDisplayName: "Alice",
+    ownerAvatarUrl: null,
+    archived: false,
+    effectiveTokens: 0,
+    newInputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    turns: 0,
+    topModel: "",
+    teamSharePercent: 0,
+    ...overrides,
+  };
+}
+
+describe("toggleWorkspaceAgentUsageSort", () => {
+  test("defaults to tokens descending and picks smart initial directions per column", () => {
+    expect(DEFAULT_WORKSPACE_AGENT_USAGE_SORT).toEqual({ key: "tokens", direction: "desc" });
+
+    expect(toggleWorkspaceAgentUsageSort(DEFAULT_WORKSPACE_AGENT_USAGE_SORT, "tokens")).toEqual({
+      key: "tokens",
+      direction: "asc",
+    });
+    expect(toggleWorkspaceAgentUsageSort({ key: "tokens", direction: "asc" }, "tokens")).toEqual({
+      key: "tokens",
+      direction: "desc",
+    });
+
+    expect(toggleWorkspaceAgentUsageSort(DEFAULT_WORKSPACE_AGENT_USAGE_SORT, "turns")).toEqual({
+      key: "turns",
+      direction: "desc",
+    });
+    expect(toggleWorkspaceAgentUsageSort({ key: "turns", direction: "desc" }, "turns")).toEqual({
+      key: "turns",
+      direction: "asc",
+    });
+
+    expect(toggleWorkspaceAgentUsageSort(DEFAULT_WORKSPACE_AGENT_USAGE_SORT, "agent")).toEqual({
+      key: "agent",
+      direction: "asc",
+    });
+    expect(toggleWorkspaceAgentUsageSort({ key: "agent", direction: "asc" }, "agent")).toEqual({
+      key: "agent",
+      direction: "desc",
+    });
+
+    expect(toggleWorkspaceAgentUsageSort(DEFAULT_WORKSPACE_AGENT_USAGE_SORT, "model")).toEqual({
+      key: "model",
+      direction: "asc",
+    });
+    expect(toggleWorkspaceAgentUsageSort(DEFAULT_WORKSPACE_AGENT_USAGE_SORT, "owner")).toEqual({
+      key: "owner",
+      direction: "asc",
+    });
+    expect(toggleWorkspaceAgentUsageSort({ key: "agent", direction: "asc" }, "tokens")).toEqual({
+      key: "tokens",
+      direction: "desc",
+    });
+  });
+});
+
+describe("sortWorkspaceAgentUsageRows", () => {
+  const sampleRows: WorkspaceAgentUsageRow[] = [
+    makeUsageRow({
+      agentId: "agent-3",
+      displayName: "zeta bot",
+      effectiveTokens: 500,
+      turns: 20,
+      topModel: "gpt-5",
+      ownerId: "user-2",
+      ownerDisplayName: "Bob",
+    }),
+    makeUsageRow({
+      agentId: "agent-1",
+      displayName: "Alpha Bot",
+      effectiveTokens: 3_000,
+      turns: 5,
+      topModel: "claude-opus-4-6",
+      ownerId: "user-1",
+      ownerDisplayName: "Alice",
+    }),
+    makeUsageRow({
+      agentId: "agent-2",
+      displayName: "beta bot",
+      effectiveTokens: 3_000,
+      turns: 8,
+      topModel: "",
+      ownerId: "user-3",
+      ownerDisplayName: "charlie",
+    }),
+    makeUsageRow({
+      agentId: "agent-4",
+      displayName: "Alpha Bot",
+      effectiveTokens: 1_200,
+      turns: 8,
+      topModel: "claude-opus-4-6",
+      ownerId: "user-1",
+      ownerDisplayName: "Alice",
+    }),
+    makeUsageRow({
+      agentId: "agent-5",
+      displayName: "Idle Bot",
+      effectiveTokens: 0,
+      turns: 0,
+      topModel: "   ",
+      ownerId: "user-2",
+      ownerDisplayName: "Bob",
+    }),
+  ];
+
+  test("does not mutate input rows and sorts by tokens with deterministic tie-breakers", () => {
+    const originalIds = sampleRows.map((row) => row.agentId);
+
+    const desc = sortWorkspaceAgentUsageRows(
+      sampleRows,
+      { key: "tokens", direction: "desc" },
+      "en",
+    );
+    expect(sampleRows.map((row) => row.agentId)).toEqual(originalIds);
+    expect(desc.map((row) => row.agentId)).toEqual([
+      "agent-2",
+      "agent-1",
+      "agent-4",
+      "agent-3",
+      "agent-5",
+    ]);
+
+    const asc = sortWorkspaceAgentUsageRows(sampleRows, { key: "tokens", direction: "asc" }, "en");
+    expect(asc.map((row) => row.agentId)).toEqual([
+      "agent-5",
+      "agent-3",
+      "agent-4",
+      "agent-2",
+      "agent-1",
+    ]);
+  });
+
+  test("sorts by turns and breaks ties by effectiveTokens desc then displayName then agentId", () => {
+    const desc = sortWorkspaceAgentUsageRows(sampleRows, { key: "turns", direction: "desc" }, "en");
+    expect(desc.map((row) => row.agentId)).toEqual([
+      "agent-3",
+      "agent-2",
+      "agent-4",
+      "agent-1",
+      "agent-5",
+    ]);
+
+    const asc = sortWorkspaceAgentUsageRows(sampleRows, { key: "turns", direction: "asc" }, "en");
+    expect(asc.map((row) => row.agentId)).toEqual([
+      "agent-5",
+      "agent-1",
+      "agent-2",
+      "agent-4",
+      "agent-3",
+    ]);
+  });
+
+  test("sorts by agent name case-insensitively and breaks ties deterministically", () => {
+    const asc = sortWorkspaceAgentUsageRows(sampleRows, { key: "agent", direction: "asc" }, "en");
+    expect(asc.map((row) => row.agentId)).toEqual([
+      "agent-1",
+      "agent-4",
+      "agent-2",
+      "agent-5",
+      "agent-3",
+    ]);
+
+    const desc = sortWorkspaceAgentUsageRows(sampleRows, { key: "agent", direction: "desc" }, "en");
+    expect(desc.map((row) => row.agentId)).toEqual([
+      "agent-3",
+      "agent-5",
+      "agent-2",
+      "agent-1",
+      "agent-4",
+    ]);
+
+    const identicalTies = [
+      makeUsageRow({ agentId: "id-b", displayName: "Same", effectiveTokens: 100, turns: 2 }),
+      makeUsageRow({ agentId: "id-a", displayName: "Same", effectiveTokens: 100, turns: 2 }),
+    ];
+    expect(
+      sortWorkspaceAgentUsageRows(identicalTies, { key: "agent", direction: "asc" }, "en").map(
+        (row) => row.agentId,
+      ),
+    ).toEqual(["id-a", "id-b"]);
+  });
+
+  test("sorts by model with empty models always last and tokens desc tie-breaker", () => {
+    const asc = sortWorkspaceAgentUsageRows(sampleRows, { key: "model", direction: "asc" }, "en");
+    expect(asc.map((row) => row.agentId)).toEqual([
+      "agent-1",
+      "agent-4",
+      "agent-3",
+      "agent-2",
+      "agent-5",
+    ]);
+
+    const desc = sortWorkspaceAgentUsageRows(sampleRows, { key: "model", direction: "desc" }, "en");
+    expect(desc.map((row) => row.agentId)).toEqual([
+      "agent-3",
+      "agent-1",
+      "agent-4",
+      "agent-2",
+      "agent-5",
+    ]);
+  });
+
+  test("sorts by owner with tokens desc tie-breaker and empty owners last", () => {
+    const asc = sortWorkspaceAgentUsageRows(sampleRows, { key: "owner", direction: "asc" }, "en");
+    expect(asc.map((row) => row.agentId)).toEqual([
+      "agent-1",
+      "agent-4",
+      "agent-3",
+      "agent-5",
+      "agent-2",
+    ]);
+
+    const desc = sortWorkspaceAgentUsageRows(sampleRows, { key: "owner", direction: "desc" }, "en");
+    expect(desc.map((row) => row.agentId)).toEqual([
+      "agent-2",
+      "agent-3",
+      "agent-5",
+      "agent-1",
+      "agent-4",
+    ]);
+
+    const withMissingOwner = [
+      makeUsageRow({ agentId: "a", displayName: "A", ownerDisplayName: "", effectiveTokens: 900 }),
+      makeUsageRow({
+        agentId: "b",
+        displayName: "B",
+        ownerDisplayName: "Zoe",
+        effectiveTokens: 10,
+      }),
+    ];
+    expect(
+      sortWorkspaceAgentUsageRows(withMissingOwner, { key: "owner", direction: "asc" }, "en").map(
+        (row) => row.agentId,
+      ),
+    ).toEqual(["b", "a"]);
+    expect(
+      sortWorkspaceAgentUsageRows(withMissingOwner, { key: "owner", direction: "desc" }, "en").map(
+        (row) => row.agentId,
+      ),
+    ).toEqual(["b", "a"]);
+  });
+
+  test("sorts CJK names according to locale collation", () => {
+    const cjkRows = [
+      makeUsageRow({ agentId: "z", displayName: "张飞", ownerDisplayName: "赵云" }),
+      makeUsageRow({ agentId: "a", displayName: "阿斗", ownerDisplayName: "安琪" }),
+      makeUsageRow({ agentId: "b", displayName: "白起", ownerDisplayName: "包拯" }),
+    ];
+
+    expect(
+      sortWorkspaceAgentUsageRows(cjkRows, { key: "agent", direction: "asc" }, "zh-CN").map(
+        (row) => row.agentId,
+      ),
+    ).toEqual(["a", "b", "z"]);
+    expect(
+      sortWorkspaceAgentUsageRows(cjkRows, { key: "owner", direction: "desc" }, "zh-CN").map(
+        (row) => row.agentId,
+      ),
+    ).toEqual(["z", "b", "a"]);
   });
 });

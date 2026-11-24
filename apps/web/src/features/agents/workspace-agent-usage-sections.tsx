@@ -1,5 +1,9 @@
 import { Link, useNavigate } from "@tanstack/react-router";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronSelectorVertical } from "@untitledui/icons";
+import { Button as AriaButton } from "react-aria-components";
 
+import { Button } from "#src/components/base/buttons/button";
+import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -19,10 +23,177 @@ import {
 import { formatAgentProfileParam } from "./profile-panel/profile-panel-search";
 import { useAgentModelName } from "./use-agent-model-name";
 import { useLiveAgentDisplay } from "./workspace-agents-realtime";
-import type { WorkspaceAgentUsageRow } from "./workspace-agent-usage-model";
+import type {
+  WorkspaceAgentUsageRow,
+  WorkspaceAgentUsageSort,
+  WorkspaceAgentUsageSortKey,
+} from "./workspace-agent-usage-model";
 
 export const USAGE_TABLE_GRID_CLASS =
   "@2xl/members:grid @2xl/members:grid-cols-[minmax(12rem,1fr)_7.5rem_6rem] @2xl/members:gap-3 @4xl/members:grid-cols-[minmax(14rem,1.4fr)_7.5rem_6rem_10.5rem_9.5rem]";
+
+type UsageSortColumnSpec = Readonly<{
+  key: WorkspaceAgentUsageSortKey;
+  label: () => string;
+  align: "start" | "end";
+  wideOnly?: boolean;
+}>;
+
+const USAGE_SORT_COLUMNS: readonly UsageSortColumnSpec[] = [
+  { key: "agent", label: m.member_table_col_agent, align: "start" },
+  { key: "tokens", label: m.agent_usage_col_tokens, align: "end" },
+  { key: "turns", label: m.agent_usage_col_turns, align: "end" },
+  { key: "model", label: m.agent_usage_col_model, align: "start", wideOnly: true },
+  { key: "owner", label: m.member_table_col_owner, align: "start", wideOnly: true },
+];
+
+const COARSE_HIT_TARGET_CLASS =
+  "relative any-pointer-coarse:after:absolute any-pointer-coarse:after:top-1/2 any-pointer-coarse:after:left-1/2 any-pointer-coarse:after:size-full any-pointer-coarse:after:min-h-11 any-pointer-coarse:after:min-w-11 any-pointer-coarse:after:-translate-x-1/2 any-pointer-coarse:after:-translate-y-1/2";
+
+function isUsageSortKey(value: string): value is WorkspaceAgentUsageSortKey {
+  return (
+    value === "agent" ||
+    value === "tokens" ||
+    value === "turns" ||
+    value === "model" ||
+    value === "owner"
+  );
+}
+
+function formatSortAriaLabel(
+  columnLabel: string,
+  active: boolean,
+  direction: WorkspaceAgentUsageSort["direction"],
+): string {
+  if (!active) return m.agent_usage_sort_by({ column: columnLabel });
+  return direction === "asc"
+    ? m.agent_usage_sort_active_asc({ column: columnLabel })
+    : m.agent_usage_sort_active_desc({ column: columnLabel });
+}
+
+export function UsageRankingHeader({
+  sort,
+  onSort,
+}: {
+  sort: WorkspaceAgentUsageSort;
+  onSort: (key: WorkspaceAgentUsageSortKey) => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={m.agent_usage_sort_label()}
+      className={cn(
+        "hidden border-b border-secondary px-4 py-2 text-xs text-tertiary",
+        USAGE_TABLE_GRID_CLASS,
+      )}
+    >
+      {USAGE_SORT_COLUMNS.map((column) => {
+        const active = sort.key === column.key;
+        const label = column.label();
+        const SortIcon = active
+          ? sort.direction === "asc"
+            ? ArrowUp
+            : ArrowDown
+          : ChevronSelectorVertical;
+
+        return (
+          <div
+            key={column.key}
+            className={cn(
+              "flex min-w-0 items-center",
+              column.align === "end" ? "justify-end" : "justify-start",
+              column.wideOnly && "hidden @4xl/members:flex",
+            )}
+          >
+            <AriaButton
+              onPress={() => onSort(column.key)}
+              aria-pressed={active}
+              aria-label={formatSortAriaLabel(label, active, sort.direction)}
+              className={cn(
+                "group inline-flex max-w-full min-w-0 cursor-pointer items-center gap-1 rounded-sm px-1 py-0.5 whitespace-nowrap outline-none transition-colors data-focus-visible:ring-2 data-focus-visible:ring-brand",
+                COARSE_HIT_TARGET_CLASS,
+                column.align === "end" ? "-me-1 flex-row-reverse text-end" : "-ms-1 text-start",
+                active
+                  ? "font-semibold text-primary"
+                  : "font-medium text-tertiary hover:text-primary",
+              )}
+            >
+              <span className="truncate">{label}</span>
+              <SortIcon
+                aria-hidden="true"
+                className={cn(
+                  "size-3.5 shrink-0 transition-colors",
+                  active
+                    ? "text-primary"
+                    : "text-fg-quaternary opacity-60 group-hover:text-tertiary group-hover:opacity-100",
+                )}
+              />
+            </AriaButton>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export function UsageRankingSortMenu({
+  sort,
+  onSort,
+}: {
+  sort: WorkspaceAgentUsageSort;
+  onSort: (key: WorkspaceAgentUsageSortKey) => void;
+}) {
+  const activeColumn =
+    USAGE_SORT_COLUMNS.find((column) => column.key === sort.key) ?? USAGE_SORT_COLUMNS[1]!;
+  const activeLabel = activeColumn.label();
+  const DirectionIcon = sort.direction === "asc" ? ArrowUp : ArrowDown;
+
+  return (
+    <div className="@2xl/members:hidden">
+      <Dropdown.Root>
+        <Button
+          size="xs"
+          color="secondary"
+          iconLeading={DirectionIcon}
+          iconTrailing={ChevronDown}
+          aria-label={`${m.agent_usage_sort_label()}: ${formatSortAriaLabel(activeLabel, true, sort.direction)}`}
+          className={cn("text-xs font-medium", COARSE_HIT_TARGET_CLASS)}
+        >
+          {activeLabel}
+        </Button>
+        <Dropdown.Popover placement="bottom end">
+          <Dropdown.Menu
+            aria-label={m.agent_usage_sort_label()}
+            selectionMode="single"
+            selectedKeys={new Set([sort.key])}
+            onAction={(key) => {
+              const next = String(key);
+              if (isUsageSortKey(next)) onSort(next);
+            }}
+          >
+            {USAGE_SORT_COLUMNS.map((column) => {
+              const active = sort.key === column.key;
+              return (
+                <Dropdown.Item
+                  key={column.key}
+                  id={column.key}
+                  label={column.label()}
+                  addon={
+                    active
+                      ? sort.direction === "asc"
+                        ? m.agent_usage_sort_asc()
+                        : m.agent_usage_sort_desc()
+                      : undefined
+                  }
+                />
+              );
+            })}
+          </Dropdown.Menu>
+        </Dropdown.Popover>
+      </Dropdown.Root>
+    </div>
+  );
+}
 
 const MODEL_SWATCH_CLASSES = [
   "bg-chart-input",

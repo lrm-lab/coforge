@@ -55,6 +55,97 @@ export type WorkspaceAgentUsageRow = {
   teamSharePercent: number;
 };
 
+export type WorkspaceAgentUsageSortKey = "agent" | "tokens" | "turns" | "model" | "owner";
+
+export type WorkspaceAgentUsageSortDirection = "asc" | "desc";
+
+export type WorkspaceAgentUsageSort = Readonly<{
+  key: WorkspaceAgentUsageSortKey;
+  direction: WorkspaceAgentUsageSortDirection;
+}>;
+
+export const DEFAULT_WORKSPACE_AGENT_USAGE_SORT: WorkspaceAgentUsageSort = {
+  key: "tokens",
+  direction: "desc",
+};
+
+export function defaultWorkspaceAgentUsageSortDirection(
+  key: WorkspaceAgentUsageSortKey,
+): WorkspaceAgentUsageSortDirection {
+  return key === "tokens" || key === "turns" ? "desc" : "asc";
+}
+
+export function toggleWorkspaceAgentUsageSort(
+  current: WorkspaceAgentUsageSort,
+  key: WorkspaceAgentUsageSortKey,
+): WorkspaceAgentUsageSort {
+  if (current.key === key) {
+    return {
+      key,
+      direction: current.direction === "asc" ? "desc" : "asc",
+    };
+  }
+  return {
+    key,
+    direction: defaultWorkspaceAgentUsageSortDirection(key),
+  };
+}
+
+function compareOptionalText(
+  aValue: string,
+  bValue: string,
+  collator: Intl.Collator,
+  dir: number,
+): number {
+  const a = aValue.trim();
+  const b = bValue.trim();
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+  return collator.compare(a, b) * dir;
+}
+
+export function sortWorkspaceAgentUsageRows(
+  rows: readonly WorkspaceAgentUsageRow[],
+  sort: WorkspaceAgentUsageSort = DEFAULT_WORKSPACE_AGENT_USAGE_SORT,
+  locale?: string,
+): WorkspaceAgentUsageRow[] {
+  const collator = new Intl.Collator(locale, { sensitivity: "base", numeric: true });
+  const dir = sort.direction === "asc" ? 1 : -1;
+
+  return [...rows].sort((a, b) => {
+    let primary = 0;
+    switch (sort.key) {
+      case "tokens":
+        primary = (a.effectiveTokens - b.effectiveTokens) * dir;
+        break;
+      case "turns":
+        primary = (a.turns - b.turns) * dir;
+        break;
+      case "agent":
+        primary = collator.compare(a.displayName, b.displayName) * dir;
+        break;
+      case "model":
+        primary = compareOptionalText(a.topModel, b.topModel, collator, dir);
+        break;
+      case "owner":
+        primary = compareOptionalText(a.ownerDisplayName, b.ownerDisplayName, collator, dir);
+        break;
+    }
+    if (primary !== 0) return primary;
+
+    if (sort.key !== "tokens" && b.effectiveTokens !== a.effectiveTokens) {
+      return b.effectiveTokens - a.effectiveTokens;
+    }
+    if (sort.key !== "turns" && b.turns !== a.turns) {
+      return b.turns - a.turns;
+    }
+    const nameOrder = collator.compare(a.displayName, b.displayName);
+    if (nameOrder !== 0) return nameOrder;
+    return a.agentId < b.agentId ? -1 : a.agentId > b.agentId ? 1 : 0;
+  });
+}
+
 export type WorkspaceAgentUsageReport = {
   timeline: AgentTokenUsageReport;
   agents: WorkspaceAgentUsageAgentMeta[];
@@ -307,29 +398,27 @@ export function summarizeWorkspaceAgentUsage(
   let visibleTurns = 0;
   let visibleActiveAgents = 0;
 
-  const rows: WorkspaceAgentUsageRow[] = allRows
-    .filter((row) => {
-      if (!matchedAgentIds.has(row.agentId)) return false;
-      if (row.archived && row.effectiveTokens === 0 && row.turns === 0) return false;
-      return true;
-    })
-    .map((row) => {
-      visibleEffectiveTokens += row.effectiveTokens;
-      visibleTurns += row.turns;
-      if (row.effectiveTokens > 0 || row.turns > 0) visibleActiveAgents += 1;
-      return {
-        ...row,
-        teamSharePercent:
-          teamEffectiveTokens > 0
-            ? Math.round((row.effectiveTokens / teamEffectiveTokens) * 1000) / 10
-            : 0,
-      };
-    })
-    .sort((a, b) => {
-      if (b.effectiveTokens !== a.effectiveTokens) return b.effectiveTokens - a.effectiveTokens;
-      if (b.turns !== a.turns) return b.turns - a.turns;
-      return a.displayName.localeCompare(b.displayName);
-    });
+  const rows: WorkspaceAgentUsageRow[] = sortWorkspaceAgentUsageRows(
+    allRows
+      .filter((row) => {
+        if (!matchedAgentIds.has(row.agentId)) return false;
+        if (row.archived && row.effectiveTokens === 0 && row.turns === 0) return false;
+        return true;
+      })
+      .map((row) => {
+        visibleEffectiveTokens += row.effectiveTokens;
+        visibleTurns += row.turns;
+        if (row.effectiveTokens > 0 || row.turns > 0) visibleActiveAgents += 1;
+        return {
+          ...row,
+          teamSharePercent:
+            teamEffectiveTokens > 0
+              ? Math.round((row.effectiveTokens / teamEffectiveTokens) * 1000) / 10
+              : 0,
+        };
+      }),
+    DEFAULT_WORKSPACE_AGENT_USAGE_SORT,
+  );
 
   return {
     timelineBuckets,
