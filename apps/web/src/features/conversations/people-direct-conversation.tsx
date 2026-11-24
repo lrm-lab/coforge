@@ -151,7 +151,7 @@ export function PeopleDirectConversation({
         description: self
           ? m.people_dm_self_empty_description()
           : m.people_dm_empty_description({ name: peer.displayName }),
-        avatar: { name: peer.displayName, src: peer.avatarUrl },
+        avatar: { name: peer.displayName, src: peer.avatarUrl, userId: peer.id },
       }}
     />
   );

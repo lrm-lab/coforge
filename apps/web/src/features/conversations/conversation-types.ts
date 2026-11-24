@@ -163,7 +163,12 @@ export type ThreadedConversationProps = Omit<ConversationProps, "conversation" |
   plainMentions?: Map<string, ChipMention>;
   header: ReactNode;
   readOnlyNotice?: ReactNode;
-  emptyState: { title: string; description: string; media: ReactNode };
+  emptyState: {
+    title: string;
+    description: string;
+    media: ReactNode;
+    singleLineDescription?: boolean;
+  };
   threadHeaderAction?: (rootMessageId: string) => ReactNode;
   /** The viewer's follow state for a thread, where following is offered (channels). */
   threadFollow?: (rootMessageId: string) => ThreadFollow | undefined;

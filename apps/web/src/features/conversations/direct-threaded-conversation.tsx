@@ -13,7 +13,7 @@ export function DirectThreadedConversation({
   emptyState: {
     title: string;
     description: string;
-    avatar: { name: string; src?: string | null };
+    avatar: { name: string; src?: string | null; userId?: string; agentId?: string };
   };
 }) {
   return (
@@ -23,14 +23,16 @@ export function DirectThreadedConversation({
       threadContext={threadContext ?? name}
       emptyState={{
         ...emptyState,
+        singleLineDescription: true,
         media: (
           <ActorAvatar
             presence={false}
             size="2xl"
+            userId={avatar.userId}
+            agentId={avatar.agentId}
             alt={avatar.name}
             src={avatar.src ?? undefined}
             name={avatar.name}
-            className="ring-1 ring-secondary"
           />
         ),
       }}

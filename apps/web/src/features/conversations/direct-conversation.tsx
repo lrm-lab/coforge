@@ -234,7 +234,11 @@ export function DirectConversation({
       emptyState={{
         title: m.conversation_empty_title({ name: conversation.agent.displayName }),
         description: m.conversation_empty_description(),
-        avatar: { name: conversation.agent.displayName, src: conversation.agent.avatarUrl },
+        avatar: {
+          name: conversation.agent.displayName,
+          src: conversation.agent.avatarUrl,
+          agentId: conversation.agent.id,
+        },
       }}
     />
   );

@@ -12,7 +12,12 @@ export function ConversationStreamPlaceholder({
 }: {
   loading: boolean;
   narrow: boolean;
-  emptyState: { title: string; description: string; media: ReactNode };
+  emptyState: {
+    title: string;
+    description: string;
+    media: ReactNode;
+    singleLineDescription?: boolean;
+  };
 }) {
   const padding = narrow ? "px-4 py-8 md:px-6" : "px-4 pt-[clamp(2rem,10svh,5rem)] pb-8 md:px-6";
   if (loading)
@@ -33,7 +38,11 @@ export function ConversationStreamPlaceholder({
       picture={emptyState.media}
       title={emptyState.title}
       description={emptyState.description}
-      className={cn(padding, !narrow && "mx-0 items-start text-left [&>p]:text-left")}
+      className={cn(
+        padding,
+        !narrow && "mx-0 items-start text-left [&>p]:text-left",
+        emptyState.singleLineDescription && "max-w-none text-wrap [&>p]:max-w-none",
+      )}
     />
   );
 }

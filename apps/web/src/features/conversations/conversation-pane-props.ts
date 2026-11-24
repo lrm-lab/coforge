@@ -12,7 +12,12 @@ export type ConversationPaneProps = Omit<ConversationProps, "conversation" | "ag
   conversation: Omit<DirectConversationView, "agent">;
   header?: ReactNode;
   readOnlyNotice?: ReactNode;
-  emptyState: { title: string; description: string; media: ReactNode };
+  emptyState: {
+    title: string;
+    description: string;
+    media: ReactNode;
+    singleLineDescription?: boolean;
+  };
   /** Whether this stream's read has completed - see `stream-state.ts`. */
   streamRead?: StreamRead;
   root?: DirectConversationView["messages"][number];
