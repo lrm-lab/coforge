@@ -435,20 +435,19 @@ const MemberRow = memo(function MemberRow({
         // The badge and the actions share one grid cell; the badge gives way to them on hover or
         // keyboard focus. The actions are hidden by opacity, not visibility, so they stay in the
         // tab order and a keyboard focus reveals them.
-        <span className="ml-auto grid shrink-0 items-center justify-items-end [@media(hover:none)]:flex [@media(hover:none)]:gap-2">
+        <span className="ml-auto grid shrink-0 items-center justify-items-end">
           {badge && (
             <span
               className={cn(
                 "col-start-1 row-start-1 flex",
-                hasActions &&
-                  "group-focus-within:opacity-0 group-hover:opacity-0 [@media(hover:none)]:opacity-100",
+                hasActions && "group-focus-within:opacity-0 group-hover:opacity-0",
               )}
             >
               {badge}
             </span>
           )}
           {hasActions && (
-            <span className="col-start-1 row-start-1 flex items-center gap-1 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
+            <span className="col-start-1 row-start-1 flex items-center gap-1 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
               {canChangeRole && (
                 <Button
                   size="sm"
