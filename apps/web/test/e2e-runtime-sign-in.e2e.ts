@@ -351,7 +351,7 @@ test("Kiro enterprise form starts the shared device-code flow and explains an ex
     });
     await waitText("Your organization has disabled device-code sign-in.");
     await shot("kiro-device-disabled");
-    await browser("click", 'button[aria-label="Close"]');
+    await browser("click", '[role="dialog"] button[aria-label="Close"]');
     await devtools.send("Emulation.setDeviceMetricsOverride", {
       width: 390,
       height: 844,
@@ -364,7 +364,7 @@ test("Kiro enterprise form starts the shared device-code flow and explains an ex
     await waitText("通过 IAM Identity Center 登录 Kiro");
     await browser("eval", `document.documentElement.classList.add("dark-mode")`);
     await shot("kiro-enterprise-form-zh-dark-mobile");
-    await browser("click", 'button[aria-label="关闭"]');
+    await browser("click", '[role="dialog"] button[aria-label="关闭"]');
     await db.computer.update({ where: { id: computerId }, data: { platform: "win32" } });
     await open(pageUrl.replace("/en/", "/zh-CN/"));
     await clickSelector('li button[aria-label^="Kiro"]');
@@ -422,7 +422,7 @@ test("a Computer that can sign Kiro in free asks which account first; free start
     await waitFor(`!(${startUrlShown})`, 5_000);
     await browser("click", '[role="dialog"] button[type="submit"]');
     await waitText("This Computer is offline.");
-    await browser("click", 'button[aria-label="Close"]');
+    await browser("click", '[role="dialog"] button[aria-label="Close"]');
     await devtools.send("Emulation.setDeviceMetricsOverride", {
       width: 390,
       height: 844,
@@ -437,7 +437,7 @@ test("a Computer that can sign Kiro in free asks which account first; free start
     await choose("pro");
     await waitText("AWS 区域");
     await shot("kiro-choice-zh-dark-mobile");
-    await browser("click", 'button[aria-label="关闭"]');
+    await browser("click", '[role="dialog"] button[aria-label="关闭"]');
     await devtools.send("Emulation.clearDeviceMetricsOverride", {});
   } finally {
     await devtools.close();
