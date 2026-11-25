@@ -58,9 +58,10 @@ test("AgentConsumedAttention prunes PreviewSeen on frontier advance and clears i
   expect(attention.hasExactSeen("agent-a", "#general")).toBe(false);
 });
 
-test("composeDeliveryNotice skips non-card deliveries already covered by the consumed frontier after PreviewSeen pruning while keeping card events", async () => {
+test("planDeliveryNotice skips non-card deliveries already covered by the consumed frontier after PreviewSeen pruning while keeping card events", async () => {
   const { AGENT_MESSAGE_METHOD } = await import("@lrm/coforge-sdk/internal");
-  const { composeDeliveryNotice } = await import("#src/daemon-runtime/delivery-notice");
+  const { planDeliveryNotice } = await import("#src/daemon-runtime/delivery-notice");
+  const { noticeEligibility } = await import("#src/daemon-runtime/notice-eligibility");
   const previewSeen = new PreviewSeen();
   const attention = new AgentConsumedAttention({
     store: () => undefined,
@@ -109,26 +110,26 @@ test("composeDeliveryNotice skips non-card deliveries already covered by the con
   attention.recordModelSeen("agent-a", "#alpha", 5);
   expect(previewSeen.recorded("agent-a", "#alpha")).toBeUndefined();
 
-  const retryNotice = composeDeliveryNotice({
-    message: d1,
+  const retryNotice = planDeliveryNotice({
+    agentId: "agent-a",
     announced: [d1, d2],
     queued: [],
     prefix: "",
     previewedInFull: (target, sequence) => previewSeen.has("agent-a", target, sequence),
-    hasSeen: (agentId, target, sequence, conversationId) =>
-      attention.hasSeen(agentId, target, sequence, conversationId),
-  });
-  expect(retryNotice.view.rows.map((row) => row.target)).toEqual(["#beta"]);
-  expect(retryNotice.view.whole).toEqual([{ target: "#beta", sequence: 20 }]);
+    eligibility: noticeEligibility((...args) => attention.readBasis(...args)),
+  })();
+  expect(retryNotice?.rows).toHaveLength(1);
+  expect(retryNotice?.rows[0]).toStartWith("#beta ");
+  expect(retryNotice?.shown).toEqual([{ target: "#beta", sequence: 20 }]);
 
-  const cardNotice = composeDeliveryNotice({
-    message: cardAnswer,
+  const cardNotice = planDeliveryNotice({
+    agentId: "agent-a",
     announced: [cardAnswer],
     queued: [],
     prefix: "",
     previewedInFull: (target, sequence) => previewSeen.has("agent-a", target, sequence),
-    hasSeen: (agentId, target, sequence, conversationId) =>
-      attention.hasSeen(agentId, target, sequence, conversationId),
-  });
-  expect(cardNotice.view.rows.map((row) => row.target)).toEqual(["#alpha"]);
+    eligibility: noticeEligibility((...args) => attention.readBasis(...args)),
+  })();
+  expect(cardNotice?.rows).toHaveLength(1);
+  expect(cardNotice?.rows[0]).toStartWith("#alpha ");
 });
