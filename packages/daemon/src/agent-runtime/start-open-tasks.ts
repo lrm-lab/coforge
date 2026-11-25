@@ -8,8 +8,12 @@ import {
 const OPEN_TASK_REF_MAX_CHARS = 200;
 const OPEN_TASK_TITLE_MAX_CHARS = 140;
 
+export const VERIFY_TASK_TO_RESUME =
+  "Open only the selected task with `coforge task view` if its details are missing or have changed. Verify current ownership, status and blockers before resuming. Wait for any pending approval or acceptance.";
+
 export const OPEN_TASKS_RESUME_ACTION =
-  "Check your unfinished tasks above with `coforge task view` and continue or update their status as needed; stop silently only if none needs action from you.";
+  'After current requests, reuse current task list results or run `coforge task list --mine` once. Follow "Your queue" if shown and pick work that can proceed. ' +
+  VERIFY_TASK_TO_RESUME;
 
 export function hasStartOpenTasks(
   openTasks: AgentStartOpenTasks | undefined,

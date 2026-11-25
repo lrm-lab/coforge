@@ -249,7 +249,8 @@ test("a resumed provider that emits failure before rejecting its first input sti
       sessionMode: "resume",
     });
     expect(modes).toEqual(["resume", "create"]);
-    expect(inputs[1]).toContain("To recover your work without previous session context");
+    expect(inputs[1]).toContain("You are starting a fresh session.");
+    expect(inputs[1]).toContain("Use the supplied handoff and memory");
     expect(disposed).toBe(1);
     expect(h.activities.at(-1)?.detailKind).toBe("idle");
   } finally {

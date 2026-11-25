@@ -1,11 +1,34 @@
 import { describe, expect, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { readIdleTaskFacts } from "#src/server/tasks/task-idle-reminder-facts.server";
-import { idleNudge } from "#src/server/tasks/task-idle-reminder.server";
+import { idleNudge, idleReminderText } from "#src/server/tasks/task-idle-reminder.server";
 
 const HOUR = 3_600_000;
 const BASE_TIME = new Date("2026-11-17T12:00:00.000Z");
 const at = (hours: number) => new Date(BASE_TIME.getTime() + hours * HOUR);
+
+test("a fresh-session reminder reuses verified task details until the task changes", () => {
+  const text = idleReminderText(
+    [
+      {
+        ref: "#coforge:#12",
+        taskNumber: 12,
+        channel: "coforge",
+        title: "Verify recovery",
+        status: "in_progress",
+        priority: "high",
+        reason: "new_session",
+        why: "you started a new session",
+        queuePosition: 1,
+      },
+    ],
+    [],
+  );
+  expect(text).toContain("prio=high");
+  expect(text).toContain("Respect any pending approval or acceptance");
+  expect(text).toContain("Reuse task details verified in this session");
+  expect(text).toContain("when details are missing or the task has changed");
+});
 
 type StoredTask = {
   id: string;

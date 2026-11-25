@@ -109,18 +109,23 @@ export function idleReminderText(
     );
   const guidance = queued
     ? hasUnassigned
-      ? "Pick up the first queued task, claim or assign any unassigned task you created, or update a task's status if it is done or blocked. Read a task with `coforge task view '<ref>'`."
-      : "Pick up the first queued task, or update a task's status if it is done or blocked. Read a task with `coforge task view '<ref>'`."
+      ? "Pick up the first queued task that can proceed, claim or assign any unassigned task you created, or update a task's status if it is done or blocked."
+      : "Pick up the first queued task that can proceed, or update a task's status if it is done or blocked."
     : hasActionableUnassigned
-      ? "Claim or assign the unassigned tasks you created, or close them if no longer needed. Read a task with `coforge task view '<ref>'`."
-      : "None of these can start yet — each waits outside your queue. Read a task with `coforge task view '<ref>'`.";
+      ? "Claim or assign the unassigned tasks you created, or close them if no longer needed."
+      : "None of these can start yet — each waits outside your queue.";
   return [
     "[Idle task reminder] Your task queue first, then what waits on others:",
     ...items.map(
       (item) =>
         `- ${item.queuePosition === undefined ? "" : `#${item.queuePosition} `}${item.ref} [${item.status}] prio=${item.priority} "${item.title}" — ${item.why}`,
     ),
-    ...(includeGuidance ? [guidance] : []),
+    ...(includeGuidance
+      ? [
+          guidance +
+            " Respect any pending approval or acceptance. Reuse task details verified in this session. Read the selected task with `coforge task view '<ref>'` when details are missing or the task has changed.",
+        ]
+      : []),
     ...(backlog.length > 0
       ? [`(${backlog.length} more: ${backlog.map((item) => item.ref).join(", ")})`]
       : []),

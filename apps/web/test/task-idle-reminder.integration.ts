@@ -118,6 +118,27 @@ test("one reminder an hour, except for a fresh session", async () => {
   }
 });
 
+test("a fresh session sees reassignments and priority changes made between task reads", async () => {
+  const { db, make, assign, run, nudge, two } = await world();
+  try {
+    const [old, promoted] = await make("alice", 2, { priority: "low" });
+    await assign(old!);
+    await assign(promoted!);
+    expect((await nudge()).items.map((task) => task.taskNumber)).toEqual([old, promoted]);
+
+    await assign(old!, two);
+    await run("alice", { operation: "update", number: promoted!, priority: "urgent" });
+
+    const fresh = await nudge({ freshSession: true }, 2);
+    expect(fresh.items).toMatchObject([
+      { taskNumber: promoted, priority: "urgent", queuePosition: 1 },
+    ]);
+    expect(fresh.text).toContain("when details are missing or the task has changed");
+  } finally {
+    await db.$disconnect();
+  }
+});
+
 test("a quiet Task is stale after 24 hours, once a day, and never while background tasks run", async () => {
   const { db, make, run, nudge } = await world();
   try {
@@ -210,7 +231,7 @@ test("highest priority first, oldest first within one; five listed, the rest in 
       `- #1 ${ref(urgent1!)} [todo] prio=urgent "${sent.items[0]!.title}" — newly assigned to you`,
     );
     expect(lines[6]).toBe(
-      "Pick up the first queued task, or update a task's status if it is done or blocked. Read a task with `coforge task view '<ref>'`.",
+      "Pick up the first queued task that can proceed, or update a task's status if it is done or blocked. Respect any pending approval or acceptance. Reuse task details verified in this session. Read the selected task with `coforge task view '<ref>'` when details are missing or the task has changed.",
     );
     expect(lines[7]).toBe(`(2 more: ${ref(newerDefault!)}, ${ref(low!)})`);
     expect(lines).toHaveLength(8);

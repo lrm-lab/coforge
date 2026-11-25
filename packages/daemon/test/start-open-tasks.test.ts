@@ -194,6 +194,22 @@ describe("start open tasks formatting", () => {
     }
   });
 
+  test("a fresh handoff checks current queue order and opens only the work it can resume", () => {
+    const startup = agentStartupInput(false, true, sampleOpenTasks);
+    const catchup = agentStartupCatchupInput(["#general 2 new messages"], false, sampleOpenTasks);
+    for (const input of [startup, catchup]) {
+      expect(input).toContain(
+        "reuse current task list results or run `coforge task list --mine` once",
+      );
+      expect(input).toContain('Follow "Your queue" if shown and pick work that can proceed');
+      expect(input).toContain("Open only the selected task");
+      expect(input).toContain("Verify current ownership, status and blockers");
+      expect(input).toContain("Wait for any pending approval or acceptance");
+    }
+    expect(startup).not.toContain("read notes/active-context.md");
+    expect(startup).toContain("Use the supplied handoff and memory");
+  });
+
   test("agentStartupCatchupInput appends open tasks on summary-only catch-up", () => {
     const plain = agentStartupCatchupInput(["#general 2 new messages"]);
     expect(plain).toContain("then end this turn");

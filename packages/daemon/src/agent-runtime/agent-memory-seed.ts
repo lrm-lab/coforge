@@ -18,8 +18,10 @@ export type AgentMemorySeedIdentity = {
 };
 
 const ACTIVE_CONTEXT_SEED = `# Active Context
-
-Current state, not a log: overwrite it when work starts, finishes or blocks — next step, blocker, progress only.
+- Task:
+- Verified result:
+- Next action or waiting for:
+- Evidence:
 `;
 
 /**

@@ -1,11 +1,8 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  attachSessionMemory,
-  prependSessionMemory,
-} from "#src/agent-runtime/session-memory-briefing";
+import { attachSessionMemory } from "#src/agent-runtime/session-memory-briefing";
 import { agentStartupInput } from "#src/agent-runtime/agent-startup";
 import { STARTUP_MEMORY_BUDGET_TOKENS } from "#src/agent-runtime/startup-memory-block";
 import type { AgentInput, AgentInputQueue } from "#src/daemon-runtime/runtime-launch-intent";
@@ -49,7 +46,7 @@ test("an empty queue's starter carries the block and stops asking for MEMORY.md"
   expect(text).not.toContain("read MEMORY.md and");
 });
 
-test("a truncated block tells the starter to read the rest of the file", async () => {
+test("a truncated block identifies further details without asking to reread every file", async () => {
   const directory = await workspace(
     `# Agent\n\n${"filler line for the budget\n".repeat(STARTUP_MEMORY_BUDGET_TOKENS)}\n# END\n`,
   );
@@ -58,7 +55,29 @@ test("a truncated block tells the starter to read the rest of the file", async (
   expect(block?.complete).toBe(false);
   const text = (items.items[0] as { text: string }).text;
   expect(text).toContain('shown="first');
-  expect(text).toContain("read MEMORY.md and notes/active-context.md");
+  expect(text).toContain('complete="false" note="read the file for the rest"');
+  expect(text).toContain("read referenced files only for missing details");
+});
+
+test("a long workspace note carries the short handoff and leaves extra history on disk", async () => {
+  const directory = await workspace("# Agent");
+  const notes = join(directory, "notes");
+  await mkdir(notes);
+  await writeFile(
+    join(notes, "active-context.md"),
+    "# Active Context\n\n- Task: #project:#12\n- Verified result: changes delivered\n" +
+      "- Next action or wait: await owner acceptance\n- Evidence: notes/results.md\n\n" +
+      "Older discussion\n".repeat(6_000) +
+      "END OF DISCUSSION",
+  );
+  const items = queue(starter());
+  const block = await attachSessionMemory(items, directory);
+  expect(block?.complete).toBe(false);
+  const text = (items.items[0] as { text: string }).text;
+  expect(text).toContain("await owner acceptance");
+  expect(text).toContain("notes/results.md");
+  expect(text).not.toContain("END OF DISCUSSION");
+  expect(text).toContain("read referenced files only for missing details");
 });
 
 test("a queued delivery keeps its place behind one short reference turn", async () => {
