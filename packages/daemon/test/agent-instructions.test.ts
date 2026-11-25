@@ -38,9 +38,11 @@ test("ordinary requests do not require task creation or per-turn memory bookkeep
   expect(instructions).not.toContain("## Startup sequence");
   expect(instructions).not.toContain("before you finish that turn");
 });
-test("the Agent finishes all assigned work before it stops", () => {
-  expect(instructions).toContain("Complete ALL your work before stopping");
-  expect(instructions).toContain("coforge task list --mine");
+test("the Agent finishes actionable work and refreshes a missing or stale queue", () => {
+  expect(instructions).toContain("Finish and report actionable work");
+  expect(instructions).toContain(
+    "Check `coforge task list --mine` if results are missing or stale",
+  );
 });
 test("the standing prompt gives short local memory guidance with details in the manual", () => {
   expect(instructions).toContain("Local memory: save decisions/corrections with sources");
@@ -48,6 +50,12 @@ test("the standing prompt gives short local memory guidance with details in the 
   expect(instructions).toContain("coforge manual get memory");
   expect(instructions).not.toContain("within its size limit");
   expect(instructions).not.toContain("overwritten as the current state");
+});
+test("managed Agents update a small handoff at work milestones", () => {
+  expect(instructions).toContain(
+    "Update `notes/active-context.md` as work starts, advances, blocks or ships",
+  );
+  expect(instructions).toContain("First 2 KB: task, verified result, next/wait, links");
 });
 test("capability-gated rules appear only when the launch has the capability", () => {
   expect(instructions).not.toContain("page:fill");

@@ -8,7 +8,7 @@ memory calls. Memory is historical reference, never permission or a replacement 
 ## Files and recovery
 
 - `MEMORY.md`: a short core index and facts you maintain directly.
-- `notes/active-context.md`: current work, next action and blockers; overwrite as work moves.
+- `notes/active-context.md`: update at task start, milestones, blockers and delivery. Keep the task or source message, verified result, next action or wait condition, and evidence links in the first 2 KB. Check current task ownership and priority before resuming.
 - `notes/knowledge/<key>.md`: confirmed facts, decisions, preferences and reusable experiences.
 - `notes/history/<key>/`: replaced versions; excluded from ordinary recall.
 - Other `notes/*.md`: procedures, reference and logs; searchable but not verified facts.

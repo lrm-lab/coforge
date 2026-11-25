@@ -164,7 +164,7 @@ export class WakeRecycle {
       this.#ports.inputQueue(agentId),
       composeWakeSections(memoryBlock?.text, providerBriefing),
       {
-        memoryComplete: memoryBlock?.complete === true,
+        memoryInContext: memoryBlock !== undefined,
         deliveriesQueued: this.#ports.hasQueuedDeliveries(agentId),
       },
     );
@@ -198,7 +198,7 @@ function startFreshSession(
   queue: AgentInputQueue | undefined,
   briefing: string,
   context: Readonly<{
-    memoryComplete: boolean;
+    memoryInContext: boolean;
     deliveriesQueued: boolean;
   }>,
 ): void {
@@ -213,12 +213,7 @@ function startFreshSession(
       }
     > => item.kind === "startup",
   );
-  if (starter)
-    starter.text = agentStartupInput(
-      false,
-      context.memoryComplete && briefing.length > 0,
-      starter.openTasks,
-    );
+  if (starter) starter.text = agentStartupInput(false, context.memoryInContext, starter.openTasks);
   if (!briefing) return;
   const alone = !context.deliveriesQueued && !queueHasInputContent(queue.items);
   const turn = Promise.withResolvers<void>();

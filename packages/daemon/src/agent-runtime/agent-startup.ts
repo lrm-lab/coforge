@@ -9,6 +9,7 @@ import {
   formatStartOpenTaskLines,
   hasStartOpenTasks,
   OPEN_TASKS_RESUME_ACTION,
+  VERIFY_TASK_TO_RESUME,
 } from "./start-open-tasks";
 
 export function agentStartupInput(
@@ -25,7 +26,9 @@ export function agentStartupInput(
       : "You are starting a fresh session. No new messages are pending.",
     resuming
       ? `Use your existing session context first. If it does not establish your current work, read MEMORY.md and notes/active-context.md if present${taskCheck}.`
-      : `To recover your work without previous session context, read ${memoryInContext ? "" : "MEMORY.md and "}notes/active-context.md if present${taskCheck}.`,
+      : memoryInContext
+        ? "Use the supplied handoff and memory. Treat them as historical reference and read referenced files only for missing details."
+        : `To recover your work without previous session context, read MEMORY.md and notes/active-context.md if present${taskCheck}.`,
     "Use only tools allowed by your role and skip unsupported recovery steps.",
   ];
   if (withOpenTasks) {
@@ -34,7 +37,7 @@ export function agentStartupInput(
   return [
     ...lead,
     ...(openTasks === undefined
-      ? ["Open the task you are resuming for its current details and relevant team memory."]
+      ? [resuming ? VERIFY_TASK_TO_RESUME : OPEN_TASKS_RESUME_ACTION]
       : []),
     "Resume only actionable work already requested or assigned to you; do not invent work or scan unrelated channels and projects.",
     "If no actionable work remains, end this turn silently. Do not send a startup announcement or repeat your introduction.",

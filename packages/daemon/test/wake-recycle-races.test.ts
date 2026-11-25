@@ -59,17 +59,19 @@ test("the starter that follows a briefing does not send the Agent back to a MEMO
   });
   const [turn] = h.sessions[0]!.inputs;
   expect(turn).toContain("You are starting a fresh session.");
-  expect(turn).toContain("read notes/active-context.md");
+  expect(turn).toContain("Use the supplied handoff and memory");
+  expect(turn).not.toContain("read notes/active-context.md");
   expect(turn).not.toContain("read MEMORY.md and");
 });
 
-test("a MEMORY.md that was cut still sends the Agent to read the file", async () => {
+test("a MEMORY.md that was cut is marked for on-demand reading", async () => {
   const { result: h } = await run({ memory: "long" }, async (h) => {
     setSystemTime(minutes(90));
     await h.runtime.handleAgentStart(h.intent({ sessionId: "old-session", sessionMode: "resume" }));
     return h;
   });
-  expect(h.sessions[0]!.inputs[0]).toContain("read MEMORY.md and notes/active-context.md");
+  expect(h.sessions[0]!.inputs[0]).toContain('complete="false" note="read the file for the rest"');
+  expect(h.sessions[0]!.inputs[0]).toContain("read referenced files only for missing details");
 });
 
 test("a Stop that finishes while the runtime is ending is not followed by a relaunch", async () => {

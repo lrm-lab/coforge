@@ -142,11 +142,10 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   `notes/<topic>.md` that holds long material. A role is the description the standing prompt
   carries, never a section here. The Active Context lives in `notes/active-context.md`; older
   workspaces get the missing notes files, and an existing `MEMORY.md` is never migrated or rewritten.
-- The instructions say what the file is for — the next session resumes from it, so it holds what a
-  later reader needs to continue without asking again — and its limits; what goes in it, and how a
-  line is worded, is the Agent's own judgement (following Anthropic's "tell the Agent what
-  memory is for, do not teach it how to use it"). The Active Context is overwritten as the current
-  state, and `MEMORY.md` is checked before asking a human. Never per-turn maintenance.
+- The Agent updates the first 2 KB of Active Context at task start, milestones, blockers and delivery.
+  It records the task, verified result, next action or wait condition and evidence links. Keep
+  long evidence elsewhere and check current instructions and task state before resuming. Ordinary
+  turns require no memory maintenance.
 - No tidy-up reminder is scheduled and none is created: writing is event-driven, a file over its
   limit is only the cleaner's hint, and an owner's existing reminder is never cleaned up.
 

@@ -4,6 +4,7 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentRuntimeConfig, AgentRuntimeEvent, AgentSession } from "@lrm/coforge-anvil";
+import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import { DaemonRuntime } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
@@ -80,6 +81,7 @@ async function harness(reportsSessionId?: string) {
     },
     undefined,
     emptyCodeAgentDiscovery,
+    join(workspaceRoot, "state"),
   );
   await runtime.start(connection);
   return {
@@ -103,9 +105,11 @@ test("a fresh session's first input carries its MEMORY.md and stops asking for t
     // The seeded Active Context is the second file the block carries.
     expect(subject.inputs[0]).toContain('<active-context file="notes/active-context.md"');
     expect(subject.inputs[0]).toContain("You are starting a fresh session.");
-    // The seeded MEMORY.md fits the budget, so the block is complete and the starter says so.
     expect(subject.inputs[0]).not.toContain("read MEMORY.md and");
-    expect(subject.inputs[0]).toContain("read notes/active-context.md");
+    expect(subject.inputs[0]?.split("</memory-index>")[1]).not.toContain(
+      "read notes/active-context.md",
+    );
+    expect(subject.inputs[0]).toContain("Use the supplied handoff and memory");
   } finally {
     await subject.stop();
   }
@@ -239,7 +243,10 @@ test("a server reset (stop, then a create start) reaches the new first input wit
     await subject.runtime.startAgent("agent-a", config, "old-session");
     await subject.answered;
     expect(subject.inputs[0]).not.toContain("<memory-index");
-    // The reset chain: the stop step, then a start with no session and mode "create".
+    const root = agentWorkspaceDirectory(workspaceRoot, connection.workspaceId, "agent-a");
+    const handoff =
+      "- Task: #release:#12\n- Verified result: candidate built\n- Next action or waiting for: await owner acceptance\n- Evidence: notes/release.md";
+    await Bun.write(join(root, "notes", "active-context.md"), handoff);
     await subject.runtime.stopAgent("agent-a");
     await subject.runtime.startAgent(
       "agent-a",
@@ -250,9 +257,10 @@ test("a server reset (stop, then a create start) reaches the new first input wit
       undefined,
       "create",
     );
-    for (let i = 0; i < 100 && subject.inputs.length < 2; i++) await Bun.sleep(10);
     expect(subject.inputs).toHaveLength(2);
     expect(subject.inputs[1]).toContain("<memory-index");
+    expect(subject.inputs[1]).toContain(handoff);
+    expect(subject.inputs[1]).toContain("Wait for any pending approval or acceptance");
   } finally {
     await subject.stop();
   }
