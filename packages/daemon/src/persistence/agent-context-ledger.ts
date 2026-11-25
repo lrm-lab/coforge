@@ -43,12 +43,9 @@ export class AgentContextLedger {
     const statement = this.#db.query(CLAIM_SQL);
     return this.#db.transaction(() => {
       const generation = this.generation();
-      const results = new Array<boolean>(entries.length);
-      for (let i = 0; i < entries.length; i++) {
-        const [kind, id, text] = entries[i]!;
-        results[i] = statement.run(kind, id, revisionOf(text), generation).changes === 1;
-      }
-      return results;
+      return entries.map(
+        ([kind, id, text]) => statement.run(kind, id, revisionOf(text), generation).changes === 1,
+      );
     })();
   }
 
