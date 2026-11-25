@@ -1,9 +1,10 @@
-import { Fragment, useMemo } from "react";
+import { useMemo } from "react";
 import { useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Link, notFound } from "@tanstack/react-router";
 import { ArrowLeft, ArrowUpRight, ChevronRight } from "@untitledui/icons";
 import { Button as AriaButton, Disclosure, DisclosurePanel, Heading } from "react-aria-components";
 import { Group, Panel, Separator, useDefaultLayout } from "react-resizable-panels";
+import type { BreadcrumbItem } from "#src/components/layout/page-breadcrumbs";
 import { PageHeader } from "#src/components/layout/page-header";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { localLayoutStorage } from "#src/features/conversations/local-layout-storage";
@@ -19,14 +20,8 @@ import { RepositoryStatusMessage } from "./repository-status";
 import { buildTreeIndex, childrenOf } from "./tree-index";
 import { DirectoryBody } from "./project-directory-body";
 
-const crumbLinkClassName =
-  "max-w-32 shrink-0 truncate rounded p-1 outline-focus-ring hover:text-primary hover:underline focus-visible:outline-2";
-
-/**
- * The repository browser. The header, breadcrumb and side tree stay mounted while the User
- * moves between files; only the content pane waits on a request, behind its own skeleton.
- */
 export function ProjectTree({ slug, path }: { slug: string; path: string }) {
+  const workspaceSlug = useWorkspaceSlug();
   const queryClient = useQueryClient();
   const { data: project } = useSuspenseQuery(projectQuery(slug));
   const { data: repository } = useSuspenseQuery(projectTreeQuery(slug));
@@ -179,21 +174,75 @@ export function ProjectTree({ slug, path }: { slug: string; path: string }) {
     />
   );
 
+  const breadcrumbs: BreadcrumbItem[] = [
+    {
+      label: m.projects_title(),
+      link: (className) => (
+        <Link
+          to="/w/$workspaceSlug/projects"
+          params={{ workspaceSlug }}
+          activeOptions={{ exact: true }}
+          className={className}
+        >
+          {m.projects_title()}
+        </Link>
+      ),
+    },
+    {
+      label: project.name,
+      link: (className) => (
+        <Link
+          to="/w/$workspaceSlug/projects/$projectSlug"
+          params={{ workspaceSlug, projectSlug: project.slug }}
+          activeOptions={{ exact: true }}
+          className={className}
+        >
+          {project.name}
+        </Link>
+      ),
+    },
+    ...(segments.length > 0
+      ? [
+          {
+            label: defaultBranch,
+            link: (className: string) => (
+              <Link
+                to="/w/$workspaceSlug/projects/$projectSlug/tree/$"
+                params={{ workspaceSlug, projectSlug: project.slug, _splat: "" }}
+                activeOptions={{ exact: true }}
+                className={className}
+              >
+                {defaultBranch}
+              </Link>
+            ),
+          },
+          ...segments.slice(0, -1).map((label, index) => {
+            const splat = segments.slice(0, index + 1).join("/");
+            return {
+              label,
+              link: (className: string) => (
+                <Link
+                  to="/w/$workspaceSlug/projects/$projectSlug/tree/$"
+                  params={{ workspaceSlug, projectSlug: project.slug, _splat: splat }}
+                  activeOptions={{ exact: true }}
+                  className={className}
+                >
+                  {label}
+                </Link>
+              ),
+            };
+          }),
+        ]
+      : []),
+  ];
+
   return (
     <main className="flex h-full min-w-0 flex-col bg-primary">
       <PageHeader
         heading={segments.at(-1) ?? defaultBranch}
-        leading={
-          <div className="flex min-w-0 items-center gap-1">
-            <BackLink />
-            <Breadcrumb
-              projectSlug={project.slug}
-              projectName={project.name}
-              branch={defaultBranch}
-              segments={segments}
-            />
-          </div>
-        }
+        leading={<BackLink />}
+        breadcrumbs={breadcrumbs}
+        breadcrumbLabel={m.project_tree_files()}
         actions={
           <a
             href={githubUrl}
@@ -314,91 +363,5 @@ function BackLink() {
     >
       <ArrowLeft aria-hidden="true" className="size-5" />
     </Link>
-  );
-}
-
-function Breadcrumb({
-  projectSlug,
-  projectName,
-  branch,
-  segments,
-}: {
-  projectSlug: string;
-  projectName: string;
-  branch: string;
-  segments: string[];
-}) {
-  const workspaceSlug = useWorkspaceSlug();
-  const trail = [
-    { label: projectName, to: "project" as const },
-    { label: branch, to: "tree" as const, splat: "" },
-    ...segments.map((label, index) => ({
-      label,
-      to: "tree" as const,
-      splat: segments.slice(0, index + 1).join("/"),
-    })),
-  ];
-  // The last crumb becomes the page's bold PageHeader heading; only the rest render here.
-  const links = trail.slice(0, -1);
-  // Mobile keeps the last segment before the heading (so heading + this = "last two
-  // segments" overall) and collapses everything earlier to an ellipsis.
-  const mobileLinks = links.length > 1 ? links.slice(-1) : links;
-
-  function renderCrumb(crumb: (typeof links)[number], index: number, withLeadingChevron: boolean) {
-    return (
-      <Fragment key={index}>
-        {withLeadingChevron && (
-          <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-quaternary" />
-        )}
-        {crumb.to === "project" ? (
-          <Link
-            to="/w/$workspaceSlug/projects/$projectSlug"
-            params={{ workspaceSlug, projectSlug }}
-            className={crumbLinkClassName}
-          >
-            {crumb.label}
-          </Link>
-        ) : (
-          <Link
-            to="/w/$workspaceSlug/projects/$projectSlug/tree/$"
-            params={{ workspaceSlug, projectSlug, _splat: crumb.splat }}
-            className={crumbLinkClassName}
-          >
-            {crumb.label}
-          </Link>
-        )}
-      </Fragment>
-    );
-  }
-
-  // The bold PageHeader heading is the final trail entry; this chevron is its separator.
-  const headingSeparator = (
-    <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-quaternary" />
-  );
-
-  return (
-    <>
-      <nav
-        aria-label={m.project_tree_files()}
-        className="flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap text-sm text-tertiary sm:hidden"
-      >
-        {mobileLinks.length < links.length && (
-          <span aria-hidden="true" className="shrink-0 text-quaternary">
-            …
-          </span>
-        )}
-        {mobileLinks.map((crumb, index) =>
-          renderCrumb(crumb, index, mobileLinks.length < links.length),
-        )}
-        {headingSeparator}
-      </nav>
-      <nav
-        aria-label={m.project_tree_files()}
-        className="hidden min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap text-sm text-tertiary sm:flex"
-      >
-        {links.map((crumb, index) => renderCrumb(crumb, index, index > 0))}
-        {headingSeparator}
-      </nav>
-    </>
   );
 }

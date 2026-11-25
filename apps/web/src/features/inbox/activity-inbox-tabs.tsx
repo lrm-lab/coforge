@@ -4,7 +4,9 @@ import { Button as AriaButton } from "react-aria-components";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Tab, TabList, Tabs } from "#src/components/application/tabs/tabs";
+import { CountBadge } from "#src/components/ui/unread-marker";
 import { useSlidingIndicator } from "#src/hooks/use-sliding-indicator";
+import { formatCappedCount } from "#src/lib/unread-count";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { ActivityInboxFilter } from "./activity-inbox.schemas";
@@ -19,11 +21,6 @@ const FILTER_TABS: ReadonlyArray<{
   { id: "artifacts", label: () => m.ag_title() },
 ];
 
-function formatTabCount(count: number | undefined) {
-  if (!count || count <= 0) return undefined;
-  return count > 99 ? "99+" : String(count);
-}
-
 export function ActivityInboxFilterPicker({
   filter,
   onFilterChange,
@@ -36,7 +33,6 @@ export function ActivityInboxFilterPicker({
   counts: Partial<Record<ActivityInboxFilter, number>>;
 }) {
   const current = FILTER_TABS.find((tab) => tab.id === filter) ?? FILTER_TABS[0];
-  const currentCount = formatTabCount(counts[current.id]);
   return (
     <Dropdown.Root>
       <AriaButton
@@ -44,11 +40,7 @@ export function ActivityInboxFilterPicker({
         className="inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-md border border-secondary bg-primary px-2 text-xs font-medium text-secondary outline-focus-ring transition-colors hover:bg-primary_hover hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2"
       >
         <span>{current.label()}</span>
-        {currentCount && (
-          <span dir="ltr" className="font-normal text-quaternary tabular-nums">
-            {currentCount}
-          </span>
-        )}
+        <CountBadge count={counts[current.id]} size="sm" />
         <ChevronDown aria-hidden="true" className="size-3.5 shrink-0 text-fg-quaternary" />
       </AriaButton>
       <Dropdown.Popover placement="bottom start" className="w-44">
@@ -66,7 +58,7 @@ export function ActivityInboxFilterPicker({
               key={tab.id}
               id={tab.id}
               label={tab.label()}
-              addon={formatTabCount(counts[tab.id])}
+              addon={formatCappedCount(counts[tab.id]) ?? undefined}
               onHoverStart={() => onFilterIntent?.(tab.id)}
             />
           ))}
@@ -88,8 +80,8 @@ export function ActivityInboxUnreadToggle({
   onFilterIntent?: (filter: ActivityInboxFilter) => void;
 }) {
   const active = filter === "unread";
-  const count = formatTabCount(unreadCount);
-  if (!active && !count) return null;
+  const hasUnread = formatCappedCount(unreadCount) !== null;
+  if (!active && !hasUnread) return null;
   const next: ActivityInboxFilter = active ? "all" : "unread";
   return (
     <AriaButton
@@ -98,18 +90,14 @@ export function ActivityInboxUnreadToggle({
       onHoverStart={() => onFilterIntent?.(next)}
       onFocus={() => onFilterIntent?.(next)}
       className={cn(
-        "inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-md px-2 text-xs font-medium outline-focus-ring transition-colors focus-visible:outline-2 focus-visible:outline-offset-2",
+        "inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 text-xs font-medium outline-focus-ring transition-colors focus-visible:outline-2 focus-visible:outline-offset-2",
         active
           ? "bg-active text-primary"
           : "text-tertiary hover:bg-primary_hover hover:text-primary",
       )}
     >
       <span>{m.activity_inbox_filter_unread()}</span>
-      {count && (
-        <span dir="ltr" className="font-normal text-quaternary tabular-nums">
-          {count}
-        </span>
-      )}
+      <CountBadge count={unreadCount} size="sm" />
     </AriaButton>
   );
 }
@@ -159,19 +147,12 @@ export function ActivityInboxTabs({
               onPointerEnter={() => onFilterIntent?.(tab.id)}
               onFocus={() => onFilterIntent?.(tab.id)}
             >
-              {() => {
-                const count = formatTabCount(counts[tab.id]);
-                return (
-                  <>
-                    {tab.label()}
-                    {count && (
-                      <span dir="ltr" className="text-xs font-normal text-quaternary tabular-nums">
-                        {count}
-                      </span>
-                    )}
-                  </>
-                );
-              }}
+              {() => (
+                <>
+                  {tab.label()}
+                  <CountBadge count={counts[tab.id]} size="sm" />
+                </>
+              )}
             </Tab>
           ))}
         </TabList>

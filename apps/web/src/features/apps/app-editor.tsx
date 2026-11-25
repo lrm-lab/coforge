@@ -1,7 +1,7 @@
 import { useCallback, useId, useRef, useState, type FormEvent } from "react";
 import { Link, useBlocker, type ShouldBlockFn } from "@tanstack/react-router";
-import { ArrowLeft } from "@untitledui/icons";
 
+import { PageHeader } from "#src/components/layout/page-header";
 import { PhoneFormBar } from "#src/components/ui/phone-form-bar";
 import { Button } from "#src/components/base/buttons/button";
 import { Alert } from "#src/components/ui/alert";
@@ -229,23 +229,41 @@ export function AppEditor({
           onCancel={onBack}
           onSubmit={() => formRef.current?.requestSubmit()}
         />
-        <header className="grid shrink-0 gap-2 border-b border-secondary px-6 py-4 max-sm:hidden">
-          <Link
-            to="/w/$workspaceSlug/settings"
-            params={{ workspaceSlug }}
-            search={{ section: "applications", appsTab: "mine" }}
-            className="flex w-fit items-center gap-1 rounded-sm text-sm text-tertiary outline-focus-ring hover:text-primary focus-visible:outline-2"
-          >
-            <ArrowLeft aria-hidden="true" className="size-4" />
-            {m.apps_review_back()}
-          </Link>
-          <div className="flex items-center gap-3">
-            <AppLogo name={draft.name || "?"} url={app?.logoUrl} size="sm" />
-            <h1 className="min-w-0 flex-1 truncate text-lg font-semibold text-primary">
-              {heading}
-            </h1>
-          </div>
-        </header>
+        <div className="max-sm:hidden">
+          <PageHeader
+            leading={<AppLogo name={draft.name || "?"} url={app?.logoUrl} size="sm" />}
+            heading={heading}
+            breadcrumbs={[
+              {
+                label: m.settings_title(),
+                link: (className) => (
+                  <Link
+                    to="/w/$workspaceSlug/settings"
+                    params={{ workspaceSlug }}
+                    activeOptions={{ exact: true }}
+                    className={className}
+                  >
+                    {m.settings_title()}
+                  </Link>
+                ),
+              },
+              {
+                label: m.settings_applications(),
+                link: (className) => (
+                  <Link
+                    to="/w/$workspaceSlug/settings"
+                    params={{ workspaceSlug }}
+                    search={{ section: "applications", appsTab: "mine" }}
+                    activeOptions={{ exact: true }}
+                    className={className}
+                  >
+                    {m.settings_applications()}
+                  </Link>
+                ),
+              },
+            ]}
+          />
+        </div>
         {(formError || issued) && (
           <div className="grid shrink-0 gap-3 border-b border-secondary px-6 py-4">
             {formError && <Alert color="error" title={formError} />}

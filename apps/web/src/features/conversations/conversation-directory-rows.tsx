@@ -1,4 +1,5 @@
 import { memo } from "react";
+import { ListIconTile } from "#src/components/ui/list-icon-tile";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 
 import type { AgentDirectoryEntry } from "#src/features/agents/workspace-agents-realtime";
@@ -7,7 +8,6 @@ import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
-import { cx } from "#src/utils/cx";
 import { ChannelGlyph, ChannelTitle } from "./channel-name";
 import { channelPreviewLine } from "./channel-preview-line";
 import { isPrivateChannel, type ChannelVisibility } from "./channel-visibility";
@@ -160,13 +160,13 @@ export const ChannelDirectoryRow = memo(function ChannelDirectoryRow({
           faces ? (
             <GroupAvatar members={channel.members} />
           ) : (
-            <span className="flex size-5 items-center justify-center">
+            <ListIconTile tone={current ? "brand" : "default"}>
               <ChannelGlyph
                 visibility={channel.visibility}
                 aria-hidden="true"
-                className={cx("size-4", current ? "text-brand-secondary" : "text-tertiary")}
+                className="size-4 shrink-0"
               />
-            </span>
+            </ListIconTile>
           )
         }
       >

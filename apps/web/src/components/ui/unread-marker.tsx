@@ -1,7 +1,7 @@
 import { MessageChatCircle } from "@untitledui/icons";
 
 import { RollingNumber } from "#src/components/ui/rolling-number";
-import { UNREAD_COUNT_SHOWN_MAX } from "#src/lib/unread-count";
+import { formatCappedCount, UNREAD_COUNT_SHOWN_MAX } from "#src/lib/unread-count";
 import { cx } from "#src/utils/cx";
 
 function UnreadNumber({ count }: { count: number }) {
@@ -13,18 +13,54 @@ function UnreadNumber({ count }: { count: number }) {
   );
 }
 
-/** Slack-style badge: the count up to 99, then "99+". Hidden from AT, so the row that owns it
- * names the unread count in its own label. `className` only positions it. Unread is a near-black pill (dark gray in dark mode), so the multi-colored Agent avatars carry the color. */
 export function UnreadBadge({ count, className }: { count: number; className?: string }) {
+  if (!Number.isFinite(count) || Math.floor(count) <= 0) return null;
   return (
     <span
       aria-hidden="true"
       className={cx(
-        "inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-unread-capsule px-1.5 text-xs font-semibold leading-none text-unread-capsule-fg tabular-nums",
+        "inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-unread-capsule px-1.5 text-xs leading-none font-semibold whitespace-nowrap text-unread-capsule-fg tabular-nums",
         className,
       )}
     >
-      <UnreadNumber count={count} />
+      <UnreadNumber count={Math.floor(count)} />
+    </span>
+  );
+}
+
+export type CountBadgeTone = "subtle" | "solid";
+export type CountBadgeSize = "sm" | "md";
+
+export function CountBadge({
+  count,
+  tone = "subtle",
+  size = "md",
+  srLabel,
+  className,
+}: {
+  count: number | null | undefined;
+  tone?: CountBadgeTone;
+  size?: CountBadgeSize;
+  srLabel?: string;
+  className?: string;
+}) {
+  const label = formatCappedCount(count);
+  if (!label) return null;
+  return (
+    <span
+      dir="ltr"
+      aria-hidden={srLabel ? undefined : true}
+      className={cx(
+        "inline-flex shrink-0 items-center justify-center rounded-full text-xs leading-none whitespace-nowrap tabular-nums",
+        size === "sm" ? "h-[1.125rem] min-w-[1.125rem] px-1" : "h-5 min-w-5 px-1.5",
+        tone === "solid"
+          ? "bg-unread-capsule font-semibold text-unread-capsule-fg"
+          : "bg-tertiary font-medium text-secondary",
+        className,
+      )}
+    >
+      {srLabel ? <span className="sr-only">{srLabel}</span> : null}
+      <span aria-hidden={srLabel ? true : undefined}>{label}</span>
     </span>
   );
 }

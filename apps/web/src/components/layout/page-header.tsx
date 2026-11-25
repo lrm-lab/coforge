@@ -1,53 +1,56 @@
 import type { FC } from "react";
 
 import { PageBackButton } from "#src/components/layout/page-back-button";
+import { PageBreadcrumbs, type BreadcrumbItem } from "#src/components/layout/page-breadcrumbs";
 import { TabbedHeader } from "#src/components/layout/tabbed-header";
 import { cn } from "#src/lib/utils";
 
-/**
- * The 48px header band every page owns. On a phone it carries the back button, which a tab
- * home (no `leading`, `null`) leaves out.
- *
- * With `tabs` it is the conversation header's row (`TabbedHeader`): title on the left, the tabs
- * centered (or, with `tabsStart`, after it), actions on the right.
- */
 export function PageHeader({
   leading,
   icon: Icon,
   heading,
   breadcrumb,
+  breadcrumbs,
+  breadcrumbLabel,
   meta,
   actions,
   tabs,
   tabsStart,
   headingClassName,
 }: {
-  /** A control that belongs before the title, such as a panel's way back. Left out, a phone gets
-   * `PageBackButton`; `null` shows nothing. */
   leading?: React.ReactNode;
-  /** The icon that goes with the heading, shown before it. */
   icon?: FC<{ className?: string }>;
   heading: string;
-  /** On subpages, the trail's earlier crumbs plus the separator into the heading: the heading
-   * itself is the trail's last crumb (Settings → Account › Change avatar). */
   breadcrumb?: React.ReactNode;
+  breadcrumbs?: readonly BreadcrumbItem[];
+  breadcrumbLabel?: string;
   meta?: React.ReactNode;
   actions?: React.ReactNode;
-  /** Underline tabs that switch the page's view. */
   tabs?: React.ReactNode;
-  /** Puts the tabs after the title, left-aligned, where they would be centered. */
   tabsStart?: boolean;
-  /** For a heading that gives way on a phone, where `meta` carries the page's name. */
   headingClassName?: string;
 }) {
+  const hasBreadcrumbs = Boolean(breadcrumbs && breadcrumbs.length > 0);
   const title = (
     <>
       {leading === undefined ? <PageBackButton /> : leading}
-      {Icon && <Icon aria-hidden="true" className="size-5 shrink-0 text-fg-secondary" />}
-      {breadcrumb}
-      <h1 className={cn("truncate text-lg font-semibold text-primary", headingClassName)}>
-        {heading}
-      </h1>
+      {hasBreadcrumbs && breadcrumbs ? (
+        <PageBreadcrumbs
+          items={breadcrumbs}
+          current={heading}
+          currentIcon={Icon}
+          headingClassName={headingClassName}
+          ariaLabel={breadcrumbLabel}
+        />
+      ) : (
+        <>
+          {Icon && <Icon aria-hidden="true" className="size-5 shrink-0 text-fg-secondary" />}
+          {breadcrumb}
+          <h1 className={cn("truncate text-lg font-semibold text-primary", headingClassName)}>
+            {heading}
+          </h1>
+        </>
+      )}
       {meta}
     </>
   );

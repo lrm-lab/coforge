@@ -109,8 +109,8 @@ export function InlineEditField({
             </p>
           )}
           <div className="mt-2 flex gap-2">
-            <Button size="sm" isDisabled={saving} onPress={() => void save()}>
-              {saving ? m.agent_profile_saving() : m.agent_profile_save()}
+            <Button size="sm" isLoading={saving} isDisabled={saving} onPress={() => void save()}>
+              {m.agent_profile_save()}
             </Button>
             <Button size="sm" color="secondary" isDisabled={saving} onPress={cancel}>
               {m.controls_cancel()}

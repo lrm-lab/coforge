@@ -9,9 +9,11 @@
     `px-page`（`styles.css` 的 `--spacing-page`，取值自 `--page-gutter`）识别为内边距；缺了它，
     合并类名时 `px-page` 覆盖不了 `px-4`。
   - `base/buttons/button.tsx` 的 loading 指示器渲染 `src/components/ui/spinner.tsx` 的 `Spinner`，
-    何时显示由 `src/components/ui/loading.ts` 决定。该文件其余行为
-    不变：`data-loading`、`pointer-events-none`、`isPending` 仍在 `isLoading` 打开时**立即**生效，
-    只有指示器本身延后出现，所以按钮在等待期间不会变空。
+    何时显示与宽度锁定由 `src/components/ui/loading.ts`（`useButtonLoadingTransition`）与
+    `src/styles/button-loading.css` 决定：进入 `isLoading` 时锁死按钮原宽度，指示器出现时
+    文字和图标平滑上滑淡出、原地居中显示旋转加载环，退出后平滑恢复并释放宽度锁定，防止文案
+    变长把相邻按钮顶歪抖动。`data-loading`、`pointer-events-none`、`isPending` 仍在 `isLoading`
+    打开时**立即**生效，只有指示器本身延后出现。
 
   这不是任意修改官方源码的许可；升级或重新 init 时保留这三处限定修补并重新验证。
 - 例外：`base-components/mobile-header.tsx` 和官方的 `sidebar-simple.tsx`、`sidebar-slim.tsx`

@@ -3,12 +3,11 @@ import { Link, useRouter } from "@tanstack/react-router";
 import { Link as AriaLink } from "react-aria-components";
 import { BellOff01, Edit03 } from "@untitledui/icons";
 
-import { UnreadCapsule, UnreadDot } from "#src/components/ui/unread-marker";
+import { CountBadge, UnreadCapsule, UnreadDot } from "#src/components/ui/unread-marker";
 import { rememberSharedRect } from "#src/lib/shared-element-rect";
 import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
 import { MentionBadge } from "./mention-badge";
-import { formatConversationCount } from "./conversation-labels";
 import { useCloseConversationList, useConversationListVisible } from "./conversation-navigation";
 import { conversationRoute, type ConversationTarget } from "./last-conversation";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -168,23 +167,15 @@ export function ConversationRow({
       className={cx(
         "flex w-full cursor-pointer items-center p-2 outline-focus-ring transition duration-100 ease-out select-none [-webkit-user-drag:none] focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2",
         card ? "rounded-xl border" : "rounded-md",
-        lastMessage
-          ? "gap-2"
-          : "max-h-9 gap-1.5 any-pointer-coarse:min-h-11 any-pointer-coarse:max-h-none",
+        lastMessage ? "gap-2" : "min-h-10 gap-2 any-pointer-coarse:min-h-11",
         current ? (card ? "bg-chat-selected-bg" : "bg-sidebar-accent") : "hover:bg-primary_hover",
         card && (current ? "border-chat-selected-border" : "border-transparent"),
       )}
     >
       <RowHoverContext.Provider value={hover}>
-        {lastMessage ? (
-          <span ref={iconRef} className="flex shrink-0 items-center justify-center">
-            {icon}
-          </span>
-        ) : (
-          <span ref={iconRef} className="flex h-5 w-4 shrink-0 items-center justify-center">
-            {icon}
-          </span>
-        )}
+        <span ref={iconRef} className="flex shrink-0 items-center justify-center">
+          {icon}
+        </span>
       </RowHoverContext.Provider>
       {lastMessage ? (
         <span className="flex min-w-0 flex-1 flex-col justify-center">
@@ -266,11 +257,7 @@ export function ConversationRow({
           subdued={subdued}
         />
       ) : null}
-      {count ? (
-        <span aria-hidden="true" className="shrink-0 text-xs text-quaternary tabular-nums">
-          {formatConversationCount(count.value)}
-        </span>
-      ) : null}
+      {count ? <CountBadge count={count.value} size="sm" /> : null}
     </AriaLink>
   );
 }

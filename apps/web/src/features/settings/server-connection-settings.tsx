@@ -205,9 +205,10 @@ function InstallHost({
       <Button
         type="submit"
         size="sm"
+        isLoading={pending}
         isDisabled={pending || clusterName.length === 0 || image.length === 0}
       >
-        {pending ? m.settings_cloud_service_downloading() : m.settings_cloud_service_download()}
+        {m.settings_cloud_service_download()}
       </Button>
       {error ? (
         <p role="alert" className="text-error-primary">

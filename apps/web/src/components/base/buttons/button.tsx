@@ -1,8 +1,8 @@
-import type { FC, ReactElement, ReactNode } from "react";
-import { isValidElement } from "react";
+import type { CSSProperties, FC, ReactElement, ReactNode, Ref } from "react";
+import { isValidElement, useCallback, useRef } from "react";
 import type { ButtonProps as AriaButtonProps, LinkProps as AriaLinkProps } from "react-aria-components";
 import { Button as AriaButton, Link as AriaLink } from "react-aria-components";
-import { useLoadingVisible } from "#src/components/ui/loading";
+import { useButtonLoadingTransition } from "#src/components/ui/loading";
 import { Spinner } from "#src/components/ui/spinner";
 import { cx, sortCx } from "#src/utils/cx";
 import { isReactComponent } from "#src/utils/is-react-component";
@@ -140,6 +140,21 @@ interface LinkProps extends CommonProps, Omit<AriaLinkProps, "children" | "class
 
 export type Props = ButtonProps | LinkProps;
 
+function assignRef<T>(ref: Ref<T> | undefined, value: T | null) {
+    if (typeof ref === "function") ref(value);
+    else if (ref && "current" in ref) ref.current = value;
+}
+
+function withLockedWidth<TStyle>(style: TStyle, lockedWidth: number | null): TStyle {
+    if (lockedWidth === null) return style;
+    const widthStyle: CSSProperties = { width: `${lockedWidth}px` };
+    if (typeof style === "function") {
+        const styleFn = style as (values: unknown) => CSSProperties | undefined;
+        return ((values: unknown) => ({ ...styleFn(values), ...widthStyle })) as TStyle;
+    }
+    return { ...(style as CSSProperties | undefined), ...widthStyle } as TStyle;
+}
+
 export const Button: {
     (props: LinkProps): ReactElement<LinkProps>;
     (props: ButtonProps): ReactElement<ButtonProps>;
@@ -153,7 +168,7 @@ export const Button: {
     iconTrailing: IconTrailing,
     isDisabled: disabled,
     isLoading: loading,
-    showTextWhileLoading,
+    showTextWhileLoading: _showTextWhileLoading,
     ...props
 }) => {
     const href = "href" in props ? props.href : undefined;
@@ -163,54 +178,89 @@ export const Button: {
 
     noTextPadding = isLinkType || noTextPadding;
 
-    const showLoadingIndicator = useLoadingVisible(Boolean(loading));
+    const elementRef = useRef<HTMLElement | null>(null);
+    const externalRef = "ref" in props ? (props.ref as Ref<HTMLElement> | undefined) : undefined;
+    const setRef = useCallback(
+        (node: HTMLElement | null) => {
+            elementRef.current = node;
+            assignRef(externalRef, node);
+        },
+        [externalRef],
+    );
+
+    const { showIndicator, loadingActive, lockedWidth, frozenContent, captureIdleWidth } =
+        useButtonLoadingTransition(
+            loading,
+            elementRef,
+            { children, iconLeading: IconLeading, iconTrailing: IconTrailing },
+            [size, color, className, children, IconLeading, IconTrailing, isIcon],
+        );
+
+    const shownChildren = loadingActive && frozenContent ? frozenContent.children : children;
+    const ShownIconLeading = loadingActive && frozenContent ? frozenContent.iconLeading : IconLeading;
+    const ShownIconTrailing = loadingActive && frozenContent ? frozenContent.iconTrailing : IconTrailing;
+
+    const originalOnPressStart = props.onPressStart;
+    const handlePressStart = useCallback(
+        (event: Parameters<NonNullable<typeof originalOnPressStart>>[0]) => {
+            captureIdleWidth();
+            originalOnPressStart?.(event);
+        },
+        [captureIdleWidth, originalOnPressStart],
+    );
 
     const commonChildren = (
         <>
-            {isValidElement(IconLeading) && IconLeading}
-            {isReactComponent(IconLeading) && <IconLeading data-icon="leading" className={styles.common.icon} />}
+            {isValidElement(ShownIconLeading) && ShownIconLeading}
+            {isReactComponent(ShownIconLeading) && <ShownIconLeading data-icon="leading" className={styles.common.icon} />}
 
-            {showLoadingIndicator && (
+            {loadingActive && (
                 <span
-                    data-icon="loading"
-                    className={cx(styles.common.icon, "inline-flex", !showTextWhileLoading && "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2")}
+                    data-loading-indicator=""
+                    aria-hidden={!showIndicator || undefined}
+                    className="pointer-events-none absolute inset-0 inline-flex items-center justify-center"
                 >
                     <Spinner className={size === "xs" ? "size-4" : "size-5"} />
                 </span>
             )}
 
-            {children && (
+            {shownChildren && (
                 <span data-text className={cx("transition-inherit-all", !noTextPadding && "px-0.5")}>
-                    {children}
+                    {shownChildren}
                 </span>
             )}
 
-            {isValidElement(IconTrailing) && IconTrailing}
-            {isReactComponent(IconTrailing) && <IconTrailing data-icon="trailing" className={styles.common.icon} />}
+            {isValidElement(ShownIconTrailing) && ShownIconTrailing}
+            {isReactComponent(ShownIconTrailing) && <ShownIconTrailing data-icon="trailing" className={styles.common.icon} />}
         </>
     );
 
     const commonProps = {
         "data-loading": loading ? true : undefined,
+        "data-loading-active": loadingActive ? "" : undefined,
+        "data-loading-visible": showIndicator ? "" : undefined,
         "data-icon-only": isIcon ? true : undefined,
         "data-press-scale": isLinkType ? undefined : true,
         ...props,
+        ref: setRef,
+        onPressStart: handlePressStart,
+        style: withLockedWidth(props.style, lockedWidth),
         isDisabled: disabled,
         className: cx(
             styles.common.root,
             styles.sizes[size].root,
             styles.colors[color].root,
             isLinkType && styles.sizes[size].linkRoot,
+            loadingActive && "overflow-hidden",
             (loading || (href && (disabled || loading))) && "pointer-events-none",
-            showLoadingIndicator && (showTextWhileLoading ? "[&>*:not([data-icon=loading]):not([data-text])]:hidden" : "[&>*:not([data-icon=loading])]:invisible"),
             className,
         ),
         children: commonChildren,
     };
 
     if ("href" in commonProps) {
-        return <AriaLink {...commonProps} href={disabled ? undefined : href} />;
+        return <AriaLink {...(commonProps as AriaLinkProps)} href={disabled ? undefined : href} />;
     }
 
-    return <AriaButton {...commonProps} type={commonProps.type || "button"} isPending={loading} />;
+    return <AriaButton {...(commonProps as AriaButtonProps)} type={(commonProps as AriaButtonProps).type || "button"} isPending={loading} />;
 };

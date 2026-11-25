@@ -1,0 +1,37 @@
+[data-loading-active] > :not([data-loading-indicator]) {
+  transition:
+    transform var(--duration-sm) var(--ease-out-strong),
+    opacity var(--duration-sm) var(--ease-out-strong);
+  will-change: transform, opacity;
+}
+
+[data-loading-visible] > :not([data-loading-indicator]) {
+  opacity: 0;
+  transform: translateY(-0.5rem);
+}
+
+[data-loading-indicator] {
+  opacity: 0;
+  transform: translateY(0.5rem);
+  transition:
+    transform var(--duration-sm) var(--ease-out-strong),
+    opacity var(--duration-sm) var(--ease-out-strong);
+  will-change: transform, opacity;
+}
+
+[data-loading-visible] > [data-loading-indicator] {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-loading-active] > :not([data-loading-indicator]),
+  [data-loading-indicator] {
+    transition: opacity var(--duration-sm) var(--ease-out);
+  }
+
+  [data-loading-visible] > :not([data-loading-indicator]),
+  [data-loading-indicator] {
+    transform: none;
+  }
+}

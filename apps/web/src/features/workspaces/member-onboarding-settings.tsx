@@ -134,8 +134,14 @@ function OnboardingForm({ settings }: { settings: WorkspaceOnboardingSettings })
         </SettingsField>
       </div>
       <SettingsCardFooter error={saveError}>
-        <Button type="button" size="sm" isDisabled={saving || !changed} onPress={submit}>
-          {saving ? m.settings_group_saving() : m.settings_group_save()}
+        <Button
+          type="button"
+          size="sm"
+          isLoading={saving}
+          isDisabled={saving || !changed}
+          onPress={submit}
+        >
+          {m.settings_group_save()}
         </Button>
       </SettingsCardFooter>
     </section>

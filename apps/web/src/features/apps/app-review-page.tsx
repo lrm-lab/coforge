@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Link, useHydrated, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, Inbox01 } from "@untitledui/icons";
+import { Inbox01 } from "@untitledui/icons";
 
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
+import { PageHeader } from "#src/components/layout/page-header";
 import { Alert } from "#src/components/ui/alert";
 import { EmptyState } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
@@ -25,41 +26,61 @@ import { decideAppReview, type ReviewRequestSummary } from "./app-publishing.fun
 export function AppReviewPage({ requests }: { requests: ReviewRequestSummary[] }) {
   const slug = useWorkspaceSlug();
   return (
-    <main className="w-full flex-1 overflow-y-auto px-page pb-8">
-      <section aria-labelledby="app-review-title" className="grid gap-4 py-6">
-        <header className="grid gap-1">
-          <Link
-            to="/w/$workspaceSlug/settings"
-            params={{ workspaceSlug: slug }}
-            search={{ section: "applications" }}
-            className="flex w-fit items-center gap-1 rounded-sm text-sm text-tertiary outline-focus-ring hover:text-primary focus-visible:outline-2"
-          >
-            <ArrowLeft aria-hidden="true" className="size-4" />
-            {m.apps_review_back()}
-          </Link>
-          <h1 id="app-review-title" className="text-lg font-semibold text-primary">
-            {m.apps_review_title()}
-          </h1>
+    <main className="flex h-full min-w-0 flex-1 flex-col bg-primary">
+      <PageHeader
+        heading={m.apps_review_title()}
+        breadcrumbs={[
+          {
+            label: m.settings_title(),
+            link: (className) => (
+              <Link
+                to="/w/$workspaceSlug/settings"
+                params={{ workspaceSlug: slug }}
+                activeOptions={{ exact: true }}
+                className={className}
+              >
+                {m.settings_title()}
+              </Link>
+            ),
+          },
+          {
+            label: m.settings_applications(),
+            link: (className) => (
+              <Link
+                to="/w/$workspaceSlug/settings"
+                params={{ workspaceSlug: slug }}
+                search={{ section: "applications" }}
+                activeOptions={{ exact: true }}
+                className={className}
+              >
+                {m.settings_applications()}
+              </Link>
+            ),
+          },
+        ]}
+      />
+      <div className="w-full min-h-0 flex-1 overflow-y-auto px-page pb-8">
+        <section aria-label={m.apps_review_title()} className="grid gap-4 py-6">
           <p className="text-sm text-tertiary">{m.apps_review_description()}</p>
-        </header>
-        {requests.length === 0 ? (
-          <EmptyState
-            size="page"
-            headingLevel={2}
-            className="max-w-none rounded-xl border border-dashed border-secondary px-4 py-10"
-            picture={<EmptyIcon icon={Inbox01} muted />}
-            title={m.apps_review_empty_title()}
-            description={m.apps_review_empty_description()}
-          />
-        ) : (
-          <ul className="grid gap-3">
-            {requests.map((request) => (
-              <ReviewCard key={request.requestId} request={request} />
-            ))}
-          </ul>
-        )}
-      </section>
-      <ReviewersSection />
+          {requests.length === 0 ? (
+            <EmptyState
+              size="page"
+              headingLevel={2}
+              className="max-w-none rounded-xl border border-dashed border-secondary px-4 py-10"
+              picture={<EmptyIcon icon={Inbox01} muted />}
+              title={m.apps_review_empty_title()}
+              description={m.apps_review_empty_description()}
+            />
+          ) : (
+            <ul className="grid gap-3">
+              {requests.map((request) => (
+                <ReviewCard key={request.requestId} request={request} />
+              ))}
+            </ul>
+          )}
+        </section>
+        <ReviewersSection />
+      </div>
     </main>
   );
 }

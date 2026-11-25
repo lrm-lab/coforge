@@ -132,6 +132,34 @@ export function ProjectSettingsPage({
     <main className="flex h-full min-w-0 flex-col bg-primary">
       <PageHeader
         heading={m.project_settings()}
+        breadcrumbs={[
+          {
+            label: m.projects_title(),
+            link: (className) => (
+              <Link
+                to="/w/$workspaceSlug/projects"
+                params={{ workspaceSlug }}
+                activeOptions={{ exact: true }}
+                className={className}
+              >
+                {m.projects_title()}
+              </Link>
+            ),
+          },
+          {
+            label: project.name,
+            link: (className) => (
+              <Link
+                to="/w/$workspaceSlug/projects/$projectSlug"
+                params={{ workspaceSlug, projectSlug: project.slug }}
+                activeOptions={{ exact: true }}
+                className={className}
+              >
+                {project.name}
+              </Link>
+            ),
+          },
+        ]}
         leading={
           <Link
             to="/w/$workspaceSlug/projects/$projectSlug"
@@ -141,9 +169,6 @@ export function ProjectSettingsPage({
           >
             <ArrowLeft aria-hidden="true" className="size-5" />
           </Link>
-        }
-        meta={
-          <span className="hidden truncate text-sm text-tertiary sm:block">{project.name}</span>
         }
       />
       <div className="min-h-0 flex-1 overflow-y-auto px-page py-6 sm:py-8">

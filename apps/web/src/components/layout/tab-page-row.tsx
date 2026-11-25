@@ -2,6 +2,7 @@ import type { FC, ReactNode } from "react";
 import { ChevronRight } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
 
+import { ListIconTile } from "#src/components/ui/list-icon-tile";
 import { cx } from "#src/utils/cx";
 
 const ROW_CLASS =
@@ -24,10 +25,7 @@ export function TabPageRow({
 }) {
   const content = (
     <>
-      <Icon
-        aria-hidden="true"
-        className={cx("size-5 shrink-0", destructive ? "text-error-primary" : "text-fg-quaternary")}
-      />
+      <ListIconTile icon={Icon} tone={destructive ? "destructive" : "default"} />
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {badge}
       {!destructive && (

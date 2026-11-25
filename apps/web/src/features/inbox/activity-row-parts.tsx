@@ -3,6 +3,7 @@ import { Check } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { ClockTime, RelativeTime } from "#src/components/ui/relative-time";
+import { CountBadge } from "#src/components/ui/unread-marker";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 
@@ -58,12 +59,7 @@ export function ActivityMentionBadge() {
 }
 
 export function ActivityUnreadCount({ count }: { count: number }) {
-  return (
-    <span dir="ltr" className="shrink-0 text-xs font-medium text-tertiary tabular-nums">
-      <span className="sr-only">{m.activity_inbox_new({ count })}</span>
-      <span aria-hidden="true">{count > 99 ? "99+" : count}</span>
-    </span>
-  );
+  return <CountBadge count={count} size="sm" srLabel={m.activity_inbox_new({ count })} />;
 }
 
 export function activityRowMetaFadeClass(current: boolean) {

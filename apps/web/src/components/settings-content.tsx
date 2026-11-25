@@ -3,6 +3,7 @@ import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { useEffect, useId, useState } from "react";
 import { ChevronLeft, Share01 } from "@untitledui/icons";
 import { PageHeader } from "#src/components/layout/page-header";
+import { ListIconTile } from "#src/components/ui/list-icon-tile";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Toggle } from "#src/components/base/toggle/toggle";
@@ -44,7 +45,8 @@ import type { TestDelivery } from "#src/server/notifications/web-push-notificati
 
 export type Locale = "en" | "zh-CN";
 type Theme = "system" | "light" | "dark";
-const navigationRowClass = "h-9 w-full min-w-0 justify-start rounded-lg px-3 text-sm font-medium";
+const navigationRowClass =
+  "h-11 w-full min-w-0 justify-start gap-2.5 rounded-lg px-2 text-sm font-medium *:data-text:min-w-0 *:data-text:truncate";
 
 export interface SettingsContentProps {
   /** Controlled section; falls back to internal state when omitted (tests, previews). */
@@ -141,7 +143,7 @@ export function SettingsContent(props: SettingsContentProps) {
         )}
       >
         <PageHeader heading={m.settings_title()} />
-        <div className="space-y-5 overflow-y-auto p-3">
+        <div className="space-y-5 overflow-x-hidden overflow-y-auto p-3">
           {SETTINGS_SECTION_GROUPS.map((group) => (
             <SettingsNavigationGroup key={group.label()} label={group.label()}>
               {group.sections.map((item) => (
@@ -149,7 +151,12 @@ export function SettingsContent(props: SettingsContentProps) {
                   <Button
                     type="button"
                     color="tertiary"
-                    iconLeading={item.icon}
+                    iconLeading={
+                      <ListIconTile
+                        icon={item.icon}
+                        tone={section === item.id ? "brand" : "default"}
+                      />
+                    }
                     aria-current={section === item.id ? "page" : undefined}
                     onPress={() => selectSection(item.id)}
                     className={cn(
@@ -298,8 +305,14 @@ function SystemChannelsSettings({
         />
       </SettingsField>
       <SettingsCardFooter error={saveError}>
-        <Button type="button" size="sm" isDisabled={saving || draft === hidden} onPress={save}>
-          {saving ? m.settings_group_saving() : m.settings_group_save()}
+        <Button
+          type="button"
+          size="sm"
+          isLoading={saving}
+          isDisabled={saving || draft === hidden}
+          onPress={save}
+        >
+          {m.settings_group_save()}
         </Button>
       </SettingsCardFooter>
     </section>

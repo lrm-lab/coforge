@@ -214,14 +214,13 @@ export function WorkspaceProfileSettings({
                   type="button"
                   size="sm"
                   iconLeading={saved ? Check : undefined}
+                  isLoading={saving}
                   isDisabled={saving || !changed}
                   onPress={save}
                 >
-                  {saving
-                    ? m.settings_profile_saving()
-                    : saved
-                      ? m.settings_workspace_profile_saved()
-                      : m.settings_workspace_profile_save()}
+                  {saved
+                    ? m.settings_workspace_profile_saved()
+                    : m.settings_workspace_profile_save()}
                 </Button>
               </div>
             )}
@@ -245,10 +244,11 @@ export function WorkspaceProfileSettings({
                 <Button
                   type="button"
                   size="sm"
+                  isLoading={savingSlug}
                   isDisabled={savingSlug || !slugValid || !slugChanged}
                   onPress={saveSlug}
                 >
-                  {savingSlug ? m.settings_profile_saving() : m.settings_workspace_url_save()}
+                  {m.settings_workspace_url_save()}
                 </Button>
               </div>
             )}

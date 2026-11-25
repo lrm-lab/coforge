@@ -3,6 +3,7 @@
 @import "./styles/typography.css";
 @import "./styles/subpage-transition.css";
 @import "./styles/floating-foot-bar.css";
+@import "./styles/button-loading.css";
 
 @plugin "@tailwindcss/typography";
 @plugin "tailwindcss-react-aria-components";

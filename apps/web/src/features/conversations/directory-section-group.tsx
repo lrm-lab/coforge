@@ -2,23 +2,11 @@ import { ChevronRight } from "@untitledui/icons";
 import { useId, useState, type ReactNode, type TransitionEvent } from "react";
 import { Button } from "#src/components/base/buttons/button";
 import { Fold } from "#src/components/ui/fold";
-import { getLocale } from "#src/paraglide/runtime";
+import { CountBadge } from "#src/components/ui/unread-marker";
 import { cx } from "#src/utils/cx";
 import type { DirectoryDragActivation } from "./directory-drag";
 
 export const DIRECTORY_INSET = "px-3";
-
-const countFormatters = new Map<string, Intl.NumberFormat>();
-
-function formatSectionCount(count: number): string {
-  const locale = getLocale();
-  let formatter = countFormatters.get(locale);
-  if (!formatter) {
-    formatter = new Intl.NumberFormat(locale);
-    countFormatters.set(locale, formatter);
-  }
-  return formatter.format(count);
-}
 
 export function DirectoryEmptyNote({ children }: { children: ReactNode }) {
   return (
@@ -72,7 +60,6 @@ export function DirectorySection({
       />
     </span>
   ) : null;
-  const formattedCount = formatSectionCount(count);
   const caption = (
     <span className="flex w-full min-w-0 items-center gap-2">
       <span className="flex min-w-0 items-center gap-1.5">
@@ -80,10 +67,8 @@ export function DirectorySection({
         {leading}
         <span className="min-w-0 truncate text-sm font-medium text-primary">{label}</span>
       </span>
-      <span className="sr-only">, </span>
-      <span className="shrink-0 text-sm font-normal text-quaternary tabular-nums">
-        {formattedCount}
-      </span>
+      {count > 0 && <span className="sr-only">, {count}</span>}
+      <CountBadge count={count} size="sm" />
     </span>
   );
   const toggle = () => {

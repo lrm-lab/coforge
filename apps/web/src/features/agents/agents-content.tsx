@@ -13,12 +13,12 @@ import { PageBackButton } from "#src/components/layout/page-back-button";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { Skeleton } from "#src/components/ui/skeleton";
+import { CountBadge } from "#src/components/ui/unread-marker";
 import { localLayoutStorage } from "#src/features/conversations/local-layout-storage";
 import type { MemberDirectorySummary } from "#src/features/workspaces/workspaces.functions";
 import { isWorkspaceAdminRole } from "#src/features/workspaces/workspace-roles";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
-import { formatNumber } from "#src/lib/format-number";
 import {
   animateFlipFromRect,
   cancelFlipAnimation,
@@ -26,7 +26,6 @@ import {
 } from "#src/lib/shared-element-rect";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { getLocale } from "#src/paraglide/runtime";
 
 import { pickBusyAgents } from "./busy-agents";
 import { MemberDialogs, type MemberDialog } from "./member-dialogs";
@@ -80,7 +79,6 @@ export function AgentsContent({
   onDialogChange: (dialog: MemberDialog | undefined) => void;
 }) {
   const { setAgentProfileTab, closeAgentProfile } = useOpenAgentProfile();
-  const locale = getLocale();
   const [query, setQuery] = useState("");
   const [searchReset, setSearchReset] = useState(0);
   const [createAgentKind, setCreateAgentKind] = useState<AgentCreateKind | undefined>(undefined);
@@ -216,17 +214,17 @@ export function AgentsContent({
           size="sm"
           className="shrink-0"
         >
-          <Tab id="all" className="tabular-nums">
+          <Tab id="all" className="gap-1.5">
             <span>{m.member_tab_all()}</span>
-            <span className="text-quaternary">{formatNumber(totalCount, locale)}</span>
+            <CountBadge count={totalCount} size="sm" />
           </Tab>
-          <Tab id="human" className="tabular-nums">
+          <Tab id="human" className="gap-1.5">
             <span>{m.member_tab_humans()}</span>
-            <span className="text-quaternary">{formatNumber(summary.peopleCount, locale)}</span>
+            <CountBadge count={summary.peopleCount} size="sm" />
           </Tab>
-          <Tab id="agent" className="tabular-nums">
+          <Tab id="agent" className="gap-1.5">
             <span>{m.member_tab_agents()}</span>
-            <span className="text-quaternary">{formatNumber(summary.agentCount, locale)}</span>
+            <CountBadge count={summary.agentCount} size="sm" />
           </Tab>
         </TabList>
 

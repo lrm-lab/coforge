@@ -209,8 +209,14 @@ export function AccountSettings({
                 >
                   {m.settings_profile_cancel()}
                 </Button>
-                <Button type="button" size="sm" isDisabled={!canSave} onPress={save}>
-                  {saving ? m.settings_profile_saving() : m.settings_profile_save()}
+                <Button
+                  type="button"
+                  size="sm"
+                  isLoading={saving}
+                  isDisabled={!canSave}
+                  onPress={save}
+                >
+                  {m.settings_profile_save()}
                 </Button>
               </div>
             </div>
