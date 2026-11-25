@@ -260,7 +260,7 @@ export function ConversationPane({
               header
             )}
 
-            <div className="group/history relative min-h-24 flex-1 overflow-hidden">
+            <div className="group/history relative min-h-24 flex-1 overflow-x-clip">
               <div
                 ref={historyRef}
                 data-scroll-restoration-id={`conversation-${conversation.conversationId}${root ? `-thread-${root.id}` : ""}`}
