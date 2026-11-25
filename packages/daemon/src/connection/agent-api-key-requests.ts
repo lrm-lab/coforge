@@ -14,6 +14,7 @@ function agentApiKeyRequest(
   what: string,
   method: "POST" | "DELETE",
   body: unknown,
+  launch?: { agentId: string; launchId?: string },
 ) {
   return requestAgentConfig({
     url: () => endpoint.url(what),
@@ -21,6 +22,7 @@ function agentApiKeyRequest(
     method,
     token: endpoint.token(),
     body: JSON.stringify(body),
+    ...(launch ? { launch } : {}),
     // Revoking is not retried: one request per key, exactly when its Agent is gone.
     ...(method === "DELETE" ? { retryDelaysMs: [] } : {}),
   });
@@ -49,7 +51,7 @@ export async function requestAgentLaunchConfig(
   },
 ): Promise<AgentLaunchConfig> {
   return parseAgentLaunchConfig(
-    await (await agentApiKeyRequest(endpoint, "Agent launch config", "POST", input)).json(),
+    await (await agentApiKeyRequest(endpoint, "Agent launch config", "POST", input, input)).json(),
   );
 }
 

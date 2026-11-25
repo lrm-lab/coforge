@@ -1,4 +1,5 @@
 import { getLogger } from "@logtape/logtape";
+import { RFC_UUID_PATTERN } from "@lrm/coforge-sdk/internal/uuid";
 import { AGENT_RPC_TIMEOUT_MS } from "./agent-http-wire";
 
 const logger = getLogger(["coforge", "daemon", "agent-launch-config"]);
@@ -50,6 +51,7 @@ export type AgentConfigRequestOptions = {
   method: "POST" | "DELETE";
   token: string;
   body: string;
+  launch?: { agentId: string; launchId?: string };
   fetchImpl?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
   retryDelaysMs?: readonly number[];
@@ -61,17 +63,35 @@ export type AgentConfigRequestOptions = {
  * its configuration says which of the three it was.
  */
 export async function requestAgentConfig(options: AgentConfigRequestOptions): Promise<Response> {
-  const attempt = () => attemptAgentConfig(options);
   const delays = options.retryDelaysMs ?? AGENT_CONFIG_RETRY_DELAYS_MS;
   const sleep = options.sleep ?? ((ms: number) => Bun.sleep(ms));
+  const { agentId, launchId } = options.launch ?? {};
+  const launchDigest =
+    launchId && RFC_UUID_PATTERN.test(launchId)
+      ? Bun.CryptoHasher.hash("sha256", launchId, "hex")
+      : undefined;
   for (let index = 0; ; index++) {
+    const requestId = options.launch ? crypto.randomUUID() : undefined;
+    const correlation = requestId
+      ? { request_id: requestId, agent_id: agentId, launch_digest: launchDigest }
+      : {};
     try {
-      return await attempt();
+      const response = await attemptAgentConfig(options, requestId);
+      if (requestId)
+        logger.info("Agent launch configuration HTTP request succeeded", {
+          event: "agent_launch_config:request_succeeded",
+          ...correlation,
+          attempt: index + 1,
+          http_status: response.status,
+          outcome: "ok",
+        });
+      return response;
     } catch (error) {
       const retryable = retryableAgentConfigFailure(error);
       const failure = error instanceof AgentConfigRequestError ? error : undefined;
       logger.warning("Agent launch configuration request failed", {
         event: "agent_launch_config:request_failed",
+        ...correlation,
         what: options.what,
         attempt: index + 1,
         failure: failure?.failure,
@@ -85,13 +105,20 @@ export async function requestAgentConfig(options: AgentConfigRequestOptions): Pr
   }
 }
 
-async function attemptAgentConfig(options: AgentConfigRequestOptions): Promise<Response> {
+async function attemptAgentConfig(
+  options: AgentConfigRequestOptions,
+  requestId: string | undefined,
+): Promise<Response> {
   const url = typeof options.url === "function" ? options.url() : options.url;
   let response: Response;
   try {
     response = await (options.fetchImpl ?? fetch)(url, {
       method: options.method,
-      headers: { authorization: `Bearer ${options.token}`, "content-type": "application/json" },
+      headers: {
+        authorization: `Bearer ${options.token}`,
+        "content-type": "application/json",
+        ...(requestId ? { "x-request-id": requestId } : {}),
+      },
       body: options.body,
       signal: AbortSignal.timeout(AGENT_RPC_TIMEOUT_MS),
     });

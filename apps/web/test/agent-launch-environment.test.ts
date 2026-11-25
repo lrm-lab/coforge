@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeEach, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
 import { mockModuleForFile } from "./helpers/file-module-mock";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { AgentEnvironment } from "#src/server/agents/agent-environment.server";
@@ -15,6 +15,7 @@ let runtimeConfig: AgentRuntimeConfig = {
 let runtimeConfigRevision = 0;
 let onAuthorizeLaunch: (() => void) | undefined;
 let allowed = true;
+let mintFailure = false;
 /** How `authorizeLaunch` refuses: not at all, an uncoded error, or the coded refusal a refused
  * relaunch has to be able to name (task #14). */
 let launchRefusal: "none" | "plain" | "coded" = "none";
@@ -133,6 +134,7 @@ await mockModuleForFile("#src/server/computers/computer-runtime-visibility.serve
 await mockModuleForFile("#src/server/db/repositories/agent-api-key.repositories.server", () => ({
   PrismaAgentApiKeyRepository: class {
     async rotate() {
+      if (mintFailure) throw new Error("mint-exception-marker");
       issued++;
     }
   },
@@ -142,17 +144,128 @@ const handlers = Route.options.server!.handlers;
 if (!handlers || typeof handlers === "function" || typeof handlers.POST !== "function")
   throw new Error("missing POST handler");
 const post = handlers.POST;
-function request(token?: string) {
+function request(token?: string, requestId?: string, launchId?: string, body?: string) {
   return post({
     request: new Request("https://example.test/api/agent-api-keys", {
       method: "POST",
-      headers: token ? { authorization: `Bearer ${token}` } : {},
-      body: JSON.stringify({ agentId: "agent-1", workspaceId: "workspace-1" }),
+      headers: {
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...(requestId ? { "x-request-id": requestId } : {}),
+      },
+      body: body ?? JSON.stringify({ agentId: "agent-1", workspaceId: "workspace-1", launchId }),
     }),
-  } as Parameters<typeof post>[0]);
+  } as Extract<Parameters<typeof post>[0], { pathname: string }>);
 }
 afterAll(() => {
   mock.restore();
+});
+
+test("launch HTTP outcomes correlate verified scope without copying request or error text", async () => {
+  const savedConfig = runtimeConfig;
+  const savedIssued = issued;
+  runtimeConfig = { ...runtimeConfig, environment: undefined };
+  const records: Record<string, unknown>[] = [];
+  const capture = (line: string) => void records.push(JSON.parse(line));
+  const info = spyOn(console, "info").mockImplementation(capture);
+  const warn = spyOn(console, "warn").mockImplementation(capture);
+  const error = spyOn(console, "error").mockImplementation(capture);
+  const requestId = crypto.randomUUID();
+  const concurrentId = crypto.randomUUID();
+  const launchId = crypto.randomUUID();
+  const launchDigest = Bun.CryptoHasher.hash("sha256", launchId, "hex");
+  try {
+    const successes = await Promise.all(
+      [requestId, concurrentId].map((id) => request("valid", id, launchId)),
+    );
+    expect(successes.map((response) => (response as Response).status)).toEqual([200, 200]);
+    expect(((await request("invalid", "unsafe-header-marker", launchId)) as Response).status).toBe(
+      401,
+    );
+    expect(((await request("valid", undefined, undefined, "body-marker")) as Response).status).toBe(
+      400,
+    );
+    allowed = false;
+    expect(((await request("valid", undefined, launchId)) as Response).status).toBe(403);
+    allowed = true;
+    launchRefusal = "coded";
+    expect(((await request("valid", undefined, launchId)) as Response).status).toBe(403);
+    launchRefusal = "plain";
+    expect(((await request("valid", undefined, "legacy-launch-marker")) as Response).status).toBe(
+      403,
+    );
+    launchRefusal = "none";
+    mintFailure = true;
+    await expect(request("valid")).rejects.toThrow("mint-exception-marker");
+    const outcomes = records.filter(
+      ({ event }) => event === "agent_launch_config.request_finished",
+    );
+    expect(outcomes.slice(0, 2)).toEqual(
+      expect.arrayContaining(
+        [requestId, concurrentId].map((id) =>
+          expect.objectContaining({
+            request_id: id,
+            agent_id: "agent-1",
+            computer_id: "computer-1",
+            launch_digest: launchDigest,
+            http_status: 200,
+            outcome: "ok",
+          }),
+        ),
+      ),
+    );
+    expect(outcomes.slice(2)).toEqual([
+      expect.objectContaining({
+        http_status: 401,
+        outcome: "rejected",
+        reason_code: "DAEMON_UNAUTHORIZED",
+      }),
+      expect.objectContaining({ http_status: 400, reason_code: "INVALID_REQUEST" }),
+      expect.objectContaining({
+        http_status: 403,
+        reason_code: "AGENT_LAUNCH_NOT_AUTHORIZED",
+      }),
+      expect.objectContaining({
+        http_status: 403,
+        launch_digest: launchDigest,
+        reason_code: "AGENT_LAUNCH_SUPERSEDED",
+      }),
+      expect.objectContaining({
+        http_status: 403,
+        outcome: "rejected",
+        reason_code: "LAUNCH_AUTHORIZATION_FAILED",
+      }),
+      expect.objectContaining({ outcome: "failed", reason_code: "LAUNCH_CONFIG_UNEXPECTED" }),
+    ]);
+    expect(outcomes[2]!.request_id).toMatch(/^[\da-f-]{36}$/i);
+    expect(outcomes[2]).not.toHaveProperty("agent_id");
+    expect(outcomes[2]).not.toHaveProperty("computer_id");
+    expect(outcomes[2]).not.toHaveProperty("launch_digest");
+    expect(outcomes[4]).not.toHaveProperty("agent_id");
+    expect(outcomes[4]).not.toHaveProperty("launch_digest");
+    expect(outcomes[6]).not.toHaveProperty("launch_digest");
+    expect(outcomes[7]).not.toHaveProperty("http_status");
+    const serialized = JSON.stringify(records);
+    for (const excluded of [
+      launchId,
+      "legacy-launch-marker",
+      "unsafe-header-marker",
+      "body-marker",
+      "stale launch",
+      "Stale Agent launch",
+      "mint-exception-marker",
+      "sk_agent_",
+    ])
+      expect(serialized).not.toContain(excluded);
+  } finally {
+    info.mockRestore();
+    warn.mockRestore();
+    error.mockRestore();
+    runtimeConfig = savedConfig;
+    issued = savedIssued;
+    launchRefusal = "none";
+    allowed = true;
+    mintFailure = false;
+  }
 });
 
 test("authorized launch HTTP response contains decrypted explicit env only, no-store; unauthorized and stale launches never decrypt", async () => {

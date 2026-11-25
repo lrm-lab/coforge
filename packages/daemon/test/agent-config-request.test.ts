@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import { requestAgentLaunchConfig } from "#src/connection/agent-api-key-requests";
 import {
   AGENT_CONFIG_RETRY_DELAYS_MS,
   AgentConfigRequestError,
@@ -103,6 +104,72 @@ describe("obtaining the Agent launch configuration", () => {
       http_status: 503,
       retryable: true,
     });
+  });
+
+  test("every launch config HTTP attempt has a distinct correlation ID logged with its status", async () => {
+    const { captureDaemonLogs } = await import("./log-capture");
+    const { fetchImpl, calls } = scripted([status(503), ok]);
+    const launch = { agentId: "fixture-agent", launchId: crypto.randomUUID() };
+    const { records, result } = await captureDaemonLogs(() =>
+      requestAgentConfig({ ...base, launch, fetchImpl }),
+    );
+    expect(result.status).toBe(200);
+    const requestIds = calls.map(({ init }) => new Headers(init?.headers).get("x-request-id"));
+    expect(requestIds).toHaveLength(2);
+    expect(requestIds[0]).toMatch(/^[\da-f-]{36}$/i);
+    expect(requestIds[1]).toMatch(/^[\da-f-]{36}$/i);
+    expect(requestIds[1]).not.toBe(requestIds[0]);
+    const entries = records.map(({ properties }) => properties);
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        event: "agent_launch_config:request_failed",
+        attempt: 1,
+        http_status: 503,
+        request_id: requestIds[0],
+      }),
+    );
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        event: "agent_launch_config:request_succeeded",
+        attempt: 2,
+        http_status: 200,
+        request_id: requestIds[1],
+        agent_id: launch.agentId,
+        launch_digest: Bun.CryptoHasher.hash("sha256", launch.launchId, "hex"),
+      }),
+    );
+    expect(JSON.stringify(entries)).not.toContain(base.token);
+  });
+
+  test("a launch config can receive HTTP 200 yet fail to decode without retrying", async () => {
+    const { captureDaemonLogs } = await import("./log-capture");
+    const fixture = scripted([status(200, { apiKey: "invalid-payload-marker" })]);
+    const fetchMock = spyOn(globalThis, "fetch").mockImplementation(fixture.fetchImpl);
+    try {
+      const { records } = await captureDaemonLogs(async () => {
+        await expect(
+          requestAgentLaunchConfig(
+            { url: () => base.url, token: () => base.token },
+            { agentId: "fixture-agent", workspaceId: "fixture-workspace" },
+          ),
+        ).rejects.toThrow();
+      });
+      expect(fixture.calls).toHaveLength(1);
+      const requestId = new Headers(fixture.calls[0]?.init?.headers).get("x-request-id");
+      const entries = records.map(({ properties }) => properties);
+      expect(entries).toContainEqual(
+        expect.objectContaining({
+          event: "agent_launch_config:request_succeeded",
+          http_status: 200,
+          request_id: requestId,
+          agent_id: "fixture-agent",
+        }),
+      );
+      expect(entries[0]?.launch_digest).toBeUndefined();
+      expect(JSON.stringify(entries)).not.toContain("invalid-payload-marker");
+    } finally {
+      fetchMock.mockRestore();
+    }
   });
 
   test("the endpoint is resolved per attempt, so a reconnect is used", async () => {

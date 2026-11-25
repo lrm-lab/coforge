@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
+import { RFC_UUID_PATTERN } from "@lrm/coforge-sdk/internal/uuid";
 import { authenticateDaemon, parseBody } from "#src/server/auth/daemon-request.server";
 import {
   createAgentApiKey,
@@ -52,6 +53,50 @@ const revokeAgentApiKeyInputSchema = z.object({
   scope: z.literal("all").optional(),
 });
 
+type LaunchConfigObservation = {
+  computer_id?: string;
+  agent_id?: string;
+  launch_digest?: string;
+  reason_code?: string;
+};
+
+function observeLaunchConfigRequest(
+  handle: (request: Request, fields: LaunchConfigObservation) => Promise<Response>,
+) {
+  return async ({ request }: { request: Request }): Promise<Response> => {
+    const suppliedId = request.headers.get("x-request-id");
+    const requestId =
+      suppliedId && RFC_UUID_PATTERN.test(suppliedId) ? suppliedId : crypto.randomUUID();
+    const startedAt = performance.now();
+    const fields: LaunchConfigObservation = {};
+    let response: Response | undefined;
+    try {
+      response = await handle(request, fields);
+      return response;
+    } catch (error) {
+      fields.reason_code = "LAUNCH_CONFIG_UNEXPECTED";
+      throw error;
+    } finally {
+      const outcome =
+        !response || response.status >= 500 ? "failed" : response.ok ? "ok" : "rejected";
+      const level = outcome === "ok" ? "info" : outcome === "rejected" ? "warn" : "error";
+      console[level](
+        JSON.stringify({
+          ts: new Date().toISOString(),
+          level,
+          service: "coforge-web",
+          event: "agent_launch_config.request_finished",
+          request_id: requestId,
+          duration_ms: Math.round(performance.now() - startedAt),
+          http_status: response?.status,
+          outcome,
+          ...fields,
+        }),
+      );
+    }
+  };
+}
+
 type LaunchIdentityComputer = AgentRuntimeContextComputer;
 
 /**
@@ -97,12 +142,20 @@ function buildAgentLaunchIdentity(agent: {
 export const Route = createFileRoute("/api/agent-api-keys")({
   server: {
     handlers: {
-      POST: async ({ request }) => {
+      POST: observeLaunchConfigRequest(async (request, observation) => {
         const daemon = await authenticateDaemon(request);
-        if (daemon instanceof Response) return daemon;
+        if (daemon instanceof Response) {
+          observation.reason_code =
+            daemon.status === 401 ? "DAEMON_UNAUTHORIZED" : "DAEMON_AUTH_UNAVAILABLE";
+          return daemon;
+        }
         const { principal, db } = daemon;
+        observation.computer_id = principal.computerId;
         const input = await parseBody(request, createAgentApiKeyInputSchema);
-        if (input instanceof Response) return input;
+        if (input instanceof Response) {
+          observation.reason_code = "INVALID_REQUEST";
+          return input;
+        }
         const agent = await db.agent.findFirst({
           where: {
             id: input.agentId,
@@ -141,13 +194,18 @@ export const Route = createFileRoute("/api/agent-api-keys")({
             },
           },
         });
-        if (principal.workspaceId !== input.workspaceId || !agent)
+        if (principal.workspaceId !== input.workspaceId || !agent) {
+          observation.reason_code = "AGENT_LAUNCH_NOT_AUTHORIZED";
           return errorResponse(
             "AGENT_LAUNCH_NOT_AUTHORIZED",
             "Agent launch is not authorized",
             403,
             false,
           );
+        }
+        observation.agent_id = agent.id;
+        if (input.launchId && RFC_UUID_PATTERN.test(input.launchId))
+          observation.launch_digest = Bun.CryptoHasher.hash("sha256", input.launchId, "hex");
         try {
           const visibility = new ComputerRuntimeVisibility(new PrismaComputerRuntimeRepository(db));
           const selection = await visibility.checkSelection(
@@ -158,6 +216,7 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           if (!selection.ok) {
             // The daemon relays this `code` to the Agent: a launch refused because the
             // Computer's runtime is missing, unusable, or private is not a permissions failure.
+            observation.reason_code = selection.code;
             return errorResponse(selection.code, selection.error, 403, false);
           }
           await new AgentControl(
@@ -170,6 +229,7 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           // server's own record of the same refusal: without it the only account of a refused
           // relaunch was one opaque 403 (task #14). No credential is read here, let alone logged.
           if (error instanceof AgentLaunchRefusalError) {
+            observation.reason_code = error.code;
             console.warn(
               JSON.stringify({
                 event: "agent_launch.refused",
@@ -184,13 +244,13 @@ export const Route = createFileRoute("/api/agent-api-keys")({
             );
             return errorResponse(error.code, error.message, 403, false);
           }
+          observation.reason_code = "LAUNCH_AUTHORIZATION_FAILED";
           console.warn(
             JSON.stringify({
               event: "agent_launch.authorization_failed",
               agent_id: input.agentId,
               computer_id: principal.computerId,
-              error_class: error instanceof Error ? error.name : typeof error,
-              error_message: error instanceof Error ? error.message : String(error),
+              code: observation.reason_code,
             }),
           );
           return Response.json({ error: "forbidden" }, { status: 403 });
@@ -206,6 +266,7 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           ).launchProviderConfig(agent.id, config);
           envVars = await decryptAgentEnvironment(agent.id, config.environment, encryptionKey);
         } catch {
+          observation.reason_code = "LAUNCH_CONFIG_UNAVAILABLE";
           return Response.json(
             { error: "service unavailable" },
             { status: 503, headers: { "cache-control": "no-store" } },
@@ -256,7 +317,7 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           },
           { headers: { "cache-control": "no-store" } },
         );
-      },
+      }),
       DELETE: async ({ request }) => {
         const daemon = await authenticateDaemon(request);
         if (daemon instanceof Response) return daemon;

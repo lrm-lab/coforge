@@ -4,6 +4,8 @@
 
 入口生成或转发 `request_id`，跨进程调用沿用同一 ID；异步重试创建新的 attempt 字段或事件，但保留原始关联 ID。日志、指标和健康结果必须能按 `service`、版本、时间窗口和稳定作用域关联。重启、drain、依赖失效、恢复和 rollback 都记录成独立生命周期事件。
 
+Daemon 通过 `x-request-id` 给每次启动配置 HTTP 尝试分配 UUID。用同一 `request_id` 对照 Daemon 的 HTTP 结果与 Web 的 `agent_launch_config.request_finished`，再用 `launch_digest` 关联同一受管启动的多次尝试。Web 只在确认 Agent 作用域后记录启动摘要，拒绝原因只记录固定码。Daemon 收到 HTTP 成功后还需要解码响应。
+
 在线 presence 只是一致性最终的 operational view。日志和指标可以记录 stale/unknown，但不得把它当成授权依据或 durable truth；完整 Workspace–Computer 枚举仍来自 PostgreSQL registration，具体协议和字段等待批准的 wire/identity 设计。
 
 ## 保留与访问
