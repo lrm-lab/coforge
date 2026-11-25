@@ -89,9 +89,7 @@
   background: var(--color-floating-bar-bg);
   backdrop-filter: blur(18px) saturate(1.4);
   -webkit-backdrop-filter: blur(18px) saturate(1.4);
-  box-shadow:
-    0 0 0 0.5px var(--color-floating-bar-hairline),
-    0 2px 8px -2px var(--color-floating-bar-shadow);
+  box-shadow: var(--floating-bar-shadow);
   pointer-events: none;
 }
 

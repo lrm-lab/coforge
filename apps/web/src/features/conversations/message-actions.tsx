@@ -76,7 +76,7 @@ export function MessageActionToolbar({
     <div
       data-message-toolbar
       className={cn(
-        "pointer-events-none absolute right-3 z-10 flex h-8 items-center gap-0.5 rounded-lg border border-secondary bg-primary px-0.5 opacity-0 shadow-xs transition-opacity",
+        "pointer-events-none absolute right-3 z-10 flex h-8 items-center gap-0.5 rounded-lg border border-secondary bg-primary px-0.5 opacity-0 shadow-(--message-toolbar-shadow) transition-opacity",
         grouped ? "-top-8" : "-top-5",
         "[li:has(>[role=separator])_&]:top-0",
         "lg:[@media(hover:hover)_and_(pointer:fine)]:group-focus-within/message:pointer-events-auto lg:[@media(hover:hover)_and_(pointer:fine)]:group-focus-within/message:opacity-100",

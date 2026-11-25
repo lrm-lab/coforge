@@ -6,7 +6,9 @@
   --cascade-menu-row-hover: var(--color-bg-tertiary);
   --cascade-menu-quiet: var(--color-text-tertiary);
   --cascade-menu-chevron: var(--color-fg-quaternary);
-  --cascade-menu-shadow: 0 12px 24px -4px rgb(15 23 42 / 0.12), 0 4px 8px -2px rgb(15 23 42 / 0.06);
+  --cascade-menu-shadow:
+    0 1px 1px rgb(16 19 25 / 0.04), 0 3px 5px rgb(16 19 25 / 0.04),
+    0 8px 14px -2px rgb(16 19 25 / 0.05), 0 16px 24px -6px rgb(16 19 25 / 0.05);
   --cascade-menu-opacity-duration: 150ms;
   --cascade-menu-transform-duration: 180ms;
   --cascade-menu-transform-ease: var(--ease-out);
@@ -15,7 +17,9 @@
 }
 
 .dark-mode {
-  --cascade-menu-shadow: 0 14px 28px -4px rgb(0 0 0 / 0.45), 0 4px 10px -2px rgb(0 0 0 / 0.28);
+  --cascade-menu-shadow:
+    0 1px 2px rgb(0 0 0 / 0.24), 0 4px 8px rgb(0 0 0 / 0.22), 0 10px 20px -4px rgb(0 0 0 / 0.26),
+    0 18px 32px -6px rgb(0 0 0 / 0.28);
 }
 
 @position-try --cascade-submenu-below-start {
