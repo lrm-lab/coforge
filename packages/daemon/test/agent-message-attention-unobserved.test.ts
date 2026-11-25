@@ -42,7 +42,7 @@ test("a delivery pushed out of the batch before any attempt is reported once", a
 
 test("a delivery read before its first attempt is reported as such", async () => {
   const { result, records } = await captureDaemonLogs(async () => {
-    const loop = unreadLoop({ writable: false });
+    const loop = unreadLoop({ writable: false, cursor: true });
     await loop.index.receive({
       ...delivery("read-first"),
       target: "#team",
@@ -50,7 +50,12 @@ test("a delivery read before its first attempt is reported as such", async () =>
       mentionsAgent: true,
     });
     // The Agent's read position moved past the batch it was never told about.
-    loop.reminder.consumed("agent-1", 3);
+    loop.index.recordHistoryRead("agent-1", {
+      spelling: "#team",
+      target: "#team",
+      shown: [3],
+      through: 3,
+    });
     return loop;
   });
   expect(result.records.size).toBe(0);

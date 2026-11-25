@@ -1,5 +1,10 @@
 import { RequestError } from "@agentclientprotocol/sdk/unstable";
-import type { AgentNoticeOptions, AgentRuntimeEvent, AgentTurnTokenUsage } from "@coforge/agent";
+import {
+  AgentNoticeSuppressedError,
+  type AgentNoticeOptions,
+  type AgentRuntimeEvent,
+  type AgentTurnTokenUsage,
+} from "@coforge/agent";
 import { acpPromptTokenUsage } from "#src/acp-context-usage";
 import { AGENT_RUNTIME_EVENT_TYPE } from "#src/contract";
 import type { AcpSteerProfile } from "./profile";
@@ -163,6 +168,14 @@ export class AcpSteering {
     if (!this.ports.turnIsLive()) {
       undeliver();
       return;
+    }
+    if (options?.prepareSubmission) {
+      const prepared = options.prepareSubmission("steer");
+      if (prepared === undefined) {
+        admission.reject(new AgentNoticeSuppressedError());
+        return;
+      }
+      text = prepared;
     }
     const request = this.profile.request(text, this.ports.sessionId());
     let response: unknown;

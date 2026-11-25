@@ -1,11 +1,14 @@
+import { AgentNoticeSuppressedError, type AgentNoticeOptions } from "@coforge/agent";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import { inboxPreviewLimit } from "./inbox-preview";
+import type { NoticeEligibility } from "./notice-eligibility";
 import type { ImportantUnreadNoticeStore } from "#src/persistence/important-unread-notice-store";
 import {
   type ImportantUnreadAttemptOutcome,
   type ImportantUnreadDelivery,
   ImportantUnreadNotices,
+  unreadConversationEligible,
   type ImportantUnreadNotice,
 } from "./important-unread-notice";
 
@@ -23,7 +26,9 @@ export type ImportantUnreadRecord = Pick<ImportantUnreadNoticeStore, "save" | "c
  * the model, recorded only once the write is accepted. */
 export type ImportantUnreadComposedNotice = Readonly<{
   text: string;
+  requestIds?: readonly string[];
   fallbackText?: () => string | undefined;
+  prepareSubmission?: AgentNoticeOptions["prepareSubmission"];
   shown?: readonly { target: string; sequence: number }[];
   accepted?(): boolean;
 }>;
@@ -53,6 +58,7 @@ export type ImportantUnreadReminderPorts = Readonly<{
   ): ImportantUnreadComposedNotice | undefined;
   /** The retries are used up and the Agent has not read: one error, once per batch. */
   report(agentId: string, notice: ImportantUnreadNotice): void;
+  eligibility?: NoticeEligibility;
 }>;
 
 /** Why a delivery the loop took in will never be shown to the model. */
@@ -66,6 +72,8 @@ export type UnobservedReason = "superseded" | "read_before_attempt" | "rejected"
  */
 export class ImportantUnreadReminder {
   readonly #reported = new Map<string, string>();
+  readonly #writing = new Map<string, Promise<void>>();
+  readonly #batchRevision = new Map<string, symbol>();
   readonly #batches = new Map<string, ImportantUnreadBatchDelivery[]>();
   readonly #unshown = new Map<string, Set<string>>();
   readonly #writtenTo = new Map<string, unknown>();
@@ -80,10 +88,27 @@ export class ImportantUnreadReminder {
   observeDeliveries(deliveries: readonly ImportantUnreadBatchDelivery[]): Promise<void> | void {
     let attempt: Promise<void> | void = undefined;
     const dirty = new Map<string, ImportantUnreadNotice>();
+    let eligibleDelivery = false;
     for (const delivery of deliveries) {
+      const decision = this.ports.eligibility?.(delivery.agentId, delivery);
+      if (decision?.disposition === "settle") {
+        logger.info("Read delivery omitted from reliable inbox notice", {
+          event: "agent.inbox_notice.eligibility",
+          agent_id: delivery.agentId,
+          request_id: delivery.requestId,
+          delivery_id: delivery.deliveryId,
+          conversation_id: delivery.conversationId,
+          sequence: delivery.sequence,
+          disposition: decision.disposition,
+          basis: decision.basis,
+        });
+        continue;
+      }
+      eligibleDelivery = true;
       this.#forgetStaleBatch(delivery.agentId);
       const notice = this.notices.observe(delivery);
       if (!notice) continue;
+      this.#batchRevision.set(notice.agentId, Symbol());
       const batch = this.#batches.get(notice.agentId) ?? [];
       batch.push(delivery);
       const shown = inboxPreviewLimit();
@@ -100,25 +125,53 @@ export class ImportantUnreadReminder {
       dirty.set(notice.agentId, notice);
     }
     for (const notice of dirty.values()) this.store.save(notice);
-    for (const agentId of dirty.keys()) attempt = this.#writeIfDue(agentId) ?? attempt;
+    for (const agentId of dirty.keys()) {
+      const writing = this.#writing.get(agentId);
+      const write = () => this.#writeIfDue(agentId);
+      attempt = (writing ? writing.then(write, write) : write()) ?? attempt;
+    }
+    if (deliveries.length && !eligibleDelivery)
+      return Promise.reject(new AgentNoticeSuppressedError());
     return attempt;
   }
 
-  consumed(agentId: string, consumedThroughSequence: number): void {
+  consumed(agentId: string): void {
     const notice = this.notices.pending(agentId);
-    if (!this.notices.settle(agentId, consumedThroughSequence)) return;
-    if (notice)
-      this.#warnUnobserved(
-        agentId,
-        this.#unshown.get(agentId) ?? [],
-        notice.attempts,
-        "read_before_attempt",
-      );
-    this.#reported.delete(agentId);
-    this.#batches.delete(agentId);
-    this.#unshown.delete(agentId);
-    this.#writtenTo.delete(agentId);
-    this.store.clear(agentId);
+    const eligibility = this.ports.eligibility;
+    if (!notice || !eligibility) return;
+    const retained = this.notices.retainConversations(agentId, (conversation) =>
+      unreadConversationEligible(notice, conversation, eligibility),
+    );
+
+    const batch = this.#batches.get(agentId);
+    const unshown = this.#unshown.get(agentId);
+    if (batch) {
+      const newBatch = batch.filter((delivery) => {
+        if (eligibility(agentId, delivery).disposition !== "settle") return true;
+        if (delivery.deliveryId && unshown?.delete(delivery.deliveryId)) {
+          this.#warnUnobserved(
+            agentId,
+            [delivery.deliveryId],
+            notice.attempts,
+            "read_before_attempt",
+          );
+        }
+        return false;
+      });
+      if (newBatch.length !== batch.length) this.#batches.set(agentId, newBatch);
+    }
+
+    if (!retained) {
+      this.#warnUnobserved(agentId, unshown ?? [], notice.attempts, "read_before_attempt");
+      this.#reported.delete(agentId);
+      this.#batchRevision.delete(agentId);
+      this.#batches.delete(agentId);
+      this.#unshown.delete(agentId);
+      this.#writtenTo.delete(agentId);
+      this.store.clear(agentId);
+    } else if (retained !== notice) {
+      this.store.save(retained);
+    }
   }
 
   restore(): void {
@@ -133,21 +186,34 @@ export class ImportantUnreadReminder {
   }
 
   #writeIfDue(agentId: string): void | Promise<void> {
+    const pendingWrite = this.#writing.get(agentId);
+    if (pendingWrite) return pendingWrite;
+    this.consumed(agentId);
     const notice = this.notices.pending(agentId);
     if (!notice) return;
     if (this.notices.dueForWrite(agentId, this.now())) {
       this.#forgetStaleBatch(agentId);
       const session = this.ports.session?.(agentId);
       const attempt = this.ports.compose?.(agentId, notice, this.#batches.get(agentId) ?? []);
+      const revision = this.#batchRevision.get(agentId);
+      const isCurrent = () => this.#batchRevision.get(agentId) === revision;
       const verdict = this.ports.write(agentId, notice, attempt);
-      if (verdict !== true && verdict !== false)
-        return verdict.then(
-          () => this.#acceptAttempt(agentId, session),
-          (error: unknown) => {
-            this.#recordAttempt(agentId, "rejected");
-            throw error;
-          },
-        );
+      if (verdict !== true && verdict !== false) {
+        const writing = verdict
+          .then(
+            () => {
+              if (isCurrent()) this.#acceptAttempt(agentId, session);
+            },
+            (error: unknown) => {
+              if (error instanceof AgentNoticeSuppressedError) this.consumed(agentId);
+              else if (isCurrent()) this.#recordAttempt(agentId, "rejected");
+              throw error;
+            },
+          )
+          .finally(() => this.#writing.delete(agentId));
+        this.#writing.set(agentId, writing);
+        return writing;
+      }
       if (!verdict) return;
       this.#acceptAttempt(agentId, session);
       return;

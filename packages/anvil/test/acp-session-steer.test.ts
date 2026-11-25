@@ -278,3 +278,27 @@ test("steersBusyTurn declares the profile's steer path to the daemon", async () 
   expect(queued.session.steersBusyTurn).toBe(false);
   await queued.session.dispose();
 });
+
+test("a queued notification is rechecked at submission and an all-read preview never reaches ACP", async () => {
+  const harness = await openSession(undefined);
+  try {
+    const busy = harness.session.notify("busy turn");
+    const running = await harness.nextRequest("session/prompt");
+    let unread = true;
+    const stale = harness.session.notify("old preview", {
+      prepareSubmission: () => (unread ? "old preview" : undefined),
+    });
+    const settled = stale.catch((error: unknown) => error);
+    const fresh = harness.session.notify("fresh input");
+    unread = false;
+    running.resolve({ stopReason: "end_turn" });
+    await busy;
+    const submitted = await harness.nextRequest("session/prompt");
+    expect(submitted.params).toMatchObject({ prompt: [{ type: "text", text: "fresh input" }] });
+    expect(await settled).toBeInstanceOf(Error);
+    submitted.resolve({ stopReason: "end_turn" });
+    await fresh;
+  } finally {
+    await harness.session.dispose();
+  }
+});

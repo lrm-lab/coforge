@@ -1,6 +1,11 @@
 import type { AgentSession } from "@coforge/agent";
-import { ImportantUnreadNotices, type ImportantUnreadNotice } from "./important-unread-notice";
-import type { AgentConsumedSeqState } from "#src/persistence/agent-consumed-seq-store";
+import { getLogger } from "@logtape/logtape";
+import {
+  ImportantUnreadNotices,
+  unreadConversationEligible,
+  type ImportantUnreadNotice,
+} from "./important-unread-notice";
+import type { NoticeEligibility } from "./notice-eligibility";
 import {
   ImportantUnreadReminder,
   type ImportantUnreadBatchDelivery,
@@ -31,6 +36,7 @@ export type ImportantUnreadWiringPorts = Readonly<{
   shown?(agentId: string, shown: readonly { target: string; sequence: number }[]): void;
   /** The clock the retry schedule is measured on. */
   now?(): number;
+  eligibility?: NoticeEligibility;
 }>;
 
 /**
@@ -58,22 +64,11 @@ export function importantUnreadNoticeText(
   return `Still waiting: ${rows}. Run \`coforge inbox check\` to see them.`;
 }
 
-/**
- * The read position an Agent's consumed cursor now holds: the furthest frontier among the targets
- * it names. A batch's highest sequence is compared against this exactly as the batch itself takes
- * the highest sequence of the conversations it holds, so the same reading settles both — a notice
- * is done once the Agent has read past what it named, and a `check` that showed none of those
- * messages leaves the frontier alone and the retries running (task #14).
- */
-export function consumedThroughSequence(state: AgentConsumedSeqState): number {
-  let highest = 0;
-  for (const entry of Object.values(state.targets)) highest = Math.max(highest, entry.seq ?? 0);
-  return highest;
-}
-
 /** Binds the loop to the daemon: a notice goes into the running session, and a batch nobody read
  * becomes one Activity. Writing without a session is a refusal, not a success, so the loop keeps
  * its retry rather than believing the Agent was told. */
+const logger = getLogger(["coforge", "daemon", "message-attention"]);
+
 export function composeImportantUnreadReminder(ports: ImportantUnreadWiringPorts) {
   const notices = new ImportantUnreadNotices();
   return new ImportantUnreadReminder(
@@ -89,17 +84,63 @@ export function composeImportantUnreadReminder(ports: ImportantUnreadWiringPorts
         // The session queues the text into the Agent's input, and the promise is this attempt's
         // verdict: it rejects when the session refused the notice, so the retry stays and the
         // delivery that asked for the attempt hears the refusal.
-        return Promise.resolve(
-          attempt?.fallbackText
-            ? session.notify(text, { fallbackText: attempt.fallbackText })
-            : session.notify(text),
-        ).then(async () => {
-          await session.waitForContextViewCapture?.();
-          const currentContext = attempt?.accepted?.() !== false;
-          if (currentContext && attempt?.shown?.length) ports.shown?.(agentId, attempt.shown);
+        const identity = {
+          agent_id: agentId,
+          notice_key: notice.key,
+          attempt_id: crypto.randomUUID(),
+          request_ids: attempt?.requestIds,
+        };
+        logger.info("Reliable inbox notice handed to the session", {
+          ...identity,
+          event: "agent.inbox_notice.admission_requested",
+          attempt: notice.attempts + 1,
         });
+        const eligibility = ports.eligibility;
+        const summary = eligibility
+          ? () => {
+              const retained = notice.conversations.filter((conversation) =>
+                unreadConversationEligible(notice, conversation, eligibility),
+              );
+              if (!retained.length) return undefined;
+              const targets = new Set(retained.map(({ target }) => target));
+              const unread = ports.unread(agentId).filter((entry) => targets.has(entry.target));
+              return importantUnreadNoticeText({ ...notice, conversations: retained }, unread);
+            }
+          : undefined;
+        const prepare = attempt?.prepareSubmission ?? summary;
+        const options =
+          attempt?.fallbackText || prepare
+            ? {
+                fallbackText: attempt?.fallbackText,
+                prepareSubmission: prepare
+                  ? (boundary: "prompt" | "steer") => {
+                      const next = prepare(boundary);
+                      logger.info("Reliable inbox notice submission decided", {
+                        ...identity,
+                        event: "agent.inbox_notice.submission_decision",
+                        boundary,
+                        outcome: next === undefined ? "suppress" : "submit",
+                      });
+                      return next;
+                    }
+                  : undefined,
+                onPromptWritten: () =>
+                  logger.info("ACP prompt written for reliable inbox notice", {
+                    ...identity,
+                    event: "agent.inbox_notice.acp_prompt_written",
+                  }),
+              }
+            : undefined;
+        return Promise.resolve(options ? session.notify(text, options) : session.notify(text)).then(
+          async () => {
+            await session.waitForContextViewCapture?.();
+            const currentContext = attempt?.accepted?.() !== false;
+            if (currentContext && attempt?.shown?.length) ports.shown?.(agentId, attempt.shown);
+          },
+        );
       },
       report: (agentId, notice) => ports.report(agentId, notice),
+      eligibility: ports.eligibility,
       session: (agentId) => ports.session(agentId),
       ...(ports.compose
         ? {
