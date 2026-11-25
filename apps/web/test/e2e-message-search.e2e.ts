@@ -118,10 +118,22 @@ test("the search dialog finds a message and opens it in its channel", async () =
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}${workspacePath}`);
     await browser("eval", "localStorage.clear()");
-    // The sidebar's search field opens the empty dialog with the box focused, once its handler is
-    // attached: it is a button, not a link that works before hydration.
-    await waitFor(hydratedElement(`document.querySelector("aside [data-search-button]")`));
-    await browser("click", "aside [data-search-button]");
+    // The desktop sidebar defaults to its collapsed icon rail (`SearchRailButton`), while an
+    // expanded sidebar shows `[data-search-button]`; locate whichever search trigger is visible.
+    const visibleSearchButton = `[...document.querySelectorAll('aside [data-search-button], aside button[aria-label="Search"][aria-haspopup="dialog"]')].find((el) => el.checkVisibility({ opacityProperty: true, visibilityProperty: true }) && el.getBoundingClientRect().width > 0)`;
+    const clickSearchButton = async () => {
+      await waitFor(`${visibleSearchButton} != null && ${hydratedElement(visibleSearchButton)}`);
+      await browser(
+        "eval",
+        `(${visibleSearchButton}?.setAttribute("data-e2e-search-trigger", ""), true)`,
+      );
+      await browser("click", "[data-e2e-search-trigger]");
+      await browser(
+        "eval",
+        `(document.querySelector("[data-e2e-search-trigger]")?.removeAttribute("data-e2e-search-trigger"), true)`,
+      );
+    };
+    await clickSearchButton();
     await waitFor(
       `document.querySelector('[role="dialog"]')?.textContent.includes("Search everything")`,
     );
@@ -162,7 +174,7 @@ test("the search dialog finds a message and opens it in its channel", async () =
     await browser("screenshot", join(artifacts, "jumped.png"));
 
     // Search opens fresh from the sidebar; a query with no match keeps the box and says so.
-    await browser("click", "aside [data-search-button]");
+    await clickSearchButton();
     await waitFor(`${box} !== null && ${box}.value === ""`);
     await browser("fill", 'input[type="search"]', "不存在的暗号");
     await waitFor(

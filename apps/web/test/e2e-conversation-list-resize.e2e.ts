@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { pageHydrated } from "./helpers/browser-e2e";
 
 /**
  * The Chat page's conversation list column can be resized. It starts at 288px; a drag on its
@@ -104,36 +105,36 @@ test("the conversation list resizes and remembers its width", async () => {
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
 
-    // A clean device: the list is 288px wide and shown.
+    // A clean device: the list is 288px (18rem) wide and shown.
     await browser("open", `${origin}${workspacePath}`);
     await browser("eval", `localStorage.removeItem("coforge-conversation-list-width")`);
     await browser("reload");
-    await waitFor(`document.querySelector('${HANDLE}') !== null`);
+    await waitFor(`document.querySelector('${HANDLE}') !== null && ${pageHydrated}`);
     await waitForWidth(288);
     expect(
       await evaluate<string | null>(
         `document.querySelector('${HANDLE}').getAttribute("aria-valuenow")`,
       ),
-    ).toBe("288");
+    ).toBe("18");
     await browser("screenshot", join(artifacts, "default.png"));
 
     // A width in between follows the pointer; dragging far under the minimum stops at 200 and
     // the list stays.
     await dragListTo(330);
     await waitForWidth(330);
-    expect(await stored("coforge-conversation-list-width")).toBe("330");
+    expect(await stored("coforge-conversation-list-width")).toBe("20.625");
     await dragListTo(500);
     await waitForWidth(400);
     await browser("screenshot", join(artifacts, "widest.png"));
     await dragListTo(40);
     await waitForWidth(200);
-    expect(await stored("coforge-conversation-list-width")).toBe("200");
+    expect(await stored("coforge-conversation-list-width")).toBe("12.5");
     await browser("screenshot", join(artifacts, "narrowest.png"));
 
     // Double-click resets the width.
     await browser("dblclick", HANDLE);
     await waitForWidth(288);
-    expect(await stored("coforge-conversation-list-width")).toBe("288");
+    expect(await stored("coforge-conversation-list-width")).toBe("18");
 
     // The keyboard: the arrows step by 16, End goes to the maximum.
     await browser("focus", HANDLE);
@@ -141,11 +142,11 @@ test("the conversation list resizes and remembers its width", async () => {
     await waitForWidth(304);
     await browser("press", "End");
     await waitForWidth(400);
-    expect(await stored("coforge-conversation-list-width")).toBe("400");
+    expect(await stored("coforge-conversation-list-width")).toBe("25");
 
     // A reload keeps the width, and the first paint already has it.
     await browser("reload");
-    await waitFor(`document.querySelector('${HANDLE}') !== null`);
+    await waitFor(`document.querySelector('${HANDLE}') !== null && ${pageHydrated}`);
     await waitForWidth(400);
   } finally {
     await browser("eval", `localStorage.removeItem("coforge-conversation-list-width")`).catch(

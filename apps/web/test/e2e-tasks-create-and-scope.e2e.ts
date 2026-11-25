@@ -9,10 +9,10 @@ import { pickTaskPriority } from "./helpers/browser-e2e";
 
 /**
  * The Tasks page and a channel's Tasks tab in a real browser. The Tasks page lists channel Tasks
- * and none from a direct message (not even the viewer's own), and offers no way to create a Task.
- * A channel's Tasks tab creates them: the dialog refuses an empty title, offers first among its
- * Projects the one the viewer last filed a Task under there (task #485), and creates the Task in
- * that channel under the one picked.
+ * and none from a direct message (not even the viewer's own), offers only its toolbar New task
+ * control (no per-column "+"), and a channel's Tasks tab creates them: the dialog refuses an empty
+ * title, offers first among its Projects the one the viewer last filed a Task under there (task
+ * #485), and creates the Task in that channel under the one picked.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`, the dev user a member of
  * its Workspace (seed-dev). Each run seeds a fresh channel, Agent and direct message. Screenshots
@@ -128,14 +128,14 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
 
-    // The Tasks page: the channel's Task, not the direct message's, and no "+" to create one.
+    // The Tasks page: the channel's Task, not the direct message's, with toolbar New task only.
     await browser("open", `${origin}${workspacePath}/tasks`);
     await waitFor(bodyHas(channelTitle), 60_000);
     expect(await browser("eval", bodyHas(directTitle))).toContain("false");
     expect(
       await browser(
         "eval",
-        `document.querySelectorAll('[aria-label^="New task in"]').length === 0 && ${byText("button", "New task")} === undefined`,
+        `document.querySelectorAll('[aria-label^="New task in"]').length === 0 && ${byText("button", "New task")} !== undefined`,
       ),
     ).toContain("true");
     await browser("screenshot", join(artifacts, "tasks-page.png"));
@@ -253,8 +253,17 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
       ).then((out) => JSON.parse(out)),
     );
     expect(phoneLayout).toEqual({ submits: ["Create"], topBar: true, cancel: true, rows: 1 });
-    // Cancel puts the page away, not what was typed: opened again, the title is still there.
+    // Closing with a dirty title prompts: "Keep editing" keeps the draft, "Discard changes" clears it.
     await browser("find", "role", "button", "click", "--name", "Cancel");
+    await waitFor(`document.body.textContent.includes("You have unsaved changes. Discard them?")`);
+    await browser("find", "role", "button", "click", "--name", "Keep editing");
+    await waitFor(`!document.body.textContent.includes("Discard changes")`);
+    expect(
+      await browser("eval", `document.querySelector(${JSON.stringify(titleField)}).value`),
+    ).toContain(`Phone ${suffix}`);
+    await browser("find", "role", "button", "click", "--name", "Cancel");
+    await waitFor(`document.body.textContent.includes("Discard changes")`);
+    await browser("find", "role", "button", "click", "--name", "Discard changes");
     await waitFor(`document.querySelector('[role="dialog"]') === null`);
     for (let attempt = 0; !(await browser("eval", dialogOpen)).includes("true"); attempt += 1) {
       if (attempt === 10) throw new Error("the create page never opened again");
@@ -262,8 +271,11 @@ test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates
       await Bun.sleep(500);
     }
     expect(
-      await browser("eval", `document.querySelector(${JSON.stringify(titleField)}).value`),
-    ).toContain(`Phone ${suffix}`);
+      JSON.parse(
+        await browser("eval", `document.querySelector(${JSON.stringify(titleField)}).value`),
+      ),
+    ).toBe("");
+    await browser("fill", titleField, `Phone ${suffix}`);
     // A new Task names its priority (task #12); the phone's menu comes up as a sheet.
     await pickTaskPriority(browser, '[role="dialog"]', "Low");
     await browser("find", "role", "button", "click", "--name", "Create");

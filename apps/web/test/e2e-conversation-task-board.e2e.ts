@@ -6,6 +6,7 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
+import { animationsSettled } from "./helpers/browser-e2e";
 
 /**
  * A conversation's Tasks tab is the Tasks page's board scoped to that conversation: the same
@@ -137,6 +138,11 @@ test("a conversation's Tasks tab is the Tasks page board, claims by moving and p
       });
     await command(channel.id, { operation: "create", title: openTitle });
     await command(channel.id, { operation: "create", title: dragTitle });
+    // Moving a Task that requires a resource receipt to Done without one is blocked on the board.
+    await db.task.updateMany({
+      where: { conversationId: channel.id, title: dragTitle },
+      data: { createsResource: true },
+    });
     await command(directId, { operation: "create", title: directTitle });
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
@@ -178,6 +184,10 @@ test("a conversation's Tasks tab is the Tasks page board, claims by moving and p
       `Number(${cardOf(dragTitle)}.textContent.match(/#(\\d+)/)[1])`,
     );
     const handle = `button[aria-label="Move task #${dragNumber}"]`;
+    await browser("wait", "--fn", animationsSettled());
+    await waitFor(
+      `(() => { const el = document.querySelector(${JSON.stringify(handle)}); const node = el?.closest('[data-task-drag-node]'); return el != null && node != null && getComputedStyle(node).transform === "none"; })()`,
+    );
     await browser("hover", handle);
     const [fromX, fromY] = await centre(handle);
     const [toX, toY] = await centre('section[aria-label="In progress"]');
@@ -190,11 +200,11 @@ test("a conversation's Tasks tab is the Tasks page board, claims by moving and p
         String(Math.round(fromX + ((toX - fromX) * step) / 10)),
         String(Math.round(fromY + ((toY - fromY) * step) / 10)),
       );
-    // While carried, a column the unowned card cannot go to is marked (its contents fade, the
-    // pointer reads "not allowed"); the one it can go to lights up (task #446).
+    // While carried, a column the card cannot go to (Done without a resource receipt) is marked
+    // (its contents fade, the pointer reads "not allowed"); the one it can go to lights up (task #446).
     const blockedColumn = (column: string) =>
       `document.querySelector('section[aria-label=${JSON.stringify(column)}]').hasAttribute("data-drop-blocked")`;
-    expect(await eval_(blockedColumn("In review"))).toBe(true);
+    expect(await eval_(blockedColumn("Done"))).toBe(true);
     expect(await eval_(blockedColumn("In progress"))).toBe(false);
     /** A column's look, waited for rather than read once (its fade and light transition in):
      * its own opacity and its contents' are as given, and it is lit (a brand tint and rule on its
@@ -204,7 +214,7 @@ test("a conversation's Tasks tab is the Tasks page board, claims by moving and p
         `(() => { const el = document.querySelector('section[aria-label=${JSON.stringify(column)}]'); const over = getComputedStyle(el, "::after"); const shown = over.content !== "none" && over.backgroundColor !== "rgba(0, 0, 0, 0)" && over.boxShadow !== "none"; return getComputedStyle(el).opacity === "1" && getComputedStyle(el.firstElementChild).opacity === ${JSON.stringify(contents)} && shown === ${lit}; })()`,
       );
     const bothLooks = async () => {
-      await looks("In review", "0.4", false);
+      await looks("Done", "0.4", false);
       await looks("In progress", "1", true);
     };
     await bothLooks();
@@ -221,14 +231,14 @@ test("a conversation's Tasks tab is the Tasks page board, claims by moving and p
     // takes no pointer events, so the column's cursor shows through.
     const cursorAt = ([x, y]: [number, number]) =>
       eval_(`getComputedStyle(document.elementFromPoint(${x}, ${y})).cursor`);
-    const review = await centre('section[aria-label="In review"]');
-    await browser("mouse", "move", String(review[0]), String(review[1]));
-    expect(await cursorAt(review)).toBe("not-allowed");
+    const blocked = await centre('section[aria-label="Done"]');
+    await browser("mouse", "move", String(blocked[0]), String(blocked[1]));
+    expect(await cursorAt(blocked)).toBe("not-allowed");
     await browser("mouse", "move", String(toX), String(toY));
     expect(await cursorAt([toX, toY])).toBe("grabbing");
     await browser("mouse", "up");
     await waitFor(movedAndSaved(dragTitle, "In progress"));
-    expect(await eval_(blockedColumn("In review"))).toBe(false);
+    expect(await eval_(blockedColumn("Done"))).toBe(false);
     const claimed = await db.task.findMany({
       where: { conversationId: channel.id, title: { in: [openTitle, dragTitle] } },
       orderBy: { number: "asc" },

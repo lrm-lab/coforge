@@ -210,7 +210,13 @@ test("a sign-up from a working invite is asked for a name only and joins without
       const joined = await membershipsOf(person);
       expect(joined.map((row) => row.workspace.slug)).toEqual([teamSlug]);
       expect(joined[0]?.role).toBe("member");
-      await browser("click", `[aria-label^="${language.switcher}"]`);
+      const switcherSelector = `[aria-label^=${JSON.stringify(language.switcher)}]`;
+      const visibleSwitcher = `[...document.querySelectorAll(${JSON.stringify(switcherSelector)})].find((el) => el.checkVisibility({ opacityProperty: true, visibilityProperty: true }) && el.getBoundingClientRect().width > 0)`;
+      await waitFor(`${visibleSwitcher} != null && ${hydrated(visibleSwitcher)}`);
+      const switcherIndex = await evaluate<number>(
+        `[...document.querySelectorAll(${JSON.stringify(switcherSelector)})].indexOf(${visibleSwitcher})`,
+      );
+      await browser("find", "nth", String(switcherIndex), switcherSelector, "click");
       await waitFor(`document.querySelectorAll("[role=menuitem]").length > 0`);
       expect(
         await evaluate<string[]>(

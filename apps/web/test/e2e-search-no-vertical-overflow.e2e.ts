@@ -114,13 +114,68 @@ test("search never scrolls the document, empty or with results", async () => {
       "--fn",
       `document.querySelectorAll('[role="dialog"] [aria-labelledby="search-frequent-heading"] [data-search-entity^="agent:"]').length === ${agents.length}`,
     );
-    await expectOnlyTheListScrolls();
-    // A phone has no Esc and no backdrop to tap: the dialog fills the screen and has a close button.
+    // On a phone SearchDialog uses <ModalOverlay page> (task #320233252) with document-level
+    // vertical scrolling and a sticky header; verify no horizontal overflow, non-overlapping header
+    // controls above the list, and scrolling the document reaches the last Agent row cleanly.
+    const phoneInitial = JSON.parse(
+      await browser(
+        "eval",
+        `(() => {
+          const dialog = document.querySelector('[role="dialog"]');
+          const pageFlow = document.querySelector('[data-phone-page-flow]');
+          const input = dialog?.querySelector('input[type="search"]');
+          const close = dialog?.querySelector('button[aria-label="Close"]');
+          const firstOption = dialog?.querySelector('[data-search-option]');
+          if (!dialog || !pageFlow || !input || !close || !firstOption) return null;
+          const d = dialog.getBoundingClientRect();
+          const i = input.getBoundingClientRect();
+          const c = close.getBoundingClientRect();
+          const f = firstOption.getBoundingClientRect();
+          return {
+            docOverflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+            docScrollY: document.documentElement.scrollHeight - document.documentElement.clientHeight,
+            dialogWidth: Math.round(d.width),
+            innerWidth,
+            inputInBounds: i.left >= 0 && i.right <= c.left && c.right <= innerWidth && c.width > 0,
+            headerAboveFirstOption: Math.max(i.bottom, c.bottom) <= f.top,
+          };
+        })()`,
+      ),
+    ) as {
+      docOverflowX: number;
+      docScrollY: number;
+      dialogWidth: number;
+      innerWidth: number;
+      inputInBounds: boolean;
+      headerAboveFirstOption: boolean;
+    } | null;
+    expect(phoneInitial).not.toBeNull();
+    expect(phoneInitial!.docOverflowX).toBeLessThanOrEqual(0);
+    expect(phoneInitial!.docScrollY).toBeGreaterThan(0);
+    expect(phoneInitial!.dialogWidth).toBe(phoneInitial!.innerWidth);
+    expect(phoneInitial!.inputInBounds).toBe(true);
+    expect(phoneInitial!.headerAboveFirstOption).toBe(true);
     await browser(
-      "wait",
-      "--fn",
-      `(() => { const dialog = document.querySelector('[role="dialog"]'); const close = dialog?.querySelector('button[aria-label="Close"]'); return dialog !== null && Math.round(dialog.getBoundingClientRect().width) === innerWidth && close !== null && close.getBoundingClientRect().width > 0; })()`,
+      "eval",
+      `(() => { const rows = [...document.querySelectorAll('[role="dialog"] [data-search-entity^="agent:"]')]; rows.at(-1)?.scrollIntoView({ block: "end" }); return true; })()`,
     );
+    const phoneScrolled = JSON.parse(
+      await browser(
+        "eval",
+        `(() => {
+          const last = [...document.querySelectorAll('[role="dialog"] [data-search-entity^="agent:"]')].at(-1);
+          const rect = last?.getBoundingClientRect();
+          return {
+            scrollY: window.scrollY,
+            docOverflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+            lastInView: Boolean(rect && rect.top >= 0 && rect.bottom <= window.innerHeight + 1),
+          };
+        })()`,
+      ),
+    ) as { scrollY: number; docOverflowX: number; lastInView: boolean };
+    expect(phoneScrolled.scrollY).toBeGreaterThan(0);
+    expect(phoneScrolled.docOverflowX).toBeLessThanOrEqual(0);
+    expect(phoneScrolled.lastInView).toBe(true);
     await mkdir(artifacts, { recursive: true });
     await browser("screenshot", join(artifacts, "search-home-phone.png"));
 

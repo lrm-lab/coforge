@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { pageHydrated } from "./helpers/browser-e2e";
 
 /**
  * The list beside an open conversation on Activity (and Search, which shares its width) can be
@@ -107,14 +108,16 @@ test("the Activity list resizes beside the open conversation and keeps its own w
     await browser("set", "viewport", "1440", "900");
 
     // A clean device, Chat's list set to its own width: the Activity list beside an open
-    // conversation starts at 380px.
+    // conversation starts at 380px (23.75rem).
     await browser("open", `${origin}${workspacePath}/activity`);
     await browser(
       "eval",
-      `localStorage.removeItem("coforge-list-column-width"); localStorage.setItem("coforge-conversation-list-width", "300")`,
+      `localStorage.removeItem("coforge-list-column-width"); localStorage.setItem("coforge-conversation-list-width", "18.75")`,
     );
     await browser("reload");
-    await waitFor(`document.querySelector('[data-activity-list] ol a') !== null`);
+    await waitFor(
+      `document.querySelector('[data-activity-list] ol a') !== null && ${pageHydrated}`,
+    );
     expect(await evaluate<number>(`document.querySelectorAll('${HANDLE}').length`)).toBe(1);
     await waitForWidth(380);
     await browser("click", "[data-activity-list] ol a");
@@ -124,11 +127,11 @@ test("the Activity list resizes beside the open conversation and keeps its own w
     // A drag sets the width and keeps it; Chat's width is its own.
     await dragListTo(500);
     await waitForWidth(500);
-    expect(await stored("coforge-list-column-width")).toBe("500");
-    expect(await stored("coforge-conversation-list-width")).toBe("300");
+    expect(await stored("coforge-list-column-width")).toBe("31.25");
+    expect(await stored("coforge-conversation-list-width")).toBe("18.75");
     await dragListTo(40);
     await waitForWidth(288);
-    expect(await stored("coforge-list-column-width")).toBe("288");
+    expect(await stored("coforge-list-column-width")).toBe("18");
 
     // Past half the page the conversation keeps its half: the list stops at it, and the next drag
     // starts from the edge that is seen.
@@ -138,20 +141,20 @@ test("the Activity list resizes beside the open conversation and keeps its own w
     expect(half).toBeLessThan(640);
     await dragListTo(900);
     await waitForWidth(half);
-    expect(await stored("coforge-list-column-width")).toBe("640");
+    expect(await stored("coforge-list-column-width")).toBe("40");
     await browser("screenshot", join(artifacts, "widest.png"));
     // Widening a list held at half the page keeps what is kept.
     await browser("focus", HANDLE);
     await browser("press", "ArrowRight");
     await waitForWidth(half);
-    expect(await stored("coforge-list-column-width")).toBe("640");
+    expect(await stored("coforge-list-column-width")).toBe("40");
     await dragListTo(half - 100);
     await waitForWidth(half - 100);
 
     // Double-click resets the width; the keyboard steps it.
     await browser("dblclick", HANDLE);
     await waitForWidth(380);
-    expect(await stored("coforge-list-column-width")).toBe("380");
+    expect(await stored("coforge-list-column-width")).toBe("23.75");
     await browser("focus", HANDLE);
     await browser("press", "ArrowRight");
     await waitForWidth(396);
@@ -160,13 +163,13 @@ test("the Activity list resizes beside the open conversation and keeps its own w
 
     // A reload keeps the width, and the first paint already has it.
     await browser("reload");
-    await waitFor(`document.querySelector('${HANDLE}') !== null`);
+    await waitFor(`document.querySelector('${HANDLE}') !== null && ${pageHydrated}`);
     await waitForWidth(288);
     expect(
       await evaluate<string>(
         `document.documentElement.style.getPropertyValue("--list-column-width")`,
       ),
-    ).toBe("288px");
+    ).toBe("18rem");
   } finally {
     await browser(
       "eval",

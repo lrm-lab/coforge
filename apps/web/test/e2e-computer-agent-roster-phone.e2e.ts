@@ -132,7 +132,7 @@ test("on a phone every Agent row keeps its name and runtime, and nothing overflo
   expect(layout.buttonsTop).toBeGreaterThanOrEqual(layout.heading.bottom);
 }, 120_000);
 
-test("on a desktop the buttons stay beside the heading; dark mode reads the same", async () => {
+test("on a desktop the buttons stay within the detail column without overlapping the heading; dark mode reads the same", async () => {
   await browser("set", "viewport", "1440", "900");
   await browser("open", `${origin}/en/w/${slug}/computer/${computerId}`);
   await browser("wait", "--fn", `document.body.innerText.includes("Frank的助手")`);
@@ -140,12 +140,63 @@ test("on a desktop the buttons stay beside the heading; dark mode reads the same
     "eval",
     `document.getElementById("computer-agents-on-computer").scrollIntoView({ block: "start" })`,
   );
-  const sameLine = await evaluate<boolean>(`(() => {
+  const desktop = await evaluate<{
+    scrollWidth: number;
+    sectionLeft: number;
+    sectionRight: number;
+    heading: { left: number; right: number; top: number; bottom: number };
+    create: { left: number; right: number; top: number; bottom: number; width: number };
+    rows: { nameWidth: number; handleRight: number; right: number }[];
+  }>(`(() => {
+    const section = document.querySelector('section[aria-labelledby="computer-agents-on-computer"]');
+    const sectionRect = section.getBoundingClientRect();
     const heading = document.getElementById("computer-agents-on-computer").getBoundingClientRect();
-    const create = [...document.querySelectorAll("button")].find((b) => b.innerText.includes("Create Agent")).getBoundingClientRect();
-    return create.top < heading.bottom && create.bottom > heading.top;
+    const create = [...section.querySelectorAll("button")].find((b) => b.innerText.includes("Create Agent")).getBoundingClientRect();
+    const rows = [...section.querySelectorAll("ul > li")].map((li) => {
+      const name = li.querySelector(".font-medium");
+      const handle = [...li.querySelectorAll("span")].find((s) => s.textContent.startsWith("@"));
+      return {
+        nameWidth: Math.round(name.getBoundingClientRect().width),
+        handleRight: Math.round(handle.getBoundingClientRect().right),
+        right: Math.round(li.getBoundingClientRect().right),
+      };
+    });
+    return {
+      scrollWidth: document.documentElement.scrollWidth,
+      sectionLeft: Math.round(sectionRect.left),
+      sectionRight: Math.round(sectionRect.right),
+      heading: {
+        left: Math.round(heading.left),
+        right: Math.round(heading.right),
+        top: Math.round(heading.top),
+        bottom: Math.round(heading.bottom),
+      },
+      create: {
+        left: Math.round(create.left),
+        right: Math.round(create.right),
+        top: Math.round(create.top),
+        bottom: Math.round(create.bottom),
+        width: Math.round(create.width),
+      },
+      rows,
+    };
   })()`);
-  expect(sameLine).toBe(true);
+  expect(desktop.scrollWidth).toBeLessThanOrEqual(1440);
+  expect(desktop.create.width).toBeGreaterThan(0);
+  expect(desktop.create.left).toBeGreaterThanOrEqual(desktop.sectionLeft);
+  expect(desktop.create.right).toBeLessThanOrEqual(desktop.sectionRight);
+  const disjoint =
+    desktop.create.top >= desktop.heading.bottom ||
+    desktop.create.bottom <= desktop.heading.top ||
+    desktop.create.left >= desktop.heading.right ||
+    desktop.create.right <= desktop.heading.left;
+  expect(disjoint).toBe(true);
+  expect(desktop.rows).toHaveLength(AGENTS.length);
+  for (const row of desktop.rows) {
+    expect(row.nameWidth).toBeGreaterThan(0);
+    expect(row.right).toBeLessThanOrEqual(desktop.sectionRight);
+    expect(row.handleRight).toBeLessThanOrEqual(row.right);
+  }
   await browser("screenshot", join(artifacts, "1440.png"));
   await browser("set", "viewport", "390", "844");
   await browser(
