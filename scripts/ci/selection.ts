@@ -214,12 +214,14 @@ if (import.meta.main) {
   const jobs = [
     "changes",
     ...new Set(
-      checks.map((check) =>
+      checks.flatMap((check) =>
         libraries.includes(check)
-          ? "libraries"
+          ? ["libraries"]
           : contracts.includes(check)
-            ? "infrastructure-contracts"
-            : check,
+            ? ["infrastructure-contracts"]
+            : check === "web"
+              ? ["web", "web-checks"]
+              : [check],
       ),
     ),
   ];

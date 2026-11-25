@@ -296,15 +296,32 @@ jobs:
         if: matrix.part != 'build'
         run: mise run test:web -- --shard=${{ matrix.part }}
 
-      - name: Run static checks
-        if: matrix.part == '1/2'
-        run: mise run check:web
-
       - name: Build and smoke the package
         if: matrix.part == 'build'
         run: |
           mise run build:web
           mise run smoke:web
+
+  web-checks:
+    name: Validate Web checks
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.checks), 'web')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - *checkout
+
+      - *setup-mise
+
+      - *toolchain
+
+      - *bun-cache
+
+      - *bun-install
+
+      - name: Run static checks
+        run: mise run check:web
 
   windows-release:
     name: Test Windows ${{ matrix.runner == 'windows-latest' && 'x64' || 'arm64' }} executable
@@ -479,7 +496,7 @@ jobs:
   ci-passed:
     name: CI passed
     if: always()
-    needs: [changes, infrastructure-contracts, libraries, computer, daemon, macos-lifecycle, web, windows-release, windows-installer, installer-crate]
+    needs: [changes, infrastructure-contracts, libraries, computer, daemon, macos-lifecycle, web, web-checks, windows-release, windows-installer, installer-crate]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

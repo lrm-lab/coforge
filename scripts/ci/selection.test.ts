@@ -344,8 +344,32 @@ test("workflow selection accepts NUL-delimited filenames and emits job and matri
   expect(output).toContain('libraries=["anvil","coforge","coforge-sdk"]\n');
   expect(output).toContain('contracts=["ci"]\n');
   expect(output).toContain(
-    'jobs=["changes","libraries","infrastructure-contracts","computer","daemon","macos-lifecycle","web","windows-release"]\n',
+    'jobs=["changes","libraries","infrastructure-contracts","computer","daemon","macos-lifecycle","web","web-checks","windows-release"]\n',
   );
+});
+
+test("selecting web requires both web and web-checks jobs on changes and web tracks", async () => {
+  for (const track of ["changes", "web"] as const) {
+    const child = Bun.spawn([process.execPath, "scripts/ci/selection.ts", track], {
+      stdin: new Blob(["apps/web/test/a.test.ts\0"]),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const output = await new Response(child.stdout).text();
+    expect(await child.exited).toBe(0);
+    const jobsLine = output.split("\n").find((line) => line.startsWith("jobs="));
+    const jobs = JSON.parse(jobsLine!.slice("jobs=".length)) as string[];
+    expect(jobs).toContain("web");
+    expect(jobs).toContain("web-checks");
+  }
+  const nonWeb = Bun.spawn([process.execPath, "scripts/ci/selection.ts", "changes"], {
+    stdin: new Blob(["crates/installer/src/fetch.rs\0"]),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const nonWebOutput = await new Response(nonWeb.stdout).text();
+  expect(await nonWeb.exited).toBe(0);
+  expect(nonWebOutput).toContain('jobs=["changes","installer-crate"]\n');
 });
 
 test("Anvil source changes validate every product consumer", () => {

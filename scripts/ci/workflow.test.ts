@@ -60,8 +60,21 @@ test("the aggregate gate executes even after failure and rejects missing, skippe
   const script = gate.steps[0].run;
   for (const result of ["success", "failure", "cancelled", "skipped", undefined]) {
     const needs = {
-      changes: { result: "success", outputs: { jobs: '["changes","web"]' } },
+      changes: { result: "success", outputs: { jobs: '["changes","web","web-checks"]' } },
+      web: { result: "success" },
+      "web-checks": { result },
+      computer: { result: "skipped" },
+    };
+    const run = Bun.spawnSync(["bash", "-e", "-o", "pipefail", "-c", script], {
+      env: { ...Bun.env, NEEDS: JSON.stringify(needs) },
+    });
+    expect(run.exitCode === 0).toBe(result === "success");
+  }
+  for (const result of ["success", "failure", "cancelled", "skipped", undefined]) {
+    const needs = {
+      changes: { result: "success", outputs: { jobs: '["changes","web","web-checks"]' } },
       web: { result },
+      "web-checks": { result: "success" },
       computer: { result: "skipped" },
     };
     const run = Bun.spawnSync(["bash", "-e", "-o", "pipefail", "-c", script], {
@@ -75,6 +88,21 @@ test("the aggregate gate executes even after failure and rejects missing, skippe
     });
     expect(run.exitCode).not.toBe(0);
   }
+});
+
+test("Web static checks run in an independent parallel job without Redis or test shards", () => {
+  const webChecks = ci.jobs["web-checks"] as Job;
+  const web = ci.jobs.web as Job;
+  expect(webChecks.name).toBe("Validate Web checks");
+  expect(webChecks.needs).toBe("changes");
+  expect(webChecks.if).toBe("contains(fromJSON(needs.changes.outputs.checks), 'web')");
+  const checkRuns = (webChecks.steps ?? []).map((step) => step.run ?? "");
+  expect(checkRuns).toContain("mise run check:web");
+  expect(checkRuns.some((run) => run.includes("install-redis") || run.includes("test:web"))).toBe(
+    false,
+  );
+  const webRuns = (web.steps ?? []).map((step) => step.run ?? "");
+  expect(webRuns).not.toContain("mise run check:web");
 });
 
 test("CI validates every pull request and every push to main; a newer PR update replaces a stale run, and every push runs to completion", () => {
