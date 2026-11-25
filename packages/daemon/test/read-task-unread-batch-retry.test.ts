@@ -282,3 +282,79 @@ test("a reliable sweep cannot queue another copy while the current admission is 
   expect(attempted).toBe(1);
   expect(loop.loopNotices).toHaveLength(1);
 });
+
+test("exact scoped reads can retire a small batch without an advanced frontier", async () => {
+  const loop = unreadLoop({ cursor: true });
+  const task = {
+    ...delivery("exact-12", "human", "owner"),
+    target: "#board:#98",
+    sequence: 12,
+    taskDiscussion: true,
+  };
+  await loop.index.flush(task.agentId, [
+    task,
+    { ...task, ...delivery("exact-15", "human", "owner"), target: task.target, sequence: 15 },
+  ]);
+  for (const sequence of [12, 15]) {
+    loop.index.recordHistoryRead(task.agentId, {
+      spelling: task.target,
+      target: task.target,
+      shown: [sequence],
+      through: 0,
+    });
+  }
+  expect(loop.index.modelSeenSequence(task.agentId, task.target)).toBe(0);
+  expect(loop.records.size).toBe(0);
+  loop.clock.nowMs += IMPORTANT_UNREAD_RETRY_DELAYS_MS[0];
+  loop.reminder.flushDue();
+  await settled();
+  expect(loop.loopNotices).toHaveLength(1);
+});
+
+test.each([undefined, 15])(
+  "a restored scoped notice covered by the cursor stays silent",
+  async (lastSequence) => {
+    const agentId = "agent-1";
+    const target = "#board:#98";
+    const conversationId = "conversation-1";
+    const loop = unreadLoop({
+      cursor: true,
+      restored: [
+        {
+          agentId,
+          key: "seq:100",
+          highestSequence: 100,
+          conversations: [{ target, conversationId, firstSequence: 15, lastSequence, count: 1 }],
+          attempts: 1,
+        },
+      ],
+    });
+    loop.index.bindConversation(agentId, target, conversationId);
+    loop.index.recordModelSeen(agentId, target, 21);
+    loop.reminder.restore();
+    loop.reminder.flushDue();
+    await settled();
+    expect(loop.records.size).toBe(0);
+    expect(loop.loopNotices).toHaveLength(0);
+  },
+);
+
+test("a card response wakes once even when the underlying card is already read", async () => {
+  const loop = unreadLoop({ cursor: true });
+  const event = {
+    ...delivery("card-choice", "human", "owner"),
+    target: "#board:#98",
+    sequence: 18,
+    body: "the card was answered",
+    reason: "choice",
+  };
+  loop.index.bindConversation(event.agentId, event.target, event.conversationId);
+  loop.index.recordModelSeen(event.agentId, event.target, 21);
+  await loop.index.receive(event);
+  expect(loop.loopNotices).toHaveLength(1);
+  loop.clock.nowMs += IMPORTANT_UNREAD_RETRY_DELAYS_MS[0];
+  loop.reminder.flushDue();
+  await settled();
+  expect(loop.loopNotices).toHaveLength(1);
+  expect(loop.reported).toEqual([]);
+});

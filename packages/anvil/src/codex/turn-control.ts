@@ -1,4 +1,9 @@
-import type { AgentRuntimeEvent, AgentSessionIdentity } from "@coforge/agent";
+import {
+  prepareAgentNotice,
+  type AgentNoticeOptions,
+  type AgentRuntimeEvent,
+  type AgentSessionIdentity,
+} from "@coforge/agent";
 import { JsonlRequestError, asRecord } from "@lrm/coforge-anvil";
 import type { JsonlProcess } from "@lrm/coforge-anvil/execution";
 import {
@@ -161,21 +166,23 @@ export class CodexTurnControl {
     return true;
   }
 
-  async acceptNotice(notice: string): Promise<void> {
+  async acceptNotice(notice: string, options?: AgentNoticeOptions): Promise<void> {
     // Only retry a rejected admission when the active turn ended. Other RPC
     // failures remain failures so the daemon retains the unacknowledged attention.
     for (let attempt = 0; attempt < 2; attempt++) {
       if (this.#starting) await this.#starting;
       const state = this.#state;
-      if (state.type === "idle") return this.sendMessage(notice);
+      if (state.type === "idle")
+        return this.sendMessage(prepareAgentNotice(notice, options, "prompt"));
       if (state.type !== "running") throw new Error("code agent cannot accept a notification");
+      const text = prepareAgentNotice(notice, options, "steer");
       try {
         const response = await this.#process.request({
           method: "turn/steer",
           params: {
             threadId: this.#threadId,
             expectedTurnId: state.turnId,
-            input: [{ type: "text", text: notice }],
+            input: [{ type: "text", text }],
           },
         });
         if (asRecord(response.result)?.turnId !== state.turnId) {

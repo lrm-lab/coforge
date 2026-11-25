@@ -20,6 +20,17 @@ export class AgentNoticeSuppressedError extends Error {
   }
 }
 
+export function prepareAgentNotice(
+  text: string,
+  options: AgentNoticeOptions | undefined,
+  boundary: "prompt" | "steer",
+): string {
+  if (!options?.prepareSubmission) return text;
+  const prepared = options.prepareSubmission(boundary);
+  if (prepared === undefined) throw new AgentNoticeSuppressedError();
+  return prepared;
+}
+
 export interface AgentSession {
   readonly contextViewRequestLogPath?: string;
   /** OS PID of the runtime's owned child process, when backed by one; absent once exited or embedded. */

@@ -25,6 +25,7 @@ export function unreadLoop(
      * will not take the text is, so nothing is recorded as written and the retry stays. */
     refuse?: (notice: string) => boolean;
     beforeSubmit?: () => Promise<void>;
+    restored?: readonly ImportantUnreadNotice[];
     /** The daemon's durable cursor, and the composition's funnel that tells the loop a read
      * position moved (`consumedSeqs` in `message-composition.ts`). */
     cursor?: boolean;
@@ -36,7 +37,7 @@ export function unreadLoop(
   /** The notices the loop's own write port put there. */
   const loopNotices: string[] = [];
   const reported: string[] = [];
-  const records = new Map<string, ImportantUnreadNotice>();
+  const records = new Map(options.restored?.map((notice) => [notice.agentId, notice] as const));
   const clock = { nowMs: 1_000_000 };
   /** The daemon's delivery queue, as the notice path reads it. */
   const queue: AgentMessageDelivery[] = [];

@@ -1,7 +1,7 @@
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import type { NoticeEligibility } from "./notice-eligibility";
-import { composeDeliveryNotice } from "./delivery-notice";
+import { planDeliveryNotice } from "./delivery-notice";
 import type { ImportantUnreadNotice } from "./important-unread-notice";
 import type {
   ImportantUnreadBatchDelivery,
@@ -29,49 +29,24 @@ export function unreadNoticeComposer(ports: UnreadNoticeComposePorts) {
         delivery.messageId !== undefined && delivery.target !== undefined,
     );
     if (!original.length) return undefined;
-    const queued = [...ports.queued(agentId)];
-    const prefix = ports.prefix(agentId);
-    const previewed = new Set(
-      [...original, ...queued]
-        .filter(
-          ({ target, sequence }) => target && ports.previewedInFull(agentId, target, sequence),
-        )
-        .map(({ target, sequence }) => `${target} ${sequence}`),
-    );
+    const current = planDeliveryNotice({
+      agentId,
+      announced: original,
+      queued: ports.queued(agentId),
+      prefix: ports.prefix(agentId),
+      eligibility: ports.eligibility,
+      previewedInFull: (target, sequence) => ports.previewedInFull(agentId, target, sequence),
+    });
     const record = ports.captureAcceptance?.(agentId);
-    const current = () => {
-      const eligible = (delivery: AgentMessageDelivery) =>
-        ports.eligibility(agentId, delivery).disposition === "notify";
-      const announced = original.filter(eligible);
-      const waiting = queued.filter(eligible);
-      const message = announced[0] ?? waiting.find(({ target }) => target);
-      if (!message) return undefined;
-      const { view, notice } = composeDeliveryNotice({
-        message,
-        announced,
-        queued: waiting,
-        prefix,
-        previewedInFull: (target, sequence) => previewed.has(`${target} ${sequence}`),
-      });
-      const included = new Set(view.rows.flatMap((row) => [...row.newIds]));
-      const accepted = announced.filter((item) => included.has(item.messageId));
-      const text = view.rows.some(
-        (row) => row.newIds.size || row.heldIds.size || row.previews.length,
-      )
-        ? notice
-        : undefined;
-      return { text, accepted, shown: view.whole };
-    };
-
     let selected = current();
-    if (!selected?.text) return undefined;
+    if (!selected) return undefined;
     const requestIds = original.map(({ requestId }) => requestId);
     const refresh = () => {
       selected = current();
-      return selected?.text;
+      return selected?.notice;
     };
     return {
-      text: selected.text,
+      text: selected.notice,
       requestIds,
       fallbackText: () => {
         const text = refresh();
@@ -88,7 +63,7 @@ export function unreadNoticeComposer(ports: UnreadNoticeComposePorts) {
       get shown() {
         return selected?.shown;
       },
-      ...(record ? { accepted: () => record(selected?.accepted ?? []) } : {}),
+      ...(record ? { accepted: () => record(selected?.announced ?? []) } : {}),
     };
   };
 }

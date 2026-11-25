@@ -5,6 +5,7 @@ import { isCardEvent } from "./agent-message-attention-index-helpers";
 export type NoticeMessage = Readonly<{
   conversationId: string;
   messageId: string;
+  sequence?: number;
   target?: string;
   reason?: string;
   mentionDelivery?: unknown;
