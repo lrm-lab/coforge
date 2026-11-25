@@ -6,7 +6,11 @@ import {
   type ComputerUpgradeResult,
 } from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionConfig } from "./daemon-connection-client";
-import { routePublication } from "./publication-routing";
+import {
+  routePublication,
+  type ComputerLifecycleKind,
+  type PublicationKind,
+} from "./publication-routing";
 
 const REMEMBERED_REQUEST_IDS = 256;
 
@@ -34,13 +38,14 @@ export class ComputerLifecyclePublications {
 
   constructor(private readonly rpc: (method: string, payload: Uint8Array) => Promise<unknown>) {}
 
-  route(
+  routeKind(
+    kind: ComputerLifecycleKind,
     data: Uint8Array,
     config: Pick<DaemonConnectionConfig, "requestUpgrade" | "requestRestart">,
     ownsDaemon: (value: { workspaceId: string; computerId?: string }) => boolean,
   ): boolean {
-    return (
-      routePublication(data, decodeComputerUpgradeIntent, (upgrade) => {
+    if (kind === "computer_upgrade") {
+      return routePublication(data, decodeComputerUpgradeIntent, (upgrade) => {
         const requestUpgrade = config.requestUpgrade;
         if (
           upgrade.protocolMajor !== 1 ||
@@ -53,21 +58,35 @@ export class ComputerLifecyclePublications {
           requestUpgrade(upgrade.requestId, upgrade.expectedVersion, upgrade.releaseChannel),
         );
         return true;
-      }) ||
-      routePublication(data, decodeComputerRestartIntent, (restart) => {
-        const requestRestart = config.requestRestart;
-        if (
-          restart.protocolMajor !== 1 ||
-          !ownsDaemon(restart) ||
-          !requestRestart ||
-          this.#restartRequestIds.has(restart.requestId)
-        )
-          return false;
-        acceptLifecycleRequest(this.#restartRequestIds, restart.requestId, () =>
-          requestRestart(restart.requestId),
-        );
-        return true;
-      })
+      });
+    }
+    return routePublication(data, decodeComputerRestartIntent, (restart) => {
+      const requestRestart = config.requestRestart;
+      if (
+        restart.protocolMajor !== 1 ||
+        !ownsDaemon(restart) ||
+        !requestRestart ||
+        this.#restartRequestIds.has(restart.requestId)
+      )
+        return false;
+      acceptLifecycleRequest(this.#restartRequestIds, restart.requestId, () =>
+        requestRestart(restart.requestId),
+      );
+      return true;
+    });
+  }
+
+  route(
+    data: Uint8Array,
+    config: Pick<DaemonConnectionConfig, "requestUpgrade" | "requestRestart">,
+    ownsDaemon: (value: { workspaceId: string; computerId?: string }) => boolean,
+    skip?: ReadonlySet<PublicationKind>,
+  ): boolean {
+    return (
+      (!skip?.has("computer_upgrade") &&
+        this.routeKind("computer_upgrade", data, config, ownsDaemon)) ||
+      (!skip?.has("computer_restart") &&
+        this.routeKind("computer_restart", data, config, ownsDaemon))
     );
   }
 

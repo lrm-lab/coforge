@@ -22,8 +22,8 @@ import {
   type DaemonRuntimeUsageScanResponse,
 } from "@lrm/coforge-sdk/internal";
 import { ListenerSlot } from "./listener-slot";
+import type { DaemonProviderKind, PublicationKind } from "./publication-routing";
 
-/** Usage scan, reset credit, model refresh, and Command Code effort read on the daemon control channel. */
 export class DaemonProviderPublications {
   readonly #usageScan = new ListenerSlot<
     (request: DaemonRuntimeUsageScanRequest) => Promise<void>
@@ -62,32 +62,43 @@ export class DaemonProviderPublications {
     return this.#effortRead.set(callback);
   }
 
-  /** Whether `data` was one of these publications for this Workspace. A decode miss tries the next. */
-  route(data: Uint8Array, workspaceId: string): boolean {
+  routeKind(kind: DaemonProviderKind, data: Uint8Array, workspaceId: string): boolean {
     const owned = (value: { protocolMajor: number; workspaceId: string; computerId: string }) =>
       value.protocolMajor === 1 && value.workspaceId === workspaceId && !!value.computerId;
+    switch (kind) {
+      case "usage_scan":
+        return this.#route(data, decodeDaemonRuntimeUsageScanRequest, (usage) => {
+          if (!owned(usage)) return false;
+          void this.#usageScan.current?.(usage);
+          return true;
+        });
+      case "reset_credit":
+        return this.#route(data, decodeDaemonRuntimeResetCreditConsumeRequest, (reset) => {
+          if (!owned(reset) || !isResetCreditIdempotencyKey(reset.idempotencyKey)) return false;
+          void this.#resetCredit.current?.(reset);
+          return true;
+        });
+      case "model_refresh":
+        return this.#route(data, decodeDaemonRuntimeProviderModelRefreshRequest, (refresh) => {
+          if (!owned(refresh)) return false;
+          void this.#modelRefresh.current?.(refresh);
+          return true;
+        });
+      case "effort_read":
+        return this.#route(data, decodeDaemonRuntimeCommandCodeEffortReadRequest, (read) => {
+          if (!owned(read) || !read.modelId.trim()) return false;
+          void this.#effortRead.current?.(read);
+          return true;
+        });
+    }
+  }
+
+  route(data: Uint8Array, workspaceId: string, skip?: ReadonlySet<PublicationKind>): boolean {
     return (
-      this.#route(data, decodeDaemonRuntimeUsageScanRequest, (usage) => {
-        if (!owned(usage)) return false;
-        void this.#usageScan.current?.(usage);
-        return true;
-      }) ||
-      // A key outside the boundary's shape is never handed to a provider.
-      this.#route(data, decodeDaemonRuntimeResetCreditConsumeRequest, (reset) => {
-        if (!owned(reset) || !isResetCreditIdempotencyKey(reset.idempotencyKey)) return false;
-        void this.#resetCredit.current?.(reset);
-        return true;
-      }) ||
-      this.#route(data, decodeDaemonRuntimeProviderModelRefreshRequest, (refresh) => {
-        if (!owned(refresh)) return false;
-        void this.#modelRefresh.current?.(refresh);
-        return true;
-      }) ||
-      this.#route(data, decodeDaemonRuntimeCommandCodeEffortReadRequest, (read) => {
-        if (!owned(read) || !read.modelId.trim()) return false;
-        void this.#effortRead.current?.(read);
-        return true;
-      })
+      (!skip?.has("usage_scan") && this.routeKind("usage_scan", data, workspaceId)) ||
+      (!skip?.has("reset_credit") && this.routeKind("reset_credit", data, workspaceId)) ||
+      (!skip?.has("model_refresh") && this.routeKind("model_refresh", data, workspaceId)) ||
+      (!skip?.has("effort_read") && this.routeKind("effort_read", data, workspaceId))
     );
   }
 

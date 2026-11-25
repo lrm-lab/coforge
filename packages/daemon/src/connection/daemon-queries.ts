@@ -37,6 +37,12 @@ import {
   PI_CHAT_FRAME_METHOD,
 } from "@lrm/coforge-sdk/internal/pi-chat-wire";
 
+import {
+  scanPublicationKinds,
+  type DaemonQueryKind,
+  type PublicationKind,
+} from "./publication-routing";
+
 const logger = getLogger(["coforge", "daemon", "queries"]);
 
 type Scope = { workspaceId: string; computerId: string };
@@ -96,6 +102,14 @@ export class DaemonQueries {
   readonly agentSideAsk;
   readonly runtimeManage;
   readonly piChat;
+  readonly #byKind: ReadonlyMap<
+    DaemonQueryKind,
+    { receive(bytes: Uint8Array, scope: Scope): boolean }
+  >;
+  readonly #ordered: readonly [
+    DaemonQueryKind,
+    { receive(bytes: Uint8Array, scope: Scope): boolean },
+  ][];
   constructor(rpc: Rpc) {
     this.memory = new DaemonQuery(
       decodeAgentMemoryRequest,
@@ -175,19 +189,34 @@ export class DaemonQueries {
       PI_CHAT_FRAME_METHOD,
       rpc,
     );
+    this.#ordered = [
+      ["pi_chat", this.piChat],
+      ["agent_memory", this.memory],
+      ["agent_skills", this.skills],
+      ["agent_workspace_files_list", this.files],
+      ["agent_workspace_scan", this.scan],
+      ["agent_workspace_file_read", this.file],
+      ["agent_workspace_delete", this.deletion],
+      ["agent_context_view", this.agentContextView],
+      ["agent_side_ask", this.agentSideAsk],
+      ["runtime_manage", this.runtimeManage],
+    ];
+    this.#byKind = new Map(this.#ordered);
   }
-  receive(bytes: Uint8Array, scope: Scope) {
-    return [
-      this.piChat,
-      this.memory,
-      this.skills,
-      this.files,
-      this.scan,
-      this.file,
-      this.deletion,
-      this.agentContextView,
-      this.agentSideAsk,
-      this.runtimeManage,
-    ].some((query) => query.receive(bytes, scope));
+  receiveKind(kind: DaemonQueryKind, bytes: Uint8Array, scope: Scope): boolean {
+    return this.#byKind.get(kind)?.receive(bytes, scope) ?? false;
+  }
+  receive(bytes: Uint8Array, scope: Scope, skip?: ReadonlySet<PublicationKind>): boolean {
+    let tried = skip;
+    if (skip === undefined) {
+      for (const candidate of scanPublicationKinds(bytes)) {
+        const query = this.#byKind.get(candidate as DaemonQueryKind);
+        if (!query) continue;
+        if (query.receive(bytes, scope)) return true;
+        if (!tried) tried = new Set<PublicationKind>([candidate]);
+        else (tried as Set<PublicationKind>).add(candidate);
+      }
+    }
+    return this.#ordered.some(([kind, query]) => !tried?.has(kind) && query.receive(bytes, scope));
   }
 }
