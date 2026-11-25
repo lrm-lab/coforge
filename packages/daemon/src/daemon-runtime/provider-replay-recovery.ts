@@ -85,7 +85,10 @@ export function carriedStart(
   }
   for (const { target } of parked) add(target, 1);
   const { recovery } = started;
-  const { openTasks, ...unreadRecovery } = recovery ?? {};
+  const { openTasks, lastUnreadSequences, ...unreadRecovery } = recovery ?? {};
+  const sequenceProofs = Object.entries(lastUnreadSequences ?? {}).filter(
+    ([target]) => counts.get(target) === recovery?.unreadSummary?.[target],
+  );
   return carriedOf({
     ...started,
     ...(recovery || counts.size
@@ -94,6 +97,9 @@ export function carriedStart(
             ...unreadRecovery,
             ...(hasStartOpenTasks(openTasks) ? { openTasks } : {}),
             unreadSummary: Object.fromEntries(counts),
+            ...(sequenceProofs.length
+              ? { lastUnreadSequences: Object.fromEntries(sequenceProofs) }
+              : {}),
             summaryIncludesResumeMessages: undefined,
             countedDeliveries,
           },
@@ -114,6 +120,17 @@ export function mergeCarried(own: CarriedStart, owed: CarriedStart): CarriedStar
     ...(b?.resumeMessages ?? []).filter(({ deliveryId }) => !ownIds.has(deliveryId)),
   ];
   const conversationIds = { ...b?.unreadConversationIds, ...a?.unreadConversationIds };
+  const proofsFrom = (
+    side: AgentRecoveryContext | undefined,
+    other: AgentRecoveryContext | undefined,
+  ) =>
+    Object.entries(side?.lastUnreadSequences ?? {}).filter(
+      ([target]) =>
+        !!side?.unreadSummary?.[target] &&
+        !other?.unreadSummary?.[target] &&
+        conversationIds[target] === side.unreadConversationIds?.[target],
+    );
+  const sequenceProofs = [...proofsFrom(a, b), ...proofsFrom(b, a)];
   const openTasks = a?.openTasks ?? (hasStartOpenTasks(b?.openTasks) ? b.openTasks : undefined);
   const countedDeliveries = [
     ...(a?.countedDeliveries ?? []).filter(({ target }) => !b?.unreadSummary?.[target ?? ""]),
@@ -124,6 +141,7 @@ export function mergeCarried(own: CarriedStart, owed: CarriedStart): CarriedStar
     ...(resumeMessages.length ? { resumeMessages } : {}),
     ...(Object.keys(summary).length ? { unreadSummary: summary } : {}),
     ...(Object.keys(conversationIds).length ? { unreadConversationIds: conversationIds } : {}),
+    ...(sequenceProofs.length ? { lastUnreadSequences: Object.fromEntries(sequenceProofs) } : {}),
     ...(openTasks ? { openTasks } : {}),
     ...(countedDeliveries.length ? { countedDeliveries } : {}),
   };
