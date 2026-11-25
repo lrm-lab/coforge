@@ -130,7 +130,7 @@ test("a member stops every Agent in a channel, then resumes them with new guidan
     await clickText("button", "Stop all agents");
     await waitFor(`document.body.textContent.includes("will stop immediately")`);
     await browser("screenshot", join(artifacts, "confirm.png"));
-    await clickText('[role="dialog"] button', "Stop");
+    await clickText('[role="dialog"] button', "Stop all Agents");
 
     await waitFor(`document.body.textContent.includes("All Agents have been stopped.")`);
     await browser("screenshot", join(artifacts, "stopped.png"));

@@ -20,11 +20,12 @@ const { suffix, browser, evaluate, until } = fx;
 const layout = `(() => {
   const enable = [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Enable notifications");
   const body = enable?.closest(".rounded-xl")?.querySelector("[class*=basis-]");
-  if (!enable || !body) return null;
+  const card = enable?.closest(".rounded-xl");
+  let column = card?.parentElement ?? null;
+  while (column && !column.querySelector("form")) column = column.parentElement;
+  if (!enable || !body || !card || !column) return null;
   const e = enable.getBoundingClientRect();
   const b = body.getBoundingClientRect();
-  const card = enable.closest(".rounded-xl");
-  const column = card.parentElement.parentElement;
   const c = card.getBoundingClientRect();
   const f = column.querySelector("form").getBoundingClientRect();
   return {
@@ -81,7 +82,12 @@ test("the banner's buttons move under its text when the pane narrows", async () 
   for (const pane of [440, 460, 550]) {
     await browser(
       "eval",
-      `[...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Enable notifications").closest(".rounded-xl").parentElement.parentElement.parentElement.style.width = "${pane}px"`,
+      `(() => {
+        const card = [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Enable notifications")?.closest(".rounded-xl");
+        let column = card?.parentElement ?? null;
+        while (column && !column.querySelector("form")) column = column.parentElement;
+        if (column?.parentElement) column.parentElement.style.width = "${pane}px";
+      })()`,
     );
     const narrow = await evaluate<Layout>(layout);
     expect(narrow).toMatchObject({ beside: false, below: true, alignedWithComposer: true });
@@ -89,7 +95,10 @@ test("the banner's buttons move under its text when the pane narrows", async () 
     await fx.screenshot(`pane-${pane}.png`);
   }
 
-  // The thread pane leaves the conversation narrower than the room's full 10% needs.
+  // The thread pane leaves the conversation narrower than the room's full 10% needs (with the
+  // desktop sidebar collapsed to its icon rail by default, 1280×800 puts the split main pane
+  // below the 698px threshold whereas 1440×900 stays just above it).
+  await browser("set", "viewport", "1280", "800");
   await fx.open(fx.joinedId, `?threadRootId=${fx.rootId}`);
   await fx.untilText(`First reply ${suffix}`);
   await until(bannerShown);

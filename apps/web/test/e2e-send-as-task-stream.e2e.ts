@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { hydratedElement } from "./helpers/browser-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
@@ -120,14 +121,19 @@ test("a message sent as a Task shows its Task in the stream", async () => {
     const body = `Ship the release notes ${suffix}`;
     await browser("open", channelPath);
     const composer = 'textarea[placeholder^="Message #"]';
-    await waitFor(`document.querySelector(${JSON.stringify(composer)}) !== null`, 60_000);
+    await waitFor(
+      `document.querySelector(${JSON.stringify(composer)}) !== null && ${hydratedElement(`document.querySelector(${JSON.stringify(composer)})`)}`,
+      60_000,
+    );
     // The Task's announcement rides the Workspace channel; a page that sends before it has
     // subscribed would only see the Task on its next read.
     await workspaceChannelSubscribed();
     await browser("fill", composer, body);
     // "Send as task" arms the send and offers the Task's priority first (task #12): the chip
     // shows the device's remembered pick; choosing one here names the Task's priority.
-    await browser("press", "Meta+Shift+Enter");
+    const sendAsTaskKey =
+      process.platform === "darwin" ? "Meta+Shift+Enter" : "Control+Shift+Enter";
+    await browser("press", sendAsTaskKey);
     await waitFor(`document.querySelector('button[aria-label^="Change priority:"]') !== null`);
     await browser("click", 'button[aria-label^="Change priority:"]');
     await browser("find", "role", "menuitemradio", "click", "--name", "High");
@@ -171,10 +177,12 @@ test("a message sent as a Task shows its Task in the stream", async () => {
 
     // The badge opens the Task's popup.
     // The chip under the message is the control (task #449): a real click on it.
-    await browser("click", `[data-message-task="${task.number}"] [data-task-status]`);
+    const taskChip = `[data-message-task="${task.number}"]`;
+    await waitFor(hydratedElement(`document.querySelector(${JSON.stringify(taskChip)})`));
+    await browser("click", taskChip);
     await waitFor(`new URL(location.href).searchParams.get("task") === "${task.number}"`);
     await waitFor(
-      `[...document.querySelectorAll('[role="dialog"]')].some((dialog) => dialog.textContent.includes(${JSON.stringify(body)}))`,
+      `document.querySelector(${JSON.stringify(`section[aria-label="Task #${task.number}"]`)})?.textContent?.includes(${JSON.stringify(body)}) === true`,
     );
     await browser("screenshot", join(artifacts, "popup.png"));
     expect(await eval_(`new URL(location.href).searchParams.get("task")`)).toBe(
