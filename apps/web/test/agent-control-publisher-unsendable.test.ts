@@ -1,4 +1,5 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test";
+import { decodeAgentStartIntent } from "@lrm/coforge-sdk/internal";
 import {
   AgentControlPublisher,
   START_INTENT_INVALID_ERROR_CODE,
@@ -109,4 +110,17 @@ test("a copy made stale by the launch id still settles the same operation failed
     errorCode: START_INTENT_INVALID_ERROR_CODE,
     launchId: "l2",
   });
+});
+
+test("the managed Start publishes the repository's scoped unread summary proof", async () => {
+  const { agent, publisher, published } = fixture(state);
+  const recovery = {
+    unreadSummary: { "#ops": 2 },
+    unreadConversationIds: { "#ops": "ops-conversation" },
+    lastUnreadSequences: { "#ops": 123 },
+  };
+  await publisher.publish(agent, state, recovery);
+  expect(published).toHaveLength(1);
+  const [, bytes] = published[0] as [string, Uint8Array];
+  expect(decodeAgentStartIntent(bytes)).toMatchObject(recovery);
 });
