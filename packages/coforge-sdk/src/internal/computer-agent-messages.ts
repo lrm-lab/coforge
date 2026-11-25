@@ -238,6 +238,7 @@ export type AgentStartIntent = {
   resumeMessages?: AgentRecoveryMessage[];
   unreadSummary?: Readonly<Record<string, number>>;
   unreadConversationIds?: Readonly<Record<string, string>>;
+  lastUnreadSequences?: Readonly<Record<string, number>>;
   openTasks?: AgentStartOpenTasks;
   resumePrompt?: string;
   introductionPrompt?: string;

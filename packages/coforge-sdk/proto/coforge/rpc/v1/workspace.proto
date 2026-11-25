@@ -282,6 +282,7 @@ message AgentUnreadSummaryEntry {
   uint32 count = 2;
   // Canonical conversation for summary-only recovery; no message bodies needed.
   optional string conversation_id = 3;
+  optional uint64 last_unread_sequence = 4;
 }
 
 message AgentStartOpenTask {
