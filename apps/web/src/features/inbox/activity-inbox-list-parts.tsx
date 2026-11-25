@@ -96,7 +96,7 @@ export function ActivityInboxLoadMore({
       {failed ? (
         <>
           <span className="text-error-primary">{m.activity_inbox_load_more_error()}</span>
-          <Button size="sm" color="link-gray" onClick={() => void fetchNextPage()}>
+          <Button size="sm" color="link-gray" onPress={() => void fetchNextPage()}>
             {m.activity_inbox_retry()}
           </Button>
         </>
@@ -120,10 +120,10 @@ export function ActivityInboxActionError({
       className="flex shrink-0 items-center gap-3 border-b border-secondary px-page py-2 text-sm text-error-primary"
     >
       <span className="min-w-0 flex-1">{m.activity_inbox_action_error()}</span>
-      <Button size="sm" color="link-gray" onClick={onRetry}>
+      <Button size="sm" color="link-gray" onPress={onRetry}>
         {m.activity_inbox_retry()}
       </Button>
-      <Button size="sm" color="link-gray" onClick={onDismiss}>
+      <Button size="sm" color="link-gray" onPress={onDismiss}>
         {m.activity_inbox_dismiss()}
       </Button>
     </div>
