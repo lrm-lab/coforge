@@ -1,6 +1,5 @@
 import {
   AGENT_MESSAGE_ACK_METHOD,
-  diagnosticErrorName,
   type AgentMessageDelivery,
   type AgentMessageDeliveryAck,
   type AgentRecoveryMessage,
@@ -9,7 +8,6 @@ import {
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
 import type { AgentConversationScope } from "@coforge/agent";
-import { getLogger } from "@logtape/logtape";
 import { NoticeActionClocks } from "./notice-action-clocks";
 import { type AgentDeliveryQueue, writeDeliveryNotice } from "./delivery-notice-writer";
 import { rememberDelivery } from "./delivery-generation-memory";
@@ -23,6 +21,7 @@ import {
 import { PreviewSeen } from "./inbox-preview-rows";
 import {
   logAttentionDecision,
+  logCustodyAckFailure,
   logRecoveryNoticeAccepted,
   recordedDeliveryOutcome,
   type AttentionDecisionMessage,
@@ -46,7 +45,6 @@ import {
   markNoticeAccepted,
   type PendingWindowEntry,
 } from "./agent-message-attention-index-helpers";
-const logger = getLogger(["coforge", "daemon", "message-attention"]);
 export type MessageAttention = Readonly<{
   target: string;
   pendingCount: number;
@@ -340,12 +338,7 @@ export class AgentMessageAttentionIndex {
   }
   acknowledgeCustody(message: AgentMessageDelivery): void {
     void this.acknowledge(message).catch((error: unknown) => {
-      logger.warn("Agent delivery could not be acknowledged on taking it", {
-        event: "agent.message.custody_ack_failed",
-        agent_id: message.agentId,
-        delivery_id: message.deliveryId,
-        error_code: diagnosticErrorName(error),
-      });
+      logCustodyAckFailure(message, error);
     });
   }
   acknowledge(message: AgentMessageDelivery): Promise<void> {
