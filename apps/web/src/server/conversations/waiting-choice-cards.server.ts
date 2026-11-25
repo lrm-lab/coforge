@@ -137,7 +137,7 @@ export async function waitingChoiceCards(
         channel: channelOf(taskDiscussionOf.conversationId, taskDiscussionOf.conversation),
       },
       prompt: payload.prompt ?? payload.questions?.[0]?.prompt ?? "",
-      options: payload.options ?? [],
+      options: payload.options ?? payload.questions?.[0]?.options ?? [],
       ...(payload.questions ? { questions: payload.questions } : {}),
       preparedBy: {
         agentId: agent.id,

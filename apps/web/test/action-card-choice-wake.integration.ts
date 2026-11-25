@@ -406,4 +406,48 @@ test("the waiting list shows the cards this person may answer", async () => {
     preparedBy: { agentId },
   });
   expect(waiting.some((card) => card.messageId === other || card.messageId === noTo)).toBe(false);
+
+  const questionsMessage = await db.message.create({
+    data: {
+      workspaceId,
+      conversationId,
+      sequence: 5,
+      senderMemberId: agentMember.id,
+      body: "Direction?",
+    },
+  });
+  await db.actionCard.create({
+    data: {
+      messageId: questionsMessage.id,
+      conversationId,
+      workspaceId,
+      kind: "questions",
+      payload: {
+        type: "questions",
+        to: userId,
+        questions: [
+          {
+            id: "q1",
+            prompt: "Direction?",
+            select: "one",
+            options: [
+              { id: "ws", label: "WebSocket" },
+              { id: "grpc", label: "gRPC" },
+            ],
+          },
+        ],
+      },
+      preparedByAgentId: agentId,
+    },
+  });
+  const withQuestions = await waitingChoiceCards(db, workspaceId, userId);
+  const questionsCard = withQuestions.find((card) => card.messageId === questionsMessage.id);
+  expect(questionsCard).toMatchObject({
+    kind: "questions",
+    prompt: "Direction?",
+    options: [
+      { id: "ws", label: "WebSocket" },
+      { id: "grpc", label: "gRPC" },
+    ],
+  });
 });

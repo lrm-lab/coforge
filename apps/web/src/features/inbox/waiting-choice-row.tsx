@@ -48,9 +48,9 @@ export const WaitingChoiceRow = memo(function WaitingChoiceRow({
   const taskLabel = card.task && m.activity_inbox_waiting_task({ number: card.task.number });
   const place =
     channel || taskLabel ? (
-      <span className="me-1.5 inline-flex items-center gap-1.5 text-tertiary">
+      <span className="inline-flex max-w-[70%] min-w-0 shrink items-center gap-1.5 text-tertiary">
         {channel && <ChannelPlace {...channel} />}
-        {taskLabel && <span>{taskLabel}</span>}
+        {taskLabel && <span className="shrink-0">{taskLabel}</span>}
       </span>
     ) : null;
 
@@ -114,14 +114,18 @@ export const WaitingChoiceRow = memo(function WaitingChoiceRow({
                 className="ms-auto shrink-0 ps-2 text-xs text-quaternary tabular-nums transition-opacity not-any-pointer-coarse:group-hover:opacity-0 not-any-pointer-coarse:group-focus-within:opacity-0"
               />
             </span>
-            <span className="truncate text-sm text-tertiary">
+            <span className="flex min-w-0 items-center gap-1.5 text-sm text-tertiary">
               {place}
-              <span className="font-medium text-secondary">{card.preparedBy.name}: </span>
-              {card.options.map((option, index) => (
-                <span key={index} className="me-2 last:me-0">
-                  {choiceNumber(index)}. {option.label}
+              <span className="min-w-0 flex-1 truncate">
+                <span className="font-medium text-secondary">
+                  {card.options.length > 0 ? `${card.preparedBy.name}: ` : card.preparedBy.name}
                 </span>
-              ))}
+                {card.options.map((option, index) => (
+                  <span key={index} className="me-2 last:me-0">
+                    {choiceNumber(index)}. {option.label}
+                  </span>
+                ))}
+              </span>
             </span>
           </span>
         </AriaLink>
