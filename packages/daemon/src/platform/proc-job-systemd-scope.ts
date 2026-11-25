@@ -47,6 +47,32 @@ export async function observeProcJobMemoryScope(
   }
 }
 
+export async function readProcJobMemoryScopeUsage(
+  target: ScopeTarget,
+  platform: NodeJS.Platform,
+  sources = { root: CGROUP_ROOT, readBootId: readProcJobLinuxBootId },
+): Promise<number | undefined> {
+  const scope =
+    target.systemdUnit && decodeProcJobMemoryScopeIdentity(target.memoryScope, target.systemdUnit);
+  if (!scope || platform !== "linux") return undefined;
+  const folder = join(sources.root, scope.group);
+  const matchesDirectories = async () =>
+    (await procJobCgroupDirectoryIdentity(sources.root)) === scope.rootDirectory &&
+    (await procJobCgroupDirectoryIdentity(folder)) === scope.directory;
+  try {
+    if ((await sources.readBootId()) !== scope.bootId || !(await matchesDirectories()))
+      return undefined;
+    const events = await Bun.file(join(folder, "cgroup.events")).text();
+    if (!/^populated 1$/m.test(events)) return undefined;
+    const current = (await Bun.file(join(folder, "memory.current")).text()).trim();
+    if (!/^\d+$/.test(current) || !(await matchesDirectories())) return undefined;
+    const bytes = Number(current);
+    return Number.isSafeInteger(bytes) ? bytes : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function signalProcJobMemoryScope(
   target: ScopeTarget,
   platform: NodeJS.Platform,
