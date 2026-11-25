@@ -65,20 +65,9 @@ export type UnobservedReason = "superseded" | "read_before_attempt" | "rejected"
  * which is what keeps every caller from deciding again when to write.
  */
 export class ImportantUnreadReminder {
-  /** Batches already reported as exhausted, so a sweep does not repeat the error. */
-  readonly #reported = new Set<string>();
-  /** The deliveries each batch announced, kept only in memory: they are how a later attempt still
-   * knows which messages it is about. Only the ones a notice actually shows are kept — the count of
-   * the rest is in the state — so a conversation that never stops cannot grow this without bound.
-   * A record taken over after a restart has none, and composes from the queue alone. */
+  readonly #reported = new Map<string, string>();
   readonly #batches = new Map<string, ImportantUnreadBatchDelivery[]>();
-  /** The deliveries of each Agent's batch that no accepted notice has shown yet. A delivery that
-   * leaves this without ever having been shown was taken in and never put in front of the model;
-   * that is the one thing a silent drop looks like from inside, so each is warned about once. */
   readonly #unshown = new Map<string, Set<string>>();
-  /** The session each Agent's batch was written into. A replacement session is told what is
-   * unread by its own recovery, so the deliveries the old one held are not its business, and a
-   * notice written for it names only what has arrived since. */
   readonly #writtenTo = new Map<string, unknown>();
 
   constructor(
@@ -88,27 +77,19 @@ export class ImportantUnreadReminder {
     private readonly now: () => number = Date.now,
   ) {}
 
-  /** Folds new deliveries in and writes what they made due. Best-effort traffic is ignored by
-   * the state itself, so callers need not pre-filter. The returned promise is the attempt this call
-   * started, when its write reports its verdict later: its rejection belongs to the caller that
-   * handed the delivery over. */
   observeDeliveries(deliveries: readonly ImportantUnreadBatchDelivery[]): Promise<void> | void {
     let attempt: Promise<void> | void = undefined;
-    const agents: string[] = [];
+    const dirty = new Map<string, ImportantUnreadNotice>();
     for (const delivery of deliveries) {
       this.#forgetStaleBatch(delivery.agentId);
       const notice = this.notices.observe(delivery);
       if (!notice) continue;
-      // One pending notice per Agent, so the batch is the Agent's: a later arrival joins it rather
-      // than starting another, which is what makes a retry count three instead of one.
       const batch = this.#batches.get(notice.agentId) ?? [];
       batch.push(delivery);
       const shown = inboxPreviewLimit();
       const evicted = batch.length > shown ? batch.splice(0, batch.length - shown) : [];
       this.#batches.set(notice.agentId, batch);
       const unshown = this.#unshown.get(notice.agentId) ?? new Set<string>();
-      // Out of the batch is out of the notice: its own text will never be shown, so it is reported
-      // once rather than silently forgotten.
       for (const dropped of evicted) {
         if (dropped.deliveryId === undefined) continue;
         unshown.delete(dropped.deliveryId);
@@ -116,21 +97,16 @@ export class ImportantUnreadReminder {
       }
       if (delivery.deliveryId !== undefined) unshown.add(delivery.deliveryId);
       this.#unshown.set(notice.agentId, unshown);
-      this.store.save(notice);
-      if (!agents.includes(notice.agentId)) agents.push(notice.agentId);
+      dirty.set(notice.agentId, notice);
     }
-    // What arrived together is one thing to say — a coalesced flush of five messages is one notice —
-    // so the attempt comes after the batch is folded, once per Agent.
-    for (const agentId of agents) attempt = this.#writeIfDue(agentId) ?? attempt;
+    for (const notice of dirty.values()) this.store.save(notice);
+    for (const agentId of dirty.keys()) attempt = this.#writeIfDue(agentId) ?? attempt;
     return attempt;
   }
 
-  /** The Agent's read position moved: a batch it has passed is done and its record goes. */
   consumed(agentId: string, consumedThroughSequence: number): void {
     const notice = this.notices.pending(agentId);
     if (!this.notices.settle(agentId, consumedThroughSequence)) return;
-    // Read before any attempt put these in front of the model: the reminder is being withdrawn, so
-    // the fact that they never landed is worth a log line.
     if (notice)
       this.#warnUnobserved(
         agentId,
@@ -141,18 +117,14 @@ export class ImportantUnreadReminder {
     this.#reported.delete(agentId);
     this.#batches.delete(agentId);
     this.#unshown.delete(agentId);
+    this.#writtenTo.delete(agentId);
     this.store.clear(agentId);
   }
 
-  /** What a starting Daemon takes over: nothing is written here, only recorded, so the first
-   * sweep of the new process tells the Agent once (task #14: the watchdog does not wait). */
   restore(): void {
     for (const notice of this.store.list()) this.notices.restore(notice);
   }
 
-  /** Writes every notice whose schedule says it is due, and reports the ones that ran out. A
-   * refusal here is nobody's rejection: the sweep is not the delivery that asked for it. Returns
-   * how many Agents had a notice pending, so the sweep driving this can log the tick it took. */
   flushDue(): number {
     const agents = this.notices.agents();
     for (const agentId of agents)
@@ -183,8 +155,6 @@ export class ImportantUnreadReminder {
     this.#reportIfSpent(agentId, notice);
   }
 
-  /** One accepted write: what the loop was holding for this Agent has been shown to the model, and
-   * the next attempt, if any, is scheduled. */
   #acceptAttempt(agentId: string, session: unknown): void {
     this.#unshown.delete(agentId);
     if (session !== undefined) this.#writtenTo.set(agentId, session);
@@ -199,14 +169,10 @@ export class ImportantUnreadReminder {
   }
 
   #reportIfSpent(agentId: string, notice: ImportantUnreadNotice): void {
-    // A batch whose retries are used up is reported once, whatever the reason it stopped.
     if (!this.notices.retriesExhausted(agentId)) return;
-    // The write above may be the one that spent the last retry, so the state is read again: the
-    // count reported is the one the Agent was actually told, not the one before this attempt.
     const spent = this.notices.pending(agentId) ?? notice;
-    const key = `${agentId} ${spent.key}`;
-    if (this.#reported.has(key)) return;
-    this.#reported.add(key);
+    if (this.#reported.get(agentId) === spent.key) return;
+    this.#reported.set(agentId, spent.key);
     this.#warnUnobserved(
       agentId,
       (this.#batches.get(agentId) ?? []).flatMap((delivery) =>

@@ -198,6 +198,14 @@ export async function runDaemon(
         agentProxy = startAgentProxy({
           agentApiKeys: agentApiKeyRegistry(requireRuntime),
           runtime: daemonAgentProxyRuntime(requireRuntime),
+          stateDirectory: daemonStateDirectory,
+          cloudForward: {
+            serverHttpUrl: () => config?.serverHttpUrl,
+            daemonApiKey: () =>
+              config
+                ? credentials.load(config.workspaceId, config.computerId)
+                : Promise.resolve(null),
+          },
         });
         process.env.COFORGE_AGENT_PROXY_URL = agentProxy.url;
         const supervisorSocket = Bun.env.COFORGE_SUPERVISOR_SOCKET;

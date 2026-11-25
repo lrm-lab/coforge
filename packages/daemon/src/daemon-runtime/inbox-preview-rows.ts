@@ -1,4 +1,4 @@
-import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
+import { SEEN_EXACT_SEQS_LIMIT, type AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { inboxPreviewLine, previewShowsWholeMessage } from "./inbox-preview";
 
 /** The fields a notice row reads — a live delivery or a recovery message. A recovery message
@@ -8,12 +8,14 @@ export type NoticeRowItem = Pick<AgentMessageDelivery, "messageId" | "target" | 
     Pick<
       AgentMessageDelivery,
       | "agentId"
+      | "conversationId"
       | "body"
       | "latestSenderKind"
       | "latestSenderHandle"
       | "attachmentCount"
       | "source"
       | "mentionDelivery"
+      | "reason"
     >
   >;
 
@@ -39,6 +41,7 @@ export function buildNoticeRows(input: {
   agentId: string | undefined;
   previewLimit: number;
   previewedInFull(target: string, sequence: number): boolean;
+  alreadyConsumed?(delivery: NoticeRowItem): boolean;
 }): { rows: NoticeRow[]; whole: PreviewedWhole[] } {
   const announcedIds = new Set(input.announced.map((delivery) => delivery.messageId));
   const byTarget = new Map<string, NoticeRow>();
@@ -53,9 +56,15 @@ export function buildNoticeRows(input: {
     byTarget.set(target, created);
     return created;
   };
+  const skip = (delivery: NoticeRowItem) =>
+    !delivery.target ||
+    Boolean(
+      input.agentId &&
+      (input.previewedInFull(delivery.target, delivery.sequence) ||
+        input.alreadyConsumed?.(delivery)),
+    );
   const place = (delivery: NoticeRowItem, ids: Set<string>) => {
     if (!delivery.target) return;
-    if (input.agentId && input.previewedInFull(delivery.target, delivery.sequence)) return;
     ids.add(delivery.messageId);
     if (!input.previewLimit) return;
     const line = inboxPreviewLine(delivery);
@@ -69,11 +78,13 @@ export function buildNoticeRows(input: {
     });
     previewCandidates.set(delivery.target, candidates);
   };
-  for (const delivery of input.announced)
-    if (delivery.target) place(delivery, rowFor(delivery.target).newIds);
+  for (const delivery of input.announced) {
+    if (skip(delivery)) continue;
+    place(delivery, rowFor(delivery.target!).newIds);
+  }
   for (const delivery of input.queued) {
-    if (!delivery.target || announcedIds.has(delivery.messageId)) continue;
-    place(delivery, rowFor(delivery.target).heldIds);
+    if (skip(delivery) || announcedIds.has(delivery.messageId)) continue;
+    place(delivery, rowFor(delivery.target!).heldIds);
   }
   const whole: PreviewedWhole[] = [];
   for (const row of byTarget.values()) {
@@ -105,10 +116,6 @@ export function renderNoticeRows(rows: readonly NoticeRow[]): string[] {
   });
 }
 
-/**
- * The sequences whose whole text a notice showed, per Agent and target. Volatile by design: a new
- * context clears them, because a preview the model no longer holds is not a shown message.
- */
 export class PreviewSeen {
   readonly #byAgent = new Map<string, Map<string, Set<number>>>();
 
@@ -123,20 +130,47 @@ export class PreviewSeen {
   record(agentId: string, shown: readonly PreviewedWhole[]): void {
     if (!shown.length) return;
     const byTarget = this.#byAgent.get(agentId) ?? new Map<string, Set<number>>();
+    const touched = new Set<string>();
     for (const entry of shown) {
       const seen = byTarget.get(entry.target) ?? new Set<number>();
       seen.add(entry.sequence);
       byTarget.set(entry.target, seen);
+      touched.add(entry.target);
+    }
+    for (const target of touched) {
+      const seen = byTarget.get(target);
+      if (seen && seen.size > SEEN_EXACT_SEQS_LIMIT) {
+        const kept = [...seen].sort((left, right) => left - right).slice(-SEEN_EXACT_SEQS_LIMIT);
+        byTarget.set(target, new Set(kept));
+      }
     }
     this.#byAgent.set(agentId, byTarget);
+  }
+
+  pruneThrough(agentId: string, target: string, frontier: number): void {
+    const byTarget = this.#byAgent.get(agentId);
+    const seen = byTarget?.get(target);
+    if (!seen) return;
+    for (const sequence of seen) {
+      if (sequence <= frontier) seen.delete(sequence);
+    }
+    if (seen.size === 0) {
+      byTarget!.delete(target);
+      if (byTarget!.size === 0) this.#byAgent.delete(agentId);
+    }
+  }
+
+  clearTarget(agentId: string, target: string): void {
+    const byTarget = this.#byAgent.get(agentId);
+    if (!byTarget) return;
+    byTarget.delete(target);
+    if (byTarget.size === 0) this.#byAgent.delete(agentId);
   }
 
   clear(agentId: string): void {
     this.#byAgent.delete(agentId);
   }
 
-  /** `recorded` plus this Agent's previewed sequences for `target`, ascending, the newest
-   * `limit` — what a send reports as `seenExactSeqs`. */
   mergeExact(
     agentId: string,
     target: string,
@@ -145,8 +179,7 @@ export class PreviewSeen {
   ): readonly number[] | undefined {
     const previewed = this.recorded(agentId, target);
     if (!previewed?.size) return recorded;
-    return [...new Set([...(recorded ?? []), ...previewed])]
-      .sort((left, right) => left - right)
-      .slice(-limit);
+    const values = recorded?.length ? [...new Set([...recorded, ...previewed])] : [...previewed];
+    return values.sort((left, right) => left - right).slice(-limit);
   }
 }

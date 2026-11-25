@@ -83,20 +83,24 @@ type ConsumedSeqRow = {
 export class AgentConsumedSeqStore implements AgentConsumedSeqPort {
   readonly #root: string;
   readonly #dbs = new Map<string, AgentStateDb>();
+  #closed = false;
 
-  /** The daemon's state directory — `agent-state/<agentId>/state.db` lives under it. */
   constructor(rootDirectory: string) {
     if (!rootDirectory) throw new Error("consumed-sequence state directory is required");
     this.#root = rootDirectory;
   }
 
-  /** The Agent's shared ledger: the draft store writes the same database. */
   stateDb(agentId: string): AgentStateDb {
     const existing = this.#dbs.get(agentId);
     if (existing) return existing;
     const db = AgentStateDb.open(this.#root, agentId);
     this.#dbs.set(agentId, db);
     return db;
+  }
+
+  borrowStateDb(agentId: string): AgentStateDb | undefined {
+    if (this.#closed) return undefined;
+    return this.stateDb(agentId);
   }
 
   read(agentId: string): AgentConsumedSeqState {
@@ -221,6 +225,7 @@ export class AgentConsumedSeqStore implements AgentConsumedSeqPort {
   }
 
   close(): void {
+    this.#closed = true;
     for (const db of this.#dbs.values()) db.close();
     this.#dbs.clear();
   }

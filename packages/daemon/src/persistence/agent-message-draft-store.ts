@@ -98,6 +98,28 @@ export class AgentMessageDraftStore {
     this.db.database.prepare(`DELETE FROM drafts WHERE target = ?`).run(target);
   }
 
+  discard(
+    target: string,
+    expectedIdempotencyKey?: string,
+  ):
+    | { status: "missing" }
+    | { status: "mismatch" }
+    | { status: "discarded"; idempotencyKey: string } {
+    const row = this.#row(target);
+    if (!row) return { status: "missing" };
+    const draft = this.#draft(row);
+    if (!draft.idempotencyKey) return { status: "missing" };
+    if (this.#expired(draft)) {
+      this.db.database.prepare(`DELETE FROM drafts WHERE target = ?`).run(target);
+      return { status: "missing" };
+    }
+    if (expectedIdempotencyKey !== undefined && draft.idempotencyKey !== expectedIdempotencyKey) {
+      return { status: "mismatch" };
+    }
+    this.db.database.prepare(`DELETE FROM drafts WHERE target = ?`).run(target);
+    return { status: "discarded", idempotencyKey: draft.idempotencyKey };
+  }
+
   /** The clear after an accepted send: only the send whose key the draft holds consumes it, so an
    * older send accepted late never removes a newer draft. Returns whether it cleared. */
   async clearIfIdempotencyKeyMatches(target: string, idempotencyKey: string): Promise<boolean> {

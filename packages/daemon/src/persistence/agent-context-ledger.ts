@@ -81,6 +81,7 @@ const revisionOf = (text: string) => createHash("sha256").update(text).digest("b
 export function evaluateAgentCommandGuidance(input: {
   stateDirectory: string;
   hasExplicitStateDir?: boolean;
+  stateDb?: AgentStateDb | (() => AgentStateDb | undefined);
   agentId: string;
   operation: "check" | "satisfy";
   command: string;
@@ -92,6 +93,20 @@ export function evaluateAgentCommandGuidance(input: {
     return input.operation === "satisfy"
       ? { ok: true, guidance: null }
       : { ok: true, guidance: text, mode: "inline" };
+  }
+  const borrowed = typeof input.stateDb === "function" ? input.stateDb() : input.stateDb;
+  if (borrowed) {
+    const claimed = new AgentContextLedger(borrowed.database).claim(
+      "guidance",
+      input.command,
+      text,
+    );
+    if (input.operation === "satisfy") return { ok: true, guidance: null };
+    return {
+      ok: true,
+      guidance: claimed ? text : null,
+      mode: "once_per_context",
+    };
   }
   const hasStateDb =
     Boolean(input.hasExplicitStateDir) ||

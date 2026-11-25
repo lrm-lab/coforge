@@ -36,14 +36,13 @@ function noticePath(stateDirectory: string, agentId: string): string {
  * file is dropped rather than trusted.
  */
 export class ImportantUnreadNoticeStore {
-  /** A thunk: the runtime's state directory is assigned after its field initializers run. The
-   * owner defaults to this process and is injectable for tests that stand in for a restart. */
+  readonly #preparedDirs = new Set<string>();
+
   constructor(
     private readonly stateDirectory: () => string | undefined,
     private readonly owner: string = PROCESS_OWNER,
   ) {}
 
-  /** Every record a previous process left, for a starting Daemon to take over. */
   list(): ImportantUnreadNotice[] {
     const stateDirectory = this.stateDirectory();
     if (!stateDirectory) return [];
@@ -62,7 +61,6 @@ export class ImportantUnreadNoticeStore {
       const path = noticePath(stateDirectory, agentId);
       try {
         const value = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-        // Written by this very process: its live state is the authority, not the file.
         if (value?.owner === this.owner) continue;
         const notice = readNotice(value, agentId);
         if (notice) notices.push(notice);
@@ -74,26 +72,28 @@ export class ImportantUnreadNoticeStore {
     return notices;
   }
 
-  /** Written synchronously and replaced atomically: one small private file, nothing pending
-   * outliving the notice it records. */
   save(notice: ImportantUnreadNotice): void {
     try {
       const stateDirectory = this.stateDirectory();
       if (!stateDirectory) return;
       const path = noticePath(stateDirectory, notice.agentId);
-      mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-      chmodSync(dirname(path), 0o700);
+      const dir = dirname(path);
+      const body = `${JSON.stringify({ version: 1, owner: this.owner, ...notice })}\n`;
       const temporary = `${path}.tmp`;
-      writeFileSync(
-        temporary,
-        `${JSON.stringify({ version: 1, owner: this.owner, ...notice })}\n`,
-        {
-          mode: 0o600,
-        },
-      );
-      renameSync(temporary, path);
+      if (!this.#preparedDirs.has(dir)) {
+        this.#prepareDir(dir);
+      }
+      try {
+        writeFileSync(temporary, body, { mode: 0o600 });
+        renameSync(temporary, path);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        this.#preparedDirs.delete(dir);
+        this.#prepareDir(dir);
+        writeFileSync(temporary, body, { mode: 0o600 });
+        renameSync(temporary, path);
+      }
     } catch (error) {
-      // The live state decides delivery; a disk failure must not become a delivery failure.
       logger.warn("Important unread notice could not be recorded", {
         event: "agent.runtime.important_unread_persist_failed",
         agent_id: notice.agentId,
@@ -105,11 +105,19 @@ export class ImportantUnreadNoticeStore {
   clear(agentId: string): void {
     const stateDirectory = this.stateDirectory();
     if (!stateDirectory) return;
+    const path = noticePath(stateDirectory, agentId);
+    this.#preparedDirs.delete(dirname(path));
     try {
-      unlinkSync(noticePath(stateDirectory, agentId));
+      unlinkSync(path);
     } catch {
-      // Already gone, or never written: nothing to clear.
+      return;
     }
+  }
+
+  #prepareDir(dir: string): void {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    chmodSync(dir, 0o700);
+    this.#preparedDirs.add(dir);
   }
 }
 

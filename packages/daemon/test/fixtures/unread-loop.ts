@@ -69,6 +69,8 @@ export function unreadLoop(
       prefix: () => "",
       previewedInFull: (agentId, target, sequence) =>
         index.previewSeen.has(agentId, target, sequence),
+      hasSeen: (agentId, target, sequence, conversationId) =>
+        index.hasSeen(agentId, target, sequence, conversationId),
     }),
     shown: (agentId, shown) => index.previewSeen.record(agentId, shown),
     now: () => clock.nowMs,

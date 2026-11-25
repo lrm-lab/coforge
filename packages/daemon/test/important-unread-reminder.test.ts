@@ -132,3 +132,52 @@ test("a restarted Daemon takes the record over and tells the Agent once", () => 
   next.flushDue();
   expect(written).toHaveLength(2);
 });
+
+test("settling a spent batch clears its reported key so a later batch with the same key reports again", () => {
+  const { reminder, reported, clock } = harness();
+  reminder.observeDeliveries([mention]);
+  for (const delay of IMPORTANT_UNREAD_RETRY_DELAYS_MS) {
+    clock.nowMs += delay;
+    reminder.flushDue();
+  }
+  expect(reported).toEqual(["agent-a"]);
+
+  reminder.consumed("agent-a", 10);
+
+  reminder.observeDeliveries([mention]);
+  for (const delay of IMPORTANT_UNREAD_RETRY_DELAYS_MS) {
+    clock.nowMs += delay;
+    reminder.flushDue();
+  }
+  expect(reported).toEqual(["agent-a", "agent-a"]);
+});
+
+test("observeDeliveries saves the folded batch once per Agent instead of once per delivery", () => {
+  let saveCalls = 0;
+  const saved = new Map<string, ImportantUnreadNotice>();
+  const reminder = new ImportantUnreadReminder(
+    new ImportantUnreadNotices(),
+    {
+      save: (notice) => {
+        saveCalls += 1;
+        saved.set(notice.agentId, notice);
+      },
+      clear: (agentId) => void saved.delete(agentId),
+      list: () => [...saved.values()],
+    },
+    { write: () => false, report: () => undefined },
+    () => 1_000_000,
+  );
+
+  reminder.observeDeliveries([
+    { ...mention, agentId: "agent-a", sequence: 1 },
+    { ...mention, agentId: "agent-a", sequence: 2 },
+    { ...mention, agentId: "agent-b", sequence: 1 },
+    { ...mention, agentId: "agent-a", sequence: 3 },
+    { ...mention, agentId: "agent-b", sequence: 2 },
+  ]);
+
+  expect(saveCalls).toBe(2);
+  expect(saved.get("agent-a")).toMatchObject({ highestSequence: 3 });
+  expect(saved.get("agent-b")).toMatchObject({ highestSequence: 2 });
+});

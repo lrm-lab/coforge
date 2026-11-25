@@ -47,6 +47,7 @@ export class AgentConsumedAttention {
     this.#latestThreadReads.clear(agentId);
     this.#conversationTargets.delete(agentId);
     this.#attentionConversation.delete(agentId);
+    this.ports.previewSeen.clear(agentId);
   }
 
   recordExactSeen(agentId: string, shown: ReadonlyMap<string, readonly number[]>): void {
@@ -149,6 +150,7 @@ export class AgentConsumedAttention {
       delete entry.reviewedSeq;
       noteFrontierSource(entry, "reset");
       this.#latestThreadReads.clear(agentId);
+      this.ports.previewSeen.clearTarget(agentId, target);
     }
     this.#persist(agentId);
   }
@@ -179,6 +181,7 @@ export class AgentConsumedAttention {
       if (!kept.length) delete entry.exactSeqs;
       else if (kept.length !== exact.length) entry.exactSeqs = kept;
     }
+    this.ports.previewSeen.pruneThrough(agentId, target, sequence);
     this.ports.settlePending(agentId, target, (pending) => pending <= sequence);
     return true;
   }

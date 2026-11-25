@@ -33,6 +33,7 @@ function createCollabHooks(requireRuntime: () => DaemonRuntime): AgentProxyColla
   return {
     authorize: (context, key) => requireRuntime().authorizedAgent(context, key),
     stateDirectory: () => requireRuntime().stateDirectory,
+    stateDb: (agentId) => requireRuntime().consumedSeqs?.borrowStateDb(agentId),
     reportsCompaction(agentId) {
       const rt = requireRuntime();
       const provider =

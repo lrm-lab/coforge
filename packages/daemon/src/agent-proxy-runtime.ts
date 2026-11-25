@@ -77,6 +77,7 @@ import type {
   AgentArtifactUploadRequest,
 } from "#src/connection/agent-forwarded-routes";
 import type { LocalMemoryCommand, LocalMemoryResult } from "@lrm/coforge-sdk/agent";
+import type { AgentStateDb } from "#src/persistence/agent-state-db";
 export type AgentProxyRuntime = {
   agentMemory?(
     context: string,
@@ -301,6 +302,7 @@ export type AgentProxyRuntime = {
 export type AgentProxyCollabHooks = {
   authorize(context: string, agentApiKey: string | undefined): string;
   stateDirectory(): string;
+  stateDb?(agentId: string): AgentStateDb | undefined;
   reportsCompaction(agentId: string): boolean;
   canonicalizeTarget(context: string, target: string, agentApiKey: string): Promise<string>;
   readMessagesForInbox(

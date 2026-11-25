@@ -30,15 +30,10 @@ const LOCAL_THREAD_FOLLOW_PREFIX = LOCAL_PROXY_ROUTES.threadFollow
   .slice(0, -THREAD_FOLLOW_SUFFIX.length);
 
 export type AgentProxyCloudForward = {
-  serverHttpUrl: string;
+  serverHttpUrl: string | (() => string | undefined);
   daemonApiKey: () => Promise<string | null>;
 };
 
-/**
- * Owns collaboration extensions on the local Agent capability boundary: local held-draft discard,
- * compaction-aware command guidance observations, and direct cloud forwarding for newly approved
- * collaboration routes (`thread follow`, and in P1-7 `inbox read|dismiss` + `action withdraw`).
- */
 export function createCollabProxyDispatcher(input: {
   agentApiKeys: { get(agentId: string): string | undefined };
   runtime?: AgentProxyRuntime;
@@ -68,10 +63,13 @@ export function createCollabProxyDispatcher(input: {
     const agentApiKey = input.agentApiKeys.get(agentId);
     if (!agentApiKey) return null;
     if (input.cloudForward) {
+      const serverHttpUrl =
+        typeof input.cloudForward.serverHttpUrl === "function"
+          ? input.cloudForward.serverHttpUrl()
+          : input.cloudForward.serverHttpUrl;
+      if (!serverHttpUrl) return null;
       const daemonApiKey = await input.cloudForward.daemonApiKey();
-      return daemonApiKey
-        ? { agentApiKey, serverHttpUrl: input.cloudForward.serverHttpUrl, daemonApiKey }
-        : null;
+      return daemonApiKey ? { agentApiKey, serverHttpUrl, daemonApiKey } : null;
     }
     const dir = resolveStateDir();
     if (!cachedConfigStore || cachedConfigStore.dir !== dir) {
@@ -146,30 +144,20 @@ export function createCollabProxyDispatcher(input: {
       input.runtime?.collab && apiKey
         ? await input.runtime.collab.canonicalizeTarget(binding.context, rawTarget, apiKey)
         : rawTarget;
+    if (input.runtime?.collab && apiKey) authorize(binding);
     const idempotencyKey =
       typeof payload.idempotencyKey === "string" && payload.idempotencyKey
         ? payload.idempotencyKey
         : crypto.randomUUID();
-    const stateDirectory = resolveStateDir();
-    const hasDb =
-      Boolean(input.stateDirectory || input.runtime?.collab) ||
-      existsSync(
-        join(stateDirectory, "agent-state", escapePathIdentity(binding.agentId), "state.db"),
-      );
-    if (!hasDb) {
-      return Response.json({
-        idempotencyKey,
-        accepted: true,
-        clearedDraft: false,
-        discarded: false,
-        target,
-      });
-    }
-    const stateDb = AgentStateDb.open(stateDirectory, binding.agentId);
-    try {
-      const store = new AgentMessageDraftStore(stateDb);
-      const lookup = await store.lookup(target);
-      if (lookup.status !== "found") {
+    const borrowedDb = input.runtime?.collab?.stateDb?.(binding.agentId);
+    const stateDirectory = borrowedDb ? "" : resolveStateDir();
+    if (!borrowedDb) {
+      const hasDb =
+        Boolean(input.stateDirectory || input.runtime?.collab) ||
+        existsSync(
+          join(stateDirectory, "agent-state", escapePathIdentity(binding.agentId), "state.db"),
+        );
+      if (!hasDb) {
         return Response.json({
           idempotencyKey,
           accepted: true,
@@ -178,24 +166,37 @@ export function createCollabProxyDispatcher(input: {
           target,
         });
       }
-      if (typeof expected === "string" && lookup.draft.idempotencyKey !== expected) {
+    }
+    const stateDb = borrowedDb ?? AgentStateDb.open(stateDirectory, binding.agentId);
+    try {
+      const store = new AgentMessageDraftStore(stateDb);
+      const result = store.discard(target, typeof expected === "string" ? expected : undefined);
+      if (result.status === "missing") {
+        return Response.json({
+          idempotencyKey,
+          accepted: true,
+          clearedDraft: false,
+          discarded: false,
+          target,
+        });
+      }
+      if (result.status === "mismatch") {
         throw new AgentPreflightError(
           "The saved draft no longer matches the expected idempotency key. No request was made and the current draft was left unchanged because it belongs to a different logical send.",
           "SAVED_DRAFT_IDENTITY_CHANGED",
           { draftSaved: false, retryable: false },
         );
       }
-      await store.clear(target);
       return Response.json({
         idempotencyKey,
         accepted: true,
         clearedDraft: true,
         discarded: true,
-        discardedDraftKey: lookup.draft.idempotencyKey,
+        discardedDraftKey: result.idempotencyKey,
         target,
       });
     } finally {
-      stateDb.close();
+      if (!borrowedDb) stateDb.close();
     }
   };
 
@@ -367,18 +368,19 @@ export function createCollabProxyDispatcher(input: {
       if ((op !== "check" && op !== "satisfy") || !cmd) return badRequest();
       try {
         authorize(registered);
+        const collab = input.runtime?.collab;
+        const borrowStateDb = collab?.stateDb;
         return Response.json(
           evaluateAgentCommandGuidance({
             stateDirectory: resolveStateDir(),
-            hasExplicitStateDir: Boolean(input.stateDirectory || input.runtime?.collab),
+            hasExplicitStateDir: Boolean(input.stateDirectory || collab),
+            ...(borrowStateDb ? { stateDb: () => borrowStateDb(registered.agentId) } : {}),
             agentId: registered.agentId,
             operation: op,
             command: cmd,
             reportsCompaction:
               input.reportsCompaction ??
-              (input.runtime?.collab
-                ? (id) => input.runtime!.collab!.reportsCompaction(id)
-                : undefined),
+              (collab ? (id) => collab.reportsCompaction(id) : undefined),
           }),
         );
       } catch (error) {

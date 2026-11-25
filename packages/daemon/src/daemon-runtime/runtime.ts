@@ -307,7 +307,7 @@ export class DaemonRuntime {
 
   readonly systemCleaner: SystemCleaner;
   readonly #runtimeInstanceId = crypto.randomUUID();
-  readonly #consumedSeqs: AgentConsumedSeqStore;
+  readonly consumedSeqs: AgentConsumedSeqStore;
   readonly #startedAt = Date.now();
   readonly #agentContexts = new Map<string, string>();
   readonly #contextViewEnabled = new Map<string, boolean>();
@@ -388,7 +388,7 @@ export class DaemonRuntime {
     inputDrain: this.#inputDrain,
     session: (agentId: string) => this.#agentProcessManager.session(agentId),
   });
-  readonly #contexts = new AgentContexts((agentId) => this.#consumedSeqs.stateDb(agentId));
+  readonly #contexts = new AgentContexts((agentId) => this.consumedSeqs.stateDb(agentId));
   readonly #phaseBookkeeping = assemblePhaseBookkeeping(
     this.#contexts,
     (agentId) => this.#currentActivityLaunches.get(agentId),
@@ -428,7 +428,7 @@ export class DaemonRuntime {
     ) => RuntimeAuthAdapter = createRuntimeAuthAdapter,
     private readonly releaseChannel?: string,
   ) {
-    this.#consumedSeqs = new AgentConsumedSeqStore(this.stateDirectory);
+    this.consumedSeqs = new AgentConsumedSeqStore(this.stateDirectory);
     this.#computerUpdateNotice = new ComputerUpdateNotice(
       this.stateDirectory,
       this.computerVersion,
@@ -487,7 +487,7 @@ export class DaemonRuntime {
       sweeps: this.#sweeps,
       stateDirectory,
       transport: () => this.#transport,
-      consumedSeqs: this.#consumedSeqs,
+      consumedSeqs: this.consumedSeqs,
       deliveryGate: this.#deliveryGate,
       runtimeRelease: this.#runtimeRelease,
       processManager: this.#agentProcessManager,
@@ -821,7 +821,7 @@ export class DaemonRuntime {
       revokeAgentApiKey: (agentId, apiKey, scope) =>
         this.#revokeAgentApiKey(agentId, apiKey, scope),
       replaceTransport: () => this.#replaceTransport(),
-      consumedSeqs: this.#consumedSeqs,
+      consumedSeqs: this.consumedSeqs,
       sendAgentStatus: this.#sendAgentStatus,
       contextView: this.#contextViewService,
     });
@@ -1220,7 +1220,7 @@ export class DaemonRuntime {
       this.systemCleaner,
       this.#offlineResidency,
       this.#messageAttention,
-      this.#consumedSeqs,
+      this.consumedSeqs,
       this.#sync,
       (agentId) => this.#launchCoordinator.dropOwedRecovery(agentId),
       this.#services.procJobs,
