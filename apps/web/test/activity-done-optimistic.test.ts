@@ -18,10 +18,14 @@ function deferred<T = void>() {
   return { promise, resolve, reject };
 }
 
-const item = (key: string, overrides?: { unreadCount?: number; unreadMention?: boolean }) => ({
+const item = (
+  key: string,
+  overrides?: { unreadCount?: number; unreadMention?: boolean; task?: { boardId: string } | null },
+) => ({
   key,
   unreadCount: overrides?.unreadCount ?? 1,
   unreadMention: overrides?.unreadMention ?? false,
+  ...(overrides?.task !== undefined ? { task: overrides.task } : {}),
 });
 
 function inboxData(items: ReturnType<typeof item>[]) {
@@ -32,6 +36,8 @@ function inboxData(items: ReturnType<typeof item>[]) {
         pinned: [],
         unreadItemCount: items.filter((entry) => entry.unreadCount > 0).length,
         unreadMentionItemCount: items.filter((entry) => entry.unreadMention).length,
+        unreadTaskItemCount: items.filter((entry) => Boolean(entry.task) && entry.unreadCount > 0)
+          .length,
         unreadArtifactItemCount: items.filter(
           (entry) => entry.key.startsWith("artifact:") && entry.unreadCount > 0,
         ).length,
@@ -46,17 +52,32 @@ test("optimisticallyCompleteActivityItems removes completed items across all cac
   const queryClient = new QueryClient();
   const first = item("conversation:1", { unreadCount: 2, unreadMention: true });
   const second = item("artifact:2", { unreadCount: 1 });
+  const third = item("conversation:task-3", { unreadCount: 1, task: { boardId: "b1" } });
   const otherWorkspaceItem = item("conversation:1", { unreadCount: 1 });
 
   const allKey = [...ACTIVITY_INBOX_LISTS_KEY, "ws-1", "all"];
   const unreadKey = [...ACTIVITY_INBOX_LISTS_KEY, "ws-1", "unread"];
   const otherWsKey = [...ACTIVITY_INBOX_LISTS_KEY, "ws-2", "all"];
 
-  queryClient.setQueryData(allKey, inboxData([first, second]));
-  queryClient.setQueryData(unreadKey, inboxData([first, second]));
+  queryClient.setQueryData(allKey, inboxData([first, second, third]));
+  queryClient.setQueryData(unreadKey, inboxData([first, second, third]));
   queryClient.setQueryData(otherWsKey, inboxData([otherWorkspaceItem]));
 
   optimisticallyCompleteActivityItems(queryClient, "ws-1", [first]);
+
+  expect(
+    queryClient.getQueryData<InfiniteData<ReturnType<typeof inboxData>["pages"][0]>>(allKey)
+      ?.pages[0],
+  ).toMatchObject({
+    items: [second, third],
+    activeItemCount: 2,
+    unreadItemCount: 2,
+    unreadMentionItemCount: 0,
+    unreadTaskItemCount: 1,
+    unreadArtifactItemCount: 1,
+  });
+
+  optimisticallyCompleteActivityItems(queryClient, "ws-1", [third]);
 
   expect(
     queryClient.getQueryData<InfiniteData<ReturnType<typeof inboxData>["pages"][0]>>(allKey)
@@ -66,6 +87,7 @@ test("optimisticallyCompleteActivityItems removes completed items across all cac
     activeItemCount: 1,
     unreadItemCount: 1,
     unreadMentionItemCount: 0,
+    unreadTaskItemCount: 0,
     unreadArtifactItemCount: 1,
   });
   expect(
@@ -76,6 +98,7 @@ test("optimisticallyCompleteActivityItems removes completed items across all cac
     activeItemCount: 1,
     unreadItemCount: 1,
     unreadMentionItemCount: 0,
+    unreadTaskItemCount: 0,
   });
   expect(
     queryClient.getQueryData<InfiniteData<ReturnType<typeof inboxData>["pages"][0]>>(otherWsKey)

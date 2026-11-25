@@ -18,6 +18,7 @@ const FILTER_TABS: ReadonlyArray<{
   { id: "all", label: () => m.activity_inbox_filter_all() },
   { id: "unread", label: () => m.activity_inbox_filter_unread() },
   { id: "mentions", label: () => m.activity_inbox_filter_mentions() },
+  { id: "tasks", label: () => m.activity_inbox_filter_tasks() },
   { id: "artifacts", label: () => m.ag_title() },
 ];
 
@@ -115,7 +116,7 @@ export function ActivityInboxTabs({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const indicator = useSlidingIndicator(containerRef, {
-    activeKey: `${filter}:${counts.unread ?? 0}:${counts.mentions ?? 0}:${counts.artifacts ?? 0}`,
+    activeKey: `${filter}:${counts.unread ?? 0}:${counts.mentions ?? 0}:${counts.tasks ?? 0}:${counts.artifacts ?? 0}`,
     variant: "underline",
   });
   return (

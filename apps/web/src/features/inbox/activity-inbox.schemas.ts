@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const ACTIVITY_INBOX_FILTERS = ["all", "unread", "mentions", "artifacts"] as const;
+export const ACTIVITY_INBOX_FILTERS = ["all", "unread", "mentions", "tasks", "artifacts"] as const;
 export type ActivityInboxFilter = (typeof ACTIVITY_INBOX_FILTERS)[number];
 
 const chronologicalCursorSchema = z.strictObject({

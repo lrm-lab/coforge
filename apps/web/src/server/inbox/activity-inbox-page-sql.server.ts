@@ -16,6 +16,7 @@ import { commentNoticeRowsSql, mentionNoticeRowsSql } from "./activity-inbox-men
 export type ActivityPageRow = {
   unreadItemCount: number;
   unreadMentionItemCount: number;
+  unreadTaskItemCount: number;
   activeItemCount: number;
   key: string | null;
   isPin: boolean;
@@ -50,6 +51,7 @@ export type ActivityPageRow = {
 
 function viewSql(filter: ActivityInboxFilter) {
   if (filter === "artifacts") return Prisma.sql`FALSE`;
+  if (filter === "tasks") return Prisma.sql`items."taskBoardId" IS NOT NULL`;
   if (filter === "unread") return Prisma.sql`items."hasUnread"`;
   if (filter === "mentions") return Prisma.sql`items."firstMentionMessageId" IS NOT NULL`;
   return Prisma.sql`(items."pinOrder" IS NULL OR items."hasUnread")`;
@@ -101,6 +103,8 @@ export function activityPageSql(
           AS "unreadItemCount",
         (COUNT(*) FILTER (WHERE items."pastDone" AND items."unreadMention"))::int
           AS "unreadMentionItemCount",
+        (COUNT(*) FILTER (WHERE items."pastDone" AND items."hasUnread" AND items."taskBoardId" IS NOT NULL))::int
+          AS "unreadTaskItemCount",
         (COUNT(*) FILTER (WHERE items."pastDone"))::int
           AS "activeItemCount"
       FROM items

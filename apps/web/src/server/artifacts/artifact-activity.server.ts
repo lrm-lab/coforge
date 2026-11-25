@@ -87,6 +87,7 @@ function mentionAfterSql(userId: string, boundary: Boundary) {
 }
 
 function viewSql(filter: ActivityInboxFilter) {
+  if (filter === "tasks") return Prisma.sql`FALSE`;
   if (filter === "unread") return Prisma.sql`listed."hasUnread"`;
   if (filter === "mentions") return Prisma.sql`listed."hasMention"`;
   return Prisma.sql`TRUE`;

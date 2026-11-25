@@ -94,11 +94,17 @@ export type ActivityInboxPage = Awaited<ReturnType<typeof loadActivityInbox>>;
 export type ActivityCompletionItem = Pick<
   ActivityInboxItem,
   "key" | "unreadCount" | "unreadMention"
->;
+> & { task?: unknown };
 type ActivityCompletionPage<Item extends ActivityCompletionItem = ActivityCompletionItem> = Pick<
   ActivityInboxPage,
   "unreadItemCount" | "unreadMentionItemCount" | "activeItemCount"
-> & { unreadArtifactItemCount?: number; items: Item[]; pinned?: Item[]; selectedItem?: Item };
+> & {
+  unreadTaskItemCount?: number;
+  unreadArtifactItemCount?: number;
+  items: Item[];
+  pinned?: Item[];
+  selectedItem?: Item;
+};
 
 export async function cancelActivityInboxListReads(
   queryClient: QueryClient,
@@ -132,6 +138,7 @@ function withoutItem<
   Item extends ActivityCompletionItem,
   Page extends ActivityCompletionPage<Item>,
 >(data: InfiniteData<Page>, item: ActivityCompletionItem): InfiniteData<Page> {
+  const unreadTask = "task" in item && Boolean(item.task) && item.unreadCount > 0 ? 1 : 0;
   const unreadArtifact = item.key.startsWith("artifact:") && item.unreadCount > 0 ? 1 : 0;
   return {
     ...data,
@@ -145,6 +152,9 @@ function withoutItem<
         0,
         page.unreadMentionItemCount - (item.unreadMention ? 1 : 0),
       ),
+      ...(page.unreadTaskItemCount !== undefined
+        ? { unreadTaskItemCount: Math.max(0, page.unreadTaskItemCount - unreadTask) }
+        : {}),
       ...(page.unreadArtifactItemCount !== undefined
         ? { unreadArtifactItemCount: Math.max(0, page.unreadArtifactItemCount - unreadArtifact) }
         : {}),
