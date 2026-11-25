@@ -190,7 +190,38 @@ test("web-e2e.yml runs 4 non-blocking shards with Bun and pinned Chrome caches",
   expect(browserInstall?.if).toBeUndefined();
 
   const runShard = steps.find((step) => step.name === "Run the shard");
+  expect(runShard?.id).toBe("run-shard");
   expect(runShard?.run).toContain('run-web-e2e-ci.sh "${{ matrix.shard }}" 4');
+
+  const summarize = steps.find((step) => step.name === "Summarize the shard");
+  expect(summarize?.if).toBe("always()");
+  expect(summarize?.run).toContain("scripts/ci/web-e2e-summary.ts");
+  expect(summarize?.run).toContain("summary.json");
+
+  const summaryUpload = steps.find((step) => step.name === "Upload shard summary");
+  expect(summaryUpload?.if).toBe("always()");
+  expect(summaryUpload?.uses).toStartWith("actions/upload-artifact@");
+  expect(String(summaryUpload?.with?.name ?? "")).toBe(
+    "web-e2e-shard-${{ matrix.shard }}-of-4-summary",
+  );
+  const summaryPaths = String(summaryUpload?.with?.path ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  expect(summaryPaths).toEqual([
+    "${{ env.E2E_OUTPUT }}/summary.md",
+    "${{ env.E2E_OUTPUT }}/summary.json",
+  ]);
+  expect(summaryUpload?.with?.["if-no-files-found"]).toBe("ignore");
+  expect(Number(summaryUpload?.with?.["retention-days"])).toBeGreaterThan(0);
+  expect(Number(summaryUpload?.with?.["retention-days"])).toBeLessThanOrEqual(7);
+
   const upload = steps.find((step) => step.name === "Keep the output of a failed shard");
+  expect(upload?.if).toBe("failure()");
   expect(String(upload?.with?.name ?? "")).toBe("web-e2e-shard-${{ matrix.shard }}-of-4");
+  const failedPaths = String(upload?.with?.path ?? "");
+  expect(failedPaths).toContain("${{ env.E2E_OUTPUT }}/logs");
+  expect(failedPaths).toContain("${{ env.E2E_OUTPUT }}/screenshots");
+  expect(failedPaths).toContain("${{ env.E2E_OUTPUT }}/ui-sweep");
+  expect(failedPaths).toContain("${{ env.E2E_OUTPUT }}/summary.md");
 });

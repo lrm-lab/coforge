@@ -145,18 +145,58 @@ jobs:
           scripts/ci/retry.sh 5 10 -- agent-browser install --with-deps
 
       - name: Run the shard
+        id: run-shard
         shell: bash
         env:
           E2E_FILE: ${{ inputs.file }}
           E2E_REPEAT: ${{ inputs.repeat }}
-        run: ./scripts/e2e/run-web-e2e-ci.sh "${{ matrix.shard }}" 4
+        run: |
+          date -u +%s > "${RUNNER_TEMP}/web-e2e-shard-started-at.epoch"
+          ./scripts/e2e/run-web-e2e-ci.sh "${{ matrix.shard }}" 4
 
       - name: Summarize the shard
         if: always()
         shell: bash
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARDS: "4"
+          E2E_FILE: ${{ inputs.file }}
+          E2E_REPEAT: ${{ inputs.repeat }}
+          SHARD_OUTCOME: ${{ steps.run-shard.outcome }}
+          STARTED_AT_FILE: ${{ runner.temp }}/web-e2e-shard-started-at.epoch
+          SUMMARY_SHA: ${{ github.sha }}
+          SUMMARY_RUN_ID: ${{ github.run_id }}
+          SUMMARY_RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           summary="$E2E_OUTPUT/summary.md"
           [ -f "$summary" ] && cat "$summary" >> "$GITHUB_STEP_SUMMARY" || true
+          if command -v bun >/dev/null 2>&1 && [ -f scripts/ci/web-e2e-summary.ts ]; then
+            bun scripts/ci/web-e2e-summary.ts \
+              --input "$summary" \
+              --output "$E2E_OUTPUT/summary.json" \
+              --shard "$SHARD" \
+              --shards "$SHARDS" \
+              --outcome "$SHARD_OUTCOME" \
+              --started-at-file "$STARTED_AT_FILE" \
+              --e2e-file "$E2E_FILE" \
+              --e2e-repeat "$E2E_REPEAT" \
+              --sha "$SUMMARY_SHA" \
+              --run-id "$SUMMARY_RUN_ID" \
+              --run-attempt "$SUMMARY_RUN_ATTEMPT"
+          fi
+
+      # Always upload the compact per-shard summary so green and near-green runs provide exact
+      # per-file timings for shard-budget planning without uploading heavy logs or screenshots.
+      - name: Upload shard summary
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: web-e2e-shard-${{ matrix.shard }}-of-4-summary
+          path: |
+            ${{ env.E2E_OUTPUT }}/summary.md
+            ${{ env.E2E_OUTPUT }}/summary.json
+          if-no-files-found: ignore
+          retention-days: 7
 
       # Each file's output, the Web's and Centrifugo's logs, and the screenshots the tests took.
       - name: Keep the output of a failed shard

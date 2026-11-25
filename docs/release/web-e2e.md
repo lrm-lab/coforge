@@ -16,9 +16,12 @@ PostgreSQL and Redis are service containers. All three images are the ones stagi
 digest (`scripts/ci/web-integration-images.test.ts`).
 
 The shards are balanced by the seconds recorded beside each file in the list (seeding shard 1 with
-`ui-sweep` time). The run page's summary has a table per shard (file, result, seconds). A failed
-shard uploads `web-e2e-shard-<n>-of-4` for a week: each file's output, the Web's, Centrifugo's and
-the front door's logs, and the screenshots the tests wrote under `.artifacts/e2e/`.
+`ui-sweep` time). The run page's summary has a table per shard (file, result, seconds). Every
+shard—passing or failing—always uploads the compact `web-e2e-shard-<n>-of-4-summary` artifact
+(`summary.md` and `summary.json`) for a week so per-file timings stay downloadable from green and
+near-green runs. A failed shard additionally uploads `web-e2e-shard-<n>-of-4` for a week: each
+file's output, the Web's, Centrifugo's and the front door's logs, and the screenshots the tests
+wrote under `.artifacts/e2e/`.
 
 A manual dispatch can instead soak one file: the `file` input (a name under `apps/web/test`,
 listed or not) and `repeat` (1-99) run only that file, that many times in a row, on one runner
