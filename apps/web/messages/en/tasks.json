@@ -1,0 +1,11 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "tasks_panel_expand": "Expand",
+  "tasks_panel_restore": "Restore split view",
+  "tasks_panel_prev": "Previous task",
+  "tasks_panel_next": "Next task",
+  "tasks_panel_resize": "Resize task panel",
+  "tasks_sheet_expand": "Expand",
+  "tasks_sheet_collapse": "Collapse",
+  "tasks_reply_placeholder": "Reply to task #{number}…"
+}

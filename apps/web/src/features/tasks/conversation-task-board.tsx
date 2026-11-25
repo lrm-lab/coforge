@@ -2,13 +2,16 @@ import type { TaskView } from "@lrm/coforge-sdk/internal";
 import { useMemo, useState } from "react";
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
+import { useOpenConversationTask } from "#src/features/conversations/open-conversation-thread";
+import { m } from "#src/paraglide/messages";
 import { isFinishedStatus } from "./finished-tasks";
-import { TaskBoard, type ConversationBoard } from "./task-board";
+import { TaskBoard, orderBoardTasks, type ConversationBoard } from "./task-board";
 import { useTaskBoardSearch } from "./task-board-search";
+import { useRegisterTaskNavigation, type TaskDetailNavigation } from "./task-detail-panel";
+import { statusMatches, taskMatches } from "./task-filters";
 import type { OverviewTaskCommand } from "./task-overview-collection";
 import { useFinishedTasks } from "./use-finished-tasks";
 import { useUnfinishedTasks, type ConversationTaskCommands } from "./use-conversation-tasks";
-import { m } from "#src/paraglide/messages";
 
 export function filterConversationBoardTasks<
   T extends Pick<TaskView, "number" | "parent" | "project">,
@@ -57,6 +60,7 @@ export function ConversationTaskBoard({
 }) {
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const view = useTaskBoardSearch(search);
+  const { openTaskNumber } = useOpenConversationTask();
   const { command } = taskView;
   const { tasks: listed, loading, failed } = useUnfinishedTasks(conversationId);
   const error = taskView.error || (failed ? m.tasks_load_error() : "");
@@ -71,6 +75,44 @@ export function ConversationTaskBoard({
     filter: view.filter,
     onPage: tasks,
   });
+  const orderedTasks = useMemo(() => {
+    const unfinished = tasks.filter((task) => !isFinishedStatus(task.status));
+    const visible = [
+      ...unfinished,
+      ...finished.columns.done.rows,
+      ...finished.columns.closed.rows,
+    ].filter((task) => statusMatches(task.status, view.statuses) && taskMatches(task, view.filter));
+    return orderBoardTasks(visible, view.statuses);
+  }, [tasks, finished.columns.done.rows, finished.columns.closed.rows, view.statuses, view.filter]);
+
+  const selectedTaskId = useMemo(
+    () =>
+      openTaskNumber !== undefined
+        ? orderedTasks.find((task) => task.number === openTaskNumber)?.id
+        : undefined,
+    [openTaskNumber, orderedTasks],
+  );
+
+  const navigation = useMemo<TaskDetailNavigation | undefined>(() => {
+    if (openTaskNumber === undefined || orderedTasks.length === 0) return undefined;
+    const index = orderedTasks.findIndex((task) => task.number === openTaskNumber);
+    if (index < 0) return undefined;
+    const prev = orderedTasks[index - 1];
+    const next = orderedTasks[index + 1];
+    return {
+      hasPrev: Boolean(prev),
+      hasNext: Boolean(next),
+      onPrev: () => {
+        if (prev) onOpenTask(prev.number);
+      },
+      onNext: () => {
+        if (next) onOpenTask(next.number);
+      },
+    };
+  }, [openTaskNumber, orderedTasks, onOpenTask]);
+
+  useRegisterTaskNavigation(navigation);
+
   const run = useMemo(
     () =>
       canMutate
@@ -84,6 +126,7 @@ export function ConversationTaskBoard({
       finished={finished}
       view={view}
       currentMemberId={currentMemberId || null}
+      selectedTaskId={selectedTaskId}
       onOpenTask={(task) => onOpenTask(task.number)}
       onCommand={run}
       conversation={{

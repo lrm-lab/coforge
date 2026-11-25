@@ -8,31 +8,20 @@ import { channelNamesQuery } from "#src/features/conversations/conversation-quer
 import type { TaskPopupControls } from "#src/features/conversations/direct-conversation";
 import { useChannelConversation } from "#src/features/conversations/use-conversation-data";
 import { TaskDetailDialog } from "./task-detail-dialog";
+import { TaskDetailPanel } from "./task-detail-panel";
 import { useNumberedTask } from "./use-conversation-tasks";
 import type { OverviewTaskCommand, OverviewTaskRow } from "./task-overview-collection";
 
 type OverviewTaskPopupProps = {
-  /** The open Task, as the overview lists it. */
   task: OverviewTaskRow;
-  /** Opens another Task of the same conversation (a `task #N` chip in the thread). */
   onOpenTask: (number: number) => void;
-  /** Opens a Task of another channel (a related Task) over the overview. */
   onOpenTaskIn: (task: { conversationId: string; number: number }) => void;
   onClose: () => void;
-  /** The overview's own command path, for the popup shown when the conversation cannot load. */
   onCommand: (command: OverviewTaskCommand) => Promise<void>;
-  /** The popup's live copy of a Task is newer than the overview's, or the Task was deleted there:
-   * re-read the overview. */
   onTaskChanged: () => void;
+  inline?: TaskPopupControls["inline"];
 };
 
-/**
- * The Tasks page's Task popup: the same popup a channel shows — the Task, its thread and
- * the reply composer — over the overview, read and kept live through the conversation's own
- * data (`use-conversation-data.ts`). It appears once the channel has loaded; if it cannot load,
- * the popup shows the Task alone. The page lists channel Tasks only, so it never opens a direct
- * message's.
- */
 export function OverviewTaskPopup(props: OverviewTaskPopupProps) {
   return (
     <ClientOnly>
@@ -42,16 +31,26 @@ export function OverviewTaskPopup(props: OverviewTaskPopupProps) {
 }
 
 function TaskPopupBoundary(props: OverviewTaskPopupProps) {
-  const { task, onClose, onCommand } = props;
+  const { task, onClose, onCommand, inline } = props;
   const workspaceId = useCurrentWorkspaceId() ?? "";
-  // Read alongside the conversation rather than after it: both hold the popup back.
   usePrefetchQuery(channelNamesQuery(workspaceId));
-  // A conversation that cannot load leaves the popup with the Task alone. The boundary only
-  // records the failure; the fallback renders here, outside it, so it keeps one component type
-  // (and its pending and error state) across this component's renders.
   const [conversationFailed, setConversationFailed] = useState(false);
   if (conversationFailed)
-    return (
+    return inline ? (
+      <TaskDetailPanel
+        key={task.id}
+        task={task}
+        mode={inline.mode}
+        expanded={inline.expanded}
+        onToggleExpand={inline.onToggleExpand}
+        navigation={inline.navigation}
+        closeOnEscape={inline.closeOnEscape}
+        onClose={onClose}
+        onCommand={onCommand}
+        conversationName={task.source.label}
+        currentMemberId={task.currentMemberId ?? null}
+      />
+    ) : (
       <TaskDetailDialog
         key={task.id}
         task={task}
@@ -77,7 +76,6 @@ function TaskPopupBoundary(props: OverviewTaskPopupProps) {
   );
 }
 
-/** The boundary's own fallback: nothing, for the moment until `onCatch` swaps in the popup. */
 function NoFallback() {
   return null;
 }
@@ -88,13 +86,13 @@ function ChannelTaskPopup(props: OverviewTaskPopupProps) {
   return <ChannelConversation {...conversationProps} channels={channels} taskPopup={taskPopup} />;
 }
 
-/** What the channel hands its popup, and the overview kept in step with it. */
 function usePopupState({
   task,
   onOpenTask,
   onOpenTaskIn,
   onClose,
   onTaskChanged,
+  inline,
 }: OverviewTaskPopupProps) {
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const channels = useSuspenseQuery(channelNamesQuery(workspaceId)).data;
@@ -106,11 +104,10 @@ function usePopupState({
       openTaskIn: onOpenTaskIn,
       closeTask: onClose,
       onTaskDeleted: onTaskChanged,
+      inline,
     }),
-    [task, onOpenTask, onOpenTaskIn, onClose, onTaskChanged],
+    [task, onOpenTask, onOpenTaskIn, onClose, onTaskChanged, inline],
   );
-  // The conversation's own copy is the live one; until it holds the open Task (still reading it,
-  // or its read failed) the overview's copy keeps the popup up.
   const liveRevision = useNumberedTask(task.conversationId, task.number)?.revision;
   useEffect(() => {
     if (liveRevision !== undefined && liveRevision > task.revision) onTaskChanged();

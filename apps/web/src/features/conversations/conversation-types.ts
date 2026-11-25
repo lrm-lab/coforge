@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { TaskView } from "@lrm/coforge-sdk/internal";
+import type { TaskDetailNavigation } from "#src/features/tasks/task-detail-panel";
 
 import type { AgentProfileTab } from "#src/features/agents/profile-panel/profile-panel-search";
 import type {
@@ -203,6 +204,12 @@ export type TaskPopupControls = {
   closeTask: () => void;
   /** The open Task was deleted from the popup, which then closes. */
   onTaskDeleted?: () => void;
-  /** The discussion message the popup opens at: an Activity card's first unread one. */
   landingMessageId?: string;
+  inline?: {
+    mode: "split" | "expanded";
+    expanded?: boolean;
+    onToggleExpand?: () => void;
+    navigation?: TaskDetailNavigation;
+    closeOnEscape?: boolean;
+  };
 };

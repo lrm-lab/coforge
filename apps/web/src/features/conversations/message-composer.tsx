@@ -297,7 +297,7 @@ export function MessageComposer({
   const taskMode = !inThread && Boolean(canSendAsTask);
   const sendDisabled =
     composerDisabled || uploading || anyFailed || (!body.trim() && attachments.length === 0);
-  const placeholder = composerPlaceholder(inThread, target);
+  const placeholder = scope?.placeholder ?? composerPlaceholder(inThread, target);
 
   function returnFocusToComposer() {
     completion.textareaRef.current?.focus({ preventScroll: true });

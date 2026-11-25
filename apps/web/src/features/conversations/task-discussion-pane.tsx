@@ -6,7 +6,8 @@ import { replyToTask } from "#src/features/tasks/task-conversation.functions";
 import { taskFollowQueryKey } from "#src/features/tasks/task-follow";
 import { ConversationPane } from "./conversation-pane";
 import { taskDraftKey } from "./composer-draft";
-import { ComposerScopeProvider, type ComposerScope } from "./composer-scope";
+import { ComposerScopeProvider, useComposerScope, type ComposerScope } from "./composer-scope";
+import { m } from "#src/paraglide/messages";
 import type { DirectConversationView } from "./conversation-types";
 import { ThreadLoadStatus, threadRootLoadOf } from "./thread-root-state";
 import { OpenUnreadHintContext } from "./use-conversation-open";
@@ -70,12 +71,22 @@ export function TaskDiscussionPane({
     changedAt,
     members: mentionables,
   });
+  const parentScope = useComposerScope();
   const scope = useMemo<ComposerScope>(
     () => ({
       draftKey: taskDraftKey(board.conversationId, board.number),
       uploadTo: () => (conversationId && seated ? Promise.resolve(conversationId) : ensure()),
+      placeholder: m.tasks_reply_placeholder({ number: String(board.number) }),
+      composerPortal: parentScope?.composerPortal,
     }),
-    [board.conversationId, board.number, conversationId, seated, ensure],
+    [
+      board.conversationId,
+      board.number,
+      conversationId,
+      seated,
+      ensure,
+      parentScope?.composerPortal,
+    ],
   );
   const unreadHint = useMemo(
     () =>

@@ -3,16 +3,23 @@ import { AnimatePresence } from "motion/react";
 import * as motion from "motion/react-m";
 
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
+import type { TaskDetailNavigation } from "#src/features/tasks/task-detail-panel";
 import type { useEdgeSwipeBack } from "#src/hooks/use-edge-swipe-back";
 import { DURATION_S, EASE_IN, EASE_OUT } from "#src/utils/motion-tokens";
 import { ActivityConversationPane, type ActivityPaneFlow } from "./activity-conversation-pane";
 import { ActivityInboxIdlePane } from "./activity-inbox-states";
 import { ActivityTaskPopup } from "./activity-task-popup";
 
+type TaskTarget = HostedConversationTarget & { task: number };
+
 export function ActivityInboxDetailPane({
   desktop,
   pane,
-  taskAlone,
+  inlineTask,
+  phoneTask,
+  isTaskExpanded,
+  onToggleTaskExpand,
+  taskNavigation,
   paneFlow,
   emptyState,
   reduced,
@@ -23,7 +30,11 @@ export function ActivityInboxDetailPane({
 }: {
   desktop: boolean;
   pane: HostedConversationTarget | undefined;
-  taskAlone: (HostedConversationTarget & { task: number }) | undefined;
+  inlineTask: TaskTarget | undefined;
+  phoneTask: TaskTarget | undefined;
+  isTaskExpanded: boolean;
+  onToggleTaskExpand: () => void;
+  taskNavigation: TaskDetailNavigation | undefined;
   paneFlow: ActivityPaneFlow | undefined;
   emptyState: ReactNode;
   reduced: boolean;
@@ -35,7 +46,19 @@ export function ActivityInboxDetailPane({
   return (
     <>
       {desktop ? (
-        pane ? (
+        inlineTask ? (
+          <ActivityTaskPopup
+            key={inlineTask.id}
+            target={inlineTask}
+            onOpen={onOpen}
+            onClose={onClose}
+            inline
+            expanded={isTaskExpanded}
+            onToggleExpand={onToggleTaskExpand}
+            navigation={taskNavigation}
+            flow={paneFlow}
+          />
+        ) : pane ? (
           <ActivityConversationPane
             key={`${pane.kind}:${pane.id}`}
             target={pane}
@@ -86,10 +109,10 @@ export function ActivityInboxDetailPane({
           )}
         </AnimatePresence>
       )}
-      {taskAlone && (
+      {phoneTask && (
         <ActivityTaskPopup
-          key={`${taskAlone.id}:${taskAlone.task}`}
-          target={taskAlone}
+          key={phoneTask.id}
+          target={phoneTask}
           onOpen={onOpen}
           onClose={onClose}
         />

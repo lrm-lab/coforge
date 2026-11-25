@@ -1,19 +1,34 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 import { useSearch } from "@tanstack/react-router";
 import { MessageSquare01 as MessageSquare } from "@untitledui/icons";
 
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { AgentProfilePanel } from "#src/features/agents/profile-panel/agent-profile-panel";
 import { PersonProfilePanel } from "#src/features/agents/person-profile-panel";
 import { resolveVisibleConversationSlot } from "#src/features/agents/profile-panel/profile-panel-slot";
 import { TaskDetailDialog } from "#src/features/tasks/task-detail-dialog";
+import {
+  TaskDetailPanel,
+  TaskNavigationRegistrationContext,
+  type TaskDetailNavigation,
+} from "#src/features/tasks/task-detail-panel";
 import { useOpenRelatedTask } from "#src/features/tasks/use-open-related-task";
 import { ConversationTaskDemand } from "#src/features/tasks/conversation-task-demand";
 import { useNumberedTask } from "#src/features/tasks/use-conversation-tasks";
 import { ownsDiscussion } from "#src/features/tasks/task-follow";
 import { useTaskPopupProfile } from "#src/features/tasks/task-popup-profile";
 
+import { ComposerScopeProvider, useComposerScope, type ComposerScope } from "./composer-scope";
 import { ConversationPane } from "./conversation-pane";
 import { SeenByDirectory } from "./message-seen-by";
 import { useConversationDetailVisible } from "./conversation-navigation";
@@ -38,14 +53,8 @@ import { resolveConversationThreadRoot } from "./conversation-thread-search";
 import type { DirectConversationView, ThreadedConversationProps } from "./conversation-types";
 import { useConversationChannels } from "./use-conversation-channels";
 
-/** No messages whose Tasks to read. */
 const NO_MESSAGES: DirectConversationView["messages"] = [];
 
-/**
- * A conversation is rendered in the browser only, and this does not check it: Chat's routes are
- * `ssr: false`, and the hosted pane and the Tasks page's Task popup (`OverviewTaskPopup`) mount it
- * under `ClientOnly`. Its collections fail if it is ever reached on the server.
- */
 export function ThreadedConversation(props: ThreadedConversationProps) {
   return (
     <ConversationIdProvider conversationId={props.conversation.conversationId}>
@@ -68,8 +77,6 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     onAgentProfileTabChange,
     onCloseAgentProfile,
     onLoadMessageAround,
-    // Held out of `conversationProps` so the thread panes (which spread it) never receive it:
-    // only the main pane may advance the conversation-level read cursor.
     onReadLatest,
     conversationName,
     tasksPane,
@@ -81,36 +88,42 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     onJumpMessageConsumed,
     ...conversationProps
   } = props;
+  const desktop = useBreakpoint("lg");
   const detailVisible = useConversationDetailVisible();
   const standaloneThread = useStandaloneThread();
   const { searchThreadRootId, openThread, openThreadFromHash, closeThread, showThreadRoot } =
     useOpenConversationThread();
-  // The Saved view's `?message=` position jump reads its search state here, next to the
-  // thread's — the wrapper owns the router so `ConversationPane` below stays hook-free.
   const { jumpMessageId, clearJumpMessage } = useConversationPositionJump();
-  // An open thread keeps its last-seen root. The bounded window drops a root's page when the main
-  // stream is scrolled far enough; the thread pane then keeps showing the thread's root as it was
-  // (its replies are the thread's own Query, which the window does not bound) rather than going
-  // blank or reloading the stream around the root.
   const threadRoots = useRef(new Map<string, DirectConversationView["messages"][number]>());
   const { channelList, channelNames, formatPreviewBody } = useConversationChannels(
     channels,
     conversation.mentionables,
   );
+  const focus = useConversationFocus();
   const conversationTaskPopup = useOpenConversationTask();
   const {
     openTaskNumber,
-    openTask: openTaskReference,
+    openTask: rawOpenTaskReference,
     closeTask: closeTaskReference,
   } = taskPopup ?? conversationTaskPopup;
+  const openTaskReference = useCallback(
+    (number: number) => {
+      if (desktop && !taskPopup && focus?.focused === "chat") focus.toggle("chat");
+      rawOpenTaskReference(number);
+    },
+    [desktop, taskPopup, focus, rawOpenTaskReference],
+  );
   const openTask = useNumberedTask(conversation.conversationId, openTaskNumber) ?? taskPopup?.task;
   const openRelatedTask = useOpenRelatedTask({
     channels: channelList,
     openHere: openTaskReference,
     openIn: taskPopup?.openTaskIn,
   });
-  // A Task with a conversation of its own, or made without a message (one nobody has spoken about
-  // yet), shows that conversation, never a message's thread.
+  const [taskExpanded, setTaskExpanded] = useState(false);
+  const [registeredTaskNav, setRegisteredTaskNav] = useState<TaskDetailNavigation | undefined>(
+    undefined,
+  );
+  const isTaskExpanded = Boolean(openTask) && taskExpanded;
   const taskDiscussionId = openTask?.discussionConversationId ?? undefined;
   const ownDiscussion = Boolean(openTask && ownsDiscussion(openTask));
   const [earlierOf, setEarlierOf] = useState<string>();
@@ -135,14 +148,15 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     strict: false,
     select: (search) => typeof search.doc === "string",
   });
+  const taskInSplit = !taskPopup && desktop && Boolean(openTask);
   const visibleSlot = resolveVisibleConversationSlot({
     threadOpen: Boolean(selected),
     profileOpen,
     detailsOpen: Boolean(detailsOpen && detailsPane),
+    taskOpen: taskInSplit,
     docOpen: docOpen && standaloneThread === null,
   });
   const threadPaneVisible = (rootId: string) => visibleSlot === "thread" && selected === rootId;
-  const focus = useConversationFocus();
   const threadInView =
     openTaskRoot?.id ??
     (detailVisible && focus?.focused !== "chat" && visibleSlot === "thread" ? selected : undefined);
@@ -187,7 +201,51 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     media: <MessageSquare aria-hidden="true" className="size-6 text-tertiary" />,
   };
   const popupProfile = useTaskPopupProfile(openTask?.id);
-  const dialog = openTask ? (
+  const taskThread =
+    openTask && (ownDiscussion || openTaskMessageId !== undefined)
+      ? (lead: ReactNode) => {
+          const head = earlier ? (
+            <>
+              {lead}
+              <TaskEarlierDiscussion
+                replyCount={earlier.replyCount}
+                open={earlierOpen}
+                onOpenChange={(open) => setEarlierOf(open ? openTask.id : undefined)}
+              />
+            </>
+          ) : (
+            lead
+          );
+          if (ownDiscussion && !earlierOpen)
+            return (
+              <TaskDiscussionPane
+                {...sidePaneProps}
+                jumpMessage={taskPopup?.landingMessageId}
+                {...popupProfile.openers}
+                lead={head}
+                conversationId={taskDiscussionId}
+                board={{ conversationId: conversation.conversationId, number: openTask.number }}
+                changedAt={openTask.updatedAt}
+                mentionables={conversation.mentionables}
+                emptyState={taskRepliesEmpty}
+              />
+            );
+          return (
+            openTaskRoot && (
+              <LegacyTaskThreadPane
+                taskNumber={openTask.number}
+                paneProps={threadPaneProps(openTaskRoot)}
+                openers={popupProfile.openers}
+                lead={head}
+                readOnlyNotice={ownDiscussion ? <></> : undefined}
+                emptyState={taskRepliesEmpty}
+              />
+            )
+          );
+        }
+      : undefined;
+
+  const taskDialog = openTask ? (
     <TaskDetailDialog
       key={openTask.id}
       task={openTask}
@@ -200,52 +258,30 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
       conversationName={conversationName}
       members={conversation.mentionables}
       currentMemberId={conversation.senderMemberId || null}
-      thread={
-        ownDiscussion || openTaskMessageId !== undefined
-          ? (lead) => {
-              const head = earlier ? (
-                <>
-                  {lead}
-                  <TaskEarlierDiscussion
-                    replyCount={earlier.replyCount}
-                    open={earlierOpen}
-                    onOpenChange={(open) => setEarlierOf(open ? openTask.id : undefined)}
-                  />
-                </>
-              ) : (
-                lead
-              );
-              if (ownDiscussion && !earlierOpen)
-                return (
-                  <TaskDiscussionPane
-                    {...sidePaneProps}
-                    jumpMessage={taskPopup?.landingMessageId}
-                    {...popupProfile.openers}
-                    lead={head}
-                    conversationId={taskDiscussionId}
-                    board={{ conversationId: conversation.conversationId, number: openTask.number }}
-                    changedAt={openTask.updatedAt}
-                    mentionables={conversation.mentionables}
-                    emptyState={taskRepliesEmpty}
-                  />
-                );
-              return (
-                openTaskRoot && (
-                  <ThreadPane
-                    {...threadPaneProps(openTaskRoot)}
-                    {...popupProfile.openers}
-                    inTaskPopup
-                    lead={head}
-                    readOnlyNotice={ownDiscussion ? <></> : undefined}
-                    emptyState={taskRepliesEmpty}
-                  />
-                )
-              );
-            }
-          : undefined
-      }
+      thread={taskThread}
     />
   ) : null;
+
+  const inlineTaskPanel =
+    openTask && taskPopup?.inline ? (
+      <TaskDetailPanel
+        key={openTask.id}
+        task={openTask}
+        mode={taskPopup.inline.mode}
+        expanded={taskPopup.inline.expanded}
+        onToggleExpand={taskPopup.inline.onToggleExpand}
+        navigation={taskPopup.inline.navigation}
+        closeOnEscape={taskPopup.inline.closeOnEscape}
+        onClose={closeTaskReference}
+        onDeleted={taskPopup.onTaskDeleted}
+        onOpenRelated={openRelatedTask}
+        conversationName={conversationName}
+        members={conversation.mentionables}
+        currentMemberId={conversation.senderMemberId || null}
+        thread={taskThread}
+      />
+    ) : null;
+
   const taskLayer = (
     <>
       <ConversationTaskDemand
@@ -256,11 +292,11 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
         readWindow={!taskPopup}
         openTaskNumber={openTaskNumber}
       />
-      {dialog}
+      {taskPopup?.inline ? inlineTaskPanel : !taskInSplit ? taskDialog : null}
       {popupProfile.layer}
     </>
   );
-  /** A thread's root: as loaded, else as last seen while it was open. */
+
   const threadRootOf = (rootId: string) =>
     conversation.messages.find((message) => message.id === rootId) ??
     threadRoots.current.get(rootId);
@@ -275,17 +311,12 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     attemptedRootLoad.current = selected;
     void loadThreadRoot(selected);
   }, [selected, selectedThreadKnown, loadThreadRoot]);
-  // The selected thread's first message has not been seen: the window around the root is read, as
-  // for any fresh open, and the thread slot says so while it is, and why if the read failed —
-  // instead of opening an empty pane. Only a read's failure is kept: a read that succeeded centres
-  // the window on the root, so until the root shows up it is loading.
   const selectedRootLoad: ThreadRootLoad | undefined =
     selected && !selectedThreadKnown
       ? threadRootFailure?.rootId === selected
         ? threadRootFailure.load
         : { status: "loading" }
       : undefined;
-  // What the stream's thread summaries read, each by its own root (`thread-summary.tsx`).
   const threadState = useMemo(
     () => ({
       conversationId: conversation.conversationId,
@@ -295,7 +326,6 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     [conversation.conversationId, conversation.threads, formatPreviewBody],
   );
   const threads = useConversationThreadStore(threadState);
-  // Records each open thread's root while it is loaded (see `threadRoots`).
   useEffect(() => {
     const roots = threadRoots.current;
     for (const rootId of roots.keys()) if (!visited.includes(rootId)) roots.delete(rootId);
@@ -304,12 +334,9 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
       if (root) roots.set(rootId, root);
     }
   }, [visited, conversation.messages]);
-  // A host showing the thread alone (Activity) closes its own pane with the thread, and swaps the
-  // thread for the conversation on "View in channel".
   const threadAlone = standaloneThread !== null;
   const threadClose = standaloneThread?.onClose ?? closeThread;
   const viewInConversation = standaloneThread?.onViewInConversation ?? showThreadRoot;
-  // Outside the conversation's page only its Task popup shows; the panes stay unmounted.
   if (taskPopup) return taskLayer;
   const conversationMainPane = (
     <ThreadStoreProvider store={threads}>
@@ -333,6 +360,25 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
   const conversationSidePane = visibleSlot && (
     <>
       {visibleSlot === "details" && detailsPane}
+      {visibleSlot === "task" && openTask && (
+        <TaskDetailPanel
+          key={openTask.id}
+          task={openTask}
+          mode={isTaskExpanded ? "expanded" : "split"}
+          expanded={isTaskExpanded}
+          onToggleExpand={() => setTaskExpanded((current) => !current)}
+          navigation={registeredTaskNav}
+          onClose={() => {
+            setTaskExpanded(false);
+            closeTaskReference();
+          }}
+          onOpenRelated={openRelatedTask}
+          conversationName={conversationName}
+          members={conversation.mentionables}
+          currentMemberId={conversation.senderMemberId || null}
+          thread={taskThread}
+        />
+      )}
       {visibleSlot === "profile" && profileAgentId && (
         <AgentProfilePanel
           agentId={profileAgentId}
@@ -349,7 +395,6 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
           onClose={() => onCloseAgentProfile?.()}
         />
       )}
-      {/* Thread panes stay mounted under the profile so drafts and scroll survive. */}
       {visited.map((rootId) => {
         const root = threadRootOf(rootId);
         if (!root) return null;
@@ -399,15 +444,61 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     </>
   );
   return (
-    <>
+    <TaskNavigationRegistrationContext.Provider value={setRegisteredTaskNav}>
       <ConversationSplit
         main={tasksPane ?? conversationMainPane}
         side={conversationSidePane}
         visibleSlot={visibleSlot}
         threadAlone={threadAlone}
         focused={focus?.focused}
+        sideExpanded={visibleSlot === "task" && isTaskExpanded}
       />
       {taskLayer}
-    </>
+    </TaskNavigationRegistrationContext.Provider>
+  );
+}
+
+function LegacyTaskThreadPane({
+  taskNumber,
+  paneProps,
+  openers,
+  lead,
+  readOnlyNotice,
+  emptyState,
+}: {
+  taskNumber: number;
+  paneProps: Omit<
+    ComponentProps<typeof ThreadPane>,
+    | "inTaskPopup"
+    | "lead"
+    | "readOnlyNotice"
+    | "emptyState"
+    | "onOpenAgentProfile"
+    | "onOpenPersonProfile"
+  >;
+  openers: ReturnType<typeof useTaskPopupProfile>["openers"];
+  lead: ReactNode;
+  readOnlyNotice?: ReactNode;
+  emptyState: ComponentProps<typeof ThreadPane>["emptyState"];
+}) {
+  const parentScope = useComposerScope();
+  const scope = useMemo<ComposerScope>(
+    () => ({
+      placeholder: m.tasks_reply_placeholder({ number: String(taskNumber) }),
+      composerPortal: parentScope?.composerPortal,
+    }),
+    [taskNumber, parentScope?.composerPortal],
+  );
+  return (
+    <ComposerScopeProvider value={scope}>
+      <ThreadPane
+        {...paneProps}
+        {...openers}
+        inTaskPopup
+        lead={lead}
+        readOnlyNotice={readOnlyNotice}
+        emptyState={emptyState}
+      />
+    </ComposerScopeProvider>
   );
 }

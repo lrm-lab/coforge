@@ -44,8 +44,29 @@ describe("resolveVisibleConversationSlot", () => {
         threadOpen: true,
         profileOpen: true,
         detailsOpen: true,
+        taskOpen: true,
         docOpen: true,
       }),
     ).toBeUndefined();
+  });
+
+  test("shows task when taskOpen is true, taking precedence over thread and profile but not details", () => {
+    expect(
+      resolveVisibleConversationSlot({ threadOpen: false, profileOpen: false, taskOpen: true }),
+    ).toBe("task");
+    expect(
+      resolveVisibleConversationSlot({ threadOpen: true, profileOpen: false, taskOpen: true }),
+    ).toBe("task");
+    expect(
+      resolveVisibleConversationSlot({ threadOpen: false, profileOpen: true, taskOpen: true }),
+    ).toBe("task");
+    expect(
+      resolveVisibleConversationSlot({
+        threadOpen: false,
+        profileOpen: false,
+        detailsOpen: true,
+        taskOpen: true,
+      }),
+    ).toBe("details");
   });
 });

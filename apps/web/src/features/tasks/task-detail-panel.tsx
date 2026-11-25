@@ -1,42 +1,75 @@
 import type { TaskView } from "@lrm/coforge-sdk/internal";
-import { MemberDirectory } from "#src/features/conversations/member-directory";
-import { ArrowUp, DotsHorizontal as MoreHorizontal, XClose } from "@untitledui/icons";
+import {
+  ArrowUp,
+  ChevronDown,
+  ChevronUp,
+  DotsHorizontal as MoreHorizontal,
+  Maximize02,
+  Minimize02,
+  XClose,
+} from "@untitledui/icons";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import {
+  createContext,
   useCallback,
+  useContext,
+  useEffect,
+  useRef,
   useState,
-  type ComponentProps,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
 import { Heading } from "react-aria-components";
 
-import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { MemberDirectory } from "#src/features/conversations/member-directory";
 import type { Mentionable } from "#src/features/conversations/mention-text";
 import { useMediaQuery } from "#src/hooks/use-media-query";
+import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
+import { OPEN_OVERLAY_SELECTOR } from "#src/lib/open-overlay";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { TaskTrail } from "./task-trail";
 import { taskDeleteMenuItem, useCanDeleteTask, useDeleteTask } from "./task-delete";
-import type { VisibleTaskName } from "./task-relation-edits";
-import { taskRelationMenuItems } from "./task-relation-lines";
-import { TaskHistoryPage, TaskSubtasks } from "./task-detail-sections";
 import { TaskDescription } from "./task-description";
-import { TaskSection, type RelationPicker } from "./task-section";
+import { TaskHistoryPage, TaskSubtasks } from "./task-detail-sections";
 import { ownsDiscussion, taskFollowMenuItem, useTaskFollow } from "./task-follow";
 import { useTaskLeadScroll } from "./task-lead-scroll";
 import { isTaskStep } from "./task-popup-steps";
-import { useTaskDialogTransition } from "./use-task-dialog-transition";
+import type { VisibleTaskName } from "./task-relation-edits";
+import { taskRelationMenuItems } from "./task-relation-lines";
+import { TaskSection, type RelationPicker } from "./task-section";
+import { TaskTrail } from "./task-trail";
 import { useTaskRelationAccess, type DetailCommand } from "./use-task-relations";
 
-export type TaskDetailDialogProps = {
+export type TaskDetailMode = "split" | "expanded" | "sheet" | "drawer";
+
+export type TaskDetailNavigation = {
+  hasPrev: boolean;
+  hasNext: boolean;
+  onPrev: () => void;
+  onNext: () => void;
+};
+
+type TaskNavigationSetter = (navigation: TaskDetailNavigation | undefined) => void;
+
+export const TaskNavigationRegistrationContext = createContext<TaskNavigationSetter | null>(null);
+
+export function useRegisterTaskNavigation(navigation: TaskDetailNavigation | undefined) {
+  const register = useContext(TaskNavigationRegistrationContext);
+  useEffect(() => {
+    if (!register) return;
+    register(navigation);
+    return () => register(undefined);
+  }, [register, navigation]);
+}
+
+export type TaskDetailPanelProps = {
   task: TaskView;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  mode: TaskDetailMode;
+  onClose: () => void;
   onCommand?: (command: DetailCommand) => Promise<void>;
   onDeleted?: () => void;
   conversationName?: string;
@@ -44,14 +77,23 @@ export type TaskDetailDialogProps = {
   currentMemberId: string | null;
   thread?: (lead: ReactNode) => ReactNode;
   onOpenRelated?: (task: VisibleTaskName) => void;
+  navigation?: TaskDetailNavigation;
+  expanded?: boolean;
+  onToggleExpand?: () => void;
+  detent?: "half" | "full";
+  onToggleDetent?: () => void;
+  onBeforeOpenPicker?: () => void;
+  active?: boolean;
+  closeOnEscape?: boolean;
+  titleSlot?: string;
 };
 
-const PHONE_BAR_BUTTON = "max-sm:size-11 max-sm:justify-center";
+const SHEET_BAR_BUTTON = "size-11 justify-center";
 
-export function TaskDetailPanel({
+export function useTaskDetailModel({
   task,
-  open,
-  onOpenChange,
+  mode,
+  onClose,
   onCommand,
   onDeleted,
   conversationName,
@@ -59,73 +101,101 @@ export function TaskDetailPanel({
   currentMemberId,
   thread,
   onOpenRelated,
-}: TaskDetailDialogProps) {
+  navigation,
+  expanded = false,
+  onToggleExpand,
+  detent,
+  onToggleDetent,
+  onBeforeOpenPicker,
+  active = true,
+  closeOnEscape = true,
+  titleSlot,
+}: TaskDetailPanelProps) {
   const deleteTask = useDeleteTask({
     task,
     onCommand,
     onDeleted: () => {
-      onOpenChange(false);
+      onClose();
       onDeleted?.();
     },
   });
-  const [picker, setPicker] = useState<RelationPicker | null>(null);
+  const [picker, setPickerState] = useState<RelationPicker | null>(null);
   const [history, setHistory] = useState(false);
   const canDelete = useCanDeleteTask(task, currentMemberId);
   const relations = useTaskRelationAccess(task, currentMemberId);
-  const follow = useTaskFollow(task, open && Boolean(thread) && ownsDiscussion(task));
-  const sidebar = useMediaQuery("(min-width: 64rem)", true);
+  const follow = useTaskFollow(task, active && Boolean(thread) && ownsDiscussion(task));
+  const wide = useMediaQuery("(min-width: 64rem)", true);
+  const sidebar = mode === "expanded" && wide;
+  const reduced = usePrefersReducedMotion();
   const router = useRouter();
   const step = useRouterState({ select: (state) => isTaskStep(state.location) });
   const stepBack = step ? () => router.history.back() : undefined;
-  const stepOnEscape = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "Escape") return;
-    if (event.defaultPrevented) return event.stopPropagation();
-    if ((!step && !history) || event.nativeEvent.isComposing || event.keyCode === 229) return;
-    if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return;
-    event.preventDefault();
-    if (history) setHistory(false);
-    else router.history.back();
-  };
-  const {
-    reduced,
-    modalContentRef,
-    titleRef,
-    contentVisible,
-    dragStyle,
-    requestClose,
-    handleOpenChange,
-    headerDragProps,
-  } = useTaskDialogTransition({
-    taskId: task.id,
-    taskNumber: task.number,
-    open,
-    onOpenChange,
-  });
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const setPicker = useCallback(
+    (next: RelationPicker | null) => {
+      if (next !== null) onBeforeOpenPicker?.();
+      setPickerState(next);
+    },
+    [onBeforeOpenPicker],
+  );
 
   const { setTitleElement, scrolledOut, canScrollToTop, scrollToTop } = useTaskLeadScroll({
-    boundaryRef: modalContentRef,
+    boundaryRef: rootRef,
     reducedMotion: reduced,
   });
   const showBackToTop = canScrollToTop && !history;
-  const setTitleNode = useCallback(
-    (node: HTMLHeadingElement | null) => {
-      titleRef.current = node;
-      setTitleElement(node);
+
+  const handleEscape = useCallback(
+    (allowClose: boolean) => {
+      if (history) {
+        setHistory(false);
+        return true;
+      }
+      if (stepBack) {
+        stepBack();
+        return true;
+      }
+      if (expanded && onToggleExpand) {
+        onToggleExpand();
+        return true;
+      }
+      if (allowClose) {
+        onClose();
+        return true;
+      }
+      return false;
     },
-    [titleRef, setTitleElement],
+    [history, stepBack, expanded, onToggleExpand, onClose],
+  );
+
+  const onKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "Escape") return;
+      if (event.defaultPrevented) {
+        event.stopPropagation();
+        return;
+      }
+      if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+      if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return;
+      const isInline = mode === "split" || mode === "expanded";
+      const handled = handleEscape(isInline && closeOnEscape);
+      if (handled) event.preventDefault();
+    },
+    [mode, closeOnEscape, handleEscape],
   );
 
   useHotkey(
     "Escape",
     (event) => {
       if (event.target !== document.body && event.target !== document.documentElement) return;
-      event.preventDefault();
-      if (history) setHistory(false);
-      else if (stepBack) stepBack();
-      else requestClose();
+      if (document.querySelector(OPEN_OVERLAY_SELECTOR) !== null) return;
+      const handled = handleEscape(closeOnEscape);
+      if (handled) event.preventDefault();
     },
-    { enabled: open, preventDefault: false },
+    { enabled: active && (mode === "split" || mode === "expanded"), preventDefault: false },
   );
+
   const section = (
     <TaskSection
       layout={sidebar ? "sidebar" : "chips"}
@@ -139,18 +209,24 @@ export function TaskDetailPanel({
     />
   );
   const description = task.description?.trim();
+  const isSheet = mode === "sheet";
   const lead = (
-    <div className="flex flex-col gap-5 px-4 pt-4 pb-6 sm:px-8 sm:pt-6">
+    <div
+      className={cn(
+        "flex flex-col gap-5",
+        sidebar ? "px-8 pt-6 pb-6" : isSheet ? "px-4 pt-3 pb-6" : "px-5 pt-4 pb-6",
+      )}
+    >
       <div className="flex flex-col gap-3">
         <Heading
-          ref={setTitleNode}
-          slot="title"
+          ref={setTitleElement}
+          slot={titleSlot}
           level={2}
           className="text-xl font-semibold break-words text-primary"
         >
           {task.title}
         </Heading>
-        {!sidebar && <div className="-mx-4 sm:-mx-8 sm:[&_dl]:px-8">{section}</div>}
+        {!sidebar && <div className={cn(isSheet ? "-mx-4" : "-mx-5 [&_dl]:px-5")}>{section}</div>}
       </div>
       {description && <TaskDescription text={description} />}
       {task.subtasks && (
@@ -164,141 +240,165 @@ export function TaskDetailPanel({
     </div>
   );
   const discussion = thread?.(lead);
-  return (
-    <>
-      <TaskPopupOverlay
-        isOpen={open}
-        onOpenChange={handleOpenChange}
-        keyboardDismiss={!step && !history}
-      >
-        <Modal
-          style={dragStyle}
+
+  const header = (
+    <div
+      className={cn(
+        "flex shrink-0 items-center gap-1",
+        isSheet ? "w-full min-w-0" : "h-12 border-b border-secondary pe-3 ps-2 sm:ps-3",
+      )}
+    >
+      {navigation && !isSheet && (
+        <div className="flex shrink-0 items-center">
+          <ButtonUtility
+            icon={ChevronUp}
+            size="sm"
+            color="tertiary"
+            tooltip={m.tasks_panel_prev()}
+            isDisabled={!navigation.hasPrev}
+            onClick={navigation.onPrev}
+          />
+          <ButtonUtility
+            icon={ChevronDown}
+            size="sm"
+            color="tertiary"
+            tooltip={m.tasks_panel_next()}
+            isDisabled={!navigation.hasNext}
+            onClick={navigation.onNext}
+          />
+        </div>
+      )}
+      <TaskTrail
+        task={task}
+        conversationName={conversationName}
+        onBack={stepBack}
+        onOpenRelated={onOpenRelated}
+        onScrollToTop={scrolledOut && !history ? scrollToTop : undefined}
+      />
+      {showBackToTop && (
+        <Button
+          aria-label={m.tasks_scroll_to_top()}
+          color="tertiary"
+          size="sm"
+          iconLeading={ArrowUp}
+          onPress={scrollToTop}
           className={cn(
-            "flex h-full w-full flex-col overflow-hidden rounded-none max-sm:overflow-hidden max-sm:shadow-none max-sm:safe-area-padding",
-            !reduced && "animate-none!",
-            thread ? "sm:h-[min(92vh,52rem)]" : "sm:h-auto sm:max-h-[min(92vh,64rem)]",
-            sidebar ? "sm:w-[min(68rem,calc(100vw-2rem))]" : "sm:w-[min(48rem,calc(100vw-2rem))]",
+            "shrink-0 gap-1 px-1.5 text-xs font-medium whitespace-nowrap *:data-icon:size-4",
+            isSheet && "h-11",
           )}
         >
-          <div ref={modalContentRef} className="contents" onKeyDown={stepOnEscape}>
-            <Dialog className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div
-                {...headerDragProps}
-                className="flex shrink-0 items-center gap-1 pt-2 pe-3 ps-2 max-sm:h-11 max-sm:touch-none max-sm:gap-0 max-sm:p-0 sm:ps-4"
-              >
-                <TaskTrail
-                  task={task}
-                  conversationName={conversationName}
-                  onBack={stepBack}
-                  onOpenRelated={onOpenRelated}
-                  onScrollToTop={scrolledOut && !history ? scrollToTop : undefined}
-                />
-                {showBackToTop && (
-                  <Button
-                    aria-label={m.tasks_scroll_to_top()}
-                    color="tertiary"
-                    size="sm"
-                    iconLeading={ArrowUp}
-                    onPress={scrollToTop}
-                    className="shrink-0 gap-1 px-1.5 text-xs font-medium whitespace-nowrap max-sm:h-11 max-sm:w-24 max-xs:w-18 max-xs:flex-col max-xs:gap-0 *:data-icon:size-4"
-                  >
-                    {m.tasks_scroll_to_top()}
-                  </Button>
-                )}
-                <Dropdown.Root>
-                  <ButtonUtility
-                    tooltip={m.tasks_more_actions({ number: String(task.number) })}
-                    icon={MoreHorizontal}
-                    size="sm"
-                    color="tertiary"
-                    className={PHONE_BAR_BUTTON}
-                  />
-                  <Dropdown.Popover placement="bottom end">
-                    <Dropdown.Menu
-                      onAction={(key) => {
-                        if (key === "delete") void deleteTask();
-                        else if (key === "history") setHistory(true);
-                        else if (key === "parent" || key === "blocker" || key === "subtask")
-                          setPicker(key);
-                      }}
-                    >
-                      <Dropdown.Section>
-                        {taskRelationMenuItems({
-                          canEdit: relations.canEdit,
-                          canAddBlocker: relations.canAddBlocker,
-                          hasParent: task.parent != null,
-                        })}
-                      </Dropdown.Section>
-                      <Dropdown.Section className="border-t border-secondary pt-1">
-                        <Dropdown.Item id="history" label={m.tasks_full_history()} />
-                      </Dropdown.Section>
-                      {(follow || canDelete) && (
-                        <Dropdown.Section className="border-t border-secondary pt-1">
-                          {follow && taskFollowMenuItem(follow)}
-                          {canDelete && taskDeleteMenuItem()}
-                        </Dropdown.Section>
-                      )}
-                    </Dropdown.Menu>
-                  </Dropdown.Popover>
-                </Dropdown.Root>
-                <ButtonUtility
-                  icon={XClose}
-                  size="sm"
-                  color="tertiary"
-                  aria-label={m.tasks_close()}
-                  onClick={requestClose}
-                  className={cn(
-                    PHONE_BAR_BUTTON,
-                    "max-sm:order-first",
-                    showBackToTop && "max-sm:me-24 max-xs:me-18",
-                  )}
-                />
-              </div>
-              <div
-                className={cn(
-                  "flex min-h-0 flex-1 border-t border-secondary transition-opacity duration-200",
-                  contentVisible ? "opacity-100" : "opacity-0",
-                )}
-              >
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                  {history ? (
-                    <TaskHistoryPage
-                      task={task}
-                      members={members}
-                      onBack={() => setHistory(false)}
-                    />
-                  ) : discussion ? (
-                    <MemberDirectory members={members}>{discussion}</MemberDirectory>
-                  ) : (
-                    <div className="min-h-0 flex-1 overflow-y-auto">{lead}</div>
-                  )}
-                </div>
-                {sidebar && (
-                  <aside className="w-72 shrink-0 overflow-x-hidden overflow-y-auto border-s border-secondary bg-secondary_alt px-5 py-5">
-                    {section}
-                  </aside>
-                )}
-              </div>
-            </Dialog>
-          </div>
-        </Modal>
-      </TaskPopupOverlay>
-    </>
+          {m.tasks_scroll_to_top()}
+        </Button>
+      )}
+      <Dropdown.Root>
+        <ButtonUtility
+          tooltip={isSheet ? undefined : m.tasks_more_actions({ number: String(task.number) })}
+          {...(isSheet
+            ? { "aria-label": m.tasks_more_actions({ number: String(task.number) }) }
+            : {})}
+          icon={MoreHorizontal}
+          size="sm"
+          color="tertiary"
+          className={cn(isSheet && SHEET_BAR_BUTTON)}
+        />
+        <Dropdown.Popover placement="bottom end">
+          <Dropdown.Menu
+            onAction={(key) => {
+              if (key === "delete") void deleteTask();
+              else if (key === "history") setHistory(true);
+              else if (key === "parent" || key === "blocker" || key === "subtask") setPicker(key);
+            }}
+          >
+            <Dropdown.Section>
+              {taskRelationMenuItems({
+                canEdit: relations.canEdit,
+                canAddBlocker: relations.canAddBlocker,
+                hasParent: task.parent != null,
+              })}
+            </Dropdown.Section>
+            <Dropdown.Section className="border-t border-secondary pt-1">
+              <Dropdown.Item id="history" label={m.tasks_full_history()} />
+            </Dropdown.Section>
+            {(follow || canDelete) && (
+              <Dropdown.Section className="border-t border-secondary pt-1">
+                {follow && taskFollowMenuItem(follow)}
+                {canDelete && taskDeleteMenuItem()}
+              </Dropdown.Section>
+            )}
+          </Dropdown.Menu>
+        </Dropdown.Popover>
+      </Dropdown.Root>
+      {!isSheet && onToggleExpand && (
+        <ButtonUtility
+          icon={expanded ? Minimize02 : Maximize02}
+          size="sm"
+          color="tertiary"
+          tooltip={expanded ? m.tasks_panel_restore() : m.tasks_panel_expand()}
+          onClick={onToggleExpand}
+        />
+      )}
+      {isSheet && onToggleDetent && (
+        <ButtonUtility
+          icon={detent === "full" ? Minimize02 : Maximize02}
+          size="sm"
+          color="tertiary"
+          aria-label={detent === "full" ? m.tasks_sheet_collapse() : m.tasks_sheet_expand()}
+          onClick={onToggleDetent}
+          className={SHEET_BAR_BUTTON}
+        />
+      )}
+      <ButtonUtility
+        icon={XClose}
+        size="sm"
+        color="tertiary"
+        tooltip={isSheet ? undefined : m.tasks_close()}
+        {...(isSheet ? { "aria-label": m.tasks_close() } : {})}
+        onClick={onClose}
+        className={cn(isSheet && SHEET_BAR_BUTTON)}
+      />
+    </div>
   );
+
+  const body = (
+    <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        {history ? (
+          <TaskHistoryPage task={task} members={members} onBack={() => setHistory(false)} />
+        ) : discussion ? (
+          <MemberDirectory members={members}>{discussion}</MemberDirectory>
+        ) : (
+          <div className="min-h-0 flex-1 overflow-y-auto">{lead}</div>
+        )}
+      </div>
+      {sidebar && (
+        <aside className="w-72 shrink-0 overflow-x-hidden overflow-y-auto border-s border-secondary bg-secondary_alt px-5 py-5">
+          {section}
+        </aside>
+      )}
+    </div>
+  );
+
+  return {
+    rootRef,
+    header,
+    body,
+    onKeyDown,
+    keyboardDismiss: !step && !history && !expanded,
+    hasHistory: history,
+  };
 }
 
-function TaskPopupOverlay({
-  keyboardDismiss,
-  ...props
-}: Pick<ComponentProps<typeof ModalOverlay>, "isOpen" | "onOpenChange" | "children"> & {
-  keyboardDismiss: boolean;
-}) {
+export function TaskDetailPanel(props: TaskDetailPanelProps) {
+  const { rootRef, header, body, onKeyDown } = useTaskDetailModel(props);
   return (
-    <ModalOverlay
-      {...props}
-      isKeyboardDismissDisabled={!keyboardDismiss}
-      isDismissable
-      className="max-sm:items-stretch max-sm:px-0 max-sm:[--modal-pb:0rem] max-sm:[--modal-pt:0rem] max-sm:visible"
-    />
+    <section
+      ref={rootRef}
+      aria-label={m.tasks_details_title({ number: String(props.task.number) })}
+      onKeyDown={onKeyDown}
+      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-primary"
+    >
+      {header}
+      {body}
+    </section>
   );
 }

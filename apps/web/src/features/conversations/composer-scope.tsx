@@ -6,9 +6,10 @@ import { createContext, useContext } from "react";
  * makes the conversation only once a file is about to be uploaded to it.
  */
 export type ComposerScope = {
-  draftKey: string;
-  /** The conversation a file is uploaded to, made (with the writer's seat in it) on the first. */
-  uploadTo: () => Promise<string>;
+  draftKey?: string;
+  uploadTo?: () => Promise<string>;
+  placeholder?: string;
+  composerPortal?: HTMLElement | null;
 };
 
 const ComposerScopeContext = createContext<ComposerScope | undefined>(undefined);

@@ -79,12 +79,14 @@ export function ConversationSplit({
   visibleSlot,
   threadAlone,
   focused,
+  sideExpanded = false,
 }: {
   main: ReactNode;
   side: ReactNode;
   visibleSlot: ConversationSlot | undefined;
   threadAlone: boolean;
   focused?: FocusedPanel;
+  sideExpanded?: boolean;
 }) {
   const groupRef = useGroupRef();
   const threadLayout = useDefaultLayout({
@@ -95,7 +97,7 @@ export function ConversationSplit({
   });
   const reduced = usePrefersReducedMotion();
   const { splitRef, splitShown } = useResponsiveSplitLayout({
-    active: Boolean(visibleSlot) && !threadAlone,
+    active: Boolean(visibleSlot) && !threadAlone && !sideExpanded,
   });
 
   if (!splitShown || threadAlone) {
@@ -148,21 +150,23 @@ export function ConversationSplit({
         <Panel
           id="main"
           minSize={`${MAIN_PANE_MIN_REM}rem`}
-          hidden={focused === "thread"}
+          hidden={focused === "thread" || sideExpanded}
           className="flex min-h-0 min-w-0 flex-col"
         >
           {main}
         </Panel>
         {visibleSlot && (
           <>
-            {!focused && (
+            {!focused && !sideExpanded && (
               <Separator
                 aria-label={
                   visibleSlot === "thread"
                     ? m.conversation_thread()
                     : visibleSlot === "details"
                       ? m.channel_settings_resize()
-                      : m.agent_profile_resize()
+                      : visibleSlot === "task"
+                        ? m.tasks_panel_resize()
+                        : m.agent_profile_resize()
                 }
                 onDoubleClick={() =>
                   groupRef.current?.setLayout({
@@ -182,12 +186,15 @@ export function ConversationSplit({
               id={visibleSlot}
               defaultSize={`${SIDE_PANE_DEFAULT_PCT}`}
               minSize={`${SIDE_PANE_MIN_REM}rem`}
-              maxSize="60"
-              hidden={focused === "chat"}
+              maxSize={sideExpanded ? undefined : "60"}
+              hidden={focused === "chat" && !sideExpanded}
               className="flex min-h-0 min-w-0 flex-col"
             >
               <div
-                className={cn("flex min-h-0 min-w-0 flex-1 flex-col bg-primary", SIDE_PANE_ENTER)}
+                className={cn(
+                  "flex min-h-0 min-w-0 flex-1 flex-col bg-primary",
+                  !sideExpanded && SIDE_PANE_ENTER,
+                )}
               >
                 {side}
               </div>

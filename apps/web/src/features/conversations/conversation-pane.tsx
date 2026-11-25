@@ -1,5 +1,6 @@
 import { WorkspaceAssistantWelcome } from "./workspace-assistant-welcome";
 import { useCallback, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useLatestCallback } from "#src/hooks/use-latest-callback";
 
 import { useAppToast } from "#src/components/ui/toast";
@@ -23,6 +24,7 @@ import { groupSystemMessages } from "./system-message-groups";
 import { usePaneOutbox } from "./use-pane-outbox";
 import { ComposerEdgeOverlay } from "./composer-edge-overlay";
 import { useComposerHost } from "./composer-host";
+import { useComposerScope } from "./composer-scope";
 import { ConversationMessageList } from "./conversation-message-list";
 import { NewerSentinel } from "./conversation-newer-sentinel";
 import { isViewerMessage } from "./own-message";
@@ -166,6 +168,7 @@ export function ConversationPane({
   const narrow = Boolean(root) || inTaskPopup;
   const column = !inTaskPopup;
   const composerHost = useComposerHost(root?.id, inTaskPopup);
+  const composerScope = useComposerScope();
   const streamLoading = streamState(conversation.messages.length, streamRead) === "loading";
   const visibleMessages = useMemo(
     () => conversation.messages.filter((message) => message.weeklyReportHidden !== true),
@@ -215,6 +218,24 @@ export function ConversationPane({
   const cardMessages = useMemo(
     () => (root ? [root, ...visibleMessages] : visibleMessages),
     [root, visibleMessages],
+  );
+
+  const composerFooter = (
+    <ConversationComposerFooter
+      conversation={conversation}
+      root={root}
+      narrow={narrow}
+      column={column}
+      readOnlyNotice={readOnlyNotice}
+      mentionCompletion={mentionCompletion}
+      mentionMemberLimit={mentionMemberLimit}
+      composerTarget={composerTarget}
+      channels={channels}
+      onSend={onSend}
+      canSendAsTask={canSendAsTask}
+      autoFocus={composerHost.autoFocus}
+      hostRef={composerHost.composerRef}
+    />
   );
 
   return (
@@ -350,21 +371,9 @@ export function ConversationPane({
               />
             </div>
 
-            <ConversationComposerFooter
-              conversation={conversation}
-              root={root}
-              narrow={narrow}
-              column={column}
-              readOnlyNotice={readOnlyNotice}
-              mentionCompletion={mentionCompletion}
-              mentionMemberLimit={mentionMemberLimit}
-              composerTarget={composerTarget}
-              channels={channels}
-              onSend={onSend}
-              canSendAsTask={canSendAsTask}
-              autoFocus={composerHost.autoFocus}
-              hostRef={composerHost.composerRef}
-            />
+            {inTaskPopup && composerScope?.composerPortal
+              ? createPortal(composerFooter, composerScope.composerPortal)
+              : composerFooter}
           </div>
         </QuestionCardsHost>
       </MessageExpansionContext.Provider>

@@ -29,7 +29,8 @@ export function useActivityFlow({
   composerRef: RefObject<HTMLTextAreaElement | null>;
 }): ActivityListFlow | undefined {
   const follow = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const paneKey = pane && `${hostedConversationOpenParam(pane)}:${pane.threadRootId ?? ""}`;
+  const paneKey =
+    pane && `${hostedConversationOpenParam(pane)}:${pane.threadRootId ?? ""}:${pane.task ?? ""}`;
   useEffect(() => () => clearTimeout(follow.current), [flowing, paneKey]);
 
   const rowTarget = useLatestCallback((key: string) => {
@@ -44,7 +45,7 @@ export function useActivityFlow({
   const onMove = useLatestCallback((key: string) => {
     clearTimeout(follow.current);
     const target = rowTarget(key)?.target;
-    if (!target || target.taskAlone || target.attachmentId !== undefined) return;
+    if (!target || target.attachmentId !== undefined) return;
     follow.current = setTimeout(() => {
       if (!rowTarget(key)?.open) onOpen(target);
     }, FOLLOW_DELAY_MS);

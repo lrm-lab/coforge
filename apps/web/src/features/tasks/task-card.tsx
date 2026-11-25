@@ -1,5 +1,5 @@
 import type { TaskView } from "@lrm/coforge-sdk/internal";
-import { useRef, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useRef, type PointerEvent, type ReactNode } from "react";
 import { useHydrated } from "@tanstack/react-router";
 
 import { ProgressBarBase } from "#src/components/base/progress-indicators/progress-indicators";
@@ -137,6 +137,7 @@ export function TaskCard({
   controls,
   menu,
   list,
+  selected = false,
   onReach,
 }: {
   task: TaskView;
@@ -147,10 +148,15 @@ export function TaskCard({
   controls: TaskControls;
   menu?: ReactNode;
   list: boolean;
+  selected?: boolean;
   onReach?: () => void;
 }) {
   const cardRef = useRef<HTMLElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (!selected) return;
+    cardRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [selected]);
   const rememberCard = () => {
     if (cardRef.current) {
       rememberSharedRect(`task-frame:${task.id}`, cardRef.current);
@@ -191,9 +197,14 @@ export function TaskCard({
     return (
       <article
         ref={cardRef}
+        data-selected={selected ? "true" : undefined}
+        aria-current={selected ? "true" : undefined}
         onClickCapture={rememberCard}
         onPointerEnter={onPointerEnter}
-        className="relative flex min-h-10 items-center gap-3 px-4 py-1.5 transition-colors hover:bg-primary_hover any-pointer-coarse:min-h-11"
+        className={cn(
+          "relative flex min-h-10 items-center gap-3 px-4 py-1.5 transition-colors any-pointer-coarse:min-h-11",
+          selected ? "bg-active" : "hover:bg-primary_hover",
+        )}
       >
         <span className="hidden size-3.5 shrink-0 sm:flex">{priorityMark("size-3.5")}</span>
         <span className="hidden w-9 shrink-0 text-xs text-tertiary tabular-nums sm:block">
@@ -257,9 +268,16 @@ export function TaskCard({
   return (
     <article
       ref={cardRef}
+      data-selected={selected ? "true" : undefined}
+      aria-current={selected ? "true" : undefined}
       onClickCapture={rememberCard}
       onPointerEnter={onPointerEnter}
-      className="group relative flex flex-col gap-2.5 rounded-lg border border-secondary bg-primary p-3 transition-colors hover:border-primary"
+      className={cn(
+        "group relative flex flex-col gap-2.5 rounded-lg border bg-primary p-3 transition-colors",
+        selected
+          ? "border-brand bg-active ring-1 ring-brand ring-inset"
+          : "border-secondary hover:border-primary",
+      )}
     >
       <div className="flex h-5 items-center gap-1.5 text-xs tabular-nums">
         {source && (

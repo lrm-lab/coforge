@@ -1,0 +1,11 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "tasks_panel_expand": "放大",
+  "tasks_panel_restore": "还原分栏",
+  "tasks_panel_prev": "上一条任务",
+  "tasks_panel_next": "下一条任务",
+  "tasks_panel_resize": "调整任务分栏宽度",
+  "tasks_sheet_expand": "展开",
+  "tasks_sheet_collapse": "收起",
+  "tasks_reply_placeholder": "回复任务 #{number}…"
+}

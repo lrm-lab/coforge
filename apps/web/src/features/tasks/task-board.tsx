@@ -2,6 +2,7 @@ import {
   TASK_CREATE_STATUSES,
   TASK_WRITE_STATUSES,
   type TaskCreateStatus,
+  type TaskStatus,
   type TaskView,
 } from "@lrm/coforge-sdk/internal";
 
@@ -57,11 +58,23 @@ export type ConversationBoard = {
 
 const FINISHED: readonly FinishedStatus[] = ["done", "closed"];
 
+export function orderBoardTasks<T extends Pick<TaskView, "status">>(
+  tasks: readonly T[],
+  statuses: readonly TaskStatus[],
+): T[] {
+  const activeStatuses =
+    statuses.length > 0
+      ? TASK_WRITE_STATUSES.filter((status) => statuses.includes(status))
+      : TASK_WRITE_STATUSES;
+  return activeStatuses.flatMap((status) => tasks.filter((task) => task.status === status));
+}
+
 export function TaskBoard<T extends BoardTask>({
   tasks,
   finished,
   view,
   currentMemberId,
+  selectedTaskId,
   onOpenTask,
   renderTitle,
   onCommand,
@@ -75,6 +88,7 @@ export function TaskBoard<T extends BoardTask>({
   finished: FinishedTasks<T>;
   view: TaskBoardView;
   currentMemberId?: string | null;
+  selectedTaskId?: string;
   onOpenTask: (task: T) => void;
   renderTitle?: (task: T, title: ReactNode) => ReactNode;
   onCommand?: (task: T, command: OverviewTaskCommand) => Promise<void>;
@@ -288,6 +302,7 @@ export function TaskBoard<T extends BoardTask>({
                 controls={controls}
                 currentMemberId={memberIdFor(task)}
                 list={layout === "list"}
+                selected={selectedTaskId === task.id}
                 onOpenTask={openTask}
                 renderTitle={renderTitle}
                 onCommand={onCommand ? runCommand : undefined}
@@ -376,6 +391,7 @@ function BoardTaskCardContent<T extends BoardTask>({
   controls,
   currentMemberId,
   list,
+  selected,
   onOpenTask,
   renderTitle,
   onCommand: onTaskCommand,
@@ -388,6 +404,7 @@ function BoardTaskCardContent<T extends BoardTask>({
   controls: TaskControls;
   currentMemberId: string | null;
   list: boolean;
+  selected: boolean;
   onOpenTask: (task: T) => void;
   renderTitle?: (task: T, title: ReactNode) => ReactNode;
   onCommand?: (task: T, command: OverviewTaskCommand) => Promise<void>;
@@ -406,6 +423,7 @@ function BoardTaskCardContent<T extends BoardTask>({
     <TaskCard
       task={task}
       list={list}
+      selected={selected}
       onReach={onCommand && reach}
       renderTitle={(title) =>
         renderTitle ? (

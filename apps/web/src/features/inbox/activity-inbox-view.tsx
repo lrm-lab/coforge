@@ -45,7 +45,8 @@ import { ACTIVITY_LIST_BESIDE_FROM, type ActivityPaneFlow } from "./activity-con
 import { ActivityInboxDetailPane } from "./activity-inbox-detail-pane";
 import { useActivityFlow } from "./use-activity-flow";
 import { useKeptOpenRow } from "./use-kept-open-row";
-import { openedItemKey } from "./activity-open-target";
+import { openedItemKey, activityOpenTarget } from "./activity-open-target";
+import type { TaskDetailNavigation } from "#src/features/tasks/task-detail-panel";
 import { useActivityItemActions } from "./use-activity-item-actions";
 import { ActivityInboxRow } from "./activity-inbox-row";
 import { ActivityArtifactRow } from "./activity-artifact-row";
@@ -85,7 +86,11 @@ export function ActivityInboxView({
   const phone = !desktop;
   const taskAlone =
     opened?.taskAlone && opened.task !== undefined ? { ...opened, task: opened.task } : undefined;
-  const pane = taskAlone ? undefined : opened;
+  const inlineTask = desktop ? taskAlone : undefined;
+  const phoneTask = phone ? taskAlone : undefined;
+  const pane = desktop ? opened : taskAlone ? undefined : opened;
+  const [taskExpanded, setTaskExpanded] = useState(false);
+  const isTaskExpanded = Boolean(inlineTask) && taskExpanded;
   const { listContentRef, paneExiting, onOpen, onExitComplete } = usePhoneActivityScrollAnchor({
     phone,
     pane,
@@ -332,8 +337,31 @@ export function ActivityInboxView({
   const filterCounts = {
     unread: query.isPlaceholderData ? undefined : firstPage?.unreadItemCount,
     mentions: query.isPlaceholderData ? undefined : firstPage?.unreadMentionItemCount,
+    tasks: query.isPlaceholderData ? undefined : firstPage?.unreadTaskItemCount,
     artifacts: query.isPlaceholderData ? undefined : firstPage?.unreadArtifactItemCount,
   };
+  const taskNavigation = useMemo<TaskDetailNavigation | undefined>(() => {
+    if (!inlineTask || !currentKey) return undefined;
+    const openable = rows.filter((item) => item.kind === "conversation");
+    const index = openable.findIndex((item) => item.key === currentKey);
+    if (index < 0) return undefined;
+    const prev = openable[index - 1];
+    const next = openable[index + 1];
+    return {
+      hasPrev: Boolean(prev),
+      hasNext: Boolean(next),
+      onPrev: () => {
+        if (prev) onOpen(activityOpenTarget(prev));
+      },
+      onNext: () => {
+        if (next) onOpen(activityOpenTarget(next));
+      },
+    };
+  }, [inlineTask, currentKey, rows, onOpen]);
+  const handleClose = useCallback(() => {
+    setTaskExpanded(false);
+    onClose();
+  }, [onClose]);
   const moreActions = !query.isPlaceholderData &&
     firstPage &&
     filter !== "mentions" &&
@@ -393,6 +421,7 @@ export function ActivityInboxView({
       style={phoneListStyle}
       className={cn(
         "relative flex min-h-0 flex-col bg-primary max-lg:absolute max-lg:inset-0 max-lg:z-10 lg:relative lg:w-list-column lg:shrink-0",
+        isTaskExpanded && "lg:hidden",
         phone && (pane || paneExiting) && "will-change-transform",
         phone && pane && "pointer-events-none",
         pane && desktop && LIST_BESIDE_CLASSES[ACTIVITY_LIST_BESIDE_FROM].list,
@@ -464,13 +493,17 @@ export function ActivityInboxView({
       <ActivityInboxDetailPane
         desktop={desktop}
         pane={pane}
-        taskAlone={taskAlone}
+        inlineTask={inlineTask}
+        phoneTask={phoneTask}
+        isTaskExpanded={isTaskExpanded}
+        onToggleTaskExpand={() => setTaskExpanded((current) => !current)}
+        taskNavigation={taskNavigation}
         paneFlow={paneFlow}
         emptyState={emptyState}
         reduced={reduced}
         swipe={swipe}
         onOpen={onOpen}
-        onClose={onClose}
+        onClose={handleClose}
         onExitComplete={onExitComplete}
       />
     </div>

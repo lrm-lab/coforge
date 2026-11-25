@@ -93,20 +93,29 @@ These rules apply to `src/features/tasks/`.
   offered every status.
 - Overview membership metadata only controls which UI actions are offered;
   the server still authorizes each command.
-- The task popup (`task-detail-dialog.tsx`) offers only the status moves
-  `taskStatusOptions` (`task-move.ts`) allows; board drags keep every move the
-  server allows. Its thread comes from the Task's conversation: a
-  conversation page renders it, and the `/tasks` popup
-  (`overview-task-popup.tsx`) renders that conversation's own popup through
-  `ThreadedConversation`'s `taskPopup` mode. The Task (title, description, sub-tasks) is the
-  `lead` at the head of the discussion pane's own scroller, never a wrapper scroller around it,
-  so anchoring, the bottom pin and jumps keep working. The popup opens at the top; unread replies
-  show only as the new-messages pill, counted by the server, and the read position moves only when
-  the latest reply comes into view. Properties sit in a sidebar from 1024px, a chip row below it.
-  Full History is the ⋯ menu's, in place of the left column. Never build a second thread view
-  for a popup. A Task
-  whose message is outside the loaded window has its message read alone
-  (`useTaskPopupRoot`); opening a popup never replaces the stream's window.
+- Task Detail (`task-detail-panel.tsx`) is the shared container-agnostic core;
+  `task-detail-dialog.tsx` wraps it in `TaskDetentSheet` (`task-detent-sheet.tsx`,
+  64% ↔ 94% GPU-translated bottom sheet with pinned composer portal and
+  auto-expand before opening relation pickers) below `64rem` and a right-docked
+  drawer on desktop when opened standalone (e.g. `OtherTaskPopup`). On desktop
+  (`>= lg`), conversations host it in `ConversationSplit`'s `"task"` slot,
+  `WorkspaceTaskBoard` hosts it in a resizable split pane beside `TaskBoard`,
+  and `ActivityInboxView` renders it directly in the right preview pane with
+  `j`/`k`/`E`/`Esc` flow. It offers only the status moves `taskStatusOptions`
+  (`task-move.ts`) allows; board drags keep every move the server allows. Its
+  thread comes from the Task's conversation: a conversation page renders it, and
+  `OverviewTaskPopup` / `ActivityTaskPopup` render that conversation's own view
+  through `ThreadedConversation`'s `taskPopup` mode (passing `inline` on desktop
+  splits). The Task (title, description, sub-tasks) is the `lead` at the head of
+  the discussion pane's own scroller, never a wrapper scroller around it, so
+  anchoring, the bottom pin and jumps keep working. The panel opens at the top;
+  unread replies show only as the new-messages pill, counted by the server, and
+  the read position moves only when the latest reply comes into view. Properties
+  render as a chip row in split/sheet/drawer modes and move into a `w-72` right
+  sidebar when expanded (`⤢`) at `>= 64rem`. Full History is in the `⋯` menu,
+  in place of the left column. Never build a second thread view for a task. A
+  Task whose message is outside the loaded window has its message read alone
+  (`useTaskPopupRoot`); opening a task never replaces the stream's window.
 - `/tasks` names its open popup as `task=<conversationId>:<number>`
   (`task-overview-search.ts`); a conversation route's `task` is the bare
   number. Opening pushes a history entry, closing replaces it.

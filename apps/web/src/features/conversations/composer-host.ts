@@ -15,20 +15,17 @@ export type ComposerHost = {
   overhead?: ReactNode;
   composerRef?: RefObject<HTMLTextAreaElement | null>;
   showAgentActivity?: boolean;
+  forTask?: boolean;
 };
 
 const UNHOSTED: ComposerHost = { autoFocus: true };
 
 export const ComposerHostContext = createContext<ComposerHost>(UNHOSTED);
 
-/**
- * The host's asks of one pane's composer. They reach only the composer the host shows: the
- * conversation's, or the thread's when the thread is shown alone; a thread opened beside the
- * conversation, or a Task popup over it, keeps the usual composer.
- */
 export function useComposerHost(rootId: string | undefined, inTaskPopup: boolean): ComposerHost {
   const host = useContext(ComposerHostContext);
   const standalone = useStandaloneThread();
-  const hosted = !inTaskPopup && (rootId === undefined || standalone?.rootId === rootId);
+  if (inTaskPopup) return host.forTask ? host : UNHOSTED;
+  const hosted = rootId === undefined || standalone?.rootId === rootId;
   return hosted ? host : UNHOSTED;
 }
