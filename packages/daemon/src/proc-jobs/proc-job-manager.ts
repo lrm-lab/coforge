@@ -17,7 +17,7 @@ import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path
 import { systemdPresent } from "#src/daemon-host/detached";
 import {
   detectUserSystemdRun,
-  isVerifiedProcJobAlive,
+  procJobMayBeRunning,
   readProcJobIdentity,
   stopVerifiedProcJob,
 } from "#src/platform/proc-job-process";
@@ -57,6 +57,7 @@ export type ProcJobManagerOptions = {
   systemdRunAvailable?: () => Promise<boolean>;
   systemdPresentCheck?: () => boolean;
   readIdentity?: typeof readProcJobIdentity;
+  retainSampledProcessGroup?: boolean;
 };
 
 export class ProcJobManager {
@@ -75,6 +76,7 @@ export class ProcJobManager {
       | "sweepIntervalMs"
       | "systemdRunAvailable"
       | "systemdPresentCheck"
+      | "retainSampledProcessGroup"
     >
   >;
   readonly #readIdentity?: typeof readProcJobIdentity;
@@ -106,6 +108,7 @@ export class ProcJobManager {
         options.systemdRunAvailable ??
         (() => (cachedSystemdRun ??= detectUserSystemdRun(platform))),
       systemdPresentCheck: options.systemdPresentCheck ?? systemdPresent,
+      retainSampledProcessGroup: options.retainSampledProcessGroup ?? false,
     };
   }
 
@@ -122,8 +125,7 @@ export class ProcJobManager {
     const reconciled = await Promise.all(
       stored.map(async (record) => {
         if (record.status !== "running") return record;
-        const alive = await isVerifiedProcJobAlive(record, this.#options.platform);
-        if (alive.alive) return record;
+        if (await procJobMayBeRunning(record, this.#options.platform)) return record;
         dirty = true;
         return markProcJobExited(record, "exited");
       }),
@@ -190,8 +192,7 @@ export class ProcJobManager {
     const next = await Promise.all(
       list.map(async (record) => {
         if (record.status !== "running") return record;
-        const check = await isVerifiedProcJobAlive(record, this.#options.platform);
-        if (check.alive) {
+        if (await procJobMayBeRunning(record, this.#options.platform)) {
           await rotateProcLogIfNeeded(record.logPath, this.#options.maxLogBytes).catch(() => {});
           return record;
         }
@@ -272,6 +273,7 @@ export class ProcJobManager {
         systemdRunAvailable: this.#options.systemdRunAvailable,
         systemdPresentCheck: this.#options.systemdPresentCheck,
         readIdentity: this.#readIdentity,
+        retainSampledProcessGroup: this.#options.retainSampledProcessGroup,
         onLateExit: (jobId, exitCode, signal) => {
           void this.#recordProcessExit(agentId, jobId, exitCode, signal);
         },
@@ -329,7 +331,9 @@ export class ProcJobManager {
       if (!list) return;
       const idx = list.findIndex((job) => job.id === id);
       if (idx === -1 || list[idx]!.status === "exited") return;
-      list[idx] = markProcJobExited(list[idx]!, "exited", exitCode, signal);
+      const record = list[idx]!;
+      if (record.groupAnchor && (await procJobMayBeRunning(record, this.#options.platform))) return;
+      list[idx] = markProcJobExited(record, "exited", exitCode, signal);
       await this.#pruneExited(agentId);
       await this.#persistLedger();
     });

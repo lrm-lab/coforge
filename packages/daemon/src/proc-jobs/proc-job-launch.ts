@@ -8,7 +8,11 @@ import {
 } from "@lrm/coforge-sdk/agent";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
-import { readProcJobIdentity, spawnDetachedProcJob } from "#src/platform/proc-job-process";
+import {
+  readProcJobIdentity,
+  requireProcJobGroupBootId,
+  spawnDetachedProcJob,
+} from "#src/platform/proc-job-process";
 import { isPidAlive } from "#src/platform/process-liveness";
 import { runtimeAllowsProcJobs, sanitizeProcJobEnvironment } from "./proc-job-environment";
 import { ProcJobError } from "./proc-job-error";
@@ -63,6 +67,7 @@ export async function launchAgentProcJob(input: {
   systemdPresentCheck: () => boolean;
   onLateExit: (jobId: string, exitCode: number | null, signal: string | null) => void;
   readIdentity?: typeof readProcJobIdentity;
+  retainSampledProcessGroup?: boolean;
 }): Promise<StoredProcJob> {
   if (input.platform !== "darwin" && input.platform !== "linux")
     throw new ProcJobError(
@@ -131,6 +136,7 @@ export async function launchAgentProcJob(input: {
   const id = randomUUID();
   const useUserSystemd = input.platform === "linux" && (await input.systemdRunAvailable());
   const systemdUnit = useUserSystemd ? systemdScopeName(input.agentId, name, id) : undefined;
+  const groupAnchor = input.retainSampledProcessGroup && !systemdUnit ? true : undefined;
   const stopsWithService =
     input.platform === "linux" && !useUserSystemd && input.systemdPresentCheck();
 
@@ -144,6 +150,7 @@ export async function launchAgentProcJob(input: {
     pid: 1,
     pgid: null,
     ...(systemdUnit ? { systemdUnit } : {}),
+    ...(groupAnchor ? { groupAnchor } : {}),
     ...(stopsWithService ? { stopsWithService: true } : {}),
     status: "running",
     startedAt: new Date().toISOString(),
@@ -153,13 +160,17 @@ export async function launchAgentProcJob(input: {
   let exitedEarly: { exitCode: number | null; signal: string | null } | undefined;
   let spawnSucceeded = false;
   let pid: number;
+  let groupAnchorBootId: string | undefined;
+  let anchorStartIdentity: string | undefined;
   try {
+    if (groupAnchor) groupAnchorBootId = await requireProcJobGroupBootId(input.platform);
     const spawned = await spawnDetachedProcJob({
       command: request.command,
       cwd: resolvedCwd,
       env,
       logPath,
       systemdUnit,
+      groupAnchor,
       onExit: (exitCode, signal) => {
         if (!spawnSucceeded) {
           exitedEarly = { exitCode, signal };
@@ -169,6 +180,7 @@ export async function launchAgentProcJob(input: {
       },
     });
     pid = spawned.pid;
+    anchorStartIdentity = spawned.startIdentity;
   } catch (error) {
     throw new ProcJobError(
       "proc_spawn_failed",
@@ -177,6 +189,11 @@ export async function launchAgentProcJob(input: {
     );
   }
 
+  if (groupAnchorBootId) pendingRecord.groupAnchorBootId = groupAnchorBootId;
+  if (anchorStartIdentity && !exitedEarly) {
+    spawnSucceeded = true;
+    return { ...pendingRecord, pid, pgid: pid, startIdentity: anchorStartIdentity };
+  }
   const readIdentity = input.readIdentity ?? readProcJobIdentity;
   let identity = exitedEarly ? null : await readIdentity(pid, input.platform).catch(() => null);
   if (!identity && !exitedEarly) {

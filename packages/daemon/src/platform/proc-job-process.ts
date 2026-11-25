@@ -2,6 +2,7 @@ import { closeSync, openSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { isExitedProcState, parseProcStat } from "./linux-process-table";
+import { procJobGroupAnchorCommand, procJobGroupHasMembers } from "./proc-job-group-anchor";
 import { procJobScopeGateCommand, type ProcJobScopePayload } from "./proc-job-scope-gate";
 import {
   resolveProcScopeControl,
@@ -9,6 +10,15 @@ import {
   type ProcScopeControl,
   type ProcScopeMemoryVerification,
 } from "./proc-job-systemd-memory";
+
+export type ProcJobStopTarget = {
+  pid: number;
+  pgid: number | null;
+  startIdentity?: string;
+  systemdUnit?: string;
+  groupAnchor?: true;
+  groupAnchorBootId?: string;
+};
 
 export type ProcJobIdentity = {
   pgid: number | null;
@@ -90,6 +100,52 @@ export async function isVerifiedProcJobAlive(
   return { alive: true, pgid: identity.pgid, identity };
 }
 
+const linuxBootId = () =>
+  Bun.file("/proc/sys/kernel/random/boot_id")
+    .text()
+    .then((id) => id.trim());
+
+export async function requireProcJobGroupBootId(
+  platform: NodeJS.Platform,
+): Promise<string | undefined> {
+  if (platform !== "linux") return undefined;
+  const id = await linuxBootId();
+  if (!id) throw new Error("Could not verify the Linux boot identity.");
+  return id;
+}
+
+async function bootMayContainProcJobGroup(
+  target: ProcJobStopTarget,
+  platform: NodeJS.Platform,
+): Promise<boolean | undefined> {
+  if (!target.groupAnchor || platform !== "linux") return true;
+  if (!target.groupAnchorBootId) return undefined;
+  try {
+    return (await requireProcJobGroupBootId(platform)) === target.groupAnchorBootId;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function procJobMayBeRunning(
+  target: ProcJobStopTarget,
+  platform: NodeJS.Platform,
+): Promise<boolean> {
+  const sameBoot = await bootMayContainProcJobGroup(target, platform);
+  if (sameBoot !== true) return sameBoot === undefined;
+  if ((await isVerifiedProcJobAlive(target, platform)).alive) return true;
+  return target.groupAnchor === true && !(await procJobGroupIsEmpty(target, platform));
+}
+
+async function procJobGroupIsEmpty(
+  target: ProcJobStopTarget,
+  platform: NodeJS.Platform,
+): Promise<boolean> {
+  if (!target.groupAnchor) return true;
+  if (target.pgid !== target.pid) return false;
+  return (await procJobGroupHasMembers(target.pgid, platform)) === false;
+}
+
 function signalOne(
   target: number,
   signal: "SIGTERM" | "SIGKILL",
@@ -136,7 +192,7 @@ export async function stopSystemdScopeUnit(
 }
 
 export async function stopVerifiedProcJob(
-  target: { pid: number; pgid: number | null; startIdentity?: string; systemdUnit?: string },
+  target: ProcJobStopTarget,
   options: {
     force?: boolean;
     graceMs?: number;
@@ -152,8 +208,13 @@ export async function stopVerifiedProcJob(
   const graceMs = options.graceMs ?? 10_000;
   const killWaitMs = options.killWaitMs ?? 2_000;
 
+  const sameBoot = await bootMayContainProcJobGroup(target, platform);
+  if (sameBoot !== true) return sameBoot === undefined ? "failed" : "already_exited";
   const initial = await isVerifiedProcJobAlive(target, platform, readIdentity);
-  if (!initial.alive) return "already_exited";
+  if (!initial.alive)
+    return (await procJobGroupIsEmpty(target, platform)) ? "already_exited" : "failed";
+  if (target.groupAnchor && (initial.pgid !== target.pid || target.pgid !== target.pid))
+    return "failed";
 
   if (!options.force) {
     if (target.systemdUnit && platform === "linux") await signalUnit(target.systemdUnit, "SIGTERM");
@@ -162,12 +223,14 @@ export async function stopVerifiedProcJob(
     while (Date.now() < termDeadline) {
       await Bun.sleep(50);
       const check = await isVerifiedProcJobAlive(target, platform, readIdentity);
-      if (!check.alive) return "stopped";
+      if (!check.alive && (await procJobGroupIsEmpty(target, platform))) return "stopped";
     }
   }
 
   const beforeKill = await isVerifiedProcJobAlive(target, platform, readIdentity);
-  if (!beforeKill.alive) return "stopped";
+  if (!beforeKill.alive)
+    return (await procJobGroupIsEmpty(target, platform)) ? "stopped" : "failed";
+  if (target.groupAnchor && beforeKill.pgid !== target.pid) return "failed";
 
   if (target.systemdUnit && platform === "linux") await signalUnit(target.systemdUnit, "SIGKILL");
   signalVerifiedTarget(target.pid, beforeKill.pgid ?? target.pgid, "SIGKILL", platform);
@@ -175,7 +238,7 @@ export async function stopVerifiedProcJob(
   while (Date.now() < killDeadline) {
     await Bun.sleep(50);
     const check = await isVerifiedProcJobAlive(target, platform, readIdentity);
-    if (!check.alive) return "stopped";
+    if (!check.alive && (await procJobGroupIsEmpty(target, platform))) return "stopped";
   }
   return "failed";
 }
@@ -266,24 +329,28 @@ export async function spawnDetachedProcJob(input: {
   verifySystemdMemoryScope?: ProcScopeMemoryVerification;
   verifyTimeoutMs?: number;
   scopeControl?: ProcScopeControl;
+  groupAnchor?: true;
   onExit(exitCode: number | null, signal: string | null): void;
-}): Promise<{ pid: number }> {
-  if (input.systemdUnit)
+}): Promise<{ pid: number; startIdentity?: string }> {
+  if (input.groupAnchor && input.systemdUnit)
+    throw new Error("A sampled process group cannot run in a managed systemd scope.");
+  if (input.systemdUnit || input.groupAnchor)
     await assertExecutableAvailable(input.command[0]!, input.cwd, input.env.PATH);
   const limit = input.memoryLimitBytes;
   if (limit !== undefined && (!input.systemdUnit || !Number.isSafeInteger(limit) || limit <= 0))
     throw new Error("A scope memory limit requires a systemd unit and positive byte limit.");
   const scopeControl =
     limit === undefined ? undefined : (input.scopeControl ?? resolveProcScopeControl());
-  const payload = scopeControl
-    ? Buffer.from(
-        JSON.stringify({
-          command: input.command,
-          cwd: input.cwd,
-          env: input.env,
-        } satisfies ProcJobScopePayload),
-      )
-    : undefined;
+  const payload =
+    scopeControl || input.groupAnchor
+      ? Buffer.from(
+          JSON.stringify({
+            command: input.command,
+            cwd: input.cwd,
+            env: input.env,
+          } satisfies ProcJobScopePayload),
+        )
+      : undefined;
   const cappedScopeArgs =
     limit === undefined
       ? []
@@ -294,7 +361,11 @@ export async function spawnDetachedProcJob(input: {
           "--property=MemorySwapMax=0",
           "--property=OOMPolicy=kill",
         ];
-  const command = scopeControl ? procJobScopeGateCommand() : input.command;
+  const command = input.groupAnchor
+    ? procJobGroupAnchorCommand()
+    : scopeControl
+      ? procJobScopeGateCommand()
+      : input.command;
   const argv = input.systemdUnit
     ? [
         scopeControl?.systemdRunPath ?? "systemd-run",
@@ -312,9 +383,11 @@ export async function spawnDetachedProcJob(input: {
   const fd = openSync(input.logPath, "a", 0o600);
   try {
     const child = Bun.spawn(argv, {
-      cwd: scopeControl ? "/" : input.cwd,
-      env: scopeControl?.environment ?? input.env,
-      stdin: limit === undefined ? "ignore" : "pipe",
+      cwd: payload ? "/" : input.cwd,
+      env:
+        scopeControl?.environment ??
+        (input.groupAnchor ? { PATH: "/usr/bin:/bin", LC_ALL: "C" } : input.env),
+      stdin: payload ? "pipe" : "ignore",
       stdout: fd,
       stderr: fd,
       detached: true,
@@ -342,8 +415,25 @@ export async function spawnDetachedProcJob(input: {
         payload,
       );
     }
+    let anchorIdentity: ProcJobIdentity | null = null;
+    if (input.groupAnchor && payload) {
+      try {
+        anchorIdentity = await readProcJobIdentity(child.pid);
+        if (!anchorIdentity || anchorIdentity.zombie || anchorIdentity.pgid !== child.pid)
+          throw new Error("Could not verify a dedicated process group for the job.");
+        if (!child.stdin || (await child.stdin.write(payload)) !== payload.byteLength)
+          throw new Error("Could not deliver the sampled job payload.");
+        await child.stdin.end();
+      } catch (error) {
+        child.kill("SIGKILL");
+        throw error;
+      }
+    }
     child.unref();
-    return { pid: child.pid };
+    return {
+      pid: child.pid,
+      ...(anchorIdentity ? { startIdentity: anchorIdentity.startIdentity } : {}),
+    };
   } finally {
     closeSync(fd);
   }

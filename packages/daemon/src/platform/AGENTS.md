@@ -17,6 +17,8 @@ Rules for OS primitives in `src/platform/`. They extend
 - `process-transport.ts` supplies pipe or opt-in terminal I/O to the shared process-tree owner and its launchd runner. Provider output is never parsed here.
 - `posix-process-tree.ts` is the shared POSIX owner for direct launches and terminal children inside launchd. Terminal cleanup snapshots descendants before TERM and checks PID/start time before escalation, including children in another session. Whole-tree `terminate()` snapshots descendants before signaling too, so a member that escaped the child's process group (setsid/setpgid) is still signaled while its parent chain is intact. Keep turn-scoped pipe cleanup unchanged.
 - `proc-job-process.ts` owns OS primitives for Agent background jobs (`coforge proc`): start-time/PGID identity verification (reusing `parseProcStat` on Linux, `ps` on macOS), verified process-group termination, Linux user `systemd-run --scope` detection, and detached `Bun.spawn` directly to log descriptors.
+- `proc-job-group-anchor.ts` keeps the sampled job group identifiable while non-zombie
+  members outlive its user command.
 - `proc-job-scope-gate.ts` receives the capped job payload after the Daemon verifies the
   scope and replaces itself with the requested executable, preserving the verified PID.
 - `process-liveness.ts` owns individual PID probes. On Linux, reuse `parseProcStat` to treat exited states as dead. If procfs cannot confirm a state, use the signal-zero probe result.

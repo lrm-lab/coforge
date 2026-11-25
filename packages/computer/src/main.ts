@@ -51,6 +51,10 @@ if (Bun.argv[2] === "__pi-chat") {
   const { runProcJobScopeGate } =
     await import("@lrm/coforge-daemon/src/platform/proc-job-scope-gate");
   await runProcJobScopeGate();
+} else if (Bun.argv[2] === "__proc-job-group-anchor" || Bun.argv[1] === "__proc-job-group-anchor") {
+  const { runProcJobGroupAnchor } =
+    await import("@lrm/coforge-daemon/src/platform/proc-job-group-anchor");
+  await runProcJobGroupAnchor();
 } else if (Bun.argv[2] === "__daemon") {
   const { runMachineSupervisor } = await import("@lrm/coforge-daemon");
   performance.mark("coforge:startup:daemon_imported");

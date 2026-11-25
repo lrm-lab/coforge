@@ -7,7 +7,7 @@ import {
   type AgentProcStopReason,
 } from "@lrm/coforge-sdk/agent";
 import { isRecord } from "@lrm/coforge-sdk/internal";
-import { isVerifiedProcJobAlive, stopVerifiedProcJob } from "#src/platform/proc-job-process";
+import { procJobMayBeRunning, stopVerifiedProcJob } from "#src/platform/proc-job-process";
 import { writePrivateFileAtomic } from "#src/platform/private-file";
 import { workspaceStateDirectory } from "#src/supervisor/workspace-instance";
 
@@ -15,6 +15,8 @@ export type StoredProcJob = AgentProcJob & {
   agentId: string;
   workspaceId: string;
   startIdentity?: string;
+  groupAnchor?: true;
+  groupAnchorBootId?: string;
 };
 
 export type RunningProcJobSummary = AgentProcJob & {
@@ -29,7 +31,14 @@ export type StopMachineProcJobsResult = {
 };
 
 export function toPublicProcJob(stored: StoredProcJob): AgentProcJob {
-  const { agentId: _agentId, workspaceId: _workspaceId, startIdentity: _identity, ...job } = stored;
+  const {
+    agentId: _agentId,
+    workspaceId: _workspaceId,
+    startIdentity: _identity,
+    groupAnchor: _groupAnchor,
+    groupAnchorBootId: _bootId,
+    ...job
+  } = stored;
   return job;
 }
 
@@ -48,6 +57,10 @@ function decodeStoredProcJob(value: unknown): StoredProcJob | undefined {
       ...decodeAgentProcJob(value),
       agentId: value.agentId,
       workspaceId: value.workspaceId,
+      ...(value.groupAnchor === true ? { groupAnchor: true } : {}),
+      ...(typeof value.groupAnchorBootId === "string"
+        ? { groupAnchorBootId: value.groupAnchorBootId }
+        : {}),
       ...(typeof value.startIdentity === "string" ? { startIdentity: value.startIdentity } : {}),
     };
   } catch {
@@ -133,8 +146,7 @@ export async function listMachineRunningProcJobs(
       const checked = await Promise.all(
         jobs.map(async (job): Promise<RunningProcJobSummary | undefined> => {
           if (job.status !== "running") return undefined;
-          const check = await isVerifiedProcJobAlive(job, platform);
-          return check.alive
+          return (await procJobMayBeRunning(job, platform))
             ? {
                 ...toPublicProcJob(job),
                 agentId: job.agentId,
