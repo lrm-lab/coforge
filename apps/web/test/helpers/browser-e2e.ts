@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { WHATS_NEW_ANNOUNCED_KEY } from "#src/features/whats-new/whats-new-announcer-quiet";
+import { WHATS_NEW_ENTRIES } from "#src/features/whats-new/whats-new-entries";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 
 /** Deterministic id (seed-dev's sha256→UUID shape), so a rerun updates instead of duplicating. */
@@ -109,9 +111,16 @@ export async function desktopPointerInitScript(directory: string) {
 }
 
 /** One agent-browser session: its commands, a page expression read back as JSON, and the DOM
- * wait/click helpers the e2e files share. */
-export function browserSession(browserPath: string, session: string) {
-  async function browser(...args: string[]) {
+ * wait/click helpers the e2e files share. By default, marks released What's New entries as already
+ * announced in the session's localStorage on first local navigation so spontaneous auto-popups do
+ * not interrupt unrelated E2E flows; pass `{ allowWhatsNewAutoOpen: true }` when testing auto-open. */
+export function browserSession(
+  browserPath: string,
+  session: string,
+  options: { allowWhatsNewAutoOpen?: boolean } = {},
+) {
+  let whatsNewAnnouncedSeeded = options.allowWhatsNewAutoOpen === true;
+  async function runBrowser(...args: string[]) {
     const child = Bun.spawn([browserPath, "--session", session, ...args], {
       stdout: "pipe",
       stderr: "pipe",
@@ -122,6 +131,22 @@ export function browserSession(browserPath: string, session: string) {
       child.exited,
     ]);
     if (code !== 0) throw new Error(`Browser ${args[0]} failed: ${stderr}`);
+    return stdout;
+  }
+  async function browser(...args: string[]) {
+    const stdout = await runBrowser(...args);
+    if (
+      !whatsNewAnnouncedSeeded &&
+      args[0] === "open" &&
+      args.slice(1).some((arg) => /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/.test(arg))
+    ) {
+      whatsNewAnnouncedSeeded = true;
+      const allIds = JSON.stringify(WHATS_NEW_ENTRIES.map((entry) => entry.id));
+      await runBrowser(
+        "eval",
+        `(() => { try { if (localStorage.getItem(${JSON.stringify(WHATS_NEW_ANNOUNCED_KEY)}) === null) localStorage.setItem(${JSON.stringify(WHATS_NEW_ANNOUNCED_KEY)}, ${JSON.stringify(allIds)}); } catch {} return true; })()`,
+      ).catch(() => undefined);
+    }
     return stdout;
   }
   async function evaluate<T>(expression: string): Promise<T> {

@@ -19,6 +19,7 @@
 import { createHash } from "node:crypto";
 import { RedisClient } from "bun";
 import { DEV_BROWSER_USER } from "../src/server/auth/dev-skip-auth.server";
+import { dismissSeededWhatsNew, seedDevBrowserUser } from "./seed-dev-baseline";
 import { getDatabaseClient } from "../src/server/db/client.server";
 import { workspaceIdForUser } from "../src/server/workspaces/enrollment.server";
 import { getFileStorage } from "../src/server/files/file-storage.server";
@@ -67,21 +68,7 @@ console.log("Seeding CoForge dev data…");
 // ---------------------------------------------------------------------------
 // Dev user + workspace (reuses the same helpers the app itself uses).
 // ---------------------------------------------------------------------------
-await db.user.upsert({
-  where: { id: DEV_BROWSER_USER.id },
-  create: {
-    id: DEV_BROWSER_USER.id,
-    username: DEV_BROWSER_USER.username,
-    displayName: DEV_BROWSER_USER.name,
-    // Past first sign-in: the dev session opens the Workspace, not the name step.
-    welcomedAt: new Date(),
-  },
-  update: {
-    username: DEV_BROWSER_USER.username,
-    displayName: DEV_BROWSER_USER.name,
-    welcomedAt: new Date(),
-  },
-});
+await seedDevBrowserUser(db);
 const workspaceId = await workspaceIdForUser(
   db,
   { ...DEV_BROWSER_USER, displayName: DEV_BROWSER_USER.name },
@@ -127,6 +114,7 @@ await db.workspaceMembership.upsert({
   create: { workspaceId, userId: caseyId, role: "member" },
   update: { role: "member" },
 });
+await dismissSeededWhatsNew(db, [jordanId, caseyId]);
 
 console.log("Members: dev-user (owner), jordan-lee (admin), casey-morgan (member)");
 

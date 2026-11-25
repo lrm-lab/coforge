@@ -6,6 +6,11 @@ import { opensKeyboard } from "#src/hooks/use-keyboard-field-focused";
 import { UnreadDot } from "#src/components/ui/unread-marker";
 import { m } from "#src/paraglide/messages";
 import { useWhatsNew } from "./use-whats-new";
+import {
+  startCalmMomentWatcher,
+  WHATS_NEW_ANNOUNCED_KEY,
+  WHATS_NEW_BLOCKING_OVERLAY_SELECTOR,
+} from "./whats-new-announcer-quiet";
 import { WhatsNewDialog } from "./whats-new-dialog";
 import { announcedWhatsNew, WHATS_NEW_ENTRIES, type WhatsNewId } from "./whats-new-entries";
 
@@ -32,12 +37,9 @@ export function useWhatsNewEntry(base?: string) {
   };
 }
 
-const ANNOUNCED_KEY = "coforge-whats-new-announced";
-const QUIET_MS = 3000;
-
 function readAnnounced(): string[] {
   try {
-    const value: unknown = JSON.parse(localStorage.getItem(ANNOUNCED_KEY) ?? "[]");
+    const value: unknown = JSON.parse(localStorage.getItem(WHATS_NEW_ANNOUNCED_KEY) ?? "[]");
     return Array.isArray(value) ? value.filter((id) => typeof id === "string") : [];
   } catch {
     return [];
@@ -46,7 +48,7 @@ function readAnnounced(): string[] {
 
 function writeAnnounced(ids: readonly string[]) {
   try {
-    localStorage.setItem(ANNOUNCED_KEY, JSON.stringify(ids));
+    localStorage.setItem(WHATS_NEW_ANNOUNCED_KEY, JSON.stringify(ids));
   } catch {
     return;
   }
@@ -73,22 +75,13 @@ export function WhatsNewAnnouncer({ base }: { base?: string } = {}) {
   const pendingKey = entry.pending.join(" ");
   useEffect(() => {
     if (!pendingKey || due().length === 0) return;
-    let lastKey = Date.now();
-    const onKey = () => {
-      lastKey = Date.now();
-    };
-    document.addEventListener("keydown", onKey, true);
-    const timer = setInterval(() => {
-      if (document.visibilityState !== "visible" || Date.now() - lastKey < QUIET_MS) return;
-      if (draftFocused() || document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
-      announce();
-      clearInterval(timer);
-      document.removeEventListener("keydown", onKey, true);
-    }, 1000);
-    return () => {
-      clearInterval(timer);
-      document.removeEventListener("keydown", onKey, true);
-    };
+    return startCalmMomentWatcher({
+      target: document,
+      isVisible: () => document.visibilityState === "visible",
+      isBlocked: () =>
+        draftFocused() || document.querySelector(WHATS_NEW_BLOCKING_OVERLAY_SELECTOR) !== null,
+      onCalm: () => announce(),
+    });
   }, [pendingKey]);
   return entry.dialog;
 }
