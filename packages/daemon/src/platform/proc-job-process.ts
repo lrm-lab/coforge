@@ -127,6 +127,16 @@ async function bootMayContainProcJobGroup(
   }
 }
 
+export async function verifyProcJobGroupAnchor(
+  target: ProcJobStopTarget,
+  platform: NodeJS.Platform,
+): Promise<boolean> {
+  if (!target.groupAnchor || target.pgid !== target.pid) return false;
+  if ((await bootMayContainProcJobGroup(target, platform)) !== true) return false;
+  const current = await isVerifiedProcJobAlive(target, platform);
+  return current.alive && current.pgid === target.pgid;
+}
+
 export async function procJobMayBeRunning(
   target: ProcJobStopTarget,
   platform: NodeJS.Platform,

@@ -19,6 +19,7 @@ Rules for OS primitives in `src/platform/`. They extend
 - `proc-job-process.ts` owns OS primitives for Agent background jobs (`coforge proc`): start-time/PGID identity verification (reusing `parseProcStat` on Linux, `ps` on macOS), verified process-group termination, Linux user `systemd-run --scope` detection, and detached `Bun.spawn` directly to log descriptors.
 - `proc-job-group-anchor.ts` keeps the sampled job group identifiable while non-zombie
   members outlive its user command.
+- `proc-job-rss.ts` reads a host snapshot of live process-group RSS.
 - `proc-job-scope-gate.ts` receives the capped job payload after the Daemon verifies the
   scope and replaces itself with the requested executable, preserving the verified PID.
 - `process-liveness.ts` owns individual PID probes. On Linux, reuse `parseProcStat` to treat exited states as dead. If procfs cannot confirm a state, use the signal-zero probe result.
