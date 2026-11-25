@@ -6,6 +6,10 @@ binary currently reports a clear unavailable-transport error.
 
 The command reference lives in [`docs/agent-cli/`](../../docs/agent-cli/README.md).
 
+When `coforge manual get` or `coforge manual search` cannot reach the service, times out, or
+receives an HTTP 5xx response, stderr gives a read-only status command for the current Agent mode
+before the original error. The command exits nonzero with no manual content on stdout.
+
 ## Module map
 
 | Module                                        | Responsibility                                                                                 |

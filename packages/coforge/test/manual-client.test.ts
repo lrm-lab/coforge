@@ -6,6 +6,7 @@ import {
 } from "@lrm/coforge-sdk/agent";
 import { connectLocal } from "#src/local-client";
 import { CliError, renderCliErrorText } from "#src/cli-error";
+import { isManualUnavailable } from "#src/manual-request";
 
 const context = `sfp_${"a".repeat(43)}`;
 const proxy = "http://proxy.test/api/agent/v1/messages?stale=1";
@@ -93,18 +94,33 @@ for (const route of routes) {
       `invalid Agent Manual ${route.name} response`,
     );
     fetch.mockResolvedValueOnce(new Response("not json", { status: 502 }));
-    await expect(route.invoke(client())).rejects.toMatchObject({
+    const serverFailure = await route.invoke(client()).catch((error: unknown) => error);
+    expect(isManualUnavailable(serverFailure)).toBeTrue();
+    expect(serverFailure).toMatchObject({
       code: "MANUAL_FAILED",
       message: "HTTP 502",
       retryable: false,
       suggestedNextAction: undefined,
     });
     fetch.mockRejectedValueOnce(new Error("network failure"));
-    await expect(route.invoke(client())).rejects.toMatchObject({
+    const transportFailure = await route.invoke(client()).catch((error: unknown) => error);
+    expect(isManualUnavailable(transportFailure)).toBeTrue();
+    expect(transportFailure).toMatchObject({
       code: "MANUAL_FAILED",
       message: "agent proxy request failed (network or timeout)",
       retryable: false,
     });
+  });
+
+  test(`manual ${route.name} keeps the decode error when the connection drops after response headers`, async () => {
+    const response = new Response();
+    spyOn(response, "json").mockRejectedValueOnce(
+      Object.assign(new Error("socket closed"), { code: "ECONNRESET" }),
+    );
+    spyOn(globalThis, "fetch").mockResolvedValueOnce(response);
+    const failure = await route.invoke(client()).catch((error: unknown) => error);
+    expect(failure).toMatchObject({ message: `invalid Agent Manual ${route.name} response` });
+    expect(isManualUnavailable(failure)).toBeTrue();
   });
 
   test(`manual ${route.name} refuses an invalid local context before issuing a request`, async () => {

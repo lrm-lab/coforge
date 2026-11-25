@@ -75,33 +75,47 @@ export async function envelopeRequest<T>(
   decodeError: (value: unknown) => { errorCode: string; error: string } | undefined,
   operation: string,
   nextAction?: (errorCode: string | undefined) => string | undefined,
+  markUnavailable?: (failure: Error) => Error,
 ): Promise<T> {
   requireProxySetup(operation, context, proxyUrl);
   const endpoint = proxyEndpoint(request.path);
   for (const [key, value] of Object.entries(request.query ?? {}))
     endpoint.searchParams.set(key, value);
   const hasBody = request.body !== undefined;
+  const deadline = AbortSignal.timeout(10_000);
   let response: Response;
   try {
     response = await issueProxyRequest(context, endpoint, {
       method: request.method,
       headers: hasBody ? { "content-type": "application/json" } : {},
       ...(hasBody ? { body: JSON.stringify(request.body) } : {}),
-      signal: AbortSignal.timeout(10_000),
+      signal: deadline,
     });
-  } catch {
-    throw new CliError({
+  } catch (cause) {
+    const failure = new CliError({
       code: operationFailedCode(operation),
       message: "agent proxy request failed (network or timeout)",
       retryable: false,
     });
+    if (
+      markUnavailable &&
+      (endpoint.protocol === "http:" || endpoint.protocol === "https:") &&
+      (cause as NodeJS.ErrnoException | undefined)?.code !== "UnexpectedRedirect"
+    )
+      throw markUnavailable(failure);
+    throw failure;
   }
-  const rawBody: unknown = await response.json().catch(() => undefined);
+  let bodyUnavailable = false;
+  const rawBody: unknown = await response.json().catch((cause: unknown) => {
+    bodyUnavailable =
+      deadline.aborted || (cause as NodeJS.ErrnoException | undefined)?.code === "ECONNRESET";
+    return undefined;
+  });
   if (!response.ok) {
     const refusal = externalRefusalFor(context, response.status, rawBody);
     if (refusal) throw refusal;
     const errorBody = decodeError(rawBody);
-    throw new CliError({
+    const failure = new CliError({
       code: errorBody?.errorCode
         ? errorBody.errorCode.toUpperCase()
         : operationFailedCode(operation),
@@ -109,8 +123,17 @@ export async function envelopeRequest<T>(
       retryable: false,
       suggestedNextAction: nextAction?.(errorBody?.errorCode),
     });
+    if (markUnavailable && response.status >= 500 && response.status <= 599)
+      throw markUnavailable(failure);
+    throw failure;
   }
-  return decode(rawBody);
+  try {
+    return decode(rawBody);
+  } catch (failure) {
+    if (markUnavailable && bodyUnavailable && failure instanceof Error)
+      throw markUnavailable(failure);
+    throw failure;
+  }
 }
 
 /** The local daemon proxy's JSON error contract (`AgentProxyFailureBody` in the SDK). A few proxy

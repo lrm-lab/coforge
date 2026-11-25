@@ -4,6 +4,7 @@ import { connectLocal } from "./local-client";
 import { commandGuidanceLine } from "./command-guidance";
 import { updateNoticeLine } from "./update-notice";
 import { CliError, renderCliError } from "./cli-error";
+import { isManualUnavailable, manualRecoveryText } from "./manual-request";
 import { runGitHubCli, runGitHubCredentialHelper } from "./github-credential";
 import { runGitPrepareCommitMsg } from "./git-prepare-commit-msg";
 import { connectAppClient } from "./app-client";
@@ -147,12 +148,17 @@ export async function runAgentCli(argv: readonly string[]): Promise<void> {
     const notice = transport && !external ? await updateNoticeLine(transport, args) : undefined;
     if (notice) console.error(notice);
   } catch (error) {
+    const offlineManual = isManualUnavailable(error);
+    if (offlineManual) console.error(`${manualRecoveryText(external?.transport.external?.slug)}\n`);
     if (error instanceof CliError) {
       if (error.stdoutText) console.log(error.stdoutText);
       console.error(renderCliError(error));
     } else console.error(thrownMessage(error));
     process.exitCode = error instanceof CliError ? (error.exitCode ?? 1) : 1;
-    const notice = transport && !external ? await updateNoticeLine(transport, args) : undefined;
+    const notice =
+      transport && !external && !offlineManual
+        ? await updateNoticeLine(transport, args)
+        : undefined;
     if (notice) console.error(notice);
   }
 }
