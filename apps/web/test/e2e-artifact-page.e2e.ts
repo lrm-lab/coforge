@@ -218,9 +218,9 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     });
     await browser("open", pageOf(secret.id));
     await browser("wait", "--fn", `${pageHydrated} && ${text("Can't open this")}`);
-    expect(await evaluate<boolean>(`document.querySelector("main .ProseMirror") == null`)).toBe(
-      true,
-    );
+    expect(
+      await evaluate<boolean>(`document.querySelector("main [data-artifact-markdown]") == null`),
+    ).toBe(true);
     // Moved to the Workspace by its author Agent, whose owner reads it: it opens read only, and
     // the way back is a link to the Workspace, not a button.
     await services.visibility.moveToWorkspace({
@@ -232,7 +232,7 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await browser(
       "wait",
       "--fn",
-      `${pageHydrated} && document.querySelector('main .ProseMirror[contenteditable="false"]') != null`,
+      `${pageHydrated} && document.querySelector("main [data-artifact-markdown]") != null && document.querySelector('main [contenteditable="true"]') == null`,
     );
     expect(
       await evaluate<boolean>(
@@ -248,7 +248,7 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await browser(
       "wait",
       "--fn",
-      `${pageHydrated} && document.querySelector("main .ProseMirror") != null`,
+      `${pageHydrated} && document.querySelector("main [data-artifact-markdown]") != null`,
     );
     await chrome.openMore();
     expect(await chrome.moreItems()).not.toContain("Rename");
@@ -264,7 +264,7 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await browser(
       "wait",
       "--fn",
-      `location.pathname.endsWith("/artifacts/${secret.id}") && document.querySelector("main .ProseMirror") != null`,
+      `location.pathname.endsWith("/artifacts/${secret.id}") && document.querySelector("main [data-artifact-markdown]") != null`,
     );
 
     // An address that names no artifact: the page that is not there, at once.
@@ -293,7 +293,7 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await browser(
       "wait",
       "--fn",
-      `${pageHydrated} && document.querySelector('section[aria-label="Artifact"] iframe') != null && document.querySelector('article[aria-label="Web page: Signup funnel ${tail}"]') != null`,
+      `${pageHydrated} && document.querySelector('[data-artifact-preview] iframe') != null && document.querySelector('article[aria-label="Web page: Signup funnel ${tail}"]') != null`,
     );
     await shoot("7-web-beside-chat");
     await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
@@ -315,7 +315,7 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await browser(
       "wait",
       "--fn",
-      `${pageHydrated} && document.querySelector('section[aria-label="Artifact"] .ProseMirror')?.textContent.includes("Friday")`,
+      `${pageHydrated} && document.querySelector('[data-artifact-preview] [data-artifact-markdown]')?.textContent.includes("Friday")`,
     );
     expect(await evaluate<string>("location.pathname")).toEndWith(`/channel/${channel.id}`);
 
@@ -324,12 +324,13 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await browser(
       "wait",
       "--fn",
-      `${pageHydrated} && document.querySelector("main .ProseMirror")?.textContent.includes("Friday")`,
+      `${pageHydrated} && document.querySelector("main [data-artifact-markdown]")?.textContent.includes("Friday")`,
     );
     expect(
       await evaluate<boolean>(`document.querySelector('main [contenteditable="true"]') == null`),
     ).toBe(true);
     expect(await chrome.versionChipText()).toBe("v2");
+
     refusing = true;
     // The page reads the document again when its tab comes back (TanStack Query hears
     // `visibilitychange` on window: https://tanstack.com/query/v5/docs/reference/focusManager).
@@ -369,7 +370,7 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await browser(
       "wait",
       "--fn",
-      `document.querySelector("main .ProseMirror")?.textContent.includes("Later")`,
+      `document.querySelector("main [data-artifact-markdown]")?.textContent.includes("Later")`,
     );
   } finally {
     refusing = false;

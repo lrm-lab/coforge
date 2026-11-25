@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { highlightCodeLines } from "./artifact-code-highlight";
+import { highlightCodeByLanguage, highlightCodeLines } from "./artifact-code-highlight";
 
 describe("highlightCodeLines", () => {
   test("highlights TypeScript code and preserves exact physical line count", () => {
@@ -44,5 +44,16 @@ describe("highlightCodeLines", () => {
     expect(pyLines).not.toBeNull();
     expect(pyLines!.length).toBe(2);
     expect(pyLines![0]!.some((token) => token.className?.includes("hljs-keyword"))).toBe(true);
+  });
+
+  test("highlights fenced code blocks by language and falls back for plaintext or unknown", () => {
+    const tsLines = highlightCodeByLanguage("const week = 48;\n", "ts");
+    expect(tsLines).not.toBeNull();
+    expect(tsLines!.length).toBe(1);
+    expect(tsLines![0]!.some((token) => token.className?.includes("hljs-keyword"))).toBe(true);
+
+    expect(highlightCodeByLanguage("plain", "plaintext")).toBeNull();
+    expect(highlightCodeByLanguage("plain", "text")).toBeNull();
+    expect(highlightCodeByLanguage("custom", "nonexistent-lang")).toBeNull();
   });
 });

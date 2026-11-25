@@ -81,7 +81,7 @@ test("the viewer's own window and header, its presence list, the gallery's visib
     await browser("screenshot", join(shots, `${shot}.png`));
   };
   const text = (needle: string) => `document.body.textContent.includes(${JSON.stringify(needle)})`;
-  const ready = `${pageHydrated} && document.querySelector("main .ProseMirror") != null`;
+  const ready = `${pageHydrated} && document.querySelector("main [data-artifact-markdown]") != null`;
   const pageOf = (id: string) => `${origin}/en/w/${workspace.slug}/artifacts/${id}`;
   const left = (selector: string) =>
     `document.querySelector(${JSON.stringify(selector)})?.getBoundingClientRect().left ?? -1`;

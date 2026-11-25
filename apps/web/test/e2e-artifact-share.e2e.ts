@@ -7,6 +7,7 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
 import { agentWrites } from "./helpers/artifact-agent-writes";
 import { artifactChrome, artifactViewerReady } from "./helpers/artifact-chrome";
+import { verifyArtifactMarkdownCopy } from "./helpers/artifact-markdown-copy-e2e";
 import {
   animationsSettled,
   browserSession,
@@ -46,6 +47,19 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
       description: "",
       visibility: "private",
       members: { create: [{ userId: DEV_BROWSER_USER.id }, { agentId: agent.id }] },
+    },
+  });
+  const sender = await db.conversationMember.findFirstOrThrow({
+    where: { conversationId: channel.id, agentId: agent.id },
+  });
+  const chatSentinel = `Chat sentinel (run ${tail}).`;
+  await db.message.create({
+    data: {
+      workspaceId,
+      conversationId: channel.id,
+      sequence: 1,
+      senderMemberId: sender.id,
+      body: chatSentinel,
     },
   });
   const lin = await db.user.create({ data: { username: `lin-${tail}`, displayName: "Lin Xia" } });
@@ -157,9 +171,9 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
     });
     await browser("open", pageOf(leads.id));
     await browser("wait", "--fn", `${pageHydrated} && ${text("Can't open this")}`);
-    expect(await evaluate<boolean>(`document.querySelector("main .ProseMirror") == null`)).toBe(
-      true,
-    );
+    expect(
+      await evaluate<boolean>(`document.querySelector("main [data-artifact-markdown]") == null`),
+    ).toBe(true);
     await shoot("2b-closed-home-unavailable");
 
     await services.visibility.moveToWorkspace({
@@ -219,6 +233,17 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
     expect(items).not.toContain("Rename");
     await shoot("5-member-chrome");
     await chrome.closeMenus();
+
+    await verifyArtifactMarkdownCopy({
+      session,
+      chrome,
+      bot,
+      channelId: channel.id,
+      chatUrl: `${origin}/en/w/${workspace.slug}/channel/${channel.id}`,
+      pageOf,
+      tail,
+      excludedChatText: chatSentinel,
+    });
   } finally {
     await browser("close").catch(() => undefined);
     await db.artifact
@@ -240,4 +265,4 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
     await db.user.delete({ where: { id: lin.id } }).catch(() => undefined);
     await db.$disconnect();
   }
-}, 120_000);
+}, 180_000);

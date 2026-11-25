@@ -7,3 +7,176 @@
   background-color: var(--color-utility-yellow-300);
   color: var(--color-text-primary);
 }
+
+.artifact-markdown {
+  color: var(--color-text-primary);
+  overflow-wrap: break-word;
+  user-select: text;
+}
+
+.artifact-markdown :where(a, code) {
+  overflow-wrap: anywhere;
+}
+
+.artifact-markdown pre code {
+  overflow-wrap: normal;
+}
+
+.artifact-markdown h6 {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  line-height: var(--text-sm--line-height);
+  color: var(--color-text-secondary);
+}
+
+.artifact-markdown-table {
+  margin: 1rem 0 1.75rem;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.artifact-markdown table {
+  table-layout: auto;
+  width: auto;
+  max-width: none;
+}
+
+.artifact-markdown th,
+.artifact-markdown td {
+  min-width: 6rem;
+  padding: 0.375rem 0.625rem;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.artifact-markdown li.task-list-item > input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  display: inline-grid;
+  place-content: center;
+  width: 0.95rem;
+  height: 0.95rem;
+  margin: 0 0.5rem 0 0;
+  vertical-align: -0.15em;
+  border-radius: 0.25rem;
+  border: 1.5px solid var(--color-border-primary);
+  background: var(--color-bg-primary);
+  opacity: 1;
+  cursor: default;
+  pointer-events: none;
+}
+
+.artifact-markdown li.task-list-item > input[type="checkbox"]:checked {
+  border-color: var(--color-bg-brand-solid);
+  background: var(--color-bg-brand-solid);
+}
+
+.artifact-markdown li.task-list-item > input[type="checkbox"]:checked::after {
+  content: "";
+  width: 0.5rem;
+  height: 0.28rem;
+  border-left: 1.75px solid var(--color-fg-white);
+  border-bottom: 1.75px solid var(--color-fg-white);
+  transform: translateY(-0.06rem) rotate(-45deg);
+}
+
+@media (forced-colors: active) {
+  .artifact-markdown li.task-list-item > input[type="checkbox"] {
+    appearance: auto;
+    -webkit-appearance: auto;
+  }
+
+  .artifact-markdown li.task-list-item > input[type="checkbox"]:checked::after {
+    content: none;
+  }
+}
+
+.artifact-markdown img {
+  cursor: zoom-in;
+}
+
+.artifact-markdown-code {
+  max-width: 100%;
+  border: 1px solid color-mix(in srgb, var(--color-text-primary) 7%, transparent);
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.artifact-markdown-code pre {
+  background: transparent;
+  border-radius: 0;
+  margin: 0;
+  padding-inline-end: 4.5rem;
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+.artifact-markdown-code .mermaid-diagram {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.artifact-markdown-code .mermaid-diagram-toolbar {
+  display: none;
+}
+
+.artifact-markdown-code-chrome {
+  position: absolute;
+  top: 0.5rem;
+  inset-inline-end: 0.5rem;
+  z-index: 10;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-secondary);
+  background: var(--color-bg-primary);
+  padding: 0.125rem;
+  box-shadow: var(--shadow-xs);
+  opacity: 0;
+  transition: opacity 150ms var(--ease-out);
+}
+
+.artifact-markdown-code:hover .artifact-markdown-code-chrome,
+.artifact-markdown-code:focus-within .artifact-markdown-code-chrome,
+.artifact-markdown-code-chrome[data-copied],
+.artifact-markdown-code-chrome[data-menu-open] {
+  opacity: 1;
+}
+
+@media (hover: none), (any-pointer: coarse) {
+  .artifact-markdown-code pre {
+    padding-inline-end: 1rem;
+  }
+
+  .artifact-markdown-code-chrome {
+    position: static;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.25rem;
+    padding: 0.125rem 0.25rem;
+    border-radius: 0;
+    border: 0;
+    border-bottom: 1px solid var(--color-border-secondary);
+    box-shadow: none;
+    opacity: 1;
+  }
+
+  .artifact-markdown-code-lang {
+    margin-inline-end: auto;
+    padding-inline: 0.5rem;
+  }
+
+  .artifact-markdown-code-chrome button {
+    min-inline-size: 2.75rem;
+    min-block-size: 2.75rem;
+  }
+}

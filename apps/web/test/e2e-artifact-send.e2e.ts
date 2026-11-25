@@ -120,7 +120,10 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
     await browser("click", targetRow(label));
   };
   const openSend = async () => {
-    await waitFor(`${pageHydrated} && document.querySelector("main .ProseMirror") != null`, 60_000);
+    await waitFor(
+      `${pageHydrated} && document.querySelector("main [data-artifact-markdown]") != null`,
+      60_000,
+    );
     await press(`document.querySelector('main header button[aria-label="More actions"]')`);
     await waitFor(`document.querySelector('[role="menuitem"]') !== null`);
     await press(

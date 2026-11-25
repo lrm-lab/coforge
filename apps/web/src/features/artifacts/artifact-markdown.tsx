@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ContentEditor } from "#src/features/records/report-editor/content-editor";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { cn } from "#src/lib/utils";
 import { ArtifactCommentSurface } from "./artifact-comment-surface";
+import { ArtifactMarkdownBody } from "./artifact-markdown-body";
 import {
   applyFindHighlights,
   clearFindHighlights,
@@ -13,6 +13,7 @@ import {
 } from "./artifact-markdown-find";
 import { ArtifactMarkdownOutline, useMarkdownOutline } from "./artifact-markdown-outline";
 import { PageFindBar } from "./artifact-page-notices";
+import "#src/features/records/report-editor/styles/index.css";
 import "./artifact-markdown.css";
 
 export type ArtifactMarkdownProps = {
@@ -153,7 +154,7 @@ export function ArtifactMarkdown({
               hasOutline && "@5xl/md-reader:col-start-2 @5xl/md-reader:mx-0",
             )}
           >
-            <ContentEditor editable={false} defaultValue={text} />
+            <ArtifactMarkdownBody text={text} />
           </div>
         </div>
       </ArtifactCommentSurface>

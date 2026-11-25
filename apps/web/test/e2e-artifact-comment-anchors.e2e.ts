@@ -93,7 +93,7 @@ test("people comment on a selection and on lines; the sidebar locates anchors wi
     browser(
       "eval",
       `(() => {
-        const walker = document.createTreeWalker(document.querySelector(".ProseMirror"), NodeFilter.SHOW_TEXT);
+        const walker = document.createTreeWalker(document.querySelector("[data-artifact-markdown]"), NodeFilter.SHOW_TEXT);
         for (let node = walker.nextNode(); node; node = walker.nextNode()) {
           const at = node.data.indexOf(${JSON.stringify(needle)});
           if (at === -1) continue;
@@ -132,7 +132,10 @@ test("people comment on a selection and on lines; the sidebar locates anchors wi
       entry: "index.md",
     });
     await browser("open", `${proxy.origin}/${locale}/w/${workspace.slug}/artifacts/${artifact.id}`);
-    await waitFor(`${pageHydrated} && document.querySelector(".ProseMirror") != null`, 60_000);
+    await waitFor(
+      `${pageHydrated} && document.querySelector("[data-artifact-markdown]") != null`,
+      60_000,
+    );
 
     await click("button[aria-pressed]");
     await waitFor(`document.querySelector("aside") != null`);

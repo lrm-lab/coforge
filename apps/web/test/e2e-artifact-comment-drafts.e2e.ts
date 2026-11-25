@@ -73,7 +73,7 @@ test("a person saves drafts, undoes and redoes, sends them as one review, and a 
     browser(
       "eval",
       `(() => {
-        const walker = document.createTreeWalker(document.querySelector(".ProseMirror"), NodeFilter.SHOW_TEXT);
+        const walker = document.createTreeWalker(document.querySelector("[data-artifact-markdown]"), NodeFilter.SHOW_TEXT);
         for (let node = walker.nextNode(); node; node = walker.nextNode()) {
           const at = node.data.indexOf(${JSON.stringify(needle)});
           if (at === -1) continue;
@@ -123,7 +123,10 @@ test("a person saves drafts, undoes and redoes, sends them as one review, and a 
     });
     const pageUrl = `${proxy.origin}/${locale}/w/${workspace.slug}/artifacts/${artifact.id}`;
     await browser("open", pageUrl);
-    await waitFor(`${pageHydrated} && document.querySelector(".ProseMirror") != null`, 60_000);
+    await waitFor(
+      `${pageHydrated} && document.querySelector("[data-artifact-markdown]") != null`,
+      60_000,
+    );
 
     if (!(await evaluate<boolean>(`document.querySelector("aside") != null`)))
       await click("button[aria-pressed]");

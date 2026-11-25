@@ -45,14 +45,23 @@ function splitHastLines(tree: HastRoot): HighlightedToken[][] {
   return lines;
 }
 
-export function highlightCodeLines(text: string, path: string): HighlightedToken[][] | null {
+export function highlightCodeByLanguage(
+  text: string,
+  language: string,
+): HighlightedToken[][] | null {
   if (text.length > MAX_HIGHLIGHT_CHARS) return null;
-  const language = extensionToLanguage(path);
-  if (!language || language === "plaintext" || !sharedLowlight.registered(language)) return null;
+  const normalized = language.trim().toLowerCase();
+  if (!normalized || normalized === "plaintext" || normalized === "text") return null;
+  if (!sharedLowlight.registered(normalized)) return null;
   const trimmed = text.replace(/\n$/, "");
   try {
-    return splitHastLines(sharedLowlight.highlight(language, trimmed));
+    return splitHastLines(sharedLowlight.highlight(normalized, trimmed));
   } catch {
     return null;
   }
+}
+
+export function highlightCodeLines(text: string, path: string): HighlightedToken[][] | null {
+  const language = extensionToLanguage(path);
+  return language ? highlightCodeByLanguage(text, language) : null;
 }

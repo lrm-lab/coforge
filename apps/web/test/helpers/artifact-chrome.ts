@@ -17,7 +17,7 @@ const menuItem = (label: string) =>
 const bannerButton = (label: string) =>
   `[...document.querySelectorAll("main button")].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`;
 
-export const artifactViewerReady = `${pageHydrated} && document.querySelector("main .ProseMirror") != null`;
+export const artifactViewerReady = `${pageHydrated} && document.querySelector("main [data-artifact-markdown]") != null`;
 export const artifactChromeReady = `${pageHydrated} && ${pill} != null`;
 export const artifactChromeText = (needle: string) =>
   `document.body.textContent.includes(${JSON.stringify(needle)})`;
