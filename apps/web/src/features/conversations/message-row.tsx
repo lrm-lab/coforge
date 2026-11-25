@@ -189,6 +189,7 @@ export const MessageRow = memo(function MessageRow({
     readState && !message.actionCard && artifactLayout.hasText ? (
       <OwnMessageTicks readState={readState} inline />
     ) : undefined;
+  const showsToolbar = Boolean(hasActions && !selection);
   const hasInFlowEmbeds = artifactLayout.inlineEmbedIds.size > 0;
   return (
     <li
@@ -206,7 +207,7 @@ export const MessageRow = memo(function MessageRow({
         id={`message-${message.id}`}
         data-message={own ? "own" : "other"}
         onClick={selection?.onClick ?? openActions}
-        onPointerEnter={hasActions && !selection ? reachToolbar : undefined}
+        onPointerEnter={showsToolbar ? reachToolbar : undefined}
         className={cn(
           "group/message relative mx-1 flex scroll-m-6 rounded-lg px-3 transition-[background-color,box-shadow] duration-500 hover:bg-message-hover focus-within:bg-message-hover target:bg-tertiary target:ring-2 target:ring-brand/50 target:ring-offset-0 target:ring-offset-primary md:target:ring-offset-2 md:mx-3",
           highlighted &&
@@ -237,6 +238,7 @@ export const MessageRow = memo(function MessageRow({
               deleted={deleted}
               onOpenSender={openSenderProfile}
               time={fullTime}
+              hasToolbar={showsToolbar}
             />
           )}
           {message.actionCard ? (
@@ -346,7 +348,7 @@ export const MessageRow = memo(function MessageRow({
             />
           </ReviewLanding>
         </div>
-        {hasActions && !selection && (
+        {showsToolbar && (
           <MessageActionToolbar
             {...actions}
             grouped={grouped}

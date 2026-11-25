@@ -140,6 +140,14 @@ type RowAction = {
   run: () => void;
 };
 
+export function commentHeaderReservedEndClass(toolbarButtonCount: number): string {
+  if (toolbarButtonCount <= 0) return "";
+  if (toolbarButtonCount === 1) return "pe-8";
+  if (toolbarButtonCount === 2) return "pe-15";
+  if (toolbarButtonCount === 3) return "pe-22";
+  return "pe-29";
+}
+
 function CommentRow({
   comment,
   isRoot,
@@ -200,6 +208,10 @@ function CommentRow({
         run: () => setConfirmingDelete(true),
       },
     );
+  const toolbarActions = rowActions.filter((action) => action.toolbar);
+  const headerReservedEndClass = commentHeaderReservedEndClass(
+    editing ? 0 : toolbarActions.length + 1,
+  );
   return (
     <article
       data-comment-id={comment.id}
@@ -210,7 +222,12 @@ function CommentRow({
     >
       <CommentAuthorAvatar comment={comment} size="sm" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <header className="flex min-h-6 min-w-0 flex-wrap items-center gap-x-2 group-focus-within/comment:pe-24 group-hover/comment:pe-24 focus-within:pe-24 pointer-coarse:pe-24">
+        <header
+          className={cn(
+            "flex min-h-6 min-w-0 flex-wrap items-center gap-x-2",
+            headerReservedEndClass,
+          )}
+        >
           <span className={cn(COMMENT_AUTHOR_CLASS, "min-w-0")}>{author.name}</span>
           {author.kind === "agent" && (
             <Badge size="sm" color="gray" type="modern">
@@ -270,18 +287,16 @@ function CommentRow({
             "opacity-0 group-hover/comment:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100",
           )}
         >
-          {rowActions
-            .filter((action) => action.toolbar)
-            .map((action) => (
-              <ButtonUtility
-                key={action.id}
-                icon={action.icon}
-                size="xs"
-                color="tertiary"
-                tooltip={action.label}
-                onClick={action.run}
-              />
-            ))}
+          {toolbarActions.map((action) => (
+            <ButtonUtility
+              key={action.id}
+              icon={action.icon}
+              size="xs"
+              color="tertiary"
+              tooltip={action.label}
+              onClick={action.run}
+            />
+          ))}
           <Dropdown.Root>
             <ButtonUtility
               icon={DotsHorizontal}
