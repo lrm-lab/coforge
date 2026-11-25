@@ -20,4 +20,4 @@ export function taskDetailChildSelector(childSelector: string): string {
 
 export const taskDetailClosestSelector = `${TASK_SECTION_SELECTOR}, [role="dialog"]`;
 
-export const taskDetailSheetEntered = `(() => { const sheet = document.querySelector("[data-detent-sheet]"); return sheet === null || sheet.getBoundingClientRect().top <= innerHeight * 0.45; })()`;
+export const taskDetailSheetEntered = `[...document.querySelectorAll("[data-detent-sheet]")].every((sheet) => sheet.getBoundingClientRect().top <= innerHeight * 0.45)`;

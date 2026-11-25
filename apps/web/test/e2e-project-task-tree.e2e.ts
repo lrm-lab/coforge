@@ -16,6 +16,7 @@ import {
   pageHydrated,
 } from "./helpers/browser-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
+import { taskDetail, taskDetailPanels } from "./helpers/task-detail-e2e";
 
 /**
  * A Project's task tree (task #462), the list layout of its Tasks tab: each Task under its parent
@@ -233,6 +234,7 @@ test("a Project's Tasks tab lists its Tasks as a tree", async () => {
     ).toBe(true);
     await Bun.sleep(500);
     expect(await evaluate<number>(`document.querySelectorAll('[role="dialog"]').length`)).toBe(1);
+    expect(await evaluate<number>(`${taskDetailPanels}.length`)).toBe(0);
     await shoot("desktop-tree-blockers");
     await browser("press", "Escape");
     await browser("wait", "--fn", `${blockers} == null`);
@@ -246,10 +248,10 @@ test("a Project's Tasks tab lists its Tasks as a tree", async () => {
     await browser(
       "wait",
       "--fn",
-      `document.querySelector('[role="dialog"]')?.textContent.includes(${JSON.stringify(title("Call the printer"))}) === true`,
+      `${taskDetail}?.textContent.includes(${JSON.stringify(title("Call the printer"))}) === true`,
     );
     await browser("press", "Escape");
-    await browser("wait", "--fn", `document.querySelector('[role="dialog"]') == null`);
+    await browser("wait", "--fn", `${taskDetail} == null`);
 
     // The keyboard: Left folds Ship, Right unfolds it, Down moves to Copy, Enter opens it.
     await evaluate(`(${row("Ship the site")}.focus(), true)`);
@@ -268,10 +270,10 @@ test("a Project's Tasks tab lists its Tasks as a tree", async () => {
     await browser(
       "wait",
       "--fn",
-      `document.querySelector('[role="dialog"]')?.textContent.includes(${JSON.stringify(title("Write the copy"))}) === true`,
+      `${taskDetail}?.textContent.includes(${JSON.stringify(title("Write the copy"))}) === true`,
     );
     await browser("press", "Escape");
-    await browser("wait", "--fn", `document.querySelector('[role="dialog"]') == null`);
+    await browser("wait", "--fn", `${taskDetail} == null`);
 
     // A status pick keeps Review (in progress) under its ancestors, read as outside the filter.
     await inSite({ operation: "claim", number: review.number });

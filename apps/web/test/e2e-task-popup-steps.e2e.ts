@@ -12,6 +12,7 @@ import {
   animationsSettled,
   pageHydrated,
 } from "./helpers/browser-e2e";
+import { taskDetail, taskDetailSheetEntered, topTaskDetail } from "./helpers/task-detail-e2e";
 
 /**
  * A Task popup opened from another's is a step down from it (task #464): a sub-task in another
@@ -100,11 +101,12 @@ test("a Task popup opened from another steps back to it", async () => {
     await run(launch.id, { operation: "claim", numbers: [first] }).catch(() => undefined);
     await run(deps.id, { operation: "assign", number: parent, assignee: "@dax" });
 
-    const settled = () => browser("wait", "--fn", animationsSettled());
-    const dialog = `document.querySelector('[role="dialog"]')`;
+    const settled = () =>
+      browser("wait", "--fn", `${taskDetailSheetEntered} && ${animationsSettled()}`);
+    const dialog = taskDetail;
     // A related Task of another channel opens as an overlay over the page, never by navigating
     // (OtherTaskPopup): while it is up there are two dialogs and the last is the step's.
-    const topDialog = `[...document.querySelectorAll('[role="dialog"]')].at(-1)`;
+    const topDialog = topTaskDetail;
     const heading = (text: string, within = dialog) =>
       `${within}?.querySelector("h2")?.textContent.includes(${JSON.stringify(text)})`;
     const shoot = async (name: string) => {
@@ -117,6 +119,7 @@ test("a Task popup opened from another steps back to it", async () => {
       await settled();
     };
     const press = async (text: string, within = dialog) => {
+      await settled();
       await evaluate(
         `[...${within}.querySelectorAll("button, [role=button], [role=row]")].find((el) => el.textContent.includes(${JSON.stringify(text)}))?.setAttribute("data-e2e-press", "") ?? true`,
       );

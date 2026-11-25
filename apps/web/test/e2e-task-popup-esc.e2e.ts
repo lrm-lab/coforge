@@ -12,6 +12,13 @@ import {
   animationsSettled,
   pageHydrated,
 } from "./helpers/browser-e2e";
+import {
+  nonTaskDialogs,
+  taskDetail,
+  taskDetailChildSelector,
+  taskDetailPanels,
+  taskDetailSheetEntered,
+} from "./helpers/task-detail-e2e";
 
 /**
  * Esc steps back one popup at a time inside one channel (task #478): from a parent's popup, a
@@ -69,10 +76,11 @@ test("Esc steps back to the popup a sub-task or a parent was opened from", async
       await run({ operation: "create", title: childTitle, parent: { number: parent } })
     ).tasks[0]!.number;
 
-    const dialog = `document.querySelector('[role="dialog"]')`;
+    const dialog = taskDetail;
     const showing = (title: string) =>
       `${dialog}?.querySelector("h2")?.textContent.includes(${JSON.stringify(title)}) === true`;
-    const settled = () => browser("wait", "--fn", animationsSettled());
+    const settled = () =>
+      browser("wait", "--fn", `${taskDetailSheetEntered} && ${animationsSettled()}`);
     /** Clicks where `selector` is once nothing moves: the click goes to the point the element
      * was measured at, so a popup still sliding in can take it somewhere else (task #127). */
     const press = async (selector: string) => {
@@ -156,7 +164,7 @@ test("Esc steps back to the popup a sub-task or a parent was opened from", async
     // Only the next Esc is the popup's.
     await browser("set", "viewport", "1280", "860");
     const composer = `${dialog}.querySelector("textarea[data-composer]")`;
-    const layers = `document.querySelectorAll('[role="dialog"], [role="alertdialog"], [role="menu"]').length`;
+    const layers = `(${taskDetailPanels}.length + ${nonTaskDialogs()}.length + document.querySelectorAll('[role="alertdialog"], [role="menu"]').length)`;
     const stays = async (title: string, count: number) => {
       await settled();
       await Bun.sleep(400);
@@ -195,7 +203,7 @@ test("Esc steps back to the popup a sub-task or a parent was opened from", async
         ["channel", `#e2e-esc-ref-${tail}`],
         ["mention", "@Esc"],
       ] as const) {
-        await browser("fill", '[role="dialog"] textarea[data-composer]', typed);
+        await browser("fill", taskDetailChildSelector("textarea[data-composer]"), typed);
         await browser("wait", "--fn", `${composer}.hasAttribute("aria-controls")`);
         await shoot(`guard-${state}-1-${trigger}`);
         await browser("press", "Escape");
@@ -203,7 +211,7 @@ test("Esc steps back to the popup a sub-task or a parent was opened from", async
         await stays(title, 1);
         expect(await evaluate<boolean>(`${composer}.hasAttribute("aria-controls")`)).toBe(false);
         expect(await evaluate<boolean>(`document.activeElement === ${composer}`)).toBe(true);
-        await browser("fill", '[role="dialog"] textarea[data-composer]', "");
+        await browser("fill", taskDetailChildSelector("textarea[data-composer]"), "");
       }
 
       // The ··· menu over the popup: Esc closes the menu alone.
