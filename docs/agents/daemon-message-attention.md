@@ -4,7 +4,7 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
 
 - `agent-message-attention-index.ts` owns full-target thread attention, consumed
   cursors and pending settlement. Cursor fields are one private record per Agent/target;
-  business operations coordinate updates and snapshot persistence inside this module.
+  business operations coordinate updates and persistence inside this module.
   Callers use its message operations and queries, never a separate mutable state dependency.
 - A create or resume launch opens one startup turn. An `introductionPrompt` (first), real recovery
   input or an explicit `resumePrompt` takes precedence; a fresh session recovers existing memory/tasks,
@@ -64,8 +64,9 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   at 1) starts over. Rows without a `conversationId` are dropped on read,
   since they cannot say whose sequences they hold.
 - The attention index is the consumed cursor's source of truth once it has
-  read the Agent's state database, and an operation that changed it writes one
-  snapshot (one transaction). A read's
+  read the Agent's state database, and an operation that changed it persists
+  only the changed targets and aliases in one atomic write (`apply`, falling
+  back to full-snapshot `write` when a port omits `apply`). A read's
   state is kept under its `consumptionScope.target` (a channel's top level is
   already canonical); the spelling the Agent used becomes an alias of it. A
   consumption scope for this Agent settles, in every other target of that

@@ -44,41 +44,40 @@ type ContinuationRow = {
  * outlive the resend path it names. */
 export const AGENT_CONTINUATION_TTL_MS = 10 * 60 * 1_000;
 
-/**
- * Open and answered continuations, one row each in the Agent's `state.db`
- * (`agent-state/<agentId>/`) — the same database the draft and consumed cursor keep, each write its
- * own commit. An answered row is the tombstone: it stays until `expiresAt` so a repeat answer
- * reports what it already chose rather than "unknown". A new continuation for a target supersedes
- * that target's still-open ones — their draft was just replaced, so answering them could only
- * mislead.
- */
+const DELETE_OPEN_TARGET_SQL = `DELETE FROM continuations WHERE target = ? AND choice IS NULL`;
+const DELETE_EXPIRED_SQL = `DELETE FROM continuations WHERE expires_at <= ?`;
+const INSERT_CONTINUATION_SQL = `INSERT INTO continuations (id, target, payload, expires_at) VALUES (?, ?, ?, ?)`;
+const SELECT_CONTINUATION_SQL = `SELECT payload, choice, with_input, answered_at FROM continuations WHERE id = ?`;
+const DELETE_CONTINUATION_SQL = `DELETE FROM continuations WHERE id = ?`;
+const MARK_ANSWERED_SQL = `UPDATE continuations SET choice = ?, with_input = ?, answered_at = ?
+  WHERE id = ? AND choice IS NULL`;
+
 export class AgentContinuationStore {
   constructor(
     private readonly db: AgentStateDb,
     private readonly now: () => number = Date.now,
   ) {}
 
-  /** A held send's fresh continuation; prior open ones for the same target are superseded. */
   async create(continuation: AgentContinuation): Promise<void> {
-    this.db.database
-      .prepare(`DELETE FROM continuations WHERE target = ? AND choice IS NULL`)
-      .run(continuation.target);
-    // Lazy GC: an expired row's answer can no longer mean anything — open or tombstoned.
-    this.db.database.prepare(`DELETE FROM continuations WHERE expires_at <= ?`).run(this.now());
-    this.db.database
-      .prepare(`INSERT INTO continuations (id, target, payload, expires_at) VALUES (?, ?, ?, ?)`)
-      .run(
+    const db = this.db.database;
+    const now = this.now();
+    const payload = JSON.stringify(continuation);
+    db.transaction(() => {
+      db.query(DELETE_OPEN_TARGET_SQL).run(continuation.target);
+      db.query(DELETE_EXPIRED_SQL).run(now);
+      db.query(INSERT_CONTINUATION_SQL).run(
         continuation.id,
         continuation.target,
-        JSON.stringify(continuation),
+        payload,
         continuation.expiresAt,
       );
+    })();
   }
 
   async lookup(id: string): Promise<AgentContinuationLookup> {
-    const row = this.db.database
-      .prepare(`SELECT payload, choice, with_input, answered_at FROM continuations WHERE id = ?`)
-      .get(id) as ContinuationRow | undefined;
+    const row = this.db.database.query(SELECT_CONTINUATION_SQL).get(id) as
+      | ContinuationRow
+      | undefined;
     if (!row) return { status: "missing" };
     const continuation = JSON.parse(row.payload) as AgentContinuation;
     if (row.choice !== null)
@@ -92,23 +91,15 @@ export class AgentContinuationStore {
         },
       };
     if (continuation.expiresAt <= this.now()) {
-      this.db.database.prepare(`DELETE FROM continuations WHERE id = ?`).run(id);
+      this.db.database.query(DELETE_CONTINUATION_SQL).run(id);
       return { status: "expired", continuation };
     }
     return { status: "open", continuation };
   }
 
-  /**
-   * Records the answer in the same write that returns it, so a second answer — however it
-   * arrived — reads the first one's choice rather than running twice. Returns false when the row
-   * was already answered (or gone); the caller re-looks it up to report the winning answer.
-   */
   async markAnswered(id: string, answer: AgentContinuationAnswer): Promise<boolean> {
     const result = this.db.database
-      .prepare(
-        `UPDATE continuations SET choice = ?, with_input = ?, answered_at = ?
-           WHERE id = ? AND choice IS NULL`,
-      )
+      .query(MARK_ANSWERED_SQL)
       .run(answer.choice, answer.withInput ? 1 : 0, answer.answeredAt, id);
     return result.changes === 1;
   }

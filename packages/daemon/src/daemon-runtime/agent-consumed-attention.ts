@@ -5,7 +5,11 @@ import {
   threadRootTarget,
 } from "@lrm/coforge-sdk/internal";
 import type { AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
-import type { AgentConsumedSeqPort } from "#src/persistence/agent-consumed-seq-store";
+import type {
+  AgentConsumedSeqDelta,
+  AgentConsumedSeqEntry,
+  AgentConsumedSeqPort,
+} from "#src/persistence/agent-consumed-seq-store";
 import { LatestThreadReadIndex } from "./latest-thread-read-index";
 import type { PreviewSeen } from "./inbox-preview-rows";
 import { noteFrontierSource, type FrontierSource } from "./agent-message-attention-frontier-source";
@@ -16,6 +20,7 @@ import {
   containsSorted,
   firstAbove,
   isAscending,
+  persistableConsumedTarget,
   sameThreadRoot,
   type ConsumedAgent,
   type ConsumedTarget,
@@ -23,6 +28,11 @@ import {
 
 const logger = getLogger(["coforge", "daemon", "message-attention"]);
 const NO_SEQUENCES: readonly number[] = [];
+
+type AliasDelta = Readonly<{
+  upsertAliases: readonly Readonly<{ spelling: string; canonical: string }>[];
+  deleteAliases?: readonly string[];
+}>;
 
 export class AgentConsumedAttention {
   readonly #consumedByAgent = new Map<string, ConsumedAgent>();
@@ -52,13 +62,13 @@ export class AgentConsumedAttention {
 
   recordExactSeen(agentId: string, shown: ReadonlyMap<string, readonly number[]>): void {
     this.#consumedState(agentId);
-    let changed = false;
+    const changedTargets: string[] = [];
     for (const [target, sequences] of shown) {
       if (!target || !this.#addExact(agentId, target, sequences)) continue;
-      changed = true;
+      changedTargets.push(target);
       this.#settleSeen(agentId, target);
     }
-    if (changed) this.#persist(agentId);
+    if (changedTargets.length > 0) this.#persistTargets(agentId, changedTargets);
   }
   recordHistoryRead(
     agentId: string,
@@ -75,17 +85,20 @@ export class AgentConsumedAttention {
   ): void {
     this.#consumedState(agentId);
     const { target } = read;
-    let changed = this.#setAlias(agentId, read.spelling, target);
+    const aliasDelta = this.#setAlias(agentId, read.spelling, target);
+    let targetChanged = false;
     if (read.through > 0)
-      changed = this.#advanceFrontier(agentId, target, read.through, "history_read") || changed;
-    changed = this.#addExact(agentId, target, read.shown) || changed;
+      targetChanged =
+        this.#advanceFrontier(agentId, target, read.through, "history_read") || targetChanged;
+    targetChanged = this.#addExact(agentId, target, read.shown) || targetChanged;
     this.#settleSeen(agentId, target);
     if (read.review) {
       this.#takeReadOrder(agentId, target, read.review.sequence);
-      changed = true;
+      targetChanged = true;
     }
     if (read.scope) this.#settleScope(agentId, read.scope, read.shown, target);
-    if (changed) this.#persist(agentId);
+    if (!aliasDelta && !targetChanged) return;
+    this.#persistTargetAndAliases(agentId, targetChanged ? target : undefined, aliasDelta);
   }
   recordSendContext(
     agentId: string,
@@ -98,7 +111,7 @@ export class AgentConsumedAttention {
     if (!Number.isInteger(through) || through < 1) return;
     const changed = this.#advanceFrontier(agentId, target, through, "send_context");
     if (review) this.#takeReadOrder(agentId, target, review.sequence);
-    if (changed || review) this.#persist(agentId);
+    if (changed || review) this.#persistTarget(agentId, target);
   }
   seenExactSequences(agentId: string, target: string): readonly number[] {
     return (
@@ -121,7 +134,8 @@ export class AgentConsumedAttention {
   }
   recordTargetAlias(agentId: string, spelling: string, canonical: string): void {
     this.#consumedState(agentId);
-    if (this.#setAlias(agentId, spelling, canonical)) this.#persist(agentId);
+    const aliasDelta = this.#setAlias(agentId, spelling, canonical);
+    if (aliasDelta) this.#persistDelta(agentId, aliasDelta);
   }
   hasSeen(agentId: string, target: string, sequence: number, conversationId?: string): boolean {
     return this.readBasis(agentId, target, sequence, conversationId) !== undefined;
@@ -151,8 +165,18 @@ export class AgentConsumedAttention {
       noteFrontierSource(entry, "reset");
       this.#latestThreadReads.clear(agentId);
       this.ports.previewSeen.clearTarget(agentId, target);
+      const record = persistableConsumedTarget(entry);
+      this.#persistDelta(
+        agentId,
+        record?.conversationId
+          ? { upsertTargets: [{ target, entry: record }] }
+          : { deleteTargets: [target] },
+      );
+      return;
     }
-    this.#persist(agentId);
+    const record = persistableConsumedTarget(entry);
+    if (record?.conversationId)
+      this.#persistDelta(agentId, { upsertTargets: [{ target, entry: record }] });
   }
   #addExact(agentId: string, target: string, sequences: readonly number[]): boolean {
     if (!sequences.length) return false;
@@ -214,18 +238,34 @@ export class AgentConsumedAttention {
       this.ports.settlePending(agentId, target, (sequence) => containsSorted(shown, sequence));
     }
   }
-  #setAlias(agentId: string, spelling: string, canonical: string): boolean {
-    if (!spelling || !canonical || spelling === canonical) return false;
+  #setAlias(agentId: string, spelling: string, canonical: string): AliasDelta | undefined {
+    if (!spelling || !canonical || spelling === canonical) return undefined;
     const { aliases } = this.#consumedState(agentId);
     let target = aliases.get(canonical) ?? canonical;
+    let deletedCanonical: string | undefined;
     if (target === spelling) {
       aliases.delete(canonical);
+      deletedCanonical = canonical;
       target = canonical;
     }
-    if (aliases.get(spelling) === target) return false;
+    if (aliases.get(spelling) === target) {
+      return deletedCanonical !== undefined
+        ? { upsertAliases: [], deleteAliases: [deletedCanonical] }
+        : undefined;
+    }
     aliases.set(spelling, target);
-    for (const [other, named] of aliases) if (named === spelling) aliases.set(other, target);
-    return true;
+    const upsertAliases: { spelling: string; canonical: string }[] = [
+      { spelling, canonical: target },
+    ];
+    for (const [other, named] of aliases) {
+      if (named === spelling) {
+        aliases.set(other, target);
+        upsertAliases.push({ spelling: other, canonical: target });
+      }
+    }
+    return deletedCanonical !== undefined
+      ? { upsertAliases, deleteAliases: [deletedCanonical] }
+      : { upsertAliases };
   }
   #takeReadOrder(agentId: string, target: string, sequence: number): void {
     const state = this.#consumedState(agentId);
@@ -235,22 +275,89 @@ export class AgentConsumedAttention {
     entry.readOrder = ++state.lastReadOrder;
     this.#latestThreadReads.record(agentId, target, entry);
   }
-  #persist(agentId: string): void {
+  #persistDelta(agentId: string, delta: AgentConsumedSeqDelta): void {
+    const store = this.ports.store();
+    if (!store) return;
+    if (store.apply) {
+      store.apply(agentId, delta);
+      return;
+    }
+    store.write(agentId, consumedSnapshot(this.#consumedState(agentId)));
+  }
+  #persistTarget(agentId: string, target: string): void {
     const store = this.ports.store();
     if (!store) return;
     const state = this.#consumedState(agentId);
-    store.write(agentId, consumedSnapshot(state));
+    if (!store.apply) {
+      store.write(agentId, consumedSnapshot(state));
+      return;
+    }
+    const entry = state.targets.get(target);
+    if (!entry?.conversationId) return;
+    const record = persistableConsumedTarget(entry);
+    if (!record) return;
+    store.apply(agentId, { upsertTargets: [{ target, entry: record }] });
+  }
+  #persistTargets(agentId: string, targets: readonly string[]): void {
+    const store = this.ports.store();
+    if (!store) return;
+    const state = this.#consumedState(agentId);
+    if (!store.apply) {
+      store.write(agentId, consumedSnapshot(state));
+      return;
+    }
+    const upsertTargets: { target: string; entry: AgentConsumedSeqEntry }[] = [];
+    for (const target of targets) {
+      const entry = state.targets.get(target);
+      if (!entry?.conversationId) continue;
+      const record = persistableConsumedTarget(entry);
+      if (record) upsertTargets.push({ target, entry: record });
+    }
+    if (upsertTargets.length > 0) store.apply(agentId, { upsertTargets });
+  }
+  #persistTargetAndAliases(
+    agentId: string,
+    target: string | undefined,
+    aliasDelta: AliasDelta | undefined,
+  ): void {
+    const store = this.ports.store();
+    if (!store) return;
+    const state = this.#consumedState(agentId);
+    if (!store.apply) {
+      store.write(agentId, consumedSnapshot(state));
+      return;
+    }
+    let upsertTargets: { target: string; entry: AgentConsumedSeqEntry }[] | undefined;
+    if (target !== undefined) {
+      const entry = state.targets.get(target);
+      if (entry?.conversationId) {
+        const record = persistableConsumedTarget(entry);
+        if (record) upsertTargets = [{ target, entry: record }];
+      }
+    }
+    if (
+      !upsertTargets?.length &&
+      !aliasDelta?.upsertAliases.length &&
+      !aliasDelta?.deleteAliases?.length
+    )
+      return;
+    store.apply(agentId, {
+      ...(upsertTargets ? { upsertTargets } : {}),
+      ...(aliasDelta?.upsertAliases.length ? { upsertAliases: aliasDelta.upsertAliases } : {}),
+      ...(aliasDelta?.deleteAliases?.length ? { deleteAliases: aliasDelta.deleteAliases } : {}),
+    });
   }
   modelSeenSequence(agentId: string, target: string): number {
     return this.#consumedState(agentId).targets.get(target)?.seq ?? 0;
   }
   recordModelSeen(agentId: string, target: string, sequence: number): void {
     if (!Number.isInteger(sequence) || sequence < 1) return;
-    if (this.#advanceFrontier(agentId, target, sequence, "model_seen")) this.#persist(agentId);
+    if (this.#advanceFrontier(agentId, target, sequence, "model_seen"))
+      this.#persistTarget(agentId, target);
   }
   recordReadContext(agentId: string, target: string, sequence = 0): void {
     this.#takeReadOrder(agentId, target, sequence);
-    this.#persist(agentId);
+    this.#persistTarget(agentId, target);
   }
   readOrder(agentId: string, target: string): number | undefined {
     return this.#consumedState(agentId).targets.get(target)?.readOrder;

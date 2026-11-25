@@ -53,17 +53,14 @@ type DraftRow = {
   seen_exact_seqs: string | null;
 };
 
-/**
- * Short-lived continuation state, one row per target in the Agent's `state.db`
- * (`agent-state/<agentId>/`) — the same database the consumed cursor keeps, each write its own
- * commit.
- *
- * Only a lookup removes an expired row, and only its own target's: `--send-draft` can then tell
- * an expired draft from one that never existed, and a write for one target never drops another
- * target's expired draft (or its last body). The async signatures stay: the state machine's API
- * is unchanged, and each operation is already a single commit, so there is nothing left to
- * serialize by hand.
- */
+const SELECT_DRAFT_SQL = `SELECT * FROM drafts WHERE target = ?`;
+const DELETE_DRAFT_SQL = `DELETE FROM drafts WHERE target = ?`;
+const DELETE_DRAFT_IF_MATCH_SQL = `DELETE FROM drafts WHERE target = ? AND idempotency_key = ? AND saved_at >= ?`;
+const UPSERT_DRAFT_SQL = `INSERT OR REPLACE INTO drafts
+  (target, content, attachment_ids, idempotency_key, mentions, saved_at, rehold_count,
+   seen_up_to_seq, seen_exact_seqs)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
 export class AgentMessageDraftStore {
   constructor(
     private readonly db: AgentStateDb,
@@ -74,19 +71,16 @@ export class AgentMessageDraftStore {
     const row = this.#row(target);
     if (!row) return { status: "missing" };
     const draft = this.#draft(row);
-    // A row without a key names no logical send, so it answers exactly like an absent one.
     if (!draft.idempotencyKey) return { status: "missing" };
     if (!this.#expired(draft)) return { status: "found", draft };
-    this.db.database.prepare(`DELETE FROM drafts WHERE target = ?`).run(target);
+    this.db.database.query(DELETE_DRAFT_SQL).run(target);
     return { status: "expired", content: draft.content, savedAt: draft.savedAt };
   }
 
-  /** A fresh send saves a never-held draft; only `replace` (a hold) advances the count. */
   async save(target: string, draft: AgentMessageDraftContent): Promise<void> {
     this.#upsert(target, draft, 0);
   }
 
-  /** The held-draft refresh: the same content, one hold later, at the reviewed frontier. */
   async replace(
     target: string,
     draft: AgentMessageDraftContent & { reholdCount: number },
@@ -95,7 +89,7 @@ export class AgentMessageDraftStore {
   }
 
   async clear(target: string): Promise<void> {
-    this.db.database.prepare(`DELETE FROM drafts WHERE target = ?`).run(target);
+    this.db.database.query(DELETE_DRAFT_SQL).run(target);
   }
 
   discard(
@@ -110,32 +104,26 @@ export class AgentMessageDraftStore {
     const draft = this.#draft(row);
     if (!draft.idempotencyKey) return { status: "missing" };
     if (this.#expired(draft)) {
-      this.db.database.prepare(`DELETE FROM drafts WHERE target = ?`).run(target);
+      this.db.database.query(DELETE_DRAFT_SQL).run(target);
       return { status: "missing" };
     }
     if (expectedIdempotencyKey !== undefined && draft.idempotencyKey !== expectedIdempotencyKey) {
       return { status: "mismatch" };
     }
-    this.db.database.prepare(`DELETE FROM drafts WHERE target = ?`).run(target);
+    this.db.database.query(DELETE_DRAFT_SQL).run(target);
     return { status: "discarded", idempotencyKey: draft.idempotencyKey };
   }
 
-  /** The clear after an accepted send: only the send whose key the draft holds consumes it, so an
-   * older send accepted late never removes a newer draft. Returns whether it cleared. */
   async clearIfIdempotencyKeyMatches(target: string, idempotencyKey: string): Promise<boolean> {
-    const row = this.#row(target);
-    if (!row) return false;
-    const draft = this.#draft(row);
-    // An expired draft is left for `--send-draft` to report (and hand back) as expired.
-    if (this.#expired(draft) || draft.idempotencyKey !== idempotencyKey) return false;
-    this.db.database.prepare(`DELETE FROM drafts WHERE target = ?`).run(target);
-    return true;
+    const minSavedAt = this.now() - AGENT_MESSAGE_DRAFT_TTL_MS;
+    const result = this.db.database
+      .query(DELETE_DRAFT_IF_MATCH_SQL)
+      .run(target, idempotencyKey, minSavedAt);
+    return result.changes === 1;
   }
 
   #row(target: string): DraftRow | undefined {
-    return this.db.database.prepare(`SELECT * FROM drafts WHERE target = ?`).get(target) as
-      | DraftRow
-      | undefined;
+    return this.db.database.query(SELECT_DRAFT_SQL).get(target) as DraftRow | undefined;
   }
 
   #draft(row: DraftRow): AgentMessageDraft {
@@ -159,15 +147,9 @@ export class AgentMessageDraftStore {
   }
 
   #upsert(target: string, draft: AgentMessageDraftContent, reholdCount: number): void {
-    // A draft without a key names no logical send, so there is nothing to keep for a resend.
     if (!draft.idempotencyKey) return;
     this.db.database
-      .prepare(
-        `INSERT OR REPLACE INTO drafts
-           (target, content, attachment_ids, idempotency_key, mentions, saved_at, rehold_count,
-            seen_up_to_seq, seen_exact_seqs)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
+      .query(UPSERT_DRAFT_SQL)
       .run(
         target,
         draft.content,

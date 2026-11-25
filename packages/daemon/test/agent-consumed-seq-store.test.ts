@@ -349,3 +349,152 @@ test("removing an Agent closes its ledger and deletes its directory", async () =
   // The next use opens a fresh, empty ledger rather than a closed handle.
   expect(store.read("agent-1").targets).toEqual({});
 });
+
+test("apply updates and deletes only named targets and aliases while preserving monotonicity", () => {
+  const stateDirectory = temporaryStateDirectory();
+  const store = new AgentConsumedSeqStore(stateDirectory);
+  store.write("agent-1", {
+    targets: {
+      "@ada": {
+        conversationId: "conversation-1",
+        seq: 9,
+        readOrder: 5,
+        reviewedSeq: 9,
+        exactSeqs: [11, 13],
+      },
+      "@bea": { conversationId: "conversation-2", seq: 4 },
+    },
+    aliases: { "@ADA": "@ada", "@BEA": "@bea" },
+    nextReadOrder: 6,
+  });
+
+  store.apply("agent-1", {
+    upsertTargets: [
+      {
+        target: "@ada",
+        entry: {
+          conversationId: "conversation-1",
+          seq: 7,
+          readOrder: 3,
+          reviewedSeq: 7,
+          exactSeqs: [15],
+        },
+      },
+      {
+        target: "@cyd",
+        entry: { conversationId: "conversation-3", seq: 2, exactSeqs: [5] },
+      },
+    ],
+    upsertAliases: [{ spelling: "@CYD", canonical: "@cyd" }],
+    deleteAliases: ["@BEA"],
+  });
+
+  expect(new AgentConsumedSeqStore(stateDirectory).read("agent-1")).toEqual({
+    targets: {
+      "@ada": {
+        conversationId: "conversation-1",
+        seq: 9,
+        readOrder: 5,
+        reviewedSeq: 9,
+        exactSeqs: [11, 13],
+      },
+      "@bea": { conversationId: "conversation-2", seq: 4 },
+      "@cyd": { conversationId: "conversation-3", seq: 2, exactSeqs: [5] },
+    },
+    aliases: { "@ADA": "@ada", "@CYD": "@cyd" },
+    nextReadOrder: 6,
+  });
+
+  store.apply("agent-1", {
+    upsertTargets: [
+      {
+        target: "@ada",
+        entry: { conversationId: "conversation-1", seq: 9, exactSeqs: [15] },
+      },
+      {
+        target: "@cyd",
+        entry: { conversationId: "conversation-3-recreated", seq: 1 },
+      },
+    ],
+    deleteTargets: ["@bea"],
+  });
+
+  expect(new AgentConsumedSeqStore(stateDirectory).read("agent-1")).toEqual({
+    targets: {
+      "@ada": {
+        conversationId: "conversation-1",
+        seq: 9,
+        readOrder: 5,
+        reviewedSeq: 9,
+        exactSeqs: [11, 13, 15],
+      },
+      "@cyd": { conversationId: "conversation-3-recreated", seq: 1 },
+    },
+    aliases: { "@ADA": "@ada", "@CYD": "@cyd" },
+    nextReadOrder: 6,
+  });
+
+  expect(() => store.apply("../escape", { deleteTargets: ["@ada"] })).toThrow(
+    "invalid consumed-sequence Agent scope",
+  );
+  store.close();
+});
+
+test("AgentConsumedAttention uses incremental apply, skips no-op initial binds, and syncs resets and alias flips", async () => {
+  const { AgentConsumedAttention } = await import("#src/daemon-runtime/agent-consumed-attention");
+  const { PreviewSeen } = await import("#src/daemon-runtime/inbox-preview-rows");
+  const stateDirectory = temporaryStateDirectory();
+  const backing = new AgentConsumedSeqStore(stateDirectory);
+  let fullWrites = 0;
+  const deltas: unknown[] = [];
+  const spyPort = {
+    read: (agentId: string) => backing.read(agentId),
+    write: (agentId: string, state: Parameters<AgentConsumedSeqStore["write"]>[1]) => {
+      fullWrites++;
+      backing.write(agentId, state);
+    },
+    apply: (agentId: string, delta: Parameters<AgentConsumedSeqStore["apply"]>[1]) => {
+      deltas.push(delta);
+      backing.apply(agentId, delta);
+    },
+  };
+  const attention = new AgentConsumedAttention({
+    store: () => spyPort,
+    previewSeen: new PreviewSeen(),
+    settlePending: () => {},
+  });
+
+  attention.bindConversation("agent-1", "#general", "conv-1");
+  expect(fullWrites).toBe(0);
+  expect(deltas).toHaveLength(0);
+
+  attention.recordModelSeen("agent-1", "#early", 5);
+  expect(deltas).toHaveLength(0);
+  attention.bindConversation("agent-1", "#early", "conv-early");
+  expect(deltas).toHaveLength(1);
+  expect(backing.read("agent-1").targets["#early"]).toEqual({
+    conversationId: "conv-early",
+    seq: 5,
+  });
+
+  attention.recordModelSeen("agent-1", "#general", 10);
+  attention.recordReadContext("agent-1", "#general", 10);
+  attention.bindConversation("agent-1", "#general", "conv-2");
+  expect(backing.read("agent-1").targets["#general"]).toEqual({
+    conversationId: "conv-2",
+    readOrder: 1,
+  });
+
+  attention.bindConversation("agent-1", "#early", "conv-early-2");
+  expect(backing.read("agent-1").targets["#early"]).toBeUndefined();
+
+  attention.recordTargetAlias("agent-1", "b", "a");
+  attention.recordTargetAlias("agent-1", "x", "b");
+  attention.recordTargetAlias("agent-1", "a", "b");
+  expect(new AgentConsumedSeqStore(stateDirectory).read("agent-1").aliases).toEqual({
+    a: "b",
+    x: "b",
+  });
+  expect(fullWrites).toBe(0);
+  backing.close();
+});

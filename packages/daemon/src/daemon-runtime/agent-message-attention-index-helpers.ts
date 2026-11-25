@@ -131,21 +131,27 @@ export type ConsumedTarget = {
   -readonly [K in keyof AgentConsumedSeqEntry]: AgentConsumedSeqEntry[K];
 };
 
-/** The durable snapshot of one Agent's consumed state: only what a cursor entry persists. */
+export function persistableConsumedTarget(
+  entry: ConsumedTarget,
+): AgentConsumedSeqEntry | undefined {
+  if (entry.seq === undefined && entry.readOrder === undefined && !entry.exactSeqs?.length)
+    return undefined;
+  const record: ConsumedTarget = {};
+  if (entry.seq !== undefined) record.seq = entry.seq;
+  if (entry.readOrder !== undefined) {
+    record.readOrder = entry.readOrder;
+    if (entry.reviewedSeq !== undefined) record.reviewedSeq = entry.reviewedSeq;
+  }
+  if (entry.exactSeqs?.length) record.exactSeqs = entry.exactSeqs;
+  if (entry.conversationId !== undefined) record.conversationId = entry.conversationId;
+  return record;
+}
+
 export function consumedSnapshot(state: ConsumedAgent): AgentConsumedSeqState {
   const targets: Record<string, AgentConsumedSeqEntry> = {};
   for (const [target, entry] of state.targets) {
-    const record: ConsumedTarget = {};
-    if (entry.seq !== undefined) record.seq = entry.seq;
-    if (entry.readOrder !== undefined) {
-      record.readOrder = entry.readOrder;
-      if (entry.reviewedSeq !== undefined) record.reviewedSeq = entry.reviewedSeq;
-    }
-    if (entry.exactSeqs?.length) record.exactSeqs = entry.exactSeqs;
-    // A conversation binding by itself never made a persisted cursor entry.
-    if (Object.keys(record).length === 0) continue;
-    if (entry.conversationId !== undefined) record.conversationId = entry.conversationId;
-    targets[target] = record;
+    const record = persistableConsumedTarget(entry);
+    if (record) targets[target] = record;
   }
   return {
     targets,
