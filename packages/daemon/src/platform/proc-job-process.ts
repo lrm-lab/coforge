@@ -2,6 +2,10 @@ import { closeSync, openSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { isExitedProcState, parseProcStat } from "./linux-process-table";
+import {
+  verifyProcJobMemoryScope,
+  type ProcScopeMemoryVerification,
+} from "./proc-job-systemd-memory";
 
 export type ProcJobIdentity = {
   pgid: number | null;
@@ -207,16 +211,82 @@ async function assertExecutableAvailable(
     throw new Error(`executable not found on PATH: ${executable}`);
 }
 
+const SCOPE_VERIFY_TIMEOUT_MS = 3_000;
+const SCOPE_EXEC_GATE =
+  'IFS= read -r approval && [ "$approval" = run ] || exit 125; exec "$@" </dev/null';
+
+async function verifyScopeBeforeExec(
+  child: {
+    pid: number;
+    exited: Promise<number>;
+    stdin: Bun.FileSink;
+    kill(signal: "SIGKILL"): void;
+  },
+  unit: string,
+  limitBytes: number,
+  verify: ProcScopeMemoryVerification,
+  timeoutMs: number,
+): Promise<void> {
+  const controller = new AbortController();
+  const deadline = performance.now() + timeoutMs;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let attempted = false;
+  try {
+    const verified = await Promise.race([
+      Promise.resolve()
+        .then(() => verify({ unit, pid: child.pid, limitBytes, signal: controller.signal }))
+        .catch(() => false),
+      child.exited.then(() => false),
+      new Promise<boolean>((resolve) => {
+        timeout = setTimeout(() => resolve(false), timeoutMs);
+      }),
+    ]);
+    if (!verified || performance.now() >= deadline)
+      throw new Error("Could not verify the scope memory limit before executing the job.");
+    attempted = true;
+    const sent = await child.stdin.write("run\n");
+    if (sent !== 4) throw new Error("Could not release the scope execution gate.");
+  } finally {
+    controller.abort();
+    clearTimeout(timeout);
+    if (!attempted) child.kill("SIGKILL");
+    await child.stdin.end();
+  }
+}
+
 export async function spawnDetachedProcJob(input: {
   command: string[];
   cwd: string;
   env: Record<string, string>;
   logPath: string;
   systemdUnit?: string;
+  memoryLimitBytes?: number;
+  verifySystemdMemoryScope?: ProcScopeMemoryVerification;
+  verifyTimeoutMs?: number;
+  systemdSupportsNoArgumentExpansion?: boolean;
   onExit(exitCode: number | null, signal: string | null): void;
 }): Promise<{ pid: number }> {
   if (input.systemdUnit)
     await assertExecutableAvailable(input.command[0]!, input.cwd, input.env.PATH);
+  const limit = input.memoryLimitBytes;
+  const verify = input.verifySystemdMemoryScope ?? verifyProcJobMemoryScope;
+  if (limit !== undefined && (!input.systemdUnit || !Number.isSafeInteger(limit) || limit <= 0))
+    throw new Error("A scope memory limit requires a systemd unit and positive byte limit.");
+  const cappedScopeArgs =
+    limit === undefined
+      ? []
+      : [
+          "--description=CoForge Agent background job",
+          "--property=MemoryAccounting=yes",
+          `--property=MemoryMax=${limit}`,
+          "--property=MemorySwapMax=0",
+          "--property=OOMPolicy=kill",
+          ...(input.systemdSupportsNoArgumentExpansion ? ["--expand-environment=no"] : []),
+        ];
+  const command =
+    limit === undefined
+      ? input.command
+      : ["/bin/sh", "-c", SCOPE_EXEC_GATE, "proc-job", ...input.command];
   const argv = input.systemdUnit
     ? [
         "systemd-run",
@@ -226,16 +296,17 @@ export async function spawnDetachedProcJob(input: {
         "--unit",
         input.systemdUnit,
         "--collect",
+        ...cappedScopeArgs,
         "--",
-        ...input.command,
+        ...command,
       ]
-    : input.command;
+    : command;
   const fd = openSync(input.logPath, "a", 0o600);
   try {
     const child = Bun.spawn(argv, {
       cwd: input.cwd,
       env: input.env,
-      stdin: "ignore",
+      stdin: limit === undefined ? "ignore" : "pipe",
       stdout: fd,
       stderr: fd,
       detached: true,
@@ -243,6 +314,24 @@ export async function spawnDetachedProcJob(input: {
         input.onExit(exitCode ?? null, signalCode ? String(signalCode) : null);
       },
     });
+    if (limit !== undefined && input.systemdUnit) {
+      if (!child.stdin) {
+        child.kill("SIGKILL");
+        throw new Error("The scope execution gate has no approval pipe.");
+      }
+      await verifyScopeBeforeExec(
+        {
+          pid: child.pid,
+          exited: child.exited,
+          stdin: child.stdin,
+          kill: (signal) => child.kill(signal),
+        },
+        input.systemdUnit,
+        limit,
+        verify,
+        Math.min(input.verifyTimeoutMs ?? SCOPE_VERIFY_TIMEOUT_MS, SCOPE_VERIFY_TIMEOUT_MS),
+      );
+    }
     child.unref();
     return { pid: child.pid };
   } finally {
