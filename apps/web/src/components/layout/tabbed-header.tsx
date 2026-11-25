@@ -46,8 +46,10 @@ export function TabbedHeader({
 }) {
   const headerRef = useRef<HTMLElement>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
+  const tabsScrollRef = useRef<HTMLDivElement>(null);
   const tabsMeasureRef = useRef<HTMLDivElement>(null);
   const [layoutMode, setLayoutMode] = useState<HeaderLayoutMode>("auto");
+  const [tabsOverflow, setTabsOverflow] = useState(false);
 
   const hasTabs = Boolean(tabs);
   const hasActions = Boolean(actions);
@@ -55,6 +57,7 @@ export function TabbedHeader({
   useIsomorphicLayoutEffect(() => {
     if (!hasTabs) {
       setLayoutMode("auto");
+      setTabsOverflow(false);
       return;
     }
     const header = headerRef.current;
@@ -62,6 +65,9 @@ export function TabbedHeader({
     if (!header || !tabsMeasure) return;
 
     const measure = () => {
+      const tabsScroll = tabsScrollRef.current;
+      const nextOverflow = tabsScroll ? tabsScroll.scrollWidth > tabsScroll.clientWidth + 1 : false;
+      setTabsOverflow((prev) => (prev === nextOverflow ? prev : nextOverflow));
       const headerWidth = header.clientWidth;
       if (headerWidth <= 0) return;
       if (headerWidth < SINGLE_ROW_MIN_HEADER_PX) {
@@ -93,6 +99,7 @@ export function TabbedHeader({
     const observer = new ResizeObserver(measure);
     observer.observe(header);
     observer.observe(tabsMeasure);
+    if (tabsScrollRef.current) observer.observe(tabsScrollRef.current);
     if (actionsRef.current) observer.observe(actionsRef.current);
     return () => observer.disconnect();
   }, [hasTabs, hasActions]);
@@ -147,8 +154,10 @@ export function TabbedHeader({
         )}
         {tabs && (
           <div
+            ref={tabsScrollRef}
             className={cx(
               "flex min-w-0 max-w-full",
+              !tabsOverflow && "[touch-action:pan-y_pinch-zoom]",
               singleRow && [
                 "col-span-1 col-start-2 row-start-1",
                 tabsStart ? "items-center py-0" : "-mb-px items-end pt-0",

@@ -46,7 +46,7 @@ export function SwipeableProfileOverlay({
               ? { type: "spring", stiffness: 380, damping: 32 }
               : { duration: DURATION_S.lg, ease: EASE_OUT }
       }
-      className="absolute inset-0 z-20 flex min-h-0 min-w-0 touch-pan-y flex-col bg-primary"
+      className="absolute inset-0 z-20 flex min-h-0 min-w-0 [touch-action:pan-y_pinch-zoom] flex-col bg-primary [&_.overflow-y-auto]:[touch-action:pan-y_pinch-zoom]"
     >
       {children}
     </m.div>

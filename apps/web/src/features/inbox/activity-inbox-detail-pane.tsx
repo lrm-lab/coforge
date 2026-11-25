@@ -97,7 +97,7 @@ export function ActivityInboxDetailPane({
                       ? { type: "spring", stiffness: 380, damping: 32 }
                       : { duration: DURATION_S.lg, ease: EASE_OUT }
               }
-              className="fixed inset-x-0 top-0 z-40 flex h-[var(--app-height,100dvh)] min-h-0 min-w-0 touch-pan-y bg-primary pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left shadow-2xl"
+              className="fixed inset-x-0 top-0 z-40 flex h-[var(--app-height,100dvh)] min-h-0 min-w-0 [touch-action:pan-y_pinch-zoom] bg-primary pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left shadow-2xl [&_.overflow-y-auto]:[touch-action:pan-y_pinch-zoom]"
             >
               <ActivityConversationPane
                 target={pane}

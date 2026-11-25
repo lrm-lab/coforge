@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type PointerEvent,
+} from "react";
 import { DURATION_MS } from "#src/utils/motion-tokens";
 
 const EDGE_MIN_X = 16;
@@ -7,6 +14,40 @@ const COMMIT_DX = 10;
 const COMPLETE_PROGRESS = 0.32;
 const COMPLETE_VELOCITY = 0.45;
 const SETTLE_DURATION_MS = Math.round(DURATION_MS.md * 1.5);
+export const SWIPE_CLICK_SUPPRESS_MS = 400;
+
+export type SwipeClickSuppressorState = {
+  armedUntil: number | null;
+};
+
+export function createSwipeClickSuppressorState(): SwipeClickSuppressorState {
+  return { armedUntil: null };
+}
+
+export function armSwipeClickSuppression(
+  nowMs: number,
+  windowMs: number = SWIPE_CLICK_SUPPRESS_MS,
+): SwipeClickSuppressorState {
+  return { armedUntil: nowMs + windowMs };
+}
+
+export function clearSwipeClickSuppression(): SwipeClickSuppressorState {
+  return { armedUntil: null };
+}
+
+export function evaluateSwipeClickSuppression(
+  state: SwipeClickSuppressorState,
+  event: { detail: number; nowMs: number },
+): { suppress: boolean; nextState: SwipeClickSuppressorState } {
+  if (state.armedUntil === null) {
+    return { suppress: false, nextState: state };
+  }
+  const nextState = clearSwipeClickSuppression();
+  if (event.nowMs > state.armedUntil || event.detail === 0) {
+    return { suppress: false, nextState };
+  }
+  return { suppress: true, nextState };
+}
 
 export function shouldCompleteSwipeBack(progress: number, velocityPxPerMs: number): boolean {
   return progress >= COMPLETE_PROGRESS || velocityPxPerMs >= COMPLETE_VELOCITY;
@@ -27,6 +68,7 @@ export function useEdgeSwipeBack({
   const [dragging, setDragging] = useState(false);
   const [settling, setSettling] = useState(false);
   const settleTimerRef = useRef<number | null>(null);
+  const suppressClickRef = useRef<SwipeClickSuppressorState>(createSwipeClickSuppressorState());
   const onProgressRef = useRef(onProgress);
   const onEndRef = useRef(onEnd);
   useEffect(() => {
@@ -51,18 +93,28 @@ export function useEdgeSwipeBack({
     }
   }, []);
 
+  const clearSuppressClick = useCallback(() => {
+    suppressClickRef.current = clearSwipeClickSuppression();
+  }, []);
+
+  const armSuppressClick = useCallback(() => {
+    suppressClickRef.current = armSwipeClickSuppression(performance.now());
+  }, []);
+
   useEffect(() => {
     return () => {
       clearSettleTimer();
+      clearSuppressClick();
       if (stateRef.current?.committed) {
         stateRef.current = null;
         onEndRef.current?.(false);
       }
     };
-  }, [clearSettleTimer]);
+  }, [clearSettleTimer, clearSuppressClick]);
 
   useEffect(() => {
     if (enabled) return;
+    clearSuppressClick();
     if (stateRef.current) {
       const wasCommitted = stateRef.current.committed;
       stateRef.current = null;
@@ -72,10 +124,11 @@ export function useEdgeSwipeBack({
         onEndRef.current?.(false);
       }
     }
-  }, [enabled]);
+  }, [clearSuppressClick, enabled]);
 
   const onPointerDown = useCallback(
     (event: PointerEvent<HTMLElement>) => {
+      clearSuppressClick();
       if (!enabled || !event.isPrimary) return;
       if (event.pointerType === "mouse" && event.button !== 0) return;
       const rect = event.currentTarget.getBoundingClientRect();
@@ -94,7 +147,7 @@ export function useEdgeSwipeBack({
         committed: false,
       };
     },
-    [clearSettleTimer, enabled],
+    [clearSettleTimer, clearSuppressClick, enabled],
   );
 
   const onPointerMove = useCallback((event: PointerEvent<HTMLElement>) => {
@@ -137,6 +190,7 @@ export function useEdgeSwipeBack({
       stateRef.current = null;
       const completed = committed && !cancelled && shouldCompleteSwipeBack(progress, velocity);
       if (committed) {
+        if (!cancelled) armSuppressClick();
         setDragging(false);
         if (!onProgressRef.current) setDragProgress(0);
         onEndRef.current?.(completed);
@@ -152,7 +206,7 @@ export function useEdgeSwipeBack({
         }, SETTLE_DURATION_MS);
       }
     },
-    [clearSettleTimer, onBack],
+    [armSuppressClick, clearSettleTimer, onBack],
   );
 
   const onPointerUp = useCallback(
@@ -165,8 +219,32 @@ export function useEdgeSwipeBack({
     [finish],
   );
 
+  const onKeyDownCapture = useCallback(() => {
+    clearSuppressClick();
+  }, [clearSuppressClick]);
+
+  const onClickCapture = useCallback((event: MouseEvent<HTMLElement>) => {
+    const decision = evaluateSwipeClickSuppression(suppressClickRef.current, {
+      detail: event.detail,
+      nowMs: performance.now(),
+    });
+    suppressClickRef.current = decision.nextState;
+    if (!decision.suppress) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }, []);
+
   return {
-    bind: enabled ? { onPointerDown, onPointerMove, onPointerUp, onPointerCancel } : {},
+    bind: enabled
+      ? {
+          onPointerDownCapture: onPointerDown,
+          onPointerMoveCapture: onPointerMove,
+          onPointerUpCapture: onPointerUp,
+          onPointerCancelCapture: onPointerCancel,
+          onKeyDownCapture,
+          onClickCapture,
+        }
+      : {},
     dragProgress,
     dragging,
     settling,

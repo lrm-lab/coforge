@@ -396,7 +396,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
                   aria-hidden={phone && showList ? true : undefined}
                   style={detailStyle}
                   className={cx(
-                    "flex min-h-0 min-w-0 flex-1 flex-col bg-primary max-lg:absolute max-lg:inset-0 max-lg:z-20 max-lg:touch-pan-y max-lg:will-change-transform lg:flex",
+                    "flex min-h-0 min-w-0 flex-1 flex-col bg-primary max-lg:absolute max-lg:inset-0 max-lg:z-20 max-lg:[touch-action:pan-y_pinch-zoom] max-lg:will-change-transform max-lg:[&_.overflow-y-auto]:[touch-action:pan-y_pinch-zoom] lg:flex",
                     phone && (animatingStack || swipe.dragging) && "shadow-2xl",
                     phone && showList && "pointer-events-none",
                   )}
