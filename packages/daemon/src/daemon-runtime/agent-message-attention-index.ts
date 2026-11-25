@@ -253,6 +253,7 @@ export class AgentMessageAttentionIndex {
       unreadConversationIds,
       snapshotMessages: options?.snapshotMessages ?? messages,
       countedDeliveries: options?.countedDeliveries,
+      lastUnreadSequences: options?.lastUnreadSequences,
       openTasks,
       currentAttention: this.#attention.get(agentId) ?? new Map<string, MessageAttention>(),
       generation,

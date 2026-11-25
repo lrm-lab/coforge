@@ -12,7 +12,12 @@ export type AgentInputCompletion = {
 };
 export type AgentRecoveryContext = Pick<
   AgentStartIntent,
-  "wakeMessage" | "resumeMessages" | "unreadSummary" | "unreadConversationIds" | "openTasks"
+  | "wakeMessage"
+  | "resumeMessages"
+  | "unreadSummary"
+  | "unreadConversationIds"
+  | "lastUnreadSequences"
+  | "openTasks"
 > & {
   summaryIncludesResumeMessages?: true;
   countedDeliveries?: readonly AgentMessageDelivery[];
@@ -99,6 +104,7 @@ export function recoveryOf(intent: AgentStartIntent): AgentRecoveryContext {
     resumeMessages: intent.resumeMessages,
     unreadSummary: intent.unreadSummary,
     unreadConversationIds: intent.unreadConversationIds,
+    lastUnreadSequences: intent.lastUnreadSequences,
     openTasks: intent.openTasks,
     summaryIncludesResumeMessages: true,
   };
