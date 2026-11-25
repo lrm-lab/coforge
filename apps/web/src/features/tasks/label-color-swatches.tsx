@@ -1,4 +1,4 @@
-import { useContext, useRef } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useFocusVisible } from "react-aria";
 import {
   Radio as AriaRadio,
@@ -11,6 +11,15 @@ import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { LABEL_DOT, LABEL_PALETTE, labelColorName } from "./label-colors";
+import {
+  createSwatchTooltipState,
+  onSwatchFocusChange,
+  onSwatchFocusVisibleChange,
+  onSwatchHoverChange,
+  onSwatchTooltipOpenChange,
+  type SwatchTooltipEffect,
+  type SwatchTooltipTransition,
+} from "./swatch-tooltip-state";
 
 /**
  * The colors a label may take, as a grid of round swatches. A radio group, so the arrow keys move
@@ -66,40 +75,103 @@ export function LabelColorSwatches({
 }
 
 function Swatch({ color, desktop }: { color: string; desktop: boolean }) {
+  const tooltipState = useRef(createSwatchTooltipState());
+  const [dismissed, setDismissed] = useState(false);
+
+  const commit = useCallback((transition: SwatchTooltipTransition): SwatchTooltipEffect => {
+    tooltipState.current = transition.state;
+    setDismissed(transition.state.dismissed);
+    return transition.effect;
+  }, []);
+
+  const handleHover = useCallback(
+    (hovered: boolean) => commit(onSwatchHoverChange(tooltipState.current, hovered)),
+    [commit],
+  );
+
+  const handleFocus = useCallback(
+    (focused: boolean, options: { focusVisible: boolean; activeElementIsSelf: boolean }) =>
+      commit(onSwatchFocusChange(tooltipState.current, focused, options)),
+    [commit],
+  );
+
+  const handlePointerModality = useCallback(
+    () => commit(onSwatchFocusVisibleChange(tooltipState.current, false)),
+    [commit],
+  );
+
   return (
-    <Tooltip title={labelColorName(color)}>
-      <SwatchRadio color={color} desktop={desktop} />
+    <Tooltip
+      title={labelColorName(color)}
+      // Disable React Aria's own trigger while dismissed so window refocus cannot bypass our guard.
+      isDisabled={dismissed}
+      onOpenChange={(open) => {
+        const next = onSwatchTooltipOpenChange(tooltipState.current, open, {
+          documentHasFocus: document.hasFocus(),
+        });
+        tooltipState.current = next;
+        setDismissed(next.dismissed);
+      }}
+    >
+      <SwatchRadio
+        color={color}
+        desktop={desktop}
+        onHover={handleHover}
+        onFocus={handleFocus}
+        onPointerModality={handlePointerModality}
+      />
     </Tooltip>
   );
 }
 
-function SwatchRadio({ color, desktop }: { color: string; desktop: boolean }) {
+function runTooltipEffect(
+  tooltip: React.ContextType<typeof TooltipTriggerStateContext>,
+  effect: SwatchTooltipEffect,
+) {
+  if (effect === "open-immediate") tooltip?.open(true);
+  else if (effect === "open-delayed") tooltip?.open(false);
+  else if (effect === "close") tooltip?.close();
+}
+
+function SwatchRadio({
+  color,
+  desktop,
+  onHover,
+  onFocus,
+  onPointerModality,
+}: {
+  color: string;
+  desktop: boolean;
+  onHover: (hovered: boolean) => SwatchTooltipEffect;
+  onFocus: (
+    focused: boolean,
+    options: { focusVisible: boolean; activeElementIsSelf: boolean },
+  ) => SwatchTooltipEffect;
+  onPointerModality: () => SwatchTooltipEffect;
+}) {
   const tooltip = useContext(TooltipTriggerStateContext);
   const { isFocusVisible: keyboard } = useFocusVisible();
-  const hovered = useRef(false);
-  const focused = useRef(false);
-  const keyboardFocus = () => focused.current && keyboard;
-  const keepsTooltip = () => hovered.current || keyboardFocus();
-  const show = () => {
-    if (keepsTooltip()) tooltip?.open(keyboardFocus());
-  };
-  const hide = () => {
-    if (!keepsTooltip()) tooltip?.close();
-  };
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!keyboard) runTooltipEffect(tooltip, onPointerModality());
+  }, [keyboard, onPointerModality, tooltip]);
+
   return (
     <AriaRadio
       value={color}
       aria-label={labelColorName(color)}
-      onHoverChange={(next) => {
-        hovered.current = next;
-        if (next) show();
-        else hide();
-      }}
-      onFocusChange={(next) => {
-        focused.current = next;
-        if (next) show();
-        else hide();
-      }}
+      inputRef={inputRef}
+      onHoverChange={(next) => runTooltipEffect(tooltip, onHover(next))}
+      onFocusChange={(next) =>
+        runTooltipEffect(
+          tooltip,
+          onFocus(next, {
+            focusVisible: keyboard,
+            activeElementIsSelf: document.activeElement === inputRef.current,
+          }),
+        )
+      }
       className={({ isSelected, isFocusVisible: ringed }) =>
         cn(
           "relative flex cursor-pointer items-center justify-center rounded-full outline-hidden",
