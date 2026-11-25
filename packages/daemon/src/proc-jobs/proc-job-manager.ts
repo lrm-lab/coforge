@@ -4,7 +4,6 @@ import {
   PROC_EXITED_KEPT_PER_AGENT,
   PROC_LOG_MAX_BYTES,
   PROC_MAX_JOBS_PER_AGENT,
-  type AgentProcJob,
   type AgentProcListResponse,
   type AgentProcLogsRequest,
   type AgentProcLogsResponse,
@@ -39,6 +38,7 @@ import {
   removeProcJobLogFiles,
   rotateProcLogIfNeeded,
 } from "./proc-job-logs";
+import { stopProcJobTargets } from "./proc-job-stop";
 
 const logger = getLogger(["coforge", "daemon", "proc"]);
 const DEFAULT_SWEEP_MS = 15_000;
@@ -229,47 +229,6 @@ export class ProcJobManager {
     );
   }
 
-  async #stopTargets(
-    list: StoredProcJob[],
-    targets: readonly StoredProcJob[],
-    reason: AgentProcStopReason,
-    force?: boolean,
-  ): Promise<{
-    stopped: AgentProcJob[];
-    alreadyExited: string[];
-    failedTarget: StoredProcJob | undefined;
-  }> {
-    const outcomes = await Promise.all(
-      targets.map(async (target) => ({
-        target,
-        outcome: await stopVerifiedProcJob(target, {
-          force,
-          graceMs: this.#options.graceMs,
-          killWaitMs: this.#options.killWaitMs,
-          platform: this.#options.platform,
-        }),
-      })),
-    );
-    const stopped: AgentProcJob[] = [];
-    const alreadyExited: string[] = [];
-    let failedTarget: StoredProcJob | undefined;
-    for (const { target, outcome } of outcomes) {
-      const idx = list.findIndex((item) => item.id === target.id);
-      if (idx === -1) continue;
-      if (outcome === "already_exited") {
-        list[idx] = markProcJobExited(list[idx]!, "exited");
-        alreadyExited.push(target.name);
-      } else if (outcome === "stopped") {
-        const updated = markProcJobExited(list[idx]!, reason);
-        list[idx] = updated;
-        stopped.push(toPublicProcJob(updated));
-      } else {
-        failedTarget ??= target;
-      }
-    }
-    return { stopped, alreadyExited, failedTarget };
-  }
-
   list(agentId: string): Promise<AgentProcListResponse> {
     return this.#enqueueAgent(agentId, async () => {
       if (this.#purged)
@@ -425,10 +384,11 @@ export class ProcJobManager {
         targets = [match];
       }
 
-      const { stopped, alreadyExited, failedTarget } = await this.#stopTargets(
+      const { stopped, alreadyExited, failedTarget } = await stopProcJobTargets(
         list,
         targets,
         reason,
+        this.#options,
         request.force,
       );
       if (this.#purged) return { ok: true, stopped, alreadyExited };
@@ -459,10 +419,11 @@ export class ProcJobManager {
       await this.#ensureAdopted();
       if (this.#purged) return;
       const list = await this.#reconcileAgent(agentId);
-      const { failedTarget } = await this.#stopTargets(
+      const { failedTarget } = await stopProcJobTargets(
         list,
         list.filter((job) => job.status === "running"),
         reason,
+        this.#options,
       );
       if (this.#purged) return;
       if (failedTarget) {
