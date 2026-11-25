@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentRuntimeEvent } from "@coforge/agent";
+import { RuntimeLoginRequiredError } from "#src/contract";
 import { DroidAcpProvider } from "#src/droid/acp-provider";
 import { fixturePerTurnHost } from "./fixtures/runtime-host";
 
@@ -110,6 +111,44 @@ test("a missing stored session is replaced with a fresh one and reported", async
     await f.cleanup();
   }
 });
+
+test.each([
+  { method: "session/new", sessionId: undefined },
+  { method: "session/load", sessionId: "native-session-1" },
+])(
+  "$method requires Droid login based on the ACP code without retrying",
+  async ({ method, sessionId }) => {
+    const f = await fixture({ DROID_ACP_FIXTURE_OPEN_ERROR_CODE: "-32000" });
+    try {
+      await expect(
+        f.provider.createAgentSession({ ...options(f.cwd), sessionId } as never),
+      ).rejects.toBeInstanceOf(RuntimeLoginRequiredError);
+      const requests = await f.requests();
+      expect(requests.map((request) => request.method).filter(Boolean)).toEqual([
+        "initialize",
+        method,
+      ]);
+    } finally {
+      await f.cleanup();
+    }
+  },
+  TEST_ACP_TIMEOUT_MS * 2,
+);
+
+test(
+  "a generic Droid RPC failure is surfaced without requiring login",
+  async () => {
+    const f = await fixture({ DROID_ACP_FIXTURE_OPEN_ERROR_CODE: "-32603" });
+    try {
+      const failure = f.provider.createAgentSession(options(f.cwd) as never);
+      await expect(failure).rejects.toMatchObject({ code: -32603, message: "Session unavailable" });
+      await expect(failure).rejects.not.toBeInstanceOf(RuntimeLoginRequiredError);
+    } finally {
+      await f.cleanup();
+    }
+  },
+  TEST_ACP_TIMEOUT_MS * 2,
+);
 
 test("a resumed session loads the stored session id", async () => {
   const f = await fixture();

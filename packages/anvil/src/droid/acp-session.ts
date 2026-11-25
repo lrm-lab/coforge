@@ -5,6 +5,7 @@ import { acpApplyRuntimeConfig, acpConfigOptions } from "#src/acp/config-options
 import { acpBounded, acpProcess } from "#src/acp/connection";
 import type { AcpRuntimeProfile, AcpSessionProfile } from "#src/acp/profile";
 import { AcpSession } from "#src/acp/session";
+import { RuntimeLoginRequiredError } from "#src/contract";
 import { asRecord, nonEmptyString } from "#src/json-record";
 import type { DroidAcpRuntimeHost } from "./acp-host";
 import { DroidAcpTurnEvents } from "./acp-update-events";
@@ -15,6 +16,13 @@ export const DROID_ACP_TIMEOUT_MS = 120_000;
 const STDERR_TAIL_LINES = 40;
 
 const DROID_SESSION_MISSING_CODE = -32602;
+const ACP_AUTH_REQUIRED_CODE = RequestError.authRequired().code;
+
+function rethrowDroidSessionOpenFailure(error: unknown): never {
+  if (error instanceof RequestError && error.code === ACP_AUTH_REQUIRED_CODE)
+    throw new RuntimeLoginRequiredError("Droid requires authentication to open a session");
+  throw error;
+}
 
 export function droidLoadSessionDeclared(response: InitializeResponse): boolean {
   return response.agentCapabilities?.loadSession === true;
@@ -123,7 +131,7 @@ function droidSessionProfile(
             /unknown session identifier|session .{0,80}not found/i.test(
               nonEmptyString(asRecord(error.data)?.message) ?? error.message,
             );
-          if (!missing) throw error;
+          if (!missing) rethrowDroidSessionOpenFailure(error);
           replaced = sessionId;
         }
       }
@@ -132,7 +140,7 @@ function droidSessionProfile(
           agent.request("session/new", { cwd, mcpServers: [] }),
           timeoutMs,
           "droid acp session/new timed out",
-        );
+        ).catch(rethrowDroidSessionOpenFailure);
         opened = nonEmptyString(asRecord(state)?.sessionId);
         if (!opened) throw new Error("droid acp did not create a session");
         configOptions = acpConfigOptions(state);

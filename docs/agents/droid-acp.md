@@ -8,9 +8,10 @@ Part of [the documentation index](../../README.md). The Droid adapter runs one p
   `fork`, `auth.logout`, and auth methods `device-pairing` and `factory-api-key`. The launch
   asserts `loadSession` and refuses with `DroidUnsupportedOptionError` when absent.
 - Resume is `session/load`; `-32602` with "Unknown session identifier" means the stored session
-  is gone and is replaced with a fresh one reported as `replaced`. Any other load failure
-  surfaces. `session/cancel` is `-32601`: interrupt is process disposal, and the daemon
-  relaunches on the same session id.
+  is gone and is replaced with a fresh one reported as `replaced`. An ACP authentication
+  refusal (`-32000`) from `session/new` or `session/load` asks the user to log in to Droid
+  on the Computer. Other load failures surface as returned. `session/cancel` is `-32601`:
+  interrupt is process disposal, and the daemon relaunches on the same session id.
 - Input is one native prompt at a time (`after_turn`): the server has no steer request, so a
   notice is queued and admitted when the live turn ends.
 - Model and effort apply through `session/set_config_option` after the session opens —

@@ -90,6 +90,17 @@ for await (const line of console) {
       break;
     case "session/new":
     case "session/load":
+      if (Bun.env.DROID_ACP_FIXTURE_OPEN_ERROR_CODE) {
+        write({
+          jsonrpc: "2.0",
+          id: request.id,
+          error: {
+            code: Number(Bun.env.DROID_ACP_FIXTURE_OPEN_ERROR_CODE),
+            message: "Session unavailable",
+          },
+        });
+        break;
+      }
       // A logged-out server refuses a session before any configuration exists.
       if (
         Bun.env.DROID_ACP_FIXTURE_REQUIRE_LOGIN &&
