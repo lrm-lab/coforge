@@ -14,7 +14,7 @@ export const SIDEBAR_COLUMN: ListColumn = {
   key: "coforge-sidebar-width",
   property: "--sidebar-width",
   defaultWidth: 15,
-  min: 15,
+  min: 10,
   max: 20,
   label: m.navigation_resize_sidebar,
 };

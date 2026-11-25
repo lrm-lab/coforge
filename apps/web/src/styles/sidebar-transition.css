@@ -1,0 +1,152 @@
+[data-sidebar-shell] {
+  width: var(--sidebar-width, 15rem);
+}
+
+[data-sidebar-shell] [data-sidebar-panel="expanded"] {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  translate: 0 0;
+}
+
+[data-sidebar-shell] [data-sidebar-panel="rail"] {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+html.sidebar-collapsed [data-sidebar-shell]:not([data-default-rail]),
+html:not(.sidebar-expanded) [data-sidebar-shell][data-default-rail] {
+  width: 3.5rem;
+}
+
+html.sidebar-collapsed
+  [data-sidebar-shell]:not([data-default-rail])
+  [data-sidebar-panel="expanded"],
+html:not(.sidebar-expanded)
+  [data-sidebar-shell][data-default-rail]
+  [data-sidebar-panel="expanded"] {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  translate: -0.25rem 0;
+}
+
+html:dir(rtl).sidebar-collapsed
+  [data-sidebar-shell]:not([data-default-rail])
+  [data-sidebar-panel="expanded"],
+html:dir(rtl):not(.sidebar-expanded)
+  [data-sidebar-shell][data-default-rail]
+  [data-sidebar-panel="expanded"] {
+  translate: 0.25rem 0;
+}
+
+html.sidebar-collapsed [data-sidebar-shell]:not([data-default-rail]) [data-sidebar-panel="rail"],
+html:not(.sidebar-expanded) [data-sidebar-shell][data-default-rail] [data-sidebar-panel="rail"] {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+[data-sidebar-shell][data-ready]:not([data-dragging]) {
+  transition: width var(--duration-lg) var(--ease-out-strong);
+}
+
+[data-sidebar-shell][data-ready] [data-sidebar-panel="expanded"] {
+  transition:
+    opacity 160ms var(--ease-out) 60ms,
+    translate 160ms var(--ease-out-strong) 60ms,
+    visibility 0ms linear 0ms;
+}
+
+html.sidebar-collapsed
+  [data-sidebar-shell][data-ready]:not([data-default-rail])
+  [data-sidebar-panel="expanded"],
+html:not(.sidebar-expanded)
+  [data-sidebar-shell][data-ready][data-default-rail]
+  [data-sidebar-panel="expanded"] {
+  transition:
+    opacity 120ms var(--ease-out),
+    translate 120ms var(--ease-out),
+    visibility 0ms linear 120ms;
+}
+
+[data-sidebar-shell][data-ready] [data-sidebar-panel="rail"] {
+  transition:
+    opacity 100ms var(--ease-out),
+    visibility 0ms linear 100ms;
+}
+
+html.sidebar-collapsed
+  [data-sidebar-shell][data-ready]:not([data-default-rail])
+  [data-sidebar-panel="rail"],
+html:not(.sidebar-expanded)
+  [data-sidebar-shell][data-ready][data-default-rail]
+  [data-sidebar-panel="rail"] {
+  transition:
+    opacity 160ms var(--ease-out) 80ms,
+    visibility 0ms linear 0ms;
+}
+
+[data-sidebar-shell][data-dragging] {
+  transition: none;
+}
+
+[data-sidebar-resize-handle]::after {
+  content: "";
+  position: absolute;
+  inset-block: 10%;
+  inset-inline-end: 0;
+  width: 2px;
+  border-radius: 9999px;
+  background: transparent;
+  transition:
+    background-color 140ms var(--ease-out),
+    inset-block 160ms var(--ease-out),
+    transform 140ms var(--ease-out);
+}
+
+[data-sidebar-resize-handle]:hover::after,
+[data-sidebar-resize-handle]:focus-visible::after,
+[data-sidebar-resize-handle][data-dragging]::after {
+  inset-block: 4%;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--color-bg-brand-solid) 85%, transparent) 18%,
+    var(--color-bg-brand-solid) 50%,
+    color-mix(in srgb, var(--color-bg-brand-solid) 85%, transparent) 82%,
+    transparent 100%
+  );
+}
+
+[data-sidebar-resize-handle][data-snap-primed]::after {
+  inset-block: 1%;
+  transform: scaleX(1.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-sidebar-shell][data-ready]:not([data-dragging]) {
+    transition: none;
+  }
+
+  [data-sidebar-shell][data-ready] [data-sidebar-panel="expanded"],
+  html.sidebar-collapsed
+    [data-sidebar-shell][data-ready]:not([data-default-rail])
+    [data-sidebar-panel="expanded"],
+  html:not(.sidebar-expanded)
+    [data-sidebar-shell][data-ready][data-default-rail]
+    [data-sidebar-panel="expanded"],
+  [data-sidebar-shell][data-ready] [data-sidebar-panel="rail"],
+  html.sidebar-collapsed
+    [data-sidebar-shell][data-ready]:not([data-default-rail])
+    [data-sidebar-panel="rail"],
+  html:not(.sidebar-expanded)
+    [data-sidebar-shell][data-ready][data-default-rail]
+    [data-sidebar-panel="rail"] {
+    translate: none;
+    transition:
+      opacity 150ms var(--ease-out),
+      visibility 0ms linear;
+  }
+}

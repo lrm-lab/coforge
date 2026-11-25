@@ -116,9 +116,10 @@ describe("list column width", () => {
     expect(keyListWidth(LIST, key("ArrowRight"), 40)).toBe(40);
   });
 
-  test("the sidebar never goes narrower than its default and its kept width is restored at boot", () => {
-    expect(SIDEBAR_COLUMN.min).toBe(SIDEBAR_COLUMN.defaultWidth);
-    expect(dragListWidth(SIDEBAR_COLUMN, 15, 15, 6)).toBe(15);
+  test("the sidebar narrows down to its collapse threshold and its kept width is restored at boot", () => {
+    expect(SIDEBAR_COLUMN.min).toBe(10);
+    expect(SIDEBAR_COLUMN.defaultWidth).toBe(15);
+    expect(dragListWidth(SIDEBAR_COLUMN, 15, 15, 6)).toBe(10);
     expect(dragListWidth(SIDEBAR_COLUMN, 15, 15, 35)).toBe(20);
     expect(CONVERSATION_LIST_BOOT).toContain(SIDEBAR_COLUMN.property);
   });

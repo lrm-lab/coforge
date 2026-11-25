@@ -17,11 +17,9 @@ const RAIL_ICON = "size-5 transition-colors duration-100 ease-out";
 type RailItemType = NavItemType & {
   icon: FC<{ className?: string }>;
   current?: boolean;
-  /** The number on the icon's corner; without it a `badge` is the dot. */
   unreadCount?: number;
 };
 
-/** Icon only. The caption used to live under the icon; the name is now the tooltip. */
 function RailItem({ href, icon: Icon, label, current, badge, unreadCount }: RailItemType) {
   return (
     <Tooltip title={label} placement="right" offset={4}>
@@ -50,8 +48,6 @@ function RailItem({ href, icon: Icon, label, current, badge, unreadCount }: Rail
               )}
             />
             {unreadCount ? (
-              // A smaller pill on the corner, ringed in the rail's color, so "99+" leaves the
-              // icon readable.
               <UnreadBadge
                 count={unreadCount}
                 className="absolute -top-1 -right-1.5 h-4 min-w-4 px-1 ring-2 ring-sidebar"
@@ -66,8 +62,6 @@ function RailItem({ href, icon: Icon, label, current, badge, unreadCount }: Rail
   );
 }
 
-/** A rail icon that opens something rather than a page, named by its tooltip; `dot` marks it
- * unread. */
 export function RailButton({
   icon: Icon,
   label,
@@ -78,7 +72,6 @@ export function RailButton({
 }: {
   icon: FC<{ className?: string }>;
   label: string;
-  /** The tooltip, when it says more than the name. */
   tooltip?: ReactNode;
   onPress: () => void;
   dot?: boolean;
@@ -105,46 +98,24 @@ interface SidebarRailProps {
   items: RailItemType[];
   header: ReactNode;
   footer: ReactNode;
-  defaultRail?: boolean;
 }
 
-export const SidebarRail = ({
-  activeUrl,
-  items,
-  header,
-  footer,
-  defaultRail = false,
-}: SidebarRailProps) => {
-  const rail = (
-    <aside
-      data-sidebar
-      style={{ width: SIDEBAR_RAIL_WIDTH }}
-      className="flex h-full max-h-full w-full flex-col items-center justify-between overflow-x-hidden overflow-y-auto pb-3"
-    >
-      <div className="flex w-full flex-col items-center">
-        <div className="mt-2 flex flex-col items-center gap-1">{header}</div>
-        <ul className="mt-2 flex w-full flex-col gap-1">
-          {items.map((item) => (
-            <li key={item.label} className="flex w-full min-w-0 justify-center">
-              <RailItem {...item} current={item.href === activeUrl} />
-            </li>
-          ))}
-        </ul>
-      </div>
-      <div className="flex flex-col items-center gap-2">{footer}</div>
-    </aside>
-  );
-
-  return (
-    <div
-      className={cx(
-        "hidden shrink-0 lg:flex",
-        defaultRail
-          ? "lg:[.sidebar-expanded_&]:hidden"
-          : "lg:[html:not(.sidebar-collapsed)_&]:hidden",
-      )}
-    >
-      {rail}
+export const SidebarRail = ({ activeUrl, items, header, footer }: SidebarRailProps) => (
+  <aside
+    data-sidebar
+    style={{ width: SIDEBAR_RAIL_WIDTH }}
+    className="flex h-full max-h-full w-full flex-col items-center justify-between overflow-x-hidden overflow-y-auto pb-3"
+  >
+    <div className="flex w-full flex-col items-center">
+      <div className="mt-2 flex flex-col items-center gap-1">{header}</div>
+      <ul className="mt-2 flex w-full flex-col gap-1">
+        {items.map((item) => (
+          <li key={item.label} className="flex w-full min-w-0 justify-center">
+            <RailItem {...item} current={item.href === activeUrl} />
+          </li>
+        ))}
+      </ul>
     </div>
-  );
-};
+    <div className="flex flex-col items-center gap-2">{footer}</div>
+  </aside>
+);

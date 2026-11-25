@@ -15,6 +15,7 @@ import {
 import type { NavItemType } from "#src/components/application/app-navigation/config";
 import { SidebarRail } from "#src/components/layout/sidebar/sidebar-rail";
 import { SidebarExpanded } from "#src/components/layout/sidebar/sidebar-expanded";
+import { SidebarShell } from "#src/components/layout/sidebar/sidebar-shell";
 import { UserMenuCard, UserRow } from "#src/components/layout/sidebar/user-menu-card";
 import {
   ChatListOpenContext,
@@ -369,20 +370,25 @@ function WorkspaceChrome({
           <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
             <div className={standalone ? "hidden" : "contents"}>
               <ShellLinks>
-                <MemoSidebarExpanded
+                <SidebarShell
                   defaultRail={defaultRail}
-                  activeUrl={activeUrl}
-                  items={navItems}
-                  header={expandedHeader}
-                  search={SEARCH_FIELD}
-                  footer={expandedFooter}
-                />
-                <MemoSidebarRail
-                  defaultRail={defaultRail}
-                  activeUrl={activeUrl}
-                  items={navItems}
-                  header={railHeader}
-                  footer={railFooter}
+                  expanded={
+                    <MemoSidebarExpanded
+                      activeUrl={activeUrl}
+                      items={navItems}
+                      header={expandedHeader}
+                      search={SEARCH_FIELD}
+                      footer={expandedFooter}
+                    />
+                  }
+                  rail={
+                    <MemoSidebarRail
+                      activeUrl={activeUrl}
+                      items={navItems}
+                      header={railHeader}
+                      footer={railFooter}
+                    />
+                  }
                 />
               </ShellLinks>
             </div>
