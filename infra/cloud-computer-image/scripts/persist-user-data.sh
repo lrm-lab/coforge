@@ -214,7 +214,7 @@ ensure_venv() {
   fi
 
   # Default PyPI is often unreachable from this network; pin a fast mirror.
-  # Agents that run bare `pip install playwright` otherwise appear to hang.
+  # Playwright client is baked into the image; other pip installs should use this mirror.
   local pip_index="${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}"
   local pip_host="${PIP_TRUSTED_HOST:-mirrors.aliyun.com}"
   mkdir -p "${VENV}/pip" /etc

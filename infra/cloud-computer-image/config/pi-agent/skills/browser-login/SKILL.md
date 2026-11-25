@@ -19,13 +19,11 @@ description: Log in, register, or operate websites on this CoForge cloud compute
 ```bash
 echo "DISPLAY=${DISPLAY:-unset}"
 command -v chromium coforge-chromium coforge-cdp-endpoint python3
-python3 -c "from playwright.sync_api import sync_playwright; print('playwright ok')" 2>/dev/null \
-  || pip install -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com playwright
+python3 -c "from playwright.sync_api import sync_playwright; print('playwright ok')"
 mkdir -p /workspace/browser-shots
 ```
 
-`pip` / `python3` 应来自 `/root/.coforge/venv`（换镜像可保留）。**不要**用 `PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install` 装进系统盘。
-**不要** `pip install … | tail`（大包输出可能看起来像卡住）；直连默认 pypi.org 在本网常会挂死，用上面的阿里云源。
+`python3` 应能直接 `import playwright`（镜像已 bake 客户端；venv 可见系统 site-packages）。**不要**再 `pip install playwright`，也**不要** `playwright install`。其他包需要时用阿里云源，**不要** `PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install`。
 
 ## 联想内网站点
 

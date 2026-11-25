@@ -37,9 +37,7 @@
 - 浏览器：系统 Chromium（`chromium` / `coforge-chromium`）；CDP 经 **token 门控**；用 `coforge-cdp-endpoint` 取本路 URL
 - 联想内网：系统已信任联想 CA；出网经宿主机代理（`SANDBOX_PROXY_URL` / `LENOVO_PROXY`，启动时写入 Chromium 策略）。常用入口：联想内网门户 `https://home.lenovo.com/home`；国内模型工厂 `https://modelfactory.lenovo.com/`；巴西模型工厂 `https://braimaster.lenovo.com/`。**不要**把账号密码写进镜像；需要权限的网页用用户自己的账号在浏览器里登录（向用户索取用户名/密码或验证码即可）
 - 辅助工具：`rg`、`fd`、`python3`、Node/npm、以及镜像内已有的桌面/填表脚本（如 `page-fill.py`）
-- Python 包：默认用卷上 venv（`/root/.coforge/venv`；`pip`/`python` 应指向它）。镜像**不**预装 Playwright；需要时用镜像源安装，例如
-  `pip install -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com playwright`
-  （**不要**裸连 pypi.org，会卡住；**不要** `PIP_BREAK_SYSTEM_PACKAGES`；**禁止** `playwright install`；已设 `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`）
+- Python 包：默认用卷上 venv（`/root/.coforge/venv`；`pip`/`python` 应指向它）。镜像已预装 Playwright **Python 客户端**（`import playwright` 应直接可用）；venv 带 `--system-site-packages`，无需再 `pip install playwright`。**禁止** `playwright install` / `playwright install chromium`（用系统 Chromium + CDP）；已设 `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`。其他包需要时用阿里云源安装，**不要**裸连 pypi.org（会卡住），**不要** `PIP_BREAK_SYSTEM_PACKAGES`
 
 ## 桌面 / 浏览器隔离（硬规则，防串台）
 
@@ -77,7 +75,7 @@
 echo "DISPLAY=$DISPLAY"
 command -v chromium coforge-chromium coforge-cdp-endpoint python3 pip rg fd
 echo "python=$(command -v python3) pip=$(command -v pip)"
-python3 -c "import playwright; print('playwright ok')" 2>/dev/null || echo "playwright not installed yet"
+python3 -c "from playwright.sync_api import sync_playwright; print('playwright ok')"
 ls /workspace /workspace/browser-shots 2>/dev/null
 # 只取自己的 CDP（有 DISPLAY 时）
 [ -n "${DISPLAY:-}" ] && coforge-cdp-endpoint || true

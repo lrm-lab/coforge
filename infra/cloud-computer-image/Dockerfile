@@ -53,8 +53,11 @@ RUN chmod +x /tmp/install-desktop-apt.sh \
   && /tmp/install-desktop-apt.sh \
   && rm -f /tmp/install-desktop-apt.sh
 
-# Lightweight system packages only (no Playwright — it balloons image build time).
-# Runtime pip goes into /root/.coforge/venv (see persist-user-data.sh).
+# Python packages for the image. Playwright is the client library only —
+# PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD skips its browsers; agents use system
+# Chromium via connect_over_cdp. Runtime pip goes into /root/.coforge/venv
+# (see persist-user-data.sh); that venv uses --system-site-packages so the
+# baked playwright import is visible without a second install.
 ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
 ARG PIP_TRUSTED_HOST=mirrors.aliyun.com
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
@@ -79,6 +82,7 @@ RUN set -eux; \
   fi; \
   # shellcheck disable=SC2086
   pip3 install ${pip_args} -r /tmp/requirements.txt; \
+  python3 -c 'from playwright.sync_api import sync_playwright'; \
   rm -f /tmp/requirements.txt
 
 COPY lenovo-modelfactory-ca.pem /root/.pi/agent/certs/lenovo-modelfactory-ca.pem
@@ -346,6 +350,7 @@ RUN mkdir -p /usr/local/lib/coforge /usr/local/share/coforge \
   && grep -q 'ensure_venv' /usr/local/bin/persist-user-data.sh \
   && python3 -c 'import venv' \
   && python3 -c 'import Xlib' \
+  && python3 -c 'from playwright.sync_api import sync_playwright' \
   && test -x /usr/local/bin/select-computer-binary.sh \
   && test -x /usr/local/bin/activate-computer-release.sh \
   && test -x /usr/local/bin/supervise-computer-runtime.sh \
