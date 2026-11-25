@@ -111,7 +111,7 @@ export async function openChannel(
   // Each thread of the page as a summary, and the viewer's cursors and follows for these roots
   // only: a long-lived channel's whole history of them never rides along with a page.
   const rootIds = pageMessages.map((message) => message.id);
-  const [{ threads, threadReadThrough }, followedRootIds] = await Promise.all([
+  const [{ threads, threadReadThrough }, followedRootIds, browserMessages] = await Promise.all([
     readWindowThreads(db, {
       workspaceId,
       conversationId: channelId,
@@ -119,6 +119,7 @@ export async function openChannel(
       viewerMemberId: member?.id,
     }),
     followedThreadRootIds(db, { viewerMemberId: member?.id, rootIds }),
+    mapBrowserMessages(db, pageMessages, workspaceId),
   ]);
   return {
     conversationId: channel.id,
@@ -134,11 +135,8 @@ export async function openChannel(
     collapseLongMessages: member?.collapseLongMessages ?? false,
     pinned: Boolean(member?.pins.length),
     channelCapabilities: authority.capabilities,
-    // Only a Workspace owner or admin hides #general (`setGeneralHidden`), whatever their role in it.
     canHideGeneral: canHideGeneralChannel(channel.channelName!, authority.serverRole),
     canDelete: canDeleteChannel(channel.channelName!, authority.serverRole),
-    // A Workspace owner or admin in a live channel (`setChannelVisibility`'s rule). Optional, as
-    // `visibility`: a page kept from before it still opens.
     ...({
       canChangeVisibility:
         channel.archivedAt === null &&
@@ -148,9 +146,7 @@ export async function openChannel(
           authority.isActiveMember,
         ),
     } as { canChangeVisibility?: boolean }),
-    // The add view's "Create Agent" (`ManageAgents.create`'s rule).
     canCreateAgents: canCreateAgents(authority.serverRole),
-    // Any member of a live channel stops its Agents (`ChannelAgentControl.stopAll`).
     canStopAgents: authority.isActiveMember && channel.archivedAt === null,
     ...(member
       ? {
@@ -160,14 +156,10 @@ export async function openChannel(
     threads,
     threadReadThrough,
     followedThreadRootIds: followedRootIds,
-    // Every active member, the viewer included: this list is what *resolves* a stored mention
-    // token, and a mention of the viewer is the most common one to render — leaving their row
-    // out leaked the raw `<@human:uuid>` token in their own view. The composer's rule that you
-    // never mention yourself is applied where it belongs, in the composer's candidate list.
     mentionables: mentionables(workspaceId, mentionRows, mentionScores),
     hasOlder,
     hasNewer,
-    messages: await mapBrowserMessages(db, pageMessages, workspaceId),
+    messages: browserMessages,
   };
 }
 

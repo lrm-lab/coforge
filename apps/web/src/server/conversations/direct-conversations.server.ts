@@ -269,32 +269,22 @@ export class DirectConversations {
     return (await this.access(workspaceId, viewerId, conversationId, {})).viewerMemberId;
   }
 
-  /** A window of the conversation's history and who is on the other side. */
   async page(
     workspaceId: string,
     viewerId: string,
     conversationId: string,
     window?: HistoryWindow,
   ) {
-    await this.authorize(workspaceId, viewerId, conversationId);
-    const page = await this.conversations.openConversationForUser(
-      workspaceId,
-      viewerId,
-      conversationId,
-      window,
-    );
-    const [welcome, preference] = await Promise.all([
-      workspaceAssistantWelcome(this.db, workspaceId, viewerId, conversationId),
-      this.db.conversationMember.findFirst({
-        where: { conversationId, userId: viewerId, leftAt: null },
-        select: { collapseLongMessages: true },
-      }),
+    const target = await this.authorize(workspaceId, viewerId, conversationId);
+    const [page, welcome] = await Promise.all([
+      this.conversations.openConversationForUser(workspaceId, viewerId, conversationId, window),
+      target.kind === "agent"
+        ? workspaceAssistantWelcome(this.db, workspaceId, viewerId, conversationId)
+        : undefined,
     ]);
-    // Optional in the type: a page the browser stored before DMs carried it reads as off.
-    const collapse: { collapseLongMessages?: boolean } = {
-      collapseLongMessages: preference?.collapseLongMessages ?? false,
-    };
-    return { ...page, ...collapse, ...(welcome ? { workspaceAssistantWelcome: true } : {}) };
+    const { collapseLongMessages, ...rest } = page;
+    const collapse: { collapseLongMessages?: boolean } = { collapseLongMessages };
+    return { ...rest, ...collapse, ...(welcome ? { workspaceAssistantWelcome: true } : {}) };
   }
 
   /** What arrived after `afterSequence`, and of the replies only those after `afterReplySequence`

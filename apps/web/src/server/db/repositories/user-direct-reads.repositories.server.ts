@@ -76,6 +76,7 @@ async function viewerSide(ports: DirectConversationPorts, conversationId: string
           // Each member's read cursor, for how far the others have read the viewer's messages.
           readThroughSequence: true,
           agentReadThroughSequence: true,
+          collapseLongMessages: true,
           // The full public profile: the pane resolves stored `<@kind:uuid>` tokens (and offers
           // @-completion) from these rows, so a mention of the viewer — the row that used to be
           // missing — is resolvable without a second query.
@@ -228,18 +229,20 @@ export async function openConversationForUser(
   // was more.
   const pageRows = windowRows.slice(0, limit);
   const messages = forward ? pageRows : pageRows.reverse();
-  // Each thread of the page as a summary, read through the viewer's own member row (the Agent
-  // records a boundary for every thread it drains, which this open never returns) and for these
-  // roots only.
-  const { threads, threadReadThrough } = await readWindowThreads(ports.db, {
-    workspaceId,
-    conversationId,
-    rootIds: messages.map((message) => message.id),
-    viewerMemberId: sender.id,
-  });
+  const [{ threads, threadReadThrough }, browserMessages] = await Promise.all([
+    readWindowThreads(ports.db, {
+      workspaceId,
+      conversationId,
+      rootIds: messages.map((message) => message.id),
+      viewerMemberId: sender.id,
+    }),
+    mapBrowserMessages(ports.db, messages, workspaceId),
+  ]);
+  const agentMember = agent ? members.find((member) => member.agentId === agent.id) : undefined;
   return {
     conversationId,
     senderMemberId: sender.id,
+    collapseLongMessages: sender.collapseLongMessages ?? false,
     othersReadThroughSequence: othersReadThroughSequence(
       sender.id,
       members.filter((member) => member.leftAt === null),
@@ -249,25 +252,16 @@ export async function openConversationForUser(
     ...(agent
       ? {
           kind: "agent" as const,
-          // Never the Agent row wholesale: `ownerId`/`visibility` are read above only to
-          // compute `dmWritable` and must not reach the browser payload.
           agent: {
             id: agent.id,
             name: agent.name,
             displayName: agent.displayName,
             deletedAt: agent.deletedAt,
-            // An app's bot wears its app's logo, never the mascot its id would choose.
             avatarUrl: agentFaceUrl(agent),
           },
-          // Whether this viewer may still send here: a private Agent's DM stays scoped to
-          // its own creator, so an existing DM held by anyone else reads read-only once it goes
-          // private. Independent of `deletedAt`'s own read-only rule.
           dmWritable: canDirectMessageAgent(userId, agent),
-          ...(members.find((member) => member.agentId === agent.id)
-            ? {
-                agentReadThroughSequence: members.find((member) => member.agentId === agent.id)!
-                  .agentReadThroughSequence,
-              }
+          ...(agentMember
+            ? { agentReadThroughSequence: agentMember.agentReadThroughSequence }
             : {}),
         }
       : peer
@@ -282,12 +276,10 @@ export async function openConversationForUser(
           }
         : unauthorizedScope()),
     viewerId: sender.user ? userId : undefined,
-    // DM mention candidates have zero affinity and sort by handle. Include the viewer so
-    // their own stored human mention resolves instead of rendering a raw token.
     mentionables: conversationMentionables(workspaceId, members),
     hasOlder,
     hasNewer,
-    messages: await mapBrowserMessages(ports.db, messages, workspaceId),
+    messages: browserMessages,
   };
 }
 

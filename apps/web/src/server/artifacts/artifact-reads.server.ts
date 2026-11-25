@@ -386,22 +386,24 @@ export class ArtifactReads {
       ...new Set(input.messages.flatMap((message) => artifactIdsInBody(message.body, 100))),
     ];
     if (ids.length === 0) return input.messages.map(() => []);
-    const rows = await this.db.artifact.findMany({
-      where: { workspaceId: input.workspaceId, id: { in: ids } },
-      select: {
-        id: true,
-        title: true,
-        preview: true,
-        entryPath: true,
-        currentVersion: true,
-        homeKey: true,
-        access: true,
-        deletedAt: true,
-        authorAgentId: true,
-        workspace: { select: { slug: true } },
-      },
-    });
-    const viewer = await artifactViewer(this.db, input.workspaceId, input.reader);
+    const [rows, viewer] = await Promise.all([
+      this.db.artifact.findMany({
+        where: { workspaceId: input.workspaceId, id: { in: ids } },
+        select: {
+          id: true,
+          title: true,
+          preview: true,
+          entryPath: true,
+          currentVersion: true,
+          homeKey: true,
+          access: true,
+          deletedAt: true,
+          authorAgentId: true,
+          workspace: { select: { slug: true } },
+        },
+      }),
+      artifactViewer(this.db, input.workspaceId, input.reader),
+    ]);
     const [owners, conversations] = await Promise.all([
       viewer.member &&
       input.reader.userId !== undefined &&

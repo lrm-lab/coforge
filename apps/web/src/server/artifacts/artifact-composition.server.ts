@@ -225,7 +225,7 @@ export function artifactMessageCards(
     messages: readonly { body: string }[];
   },
 ): Promise<ArtifactMessageCard[][]> {
-  return productionArtifacts(db).artifacts.reads.messageCards(input);
+  return productionArtifactReads(db).messageCards(input);
 }
 
 export function productionArtifactChecks(db: PrismaClient) {

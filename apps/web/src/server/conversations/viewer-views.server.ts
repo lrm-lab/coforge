@@ -21,16 +21,15 @@ export async function attachViewerViews<
   viewerUserId: string,
   messages: readonly T[],
 ): Promise<(T & { actionCard?: ActionCardView; artifactCards?: ArtifactMessageCard[] })[]> {
-  const [settled, withCards] = await Promise.all([
+  const [settled, withCards, artifacts] = await Promise.all([
     attachForwardedAccess(db, workspaceId, viewerUserId, messages),
     attachActionCardViews(db, workspaceId, viewerUserId, messages),
+    artifactMessageCards(db, {
+      workspaceId,
+      reader: { userId: viewerUserId },
+      messages,
+    }),
   ]);
-  const artifacts = await artifactMessageCards(db, {
-    workspaceId,
-    reader: { userId: viewerUserId },
-    messages,
-  });
-  // Both keep the page's order, one message each.
   return settled.map((message, index) => {
     const actionCard = withCards[index]!.actionCard;
     return {
