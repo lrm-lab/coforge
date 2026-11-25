@@ -16,8 +16,6 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { MessageQuestionCircle, Pin01 } from "@untitledui/icons";
-import { AnimatePresence } from "motion/react";
-import * as motion from "motion/react-m";
 
 import { Button } from "#src/components/base/buttons/button";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
@@ -27,7 +25,6 @@ import { LIST_BESIDE_CLASSES } from "#src/features/conversations/conversation-li
 import { ConversationListResizeHandle } from "#src/features/conversations/conversation-list-resize-handle";
 import { LIST_COLUMN } from "#src/features/conversations/conversation-list-width";
 import { useActivityFilterPrefetch } from "./use-activity-filter-prefetch";
-import { DURATION_S, EASE_IN, EASE_OUT } from "#src/utils/motion-tokens";
 import { cn } from "#src/lib/utils";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 import { m } from "#src/paraglide/messages";
@@ -43,20 +40,12 @@ import {
 } from "./activity-inbox-queries";
 import { createActivityDoneCoordinator, useActivityDoneProjection } from "./activity-inbox-done";
 import type { ActivityInboxFilter } from "./activity-inbox.schemas";
-import {
-  ActivityInboxEmpty,
-  ActivityInboxIdlePane,
-  ActivityInboxLoadError,
-} from "./activity-inbox-states";
-import {
-  ACTIVITY_LIST_BESIDE_FROM,
-  ActivityConversationPane,
-  type ActivityPaneFlow,
-} from "./activity-conversation-pane";
+import { ActivityInboxEmpty, ActivityInboxLoadError } from "./activity-inbox-states";
+import { ACTIVITY_LIST_BESIDE_FROM, type ActivityPaneFlow } from "./activity-conversation-pane";
+import { ActivityInboxDetailPane } from "./activity-inbox-detail-pane";
 import { useActivityFlow } from "./use-activity-flow";
 import { useKeptOpenRow } from "./use-kept-open-row";
 import { openedItemKey } from "./activity-open-target";
-import { ActivityTaskPopup } from "./activity-task-popup";
 import { useActivityItemActions } from "./use-activity-item-actions";
 import { ActivityInboxRow } from "./activity-inbox-row";
 import { ActivityArtifactRow } from "./activity-artifact-row";
@@ -472,66 +461,18 @@ export function ActivityInboxView({
       className="relative flex h-full min-h-0 min-w-0 overflow-hidden lg:overflow-visible"
     >
       {list}
-      {desktop ? (
-        pane ? (
-          <ActivityConversationPane
-            key={`${pane.kind}:${pane.id}`}
-            target={pane}
-            onOpen={onOpen}
-            onClose={onClose}
-            flow={paneFlow}
-          />
-        ) : (
-          <ActivityInboxIdlePane emptyState={emptyState} />
-        )
-      ) : (
-        <AnimatePresence initial={false} onExitComplete={onExitComplete}>
-          {pane && (
-            <motion.div
-              key={`${pane.kind}:${pane.id}`}
-              {...swipe.bind}
-              initial={reduced ? { opacity: 0 } : { x: "100%" }}
-              animate={
-                reduced
-                  ? { opacity: 1 }
-                  : swipe.dragging
-                    ? { x: `${swipe.dragProgress * 100}%` }
-                    : { x: 0 }
-              }
-              exit={
-                reduced
-                  ? { opacity: 0, transition: { duration: DURATION_S.reduced } }
-                  : { x: "100%", transition: { duration: DURATION_S.lgOut, ease: EASE_IN } }
-              }
-              transition={
-                swipe.dragging
-                  ? { duration: 0 }
-                  : reduced
-                    ? { duration: DURATION_S.reduced }
-                    : swipe.settling
-                      ? { type: "spring", stiffness: 380, damping: 32 }
-                      : { duration: DURATION_S.lg, ease: EASE_OUT }
-              }
-              className="fixed inset-x-0 top-0 z-40 flex h-[var(--app-height,100dvh)] min-h-0 min-w-0 touch-pan-y bg-primary pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left shadow-2xl"
-            >
-              <ActivityConversationPane
-                target={pane}
-                onOpen={onOpen}
-                onClose={onClose}
-                flow={paneFlow}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      )}
-      {taskAlone && (
-        <ActivityTaskPopup
-          key={`${taskAlone.id}:${taskAlone.task}`}
-          target={taskAlone}
-          onOpen={onOpen}
-          onClose={onClose}
-        />
-      )}
+      <ActivityInboxDetailPane
+        desktop={desktop}
+        pane={pane}
+        taskAlone={taskAlone}
+        paneFlow={paneFlow}
+        emptyState={emptyState}
+        reduced={reduced}
+        swipe={swipe}
+        onOpen={onOpen}
+        onClose={onClose}
+        onExitComplete={onExitComplete}
+      />
     </div>
   );
 }
