@@ -150,6 +150,10 @@ for await (const line of console) {
         content: { type: "text", text: "working" },
       });
       if (text === "crash") process.exit(1);
+      if (text === "hold until released") {
+        const release = Bun.file(Bun.env.DEVIN_FIXTURE_RELEASE!);
+        while (!(await release.exists())) await Bun.sleep(5);
+      }
       if (text === "hold") {
         held = request.id;
         break;

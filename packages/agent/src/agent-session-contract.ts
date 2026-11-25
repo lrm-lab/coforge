@@ -10,6 +10,16 @@ import type {
 export type AgentNoticeOptions = {
   deliveryIds?: readonly string[];
   fallbackText?: () => string | undefined;
+  noticeOrigin?: Readonly<{
+    attemptId: string;
+    source: "indexed" | "reliable" | "recovery" | "fallback";
+    deliveries: readonly Readonly<{
+      target?: string;
+      conversationId: string;
+      sequence?: number;
+      deliveryId?: string;
+    }>[];
+  }>;
   prepareSubmission?: (boundary: "prompt" | "steer") => string | undefined;
   onPromptWritten?: () => void;
   conversation?: AgentConversationScope;

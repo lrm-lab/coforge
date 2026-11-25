@@ -31,11 +31,13 @@ test("a steering outcome that arrives before its steer's answer still settles co
     session.subscribe((event) => {
       if (event.type === "notice-undelivered") undelivered.resolve();
     });
-    await session.notify!("steer-clear-before-answer MARKER-F");
+    const noticeOrigin = { source: "indexed" as const, attemptId: "attempt-1", deliveries: [] };
+    await session.notify!("steer-clear-before-answer MARKER-F", { noticeOrigin });
     await undelivered.promise;
     expect(events).toContainEqual({
       type: "notice-undelivered",
       text: "steer-clear-before-answer MARKER-F",
+      noticeOrigin,
     });
   } finally {
     await session.dispose();

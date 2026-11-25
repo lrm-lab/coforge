@@ -179,6 +179,7 @@ export class KiroTurnSteering {
       text,
       ...(options?.deliveryIds?.length ? { deliveryIds: options.deliveryIds } : {}),
       ...(options?.fallbackText ? { fallbackText: options.fallbackText } : {}),
+      ...(options?.noticeOrigin ? { noticeOrigin: options.noticeOrigin } : {}),
     });
   }
 }

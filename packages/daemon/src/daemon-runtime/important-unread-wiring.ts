@@ -89,6 +89,7 @@ export function composeImportantUnreadReminder(ports: ImportantUnreadWiringPorts
           notice_key: notice.key,
           attempt_id: crypto.randomUUID(),
           request_ids: attempt?.requestIds,
+          source: "reliable" as const,
         };
         logger.info("Reliable inbox notice handed to the session", {
           ...identity,
@@ -111,7 +112,12 @@ export function composeImportantUnreadReminder(ports: ImportantUnreadWiringPorts
         const options =
           attempt?.fallbackText || prepare
             ? {
-                fallbackText: attempt?.fallbackText,
+                fallbackText: attempt?.fallbackText ?? summary,
+                noticeOrigin: {
+                  source: identity.source,
+                  attemptId: identity.attempt_id,
+                  deliveries: attempt?.deliveries ?? [],
+                },
                 prepareSubmission: prepare
                   ? (boundary: "prompt" | "steer") => {
                       const next = prepare(boundary);

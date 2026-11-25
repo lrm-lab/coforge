@@ -170,6 +170,7 @@ export function writeDeliveryNotice(
     workspace_id: message.workspaceId,
     agent_id: message.agentId,
     attempt_id: crypto.randomUUID(),
+    source: "indexed" as const,
   };
   let selected = current();
   const refresh = (boundary: "admission" | "prompt" | "steer" | "fallback") => {
@@ -192,11 +193,16 @@ export function writeDeliveryNotice(
         ...identity,
         event: "agent.inbox_notice.admission_requested",
       });
-      const { trackedIds } = selected;
+      const { trackedIds, deliveries } = selected;
       return this.acceptNotice(generation.cancellation.signal, () =>
         session.notify!(notice, {
           ...(trackedIds.length ? { deliveryIds: trackedIds } : {}),
           fallbackText: () => refresh("fallback"),
+          noticeOrigin: {
+            source: identity.source,
+            attemptId: identity.attempt_id,
+            deliveries,
+          },
           prepareSubmission: refresh,
           onPromptWritten: () =>
             logger.info("ACP prompt written for inbox notice", {
