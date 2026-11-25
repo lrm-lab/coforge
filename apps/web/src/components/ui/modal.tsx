@@ -288,7 +288,9 @@ export function ModalOverlay({
             /* Safari 26+ samples fixed overlays that touch the viewport foot; hide the fixed shell
                with visibility: hidden while PageCoordinateScrim dims the page in page coordinates. */
             "invisible z-10 bg-transparent backdrop-blur-none",
-            instant && "animate-none!",
+            instant
+              ? "animate-none!"
+              : [state.isEntering && "scrim-in", state.isExiting && "scrim-out"],
             "max-sm:top-(--visual-viewport-top) max-sm:bottom-auto max-sm:h-(--visual-viewport-height) max-sm:min-h-0",
             !keyboardMayBeUp &&
               "max-sm:[--visual-viewport-height:var(--app-height,100dvh)]! max-sm:[--visual-viewport-top:0px]!",
