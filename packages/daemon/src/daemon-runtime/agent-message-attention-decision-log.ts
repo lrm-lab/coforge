@@ -1,4 +1,4 @@
-import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
+import { diagnosticErrorName, type AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import {
   consumedReadBasis,
@@ -99,5 +99,14 @@ export function logRecoveryNoticeAccepted(
     daemon_pid: process.pid,
     recovered_message_count: counts.recoveredMessageCount,
     summary_unread_count: counts.summaryUnreadCount,
+  });
+}
+
+export function logCustodyAckFailure(message: AgentMessageDelivery, error: unknown): void {
+  logger.warn("Agent delivery could not be acknowledged on taking it", {
+    event: "agent.message.custody_ack_failed",
+    agent_id: message.agentId,
+    delivery_id: message.deliveryId,
+    error_code: diagnosticErrorName(error),
   });
 }
