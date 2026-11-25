@@ -17,10 +17,15 @@ function database() {
   const connectionString = Bun.env.PREFERENCES_TEST_DATABASE_URL;
   if (!connectionString)
     throw new Error("PREFERENCES_TEST_DATABASE_URL must point to local PostgreSQL");
-  return new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+  return new PrismaClient({
+    adapter: new PrismaPg({ connectionString }),
+    log: [{ level: "query", emit: "event" }],
+  });
 }
 
-async function withMember(run: (context: WorkspaceUserContext) => Promise<void>) {
+async function withMember(
+  run: (context: WorkspaceUserContext, db: ReturnType<typeof database>) => Promise<void>,
+) {
   const db = database();
   const suffix = crypto.randomUUID();
   const user = await db.user.create({
@@ -30,11 +35,10 @@ async function withMember(run: (context: WorkspaceUserContext) => Promise<void>)
     data: { slug: suffix, name: "Chat lists", members: { create: { userId: user.id } } },
   });
   try {
-    await run({
+    await run(
+      { db, workspaceId: workspace.id, user: { id: user.id } as WorkspaceUserContext["user"] },
       db,
-      workspaceId: workspace.id,
-      user: { id: user.id } as WorkspaceUserContext["user"],
-    });
+    );
   } finally {
     await db.workspace.delete({ where: { id: workspace.id } });
     await db.user.delete({ where: { id: user.id } });
@@ -165,4 +169,167 @@ test("saved chat list includes each equally timed bookmark across the page bound
         .sort()
         .reverse(),
     );
+  }));
+
+test("the section read starts while assistant onboarding is pending", () =>
+  withMember(async (context, db) => {
+    const onboarding = Promise.withResolvers<void>();
+    const sectionRead = Promise.withResolvers<string>();
+    db.$on("query", ({ query }) => {
+      if (query.includes('"chat_sections"')) sectionRead.resolve("sections");
+    });
+    const steps: string[] = [];
+    const { streams } = recordedStreams(steps);
+    const lists = readChatLists(context, ["directPreferences", "sections"], {
+      streams,
+      onboard: () => onboarding.promise,
+    });
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const outcome = await Promise.race([
+        sectionRead.promise,
+        new Promise((resolve) => {
+          timeout = setTimeout(() => resolve("blocked"), 750);
+        }),
+      ]);
+      expect(outcome).toBe("sections");
+      expect(steps).toEqual(["positions"]);
+    } finally {
+      clearTimeout(timeout);
+      onboarding.resolve();
+      await lists;
+    }
+  }));
+
+test("the full sidebar shares channel visibility and collage reads with the name directory", () =>
+  withMember(async (context, db) => {
+    const { workspaceId, user } = context;
+    const channel = await db.conversation.create({
+      data: { workspaceId, channelName: "shared-read", description: "Composer text" },
+    });
+    await db.conversationMember.create({
+      data: { workspaceId, conversationId: channel.id, userId: user.id },
+    });
+    const queries: string[] = [];
+    db.$on("query", ({ query }) => queries.push(query));
+    const result = await readChatLists(context, ["channels", "channelNames"], { streams: null });
+    const admitted = queries.filter(
+      (sql) =>
+        sql.includes('"hiddenFromWorkspaceAt"') &&
+        sql.includes('"visibility"') &&
+        sql.includes('FROM "public"."conversations"'),
+    );
+    const collages = queries.filter(
+      (sql) => sql.includes("CROSS JOIN LATERAL") && sql.includes('ORDER BY cm."joinedAt"'),
+    );
+    expect(admitted).toHaveLength(1);
+    expect(collages).toHaveLength(1);
+    const channels = new PublicChannels(db);
+    expect(result).toEqual({
+      channels: {
+        value: { channels: await channels.list(workspaceId, user.id), streamPositions: {} },
+      },
+      channelNames: {
+        value: { names: await channels.names(workspaceId, user.id), streamPositions: {} },
+      },
+    });
+  }));
+
+test("DM preview mentions start while people profiles are pending", () =>
+  withMember(async (context, db) => {
+    const { workspaceId, user } = context;
+    const peer = await db.user.create({
+      data: { username: `chat-peers-${crypto.randomUUID()}`, displayName: "Peer" },
+    });
+    await db.workspaceMembership.create({ data: { workspaceId, userId: peer.id } });
+    try {
+      const { conversationId } = await new DirectConversations(db).open(workspaceId, user.id, {
+        userId: peer.id,
+      });
+      await db.message.create({
+        data: { workspaceId, conversationId, sequence: 1, body: "Hello" },
+      });
+      const profiles = Promise.withResolvers<void>();
+      const mentions = Promise.withResolvers<string>();
+      const observed = db.$extends({
+        query: {
+          user: {
+            async findMany({ args, query }) {
+              await profiles.promise;
+              return query(args);
+            },
+          },
+          messageMention: {
+            findMany({ args, query }) {
+              mentions.resolve("mentions");
+              return query(args);
+            },
+          },
+        },
+      });
+      const lists = readChatLists(
+        { ...context, db: observed as unknown as WorkspaceUserContext["db"] },
+        ["directPreferences"],
+        { streams: null, onboard: async () => undefined },
+      );
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const outcome = await Promise.race([
+          mentions.promise,
+          new Promise((resolve) => {
+            timeout = setTimeout(() => resolve("blocked"), 750);
+          }),
+        ]);
+        expect(outcome).toBe("mentions");
+      } finally {
+        clearTimeout(timeout);
+        profiles.resolve();
+        await lists;
+      }
+    } finally {
+      await db.conversation.deleteMany({ where: { workspaceId, directKey: { not: null } } });
+      await db.workspaceMembership.delete({
+        where: { workspaceId_userId: { workspaceId, userId: peer.id } },
+      });
+      await db.user.delete({ where: { id: peer.id } });
+    }
+  }));
+
+test("channel names still answer when the sidebar membership read fails", () =>
+  withMember(async (context, db) => {
+    const { workspaceId } = context;
+    const channel = await db.conversation.create({
+      data: { workspaceId, channelName: "directory-only" },
+    });
+    const observed = db.$extends({
+      query: {
+        conversationMember: {
+          findMany({ args, query }) {
+            if (args.select?.hiddenAt) throw new AppError("TEMPORARILY_UNAVAILABLE");
+            return query(args);
+          },
+        },
+      },
+    });
+    const result = await readChatLists(
+      { ...context, db: observed as unknown as WorkspaceUserContext["db"] },
+      ["channels", "channelNames"],
+      { streams: null },
+    );
+    expect(result.channels).toEqual({ error: { code: "TEMPORARILY_UNAVAILABLE" } });
+    expect(result.channelNames).toEqual({
+      value: {
+        streamPositions: {},
+        names: [
+          {
+            id: channel.id,
+            name: "directory-only",
+            description: "",
+            archived: false,
+            visibility: "public",
+            members: [],
+          },
+        ],
+      },
+    });
   }));

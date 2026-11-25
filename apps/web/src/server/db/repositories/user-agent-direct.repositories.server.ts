@@ -1,7 +1,11 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { agentDirectKey } from "#src/features/conversations/direct-key";
 import { AppError } from "#src/lib/app-error";
-import { canDirectMessageAgent } from "#src/server/agents/agent-visibility.server";
+import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
+import {
+  canDirectMessageAgent,
+  directMessageAgentWhere,
+} from "#src/server/agents/agent-visibility.server";
 import { restoreDirectConversationMembers } from "#src/server/conversations/direct-conversation-members.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import { buildUserAgentConversationCreateInput } from "./user-agent-conversation-input.server";
@@ -70,6 +74,27 @@ export async function openUserAgentConversation(
   userId: string,
   agentId: string,
 ) {
+  const existing = await db.conversation.findUnique({
+    where: {
+      workspaceId_directKey: { workspaceId, directKey: agentDirectKey(userId, agentId) },
+      workspace: { members: { some: { userId } } },
+      members: { some: { userId } },
+      AND: {
+        members: {
+          some: {
+            agent: { id: agentId, ...ACTIVE_AGENT_WHERE, ...directMessageAgentWhere(userId) },
+          },
+        },
+      },
+    },
+    select: { id: true },
+  });
+  if (existing) return { id: existing.id, created: false };
+  const agent = await db.agent.findFirst({
+    where: { id: agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
+    select: { ownerId: true, visibility: true },
+  });
+  if (!agent || !canDirectMessageAgent(userId, agent)) throw new AppError("ACCESS_DENIED");
   const created = !(await findUserAgentConversation(db, workspaceId, userId, agentId));
   const conversation = {
     ...(await getOrCreateUserAgentConversation(db, workspaceId, userId, agentId)),

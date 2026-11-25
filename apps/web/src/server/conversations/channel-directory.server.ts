@@ -7,13 +7,17 @@ import { channelVisibilityOf } from "#src/features/conversations/channel-visibil
 import { AppError } from "#src/lib/app-error";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
+import type { PrismaClient } from "#src/generated/prisma/client";
 import type { PublicChannelPorts } from "./channel-access.server";
 import { canListArchivedChannels, resolveActorServerRole } from "./channel-authority.server";
 import { isClosedAndUnpinned } from "./channel-closed.server";
 import { visibleChannelWhere } from "./channel-read-access.server";
-import { channelListPreviews } from "./channel-list-preview.server";
+import {
+  channelListMemberDetails,
+  channelListMembers,
+  channelListPreviews,
+} from "./channel-list-preview.server";
 import type { ChannelName } from "#src/features/conversations/channel-signals";
-import { channelListMembers } from "./channel-list-preview.server";
 import { channelInfoOf } from "./conversation-realtime.server";
 import { workspaceChannelThreadUnreads } from "./channel-thread-unread.server";
 import {
@@ -36,10 +40,7 @@ export async function channelNames(
   userId: string,
 ): Promise<ChannelName[]> {
   await requireWorkspaceMember(db, workspaceId, userId);
-  const channels = await db.conversation.findMany({
-    where: visibleChannelWhere(workspaceId, { userId }),
-    select: { id: true, channelName: true, description: true, archivedAt: true, visibility: true },
-  });
+  const channels = await visibleChannelRows(db, workspaceId, userId);
   // Each channel's group avatar, read once with the list rather than per row: the composer's `#`
   // list and search show it (Frank, 11-10: a channel is never a `#`).
   const members = await channelListMembers(
@@ -47,6 +48,13 @@ export async function channelNames(
     workspaceId,
     channels.map(({ id }) => id),
   );
+  return channelNamesWithMembers(channels, members);
+}
+
+function channelNamesWithMembers(
+  channels: readonly (Parameters<typeof channelInfoOf>[0] & { id: string })[],
+  members: Awaited<ReturnType<typeof channelListMembers>>,
+): ChannelName[] {
   return channels.map((channel) => ({
     id: channel.id,
     ...channelInfoOf(channel),
@@ -54,37 +62,85 @@ export async function channelNames(
   }));
 }
 
-export async function listChannels(
-  { db }: PublicChannelPorts,
+function visibleChannelRows(db: PrismaClient, workspaceId: string, userId: string) {
+  return db.conversation.findMany({
+    where: visibleChannelWhere(workspaceId, { userId }),
+    select: { id: true, channelName: true, description: true, archivedAt: true, visibility: true },
+  });
+}
+
+async function withViewerMemberships(
+  db: PrismaClient,
   workspaceId: string,
   userId: string,
+  channels: Awaited<ReturnType<typeof visibleChannelRows>>,
 ) {
-  await requireWorkspaceMember(db, workspaceId, userId);
-  const channelRows = db.conversation.findMany({
-    where: visibleChannelWhere(workspaceId, { userId }),
-    orderBy: { channelName: "asc" },
+  if (!channels.length) return [];
+  const members = await db.conversationMember.findMany({
+    where: {
+      workspaceId,
+      userId,
+      conversationId: { in: channels.map(({ id }) => id) },
+      ...ACTIVE_MEMBER_WHERE,
+    },
     select: {
-      id: true,
-      channelName: true,
-      archivedAt: true,
-      visibility: true,
-      members: {
-        where: { userId, ...ACTIVE_MEMBER_WHERE },
-        select: {
-          id: true,
-          notificationLevel: true,
-          // Slack-style unread cursor. Thread replies belong to their thread
-          // target and never advance it, so they never count in the channel badge.
-          readThroughSequence: true,
-          // Forced unread (`mark as unread`) and per-member hide/close, plus this member's
-          // pin order — the three member-level facts the conversation list renders (#121/#122).
-          unreadFromSequence: true,
-          hiddenAt: true,
-          pins: { select: { sortOrder: true } },
-        },
-      },
+      conversationId: true,
+      notificationLevel: true,
+      unreadFromSequence: true,
+      hiddenAt: true,
+      pins: { select: { sortOrder: true } },
     },
   });
+  const byChannel = new Map<string, typeof members>();
+  for (const member of members) {
+    const rows = byChannel.get(member.conversationId);
+    if (rows) rows.push(member);
+    else byChannel.set(member.conversationId, [member]);
+  }
+  return channels.map((channel) => ({ ...channel, members: byChannel.get(channel.id) ?? [] }));
+}
+
+export function sharedChannelDirectory(db: PrismaClient, workspaceId: string, userId: string) {
+  const admitted = requireWorkspaceMember(db, workspaceId, userId);
+  const rows = admitted.then(() => visibleChannelRows(db, workspaceId, userId));
+  const members = rows.then((channels) =>
+    channelListMemberDetails(
+      db,
+      workspaceId,
+      channels.map(({ id }) => id),
+    ),
+  );
+  return {
+    list: () => readChannelList(db, workspaceId, userId, admitted, rows, members),
+    names: async () => {
+      const [channels, { collages }] = await Promise.all([rows, members]);
+      return channelNamesWithMembers(channels, collages);
+    },
+  };
+}
+
+export function listChannels({ db }: PublicChannelPorts, workspaceId: string, userId: string) {
+  const admitted = requireWorkspaceMember(db, workspaceId, userId);
+  return readChannelList(
+    db,
+    workspaceId,
+    userId,
+    admitted,
+    admitted.then(() => visibleChannelRows(db, workspaceId, userId)),
+  );
+}
+
+async function readChannelList(
+  db: PrismaClient,
+  workspaceId: string,
+  userId: string,
+  admitted: Promise<unknown>,
+  visibleRows: Promise<Awaited<ReturnType<typeof visibleChannelRows>>>,
+  sharedMembers?: ReturnType<typeof channelListMemberDetails>,
+) {
+  const channelRows = visibleRows.then((channels) =>
+    withViewerMemberships(db, workspaceId, userId, channels),
+  );
   // One query for every channel's unread: other-authored top-level messages past the
   // member's own read cursor, or from their mark-as-unread marker when that is lower.
   // System messages (no sender member) and the viewer's own messages are already-read by
@@ -95,15 +151,16 @@ export async function listChannels(
   // `arrivedSinceClosed` counts the unread ones posted after the member closed the chat:
   // any of them brings a closed chat back to the list.
   // `mentioned` is true when one of those unread top-level messages mentions this member row.
-  const unreadRows = db.$queryRaw<
-    {
-      conversationId: string;
-      unread: number;
-      firstUnreadMessageId: string | null;
-      arrivedSinceClosed: number;
-      mentioned: boolean;
-    }[]
-  >`
+  const unreadRows = admitted.then(
+    () => db.$queryRaw<
+      {
+        conversationId: string;
+        unread: number;
+        firstUnreadMessageId: string | null;
+        arrivedSinceClosed: number;
+        mentioned: boolean;
+      }[]
+    >`
       SELECT cm."conversationId" AS "conversationId",
         unread."count" AS "unread",
         CASE WHEN unread."firstSequence" IS NOT NULL
@@ -131,20 +188,22 @@ export async function listChannels(
       WHERE cm."userId" = ${userId}::uuid
         AND cm."leftAt" IS NULL
         AND cm."workspaceId" = ${workspaceId}::uuid
-  `;
+  `,
+  );
   // The channel previews need only the channel ids. A channel the viewer closed and did not pin
   // is listed only when a newer message reopens it, so the other channels' previews load in
   // parallel with the unread read, and the reopened closed ones are read after it.
   const [channels, unread, threadUnreads, previews] = await Promise.all([
     channelRows,
     unreadRows,
-    workspaceChannelThreadUnreads(db, workspaceId, userId),
+    admitted.then(() => workspaceChannelThreadUnreads(db, workspaceId, userId)),
     channelRows.then((rows) =>
       channelListPreviews(
         db,
         workspaceId,
         rows.filter((row) => !isClosedAndUnpinned(row)).map((row) => row.id),
         userId,
+        sharedMembers,
       ),
     ),
   ]);
@@ -159,7 +218,7 @@ export async function listChannels(
     .filter((channel) => isClosedAndUnpinned(channel) && reopenedByActivity.has(channel.id))
     .map((channel) => channel.id);
   if (reopenedIds.length) {
-    const reopened = await channelListPreviews(db, workspaceId, reopenedIds, userId);
+    const reopened = await channelListPreviews(db, workspaceId, reopenedIds, userId, sharedMembers);
     for (const [id, preview] of reopened) previews.set(id, preview);
   }
   return channels

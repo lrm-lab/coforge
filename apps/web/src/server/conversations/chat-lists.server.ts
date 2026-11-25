@@ -14,6 +14,7 @@ import { chatStreamPositions } from "./chat-stream-positions.server";
 import type { CentrifugoStreams } from "#src/server/centrifugo/server-api.server";
 import { DirectConversations } from "./direct-conversations.server";
 import { PublicChannels } from "./public-channels.server";
+import { sharedChannelDirectory } from "./channel-directory.server";
 import {
   SAVED_MESSAGES_DEFAULT_LIMIT,
   listUserSavedMessages,
@@ -45,14 +46,23 @@ async function readSavedEntries({ db, workspaceId, user }: WorkspaceUserContext)
   }
 }
 
-function listReaders(context: WorkspaceUserContext, onboarded: Promise<unknown> | undefined) {
+function listReaders(
+  context: WorkspaceUserContext,
+  onboarded: Promise<unknown> | undefined,
+  shareDirectory: boolean,
+) {
   const { db, workspaceId, user } = context;
-  const channels = () => new PublicChannels(db);
+  const channels = new PublicChannels(db);
+  const directory = shareDirectory ? sharedChannelDirectory(db, workspaceId, user.id) : undefined;
   const directs = () => new DirectConversations(db);
   const sections = () => new ChatSections(db, workspaceId, user.id);
   return {
-    channels: async () => ({ channels: await channels().list(workspaceId, user.id) }),
-    channelNames: async () => ({ names: await channels().names(workspaceId, user.id) }),
+    channels: async () => ({
+      channels: await (directory?.list() ?? channels.list(workspaceId, user.id)),
+    }),
+    channelNames: async () => ({
+      names: await (directory?.names() ?? channels.names(workspaceId, user.id)),
+    }),
     saved: async () => ({
       entries: await readSavedEntries(context),
     }),
@@ -61,6 +71,7 @@ function listReaders(context: WorkspaceUserContext, onboarded: Promise<unknown> 
       return directs().list(workspaceId, user.id);
     },
     directBadges: async () => {
+      await onboarded?.catch(() => undefined);
       const rows = await directs().unreadCounts(workspaceId, user.id);
       const unread: Record<string, number> = {};
       const firstUnreadMessageIds: Record<string, string | null> = {};
@@ -107,7 +118,7 @@ export async function readChatLists(
 ): Promise<ChatListResults> {
   const wanted = [...new Set(lists)];
   const onboarded = wanted.includes("directPreferences") ? onboard() : undefined;
-  await onboarded?.catch(() => undefined);
+  void onboarded?.catch(() => undefined);
   const signalChannels: Record<SignalChannel, string> = {
     workspace: workspaceConversationChannel(context.workspaceId),
     user: userConversationChannel(context.user.id),
@@ -124,7 +135,11 @@ export async function readChatLists(
         return position ? [[signalChannels[channel], position]] : [];
       }),
     );
-  const readers = listReaders(context, onboarded);
+  const readers = listReaders(
+    context,
+    onboarded,
+    wanted.includes("channels") && wanted.includes("channelNames"),
+  );
   const entries = await Promise.all(
     wanted.map(async (list) => {
       const result = await settle(async () => ({

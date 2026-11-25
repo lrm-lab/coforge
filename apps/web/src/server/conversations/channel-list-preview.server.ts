@@ -3,6 +3,7 @@ import type { HumanNames } from "#src/lib/human-label";
 import {
   activeMemberRows,
   latestTopLevelMessageRows,
+  type ActiveMemberRow,
 } from "#src/server/db/repositories/channel-list-preview.repositories.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { APP_BOT_LOGO_SELECT, agentFaceUrl } from "#src/server/apps/app-logo.server";
@@ -93,71 +94,42 @@ export async function channelListPreviews(
   workspaceId: string,
   conversationIds: readonly string[],
   viewerUserId: string,
+  sharedMembers?: Promise<ChannelListMemberDetails>,
 ) {
-  const [latest, members] = await Promise.all([
-    latestTopLevelMessageRows(db, conversationIds),
-    activeMemberRows(db, conversationIds, CHANNEL_LIST_MEMBER_LIMIT),
-  ]);
-  const mentionRows = latest.length
-    ? await db.messageMention.findMany({
-        where: { messageId: { in: latest.map((row) => row.messageId) } },
-        select: { messageId: true, ...BROWSER_MESSAGE_MENTIONS_SELECT.select },
-      })
-    : [];
-  const mentionsByMessage = new Map<string, PreviewMentionRef[]>();
-  for (const row of mentionRows) {
-    const mentions = mentionsByMessage.get(row.messageId) ?? [];
-    mentions.push(browserMessageMention(row));
-    mentionsByMessage.set(row.messageId, mentions);
-  }
-
-  const userIds = new Set<string>();
-  const agentIds = new Set<string>();
-  for (const row of latest) {
-    if (row.senderUserId) userIds.add(row.senderUserId);
-    if (row.senderAgentId) agentIds.add(row.senderAgentId);
-  }
-  for (const row of members) {
-    if (row.userId) userIds.add(row.userId);
-    if (row.agentId) agentIds.add(row.agentId);
-  }
-  const [users, agents] = await Promise.all([
-    userIds.size
-      ? db.user.findMany({
-          where: { id: { in: [...userIds] } },
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            avatarObjectKey: true,
-          },
+  const latest = latestTopLevelMessageRows(db, conversationIds);
+  const members = sharedMembers ?? activeMemberRows(db, conversationIds, CHANNEL_LIST_MEMBER_LIMIT);
+  const mentions = latest.then(async (rows) => {
+    const mentionRows = rows.length
+      ? await db.messageMention.findMany({
+          where: { messageId: { in: rows.map((row) => row.messageId) } },
+          select: { messageId: true, ...BROWSER_MESSAGE_MENTIONS_SELECT.select },
         })
-      : [],
-    agentIds.size
-      ? db.agent.findMany({
-          where: { id: { in: [...agentIds] } },
-          select: {
-            id: true,
-            name: true,
-            displayName: true,
-            avatarMascot: true,
-            appBot: APP_BOT_LOGO_SELECT,
-          },
-        })
-      : [],
+      : [];
+    const byMessage = new Map<string, PreviewMentionRef[]>();
+    for (const row of mentionRows) {
+      const refs = byMessage.get(row.messageId) ?? [];
+      refs.push(browserMessageMention(row));
+      byMessage.set(row.messageId, refs);
+    }
+    return byMessage;
+  });
+  const people = Promise.all([latest, members]).then(([rows, people]) =>
+    Array.isArray(people)
+      ? readChannelListPeople(db, [...rows.map(messageSender), ...people])
+      : readChannelListPeople(db, rows.map(messageSender), people.names),
+  );
+  const [messages, memberDetails, mentionsByMessage, names] = await Promise.all([
+    latest,
+    members,
+    mentions,
+    people,
   ]);
-  const userById = new Map(users.map((user) => [user.id, user]));
-  const agentById = new Map(agents.map((agent) => [agent.id, agent]));
-  const names: ChannelListNames = {
-    users: userById,
-    agents: agentById,
-  };
 
   const result = new Map<
     string,
     { lastMessage: ChannelListLastMessage | null; members: ChannelListMember[] }
   >(conversationIds.map((id) => [id, { lastMessage: null, members: [] }]));
-  for (const row of latest) {
+  for (const row of messages) {
     const entry = result.get(row.conversationId);
     if (!entry) continue;
     entry.lastMessage = {
@@ -172,10 +144,10 @@ export async function channelListPreviews(
       sender: previewSenderOf(row, viewerUserId, names),
     };
   }
-  for (const row of members) {
-    const member = channelListMember(workspaceId, row, userById, agentById);
-    if (member) result.get(row.conversationId)?.members.push(member);
-  }
+  const collages = Array.isArray(memberDetails)
+    ? memberCollages(workspaceId, conversationIds, memberDetails, names)
+    : memberDetails.collages;
+  for (const [id, entry] of result) entry.members = collages.get(id) ?? [];
   return result;
 }
 
@@ -190,9 +162,45 @@ export async function channelListMembers(
   workspaceId: string,
   conversationIds: readonly string[],
 ) {
-  const members = await activeMemberRows(db, conversationIds, CHANNEL_LIST_MEMBER_LIMIT);
-  const userIds = new Set(members.flatMap((row) => (row.userId ? [row.userId] : [])));
-  const agentIds = new Set(members.flatMap((row) => (row.agentId ? [row.agentId] : [])));
+  return (await channelListMemberDetails(db, workspaceId, conversationIds)).collages;
+}
+
+type ChannelActorIds = { userId: string | null; agentId: string | null };
+type ChannelListPeople = {
+  users: ReadonlyMap<string, ChannelListMemberUser>;
+  agents: ReadonlyMap<string, ChannelListMemberAgent>;
+};
+type ChannelListMemberDetails = {
+  names: ChannelListPeople;
+  collages: Map<string, ChannelListMember[]>;
+};
+
+export async function channelListMemberDetails(
+  db: PrismaClient,
+  workspaceId: string,
+  conversationIds: readonly string[],
+): Promise<ChannelListMemberDetails> {
+  const rows = await activeMemberRows(db, conversationIds, CHANNEL_LIST_MEMBER_LIMIT);
+  const names = await readChannelListPeople(db, rows);
+  return { names, collages: memberCollages(workspaceId, conversationIds, rows, names) };
+}
+
+function messageSender(row: { senderUserId: string | null; senderAgentId: string | null }) {
+  return { userId: row.senderUserId, agentId: row.senderAgentId };
+}
+
+async function readChannelListPeople(
+  db: PrismaClient,
+  rows: Iterable<ChannelActorIds>,
+  known?: ChannelListPeople,
+): Promise<ChannelListPeople> {
+  const userIds = new Set<string>();
+  const agentIds = new Set<string>();
+  for (const { userId, agentId } of rows) {
+    if (userId && !known?.users.has(userId)) userIds.add(userId);
+    if (agentId && !known?.agents.has(agentId)) agentIds.add(agentId);
+  }
+  if (known && !userIds.size && !agentIds.size) return known;
   const [users, agents] = await Promise.all([
     userIds.size
       ? db.user.findMany({
@@ -213,14 +221,25 @@ export async function channelListMembers(
         })
       : [],
   ]);
-  const userById = new Map(users.map((user) => [user.id, user]));
-  const agentById = new Map(agents.map((agent) => [agent.id, agent]));
-  const result = new Map<string, ChannelListMember[]>(conversationIds.map((id) => [id, []]));
-  for (const row of members) {
-    const member = channelListMember(workspaceId, row, userById, agentById);
-    if (member) result.get(row.conversationId)?.push(member);
+  const userById = new Map(known?.users);
+  const agentById = new Map(known?.agents);
+  for (const user of users) userById.set(user.id, user);
+  for (const agent of agents) agentById.set(agent.id, agent);
+  return { users: userById, agents: agentById };
+}
+
+function memberCollages(
+  workspaceId: string,
+  conversationIds: readonly string[],
+  rows: readonly ActiveMemberRow[],
+  names: ChannelListPeople,
+) {
+  const collages = new Map<string, ChannelListMember[]>(conversationIds.map((id) => [id, []]));
+  for (const row of rows) {
+    const member = channelListMember(workspaceId, row, names.users, names.agents);
+    if (member) collages.get(row.conversationId)?.push(member);
   }
-  return result;
+  return collages;
 }
 
 type ChannelListMemberUser = {

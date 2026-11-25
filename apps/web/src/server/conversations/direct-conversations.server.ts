@@ -10,7 +10,7 @@ import { MentionDeliveryIssuer } from "./mention-deliveries.server";
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import { ACTIVE_AGENT_WHERE, assertAgentLive } from "#src/server/agents/active-agent.server";
+import { assertAgentLive } from "#src/server/agents/active-agent.server";
 import { agentDirectKey, peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { canDirectMessageAgent } from "#src/server/agents/agent-visibility.server";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
@@ -100,13 +100,6 @@ export class DirectConversations {
   ) {
     if ("userId" in peer)
       return openPeopleDirectConversation(this.db, workspaceId, viewerId, peer.userId);
-    // Any member messages a public Agent, only its creator a private one, and nobody starts a
-    // DM with a deleted one.
-    const agent = await this.db.agent.findFirst({
-      where: { id: peer.agentId, workspaceId, ...ACTIVE_AGENT_WHERE },
-      select: { ownerId: true, visibility: true },
-    });
-    if (!agent || !canDirectMessageAgent(viewerId, agent)) throw new AppError("ACCESS_DENIED");
     const conversation = await this.conversations.openUserAgent(
       workspaceId,
       viewerId,

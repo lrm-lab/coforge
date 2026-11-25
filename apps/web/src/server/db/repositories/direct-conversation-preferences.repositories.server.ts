@@ -233,14 +233,16 @@ export class PrismaDirectConversationPreferences {
       const peerId = peopleDirectPeerId(conversation.directKey, userId);
       if (peerId) peerIds.set(conversation.id, peerId);
     }
-    const people = peerIds.size
-      ? await this.db.user.findMany({
-          where: { id: { in: [...new Set(peerIds.values())] } },
-          select: peoplePeerUserFields,
-        })
-      : [];
+    const [people, lastMessages] = await Promise.all([
+      peerIds.size
+        ? this.db.user.findMany({
+            where: { id: { in: [...new Set(peerIds.values())] } },
+            select: peoplePeerUserFields,
+          })
+        : [],
+      this.lastMessagePreviews(latest),
+    ]);
     const profiles = new Map(people.map((person) => [person.id, person]));
-    const lastMessages = await this.lastMessagePreviews(latest);
     return {
       conversations: memberships.flatMap(
         ({ conversation, notificationLevel, unreadFromSequence }) => {

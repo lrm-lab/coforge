@@ -48,27 +48,22 @@ function fixture(options: { member?: boolean; newestSequence?: number } = {}) {
       // A channel: a read keeps no read time (`recordReadAdvance`).
       findUnique: async () => ({ directKey: null, workspaceId: "workspace-1" }),
       findMany: async () => [
-        {
-          id: CHANNEL_ID,
-          channelName: "ops",
-          archivedAt: null,
-          members:
-            options.member === false
-              ? []
-              : [
-                  {
-                    id: memberId,
-                    channelMuted: false,
-                    readThroughSequence: member.readThroughSequence,
-                    unreadFromSequence: member.unreadFromSequence,
-                    hiddenAt: member.hiddenAt,
-                    pins: pins.map((pin) => ({ sortOrder: pin.sortOrder })),
-                  },
-                ],
-        },
+        { id: CHANNEL_ID, channelName: "ops", archivedAt: null, visibility: "public" },
       ],
     },
     conversationMember: {
+      findMany: async () =>
+        options.member === false
+          ? []
+          : [
+              {
+                conversationId: CHANNEL_ID,
+                notificationLevel: "all",
+                unreadFromSequence: member.unreadFromSequence,
+                hiddenAt: member.hiddenAt,
+                pins: pins.map((pin) => ({ sortOrder: pin.sortOrder })),
+              },
+            ],
       findFirst: async () => (options.member === false ? null : { id: memberId }),
       count: async () => (options.member === false ? 0 : 1),
       updateMany: async ({ data }: { data: Partial<MemberState> }) => {
