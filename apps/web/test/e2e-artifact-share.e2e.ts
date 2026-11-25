@@ -8,6 +8,7 @@ import { productionArtifacts } from "#src/server/artifacts/artifact-composition.
 import { agentWrites } from "./helpers/artifact-agent-writes";
 import { artifactChrome, artifactViewerReady } from "./helpers/artifact-chrome";
 import {
+  animationsSettled,
   browserSession,
   devBrowserWorkspace,
   localBrowserE2e,
@@ -82,8 +83,7 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
       },
     },
   });
-  const settled = () =>
-    browser("wait", "--fn", `document.getAnimations().every((a) => a.playState !== "running")`);
+  const settled = () => browser("wait", "--fn", animationsSettled());
   const shoot = async (shot: string) => {
     await settled();
     await browser("screenshot", join(artifacts, `${shot}.png`));

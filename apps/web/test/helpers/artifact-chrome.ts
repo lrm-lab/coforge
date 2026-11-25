@@ -1,4 +1,4 @@
-import { pageHydrated } from "./browser-e2e";
+import { animationsSettled, pageHydrated } from "./browser-e2e";
 
 type Session = {
   browser: (...args: string[]) => Promise<string>;
@@ -86,11 +86,7 @@ export function artifactChrome({ browser, evaluate }: Session) {
         `[...${dialog}.querySelectorAll("button")].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`,
       );
       await until(`!document.body.textContent.includes(${JSON.stringify(label)})`);
-      await browser(
-        "wait",
-        "--fn",
-        `document.getAnimations().every((a) => a.playState !== "running")`,
-      );
+      await browser("wait", "--fn", animationsSettled());
     },
     openVersionMenu: async () => {
       await until(`${versionChip} != null`);

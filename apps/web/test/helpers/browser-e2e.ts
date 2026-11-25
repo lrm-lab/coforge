@@ -26,15 +26,30 @@ export const hydratedElement = (element: string) =>
   `Object.keys(${element} ?? {}).some((key) => key.startsWith("__reactProps"))`;
 
 /**
+ * Page expression that is true when no real time-based animation on `DocumentTimeline` is still
+ * running. Scroll-driven animations (`ScrollTimeline` / `ViewTimeline`, such as `.scroll-fade-y`)
+ * report `playState === "running"` even when the page is completely still and are ignored.
+ * Infinite animations (loading spinners/pulses) are still waited on unless a call site with an
+ * explicit endless indicator opts into `{ allowInfinite: true }`.
+ */
+export function animationsSettled(options: { allowInfinite?: boolean } = {}): string {
+  const ignoreInfinite = options.allowInfinite
+    ? " || animation.effect?.getComputedTiming().iterations === Infinity"
+    : "";
+  return `document.getAnimations().every((animation) => !(animation.timeline instanceof DocumentTimeline) || animation.playState !== "running"${ignoreInfinite})`;
+}
+
+/**
  * `element` (as in {@link hydratedElement}) is hydrated and holding still: neither it nor any
- * ancestor is running an animation. A click is aimed where the element is when it is measured; a
- * dialog still zooming in (`zoom-in-95`) moves its controls, and on a slow runner the press arrived
- * after the zoom ended, just below the button it was aimed at (task #coforge-backend:#23, CI run
- * 44034672096: 3 of 10 runs pressed the `dl` under the status trigger). Animations elsewhere on
- * the page do not count.
+ * ancestor is running a `DocumentTimeline` animation (ignoring scroll-driven `ScrollTimeline` /
+ * `ViewTimeline` effects on scrollable ancestors). A click is aimed where the element is when it
+ * is measured; a dialog still zooming in (`zoom-in-95`) moves its controls, and on a slow runner
+ * the press arrived after the zoom ended, just below the button it was aimed at (task
+ * #coforge-backend:#23, CI run 44034672096: 3 of 10 runs pressed the `dl` under the status
+ * trigger). Animations elsewhere on the page do not count.
  */
 export const elementAtRest = (element: string) =>
-  `(() => { const target = ${element}; if (!target || !(${hydratedElement("target")})) return false; for (let node = target; node instanceof Element; node = node.parentElement) if (node.getAnimations().some((animation) => animation.playState === "running")) return false; return true; })()`;
+  `(() => { const target = ${element}; if (!target || !(${hydratedElement("target")})) return false; for (let node = target; node instanceof Element; node = node.parentElement) if (node.getAnimations().some((animation) => animation.timeline instanceof DocumentTimeline && animation.playState === "running")) return false; return true; })()`;
 
 /**
  * The local stack a browser E2E runs against: the Web service (`COFORGE_E2E_WEB_URL`),

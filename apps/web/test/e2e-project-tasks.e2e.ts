@@ -10,6 +10,7 @@ import {
   devBrowserWorkspace,
   hydratedElement,
   localBrowserE2e,
+  animationsSettled,
   pageHydrated,
 } from "./helpers/browser-e2e";
 
@@ -79,11 +80,7 @@ test("a Project page lists its Tasks as a tree, and a Task's popup moves it betw
 
     await mkdir(artifacts, { recursive: true });
     const shoot = async (name: string) => {
-      await browser(
-        "wait",
-        "--fn",
-        `document.getAnimations().every((a) => a.playState !== "running")`,
-      );
+      await browser("wait", "--fn", animationsSettled());
       await browser("screenshot", join(artifacts, `${name}.png`));
       await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
       await browser("screenshot", join(artifacts, `${name}-dark.png`));

@@ -8,6 +8,7 @@ import {
   browserSession,
   devBrowserWorkspace,
   localBrowserE2e,
+  animationsSettled,
   pageHydrated,
 } from "./helpers/browser-e2e";
 
@@ -92,11 +93,9 @@ test("a muted channel shows its unread as a quiet number beside the muted icon",
         true,
       );
       await evaluate(`(${row(`a-muted-${tail}`)}.scrollIntoView({ block: "center" }), true)`);
-      await browser(
-        "wait",
-        "--fn",
-        `document.getAnimations().every((a) => a.playState !== "running")`,
-      );
+      // On phone viewports /w/:slug keeps ConversationPending's infinite animate-pulse mounted
+      // behind the mobile sidebar, so only finite DocumentTimeline transitions should block here.
+      await browser("wait", "--fn", animationsSettled({ allowInfinite: true }));
       await browser("screenshot", join(artifacts, `${label}.png`));
       await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
       await browser("screenshot", join(artifacts, `${label}-dark.png`));

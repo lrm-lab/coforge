@@ -9,6 +9,7 @@ import {
   browserSession,
   devBrowserWorkspace,
   localBrowserE2e,
+  animationsSettled,
   pageHydrated,
 } from "./helpers/browser-e2e";
 
@@ -54,8 +55,7 @@ test("a Task's popup on a phone has a top bar, and its properties are one row of
       members: { create: [{ userId: DEV_BROWSER_USER.id }, { agentId: agent.id }] },
     },
   });
-  const settled = () =>
-    browser("wait", "--fn", `document.getAnimations().every((a) => a.playState !== "running")`);
+  const settled = () => browser("wait", "--fn", animationsSettled());
   const shots = async (name: string) => {
     await settled();
     await browser("screenshot", join(artifacts, `${name}.png`));

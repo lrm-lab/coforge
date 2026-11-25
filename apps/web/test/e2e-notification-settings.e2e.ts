@@ -5,7 +5,12 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  animationsSettled,
+  browserSession,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
  * Settings › Notifications (task #469, in Raft's order): this device first, named with its last
@@ -73,11 +78,7 @@ test("notification settings: this device, a pause of one's own, and settings tha
     );
     const page = `${origin}/zh-CN/w/${workspace.slug}/settings?section=notifications`;
     const shoot = async (name: string) => {
-      await browser(
-        "wait",
-        "--fn",
-        `document.getAnimations().every((a) => a.playState !== "running")`,
-      );
+      await browser("wait", "--fn", animationsSettled());
       await browser("screenshot", "--full", join(artifacts, `${name}.png`));
       await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
       await browser("screenshot", "--full", join(artifacts, `${name}-dark.png`));

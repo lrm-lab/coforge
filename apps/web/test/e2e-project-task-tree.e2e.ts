@@ -12,6 +12,7 @@ import {
   browserSession,
   devBrowserWorkspace,
   localBrowserE2e,
+  animationsSettled,
   pageHydrated,
 } from "./helpers/browser-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
@@ -147,19 +148,11 @@ test("a Project's Tasks tab lists its Tasks as a tree", async () => {
 
     await mkdir(artifacts, { recursive: true });
     const shoot = async (name: string) => {
-      await browser(
-        "wait",
-        "--fn",
-        `document.getAnimations().every((a) => a.playState !== "running")`,
-      );
+      await browser("wait", "--fn", animationsSettled());
       await browser("screenshot", join(artifacts, `${name}.png`));
       await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
       // The theme's own colour transitions settle first.
-      await browser(
-        "wait",
-        "--fn",
-        `document.getAnimations().every((a) => a.playState !== "running")`,
-      );
+      await browser("wait", "--fn", animationsSettled());
       await browser("screenshot", join(artifacts, `${name}-dark.png`));
       await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
     };

@@ -6,6 +6,7 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import {
+  animationsSettled,
   browserSession,
   devBrowserWorkspace,
   elementAtRest,
@@ -40,9 +41,7 @@ test("Backlog column shows by default, accepts writes, and retired In Review is 
     await waitFor('document.querySelector(\'[role="menu"][aria-label="Status"]\') !== null');
   };
   const shoot = async (name: string) => {
-    await waitFor(
-      'document.getAnimations().every((animation) => animation.playState !== "running")',
-    );
+    await waitFor(animationsSettled());
     await browser("screenshot", join(artifacts, `${name}.png`));
     await evaluate('document.documentElement.classList.add("dark-mode") ?? true');
     await browser("screenshot", join(artifacts, `${name}-dark.png`));

@@ -9,6 +9,7 @@ import {
   browserSession,
   devBrowserWorkspace,
   localBrowserE2e,
+  animationsSettled,
   pageHydrated,
 } from "./helpers/browser-e2e";
 
@@ -71,8 +72,7 @@ test("Esc steps back to the popup a sub-task or a parent was opened from", async
     const dialog = `document.querySelector('[role="dialog"]')`;
     const showing = (title: string) =>
       `${dialog}?.querySelector("h2")?.textContent.includes(${JSON.stringify(title)}) === true`;
-    const settled = () =>
-      browser("wait", "--fn", `document.getAnimations().every((a) => a.playState !== "running")`);
+    const settled = () => browser("wait", "--fn", animationsSettled());
     /** Clicks where `selector` is once nothing moves: the click goes to the point the element
      * was measured at, so a popup still sliding in can take it somewhere else (task #127). */
     const press = async (selector: string) => {

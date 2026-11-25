@@ -9,6 +9,7 @@ import {
   browserSession,
   devBrowserWorkspace,
   localBrowserE2e,
+  animationsSettled,
   pageHydrated,
 } from "./helpers/browser-e2e";
 
@@ -68,7 +69,7 @@ test("an existing Task is put under the open one, and one under another parent i
         ),
       ).toBe(true);
     };
-    const settled = `document.getAnimations().every((a) => a.playState !== "running")`;
+    const settled = animationsSettled();
     const shoot = async (name: string) => {
       await browser("wait", "--fn", settled);
       await browser("screenshot", join(artifacts, `${name}.png`));

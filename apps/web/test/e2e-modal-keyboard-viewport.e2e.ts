@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { animationsSettled } from "./helpers/browser-e2e";
 
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
@@ -105,7 +106,7 @@ test("a dialog's field stays inside the visual viewport the keyboard leaves", as
     expect(before.focused).toBe(true);
     expect(before.overlay).toEqual([0, 844]);
 
-    await browser("wait", "--fn", `document.getAnimations().length === 0`);
+    await browser("wait", "--fn", animationsSettled());
     expect(Math.abs((await boxes()).dialog[1] - 844)).toBeLessThan(2);
     await browser("screenshot", join(artifacts, "keyboard-down.png"));
     await browser(

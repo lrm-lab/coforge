@@ -82,7 +82,7 @@ test("a profile opened in a Task popup opens over the popup", async () => {
     await mkdir(artifacts, { recursive: true });
     const dialogs = `[...document.querySelectorAll('[role="dialog"]')]`;
     const profileButton = `[role="dialog"] button[aria-label=${JSON.stringify(`Open Task Agent ${tail}'s profile`)}]`;
-    const settled = `${dialogs}.every((el) => { for (let at = el; at; at = at.parentElement) if (at.getAnimations().length) return false; return true; })`;
+    const settled = `${dialogs}.every((el) => { for (let at = el; at; at = at.parentElement) if (at.getAnimations().some((animation) => animation.timeline instanceof DocumentTimeline && animation.playState === "running")) return false; return true; })`;
     const openProfile = async () => {
       await browser(
         "wait",

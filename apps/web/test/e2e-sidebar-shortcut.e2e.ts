@@ -4,7 +4,13 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, localBrowserE2e, pageHydrated, pageWaiter } from "./helpers/browser-e2e";
+import {
+  animationsSettled,
+  browserSession,
+  localBrowserE2e,
+  pageHydrated,
+  pageWaiter,
+} from "./helpers/browser-e2e";
 
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/sidebar-shortcut");
@@ -101,9 +107,7 @@ test("Cmd/Ctrl+B toggles the sidebar, except in a rich-text editor", async () =>
     expect(await evaluate<string | null>(`localStorage.getItem("coforge-sidebar-expanded")`)).toBe(
       "show",
     );
-    await wait(
-      `document.getAnimations().every((a) => a.timeline !== document.timeline || a.playState !== "running")`,
-    );
+    await wait(animationsSettled());
     expect(await tooltipAfterHover(COLLAPSE, "Collapse sidebar")).toBe(`Collapse sidebar${label}`);
     await browser("screenshot", join(artifacts, "collapse-tooltip.png"));
     await browser("focus", "textarea");

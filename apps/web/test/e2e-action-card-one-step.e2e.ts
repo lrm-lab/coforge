@@ -6,7 +6,12 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { ActionCards } from "#src/server/conversations/action-cards.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  animationsSettled,
+  browserSession,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
  * An action card commits its draft in one press (task #449, step 2): Create makes the channel as
@@ -99,8 +104,7 @@ test("an action card commits in one press, settles in place, and is one line reo
   const settledIn = (id: string) =>
     `${card(id)}?.querySelector("[data-action-card-handled]") != null`;
   // Colors ease into a new theme: a screenshot waits until no transition is still running.
-  const settled = () =>
-    browser("wait", "--fn", `document.getAnimations().every((a) => a.playState !== "running")`);
+  const settled = () => browser("wait", "--fn", animationsSettled());
   const shot = async (name: string) => {
     await browser("screenshot", join(artifacts, `${name}.png`));
     await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);

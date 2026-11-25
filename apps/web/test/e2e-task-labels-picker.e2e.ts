@@ -11,6 +11,7 @@ import {
   browserSession,
   devBrowserWorkspace,
   localBrowserE2e,
+  animationsSettled,
   pageHydrated,
 } from "./helpers/browser-e2e";
 
@@ -74,8 +75,7 @@ test("labels go on and off a Task, are made from a name, show on cards and filte
         .sort();
 
     const dialog = `document.querySelector('[role="dialog"]')`;
-    const settled = () =>
-      browser("wait", "--fn", `document.getAnimations().every((a) => a.playState !== "running")`);
+    const settled = () => browser("wait", "--fn", animationsSettled());
     const menu = `document.querySelector('[role="menu"][aria-label="Labels"]')`;
     const item = (label: string) =>
       `[...(${menu}?.querySelectorAll('[role^="menuitem"]') ?? [])].find((el) => el.textContent.includes(${JSON.stringify(label)}))`;

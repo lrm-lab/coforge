@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import {
+  animationsSettled,
   browserSession,
   devBrowserWorkspace,
   localBrowserE2e,
@@ -23,8 +24,7 @@ test("external Agent: page credential, browser-approved login, presence, revoke 
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
   let createdAgentId: string | undefined;
 
-  const settled = () =>
-    browser("wait", "--fn", `document.getAnimations().every((a) => a.playState !== "running")`);
+  const settled = () => browser("wait", "--fn", animationsSettled());
   const shoot = async (name: string) => {
     await settled();
     await browser("screenshot", join(artifacts, `${name}.png`));

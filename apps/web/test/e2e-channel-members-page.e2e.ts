@@ -4,7 +4,12 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, desktopPointerInitScript, localBrowserE2e } from "./helpers/browser-e2e";
+import {
+  animationsSettled,
+  browserSession,
+  desktopPointerInitScript,
+  localBrowserE2e,
+} from "./helpers/browser-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
@@ -73,7 +78,7 @@ test("the settings panel shows a channel's members as a page, adds and removes o
   }
   /** No finite animation or transition is running (the panel has slid in, a menu has faded out), so
    * a screenshot shows the page at rest. An endless one, such as a spinner, never settles. */
-  const settled = `document.getAnimations().every((animation) => animation.playState !== "running" || animation.effect?.getComputedTiming().iterations === Infinity)`;
+  const settled = animationsSettled({ allowInfinite: true });
   /** The right edge of the roster's badge reading `role`. */
   const badgeRight = (role: string) =>
     `Math.round([...${panel}.querySelectorAll("li *")].filter((element) => element.textContent.trim() === ${JSON.stringify(role)}).at(-1)?.getBoundingClientRect().right ?? -1)`;

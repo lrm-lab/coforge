@@ -10,6 +10,7 @@ import {
   devBrowserWorkspace,
   elementAtRest,
   localBrowserE2e,
+  animationsSettled,
   pageHydrated,
 } from "./helpers/browser-e2e";
 
@@ -63,11 +64,7 @@ test("the Task popup's menu sets a parent, a Task to wait on and a sub-task", as
       ).toBe(true);
     };
     const shoot = async (name: string) => {
-      await browser(
-        "wait",
-        "--fn",
-        `document.getAnimations().every((a) => a.playState !== "running")`,
-      );
+      await browser("wait", "--fn", animationsSettled());
       await browser("screenshot", join(artifacts, `${name}.png`));
       await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
       await browser("screenshot", join(artifacts, `${name}-dark.png`));
@@ -92,11 +89,7 @@ test("the Task popup's menu sets a parent, a Task to wait on and a sub-task", as
       const page = `${origin}/en/w/${workspace.slug}/channel/${channel.id}?task=${task}`;
       const menu = async (item: string) => {
         // The last picker has closed and faded out, so nothing lies over the popup.
-        await browser(
-          "wait",
-          "--fn",
-          `${dialogs}.length === 1 && document.getAnimations().every((a) => a.playState !== "running")`,
-        );
+        await browser("wait", "--fn", `${dialogs}.length === 1 && ${animationsSettled()}`);
         await mark(
           `${popup}?.querySelector('[aria-label^="More actions for task #${task}"]')`,
           "more",
@@ -228,11 +221,7 @@ test("the Task popup's menu sets a parent, a Task to wait on and a sub-task", as
       // The sub-task's trail opens its parent in place, and the parent's Sub-tasks section appears
       // once the copy's announcement reaches its view: the front door gives this run the realtime
       // connection production has, so no reload is needed.
-      await browser(
-        "wait",
-        "--fn",
-        `${dialogs}.length === 1 && document.getAnimations().every((a) => a.playState !== "running")`,
-      );
+      await browser("wait", "--fn", `${dialogs}.length === 1 && ${animationsSettled()}`);
       const trailParent = `[...(${popup}?.querySelectorAll('[aria-label="Where this task is"] button') ?? [])].find((el) => el.textContent.includes(${JSON.stringify(title)}))`;
       await mark(trailParent, "parent-trail");
       await browser("click", '[data-e2e="parent-trail"]');

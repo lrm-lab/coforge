@@ -9,6 +9,7 @@ import {
   browserSession,
   devBrowserWorkspace,
   localBrowserE2e,
+  animationsSettled,
   pageHydrated,
 } from "./helpers/browser-e2e";
 
@@ -99,8 +100,7 @@ test("a Task popup opened from another steps back to it", async () => {
     await run(launch.id, { operation: "claim", numbers: [first] }).catch(() => undefined);
     await run(deps.id, { operation: "assign", number: parent, assignee: "@dax" });
 
-    const settled = () =>
-      browser("wait", "--fn", `document.getAnimations().every((a) => a.playState !== "running")`);
+    const settled = () => browser("wait", "--fn", animationsSettled());
     const dialog = `document.querySelector('[role="dialog"]')`;
     // A related Task of another channel opens as an overlay over the page, never by navigating
     // (OtherTaskPopup): while it is up there are two dialogs and the last is the step's.

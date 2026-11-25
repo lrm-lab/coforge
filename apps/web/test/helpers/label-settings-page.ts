@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { type browserSession, pageDevtools } from "./browser-e2e";
+import { animationsSettled, type browserSession, pageDevtools } from "./browser-e2e";
 
 /**
  * The Settings → Labels page as `e2e-label-settings` drives it: its rows, buttons and menus as
@@ -17,7 +17,7 @@ export function labelSettingsPage(
   const item = (text: string) =>
     `[...document.querySelectorAll('[role="menuitem"]')].find((el) => el.textContent.trim() === ${JSON.stringify(text)})`;
   const click = (selector: string) => evaluate(`(${selector}.click(), true)`);
-  const settled = `document.getAnimations().every((a) => a.playState !== "running")`;
+  const settled = animationsSettled();
   const shoot = async (shot: string) => {
     await browser("wait", "--fn", settled);
     await browser("screenshot", join(artifacts, `${shot}.png`));

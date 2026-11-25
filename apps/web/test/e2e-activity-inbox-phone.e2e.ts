@@ -5,6 +5,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import {
+  animationsSettled,
   browserSession,
   devBrowserWorkspace,
   localBrowserE2e,
@@ -65,8 +66,7 @@ test("on a phone a row opens its conversation in place of the Activity list", as
       },
     },
   });
-  const settled = () =>
-    browser("wait", "--fn", `document.getAnimations().every((a) => a.playState !== "running")`);
+  const settled = () => browser("wait", "--fn", animationsSettled());
   /** Presses a tab by its label and waits for its page with it marked current. */
   const pressTab = async (label: string, path: string) => {
     await settled();

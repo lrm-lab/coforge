@@ -12,6 +12,7 @@ import {
   browserSession,
   devBrowserWorkspace,
   localBrowserE2e,
+  animationsSettled,
   pageHydrated,
 } from "./helpers/browser-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
@@ -153,8 +154,7 @@ test("another conversation's Task reads as its live label, or as a Task the read
     const label = (title: string) =>
       `[...document.querySelectorAll(".message-markdown [data-task-status]")].find((el) => el.textContent === ${JSON.stringify(title)})`;
     const chip = (title: string) => `${label(title)}?.closest("[role=button]")`;
-    const settled = () =>
-      browser("wait", "--fn", `document.getAnimations().every((a) => a.playState !== "running")`);
+    const settled = () => browser("wait", "--fn", animationsSettled());
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${proxy.origin}/en/w/${workspace.slug}/channel/${here.id}`);

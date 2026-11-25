@@ -5,7 +5,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { WHATS_NEW_ENTRIES, pendingWhatsNew } from "#src/features/whats-new/whats-new-entries";
-import { browserSession, localBrowserE2e } from "./helpers/browser-e2e";
+import { animationsSettled, browserSession, localBrowserE2e } from "./helpers/browser-e2e";
 
 /**
  * "What's new" in the sidebar (tasks #493, #516) in a real browser: a dot while entries wait; the
@@ -71,8 +71,7 @@ test("What's new keeps a row in the sidebar with a dot while entries wait, on ev
   const dot = `(${entry})?.querySelector("span.size-2.rounded-full") != null`;
   const dialog = `([...document.querySelectorAll('[role="dialog"]')].find((el) => el.getAttribute("aria-label") === "What's new") ?? null)`;
   const heading = `(${dialog}?.querySelector("h2")?.textContent ?? null)`;
-  const settled = (b: typeof first) =>
-    b.browser("wait", "--fn", `document.getAnimations().every((a) => a.playState !== "running")`);
+  const settled = (b: typeof first) => b.browser("wait", "--fn", animationsSettled());
   const shoot = async (b: typeof first, shot: string) => {
     await settled(b);
     await b.browser("screenshot", join(artifacts, `${shot}.png`));

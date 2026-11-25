@@ -9,6 +9,7 @@ import {
   browserSession,
   devBrowserWorkspace,
   localBrowserE2e,
+  animationsSettled,
   pageHydrated,
 } from "./helpers/browser-e2e";
 
@@ -47,7 +48,7 @@ test("a Task deleted from its popup comes back with Undo", async () => {
       (await db.task.findFirstOrThrow({ where: { conversationId: channel.id, number } })).deletedAt;
 
     await mkdir(artifacts, { recursive: true });
-    const settled = `document.getAnimations().every((a) => a.playState !== "running")`;
+    const settled = animationsSettled();
     const toast = `[...document.querySelectorAll("[data-toast]")].find((el) => el.textContent.includes("Deleted task #${number}"))`;
     const shoot = async (name: string) => {
       await browser("screenshot", join(artifacts, `${name}.png`));

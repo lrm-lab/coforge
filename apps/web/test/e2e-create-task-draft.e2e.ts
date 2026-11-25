@@ -4,7 +4,12 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import {
+  animationsSettled,
+  browserSession,
+  localBrowserE2e,
+  pageHydrated,
+} from "./helpers/browser-e2e";
 
 /**
  * The create-task dialog's owner and labels (Raft's review of e7f967b1d, in task #533): someone
@@ -57,7 +62,7 @@ test("a member creates a Task with themselves as owner and a label", async () =>
       evaluate(`(${expression}.setAttribute("data-e2e", ${JSON.stringify(name)}), true)`);
     const byText = (selector: string, text: string) =>
       `[...document.querySelectorAll(${JSON.stringify(selector)})].find((el) => el.textContent.trim() === ${JSON.stringify(text)})`;
-    const settled = `document.getAnimations().every((animation) => animation.playState !== "running" || animation.effect?.getComputedTiming().iterations === Infinity)`;
+    const settled = animationsSettled({ allowInfinite: true });
 
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}?view=tasks`);

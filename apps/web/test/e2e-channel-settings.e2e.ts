@@ -5,6 +5,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import {
+  animationsSettled,
   browserSession,
   devBrowserWorkspace,
   localBrowserE2e,
@@ -23,7 +24,7 @@ const { browser, evaluate, waitFor, byText, clickText } = browserSession(browser
 const channelHeader = `document.querySelector("header h1[data-channel-title]")?.closest("header")`;
 const panelSelector = 'section[aria-label="Channel details and settings"]';
 const panelOpen = `document.querySelector('${panelSelector}') !== null`;
-const animationsSettled = `document.getAnimations().every((a) => a.playState !== "running" || !(a.timeline instanceof DocumentTimeline) || a.effect?.getComputedTiming().iterations === Infinity)`;
+const settledAnimations = animationsSettled({ allowInfinite: true });
 
 async function openPanel() {
   await waitFor(
@@ -217,7 +218,7 @@ test("the channel settings panel edits info, preferences, archive and membership
     await evaluate(
       `([...${leftToast}.querySelectorAll("button")].find((b) => b.textContent.trim() === "Undo").setAttribute("data-e2e-undo", ""), true)`,
     );
-    await browser("wait", "--fn", animationsSettled);
+    await browser("wait", "--fn", settledAnimations);
     await browser("click", "[data-e2e-undo]");
     await waitFor(`document.querySelector("main textarea") !== null`);
     expect((await viewerRow()).leftAt).toBeNull();
@@ -258,7 +259,7 @@ test("a channel's notification level is chosen from its row menu and its setting
       where: { conversationId: channel.id, userId: DEV_BROWSER_USER.id },
       select: { notificationLevel: true, channelMuted: true },
     });
-  const settled = () => browser("wait", "--fn", animationsSettled);
+  const settled = () => browser("wait", "--fn", settledAnimations);
   const shoot = async (shot: string) => {
     await settled();
     await browser("screenshot", join(notifyArtifacts, `${shot}.png`));

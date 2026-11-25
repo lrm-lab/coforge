@@ -30,6 +30,7 @@ import {
   hydratedElement,
   localBrowserE2e,
   pageDevtools,
+  animationsSettled,
   pageHydrated,
 } from "./helpers/browser-e2e";
 
@@ -82,10 +83,7 @@ const clickDialogButton = (text: string) =>
     return Boolean(button);
   })()`);
 const shot = async (name: string) => {
-  await waitFor(
-    `document.getAnimations().every((a) => a.playState !== "running" || a.effect?.getComputedTiming().iterations === Infinity)`,
-    5_000,
-  );
+  await waitFor(animationsSettled({ allowInfinite: true }), 5_000);
   await Bun.sleep(200);
   await browser("screenshot", join(artifacts, `${name}.png`));
 };
