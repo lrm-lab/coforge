@@ -1,11 +1,13 @@
 import { PageHeader } from "#src/components/layout/page-header";
+import { TabbedHeader } from "#src/components/layout/tabbed-header";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
 import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
 import { COMPOSER_FRAME_CLASS } from "./composer-frame";
 import { MessageSkeleton } from "./message-skeleton";
-import { ConversationBackHeader } from "./conversation-list-button";
+import { ConversationBackHeader, ConversationListButton } from "./conversation-list-button";
 import { LIST_COLUMN_CLASS } from "./conversation-list-width";
+import { useStandaloneThread } from "./standalone-thread";
 import { cx } from "#src/utils/cx";
 
 export function MessagesPending() {
@@ -45,21 +47,33 @@ export function MessagesPending() {
   );
 }
 
-/** The open conversation's loading screen: its header, message skeletons and composer frame. */
 export function ConversationPending({ label = m.conversation_loading() }: { label?: string }) {
+  const standaloneThread = useStandaloneThread();
+  const status = (
+    <p role="status" className="sr-only">
+      {label}
+    </p>
+  );
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ConversationBackHeader>
-        <p role="status" className="sr-only">
-          {label}
-        </p>
-      </ConversationBackHeader>
+      {standaloneThread ? (
+        <ConversationBackHeader>{status}</ConversationBackHeader>
+      ) : (
+        <TabbedHeader
+          identity={
+            <>
+              <ConversationListButton />
+              {status}
+            </>
+          }
+          tabs={<div aria-hidden="true" className="h-8" />}
+        />
+      )}
       <div
         aria-busy="true"
         aria-label={m.conversation_history()}
         className="min-h-0 flex-1 overflow-hidden"
       >
-        {/* The same reading column as the loaded stream, so rows do not jump sideways on load. */}
         <div
           aria-hidden="true"
           className={`${MESSAGE_COLUMN_CLASS} pt-6 motion-safe:animate-pulse`}
@@ -69,8 +83,6 @@ export function ConversationPending({ label = m.conversation_loading() }: { labe
           ))}
         </div>
       </div>
-      {/* The composer's frame, in the same column as the stream above, around one row as tall as
-          its buttons. */}
       <div className={MESSAGE_COLUMN_CLASS}>
         <div aria-hidden="true" className={COMPOSER_FRAME_CLASS}>
           <div className="h-8" />

@@ -72,6 +72,7 @@ import {
 } from "./activity-inbox-list-parts";
 import { useActivityListKeyboard, waitingRowKey } from "./use-activity-list-keyboard";
 import { useActivityBulkActions } from "./use-activity-bulk-actions";
+import { usePhoneActivityScrollAnchor } from "./use-phone-activity-scroll-anchor";
 import { WaitingChoiceRow } from "./waiting-choice-row";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
@@ -80,7 +81,7 @@ export function ActivityInboxView({
   filter,
   onFilterChange,
   opened,
-  onOpen,
+  onOpen: onOpenTarget,
   onClose,
 }: {
   filter: ActivityInboxFilter;
@@ -92,6 +93,16 @@ export function ActivityInboxView({
   const { user, currentWorkspace } = appRoute.useLoaderData();
   const workspaceId = currentWorkspace?.id ?? "";
   const desktop = useBreakpoint("lg");
+  const phone = !desktop;
+  const taskAlone =
+    opened?.taskAlone && opened.task !== undefined ? { ...opened, task: opened.task } : undefined;
+  const pane = taskAlone ? undefined : opened;
+  const { listContentRef, paneExiting, onOpen, onExitComplete } = usePhoneActivityScrollAnchor({
+    phone,
+    pane,
+    opened,
+    onOpen: onOpenTarget,
+  });
   const queryClient = useQueryClient();
   const markAllRead = useServerFn(markActivityInboxRead);
   const {
@@ -151,9 +162,6 @@ export function ActivityInboxView({
     [pinned, items, opened],
   );
   selection.current = currentKey ?? selected;
-  const taskAlone =
-    opened?.taskAlone && opened.task !== undefined ? { ...opened, task: opened.task } : undefined;
-  const pane = taskAlone ? undefined : opened;
   const refreshAfterDoneRef = useRef<() => Promise<void>>(() => Promise.resolve());
   const externalRealtimeRef = useRef<() => void>(() => undefined);
   const doneCoordinator = useMemo(
@@ -351,7 +359,7 @@ export function ActivityInboxView({
       />
     );
   const reduced = usePrefersReducedMotion();
-  const phone = !desktop;
+
   const swipe = useEdgeSwipeBack({
     enabled: phone && Boolean(pane) && !reduced,
     onBack: onClose,
@@ -363,16 +371,18 @@ export function ActivityInboxView({
           opacity: pane ? 0 : 1,
           transition: "opacity 150ms var(--ease-out)",
         }
-      : {
-          transform: pane
-            ? `translate3d(${(1 - swipe.dragProgress) * -10}%, 0, 0) scale(${0.95 + 0.05 * swipe.dragProgress})`
-            : "translate3d(0, 0, 0) scale(1)",
-          transition: !swipe.dragging
-            ? swipe.settling
-              ? "transform calc(var(--duration-md) * 1.5) var(--ease-spring)"
-              : `transform ${pane ? "var(--duration-lg)" : "var(--duration-lg-out)"} var(--ease-in-out)`
-            : undefined,
-        }
+      : pane || paneExiting
+        ? {
+            transform: pane
+              ? `translate3d(${(1 - swipe.dragProgress) * -10}%, 0, 0)`
+              : "translate3d(0, 0, 0)",
+            transition: !swipe.dragging
+              ? swipe.settling
+                ? "transform calc(var(--duration-md) * 1.5) var(--ease-spring)"
+                : `transform ${pane ? "var(--duration-lg)" : "var(--duration-lg-out)"} var(--ease-in-out)`
+              : undefined,
+          }
+        : undefined
     : undefined;
   const phoneScrimOpacity = phone && !reduced && pane ? 0.24 * (1 - swipe.dragProgress) : 0;
 
@@ -393,7 +403,8 @@ export function ActivityInboxView({
       aria-hidden={phone && pane ? true : undefined}
       style={phoneListStyle}
       className={cn(
-        "relative flex min-h-0 flex-col bg-primary max-lg:absolute max-lg:inset-0 max-lg:z-10 max-lg:will-change-transform lg:relative lg:w-list-column lg:shrink-0",
+        "relative flex min-h-0 flex-col bg-primary max-lg:absolute max-lg:inset-0 max-lg:z-10 lg:relative lg:w-list-column lg:shrink-0",
+        phone && (pane || paneExiting) && "will-change-transform",
         phone && pane && "pointer-events-none",
         pane && desktop && LIST_BESIDE_CLASSES[ACTIVITY_LIST_BESIDE_FROM].list,
       )}
@@ -416,19 +427,21 @@ export function ActivityInboxView({
         data-tab-home-scroll=""
         className="@container/activity-list min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-1"
       >
-        {emptyState ? (
-          desktop && !pane ? null : (
-            emptyState
-          )
-        ) : (
-          <ActivityInboxSections sections={sections} />
-        )}
-        <ActivityInboxLoadMore
-          hasNextPage={query.hasNextPage}
-          isFetchingNextPage={query.isFetchingNextPage}
-          failed={query.isFetchNextPageError}
-          fetchNextPage={() => query.fetchNextPage({ cancelRefetch: false })}
-        />
+        <div ref={listContentRef} className={cn(emptyState && "h-full")}>
+          {emptyState ? (
+            desktop && !pane ? null : (
+              emptyState
+            )
+          ) : (
+            <ActivityInboxSections sections={sections} />
+          )}
+          <ActivityInboxLoadMore
+            hasNextPage={query.hasNextPage}
+            isFetchingNextPage={query.isFetchingNextPage}
+            failed={query.isFetchNextPageError}
+            fetchNextPage={() => query.fetchNextPage({ cancelRefetch: false })}
+          />
+        </div>
       </div>
       {desktop && (
         <ConversationListResizeHandle
@@ -472,7 +485,7 @@ export function ActivityInboxView({
           <ActivityInboxIdlePane emptyState={emptyState} />
         )
       ) : (
-        <AnimatePresence initial={false}>
+        <AnimatePresence initial={false} onExitComplete={onExitComplete}>
           {pane && (
             <motion.div
               key={`${pane.kind}:${pane.id}`}
@@ -499,7 +512,7 @@ export function ActivityInboxView({
                       ? { type: "spring", stiffness: 380, damping: 32 }
                       : { duration: DURATION_S.lg, ease: EASE_OUT }
               }
-              className="absolute inset-0 z-20 flex min-h-0 min-w-0 touch-pan-y bg-primary shadow-2xl"
+              className="fixed inset-x-0 top-0 z-40 flex h-[var(--app-height,100dvh)] min-h-0 min-w-0 touch-pan-y bg-primary pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left shadow-2xl"
             >
               <ActivityConversationPane
                 target={pane}

@@ -146,6 +146,7 @@ function ActivityPage() {
         }),
         hash: next.threadReplyId ? messageHash(next.threadReplyId) : undefined,
         replace: !listHistory.openOverList(),
+        resetScroll: false,
       });
     },
     [navigate, listHistory, queryClient],
