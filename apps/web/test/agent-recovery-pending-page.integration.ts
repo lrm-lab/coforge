@@ -491,7 +491,7 @@ test("a blocked notice no longer costs the page a row", async () => {
       })),
     });
 
-    const allowedRows = Array.from({ length: AGENT_RECOVERY_MESSAGE_LIMIT }, (_, index) => ({
+    const allowedRows = Array.from({ length: AGENT_RECOVERY_MESSAGE_LIMIT + 1 }, (_, index) => ({
       sequence: blockedCount + 1 + index,
       createdAt: new Date(base + (blockedCount + index) * 1000),
     }));
@@ -532,8 +532,14 @@ test("a blocked notice no longer costs the page a row", async () => {
     expect(actual).toEqual([
       allowedMessages[1]?.id,
       allowedMessages[0]?.id,
-      ...allowedMessages.slice(2).map((message) => message.id),
+      ...allowedMessages.slice(2, AGENT_RECOVERY_MESSAGE_LIMIT).map((message) => message.id),
     ]);
+
+    const context = await repository.readAgentRecoveryContext(workspace.id, reader.id);
+    expect(context.resumeMessages).toHaveLength(AGENT_RECOVERY_MESSAGE_LIMIT);
+    expect(context.resumeMessages.at(-1)?.sequence).toBe(allowedRows.at(-2)?.sequence);
+    expect(context.unreadSummary[`#cap-${suffix}`]).toBe(allowedRows.length);
+    expect(context.lastUnreadSequences?.[`#cap-${suffix}`]).toBe(allowedRows.at(-1)?.sequence);
   } finally {
     await db.workspace.deleteMany({ where: { id: workspace.id } });
     await db.user.deleteMany({ where: { id: user.id } });
