@@ -89,11 +89,8 @@ docker run -d --name "$container" --network host \
   -e CENTRIFUGO_CHANNEL_PROXY_SUB_REFRESH_ENDPOINT="$web/api/internal/centrifugo-sub-refresh" \
   "$centrifugo_image" centrifugo -c /centrifugo/config.yaml >/dev/null
 
-bun run --cwd "$root/packages/coforge-sdk" generate
+"$root/scripts/e2e/prepare-e2e-web.sh"
 cd "$root/apps/web"
-bun run db:migrate:deploy
-NODE_ENV=production bun run build
-bun run ./scripts/seed-dev-data.ts
 export COFORGE_ARTIFACT_SANDBOX_ORIGIN="http://localhost:$front"
 export COFORGE_FILE_STORAGE_DIR="$state/files"
 COFORGE_WEB_PUSH_PUBLIC_KEY=$(<"$root/.artifacts/e2e/web-push-public-key") \

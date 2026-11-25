@@ -13,6 +13,7 @@ const fixtureBuild = await readFile(
 const waitForOnline = await readFile(new URL("./wait-for-online.sh", import.meta.url), "utf8");
 const e2eInfra = await readFile(new URL("./start-e2e-infra.sh", import.meta.url), "utf8");
 const e2eWeb = await readFile(new URL("./start-e2e-web.sh", import.meta.url), "utf8");
+const prepareE2eWeb = await readFile(new URL("./prepare-e2e-web.sh", import.meta.url), "utf8");
 
 test("Computer setup harness exercises the compiled CLI and real daemon path", () => {
   expect(harness).toContain(".artifacts/e2e/native-package");
@@ -50,12 +51,21 @@ test("Computer setup infrastructure keeps the normal fixed Centrifugo port", () 
   expect(e2eInfra).not.toContain("CENTRIFUGO_PORT");
 });
 
-test("the E2E Web seeds the fixed development user after database migration", () => {
-  const migration = e2eWeb.indexOf("db:migrate:deploy");
-  const seed = e2eWeb.indexOf("seed-dev-data.ts");
+test("the E2E Web seeds the fixed development user after database migration and physical i18n generation", () => {
+  expect(e2eWeb).toContain("prepare-e2e-web.sh");
+  const prepareCommands = prepareE2eWeb
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("#"))
+    .join("\n");
+  const migration = prepareCommands.indexOf("db:migrate:deploy");
+  const build = prepareCommands.indexOf("NODE_ENV=production bun run build");
+  const generateI18n = prepareCommands.indexOf("bun run generate-i18n");
+  const seed = prepareCommands.indexOf("seed-dev-data.ts");
 
   expect(migration).toBeGreaterThan(-1);
-  expect(seed).toBeGreaterThan(migration);
+  expect(build).toBeGreaterThan(migration);
+  expect(generateI18n).toBeGreaterThan(build);
+  expect(seed).toBeGreaterThan(generateI18n);
 });
 
 test("the E2E Web loads the stable local Web Push key pair", () => {

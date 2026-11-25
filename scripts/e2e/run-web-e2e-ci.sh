@@ -120,14 +120,10 @@ trap 'docker logs coforge-e2e-centrifugo > "$output/logs/centrifugo.log" 2>&1 ||
   [ -n "${front_pid:-}" ] && kill "$front_pid" 2>/dev/null || true
   docker rm -f coforge-e2e-centrifugo >/dev/null 2>&1 || true' EXIT
 
-# Built with NODE_ENV=production, served with NODE_ENV=development and skip-auth: the order
-# start-e2e-web.sh uses (docs/agents/testing.md says why the other order fails every file).
-bun run --cwd packages/coforge-sdk generate
+# Built with NODE_ENV=production, physical Paraglide generated before seeding, served with
+# NODE_ENV=development and skip-auth (docs/agents/testing.md says why the other order fails).
+"$root/scripts/e2e/prepare-e2e-web.sh" --with-dev-seed
 cd "$root/apps/web"
-bun run db:migrate:deploy
-NODE_ENV=production bun run build
-bun run ./scripts/seed-dev-data.ts
-bun run ./scripts/seed-dev.ts
 COFORGE_DEV_SKIP_AUTH=1 COFORGE_E2E_ALLOW_DEVICE_AUTH=0 NODE_ENV=development \
   HOST=127.0.0.1 PORT=$web_port \
   bun run ./scripts/start-server.ts > "$output/logs/web.log" 2>&1 &
