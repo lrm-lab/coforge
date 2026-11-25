@@ -350,6 +350,7 @@ export function observeRuntimeEvent(
     ports.deliveryGate.holdFallbackNotice(agentId, {
       text: event.text,
       ...(event.fallbackText ? { fallbackText: event.fallbackText } : {}),
+      ...(event.noticeOrigin ? { noticeOrigin: event.noticeOrigin } : {}),
       ...(event.conversation ? { conversation: event.conversation } : {}),
       ...(event.deliveryIds?.length ? { deliveryIds: event.deliveryIds } : {}),
     });

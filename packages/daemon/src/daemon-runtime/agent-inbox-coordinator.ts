@@ -27,6 +27,7 @@ import type { AgentDeliveryGate } from "./agent-delivery-gate";
 import type { ActivityLaunch } from "./activity-launch";
 import type { MentionDeliveryTracker } from "./mention-delivery-tracker";
 import type { RuntimeRelease } from "./runtime-release";
+import { prepareFallbackNotice } from "./fallback-notice-submission";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
@@ -404,21 +405,17 @@ export class AgentInboxCoordinator {
     const notices = this.ports.deliveryGate.releaseFallbackNotices(agentId);
     if (!notices.length) return;
     const session = this.ports.processManager.session(agentId);
-    for (const { text, fallbackText, deliveryIds = [], conversation } of notices) {
+    for (const notice of notices) {
+      const { deliveryIds = [] } = notice;
       if (!session?.notify) {
         this.ports.mentionDeliveries.settleRedelivery(agentId, deliveryIds, false);
         continue;
       }
-      const pendingText = fallbackText ? fallbackText() : text;
-      if (pendingText === undefined) continue;
-      const redelivery =
-        deliveryIds.length || conversation || fallbackText
-          ? session.notify(pendingText, {
-              deliveryIds,
-              ...(conversation ? { conversation } : {}),
-              ...(fallbackText ? { fallbackText, prepareSubmission: fallbackText } : {}),
-            })
-          : session.notify(pendingText);
+      const prepared = prepareFallbackNotice(agentId, notice);
+      if (!prepared) continue;
+      const redelivery = prepared.options
+        ? session.notify(prepared.text, prepared.options)
+        : session.notify(prepared.text);
       void redelivery.then(
         () => this.ports.mentionDeliveries.settleRedelivery(agentId, deliveryIds, true),
         (error: unknown) => {

@@ -98,6 +98,59 @@ async function fixture(options: { sessionId?: string; instructions?: string } = 
 }
 
 test(
+  "Devin skips already-read queued notices before writing its next ACP prompts",
+  async () => {
+    const run = await fixture();
+    try {
+      expect(run.session.steersBusyTurn).toBe(false);
+      const active = run.session.sendMessage("busy turn");
+      const selection: Array<[string, string]> = [];
+      let readThrough = 0;
+      const queue = (sequence: number, text: string) =>
+        run.session.notify!(text, {
+          prepareSubmission(boundary) {
+            selection.push([text, boundary]);
+            return sequence > readThrough ? text : undefined;
+          },
+        });
+      const admissions = Promise.allSettled([
+        queue(46, "old preview first copy"),
+        queue(55, "new preview first"),
+        queue(46, "old preview second copy"),
+        queue(56, "new preview second"),
+      ]);
+      expect(selection).toEqual([]);
+      readThrough = 54;
+      await active;
+      const outcomes = await admissions;
+      const prompts = (await run.records())
+        .filter(({ method }) => method === "session/prompt")
+        .map(({ params }) => params?.prompt);
+      expect(prompts).toEqual([
+        [{ type: "text", text: "busy turn" }],
+        [{ type: "text", text: "new preview first" }],
+        [{ type: "text", text: "new preview second" }],
+      ]);
+      expect(outcomes.map(({ status }) => status)).toEqual([
+        "rejected",
+        "fulfilled",
+        "rejected",
+        "fulfilled",
+      ]);
+      expect(selection).toEqual([
+        ["old preview first copy", "prompt"],
+        ["new preview first", "prompt"],
+        ["old preview second copy", "prompt"],
+        ["new preview second", "prompt"],
+      ]);
+    } finally {
+      await run.cleanup();
+    }
+  },
+  TEST_BUDGET_MS,
+);
+
+test(
   "a Devin session writes its standing instructions as an always-on rule and removes it on dispose",
   async () => {
     const run = await fixture({ instructions: "Stay brief." });
