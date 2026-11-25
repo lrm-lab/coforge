@@ -29,7 +29,7 @@ import {
   type AgentReadableBody,
 } from "#src/server/conversations/agent-message-view.server";
 import { cardPerson } from "#src/server/conversations/action-card-outcome-body.server";
-import { taskReferenceView } from "#src/server/conversations/task-reference-view.server";
+import { taskReferenceViewForMessages } from "#src/server/conversations/task-reference-view.server";
 import {
   agentMessageSender,
   MESSAGE_SENDER_SELECT,
@@ -165,7 +165,7 @@ export async function readPendingAgentDeliveries(
       ),
     ),
   ];
-  const [memberRows, targetOf, chooserRows] = await Promise.all([
+  const [memberRows, targetOf, chooserRows, taskViewOf] = await Promise.all([
     ports.db.conversationMember.findMany({
       where: {
         agentId,
@@ -191,26 +191,18 @@ export async function readPendingAgentDeliveries(
             username: string;
           }[],
         ),
+    taskReferenceViewForMessages(
+      ports.db,
+      workspaceId,
+      agentId,
+      deliveries.map((delivery) => ({
+        conversationId: delivery.conversationId,
+        body: delivery.message.body,
+      })),
+    ),
   ]);
   const memberOf = new Set(memberRows.map((member) => member.conversationId));
   const choosers = new Map(chooserRows.map((user) => [user.id, user.username]));
-  const taskViews = new Map(
-    await Promise.all(
-      deliveries.map(
-        async (delivery) =>
-          [
-            delivery.deliveryId,
-            await taskReferenceView(
-              ports.db,
-              workspaceId,
-              agentId,
-              delivery.conversationId,
-              delivery.message.body,
-            ),
-          ] as const,
-      ),
-    ),
-  );
   const still = new Set(
     candidates.length === 0
       ? []
@@ -244,7 +236,7 @@ export async function readPendingAgentDeliveries(
         latestSenderKind: sender.kind,
         latestSenderHandle: sender.handle,
         latestSenderDescription: sender.description,
-        ...agentDeliveryView(message, agentId, taskViews.get(delivery.deliveryId)),
+        ...agentDeliveryView(message, agentId, taskViewOf?.(delivery.conversationId)),
         ...(delivery.reason === "choice" ? { body: answerBody(actionCard, target, choosers) } : {}),
         ...(delivery.reason ? { reason: delivery.reason } : {}),
         ...(delivery.conversation.kind === APP_EVENTS_KIND ? { source: "app" as const } : {}),
@@ -304,8 +296,12 @@ export async function readAgentRecoveryContext(
   const resumeMessages: AgentFacing<AgentRecoveryContext["resumeMessages"][number]>[] = [];
   const unreadSummary: Record<string, number> = {};
   const unreadConversationIds: Record<string, string> = {};
-  const { mentionsByMessage, forwardsByMessage } = await recoverySecondPass(ports.db, rows);
-  const directRefOf = await recoveryRefs(ports.db, workspaceId, agentId, rows);
+  const resumeRows = rows.filter((row) => row.globalRank <= AGENT_RECOVERY_MESSAGE_LIMIT);
+  const [{ mentionsByMessage, forwardsByMessage }, directRefOf, taskViewOf] = await Promise.all([
+    recoverySecondPass(ports.db, rows),
+    recoveryRefs(ports.db, workspaceId, agentId, rows),
+    taskReferenceViewForMessages(ports.db, workspaceId, agentId, resumeRows),
+  ]);
   for (const row of rows) {
     const appTarget = appEventRowTarget(row);
     if (!row.channelName && !row.otherUsername && !row.attachmentId && !appTarget)
@@ -358,7 +354,7 @@ export async function readAgentRecoveryContext(
           attachments: forwardsByMessage.get(row.id)?.attachments,
         },
         agentId,
-        await taskReferenceView(ports.db, workspaceId, agentId, row.conversationId, row.body),
+        taskViewOf?.(row.conversationId),
       ),
       ...(row.nonMemberMention ? { nonMemberMention: true } : {}),
     });

@@ -27,29 +27,38 @@ export function taskReferenceConversations(body: string): {
 type TaskReferenceDb = Pick<PrismaClient, "conversationMember" | "conversation" | "user" | "agent">;
 type TaskReferenceFormatter = (reference: TaskReference) => string | undefined;
 
-export async function taskReferenceViews(
+type TaskReferenceAccess = {
+  publicChannels: Set<string>;
+  privateChannelsByAgent: Map<string, Set<string>>;
+  peerByAgentAndDm: Map<string, Map<string, { handle: string; kind: "user" | "agent" }>>;
+  ambiguous: Set<string>;
+};
+
+function addToSet(map: Map<string, Set<string>>, key: string, value: string): void {
+  let set = map.get(key);
+  if (!set) {
+    set = new Set<string>();
+    map.set(key, set);
+  }
+  set.add(value);
+}
+
+async function resolveTaskReferenceAccess(
   db: TaskReferenceDb,
   workspaceId: string,
-  readerAgentIds: readonly string[],
-  currentConversationId: string,
-  body: string,
-): Promise<Map<string, TaskReferenceFormatter>> {
-  const uniqueAgentIds = [...new Set(readerAgentIds)];
-  if (uniqueAgentIds.length === 0) return new Map();
-  const referenced = taskReferenceConversations(body);
-  if (referenced.channel.length === 0 && referenced.dm.length === 0) return new Map();
-  const dmConversations = referenced.dm.filter(
-    (conversationId) => conversationId !== currentConversationId,
-  );
+  uniqueAgentIds: readonly string[],
+  channelIds: readonly string[],
+  dmConversations: readonly string[],
+): Promise<TaskReferenceAccess> {
   const [channels, dmMemberships] = await Promise.all([
-    referenced.channel.length > 0
+    channelIds.length > 0
       ? db.conversation.findMany({
           where: {
-            id: { in: referenced.channel },
+            id: { in: [...channelIds] },
             workspaceId,
             OR: [
               { visibility: "public" },
-              { members: { some: { agentId: { in: uniqueAgentIds }, leftAt: null } } },
+              { members: { some: { agentId: { in: [...uniqueAgentIds] }, leftAt: null } } },
             ],
           },
           select: {
@@ -57,7 +66,7 @@ export async function taskReferenceViews(
             visibility: true,
             members: {
               where: {
-                agentId: { in: uniqueAgentIds },
+                agentId: { in: [...uniqueAgentIds] },
                 leftAt: null,
                 conversation: { visibility: { not: "public" } },
               },
@@ -69,23 +78,14 @@ export async function taskReferenceViews(
     dmConversations.length > 0
       ? db.conversationMember.findMany({
           where: {
-            conversationId: { in: dmConversations },
-            agentId: { in: uniqueAgentIds },
+            conversationId: { in: [...dmConversations] },
+            agentId: { in: [...uniqueAgentIds] },
             leftAt: null,
           },
           select: { conversationId: true, agentId: true },
         })
       : [],
   ]);
-
-  const addToSet = (map: Map<string, Set<string>>, key: string, value: string) => {
-    let set = map.get(key);
-    if (!set) {
-      set = new Set<string>();
-      map.set(key, set);
-    }
-    set.add(value);
-  };
 
   const publicChannels = new Set<string>();
   const privateChannelsByAgent = new Map<string, Set<string>>();
@@ -185,28 +185,98 @@ export async function taskReferenceViews(
     }
   }
 
+  return { publicChannels, privateChannelsByAgent, peerByAgentAndDm, ambiguous };
+}
+
+function buildFormatter(
+  access: TaskReferenceAccess,
+  agentId: string,
+  currentConversationId: string,
+): TaskReferenceFormatter {
+  const privateChannels = access.privateChannelsByAgent.get(agentId);
+  const peerOf = access.peerByAgentAndDm.get(agentId);
+  return (reference) => {
+    if (reference.kind === "channel") {
+      return access.publicChannels.has(reference.conversationId) ||
+        privateChannels?.has(reference.conversationId)
+        ? canonicalTaskReference(reference)
+        : HIDDEN_TASK_REFERENCE;
+    }
+    if (reference.kind !== "dm") return canonicalTaskReference(reference);
+    if (reference.conversationId === currentConversationId) return `#${reference.number}`;
+    const peer = peerOf?.get(reference.conversationId);
+    if (!peer) return canonicalTaskReference(reference);
+    const handle = access.ambiguous.has(peer.handle)
+      ? `${peer.handle}~${peer.kind === "agent" ? "agent" : "human"}`
+      : peer.handle;
+    return `dm:@${handle}:#${reference.number}`;
+  };
+}
+
+export async function taskReferenceViews(
+  db: TaskReferenceDb,
+  workspaceId: string,
+  readerAgentIds: readonly string[],
+  currentConversationId: string,
+  body: string,
+): Promise<Map<string, TaskReferenceFormatter>> {
+  const uniqueAgentIds = [...new Set(readerAgentIds)];
+  if (uniqueAgentIds.length === 0) return new Map();
+  const referenced = taskReferenceConversations(body);
+  if (referenced.channel.length === 0 && referenced.dm.length === 0) return new Map();
+  const dmConversations = referenced.dm.filter(
+    (conversationId) => conversationId !== currentConversationId,
+  );
+  const access = await resolveTaskReferenceAccess(
+    db,
+    workspaceId,
+    uniqueAgentIds,
+    referenced.channel,
+    dmConversations,
+  );
   const views = new Map<string, TaskReferenceFormatter>();
   for (const agentId of uniqueAgentIds) {
-    const privateChannels = privateChannelsByAgent.get(agentId);
-    const peerOf = peerByAgentAndDm.get(agentId);
-    views.set(agentId, (reference) => {
-      if (reference.kind === "channel") {
-        return publicChannels.has(reference.conversationId) ||
-          privateChannels?.has(reference.conversationId)
-          ? canonicalTaskReference(reference)
-          : HIDDEN_TASK_REFERENCE;
-      }
-      if (reference.kind !== "dm") return canonicalTaskReference(reference);
-      if (reference.conversationId === currentConversationId) return `#${reference.number}`;
-      const peer = peerOf?.get(reference.conversationId);
-      if (!peer) return canonicalTaskReference(reference);
-      const handle = ambiguous.has(peer.handle)
-        ? `${peer.handle}~${peer.kind === "agent" ? "agent" : "human"}`
-        : peer.handle;
-      return `dm:@${handle}:#${reference.number}`;
-    });
+    views.set(agentId, buildFormatter(access, agentId, currentConversationId));
   }
   return views;
+}
+
+export async function taskReferenceViewForMessages(
+  db: TaskReferenceDb,
+  workspaceId: string,
+  readerAgentId: string,
+  messages: readonly { conversationId: string; body: string }[],
+): Promise<((currentConversationId: string) => TaskReferenceFormatter) | undefined> {
+  if (messages.length === 0) return undefined;
+  const channelSet = new Set<string>();
+  const dmSet = new Set<string>();
+  let hasAnyReference = false;
+  for (const message of messages) {
+    const referenced = taskReferenceConversations(message.body);
+    if (referenced.channel.length === 0 && referenced.dm.length === 0) continue;
+    hasAnyReference = true;
+    for (const id of referenced.channel) channelSet.add(id);
+    for (const id of referenced.dm) {
+      if (id !== message.conversationId) dmSet.add(id);
+    }
+  }
+  if (!hasAnyReference) return undefined;
+  const access = await resolveTaskReferenceAccess(
+    db,
+    workspaceId,
+    [readerAgentId],
+    [...channelSet],
+    [...dmSet],
+  );
+  const formatters = new Map<string, TaskReferenceFormatter>();
+  return (currentConversationId: string) => {
+    let formatter = formatters.get(currentConversationId);
+    if (!formatter) {
+      formatter = buildFormatter(access, readerAgentId, currentConversationId);
+      formatters.set(currentConversationId, formatter);
+    }
+    return formatter;
+  };
 }
 
 export async function taskReferenceView(

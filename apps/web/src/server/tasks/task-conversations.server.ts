@@ -334,14 +334,12 @@ export class TaskConversations {
     };
   }
 
-  /** The task conversations the principal follows, newest follow first. */
   async following(principal: TaskPrincipal) {
     const seat = principal.agentId ? { agentId: principal.agentId } : { userId: principal.userId };
     const rows = await this.ports.db.taskFollow.findMany({
       where: {
         workspaceId: principal.workspaceId,
         member: { ...seat, ...ACTIVE_MEMBER_WHERE },
-        // The same scope every other read applies: a hidden channel's tasks are not listed.
         task: { conversation: TASK_SCOPE_WHERE, ...LIVE_TASK_WHERE },
       },
       orderBy: { createdAt: "desc" },
@@ -358,7 +356,11 @@ export class TaskConversations {
               select: {
                 channelName: true,
                 members: {
-                  where: { userId: { not: null }, ...ACTIVE_MEMBER_WHERE },
+                  where: {
+                    userId: { not: null },
+                    ...ACTIVE_MEMBER_WHERE,
+                    conversation: { channelName: null },
+                  },
                   select: { user: { select: { username: true } } },
                   take: 1,
                 },
@@ -368,33 +370,49 @@ export class TaskConversations {
         },
       },
     });
-    return Promise.all(
-      rows.map(async (row) => ({
-        taskRef: `${boardLabel(row.task.conversation.channelName, row.task.conversation.members[0]?.user?.username)}:#${row.task.number}`,
-        taskNumber: row.task.number,
-        title: row.task.title,
-        status: row.task.status,
-        unread: await this.unread(row.task.discussionConversationId, principal),
-        followedAt: row.createdAt.toISOString(),
-        reason: row.reason as TaskFollowReason,
-      })),
-    );
+    const discussionIds = [
+      ...new Set(
+        rows.flatMap((row) =>
+          row.task.discussionConversationId ? [row.task.discussionConversationId] : [],
+        ),
+      ),
+    ];
+    const unreadByConversation =
+      principal.agentId && discussionIds.length > 0
+        ? await this.unreadCounts(discussionIds, principal.agentId)
+        : new Map<string, number>();
+    return rows.map((row) => ({
+      taskRef: `${boardLabel(row.task.conversation.channelName, row.task.conversation.members[0]?.user?.username)}:#${row.task.number}`,
+      taskNumber: row.task.number,
+      title: row.task.title,
+      status: row.task.status,
+      unread: row.task.discussionConversationId
+        ? (unreadByConversation.get(row.task.discussionConversationId) ?? 0)
+        : 0,
+      followedAt: row.createdAt.toISOString(),
+      reason: row.reason as TaskFollowReason,
+    }));
   }
 
-  /** What others wrote in the task's conversation past this Agent's read position. */
-  private async unread(conversationId: string | null, principal: TaskPrincipal) {
-    if (!conversationId || !principal.agentId) return 0;
-    const seat = await this.ports.db.conversationMember.findUnique({
-      where: { conversationId_agentId: { conversationId, agentId: principal.agentId } },
-      select: { id: true, agentReadThroughSequence: true },
-    });
-    return this.ports.db.message.count({
-      where: {
-        conversationId,
-        sequence: { gt: seat?.agentReadThroughSequence ?? 0 },
-        ...(seat ? { OR: [{ senderMemberId: null }, { senderMemberId: { not: seat.id } }] } : {}),
-      },
-    });
+  private async unreadCounts(
+    conversationIds: readonly string[],
+    agentId: string,
+  ): Promise<Map<string, number>> {
+    const rows = await this.ports.db.$queryRaw<{ conversationId: string; unread: number }[]>`
+      SELECT d."id"::text AS "conversationId",
+             COALESCE(c."unread", 0)::int AS "unread"
+      FROM unnest(${conversationIds}::uuid[]) AS d("id")
+      LEFT JOIN "conversation_members" cm
+        ON cm."conversationId" = d."id"
+       AND cm."agentId" = ${agentId}::uuid
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS "unread"
+        FROM "messages" m
+        WHERE m."conversationId" = d."id"
+          AND m."sequence" > COALESCE(cm."agentReadThroughSequence", 0)
+          AND (cm."id" IS NULL OR m."senderMemberId" IS NULL OR m."senderMemberId" <> cm."id")
+      ) c ON true`;
+    return new Map(rows.map((row) => [row.conversationId, Number(row.unread)]));
   }
 
   private async resolve(
