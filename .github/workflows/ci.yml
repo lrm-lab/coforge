@@ -212,7 +212,6 @@ jobs:
       - name: Build package
         run: mise run build:computer
 
-  # Its tests run one file at a time (some are timing-sensitive), so two machines split the files.
   daemon:
     name: Validate Daemon ${{ matrix.part }}
     needs: changes
@@ -220,7 +219,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        part: ["1/2", "2/2"]
+        part: ["1/3", "2/3", "3/3"]
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -237,10 +236,13 @@ jobs:
 
       # `pretest` builds the package.
       - name: Run tests
-        run: mise run test:daemon -- --shard=${{ matrix.part }}
+        run: >-
+          mise run test:daemon -- --shard=${{ matrix.part }}
+          --timings=../../scripts/ci/daemon-test-timings-1.json
+          --timings=../../scripts/ci/daemon-test-timings-2.json
 
       - name: Run static checks
-        if: matrix.part == '1/2'
+        if: matrix.part == '1/3'
         run: mise run check:daemon
 
   macos-lifecycle:
