@@ -461,39 +461,12 @@ jobs:
           key: ${{ matrix.release_target }}
           save-if: ${{ github.event_name == 'push' }}
 
-      - name: Check formatting
-        if: matrix.release_target == 'linux-x64'
-        run: mise exec rust -- cargo fmt --check
-
-      # Per target: cfg(unix) and cfg(windows) code differs.
-      - name: Lint
-        run: mise exec rust -- cargo clippy --locked --all-targets --target "${{ matrix.rust_target }}" -- -D warnings
-
-      # Bun runs the Computer's own machine mutation lock (packages/daemon) against the
-      # installer's in src/lock/tests.rs, so the two are proven to exclude each other.
-      - name: Test
-        if: matrix.native
-        run: mise exec rust bun -- cargo test --locked --target "${{ matrix.rust_target }}"
-
-      # The tests write what the installer produces into contract/rust/, which the Computer
-      # package's tests read back; the committed copy must match on every native target.
-      - name: Check the contract output is committed
-        if: matrix.native
-        run: bash ../../scripts/ci/require-committed.sh contract
-
-      - name: Build release binary
-        run: mise exec rust -- cargo build --locked --release --target "${{ matrix.rust_target }}"
-
-      - name: Sign, verify, and run the release binary
-        run: bash ../../scripts/ci/check-installer-binary.sh "${{ matrix.release_target }}" "$BINARY"
-
-      - name: Check dependency licenses, bans, and sources
-        if: matrix.release_target == 'linux-x64'
-        run: mise exec -- cargo deny --locked check licenses bans sources
-
-      - name: Generate third-party notices
-        if: matrix.release_target == 'linux-x64'
-        run: mise exec -- cargo about generate --locked --fail --output-file THIRD_PARTY_NOTICES.txt about/notices.hbs
+      - name: Validate installer crate
+        env:
+          RELEASE_TARGET: ${{ matrix.release_target }}
+          RUST_TARGET: ${{ matrix.rust_target }}
+          NATIVE: ${{ matrix.native }}
+        run: bash ../../scripts/ci/validate-installer-crate.sh
 
       - name: Upload third-party notices
         if: matrix.release_target == 'linux-x64'
