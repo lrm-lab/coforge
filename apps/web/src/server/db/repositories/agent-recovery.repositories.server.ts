@@ -261,6 +261,8 @@ function appEventRowTarget(
   if (row.appKey) return appEventTarget(row.appKey);
   return systemEventTargetFromDirectKey(row.directKey);
 }
+type RankedRecoveryRow = AgentRecoveryRow & { lastUnreadSequence: number };
+
 export async function readAgentRecoveryContext(
   ports: DirectConversationPorts,
   workspaceId: string,
@@ -271,20 +273,22 @@ export async function readAgentRecoveryContext(
   }
 > {
   const [ranked, openTasks] = await Promise.all([
-    ports.db.$queryRaw<AgentRecoveryRow[]>`
+    ports.db.$queryRaw<RankedRecoveryRow[]>`
     WITH unread AS (
       ${unreadAgentMessagesFragment(workspaceId, agentId)}
     ), ranked AS (
       SELECT u.*,
-        (COUNT(*) OVER (PARTITION BY "conversationId", "threadRootId"))::int AS "unreadCount",
-        (ROW_NUMBER() OVER (PARTITION BY "conversationId", "threadRootId" ORDER BY "sequence"))::int AS "targetRank",
+        (COUNT(*) OVER target_partition)::int AS "unreadCount",
+        MAX("sequence") OVER target_partition AS "lastUnreadSequence",
+        (ROW_NUMBER() OVER (target_partition ORDER BY "sequence"))::int AS "targetRank",
         (ROW_NUMBER() OVER (ORDER BY "conversationId", "rootSequence", "sequence"))::int AS "globalRank"
       FROM unread u
+      WINDOW target_partition AS (PARTITION BY "conversationId", "threadRootId")
     )
     SELECT "id", "sequence", "body", "conversationId", "threadRootId", "senderMemberId", "createdAt",
       "deliveryId", "senderAgentName", "senderAgentDescription", "senderUsername",
       "senderUserDescription", "channelName", "otherUsername", "agentPeer", "unreadCount", "globalRank",
-      "nonMemberMention", "attachmentId", "conversationKind", "directKey", "appKey"
+      "nonMemberMention", "attachmentId", "conversationKind", "directKey", "appKey", "lastUnreadSequence"
     FROM ranked
     WHERE "globalRank" <= ${AGENT_RECOVERY_MESSAGE_LIMIT} OR "targetRank" = 1
     ORDER BY "globalRank"`,
@@ -304,6 +308,7 @@ export async function readAgentRecoveryContext(
   const resumeMessages: AgentFacing<AgentRecoveryContext["resumeMessages"][number]>[] = [];
   const unreadSummary: Record<string, number> = {};
   const unreadConversationIds: Record<string, string> = {};
+  const unreadPartitions = new Map<string, RankedRecoveryRow | null>();
   const { mentionsByMessage, forwardsByMessage } = await recoverySecondPass(ports.db, rows);
   const directRefOf = await recoveryRefs(ports.db, workspaceId, agentId, rows);
   for (const row of rows) {
@@ -323,6 +328,14 @@ export async function readAgentRecoveryContext(
     if (!isRecoverableAgentTarget(target)) continue;
     unreadSummary[target] ??= row.unreadCount;
     unreadConversationIds[target] = row.conversationId;
+    const partition = unreadPartitions.get(target);
+    if (partition === undefined) unreadPartitions.set(target, row);
+    else if (
+      partition &&
+      (partition.conversationId !== row.conversationId ||
+        partition.threadRootId !== row.threadRootId)
+    )
+      unreadPartitions.set(target, null);
     if (row.globalRank > AGENT_RECOVERY_MESSAGE_LIMIT) continue;
     if (!row.deliveryId) throw new Error(`Unread Agent message has no delivery: ${row.id}`);
     const sender = agentMessageSender(
@@ -363,9 +376,17 @@ export async function readAgentRecoveryContext(
       ...(row.nonMemberMention ? { nonMemberMention: true } : {}),
     });
   }
+  const sequenceProofs = [...unreadPartitions].flatMap(([target, partition]) =>
+    partition &&
+    Number.isSafeInteger(partition.lastUnreadSequence) &&
+    partition.lastUnreadSequence >= Math.max(partition.unreadCount, partition.sequence)
+      ? [[target, partition.lastUnreadSequence] as const]
+      : [],
+  );
   return {
     resumeMessages,
     unreadSummary,
+    ...(sequenceProofs.length ? { lastUnreadSequences: Object.fromEntries(sequenceProofs) } : {}),
     ...(Object.keys(unreadConversationIds).length ? { unreadConversationIds } : {}),
     ...(openTasks ? { openTasks } : {}),
   };

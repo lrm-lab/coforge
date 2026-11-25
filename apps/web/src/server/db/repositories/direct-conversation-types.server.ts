@@ -66,6 +66,7 @@ export type AgentRecoveryContext = {
   >;
   unreadSummary: Readonly<Record<string, number>>;
   unreadConversationIds?: Readonly<Record<string, string>>;
+  lastUnreadSequences?: Readonly<Record<string, number>>;
   openTasks?: AgentStartOpenTasks;
 };
 export type PendingAgentDelivery = AgentRecoveryContext["resumeMessages"][number] & {
