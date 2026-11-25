@@ -18,6 +18,7 @@ import {
   pinnedItems,
   rightClickRow,
   seedChannel,
+  selectDesktopFilter,
 } from "./helpers/activity-inbox-e2e";
 
 const unreadRows = JSON.stringify('ol[aria-label="Unread"] > li');
@@ -73,7 +74,7 @@ test("an unread pin lists once under Unread, moves to Pinned on read and returns
     expect(threadRow).not.toContain("E2E pinned hello");
     await browser("screenshot", join(artifacts, "pinned.png"));
 
-    await browser("find", "role", "tab", "click", "--name", "Mentions");
+    await selectDesktopFilter(browser, evaluate, "Mentions");
     await browser("wait", "--fn", `location.search.includes("filter=mentions")`);
     await browser(
       "wait",
@@ -83,7 +84,7 @@ test("an unread pin lists once under Unread, moves to Pinned on read and returns
     expect(
       await evaluate<boolean>(`document.querySelector('ol[aria-label="Pinned"]') === null`),
     ).toBe(true);
-    await browser("find", "role", "tab", "click", "--name", "All");
+    await selectDesktopFilter(browser, evaluate, "All");
     await browser("wait", "--fn", `${rowsIn(unreadRows)}.length === 2`);
     await evaluate(rightClickRow("E2E pinned hello"));
     await browser("find", "role", "menuitem", "click", "--name", "Mark as read");
@@ -170,7 +171,7 @@ test("an unread pin lists once under Unread, moves to Pinned on read and returns
         .filter((item) => /E2E pinned|e2e-activity-pinned/.test(item.textContent))
         .map((item) => Math.round(item.querySelector("a .truncate")?.getBoundingClientRect().width ?? 0));
       const header = document.querySelector('[data-activity-list] > header');
-      const edge = document.querySelector('[data-activity-list] > [role="separator"]').getBoundingClientRect().left;
+      const edge = header.getBoundingClientRect().right;
       const tabsPastEdge = Math.round(Math.max(...[...header.querySelectorAll("button")].map((btn) => btn.getBoundingClientRect().right)) - edge);
       return { overflow: list.scrollWidth - list.clientWidth, titles, tabsPastEdge };
     })()`);

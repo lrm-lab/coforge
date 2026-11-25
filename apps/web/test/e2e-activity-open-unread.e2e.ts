@@ -11,7 +11,7 @@ import {
   pageHydrated,
   pageWaiter,
 } from "./helpers/browser-e2e";
-import { inPane, waitFor } from "./helpers/activity-inbox-e2e";
+import { inPane, selectDesktopFilter, waitFor } from "./helpers/activity-inbox-e2e";
 import { dividerBetween, inView, postLive, row, seedChannel } from "./helpers/open-unread-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 import { serverFunctionIds, serverFunctionOf } from "./helpers/server-function-ids";
@@ -173,7 +173,7 @@ test("a channel with a mention already read opens on its new unread message, not
 
 test("a channel opened again from Activity, with a message that came live since, shows its divider", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-  const { browser } = browserSession(browserPath, `activity-open-again-${process.pid}`);
+  const { browser, evaluate } = browserSession(browserPath, `activity-open-again-${process.pid}`);
   const wait = pageWaiter(browserPath)(`activity-open-again-${process.pid}`, browser);
   const realtime = new CentrifugoConversationRealtime(createCentrifugoServerApi());
   try {
@@ -215,10 +215,7 @@ test("a channel opened again from Activity, with a message that came live since,
     });
     // QA's Unread view, read afresh: the card names the new message whether or not the list
     // heard it live.
-    await browser(
-      "eval",
-      `[...document.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent.startsWith("Unread")).click()`,
-    );
+    await selectDesktopFilter(browser, evaluate, "Unread");
     await wait(`${row("E2E open-again later unread")} !== null`);
     // Staging's round trips, not a local server's: every read the reopened pane makes is slow.
     await browser(

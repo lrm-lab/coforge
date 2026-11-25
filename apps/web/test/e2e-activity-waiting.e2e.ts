@@ -130,8 +130,13 @@ test("a choice card asking the viewer waits in Activity until they answer it", a
     expect(await evaluate<number>(shownRows)).toBe(3);
     expect(await evaluate<boolean>(listed(older[0]!))).toBe(false);
     expect(await evaluate<string>(`${section}.previousElementSibling.textContent`)).toContain(
-      "· 4",
+      "Waiting on you",
     );
+    expect(
+      await evaluate<string>(
+        `${section}.previousElementSibling.querySelector("span")?.textContent.trim() ?? ""`,
+      ),
+    ).toBe("4");
     // Where it was asked: the channel's group avatar and name, no `#` (task #55).
     expect(
       await evaluate<boolean>(
@@ -143,11 +148,13 @@ test("a choice card asking the viewer waits in Activity until they answer it", a
     ).toBe(false);
     await browser("screenshot", join(artifacts, "waiting.png"));
 
-    // The keyboard walks the waiting cards with the rest (Frank, 11-10, task #51): Down from the
-    // filter tabs enters the list at its first row, the newest card, and Down and Up move on.
+    // The keyboard walks the waiting cards with the rest (Frank, 11-10, task #51): Down from a
+    // non-menu header control (the Unread toggle; the Filter dropdown trigger itself consumes
+    // ArrowDown to open its menu) enters the list at its first row, the newest card, and Down and
+    // Up move on.
     const focusedWaiting = `[...${section}.querySelectorAll(":scope > li")].findIndex((row) => row.contains(document.activeElement))`;
     await evaluate(
-      `([...document.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent.trim().startsWith("All")).focus(), true)`,
+      `(document.querySelector('[data-activity-list] header button[aria-pressed]').focus(), true)`,
     );
     await browser("press", "ArrowDown");
     expect(await evaluate<number>(focusedWaiting)).toBe(0);
@@ -182,9 +189,11 @@ test("a choice card asking the viewer waits in Activity until they answer it", a
     await clickText('[role="dialog"] button', "Don't answer");
     await browser("wait", "--fn", `!${listed(older[0]!)}`);
     expect(await evaluate<number>(shownRows)).toBe(3);
-    expect(await evaluate<string>(`${section}.previousElementSibling.textContent`)).toContain(
-      "· 3",
-    );
+    expect(
+      await evaluate<string>(
+        `${section}.previousElementSibling.querySelector("span")?.textContent.trim() ?? ""`,
+      ),
+    ).toBe("3");
     const declined = await db.actionCard.findUniqueOrThrow({ where: { messageId: olderIds[0]! } });
     expect(declined.state).toBe("cancelled");
     expect(declined.committedByUserId).toBe(DEV_BROWSER_USER.id);

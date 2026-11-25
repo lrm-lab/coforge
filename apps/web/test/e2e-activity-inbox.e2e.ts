@@ -14,8 +14,11 @@ import {
 import {
   activeCount,
   currentRow,
+  filterMenuItems,
+  filterTriggerSelector,
   inPane,
   listColumnWidth,
+  menuItemLabel,
   openParam,
   pane,
   paneTabsShown,
@@ -23,6 +26,7 @@ import {
   rowItems,
   seedChannel,
   seedQuietThread,
+  selectDesktopFilter,
   shownInPane,
   waitFor,
 } from "./helpers/activity-inbox-e2e";
@@ -83,31 +87,23 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
       };
     })()`);
     expect(preview).toEqual({ strong: "reply", code: "code" });
-    const filterTrigger = `document.querySelector('[data-activity-list] header button[aria-label="Filter activity"]')`;
-    const filterMenuItems = `document.querySelectorAll('[role="menu"][aria-label="Filter activity"] [role="menuitemradio"]')`;
     const unreadToggleCount = `Number(document.querySelector('[data-activity-list] header button[aria-pressed]')?.textContent?.replace(/\\D/g, "") ?? 0)`;
     const openFilterMenu = async () => {
-      await evaluate(`(${filterTrigger}.click(), true)`);
-      await browser("wait", "--fn", `${filterMenuItems}.length === 4`);
+      await browser("click", filterTriggerSelector);
+      await browser("wait", "--fn", `${filterMenuItems}.length === 5`);
     };
     const readFilterCounts = async () => {
       await openFilterMenu();
       const result = await evaluate<Record<string, number>>(
-        `Object.fromEntries([...${filterMenuItems}].map((item) => [item.textContent.replace(/[\\d+]/g, "").trim(), Number(item.textContent.replace(/\\D/g, "")) || 0]))`,
+        `Object.fromEntries([...${filterMenuItems}].map((item) => [${menuItemLabel("item")}, Number(item.textContent.replace(/\\D/g, "")) || 0]))`,
       );
       await browser("press", "Escape");
       await browser("wait", "--fn", `document.querySelectorAll('[role="menu"]').length === 0`);
       return result;
     };
-    const selectFilter = async (name: string) => {
-      await openFilterMenu();
-      await evaluate(`[...${filterMenuItems}]
-        .find((item) => item.textContent.replace(/[\\d+]/g, "").trim() === ${JSON.stringify(name)})
-        .click() ?? true`);
-      await browser("wait", "--fn", `document.querySelectorAll('[role="menu"]').length === 0`);
-    };
+    const selectFilter = (name: string) => selectDesktopFilter(browser, evaluate, name);
     const counts = await readFilterCounts();
-    expect(Object.keys(counts)).toEqual(["All", "Unread", "Mentions", "Artifacts"]);
+    expect(Object.keys(counts)).toEqual(["All", "Unread", "Mentions", "Tasks", "Artifacts"]);
     expect(counts.All).toBe(0);
     expect(counts.Unread).toBeGreaterThanOrEqual(2);
     expect(counts.Mentions).toBeGreaterThanOrEqual(1);
@@ -125,7 +121,7 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     await evaluate(rightClickRow("E2E activity root"));
     await browser("wait", "--fn", `document.querySelectorAll('[role="menuitem"]').length > 0`);
     const menu = await evaluate<string[]>(
-      `[...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent.trim())`,
+      `[...document.querySelectorAll('[role="menuitem"]')].map((item) => ${menuItemLabel("item")})`,
     );
     expect(menu).toEqual(["Mark as read", "Done", "Unfollow thread"]);
     await browser("screenshot", join(artifacts, "row-menu.png"));
@@ -140,12 +136,12 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
           browser(
             "wait",
             "--fn",
-            `[...document.querySelectorAll('[role="menuitem"]')].some((item) => item.textContent.trim() === ${JSON.stringify(label)})`,
+            `[...document.querySelectorAll('[role="menuitem"]')].some((item) => ${menuItemLabel("item")} === ${JSON.stringify(label)})`,
           ),
         )
         .then(() =>
           evaluate(`[...document.querySelectorAll('[role="menuitem"]')]
-            .find((item) => item.textContent.trim() === ${JSON.stringify(label)})
+            .find((item) => ${menuItemLabel("item")} === ${JSON.stringify(label)})
             .click() ?? true`),
         );
     const channelRow = `([...document.querySelectorAll(${rowItems})].find((item) => item.textContent.includes("E2E activity unread"))?.textContent ?? "")`;

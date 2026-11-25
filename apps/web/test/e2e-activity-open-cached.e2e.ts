@@ -8,11 +8,16 @@ import { CentrifugoConversationRealtime } from "#src/server/conversations/conver
 import {
   browserSession,
   devBrowserWorkspace,
-  hydratedElement,
   localBrowserE2e,
   pageHydrated,
 } from "./helpers/browser-e2e";
-import { clickActivityLink, inPane, rowItems, waitFor } from "./helpers/activity-inbox-e2e";
+import {
+  clickActivityLink,
+  inPane,
+  rowItems,
+  selectDesktopFilter,
+  waitFor,
+} from "./helpers/activity-inbox-e2e";
 import {
   dividerBetween,
   firstPictureSeen,
@@ -30,7 +35,7 @@ const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/activity-open-u
 
 test("a channel read in Chat and opened from Activity after messages came shows its divider", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-  const { browser } = browserSession(browserPath, `activity-open-cached-${process.pid}`);
+  const { browser, evaluate } = browserSession(browserPath, `activity-open-cached-${process.pid}`);
   const realtime = new CentrifugoConversationRealtime(createCentrifugoServerApi());
   const proxy = sameOriginProxy(webOrigin, centrifugoOrigin);
   const { origin } = proxy;
@@ -65,9 +70,7 @@ test("a channel read in Chat and opened from Activity after messages came shows 
     await send(read.length + 2, "E2E open-cached probe received");
 
     await clickActivityLink(browser);
-    const unreadTab = `[...document.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent.startsWith("Unread"))`;
-    await browser("wait", "--fn", `${unreadTab} !== undefined && ${hydratedElement(unreadTab)}`);
-    await browser("eval", `${unreadTab}.click()`);
+    await selectDesktopFilter(browser, evaluate, "Unread");
     await browser("wait", "--fn", `${row("E2E open-cached probe received")} !== null`);
     await browser("find", "text", "E2E open-cached probe received", "click");
     await send(read.length + 3, "E2E open-cached during");
@@ -99,11 +102,7 @@ test("a channel opened from Activity round after round shows each round's divide
     },
   });
   const { origin } = proxy;
-  const tab = (name: string) =>
-    browser(
-      "eval",
-      `[...document.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent.startsWith(${JSON.stringify(name)})).click()`,
-    );
+  const tab = (name: string) => selectDesktopFilter(browser, evaluate, name);
   try {
     const { workspaceId, workspace } = await devBrowserWorkspace(db);
     const read = Array.from({ length: 40 }, (_, index) => ({

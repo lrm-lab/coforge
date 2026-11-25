@@ -8,6 +8,7 @@ import {
   animationsSettled,
   browserSession,
   devBrowserWorkspace,
+  elementAtRest,
   localBrowserE2e,
   pageHydrated,
 } from "./helpers/browser-e2e";
@@ -66,7 +67,18 @@ test("on a phone a row opens its conversation in place of the Activity list", as
       },
     },
   });
-  const settled = () => browser("wait", "--fn", animationsSettled());
+  // On phone viewports /w/:slug keeps ConversationPending's infinite animate-pulse mounted
+  // behind the mobile sidebar, so only finite DocumentTimeline transitions should block here.
+  const settled = () => browser("wait", "--fn", animationsSettled({ allowInfinite: true }));
+  const clickBack = async (name: string) => {
+    const selector = `button[aria-label=${JSON.stringify(name)}]`;
+    await browser(
+      "wait",
+      "--fn",
+      `${elementAtRest(`document.querySelector(${JSON.stringify(selector)})`)} && (() => { const b = document.querySelector(${JSON.stringify(selector)}); if (!b) return false; const r = b.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.width > 0 && document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest("button") === b; })()`,
+    );
+    await browser("find", "role", "button", "click", "--name", name);
+  };
   /** Presses a tab by its label and waits for its page with it marked current. */
   const pressTab = async (label: string, path: string) => {
     await settled();
@@ -94,7 +106,12 @@ test("on a phone a row opens its conversation in place of the Activity list", as
 
     await browser("set", "viewport", "390", "844");
     await browser("open", `${origin}${workspacePath}/activity`);
-    await browser("wait", "--fn", `${seededRows}.length === 2 && ${pageHydrated}`);
+    // Wait for `useBreakpoint("lg")` to hydrate from its desktop SSR default into phone layout.
+    await browser(
+      "wait",
+      "--fn",
+      `${seededRows}.length === 2 && ${pageHydrated} && document.querySelector('[role="tablist"]') !== null`,
+    );
     // On a phone the tabs take their own row under the title.
     expect(
       await evaluate<boolean>(
@@ -122,9 +139,9 @@ test("on a phone a row opens its conversation in place of the Activity list", as
     await browser("wait", "--fn", `location.search.includes("threadRootId=${rootId}")`);
     await browser("wait", "--fn", shownInPane(replyId));
     expect(await evaluate<number>("navigation.currentEntry.index")).toBe(listEntry + 2);
-    await browser("find", "role", "button", "click", "--name", "Back to chat");
+    await clickBack("Back to chat");
     await browser("wait", "--fn", `!location.search.includes("threadRootId")`);
-    await browser("find", "role", "button", "click", "--name", "Back to activity");
+    await clickBack("Back to activity");
     await browser("wait", "--fn", listAlone);
     expect(await evaluate<number>("navigation.currentEntry.index")).toBe(listEntry);
     // A reload keeps that way back: the arrow still returns to the list's entry.
@@ -132,7 +149,7 @@ test("on a phone a row opens its conversation in place of the Activity list", as
     await browser("wait", "--fn", `${shownInPane(newestId)} && ${listHidden} === true`);
     await browser("reload");
     await browser("wait", "--fn", `${shownInPane(newestId)} && ${pageHydrated}`);
-    await browser("find", "role", "button", "click", "--name", "Back to activity");
+    await clickBack("Back to activity");
     await browser("wait", "--fn", listAlone);
     expect(await evaluate<number>("navigation.currentEntry.index")).toBe(listEntry);
     // So does leaving for another page in the app and coming back with Back: the arrow returns to
@@ -145,7 +162,7 @@ test("on a phone a row opens its conversation in place of the Activity list", as
     await browser("wait", "--fn", `location.pathname === ${tasksPath}`);
     await browser("back");
     await browser("wait", "--fn", `${shownInPane(newestId)} && ${listHidden} === true`);
-    await browser("find", "role", "button", "click", "--name", "Back to activity");
+    await clickBack("Back to activity");
     await browser("wait", "--fn", listAlone);
     expect(await evaluate<number>("navigation.currentEntry.index")).toBe(listEntry);
     // Without the Navigation API (before Safari 26.2 and Firefox 147) the arrow still returns to
@@ -159,9 +176,9 @@ test("on a phone a row opens its conversation in place of the Activity list", as
       .click() ?? true`);
     await browser("wait", "--fn", `location.search.includes("threadRootId=${rootId}")`);
     await browser("wait", "--fn", shownInPane(replyId));
-    await browser("find", "role", "button", "click", "--name", "Back to chat");
+    await clickBack("Back to chat");
     await browser("wait", "--fn", `!location.search.includes("threadRootId")`);
-    await browser("find", "role", "button", "click", "--name", "Back to activity");
+    await clickBack("Back to activity");
     await browser("wait", "--fn", listAlone);
     expect(await evaluate<number>("history.state.__TSR_index")).toBe(listIndex);
     // A thread's row opens the thread alone.
@@ -187,7 +204,7 @@ test("on a phone a row opens its conversation in place of the Activity list", as
     // An open conversation fills the screen without the tab bar.
     expect(await evaluate<boolean>(`${tabBar} === null`)).toBe(true);
     await browser("screenshot", join(artifacts, "phone-open.png"));
-    await browser("find", "role", "button", "click", "--name", "Back to activity");
+    await clickBack("Back to activity");
     await browser(
       "wait",
       "--fn",

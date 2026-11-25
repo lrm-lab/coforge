@@ -1,7 +1,7 @@
 import { peopleDirectKey } from "#src/features/conversations/direct-key";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { seededUuid } from "./browser-e2e";
+import { hydratedElement, seededUuid } from "./browser-e2e";
 
 /**
  * The Activity list's rows, as a selector literal for page expressions. Scoped to the list: a
@@ -20,7 +20,7 @@ export const daysNamed = `[...document.querySelectorAll("[data-activity-list] ol
  */
 export async function clickActivityLink(browser: (...args: string[]) => Promise<string>) {
   const links = 'a[href$="/activity"]';
-  const visible = `JSON.stringify([...document.querySelectorAll(${JSON.stringify(links)})].findIndex((link) => link.getClientRects().length > 0))`;
+  const visible = `JSON.stringify([...document.querySelectorAll(${JSON.stringify(links)})].findIndex((link) => link.checkVisibility({ opacityProperty: true, visibilityProperty: true }) && link.getBoundingClientRect().width > 0))`;
   const index = JSON.parse(JSON.parse(await browser("eval", visible))) as number;
   if (index < 0) throw new Error("no visible Activity link");
   await browser("find", "nth", String(index), links, "click");
@@ -35,8 +35,9 @@ export const pane = `document.querySelector('section[aria-label="Selected conver
 /** The list's column: its width says whether a pane is beside it. */
 export const listColumnWidth = `document.querySelector("[data-activity-list]").getBoundingClientRect().width`;
 
-/** Whether the list's column is mounted but not laid out (a phone with a conversation open). */
-export const listHidden = `(() => { const list = document.querySelector("[data-activity-list]"); return Boolean(list) && list.getClientRects().length === 0; })()`;
+/** Whether the list's column is mounted but hidden behind the full-screen phone conversation pane
+ * (either unlaid out or marked `inert` + `aria-hidden="true"` by the phone navigation stack). */
+export const listHidden = `(() => { const list = document.querySelector("[data-activity-list]"); return Boolean(list) && (list.getClientRects().length === 0 || (list.getAttribute("aria-hidden") === "true" && list.hasAttribute("inert"))); })()`;
 
 /** The header's "N active", as its number, or null when it is not shown. */
 export const activeCount = `(() => { const text = document.querySelector("[data-activity-active-count]")?.textContent.trim() ?? ""; const match = /^(\\d+) active$/.exec(text); return match ? Number(match[1]) : null; })()`;
@@ -86,6 +87,35 @@ export const currentRow = `[...document.querySelectorAll(${rowItems})].find((ite
 /** The open conversation as the Activity URL names it (`channel:<id>` or `dm:<id>`, prefixed
  * `thread:` for a thread shown alone). */
 export const openParam = `new URLSearchParams(location.search).get("open")`;
+
+/** The desktop Activity header's Filter activity dropdown trigger selector. */
+export const filterTriggerSelector =
+  '[data-activity-list] header button[aria-label="Filter activity"]';
+
+/** The desktop Activity header's Filter activity dropdown trigger (`ActivityInboxFilterPicker`). */
+export const filterTrigger = `document.querySelector(${JSON.stringify(filterTriggerSelector)})`;
+
+/** Radio items inside the open desktop Filter activity dropdown (`All`, `Unread`, `Mentions`, `Tasks`, `Artifacts`). */
+export const filterMenuItems = `document.querySelectorAll('[role="menu"][aria-label="Filter activity"] [role="menuitemradio"]')`;
+
+/** Visible label of a `Dropdown.Item` menu item without its trailing `<kbd>` shortcut keycap. */
+export const menuItemLabel = (item: string) =>
+  `(${item}.querySelector("span.grow")?.textContent?.trim() ?? ${item}.textContent.trim())`;
+
+/** Opens the desktop Filter activity dropdown, picks `name`, and waits for the menu to close. */
+export async function selectDesktopFilter(
+  browser: (...args: string[]) => Promise<string>,
+  evaluate: <T>(expression: string) => Promise<T>,
+  name: string,
+) {
+  await browser("wait", "--fn", `${filterTrigger} !== null && ${hydratedElement(filterTrigger)}`);
+  await browser("click", filterTriggerSelector);
+  await browser("wait", "--fn", `${filterMenuItems}.length === 5`);
+  await evaluate(`[...${filterMenuItems}]
+    .find((item) => ${menuItemLabel("item")} === ${JSON.stringify(name)})
+    .click() ?? true`);
+  await browser("wait", "--fn", `document.querySelectorAll('[role="menu"]').length === 0`);
+}
 
 /**
  * A channel shared by the viewer and the seeded peer, reset to this run's messages: the viewer's
