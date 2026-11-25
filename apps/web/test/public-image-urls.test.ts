@@ -64,7 +64,7 @@ test("the same object key always yields the same URL, so the browser caches one 
   );
 });
 
-test("without delivery every image falls back to its authenticated route", () => {
+test("without CDN delivery each image uses its authenticated route", () => {
   expect(avatarUrl("user-1", avatarKey, noDelivery)).toBe("/api/me/avatar?v=avatar-1");
   expect(workspaceUserAvatarUrl("workspace-1", "user-1", avatarKey, noDelivery)).toBe(
     "/api/workspaces/workspace-1/users/user-1/avatar?v=avatar-1",
