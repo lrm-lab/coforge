@@ -1,13 +1,14 @@
 import type { RequestPermissionRequest } from "@agentclientprotocol/sdk/unstable";
-import type {
-  AgentNoticeOptions,
-  AgentRuntimeEvent,
-  AgentSession,
-  AgentSessionExit,
-  AgentSessionIdentity,
-  AgentSessionOptions,
-  AgentTurnProcessWindow,
-  AgentTurnTokenUsage,
+import {
+  AgentNoticeSuppressedError,
+  type AgentNoticeOptions,
+  type AgentRuntimeEvent,
+  type AgentSession,
+  type AgentSessionExit,
+  type AgentSessionIdentity,
+  type AgentSessionOptions,
+  type AgentTurnProcessWindow,
+  type AgentTurnTokenUsage,
 } from "@coforge/agent";
 import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import { acpPromptTokenUsage, acpUpdateTokenUsage } from "#src/acp-context-usage";
@@ -102,7 +103,10 @@ export class AcpSession implements AgentSession {
         notification: (method, params) => this.#notification(method, params),
         permission: (request) => this.#permission(request),
         promptWritten: () => {
-          if (this.#active) this.#active.attempted = true;
+          if (this.#active && !this.#active.attempted) {
+            this.#active.attempted = true;
+            this.#active.options?.onPromptWritten?.();
+          }
         },
       });
       this.#transport = transport;
@@ -181,12 +185,21 @@ export class AcpSession implements AgentSession {
 
   #startNext() {
     if (this.#active || this.#disposed || this.#failed || this.#interrupting) return;
-    const input = this.#queue.shift();
-    if (!input) return;
-    this.#active = input;
-    this.#turnEmittedTokenUsage = false;
-    this.#turn = this.#run(input);
-    if (this.profile.admissionTimeoutMs !== undefined) this.#armAdmissionTimeout(input);
+    for (let input = this.#queue.shift(); input; input = this.#queue.shift()) {
+      if (input.options?.prepareSubmission) {
+        const text = input.options.prepareSubmission("prompt");
+        if (text === undefined) {
+          input.admission.reject(new AgentNoticeSuppressedError());
+          continue;
+        }
+        input.text = text;
+      }
+      this.#active = input;
+      this.#turnEmittedTokenUsage = false;
+      this.#turn = this.#run(input);
+      if (this.profile.admissionTimeoutMs !== undefined) this.#armAdmissionTimeout(input);
+      return;
+    }
   }
 
   #armAdmissionTimeout(input: Input) {

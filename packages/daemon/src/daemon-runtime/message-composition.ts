@@ -30,7 +30,7 @@ import { AgentInboxCoordinator as InboxCoordinator } from "./agent-inbox-coordin
 import { AgentMessageAttentionIndex as MessageAttention } from "./agent-message-attention-index";
 import { AgentMessageOperations as MessageOperations } from "./agent-message-operations";
 import { ImportantUnreadNoticeStore } from "#src/persistence/important-unread-notice-store";
-import { composeImportantUnreadReminder, consumedThroughSequence } from "./important-unread-wiring";
+import { composeImportantUnreadReminder } from "./important-unread-wiring";
 import { ImportantUnreadSweep } from "./important-unread-sweep";
 import { MentionDeliveryTracker as MentionDeliveries } from "./mention-delivery-tracker";
 export type MessageCompositionPorts = {
@@ -161,7 +161,7 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
         write: (agentId, state) => {
           ports.consumedSeqs.write(agentId, state);
           mentionDeliveries.settleConsumed(agentId);
-          importantUnread.consumed(agentId, consumedThroughSequence(state));
+          importantUnread.consumed(agentId);
         },
       },
       noticePrefix: (agentId) => ports.sync.noticePrefix(agentId),
@@ -195,16 +195,17 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
   // whose retries ran out as one error, so "written but nobody read it" cannot pass unnoticed.
   importantUnread = composeImportantUnreadReminder({
     store: new ImportantUnreadNoticeStore(() => ports.stateDirectory),
+    eligibility: messageAttention.noticeEligibility,
     session: (agentId) => ports.processManager.session(agentId),
     unread: (agentId) => messageAttention.unreadDeliveries(agentId),
     // Every attempt asks for the notice again: the batch's own messages plus whatever waits in the
     // queue now, so a retry counts what arrived meanwhile instead of repeating a stale snapshot.
     compose: unreadNoticeComposer({
+      eligibility: messageAttention.noticeEligibility,
       queued: (agentId) => ports.deliveryGate.pending(agentId),
       prefix: (agentId) => ports.sync.noticePrefix(agentId),
       previewedInFull: (agentId, target, sequence) =>
         messageAttention.previewSeen.has(agentId, target, sequence),
-      hasSeen: messageAttention.hasSeen.bind(messageAttention),
       captureAcceptance: (agentId) => messageAttention.captureNoticeAcceptance(agentId),
     }),
     // An accepted attempt showed the model these bodies; a later attempt does not repeat them.

@@ -42,7 +42,13 @@ test("a second important message in the same conversation merges instead of addi
   notices.observe(mention);
   const merged = notices.observe({ ...mention, sequence: 12 });
   expect(merged?.conversations).toEqual([
-    { conversationId: "conversation-a", target: "#general", firstSequence: 10, count: 2 },
+    {
+      conversationId: "conversation-a",
+      target: "#general",
+      firstSequence: 10,
+      lastSequence: 12,
+      count: 2,
+    },
   ]);
   // A new identity is new to say, so its attempts start again.
   expect(merged?.attempts).toBe(0);
@@ -75,9 +81,13 @@ test("only a read position past the batch settles it", () => {
   notices.observe(mention);
   notices.observe({ ...mention, sequence: 14 });
   // A check that stopped before these messages read nothing of them.
-  expect(notices.settle("agent-a", 13)).toBe(false);
+  expect(
+    notices.retainConversations("agent-a", ({ lastSequence }) => (lastSequence ?? 0) > 13),
+  ).toBeDefined();
   expect(notices.pending("agent-a")).toBeDefined();
-  expect(notices.settle("agent-a", 14)).toBe(true);
+  expect(
+    notices.retainConversations("agent-a", ({ lastSequence }) => (lastSequence ?? 0) > 14),
+  ).toBeUndefined();
   expect(notices.pending("agent-a")).toBeUndefined();
   expect(notices.dueForWrite("agent-a")).toBe(false);
 });

@@ -11,7 +11,9 @@ import { ImportantUnreadReminder } from "#src/daemon-runtime/important-unread-re
 // them. The tests drive it the way the delivery path will — a delivery arrives, the schedule
 // elapses, the Agent reads — and watch what reaches the process.
 
-function harness(options: Readonly<{ accept?: () => boolean }> = {}) {
+function harness(
+  options: Readonly<{ accept?: () => boolean; through?: (conversationId: string) => number }> = {},
+) {
   const written: ImportantUnreadNotice[] = [];
   const reported: string[] = [];
   const records = new Map<string, ImportantUnreadNotice>();
@@ -30,6 +32,10 @@ function harness(options: Readonly<{ accept?: () => boolean }> = {}) {
         return true;
       },
       report: (agentId) => void reported.push(agentId),
+      eligibility: (_agentId, { sequence, conversationId }) =>
+        sequence <= (options.through?.(conversationId) ?? 0)
+          ? { disposition: "settle", basis: "read_frontier" }
+          : { disposition: "notify", basis: "unread" },
     },
     () => clock.nowMs,
   );
@@ -96,12 +102,14 @@ test("the error is raised once when the retries are used up, not on every sweep"
 });
 
 test("reading the batch clears the record, and a new batch starts its own retries", () => {
-  const { reminder, written, records } = harness();
+  let through = 9;
+  const { reminder, written, records } = harness({ through: () => through });
   reminder.observeDeliveries([mention]);
   // A check that stopped short of these messages is not a read.
-  reminder.consumed("agent-a", 9);
+  reminder.consumed("agent-a");
   expect(records.get("agent-a")).toBeDefined();
-  reminder.consumed("agent-a", 10);
+  through = 10;
+  reminder.consumed("agent-a");
   expect(records.get("agent-a")).toBeUndefined();
   // A new message is a new batch: it is written at once, with its own attempts.
   reminder.observeDeliveries([{ ...mention, sequence: 12 }]);
@@ -134,7 +142,10 @@ test("a restarted Daemon takes the record over and tells the Agent once", () => 
 });
 
 test("settling a spent batch clears its reported key so a later batch with the same key reports again", () => {
-  const { reminder, reported, clock } = harness();
+  let through = 0;
+  const { reminder, reported, clock } = harness({
+    through: (id) => (id === mention.conversationId ? through : 0),
+  });
   reminder.observeDeliveries([mention]);
   for (const delay of IMPORTANT_UNREAD_RETRY_DELAYS_MS) {
     clock.nowMs += delay;
@@ -142,9 +153,10 @@ test("settling a spent batch clears its reported key so a later batch with the s
   }
   expect(reported).toEqual(["agent-a"]);
 
-  reminder.consumed("agent-a", 10);
+  through = 10;
+  reminder.consumed("agent-a");
 
-  reminder.observeDeliveries([mention]);
+  reminder.observeDeliveries([{ ...mention, conversationId: "another-conversation" }]);
   for (const delay of IMPORTANT_UNREAD_RETRY_DELAYS_MS) {
     clock.nowMs += delay;
     reminder.flushDue();

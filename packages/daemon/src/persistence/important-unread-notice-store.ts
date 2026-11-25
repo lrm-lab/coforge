@@ -160,6 +160,12 @@ function readConversations(value: unknown): UnreadNoticeConversation[] {
       conversationId: record.conversationId,
       ...(typeof record.target === "string" && record.target ? { target: record.target } : {}),
       firstSequence: record.firstSequence as number,
+      ...(record.independentEvent === true ? { independentEvent: true as const } : {}),
+      ...(typeof record.lastSequence === "number" &&
+      Number.isSafeInteger(record.lastSequence) &&
+      record.lastSequence >= (record.firstSequence as number)
+        ? { lastSequence: record.lastSequence }
+        : {}),
       count: typeof record.count === "number" && record.count > 0 ? record.count : 1,
     });
   }

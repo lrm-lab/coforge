@@ -6,7 +6,7 @@
  * daemon — so a delivery that is both is written exactly once.
  */
 import type { NoticeMessage } from "./accepted-message-notices";
-import type { AgentConversationScope } from "@coforge/agent";
+import { AgentNoticeSuppressedError, type AgentConversationScope } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
 import { setContextViewMessageIds } from "./context-view-runtime-wiring";
 import { countDistinctMessages } from "./agent-history-read";
@@ -133,6 +133,7 @@ export function writeDeliveryNotice(
         });
       })
       .catch((error: unknown) => {
+        if (error instanceof AgentNoticeSuppressedError) return;
         logger.error("Agent rejected inbox notice", {
           event: "agent.inbox_notice.rejected",
           request_id: message.requestId,
