@@ -6,12 +6,19 @@ import type {
 import {
   ITEM_COLUMNS,
   conversationItemRowsSql,
+  conversationUnreadAttentionRowsSql,
   conversationUnreadMessageSql,
   threadItemRowsSql,
+  threadUnreadAttentionRowsSql,
   threadUnreadReplySql,
 } from "./activity-inbox-items-sql.server";
-import { taskItemRowsSql } from "./activity-inbox-task-items.server";
-import { commentNoticeRowsSql, mentionNoticeRowsSql } from "./activity-inbox-mentions.server";
+import { taskItemRowsSql, taskUnreadAttentionRowsSql } from "./activity-inbox-task-items.server";
+import {
+  commentNoticeRowsSql,
+  commentNoticeUnreadAttentionRowsSql,
+  mentionNoticeRowsSql,
+  mentionNoticeUnreadAttentionRowsSql,
+} from "./activity-inbox-mentions.server";
 
 export type ActivityPageRow = {
   unreadItemCount: number;
@@ -110,10 +117,11 @@ export function activityPageSql(
       FROM items
     )
     SELECT counts.*, listed.*,
+      peer."agentId" AS "agentId",
       CASE
         WHEN listed."mentionId" IS NOT NULL THEN listed."hasUnread"::int
-        WHEN listed."rootMessageId" IS NOT NULL THEN replies."count"
-        ELSE unread."count"
+        WHEN listed."rootMessageId" IS NOT NULL THEN COALESCE(replies."count", 0)
+        ELSE COALESCE(unread."count", 0)
       END AS "unreadCount",
       CASE
         WHEN listed."mentionId" IS NOT NULL
@@ -127,21 +135,32 @@ export function activityPageSql(
     LEFT JOIN "thread_reads" tr
       ON tr."memberId" = listed."memberId" AND tr."rootMessageId" = listed."rootMessageId"
     LEFT JOIN LATERAL (
+      SELECT am."agentId" FROM "conversation_members" am
+      LEFT JOIN "agents" a ON a."id" = am."agentId"
+      WHERE am."conversationId" = listed."conversationId"
+        AND am."agentId" IS NOT NULL
+        AND (listed."attachmentId" IS NOT NULL OR a."deletedAt" IS NULL)
+      LIMIT 1
+    ) peer ON listed."kind" = 'direct'
+    LEFT JOIN LATERAL (
       SELECT COUNT(*)::int AS "count", (ARRAY_AGG(m."id" ORDER BY m."sequence"))[1] AS "firstId"
       FROM "messages" m
-      WHERE listed."rootMessageId" IS NULL
-        AND ${conversationUnreadMessageSql}
+      WHERE ${conversationUnreadMessageSql}
         AND (cm."notificationLevel" <> 'muted' OR listed."channelName" IS NULL
           OR listed."taskBoardId" IS NOT NULL OR EXISTS (
             SELECT 1 FROM "message_mentions" mm
             WHERE mm."messageId" = m."id" AND mm."memberId" = cm."id"
           ))
-    ) unread ON TRUE
+    ) unread ON listed."mentionId" IS NULL
+      AND listed."rootMessageId" IS NULL
+      AND (listed."hasUnread" OR cm."notificationLevel" = 'muted')
     LEFT JOIN LATERAL (
       SELECT COUNT(*)::int AS "count", (ARRAY_AGG(m."id" ORDER BY m."sequence"))[1] AS "firstId"
       FROM "messages" m
       WHERE ${threadUnreadReplySql("listed")}
-    ) replies ON TRUE
+    ) replies ON listed."mentionId" IS NULL
+      AND listed."rootMessageId" IS NOT NULL
+      AND listed."hasUnread"
     ORDER BY listed."isPin" DESC,
       CASE WHEN listed."isPin" THEN listed."pinOrder" END,
       CASE WHEN listed."isPin" THEN listed."pinnedAt" END,
@@ -173,13 +192,24 @@ function pinsSql(filter: ActivityInboxFilter, cursor: ActivityInboxCursor | unde
 export const NAV_UNREAD_KEY_LIMIT = 100;
 
 export function activityNavAttentionSql(workspaceId: string, userId: string) {
+  const branches = Prisma.join(
+    [
+      conversationUnreadAttentionRowsSql(workspaceId, userId),
+      threadUnreadAttentionRowsSql(workspaceId, userId),
+      taskUnreadAttentionRowsSql(workspaceId, userId),
+      mentionNoticeUnreadAttentionRowsSql(workspaceId, userId),
+      commentNoticeUnreadAttentionRowsSql(workspaceId, userId),
+    ].map(
+      (branch) => Prisma.sql`SELECT "key", "latestAt", "latestSequence" FROM (${branch}) branch`,
+    ),
+    " UNION ALL ",
+  );
   return Prisma.sql`
     WITH items AS MATERIALIZED (
-      ${activityItemsSql(workspaceId, userId)}
+      ${branches}
     )
     SELECT items."key", items."latestAt", items."latestSequence"
     FROM items
-    WHERE items."pastDone" AND items."hasUnread"
     ORDER BY items."latestAt" DESC, items."latestSequence" DESC, items."key" COLLATE "C" DESC
     LIMIT ${NAV_UNREAD_KEY_LIMIT}`;
 }

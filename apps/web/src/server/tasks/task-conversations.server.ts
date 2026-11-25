@@ -275,21 +275,20 @@ export class TaskConversations {
     return { conversationId };
   }
 
-  /**
-   * Moves a person's read position in the task's conversation, as `markHumanRead` does anywhere:
-   * monotone, clamped to the newest message. Nothing is announced to the sidebar; the conversation
-   * is hidden. Where it left them, or null when nothing moved or there is no conversation yet.
-   */
   async markRead(principal: TaskPrincipal, ref: TaskConversationRef, throughSequence: number) {
     if (!Number.isSafeInteger(throughSequence) || throughSequence < 1)
       throw new AppError("INVALID_INPUT");
     const { task, member } = await this.resolve(principal, ref, { member: true });
     if (!task.discussionConversationId || !member?.userId) return null;
-    const moved = await markHumanRead(this.ports.db, {
-      conversationId: task.discussionConversationId,
-      userId: member.userId,
-      throughSequence,
-    });
+    const moved = await markHumanRead(
+      this.ports.db,
+      {
+        conversationId: task.discussionConversationId,
+        userId: member.userId,
+        throughSequence,
+      },
+      { recordAdvance: false },
+    );
     return moved ? { unreadCount: moved.unreadCount } : null;
   }
 

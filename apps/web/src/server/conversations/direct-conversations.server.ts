@@ -305,7 +305,6 @@ export class DirectConversations {
     );
   }
 
-  /** Advances the viewer's read cursor; monotone and clamped. */
   async markRead(
     workspaceId: string,
     viewerId: string,
@@ -313,8 +312,6 @@ export class DirectConversations {
     throughSequence: number,
   ) {
     await this.authorize(workspaceId, viewerId, conversationId);
-    // Like a channel read: a move tells the reader's other pages the badge it leaves (Slack's
-    // `im_marked`); a read that moved nothing says nothing.
     const state = await this.conversations.markReadForUser(
       viewerId,
       conversationId,
@@ -322,21 +319,24 @@ export class DirectConversations {
     );
     if (state !== undefined) {
       const { memberId, readThroughAdvanced, ...viewerState } = state;
-      await announceViewerEvent(this.realtime, {
-        userIds: [viewerId],
-        event: { type: REALTIME_EVENTS.dmMarked, workspaceId, conversationId, ...viewerState },
-      });
+      const announcements = [
+        announceViewerEvent(this.realtime, {
+          userIds: [viewerId],
+          event: { type: REALTIME_EVENTS.dmMarked, workspaceId, conversationId, ...viewerState },
+        }),
+      ];
       if (readThroughAdvanced) {
-        await announceConversationReadChanged(this.realtime, {
-          workspaceId,
-          conversationId,
-          memberId,
-          readThroughSequence: state.readThroughSequence,
-        });
-        // The read may have cleared the nav rail's Activity dot (task #496), only when the cursor
-        // actually advanced.
-        await announceActivityAttention(this.db, this.realtime, workspaceId, viewerId);
+        announcements.push(
+          announceConversationReadChanged(this.realtime, {
+            workspaceId,
+            conversationId,
+            memberId,
+            readThroughSequence: state.readThroughSequence,
+          }),
+          announceActivityAttention(this.db, this.realtime, workspaceId, viewerId),
+        );
       }
+      await Promise.all(announcements);
     }
   }
 

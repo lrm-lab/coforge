@@ -1,6 +1,7 @@
 import { Prisma } from "#src/generated/prisma/client";
 import { CHANNEL_VISIBILITY } from "#src/features/conversations/channel-visibility";
 import {
+  conversationActiveUnreadGateSql,
   conversationMentionLateral,
   conversationPastDoneSql,
   conversationUnreadMessageSql,
@@ -8,13 +9,6 @@ import {
   noNoticeColumns,
 } from "./activity-inbox-items-sql.server";
 
-/**
- * The viewer's task conversations (`Conversation.kind` "task_thread") the Activity inbox can list,
- * as the `FROM` of an item query over the viewer's seat (`cm`) in the conversation (`c`), its task
- * (`t`), the task's channel board (`b`) and the viewer's own member row on it (`bm`). The board is
- * what lets them read: a public channel, or one they are on. A task on a direct board is not
- * listed.
- */
 export function taskItemsSql(workspaceId: string, userId: string) {
   return Prisma.sql`"conversation_members" cm
     JOIN "conversations" c
@@ -39,15 +33,12 @@ export function taskItemsSql(workspaceId: string, userId: string) {
     ) latest`;
 }
 
-/** Read as the board's rule reads it: a public channel, or a member's. */
 const taskBoardReadableSql = Prisma.sql`(b."visibility" = ${CHANNEL_VISIBILITY.PUBLIC} OR bm."id" IS NOT NULL)`;
 
-/** Listed with activity past Done, for a task the viewer follows or was mentioned in. */
 export const taskItemListedSql = (mentionFirstId: Prisma.Sql) => Prisma.sql`${taskBoardReadableSql}
   AND ${conversationPastDoneSql}
   AND (tf."taskId" IS NOT NULL OR ${mentionFirstId} IS NOT NULL)`;
 
-/** The list's task items, shaped as the conversation items are, plus the task. */
 export function taskItemRowsSql(workspaceId: string, userId: string) {
   return Prisma.sql`
     SELECT
@@ -59,7 +50,6 @@ export function taskItemRowsSql(workspaceId: string, userId: string) {
       b."channelName" AS "channelName",
       b."visibility" AS "visibility",
       NULL::text AS "directKey",
-      NULL::uuid AS "agentId",
       latest."id" AS "latestMessageId",
       latest."sequence" AS "latestSequence",
       latest."createdAt" AS "latestAt",
@@ -79,13 +69,29 @@ export function taskItemRowsSql(workspaceId: string, userId: string) {
     WHERE ${taskItemListedSql(Prisma.sql`mention."firstId"`)}`;
 }
 
-/** Whether a listed task conversation has anything unread: the nav dot's term for them. */
-export function taskHasUnreadSql(workspaceId: string, userId: string) {
-  return Prisma.sql`SELECT 1 FROM ${taskItemsSql(workspaceId, userId)}
-      ${conversationMentionLateral}
-      CROSS JOIN LATERAL (
-        SELECT 1 FROM "messages" m WHERE ${conversationUnreadMessageSql}
-        ORDER BY m."sequence" LIMIT 1
-      ) message
-      WHERE ${taskItemListedSql(Prisma.sql`mention."firstId"`)}`;
+export function taskUnreadAttentionRowsSql(workspaceId: string, userId: string) {
+  return Prisma.sql`
+    SELECT
+      'conversation:' || cm."conversationId" AS "key",
+      latest."createdAt" AS "latestAt",
+      latest."sequence" AS "latestSequence"
+    FROM ${taskItemsSql(workspaceId, userId)}
+    LEFT JOIN LATERAL (
+      SELECT TRUE AS "found" FROM "messages" m
+      WHERE ${conversationUnreadMessageSql}
+      ORDER BY m."sequence" LIMIT 1
+    ) unread ON ${taskBoardReadableSql} AND ${conversationActiveUnreadGateSql}
+    WHERE ${taskBoardReadableSql}
+      AND ${conversationActiveUnreadGateSql}
+      AND unread."found" IS NOT NULL
+      AND (
+        tf."taskId" IS NOT NULL
+        OR EXISTS (
+          SELECT 1 FROM "message_mentions" mm
+          JOIN "messages" m ON m."id" = mm."messageId" AND m."conversationId" = mm."conversationId"
+          WHERE mm."memberId" = cm."id"
+            AND m."threadRootId" IS NULL
+            AND m."sequence" > COALESCE(cm."doneThroughSequence", 0)
+        )
+      )`;
 }

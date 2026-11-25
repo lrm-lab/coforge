@@ -145,19 +145,13 @@ export async function humanReadStates(
   );
 }
 
-/**
- * Advances the person's top-level read cursor in a channel or DM they are in: monotone and clamped
- * to the conversation's newest message, so a stale client cannot move it back nor push it past the
- * conversation. Reading past a mark-as-unread marker consumes it. Returns where the move left the
- * person (`HumanReadState`; nothing unread when it read through the newest message, else counted
- * after the commit), or undefined when nothing moved, so a caller announces only real moves.
- * `channelThreads` adds a channel's followed-thread unreads to a read-through state: only a
- * channel has them, so a DM or a Task's conversation skips the query.
- */
 export async function markHumanRead(
   db: PrismaClient,
   read: { conversationId: string; userId: string; throughSequence: number },
-  { channelThreads = false }: { channelThreads?: boolean } = {},
+  {
+    channelThreads = false,
+    recordAdvance = true,
+  }: { channelThreads?: boolean; recordAdvance?: boolean } = {},
 ): Promise<HumanReadAdvance | undefined> {
   const { conversationId, userId } = read;
   const moved = await db.$transaction(async (tx) => {
@@ -170,27 +164,66 @@ export async function markHumanRead(
     if (boundary < 1) return undefined;
     const member = await tx.conversationMember.findFirst({
       where: { conversationId, userId, ...ACTIVE_MEMBER_WHERE },
-      select: { id: true },
+      select: { id: true, readThroughSequence: true, unreadFromSequence: true },
     });
     if (!member) return undefined;
-    const advanced = await tx.conversationMember.updateMany({
-      where: {
-        id: member.id,
-        readThroughSequence: { lt: boundary },
-      },
-      data: { readThroughSequence: boundary },
-    });
-    // Reading past the forced `mark as unread` marker consumes it, so the badge does not come
-    // back on the next render (see the marker's note in the schema).
-    const consumed = await tx.conversationMember.updateMany({
-      where: {
-        id: member.id,
-        unreadFromSequence: { not: null, lte: boundary },
-      },
-      data: { unreadFromSequence: null },
-    });
+    const shouldAdvance =
+      member.readThroughSequence === undefined || member.readThroughSequence < boundary;
+    const shouldConsume =
+      member.unreadFromSequence === undefined ||
+      (member.unreadFromSequence !== null && member.unreadFromSequence <= boundary);
+    if (!shouldAdvance && !shouldConsume) return undefined;
+    let advanced: { count: number };
+    let consumed: { count: number };
+    if (shouldAdvance && !shouldConsume) {
+      advanced = await tx.conversationMember.updateMany({
+        where: {
+          id: member.id,
+          readThroughSequence: { lt: boundary },
+          OR: [{ unreadFromSequence: null }, { unreadFromSequence: { gt: boundary } }],
+        },
+        data: { readThroughSequence: boundary },
+      });
+      if (advanced.count > 0) {
+        consumed = { count: 0 };
+      } else {
+        advanced = await tx.conversationMember.updateMany({
+          where: {
+            id: member.id,
+            readThroughSequence: { lt: boundary },
+          },
+          data: { readThroughSequence: boundary },
+        });
+        consumed = await tx.conversationMember.updateMany({
+          where: {
+            id: member.id,
+            unreadFromSequence: { not: null, lte: boundary },
+          },
+          data: { unreadFromSequence: null },
+        });
+      }
+    } else {
+      advanced = shouldAdvance
+        ? await tx.conversationMember.updateMany({
+            where: {
+              id: member.id,
+              readThroughSequence: { lt: boundary },
+            },
+            data: { readThroughSequence: boundary },
+          })
+        : { count: 0 };
+      consumed = shouldConsume
+        ? await tx.conversationMember.updateMany({
+            where: {
+              id: member.id,
+              unreadFromSequence: { not: null, lte: boundary },
+            },
+            data: { unreadFromSequence: null },
+          })
+        : { count: 0 };
+    }
     if (advanced.count === 0 && consumed.count === 0) return undefined;
-    if (advanced.count > 0)
+    if (advanced.count > 0 && recordAdvance)
       await recordReadAdvance(tx, {
         conversationId,
         memberId: member.id,

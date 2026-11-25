@@ -17,8 +17,6 @@ export type ActivityNavAttention = {
   unreadKeys?: string[];
 };
 
-/** Whether the person has any unread activity: all the nav rail's Activity dot shows
- * (`navHasUnreadSql` says what it reads). The caller has checked they belong to the Workspace. */
 export async function navHasUnread(
   db: Pick<PrismaClient, "$queryRaw">,
   workspaceId: string,
@@ -40,12 +38,6 @@ export async function navHasUnread(
   } satisfies ActivityNavAttention;
 }
 
-/**
- * Tells the person's other pages, after a write of theirs that can clear their Activity, where it
- * now stands (`ActivityAttention`), so each nav dot takes the answer instead of every open page
- * reading it again. The stream position is read first, as for a list (`readAfterStreamPositions`).
- * Best effort once the write has committed, like every announcement (`announceBestEffort`).
- */
 export async function announceActivityAttention(
   db: Pick<PrismaClient, "$queryRaw">,
   realtime: Pick<ConversationRealtime, "activityChanged"> | undefined,
@@ -71,12 +63,6 @@ export async function announceActivityAttention(
   );
 }
 
-/**
- * After a write of the person's that moved their read place in some conversations (a Done, a
- * read-all, a conversation marked unread or read), tells their other pages, together: the badge
- * each moved conversation is left with (Slack's `channel_marked` / `im_marked`), as a read inside
- * the conversation does, and where their Activity now stands (`announceActivityAttention`).
- */
 export async function announceReadMoved(
   db: Pick<PrismaClient, "$queryRaw">,
   realtime:
@@ -93,8 +79,6 @@ export async function announceReadMoved(
       userId,
       moved.map((row) => row.conversationId),
     );
-    // One announcement for every moved conversation: each keeps its own badge event, but they
-    // ride a single Centrifugo batch instead of one HTTP call apiece.
     await announceViewerEvents(realtime, {
       userIds: [userId],
       events: moved.map(({ conversationId, channel }) => ({

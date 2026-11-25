@@ -57,6 +57,7 @@ async function hydrateConversationItems(
   userId: string,
   page: readonly ActivityCandidate[],
 ) {
+  if (page.length === 0) return [];
   const messageIds = new Set<string>();
   const agentIds = new Set<string>();
   const peerUserIds = new Map<string, string>();
@@ -74,60 +75,74 @@ async function hydrateConversationItems(
     const peerUserId = peopleDirectPeerId(candidate.directKey, userId);
     if (peerUserId) peerUserIds.set(candidate.conversationId, peerUserId);
   }
+  const uniquePeerUserIds = [...new Set(peerUserIds.values())];
   const [messages, agents, people, channelMembers, tasks] = await Promise.all([
-    db.message.findMany({
-      where: { id: { in: [...messageIds] }, workspaceId },
-      select: { ...browserMessageFields, actionCard: ACTION_CARD_PREVIEW_SELECT },
-    }),
-    db.agent.findMany({
-      where: { id: { in: [...agentIds] }, workspaceId },
-      select: {
-        id: true,
-        name: true,
-        displayName: true,
-        avatarMascot: true,
-        appBot: APP_BOT_LOGO_SELECT,
-      },
-    }),
-    db.user.findMany({
-      where: { id: { in: [...new Set(peerUserIds.values())] } },
-      select: peoplePeerUserFields,
-    }),
-    channelListMembers(db, workspaceId, [...channelIds]),
-    db.task.findMany({
-      where: { messageId: { in: rootIds }, workspaceId, deletedAt: null },
-      select: {
-        messageId: true,
-        number: true,
-        status: true,
-        owner: {
+    messageIds.size > 0
+      ? db.message.findMany({
+          where: { id: { in: [...messageIds] }, workspaceId },
+          select: { ...browserMessageFields, actionCard: ACTION_CARD_PREVIEW_SELECT },
+        })
+      : [],
+    agentIds.size > 0
+      ? db.agent.findMany({
+          where: { id: { in: [...agentIds] }, workspaceId },
           select: {
-            userId: true,
-            agentId: true,
-            user: { select: { username: true, displayName: true, avatarObjectKey: true } },
-            agent: {
+            id: true,
+            name: true,
+            displayName: true,
+            avatarMascot: true,
+            appBot: APP_BOT_LOGO_SELECT,
+          },
+        })
+      : [],
+    uniquePeerUserIds.length > 0
+      ? db.user.findMany({
+          where: { id: { in: uniquePeerUserIds } },
+          select: peoplePeerUserFields,
+        })
+      : [],
+    channelIds.size > 0
+      ? channelListMembers(db, workspaceId, [...channelIds])
+      : new Map<string, never[]>(),
+    rootIds.length > 0
+      ? db.task.findMany({
+          where: { messageId: { in: rootIds }, workspaceId, deletedAt: null },
+          select: {
+            messageId: true,
+            number: true,
+            status: true,
+            owner: {
               select: {
-                name: true,
-                displayName: true,
-                deletedAt: true,
-                avatarMascot: true,
-                appBot: APP_BOT_LOGO_SELECT,
+                userId: true,
+                agentId: true,
+                user: { select: { username: true, displayName: true, avatarObjectKey: true } },
+                agent: {
+                  select: {
+                    name: true,
+                    displayName: true,
+                    deletedAt: true,
+                    avatarMascot: true,
+                    appBot: APP_BOT_LOGO_SELECT,
+                  },
+                },
               },
             },
           },
-        },
-      },
-    }),
+        })
+      : [],
   ]);
-  const settledMessages = await attachForwardedAccess(
-    db,
-    workspaceId,
-    userId,
-    messages.map((message) => ({
-      ...mapBrowserMessage(message, workspaceId),
-      ...previewCardFieldOf(message.actionCard),
-    })),
-  );
+  const settledMessages =
+    messages.length > 0
+      ? await attachForwardedAccess(
+          db,
+          workspaceId,
+          userId,
+          messages.map((message) => ({
+            ...mapBrowserMessage(message, workspaceId),
+            ...previewCardFieldOf(message.actionCard),
+          })),
+        )
+      : [];
   const messageById = new Map(settledMessages.map((message) => [message.id, message]));
   const agentById = new Map(
     agents.map((agent) => [

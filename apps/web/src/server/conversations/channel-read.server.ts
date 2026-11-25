@@ -6,7 +6,6 @@ import { announceViewerEvent, type ConversationRealtime } from "./conversation-r
 import { announceConversationReadChanged } from "./conversation-read-realtime.server";
 import { markHumanRead } from "./human-unread.server";
 
-/** Advances a channel's human read cursor and announces the viewer and shared read state. */
 export async function markPublicChannelRead(input: {
   db: PrismaClient;
   realtime?: Pick<
@@ -29,28 +28,31 @@ export async function markPublicChannelRead(input: {
       userId: input.userId,
       throughSequence: input.throughSequence,
     },
-    { channelThreads: true },
+    { channelThreads: true, recordAdvance: false },
   );
   if (state === undefined) return;
   const { memberId, readThroughAdvanced, ...viewerState } = state;
-  await announceViewerEvent(input.realtime, {
-    userIds: [input.userId],
-    event: {
-      type: REALTIME_EVENTS.channelMarked,
-      workspaceId: input.workspaceId,
-      conversationId: input.conversationId,
-      ...viewerState,
-    },
-  });
+  const announcements = [
+    announceViewerEvent(input.realtime, {
+      userIds: [input.userId],
+      event: {
+        type: REALTIME_EVENTS.channelMarked,
+        workspaceId: input.workspaceId,
+        conversationId: input.conversationId,
+        ...viewerState,
+      },
+    }),
+  ];
   if (readThroughAdvanced) {
-    await announceConversationReadChanged(input.realtime, {
-      workspaceId: input.workspaceId,
-      conversationId: input.conversationId,
-      memberId,
-      readThroughSequence: state.readThroughSequence,
-    });
-    // The read may have cleared the nav rail's Activity dot: tell the person's other pages where
-    // their Activity stands now, only when the cursor actually advanced (task #496).
-    await announceActivityAttention(input.db, input.realtime, input.workspaceId, input.userId);
+    announcements.push(
+      announceConversationReadChanged(input.realtime, {
+        workspaceId: input.workspaceId,
+        conversationId: input.conversationId,
+        memberId,
+        readThroughSequence: state.readThroughSequence,
+      }),
+      announceActivityAttention(input.db, input.realtime, input.workspaceId, input.userId),
+    );
   }
+  await Promise.all(announcements);
 }

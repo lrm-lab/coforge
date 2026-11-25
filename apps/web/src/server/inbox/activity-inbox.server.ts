@@ -103,19 +103,22 @@ export class ActivityInbox {
         : undefined;
     const hydrate = extra ? [...shown, extra] : shown;
     const shownArtifacts = hydrate.flatMap(({ row }) => ("artifactId" in row ? [row] : []));
-    const [conversations, artifacts, pinned] = await Promise.all([
-      hydrateConversationRows(
-        this.db,
-        workspaceId,
-        userId,
-        hydrate.flatMap(({ row }) => ("artifactId" in row ? [] : [row])),
-      ),
+    const shownConversations = hydrate.flatMap(({ row }) => ("artifactId" in row ? [] : [row]));
+    const conversationRowsToHydrate =
+      pins.length > 0 ? [...shownConversations, ...pins] : shownConversations;
+    const [conversations, artifacts] = await Promise.all([
+      conversationRowsToHydrate.length > 0
+        ? hydrateConversationRows(this.db, workspaceId, userId, conversationRowsToHydrate)
+        : [],
       hydrateArtifactItems(this.db, workspaceId, userId, shownArtifacts),
-      pins.length > 0 ? hydrateConversationRows(this.db, workspaceId, userId, pins) : [],
     ]);
     const byKey = new Map<string, (typeof conversations)[number] | (typeof artifacts)[number]>(
       [...conversations, ...artifacts].map((item) => [item.key, item]),
     );
+    const pinned = pins.flatMap((row) => {
+      const item = byKey.get(row.key!);
+      return item && item.kind === "conversation" ? [item] : [];
+    });
     const missing = shownArtifacts.filter((row) => row.key !== extra?.key && !byKey.has(row.key));
     const without = (count: (row: ArtifactListedRow) => boolean) => missing.filter(count).length;
     return {
