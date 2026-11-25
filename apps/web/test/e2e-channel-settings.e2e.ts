@@ -230,11 +230,22 @@ test("the channel settings panel edits info, preferences, archive and membership
       60_000,
     );
     await openPanel();
-    const phone = await evaluate<{ panelWidth: number; viewport: number }>(`(() => {
+    const phone = await evaluate<{
+      panelWidth: number;
+      viewport: number;
+      scrollWidth: number;
+      clientWidth: number;
+    }>(`(() => {
       const panel = document.querySelector('${panelSelector}');
-      return { panelWidth: panel.getBoundingClientRect().width, viewport: innerWidth };
+      return {
+        panelWidth: panel.getBoundingClientRect().width,
+        viewport: innerWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+      };
     })()`);
-    expect(phone.panelWidth).toBeLessThanOrEqual(phone.viewport);
+    expect(phone.panelWidth).toBeLessThanOrEqual(phone.viewport + 0.5);
+    expect(phone.scrollWidth).toBeLessThanOrEqual(phone.clientWidth);
     await browser("screenshot", join(artifacts, "phone.png"));
   } finally {
     await db.conversationPin.deleteMany({ where: { conversationId: channelId } });

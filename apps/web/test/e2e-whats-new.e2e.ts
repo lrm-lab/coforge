@@ -67,7 +67,7 @@ test("What's new keeps a row in the sidebar with a dot while entries wait, on ev
 
   // The sidebar, the rail and the Me page's row can all be in the page; the one meant is the one on
   // screen.
-  const entry = `[...document.querySelectorAll('button')].find((el) => (el.textContent === "What's new" || el.getAttribute("aria-label") === "What's new") && el.getBoundingClientRect().width > 0)`;
+  const entry = `[...document.querySelectorAll('button')].find((el) => (el.textContent === "What's new" || el.getAttribute("aria-label") === "What's new") && el.getBoundingClientRect().width > 0 && el.checkVisibility({ visibilityProperty: true, opacityProperty: true }))`;
   const dot = `(${entry})?.querySelector("span.size-2.rounded-full") != null`;
   const dialog = `([...document.querySelectorAll('[role="dialog"]')].find((el) => el.getAttribute("aria-label") === "What's new") ?? null)`;
   const heading = `(${dialog}?.querySelector("h2")?.textContent ?? null)`;
@@ -151,7 +151,7 @@ test("What's new keeps a row in the sidebar with a dot while entries wait, on ev
     await setDismissed([]);
     await open(first);
     const visible = (label: string) =>
-      `[...document.querySelectorAll('[aria-label="${label}"]')].find((el) => el.getBoundingClientRect().width > 0)`;
+      `[...document.querySelectorAll('[aria-label="${label}"]')].find((el) => el.getBoundingClientRect().width > 0 && el.checkVisibility({ visibilityProperty: true, opacityProperty: true }))`;
     await press(first, visible("Collapse sidebar"));
     await first.browser(
       "wait",
