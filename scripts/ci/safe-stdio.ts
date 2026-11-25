@@ -7,6 +7,7 @@
 //
 // usage: bun scripts/ci/safe-stdio.ts <command> [args...]
 import { dlopen, FFIType, ptr, type Pointer } from "bun:ffi";
+import { readlinkSync } from "node:fs";
 import { isatty } from "node:tty";
 
 const POLLIN = 0x0001;
@@ -37,10 +38,24 @@ function loadPosixPoll(): PollFn | null {
   return cachedPoll;
 }
 
+function isPtyOrTtyFd(fd: number): boolean {
+  if (isatty(fd)) return true;
+  // On Linux, `isatty(fd)` calls `ioctl(TCGETS)` which returns EIO once a PTY master closes,
+  // while `/proc/self/fd/<fd>` still points to `/dev/pts/<n>` (excluding `/dev/null`, pipes, files).
+  if (process.platform === "linux") {
+    try {
+      return readlinkSync(`/proc/self/fd/${fd}`).startsWith("/dev/pts/");
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
 /** True when `fd` is a TTY/PTY whose peer/master side has already hung up (POLLHUP/POLLERR/POLLNVAL).
  * Uses non-blocking `poll(2)` with timeout 0, which never blocks, writes, or raises SIGTTIN/SIGTTOU. */
 export function isClosedPtyFd(fd: number): boolean {
-  if (!isatty(fd)) return false;
+  if (!isPtyOrTtyFd(fd)) return false;
   const poll = loadPosixPoll();
   if (!poll) return false;
   const buffer = new ArrayBuffer(8);
