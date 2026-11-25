@@ -23,5 +23,6 @@
   "agent_workspace_back": "返回",
   "agent_workspace_select_file": "选择一个文件以预览。",
   "agent_workspace_empty_description": "Agent 在工作目录里写下的文件会显示在这里，比如让它「把今天的结论存成 notes.md」。",
-  "agent_workspace_more": "更多"
+  "agent_workspace_path_copied": "已复制路径",
+  "agent_workspace_path_unavailable": "路径暂不可用"
 }

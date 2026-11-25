@@ -48,3 +48,19 @@ export function formatDisplayPath(rawPath: string, maxLength = 56): string {
   }
   return `${prefix}${sep}…${sep}${tail}`;
 }
+
+export function splitDisplayPath(displayPath: string): { prefix: string; leaf: string } {
+  if (!displayPath) return { prefix: "", leaf: "" };
+  const sep = displayPath.includes("\\") && !displayPath.includes("/") ? "\\" : "/";
+  const trimmed =
+    displayPath.length > 1 && displayPath.endsWith(sep) ? displayPath.slice(0, -1) : displayPath;
+  if (trimmed === sep) return { prefix: "", leaf: sep };
+  const idx = trimmed.lastIndexOf(sep);
+  if (idx === -1) return { prefix: "", leaf: trimmed };
+  return { prefix: trimmed.slice(0, idx + 1), leaf: trimmed.slice(idx + 1) };
+}
+
+export function workspacePathMaxLength(paneWidthPx: number): number {
+  if (paneWidthPx <= 0) return 56;
+  return Math.min(80, Math.max(24, Math.floor((paneWidthPx - 136) / 7.5)));
+}

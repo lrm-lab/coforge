@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, Copy01, DotsHorizontal, Eye, EyeOff, RefreshCw01 } from "@untitledui/icons";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { ArrowLeft, Check, Copy01, Eye, EyeOff, RefreshCw01 } from "@untitledui/icons";
+import { Toolbar } from "react-aria-components";
 import type {
   AgentWorkspaceFileEntry,
   AgentWorkspaceFileReadResult,
@@ -7,7 +8,12 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
+import {
+  formatDisplayPath,
+  splitDisplayPath,
+  workspacePathMaxLength,
+} from "#src/features/agents/display-path";
 import { useResizeObserver } from "#src/hooks/use-resize-observer";
 import { copyText } from "#src/lib/clipboard";
 import { m } from "#src/paraglide/messages";
@@ -16,11 +22,11 @@ import { FilePane, loadProjectFileView, type FileState } from "./agent-workspace
 import { sameEntries, sameFileRead } from "./agent-workspace-same";
 import { TreeRoot, type DirState } from "./agent-workspace-tree";
 
-/** The container width, in CSS px, at and above which the tree and the open file split
- * side-by-side (the wide Members-page pane). Below it, the file replaces the tree and a
- * breadcrumb + back button return to it (the panel's own narrow width) — a single breakpoint,
- * simpler than a true three-way responsive layout and acceptable per the brief. */
 const SPLIT_BREAKPOINT_PX = 900;
+const SPLIT_TREE_WIDTH_PX = 288;
+const COMPACT_TREE_BREAKPOINT_PX = 420;
+const COPY_CONFIRM_MS = 1800;
+const SAME_RETURN_MS = 1000;
 
 export type AgentWorkspaceFilesLoadResult =
   | { status: "ready"; result: AgentWorkspaceFilesListResult }
@@ -28,10 +34,6 @@ export type AgentWorkspaceFilesLoadResult =
 export type AgentWorkspaceFileLoadResult =
   | { status: "ready"; result: AgentWorkspaceFileReadResult }
   | { status: "offline" | "timeout" | "unavailable" };
-
-/** `focus` and `visibilitychange` both fire when the reader returns; events this close are one
- * return. */
-const SAME_RETURN_MS = 1000;
 
 function hiddenStorageKey(agentId: string) {
   return `coforge:agent-workspace-hidden:${agentId}`;
@@ -48,26 +50,16 @@ function readHiddenPreference(agentId: string): boolean {
 function writeHiddenPreference(agentId: string, value: boolean) {
   try {
     localStorage.setItem(hiddenStorageKey(agentId), value ? "1" : "0");
-  } catch {
-    // Private mode or blocked storage: the choice still holds for this visit.
-  }
+  } catch {}
 }
 
 function sortedEntries(entries: AgentWorkspaceFileEntry[]): AgentWorkspaceFileEntry[] {
-  // The daemon already returns directories-first, name-sorted, but this component sorts
-  // defensively rather than trusting that contract.
   return [...entries].sort((a, b) => {
     if ((a.type === "dir") !== (b.type === "dir")) return a.type === "dir" ? -1 : 1;
     return a.name.localeCompare(b.name);
   });
 }
 
-/**
- * The Agent profile panel's Workspace tab: a lazy directory tree of the Agent's working directory
- * on its Computer, plus a read-only file viewer. Creator/admin only (caller gates via
- * `visibleAgentProfileTabs`), with the same publish/poll/timeout data shape
- * as Skills, but with two operations (list, read) instead of one.
- */
 export function AgentWorkspaceTab({
   agentId,
   onListDir,
@@ -82,12 +74,14 @@ export function AgentWorkspaceTab({
   const [selected, setSelected] = useState<string | undefined>(undefined);
   const [fileState, setFileState] = useState<FileState | undefined>(undefined);
   const [rootPath, setRootPath] = useState<string | undefined>(undefined);
+  const [copied, setCopied] = useState(false);
   const [containerWidth, setContainerWidth] = useState(0);
 
   const cacheRef = useRef<Record<string, DirState>>({});
   const [, forceRender] = useReducer((n: number) => n + 1, 0);
   const dirSeq = useRef<Record<string, number>>({});
   const fileSeq = useRef(0);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const fileStateRef = useRef(fileState);
   fileStateRef.current = fileState;
 
@@ -100,6 +94,14 @@ export function AgentWorkspaceTab({
     setContainerWidth(containerRef.current?.clientWidth ?? 0);
   }, []);
 
+  useEffect(() => {
+    clearTimeout(copyTimerRef.current);
+    setCopied(false);
+    return () => {
+      clearTimeout(copyTimerRef.current);
+    };
+  }, [agentId]);
+
   const setDirState = useCallback((dirPath: string, state: DirState) => {
     cacheRef.current = { ...cacheRef.current, [dirPath]: state };
     forceRender();
@@ -109,10 +111,6 @@ export function AgentWorkspaceTab({
     async (dirPath: string, hidden: boolean, quiet = false) => {
       const seq = (dirSeq.current[dirPath] ?? 0) + 1;
       dirSeq.current[dirPath] = seq;
-      // A quiet reload (the reader coming back to the window) keeps what is listed on screen
-      // while it reads, but shows what the read finds: a folder that is gone, or a computer that
-      // went offline, replaces the list. A list that did not change keeps its object, so only a
-      // changed listing redraws.
       if (!(quiet && cacheRef.current[dirPath]?.status === "ready"))
         setDirState(dirPath, { status: "loading" });
       try {
@@ -126,7 +124,7 @@ export function AgentWorkspaceTab({
           setDirState(dirPath, { status: response.result.status });
           return;
         }
-        if (dirPath === "") setRootPath(response.result.rootPath);
+        if (dirPath === "") setRootPath(response.result.rootPath || undefined);
         const entries = sortedEntries(response.result.entries);
         const shown = cacheRef.current[dirPath];
         if (shown?.status === "ready" && sameEntries(shown.entries, entries)) return;
@@ -142,12 +140,8 @@ export function AgentWorkspaceTab({
     async (path: string, quiet = false) => {
       const seq = ++fileSeq.current;
       const shown = fileStateRef.current;
-      // As for a folder: a quiet reload skips the loading blank but shows what it finds (a file
-      // deleted meanwhile is "missing"), and an unchanged file keeps its object.
       if (!(quiet && shown?.status === "ready" && shown.path === path))
         setFileState({ status: "loading", path });
-      // Fetch the viewer's code alongside the file rather than after it arrives. A failed load
-      // is reported when the viewer renders, so this early request drops its own error.
       void loadProjectFileView().catch(() => undefined);
       try {
         const response = await onReadFile(path);
@@ -177,7 +171,6 @@ export function AgentWorkspaceTab({
 
   useEffect(() => {
     void loadDir("", includeHidden);
-    // Reload every directory expanded so far so a hidden-files toggle applies everywhere at once.
     for (const dir of expanded) void loadDir(dir, includeHidden);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refetch driven by includeHidden/agentId only.
   }, [agentId, includeHidden]);
@@ -188,18 +181,12 @@ export function AgentWorkspaceTab({
     writeHiddenPreference(agentId, next);
   }
 
-  // Reads everything on screen again without blanking it: the list, every open folder and the
-  // open file.
   function refresh() {
     void loadDir("", includeHidden, true);
     for (const dir of expanded) void loadDir(dir, includeHidden, true);
     if (selected) void loadFile(selected, true);
   }
 
-  // The Agent keeps writing while the reader is elsewhere, so coming back to the window reads
-  // again (there is no push for file changes). The menu keeps a Refresh for staying put. Returning
-  // to a tab fires both `visibilitychange` and `focus`; `focus` alone covers switching windows
-  // without hiding the page, so both stay and the second event of one return is dropped.
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
   useEffect(() => {
@@ -219,9 +206,6 @@ export function AgentWorkspaceTab({
     };
   }, []);
 
-  // Single entry point for every expansion change, whether it comes from the tree's own
-  // chevron toggle (a full next set) or a row click on a directory (one path flipped below).
-  // Any directory newly present in `next` that isn't cached yet gets fetched.
   function applyExpanded(next: Set<string>) {
     for (const dirPath of next) {
       if (!expanded.has(dirPath) && !cacheRef.current[dirPath])
@@ -236,22 +220,20 @@ export function AgentWorkspaceTab({
   }
 
   async function copyPath() {
-    if (rootPath) await copyText(rootPath);
+    if (!rootPath) return;
+    if (!(await copyText(rootPath))) return;
+    setCopied(true);
+    clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopied(false), COPY_CONFIRM_MS);
   }
 
   const rootState = cacheRef.current[""];
+  const isRootLoading = !rootState || rootState.status === "loading";
   const showSplit = containerWidth >= SPLIT_BREAKPOINT_PX;
+  const paneWidth = showSplit ? SPLIT_TREE_WIDTH_PX : containerWidth;
+  const compactTree = paneWidth > 0 && paneWidth < COMPACT_TREE_BREAKPOINT_PX;
   const narrowShowingFile = !showSplit && selected !== undefined;
 
-  const menu = (
-    <WorkspaceMenu
-      includeHidden={includeHidden}
-      canCopyPath={rootPath !== undefined}
-      onRefresh={refresh}
-      onToggleHidden={toggleHidden}
-      onCopyPath={() => void copyPath()}
-    />
-  );
   const tree = (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <TreeRoot
@@ -259,6 +241,7 @@ export function AgentWorkspaceTab({
         cache={cacheRef.current}
         expanded={expanded}
         selected={selected}
+        compact={compactTree}
         onExpandedChange={applyExpanded}
         onSelectFile={selectFile}
         onRetry={() => loadDir("", includeHidden)}
@@ -266,8 +249,6 @@ export function AgentWorkspaceTab({
     </div>
   );
 
-  // One bar above the content, never a stack of them: the list's bar holds only its menu, and an
-  // open file's bar (the viewer's own) carries the way back on a narrow panel.
   return (
     <div ref={containerRef} className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       {narrowShowingFile ? (
@@ -295,7 +276,16 @@ export function AgentWorkspaceTab({
               showSplit ? "w-72 shrink-0 border-r border-secondary" : "min-h-0 flex-1",
             )}
           >
-            <ListBar>{menu}</ListBar>
+            <WorkspaceBar
+              rootPath={rootPath}
+              isLoading={isRootLoading}
+              paneWidth={paneWidth}
+              copied={copied}
+              includeHidden={includeHidden}
+              onCopyPath={() => void copyPath()}
+              onToggleHidden={toggleHidden}
+              onRefresh={refresh}
+            />
             {tree}
           </div>
           {showSplit && (
@@ -315,60 +305,104 @@ export function AgentWorkspaceTab({
   );
 }
 
-/** The list's bar: as tall as an open file's bar, so going in and out of a file does not shift
- * the content. */
-function ListBar({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex min-h-12 shrink-0 items-center justify-end border-b border-secondary px-3 py-2">
-      {children}
-    </div>
-  );
-}
-
-/** What the list does besides opening files, all used now and then, so they wait behind one
- * button instead of each holding a place on screen. */
-function WorkspaceMenu({
+function WorkspaceBar({
+  rootPath,
+  isLoading,
+  paneWidth,
+  copied,
   includeHidden,
-  canCopyPath,
-  onRefresh,
-  onToggleHidden,
   onCopyPath,
+  onToggleHidden,
+  onRefresh,
 }: {
+  rootPath: string | undefined;
+  isLoading: boolean;
+  paneWidth: number;
+  copied: boolean;
   includeHidden: boolean;
-  canCopyPath: boolean;
-  onRefresh: () => void;
-  onToggleHidden: () => void;
   onCopyPath: () => void;
+  onToggleHidden: () => void;
+  onRefresh: () => void;
 }) {
+  const shownPath = rootPath
+    ? formatDisplayPath(rootPath, workspacePathMaxLength(paneWidth))
+    : undefined;
+  const { prefix, leaf } = splitDisplayPath(shownPath ?? "");
+  const copyTooltip = copied ? m.agent_workspace_path_copied() : m.agent_workspace_copy_path();
+
   return (
-    <Dropdown.Root>
-      <ButtonUtility
-        icon={DotsHorizontal}
-        size="xs"
-        color="tertiary"
-        tooltip={m.agent_workspace_more()}
-      />
-      <Dropdown.Popover placement="bottom end">
-        <Dropdown.Menu
-          aria-label={m.agent_workspace_more()}
-          disabledKeys={canCopyPath ? [] : ["copy"]}
-          onAction={(key) =>
-            key === "refresh" ? onRefresh() : key === "hidden" ? onToggleHidden() : onCopyPath()
-          }
-        >
-          <Dropdown.Item id="refresh" icon={RefreshCw01} label={m.agent_workspace_refresh()} />
-          <Dropdown.Item
-            id="hidden"
-            icon={includeHidden ? EyeOff : Eye}
-            label={
-              includeHidden
-                ? m.agent_workspace_hidden_files_shown()
-                : m.agent_workspace_hidden_files_hidden()
-            }
+    <div className="flex min-h-10 shrink-0 items-center justify-between gap-2 border-b border-secondary bg-secondary py-1.5 ps-4 pe-2.5">
+      <div className="min-w-0 flex-1">
+        {isLoading && !rootPath ? (
+          <span
+            aria-hidden="true"
+            className="block h-3.5 w-40 max-w-full animate-pulse rounded bg-tertiary motion-reduce:animate-none"
           />
-          <Dropdown.Item id="copy" icon={Copy01} label={m.agent_workspace_copy_path()} />
-        </Dropdown.Menu>
-      </Dropdown.Popover>
-    </Dropdown.Root>
+        ) : rootPath ? (
+          <Tooltip title={copied ? m.agent_workspace_path_copied() : rootPath}>
+            <TooltipTrigger
+              onPress={onCopyPath}
+              aria-label={`${copyTooltip}: ${rootPath}`}
+              className="relative -mx-1.5 -my-0.5 block max-w-full min-w-0 cursor-pointer rounded-sm px-1.5 py-0.5 text-start font-mono text-xs leading-5 text-quaternary outline-focus-ring transition-colors duration-100 ease-out hover:bg-tertiary focus-visible:outline-2 focus-visible:outline-solid any-pointer-coarse:after:absolute any-pointer-coarse:after:inset-x-0 any-pointer-coarse:after:top-1/2 any-pointer-coarse:after:min-h-11 any-pointer-coarse:after:-translate-y-1/2"
+            >
+              <span dir="ltr" className="block truncate">
+                {prefix}
+                <span className="font-medium text-primary">{leaf}</span>
+              </span>
+            </TooltipTrigger>
+          </Tooltip>
+        ) : (
+          <span className="block truncate text-xs text-quaternary">
+            {m.agent_workspace_path_unavailable()}
+          </span>
+        )}
+      </div>
+
+      <Toolbar
+        aria-label={m.agent_workspace_section()}
+        className="flex shrink-0 items-center gap-0.5"
+      >
+        <ButtonUtility
+          icon={copied ? Check : Copy01}
+          size="xs"
+          color="tertiary"
+          isDisabled={!rootPath}
+          tooltip={copyTooltip}
+          onClick={onCopyPath}
+          className={cn(
+            "hover:bg-tertiary",
+            copied &&
+              "bg-success-primary text-success-primary hover:bg-success-primary hover:text-success-primary",
+          )}
+        />
+        <ButtonUtility
+          icon={includeHidden ? EyeOff : Eye}
+          size="xs"
+          color="tertiary"
+          tooltip={
+            includeHidden
+              ? m.agent_workspace_hidden_files_shown()
+              : m.agent_workspace_hidden_files_hidden()
+          }
+          onClick={onToggleHidden}
+          className={cn(
+            "hover:bg-tertiary",
+            includeHidden && "bg-tertiary text-primary hover:bg-tertiary hover:text-primary",
+          )}
+        />
+        <ButtonUtility
+          icon={RefreshCw01}
+          size="xs"
+          color="tertiary"
+          tooltip={m.agent_workspace_refresh()}
+          onClick={onRefresh}
+          className="hover:bg-tertiary"
+        />
+      </Toolbar>
+
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {copied ? m.agent_workspace_path_copied() : ""}
+      </span>
+    </div>
   );
 }

@@ -22,10 +22,13 @@ export type DirState =
   | { status: "offline" | "timeout" | "unavailable" | "missing" | "unreadable" | "error" };
 
 const MAX_VISUAL_TREE_DEPTH = 8;
+const COMPACT_VISUAL_TREE_DEPTH = 6;
 
-export function treeRowIndent(level: number): string {
-  const clamped = Math.min(Math.max(level, 1), MAX_VISUAL_TREE_DEPTH);
-  return `${0.25 + (clamped - 1)}rem`;
+export function treeRowIndent(level: number, compact = false): string {
+  const maxDepth = compact ? COMPACT_VISUAL_TREE_DEPTH : MAX_VISUAL_TREE_DEPTH;
+  const stepRem = compact ? 0.625 : 1;
+  const clamped = Math.min(Math.max(level, 1), maxDepth);
+  return `${0.25 + (clamped - 1) * stepRem}rem`;
 }
 
 function joinPath(dirPath: string, name: string): string {
@@ -37,6 +40,7 @@ export function TreeRoot({
   cache,
   expanded,
   selected,
+  compact = false,
   onExpandedChange,
   onSelectFile,
   onRetry,
@@ -45,6 +49,7 @@ export function TreeRoot({
   cache: Record<string, DirState>;
   expanded: Set<string>;
   selected: string | undefined;
+  compact?: boolean;
   onExpandedChange: (next: Set<string>) => void;
   onSelectFile: (path: string) => void;
   onRetry: () => void;
@@ -82,14 +87,13 @@ export function TreeRoot({
       cache={cache}
       expanded={expanded}
       selected={selected}
+      compact={compact}
       onExpandedChange={onExpandedChange}
       onSelectFile={onSelectFile}
     />
   );
 }
 
-/** One row of the tree: either a real file/directory entry, or a non-interactive placeholder
- * standing in for a directory's loading/empty/error child state. */
 type TreeRow =
   | { kind: "entry"; entry: AgentWorkspaceFileEntry; path: string }
   | { kind: "status"; id: string; loading: boolean; text: string };
@@ -126,15 +130,12 @@ function childRows(dirPath: string, cache: Record<string, DirState>): TreeRow[] 
   ];
 }
 
-/**
- * The lazily-loaded directory tree, built on React Aria's `Tree`. Collapsed directories
- * contribute no rows to the Collection, so expanding one is the only point a fetch happens.
- */
 function WorkspaceTree({
   rootEntries,
   cache,
   expanded,
   selected,
+  compact,
   onExpandedChange,
   onSelectFile,
 }: {
@@ -142,10 +143,10 @@ function WorkspaceTree({
   cache: Record<string, DirState>;
   expanded: Set<string>;
   selected: string | undefined;
+  compact: boolean;
   onExpandedChange: (next: Set<string>) => void;
   onSelectFile: (path: string) => void;
 }) {
-  // Read once per render: a refresh or an expansion re-renders the rows and moves their times on.
   const now = new Date();
   const locale = getLocale();
 
@@ -164,7 +165,7 @@ function WorkspaceTree({
             {({ level }) => (
               <div
                 className="flex min-w-0 items-center gap-1.5 py-1.5 pe-2 text-xs text-tertiary"
-                style={{ paddingInlineStart: treeRowIndent(level) }}
+                style={{ paddingInlineStart: treeRowIndent(level, compact) }}
               >
                 <span aria-hidden="true" className="size-6 shrink-0" />
                 {row.loading ? (
@@ -198,13 +199,13 @@ function WorkspaceTree({
         <TreeItemContent>
           {({ level, isExpanded }) => (
             <div
-              className="flex min-w-0 items-center gap-1.5 pe-2"
-              style={{ paddingInlineStart: treeRowIndent(level) }}
+              className="flex min-w-0 items-start gap-1.5 pe-2"
+              style={{ paddingInlineStart: treeRowIndent(level, compact) }}
             >
               {isDir ? (
                 <AriaButton
                   slot="chevron"
-                  className="flex size-6 shrink-0 cursor-pointer items-center justify-center rounded text-quaternary outline-focus-ring hover:text-tertiary focus-visible:outline-2"
+                  className="mt-1 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded text-quaternary outline-focus-ring hover:text-tertiary focus-visible:outline-2"
                 >
                   <ChevronRight
                     aria-hidden="true"
@@ -215,16 +216,17 @@ function WorkspaceTree({
                   />
                 </AriaButton>
               ) : (
-                <span aria-hidden="true" className="size-6 shrink-0" />
+                <span aria-hidden="true" className="mt-1 size-6 shrink-0" />
               )}
               {isDir ? (
-                <Folder aria-hidden="true" className="size-4 shrink-0 text-quaternary" />
+                <Folder aria-hidden="true" className="mt-2 size-4 shrink-0 text-quaternary" />
               ) : (
-                <FileTypeIcon fileName={entry.name} className="size-4" />
+                <FileTypeIcon fileName={entry.name} className="mt-2 size-4 shrink-0" />
               )}
               <span
+                dir="auto"
                 className={cn(
-                  "min-w-0 flex-1 py-1.5 text-sm wrap-anywhere text-primary",
+                  "min-w-0 flex-1 py-1.5 text-sm leading-5 whitespace-pre-wrap wrap-anywhere text-primary [unicode-bidi:plaintext]",
                   isCurrent && "font-medium",
                 )}
               >
@@ -233,7 +235,7 @@ function WorkspaceTree({
               {time && (
                 <time
                   dateTime={new Date(entry.modifiedAtMs).toISOString()}
-                  className="shrink-0 text-xs text-tertiary tabular-nums"
+                  className="shrink-0 py-1.5 text-xs leading-5 text-tertiary tabular-nums"
                 >
                   {time}
                 </time>
@@ -241,10 +243,9 @@ function WorkspaceTree({
             </div>
           )}
         </TreeItemContent>
-        {/* Collapsed directories contribute no rows; files pass an always-empty list. */}
         <Collection
           items={isDir && expanded.has(path) ? childRows(path, cache) : []}
-          dependencies={[expanded, cache, selected]}
+          dependencies={[expanded, cache, selected, compact]}
         >
           {renderRow}
         </Collection>
@@ -256,10 +257,10 @@ function WorkspaceTree({
     <Tree
       aria-label={m.agent_workspace_section()}
       items={rootEntries.map((entry): TreeRow => ({ kind: "entry", entry, path: entry.name }))}
-      dependencies={[expanded, cache, selected]}
+      dependencies={[expanded, cache, selected, compact]}
       expandedKeys={expanded}
       onExpandedChange={(keys) => onExpandedChange(new Set([...keys].map(String)))}
-      className="space-y-0.5 px-2 pb-3 outline-none"
+      className="space-y-0.5 px-2 pt-1.5 pb-3 outline-none"
     >
       {renderRow}
     </Tree>
