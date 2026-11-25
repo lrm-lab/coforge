@@ -1,4 +1,4 @@
-import { readdir, readlink } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { isExitedProcState } from "./linux-process-table";
 
 export type ProcJobRssGroup = { bytes: number; members: ReadonlySet<number> };
@@ -61,7 +61,9 @@ async function linuxRssRow(name: string): Promise<RssRow | "unavailable" | undef
 }
 
 async function readLinuxRssGroups(signal: AbortSignal): Promise<ProcJobRssGroups | undefined> {
-  if ((await readlink("/proc/self")) !== String(process.pid)) return undefined;
+  const selfStatus = await Bun.file("/proc/self/status").text();
+  const procNamespacePid = /^NSpid:[ \t]+([^\n]+)$/m.exec(selfStatus)?.[1]?.trim();
+  if (procNamespacePid !== String(process.pid)) return undefined;
   const names = (await readdir("/proc")).filter((name) => /^\d+$/.test(name));
   const groups = new Map<number, RssGroup>();
   for (let offset = 0; offset < names.length; offset += 64) {

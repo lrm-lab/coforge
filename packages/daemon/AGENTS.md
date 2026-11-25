@@ -101,6 +101,8 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 | `src/proc-jobs/`                                 | Managed Agent background jobs (`coforge proc`): detached launch, identity-verified signaling, sanitized env, bounded log rotation/tail, and per-Workspace `proc-jobs.json` ledger |
 
 `src/proc-jobs/proc-job-rss-sampler.ts` verifies sampled group ownership and compares consecutive RSS observations.
+`src/proc-jobs/proc-job-memory-monitor.ts` caches sampled usage and records confirmed memory stops.
+`src/proc-jobs/proc-job-memory-config.ts` reads the local Computer memory limit for new jobs.
 
 `src/daemon-runtime/upgrade-progress-reporter.ts` submits installed upgrade evidence and durable ready receipt replays for an authenticated binding.
 

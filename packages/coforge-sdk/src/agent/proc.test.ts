@@ -220,3 +220,25 @@ describe("agent proc contracts", () => {
     expect(externalGuide).toContain("`coforge proc`");
   });
 });
+
+test("proc memory metadata is optional and decodes with the existing exit reason", () => {
+  const running = { mode: "process_group_rss", limitBytes: 1024, usageBytes: 1050 } as const;
+  expect(decodeAgentProcJob({ ...sampleJob, memory: running }).memory).toEqual(running);
+  expect(() =>
+    decodeAgentProcJob({ ...sampleJob, memory: { ...running, usageBytes: -1 } }),
+  ).toThrow();
+  expect(() =>
+    decodeAgentProcJob({
+      ...sampleJob,
+      memory: { ...running, termination: "memory_limit" },
+    }),
+  ).toThrow();
+  const memory = {
+    mode: "process_group_rss",
+    limitBytes: 1024,
+    termination: "memory_limit",
+  } as const;
+  expect(
+    decodeAgentProcJob({ ...sampleJob, status: "exited", stopReason: "exited", memory }),
+  ).toMatchObject({ stopReason: "exited", memory });
+});

@@ -37,6 +37,13 @@ export const AGENT_PROC_ERROR_CODES = [
 ] as const;
 export type AgentProcErrorCode = (typeof AGENT_PROC_ERROR_CODES)[number];
 
+export type AgentProcMemory = {
+  mode: "process_group_rss";
+  limitBytes: number;
+  usageBytes?: number;
+  termination?: "memory_limit";
+};
+
 export type AgentProcJob = {
   id: string;
   name: string;
@@ -52,6 +59,7 @@ export type AgentProcJob = {
   exitCode?: number | null;
   signal?: string | null;
   stopReason?: AgentProcStopReason;
+  memory?: AgentProcMemory;
   logPath: string;
 };
 
@@ -201,6 +209,21 @@ export function decodeAgentProcJob(value: unknown): AgentProcJob {
     if (!AGENT_PROC_STOP_REASONS.includes(value.stopReason as AgentProcStopReason))
       fail("invalid proc stopReason");
     job.stopReason = value.stopReason as AgentProcStopReason;
+  }
+  if (value.memory !== undefined) {
+    const memory = value.memory;
+    if (!isRecord(memory) || memory.mode !== "process_group_rss") fail("invalid proc memory");
+    job.memory = {
+      mode: memory.mode,
+      limitBytes: requirePositiveInt(memory.limitBytes, "memory limit"),
+    };
+    if (memory.usageBytes !== undefined)
+      job.memory.usageBytes = requireNonNegativeInt(memory.usageBytes, "memory usage");
+    if (memory.termination !== undefined) {
+      if (memory.termination !== "memory_limit" || job.status !== "exited")
+        fail("invalid proc memory termination");
+      job.memory.termination = memory.termination;
+    }
   }
   return job;
 }

@@ -179,11 +179,11 @@ function signalVerifiedTarget(
   pgid: number | null,
   signal: "SIGTERM" | "SIGKILL",
   platform: NodeJS.Platform,
-): void {
+): boolean {
   if (pgid !== null && pgid > 1 && pgid !== process.pid) {
-    if (signalOne(-pgid, signal, true, platform)) return;
+    if (signalOne(-pgid, signal, true, platform)) return true;
   }
-  signalOne(pid, signal, false, platform);
+  return signalOne(pid, signal, false, platform);
 }
 
 export async function stopSystemdScopeUnit(
@@ -205,6 +205,7 @@ export async function stopVerifiedProcJob(
   target: ProcJobStopTarget,
   options: {
     force?: boolean;
+    requireDeliveredSignal?: boolean;
     graceMs?: number;
     killWaitMs?: number;
     platform?: NodeJS.Platform;
@@ -226,29 +227,36 @@ export async function stopVerifiedProcJob(
   if (target.groupAnchor && (initial.pgid !== target.pid || target.pgid !== target.pid))
     return "failed";
 
+  let delivered = false;
+  const stopped = () =>
+    options.requireDeliveredSignal && !delivered
+      ? ("already_exited" as const)
+      : ("stopped" as const);
   if (!options.force) {
     if (target.systemdUnit && platform === "linux") await signalUnit(target.systemdUnit, "SIGTERM");
-    signalVerifiedTarget(target.pid, initial.pgid ?? target.pgid, "SIGTERM", platform);
+    delivered = signalVerifiedTarget(target.pid, initial.pgid ?? target.pgid, "SIGTERM", platform);
     const termDeadline = Date.now() + graceMs;
     while (Date.now() < termDeadline) {
       await Bun.sleep(50);
       const check = await isVerifiedProcJobAlive(target, platform, readIdentity);
-      if (!check.alive && (await procJobGroupIsEmpty(target, platform))) return "stopped";
+      if (!check.alive && (await procJobGroupIsEmpty(target, platform))) return stopped();
     }
   }
 
   const beforeKill = await isVerifiedProcJobAlive(target, platform, readIdentity);
   if (!beforeKill.alive)
-    return (await procJobGroupIsEmpty(target, platform)) ? "stopped" : "failed";
+    return (await procJobGroupIsEmpty(target, platform)) ? stopped() : "failed";
   if (target.groupAnchor && beforeKill.pgid !== target.pid) return "failed";
 
   if (target.systemdUnit && platform === "linux") await signalUnit(target.systemdUnit, "SIGKILL");
-  signalVerifiedTarget(target.pid, beforeKill.pgid ?? target.pgid, "SIGKILL", platform);
+  delivered =
+    signalVerifiedTarget(target.pid, beforeKill.pgid ?? target.pgid, "SIGKILL", platform) ||
+    delivered;
   const killDeadline = Date.now() + killWaitMs;
   while (Date.now() < killDeadline) {
     await Bun.sleep(50);
     const check = await isVerifiedProcJobAlive(target, platform, readIdentity);
-    if (!check.alive && (await procJobGroupIsEmpty(target, platform))) return "stopped";
+    if (!check.alive && (await procJobGroupIsEmpty(target, platform))) return stopped();
   }
   return "failed";
 }

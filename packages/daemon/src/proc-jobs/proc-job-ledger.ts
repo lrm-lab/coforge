@@ -17,6 +17,7 @@ export type StoredProcJob = AgentProcJob & {
   startIdentity?: string;
   groupAnchor?: true;
   groupAnchorBootId?: string;
+  memoryStopRequested?: true;
 };
 
 export type RunningProcJobSummary = AgentProcJob & {
@@ -37,6 +38,7 @@ export function toPublicProcJob(stored: StoredProcJob): AgentProcJob {
     startIdentity: _identity,
     groupAnchor: _groupAnchor,
     groupAnchorBootId: _bootId,
+    memoryStopRequested: _memoryStopRequested,
     ...job
   } = stored;
   return job;
@@ -58,6 +60,7 @@ function decodeStoredProcJob(value: unknown): StoredProcJob | undefined {
       agentId: value.agentId,
       workspaceId: value.workspaceId,
       ...(value.groupAnchor === true ? { groupAnchor: true } : {}),
+      ...(value.memoryStopRequested === true ? { memoryStopRequested: true } : {}),
       ...(typeof value.groupAnchorBootId === "string"
         ? { groupAnchorBootId: value.groupAnchorBootId }
         : {}),

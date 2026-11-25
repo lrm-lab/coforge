@@ -28,7 +28,6 @@ import {
   procJobLedgerPath,
   readProcJobLedger,
   removeWorkspaceProcJobLedger,
-  toPublicProcJob,
   writeProcJobLedger,
   type StoredProcJob,
 } from "./proc-job-ledger";
@@ -38,6 +37,8 @@ import {
   removeProcJobLogFiles,
   rotateProcLogIfNeeded,
 } from "./proc-job-logs";
+import { ProcJobMemoryMonitor, settleProcJobMemoryStop } from "./proc-job-memory-monitor";
+import { PROC_JOB_RSS_INTERVAL_MS, type ProcJobRssSampler } from "./proc-job-rss-sampler";
 import { stopProcJobTargets } from "./proc-job-stop";
 
 const logger = getLogger(["coforge", "daemon", "proc"]);
@@ -58,6 +59,8 @@ export type ProcJobManagerOptions = {
   systemdPresentCheck?: () => boolean;
   readIdentity?: typeof readProcJobIdentity;
   retainSampledProcessGroup?: boolean;
+  memoryConfigPath?: string;
+  rssSampler?: ProcJobRssSampler;
 };
 
 export class ProcJobManager {
@@ -79,6 +82,10 @@ export class ProcJobManager {
       | "retainSampledProcessGroup"
     >
   >;
+  readonly #memoryConfigPath?: string;
+  readonly #memory: ProcJobMemoryMonitor;
+  #samplingMemory = false;
+  #sweepGeneration = 0;
   readonly #readIdentity?: typeof readProcJobIdentity;
   readonly #jobs = new Map<string, StoredProcJob[]>();
   readonly #queues = new Map<string, Promise<unknown>>();
@@ -93,6 +100,8 @@ export class ProcJobManager {
     const platform = options.platform ?? process.platform;
     let cachedSystemdRun: Promise<boolean> | undefined;
     this.#readIdentity = options.readIdentity;
+    this.#memoryConfigPath = options.memoryConfigPath;
+    this.#memory = new ProcJobMemoryMonitor(platform, options.rssSampler);
     this.#options = {
       workspaceId: options.workspaceId,
       workspaceRoot: options.workspaceRoot,
@@ -123,7 +132,9 @@ export class ProcJobManager {
     const stored = await readProcJobLedger(procJobLedgerPath(this.#options.stateDirectory));
     let dirty = false;
     const reconciled = await Promise.all(
-      stored.map(async (record) => {
+      stored.map(async (storedRecord) => {
+        const { memoryStopRequested, ...record } = storedRecord;
+        if (memoryStopRequested) dirty = true;
         if (record.status !== "running") return record;
         if (await procJobMayBeRunning(record, this.#options.platform)) return record;
         dirty = true;
@@ -143,6 +154,7 @@ export class ProcJobManager {
     if (!this.#closed && !this.#sweepTimer) {
       this.#sweepTimer = setInterval(() => {
         void this.#sweepAll().catch(() => {});
+        void this.#sweepMemory().catch(() => {});
       }, this.#options.sweepIntervalMs);
       this.#sweepTimer.unref();
     }
@@ -230,6 +242,54 @@ export class ProcJobManager {
     );
   }
 
+  async #sweepMemory(): Promise<void> {
+    if (this.#samplingMemory || this.#closed || this.#purged) return;
+    this.#samplingMemory = true;
+    const generation = this.#sweepGeneration;
+    try {
+      const exceeded = await this.#memory.sample([...this.#jobs.values()].flat());
+      const sampledAt = Date.now();
+      const canEnforce = () => {
+        const elapsed = Date.now() - sampledAt;
+        return (
+          !this.#closed &&
+          !this.#purged &&
+          generation === this.#sweepGeneration &&
+          elapsed >= 0 &&
+          elapsed < PROC_JOB_RSS_INTERVAL_MS
+        );
+      };
+      await Promise.allSettled(
+        exceeded.map((record) =>
+          this.#enqueueAgent(record.agentId, async () => {
+            if (!canEnforce()) return;
+            const list = this.#jobs.get(record.agentId);
+            const index = list?.indexOf(record) ?? -1;
+            if (!list || index < 0 || record.status !== "running") return;
+            const pending = { ...record, memoryStopRequested: true as const };
+            list[index] = pending;
+            try {
+              await this.#persistLedger();
+            } catch (error) {
+              list[index] = record;
+              throw error;
+            }
+            if (!canEnforce()) {
+              list[index] = record;
+              await this.#persistLedger();
+              return;
+            }
+            list[index] = await settleProcJobMemoryStop(pending, this.#options).catch(() => record);
+            await this.#pruneExited(record.agentId);
+            await this.#persistLedger();
+          }),
+        ),
+      );
+    } finally {
+      this.#samplingMemory = false;
+    }
+  }
+
   list(agentId: string): Promise<AgentProcListResponse> {
     return this.#enqueueAgent(agentId, async () => {
       if (this.#purged)
@@ -240,7 +300,7 @@ export class ProcJobManager {
       const jobs = await this.#reconcileAgent(agentId);
       return {
         ok: true,
-        jobs: jobs.map(toPublicProcJob),
+        jobs: jobs.map((job) => this.#memory.toPublic(job)),
         limit: this.#options.maxJobsPerAgent,
       };
     });
@@ -274,6 +334,7 @@ export class ProcJobManager {
         systemdPresentCheck: this.#options.systemdPresentCheck,
         readIdentity: this.#readIdentity,
         retainSampledProcessGroup: this.#options.retainSampledProcessGroup,
+        memoryConfigPath: this.#memoryConfigPath,
         onLateExit: (jobId, exitCode, signal) => {
           void this.#recordProcessExit(agentId, jobId, exitCode, signal);
         },
@@ -312,7 +373,7 @@ export class ProcJobManager {
 
       return {
         ok: true,
-        job: toPublicProcJob(finalRecord),
+        job: this.#memory.toPublic(finalRecord),
         ...(replacedExited ? { replacedExited: true } : {}),
       };
     });
@@ -356,7 +417,7 @@ export class ProcJobManager {
       });
       return {
         ok: true,
-        job: toPublicProcJob(job),
+        job: this.#memory.toPublic(job),
         ...slice,
       };
     });
@@ -490,6 +551,8 @@ export class ProcJobManager {
 
   close(): void {
     this.#closed = true;
+    this.#sweepGeneration++;
+    this.#memory.reset();
     if (this.#sweepTimer) {
       clearInterval(this.#sweepTimer);
       this.#sweepTimer = undefined;

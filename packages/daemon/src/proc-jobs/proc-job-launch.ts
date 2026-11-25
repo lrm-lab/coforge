@@ -15,6 +15,7 @@ import {
 } from "#src/platform/proc-job-process";
 import { isPidAlive } from "#src/platform/process-liveness";
 import { runtimeAllowsProcJobs, sanitizeProcJobEnvironment } from "./proc-job-environment";
+import { readProcJobMemoryLimit } from "./proc-job-memory-config";
 import { ProcJobError } from "./proc-job-error";
 import { markProcJobExited, toPublicProcJob, type StoredProcJob } from "./proc-job-ledger";
 import { prepareProcJobLogFile } from "./proc-job-logs";
@@ -68,6 +69,7 @@ export async function launchAgentProcJob(input: {
   onLateExit: (jobId: string, exitCode: number | null, signal: string | null) => void;
   readIdentity?: typeof readProcJobIdentity;
   retainSampledProcessGroup?: boolean;
+  memoryConfigPath?: string;
 }): Promise<StoredProcJob> {
   if (input.platform !== "darwin" && input.platform !== "linux")
     throw new ProcJobError(
@@ -122,6 +124,10 @@ export async function launchAgentProcJob(input: {
     jobEnv: request.env,
   });
 
+  const limitBytes = input.memoryConfigPath
+    ? await readProcJobMemoryLimit(input.memoryConfigPath)
+    : 0;
+
   let logPath: string;
   try {
     logPath = await prepareProcJobLogFile(agentWorkspaceDir, name);
@@ -136,7 +142,8 @@ export async function launchAgentProcJob(input: {
   const id = randomUUID();
   const useUserSystemd = input.platform === "linux" && (await input.systemdRunAvailable());
   const systemdUnit = useUserSystemd ? systemdScopeName(input.agentId, name, id) : undefined;
-  const groupAnchor = input.retainSampledProcessGroup && !systemdUnit ? true : undefined;
+  const groupAnchor =
+    (input.retainSampledProcessGroup || limitBytes > 0) && !systemdUnit ? true : undefined;
   const stopsWithService =
     input.platform === "linux" && !useUserSystemd && input.systemdPresentCheck();
 
@@ -151,6 +158,9 @@ export async function launchAgentProcJob(input: {
     pgid: null,
     ...(systemdUnit ? { systemdUnit } : {}),
     ...(groupAnchor ? { groupAnchor } : {}),
+    ...(groupAnchor && limitBytes > 0
+      ? { memory: { mode: "process_group_rss" as const, limitBytes } }
+      : {}),
     ...(stopsWithService ? { stopsWithService: true } : {}),
     status: "running",
     startedAt: new Date().toISOString(),

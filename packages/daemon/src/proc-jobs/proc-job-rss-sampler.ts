@@ -29,14 +29,21 @@ export class ProcJobRssSampler {
   #previous = new Map<string, string>();
   #lastSampleAt: number | undefined;
   #sampling = false;
+  #generation = 0;
 
   constructor(options: RssSamplerOptions = {}) {
     const platform = options.platform ?? process.platform;
-    this.#now = options.now ?? (() => performance.now());
+    this.#now = options.now ?? Date.now;
     this.#timeoutMs = options.timeoutMs ?? PROC_JOB_RSS_TIMEOUT_MS;
     this.#readGroups = options.readGroups ?? ((signal) => readProcJobRssGroups(platform, signal));
     this.#verifyAnchor =
       options.verifyAnchor ?? ((target) => verifyProcJobGroupAnchor(target, platform));
+  }
+
+  reset(): void {
+    this.#generation++;
+    this.#previous.clear();
+    this.#lastSampleAt = undefined;
   }
 
   async #read(
@@ -74,17 +81,16 @@ export class ProcJobRssSampler {
 
   async sample(targets: readonly ProcJobRssTarget[]): Promise<RssReading[] | undefined> {
     const now = this.#now();
+    const elapsed = this.#lastSampleAt === undefined ? undefined : now - this.#lastSampleAt;
     if (
       this.#sampling ||
-      (this.#lastSampleAt !== undefined && now - this.#lastSampleAt < PROC_JOB_RSS_INTERVAL_MS)
+      (elapsed !== undefined && elapsed >= 0 && elapsed < PROC_JOB_RSS_INTERVAL_MS - 1)
     )
       return undefined;
-    if (
-      this.#lastSampleAt !== undefined &&
-      now - this.#lastSampleAt >= 2 * PROC_JOB_RSS_INTERVAL_MS
-    )
+    if (elapsed !== undefined && (elapsed < 0 || elapsed >= 2 * PROC_JOB_RSS_INTERVAL_MS - 1))
       this.#previous.clear();
     this.#sampling = true;
+    const generation = this.#generation;
     this.#lastSampleAt = now;
     const abort = new AbortController();
     const deadline = performance.now() + this.#timeoutMs;
@@ -100,6 +106,7 @@ export class ProcJobRssSampler {
         this.#read(targets, abort.signal).catch(() => undefined),
         expired,
       ]);
+      if (generation !== this.#generation) return undefined;
       const previous = this.#previous;
       this.#previous = new Map();
       const timedOut = abort.signal.aborted || performance.now() >= deadline;
