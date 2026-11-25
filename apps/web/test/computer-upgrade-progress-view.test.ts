@@ -5,6 +5,8 @@ import {
   buildComputerUpgradeProgressView,
   describeComputerUpgradeFailureNotice,
   describeComputerUpgradeSuccessBatch,
+  imageUpgradePresentation,
+  resolveHeroUpgradeAction,
   resolveProgressComputerVersion,
   runtimeUpgradePresentation,
 } from "#src/features/computers/computer-upgrade-progress-view";
@@ -453,4 +455,85 @@ test("resolveDetailUpgradeRequest restores an in-flight followed upgrade after s
       "c1",
     ),
   ).toEqual({ state: "requesting", version: "0.1.35", target: "runtime" });
+});
+
+test("imageUpgradePresentation maps available, upgrading, failed, and offline cloud image slots", () => {
+  const available = imageUpgradePresentation({
+    slot: { state: "available", offer: "0.1.35-dev.2" },
+    canUpgrade: true,
+    online: true,
+    upgradeInFlight: false,
+  });
+  expect(available.headerAction).toEqual({ kind: "upgrade", disabled: false });
+  expect(available.versionNotice).toEqual({
+    kind: "available",
+    version: "0.1.35-dev.2",
+    prerelease: true,
+    offline: false,
+  });
+
+  const offline = imageUpgradePresentation({
+    slot: { state: "available", offer: "2026.12.01" },
+    canUpgrade: true,
+    online: false,
+    upgradeInFlight: false,
+  });
+  expect(offline.headerAction).toEqual({ kind: "upgrade", disabled: true });
+  expect(offline.versionNotice).toEqual({
+    kind: "available",
+    version: "2026.12.01",
+    prerelease: false,
+    offline: true,
+  });
+
+  const upgrading = imageUpgradePresentation({
+    slot: { state: "upgrading", version: "2026.12.01", delivered: true },
+    canUpgrade: true,
+    online: true,
+    upgradeInFlight: true,
+  });
+  expect(upgrading.headerAction).toEqual({ kind: "upgrading", disabled: true });
+  expect(upgrading.versionNotice).toEqual({ kind: "upgrading", version: "2026.12.01" });
+
+  const failed = imageUpgradePresentation({
+    slot: {
+      state: "failed",
+      version: "2026.12.01",
+      offer: "2026.12.01",
+      failure: { headline: "image pull failed", steps: [] },
+    },
+    canUpgrade: true,
+    online: true,
+    upgradeInFlight: false,
+  });
+  expect(failed.headerAction).toEqual({ kind: "retry", disabled: false });
+  expect(failed.versionNotice).toMatchObject({
+    kind: "issue",
+    tone: "error",
+    detail: "image pull failed",
+  });
+});
+
+test("resolveHeroUpgradeAction promotes image update to hero when runtime has none, and keeps inline image action when both exist", () => {
+  const runtimeAvailable = { kind: "upgrade" as const, disabled: false };
+  const imageAvailable = { kind: "upgrade" as const, disabled: false };
+  const imageUpgrading = { kind: "upgrading" as const, disabled: true as const };
+
+  expect(resolveHeroUpgradeAction(undefined, imageAvailable)).toEqual({
+    heroTarget: "image",
+    heroAction: imageAvailable,
+    inlineImageAction: undefined,
+  });
+
+  expect(resolveHeroUpgradeAction(runtimeAvailable, imageAvailable)).toEqual({
+    heroTarget: "runtime",
+    heroAction: runtimeAvailable,
+    inlineImageAction: imageAvailable,
+  });
+
+  expect(resolveHeroUpgradeAction(runtimeAvailable, imageUpgrading)).toEqual({
+    heroTarget: "image",
+    heroAction: imageUpgrading,
+    inlineImageAction: undefined,
+  });
 });

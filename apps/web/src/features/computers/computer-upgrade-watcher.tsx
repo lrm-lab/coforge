@@ -48,11 +48,10 @@ export function ComputerUpgradeWatcher() {
   );
   const settledSet = new Set(settled.map(({ upgrade }) => upgrade.requestId));
   const settledIds = settled.map(({ upgrade }) => upgrade.requestId).join(",");
-  const activeRuntime = followed.filter(
-    (upgrade) =>
-      upgrade.startedHere && upgrade.target !== "image" && !settledSet.has(upgrade.requestId),
+  const activeUpgrades = followed.filter(
+    (upgrade) => upgrade.startedHere && !settledSet.has(upgrade.requestId),
   );
-  const activeRuntimeKey = activeRuntime.map((upgrade) => upgrade.requestId).join(",");
+  const activeUpgradesKey = activeUpgrades.map((upgrade) => upgrade.requestId).join(",");
 
   useEffect(() => {
     let changed = false;
@@ -66,13 +65,12 @@ export function ComputerUpgradeWatcher() {
         computerUpgradeSettledToastable(status) &&
         status.computerVersion
       ) {
-        if (upgrade.target !== "image")
-          appNotice.dismiss(computerUpgradeNoticeId(upgrade.computerId));
+        appNotice.dismiss(computerUpgradeNoticeId(upgrade.computerId));
         succeeded.push({
           version: status.computerVersion,
           computerName: upgrade.computerName,
         });
-      } else if (upgrade.startedHere && upgrade.target !== "image") {
+      } else if (upgrade.startedHere) {
         const failureNotice = describeComputerUpgradeFailureNotice({ upgrade, status });
         if (failureNotice) {
           const viewingComputer = viewingComputerId === upgrade.computerId;
@@ -112,14 +110,14 @@ export function ComputerUpgradeWatcher() {
 
   useEffect(() => {
     const currentIds = new Set<string>();
-    for (const upgrade of activeRuntime) {
+    for (const upgrade of activeUpgrades) {
       currentIds.add(upgrade.requestId);
       if (!seenActiveIdsRef.current.has(upgrade.requestId)) {
         appNotice.dismiss(computerUpgradeNoticeId(upgrade.computerId));
       }
     }
     seenActiveIdsRef.current = currentIds;
-  }, [activeRuntimeKey]);
+  }, [activeUpgradesKey]);
 
   return null;
 }

@@ -12,9 +12,11 @@ export function RuntimeChip({
   status?: RuntimeStatus;
 }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-md bg-primary px-2 py-1 text-xs font-medium text-secondary ring-1 ring-secondary ring-inset hover:bg-primary_hover">
-      <RuntimeProviderMark provider={runtime.provider} className="size-3.5" />
-      {runtime.displayName}
+    <span className="inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-md bg-primary px-2 py-1 text-xs font-medium text-secondary ring-1 ring-secondary ring-inset hover:bg-primary_hover">
+      <RuntimeProviderMark provider={runtime.provider} className="size-3.5 shrink-0" />
+      <span dir="auto" className="min-w-0 truncate">
+        {runtime.displayName}
+      </span>
       {status && (
         <span
           role="img"

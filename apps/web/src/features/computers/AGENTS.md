@@ -91,8 +91,10 @@ provider)`, with its count and account label fixed when it opens.
   default when online and healthy, auto-opened when offline or on an upgrade issue). `ComputerUpgradeWatcher` polls upgrades in the background across routes without a floating progress toast (the upgrade button itself shows loading in place) and surfaces one-shot `toast.success` notifications on completion or per-Computer `appNotice` cards on failure (§13). `useComputerDetailLifecycle` also reads
   `followedComputerUpgradesQuery` so switching between Computers preserves in-flight upgrade state.
   A local Computer owner also sees pending `InstallerRecoveryAdvice` under Version when an
-  upgrade or retry is offered. A newer cloud node image stays on its own Image row and bordered
-  `ComputerUpgradeSlot`. Versions always show in full (`0.1.4-dev.2`, never `dev.2`).
+  upgrade or retry is offered. A newer cloud node image follows the same flat inline pattern under
+  its Image spec row (spanning 2 columns when a notice is present, with an in-place Hero action when
+  no runtime upgrade occupies the Hero button, or a compact inline action when both runtime and
+  image updates are offered simultaneously). Versions always show in full (`0.1.4-dev.2`, never `dev.2`).
 - The slot's "What's new" opens the notes the release catalog (`server/release-catalog/`) holds for
   the release on offer or being installed, in the UI's language with the other as fallback. No
   notes, or a failed read, means no link and never an error; it never holds up Upgrade.

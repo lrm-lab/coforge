@@ -69,5 +69,9 @@
   "computer_detail_cleanup_title": "Clean up leftover workspaces",
   "computer_detail_cleanup_description": "Scan and remove local folders left behind by deleted Agents to free disk space.",
   "computer_detail_kind_cloud": "Cloud",
-  "computer_detail_kind_local": "Local"
+  "computer_detail_kind_local": "Local",
+  "computer_detail_creator_unnamed": "Unnamed",
+  "computer_detail_show_more": "Show {remaining} more",
+  "computer_detail_copy_name": "Copy name",
+  "computer_detail_name_copied": "Copied"
 }

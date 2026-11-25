@@ -101,11 +101,11 @@ export function ComputerDetailHero({
 
   return (
     <section className="border-b border-secondary px-page py-4">
-      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-tertiary">
+      <div className="text-xs leading-relaxed text-tertiary wrap-anywhere">
         {metaParts.map((part, index) => (
-          <span key={`${index}-${part}`} className="inline-flex items-center gap-1.5">
+          <span key={`${index}-${part}`}>
             {index > 0 ? (
-              <span aria-hidden="true" className="text-quaternary">
+              <span aria-hidden="true" className="mx-1.5 text-quaternary">
                 ·
               </span>
             ) : null}
@@ -113,11 +113,11 @@ export function ComputerDetailHero({
           </span>
         ))}
         {hostname ? (
-          <span className="inline-flex items-center gap-1.5">
-            <span aria-hidden="true" className="text-quaternary">
+          <span>
+            <span aria-hidden="true" className="mx-1.5 text-quaternary">
               ·
             </span>
-            <span dir="ltr" className="font-mono">
+            <span dir="ltr" className="font-mono wrap-anywhere">
               {hostname}
             </span>
           </span>

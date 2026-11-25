@@ -4,6 +4,7 @@ import { Checkbox as AriaCheckbox } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
+import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { formatNumber } from "#src/lib/format-number";
 import { m } from "#src/paraglide/messages";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
@@ -41,8 +42,11 @@ export function ComputerDetailAgentRoster({
 }) {
   const [selecting, setSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
+  const [visibleCount, setVisibleCount] = useState(AGENT_ROSTER_PAGE_SIZE);
   const [busy, setBusy] = useState(false);
   const [failedNames, setFailedNames] = useState<string[]>([]);
+  const visibleAgents = agents.slice(0, visibleCount);
+  const hiddenCount = Math.max(0, agents.length - visibleAgents.length);
   const selectedAgents = agents.filter((agent) => selectedIds.has(agent.id));
   const selectionName = selectedAgents.map((agent) => agent.displayName).join(", ");
   const control = useAgentRuntimeControls({
@@ -160,12 +164,7 @@ export function ComputerDetailAgentRoster({
         )}
         {control.startDeferred && <p className="py-2 text-sm text-tertiary">{control.startNote}</p>}
         {agents.length ? (
-          // One grid for the heads and every row, which share its columns through `subgrid`: a
-          // column is as wide as its widest cell, so the name and runtime take what they need.
           <div className={cn(ROSTER_COLUMNS, "@2xl:grid")}>
-            {/* The table's column heads, set in by a row's checkbox while selecting; below `@2xl` a
-                row stacks its runtime under its name and its status is a dot, so there are no
-                columns to head. */}
             <div
               aria-hidden="true"
               className={cn(
@@ -179,7 +178,7 @@ export function ComputerDetailAgentRoster({
               <span>{m.computer_agents_column_status()}</span>
             </div>
             <ul className={cn(ROSTER_ROW, "divide-y divide-secondary border-y border-secondary")}>
-              {agents.map((agent) => {
+              {visibleAgents.map((agent) => {
                 const toggle = (selected: boolean) =>
                   setSelectedIds((current) => {
                     const next = new Set(current);
@@ -201,6 +200,18 @@ export function ComputerDetailAgentRoster({
                 );
               })}
             </ul>
+            {hiddenCount > 0 ? (
+              <div className="pt-2 @2xl:col-span-3">
+                <Button
+                  type="button"
+                  size="sm"
+                  color="secondary"
+                  onPress={() => setVisibleCount((count) => count + AGENT_ROSTER_PAGE_SIZE)}
+                >
+                  {m.computer_detail_show_more({ remaining: formatNumber(hiddenCount) })}
+                </Button>
+              </div>
+            ) : null}
           </div>
         ) : (
           <p className="py-2 text-sm text-tertiary">{m.computer_no_agents_on_computer()}</p>
@@ -211,13 +222,6 @@ export function ComputerDetailAgentRoster({
   );
 }
 
-/**
- * One Agent's row: while selecting, the whole row is the checkbox's own label: one control, so a
- * click anywhere toggles selection and nothing interactive nests inside anything else interactive
- * (the channel member picker's shape). Otherwise the row itself opens the Agent, with no trailing
- * "Open" button to aim at; its accessible name is its own content. An error's whole sentence, cut
- * to two lines in the row, is the row's tooltip: the row is the one button there is to hover.
- */
 function AgentRosterEntry({
   agent,
   selecting,
@@ -235,7 +239,10 @@ function AgentRosterEntry({
 }) {
   const display = useLiveAgentDisplay(agent.id) ?? agent.display;
   const status = agentDisplay(display);
-  const identity = <AgentRosterIdentity agent={agent} display={display} status={status} />;
+  const modelLabel = useAgentModelName(agent.id, agent.runtimeConfig?.model ?? "");
+  const identity = (
+    <AgentRosterIdentity agent={agent} display={display} status={status} modelLabel={modelLabel} />
+  );
   if (selecting)
     return (
       <AriaCheckbox
@@ -246,12 +253,12 @@ function AgentRosterEntry({
         className={cn(
           ROSTER_ROW,
           ROSTER_SELECT_INSET,
-          "relative flex w-full cursor-pointer items-center gap-3 py-3 text-sm hover:bg-primary_hover disabled:cursor-not-allowed",
+          "relative flex w-full cursor-pointer items-start gap-3 py-3 text-sm hover:bg-primary_hover disabled:cursor-not-allowed",
         )}
       >
         {({ isSelected, isDisabled, isFocusVisible }) => (
           <>
-            <span className="absolute inset-s-0 top-1/2 flex -translate-y-1/2">
+            <span className="absolute inset-s-0 top-4 flex">
               <CheckboxBase
                 isSelected={isSelected}
                 isDisabled={isDisabled}
@@ -265,42 +272,44 @@ function AgentRosterEntry({
     );
   if (!onSelectAgent)
     return <span className={cn(ROSTER_ROW, "block w-full py-3 text-sm")}>{identity}</span>;
+  const rowTooltipDescription = modelLabel ? `@${agent.name} · ${modelLabel}` : `@${agent.name}`;
   return (
-    <Button
-      noTextPadding
-      color="tertiary"
-      size="sm"
-      onPress={() => onSelectAgent(agent.id)}
-      className={cn(
-        ROSTER_ROW,
-        "h-auto w-full justify-start rounded-none px-0 py-3 text-start font-normal *:data-text:w-full *:data-text:min-w-0",
-        "@2xl:*:data-text:col-span-3 @2xl:*:data-text:grid @2xl:*:data-text:grid-cols-subgrid",
-      )}
-    >
-      {identity}
-    </Button>
+    <Tooltip title={agent.displayName} description={rowTooltipDescription}>
+      <Button
+        noTextPadding
+        color="tertiary"
+        size="sm"
+        onPress={() => onSelectAgent(agent.id)}
+        className={cn(
+          ROSTER_ROW,
+          "h-auto w-full justify-start rounded-none px-0 py-3 text-start font-normal *:data-text:w-full *:data-text:min-w-0",
+          "@2xl:*:data-text:col-span-3 @2xl:*:data-text:grid @2xl:*:data-text:grid-cols-subgrid",
+        )}
+      >
+        {identity}
+      </Button>
+    </Tooltip>
   );
 }
 
+const AGENT_ROSTER_PAGE_SIZE = 50;
 const ROSTER_COLUMNS =
-  "@2xl:grid-cols-[minmax(0,max-content)_minmax(0,max-content)_minmax(12rem,1fr)] @2xl:gap-x-4";
+  "@2xl:grid-cols-[fit-content(33%)_fit-content(32%)_minmax(12rem,1fr)] @2xl:gap-x-4";
 const ROSTER_ROW = "@2xl:col-span-3 @2xl:grid @2xl:grid-cols-subgrid @2xl:gap-x-4";
 const ROSTER_SELECT_INSET = "ps-7";
 
-/** One Agent's cells: avatar, name and @handle; its runtime and model; its status, an error in
- * full. Below `@2xl` the runtime stacks under the name and the status is a dot at the row's end,
- * its words for screen readers only, except an error's, which stacks under the runtime so it can
- * still be read. */
 function AgentRosterIdentity({
   agent,
   display,
   status,
+  modelLabel,
 }: {
   agent: ComputerDetailView["agents"][number];
   display: ComputerDetailView["agents"][number]["display"];
   status: ReturnType<typeof agentDisplay>;
+  modelLabel: string | undefined;
 }) {
-  const modelLabel = useAgentModelName(agent.id, agent.runtimeConfig?.model ?? "");
+  const hasErrorDetail = status.kind === "error" || Boolean(status.alert);
   const runtime = agent.provider ? (
     <>
       <RuntimeProviderMark provider={agent.provider} className="size-3.5 shrink-0" />
@@ -311,48 +320,52 @@ function AgentRosterIdentity({
     <span className="truncate text-destructive-primary">{m.agent_profile_runtime_invalid()}</span>
   ) : null;
   return (
-    <span className={cn(ROSTER_ROW, "flex w-full min-w-0 items-center")}>
-      <span className="flex min-w-0 flex-1 items-center gap-3">
+    <span className={cn(ROSTER_ROW, "flex w-full min-w-0 items-start")}>
+      <span className="flex min-w-0 flex-1 items-start gap-3">
         <AgentDisplayAvatar
           agentId={agent.id}
           name={agent.displayName}
           src={agent.avatarUrl}
           display={display}
           cornerDot={false}
+          className="mt-0.5"
         />
-        <span className="min-w-0">
-          <span className="block truncate font-medium text-primary">{agent.displayName}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-medium text-primary">
+            <bdi>{agent.displayName}</bdi>
+          </span>
           <span dir="ltr" className="block truncate text-start text-xs text-tertiary">
             @{agent.name}
           </span>
           <span className="flex min-w-0 items-center gap-1.5 text-xs text-tertiary @2xl:hidden">
             {runtime}
           </span>
-          {(status.kind === "error" || status.alert) && (
+          {hasErrorDetail && (
             <span
               aria-hidden="true"
-              className="text-xs break-words whitespace-normal text-error-primary @2xl:hidden"
+              className="mt-0.5 block text-xs whitespace-normal wrap-anywhere text-error-primary @2xl:hidden"
             >
               {status.label}
             </span>
           )}
         </span>
       </span>
-      <span className="hidden min-w-0 items-center gap-1.5 text-sm text-secondary @2xl:flex">
+      <span className="hidden min-w-0 items-center gap-1.5 text-sm text-secondary @2xl:mt-0.5 @2xl:flex">
         {runtime}
       </span>
       <span
         className={cn(
-          "flex min-w-0 items-center gap-1.5 text-sm",
-          status.alert ? "text-error-primary" : "shrink-0 text-secondary @2xl:items-start",
+          "flex min-w-0 items-start gap-1.5 text-sm @2xl:mt-0.5",
+          status.alert ? "text-error-primary" : "shrink-0 text-secondary",
         )}
       >
-        {/* On a wrapped error the dot stays on its first line (text-sm is 20px tall). */}
-        <AgentStatusMarker status={status} className="size-2 @2xl:mt-1.5" />
+        <span className={cn("flex shrink-0", status.alert ? "mt-0.5" : "mt-1.5")}>
+          <AgentStatusMarker status={status} className="size-2" />
+        </span>
         <span
           className={cn(
-            "@max-2xl:sr-only",
-            status.kind === "error" ? "break-words whitespace-normal" : "truncate",
+            "@max-2xl:sr-only min-w-0",
+            hasErrorDetail ? "whitespace-normal wrap-anywhere" : "truncate",
           )}
         >
           {status.label}

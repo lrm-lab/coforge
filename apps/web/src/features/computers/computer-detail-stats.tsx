@@ -3,27 +3,30 @@ import { Heading } from "react-aria-components";
 
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
+import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { Dialog, DialogTrigger, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { ComputerDate } from "./computer-detail-date";
+import { ComputerDate, isValidComputerDate } from "./computer-detail-date";
 import type { ComputerDetailView } from "./computer-detail-view";
 import { operatingSystemLabel } from "./computer-identity";
 import { ComputerReleaseNotesLink, useComputerRelease } from "./computer-release-notes";
 import type { RuntimeUpgradeVersionNotice } from "./computer-upgrade-progress-view";
-import {
-  ComputerUpgradeSlot,
-  UpgradeCommand,
-  type ComputerUpgradeSlotState,
-} from "./computer-upgrade-slot";
+import { UpgradeCommand } from "./computer-upgrade-slot";
 import { InstallerRecoveryAdvice } from "./installer-recovery-advice";
+
+export type InlineUpgradeAction = {
+  kind: "upgrade" | "upgrading" | "retry";
+  label: string;
+  disabled: boolean;
+  onPress: () => void;
+};
 
 export function ComputerDetailStats({
   computer,
-  label,
   timeZone,
   creatorName,
   isCloud,
@@ -32,15 +35,14 @@ export function ComputerDetailStats({
   isLatestVersion = false,
   versionNotice,
   showRecoveryAdvice = false,
-  imageSlot,
+  imageNotice,
+  imageAction,
   canUpgrade,
   upgradeInFlight,
-  onImageUpgrade,
   runtimesAction,
   runtimes,
 }: {
   computer: ComputerDetailView;
-  label: string;
   timeZone: string | null;
   creatorName: string;
   isCloud: boolean;
@@ -49,21 +51,24 @@ export function ComputerDetailStats({
   isLatestVersion?: boolean;
   versionNotice?: RuntimeUpgradeVersionNotice;
   showRecoveryAdvice?: boolean;
-  imageSlot: ComputerUpgradeSlotState | null;
+  imageNotice?: RuntimeUpgradeVersionNotice;
+  imageAction?: InlineUpgradeAction;
   canUpgrade: boolean;
   upgradeInFlight: boolean;
-  onImageUpgrade: () => void;
   runtimesAction?: ReactNode;
   runtimes?: ReactNode;
 }) {
   const os = operatingSystemLabel(computer);
   const imageVersion = isCloud ? currentImageVersion : null;
+  const showImageField = Boolean(imageVersion || (isCloud && imageNotice));
   const showInlineRecoveryAdvice = Boolean(
     showRecoveryAdvice && !isCloud && canUpgrade && computer.online && !upgradeInFlight,
   );
   const versionWide = Boolean(versionNotice || showInlineRecoveryAdvice);
+  const imageWide = Boolean(imageNotice);
+  const hasConnectedAt = Boolean(computer.connectedAt && isValidComputerDate(computer.connectedAt));
   const hasSpecs = Boolean(
-    currentVersion || os || imageVersion || computer.connectedAt || computer.creator,
+    currentVersion || os || showImageField || hasConnectedAt || computer.creator,
   );
 
   return (
@@ -83,24 +88,24 @@ export function ComputerDetailStats({
       {hasSpecs ? (
         <div
           className={cn(
-            "grid grid-cols-2 gap-x-6 gap-y-3.5",
+            "grid grid-cols-1 gap-x-6 gap-y-3.5 @sm:grid-cols-2",
             runtimes && "border-t border-secondary pt-4",
           )}
         >
           {currentVersion ? (
             <InfoField
               label={m.computer_version()}
-              className={versionWide ? "col-span-2" : undefined}
+              className={versionWide ? "@sm:col-span-2" : undefined}
             >
               <div className="flex min-w-0 flex-col items-start gap-1">
-                <span className="inline-flex flex-wrap items-baseline gap-x-1.5">
-                  <span dir="ltr" className="font-mono">
+                <span className="inline-flex max-w-full flex-wrap items-baseline gap-x-1.5">
+                  <span dir="ltr" className="font-mono wrap-anywhere">
                     {currentVersion}
                   </span>
                   {versionNotice?.kind === "upgrading" &&
                   versionNotice.version &&
                   versionNotice.version !== currentVersion ? (
-                    <span dir="ltr" className="font-mono text-tertiary">
+                    <span dir="ltr" className="font-mono text-tertiary wrap-anywhere">
                       → {versionNotice.version}
                     </span>
                   ) : isLatestVersion ? (
@@ -128,15 +133,34 @@ export function ComputerDetailStats({
             </InfoField>
           ) : null}
 
-          {imageVersion ? (
-            <InfoField label={m.computer_image_version()}>
-              <span dir="ltr" className="font-mono">
-                {imageVersion}
-              </span>
+          {showImageField ? (
+            <InfoField
+              label={m.computer_image_version()}
+              className={imageWide ? "@sm:col-span-2" : undefined}
+            >
+              <div className="flex min-w-0 flex-col items-start gap-1">
+                {imageVersion ? (
+                  <span className="inline-flex max-w-full flex-wrap items-baseline gap-x-1.5">
+                    <span dir="ltr" className="font-mono wrap-anywhere">
+                      {imageVersion}
+                    </span>
+                    {imageNotice?.kind === "upgrading" &&
+                    imageNotice.version &&
+                    imageNotice.version !== imageVersion ? (
+                      <span dir="ltr" className="font-mono text-tertiary wrap-anywhere">
+                        → {imageNotice.version}
+                      </span>
+                    ) : null}
+                  </span>
+                ) : null}
+                {imageNotice ? (
+                  <VersionUpgradeNotice notice={imageNotice} action={imageAction} />
+                ) : null}
+              </div>
             </InfoField>
           ) : null}
 
-          {computer.connectedAt ? (
+          {hasConnectedAt ? (
             <InfoField label={m.computer_connected_at()}>
               <ComputerDate value={computer.connectedAt} timeZone={timeZone} />
             </InfoField>
@@ -148,27 +172,21 @@ export function ComputerDetailStats({
                 <ActorAvatar
                   presence={false}
                   size="xs"
-                  className="size-5"
+                  className="size-5 shrink-0"
                   name={creatorName}
                   src={computer.creator.avatarUrl}
                 />
-                <span className="truncate font-medium">{creatorName}</span>
+                <Tooltip title={creatorName}>
+                  <TooltipTrigger className="max-w-full min-w-0 rounded-xs text-start outline-focus-ring focus-visible:outline-2">
+                    <span dir="auto" className="block truncate font-medium">
+                      {creatorName}
+                    </span>
+                  </TooltipTrigger>
+                </Tooltip>
               </span>
             </InfoField>
           ) : null}
         </div>
-      ) : null}
-
-      {isCloud && imageSlot ? (
-        <ComputerUpgradeSlot
-          slot={imageSlot}
-          canUpgrade={canUpgrade}
-          computerName={label}
-          cloud
-          online={computer.online}
-          upgradeInFlight={upgradeInFlight}
-          onUpgrade={onImageUpgrade}
-        />
       ) : null}
     </section>
   );
@@ -191,17 +209,25 @@ function InfoField({
   );
 }
 
-function VersionUpgradeNotice({ notice }: { notice: RuntimeUpgradeVersionNotice }) {
+function VersionUpgradeNotice({
+  notice,
+  action,
+}: {
+  notice: RuntimeUpgradeVersionNotice;
+  action?: InlineUpgradeAction;
+}) {
   if (notice.kind === "issue") {
-    return <VersionUpgradeIssueNotice notice={notice} />;
+    return <VersionUpgradeIssueNotice notice={notice} action={action} />;
   }
-  return <VersionUpgradeReleaseNotice notice={notice} />;
+  return <VersionUpgradeReleaseNotice notice={notice} action={action} />;
 }
 
 function VersionUpgradeReleaseNotice({
   notice,
+  action,
 }: {
   notice: Extract<RuntimeUpgradeVersionNotice, { kind: "available" | "upgrading" }>;
+  action?: InlineUpgradeAction;
 }) {
   const release = useComputerRelease(notice.version);
   if (notice.kind === "upgrading") {
@@ -229,14 +255,29 @@ function VersionUpgradeReleaseNotice({
         </Badge>
       )}
       {release && <ComputerReleaseNotesLink release={release} size="xs" />}
+      {action ? (
+        <Button
+          type="button"
+          size="xs"
+          color="secondary"
+          isLoading={action.kind === "upgrading"}
+          showTextWhileLoading
+          isDisabled={action.disabled}
+          onPress={action.onPress}
+        >
+          {action.label}
+        </Button>
+      ) : null}
     </div>
   );
 }
 
 function VersionUpgradeIssueNotice({
   notice,
+  action,
 }: {
   notice: Extract<RuntimeUpgradeVersionNotice, { kind: "issue" }>;
+  action?: InlineUpgradeAction;
 }) {
   const hasDetails = Boolean(
     notice.detail ||
@@ -274,7 +315,7 @@ function VersionUpgradeIssueNotice({
                   </Heading>
                   <p className="mt-2 text-sm text-tertiary">{notice.detail}</p>
                   {notice.steps && notice.steps.length > 0 && (
-                    <ol className="mt-3 list-decimal space-y-2 pl-4 text-sm text-secondary">
+                    <ol className="mt-3 list-decimal space-y-2 ps-4 text-sm text-secondary">
                       {notice.steps.map((step, index) => (
                         <li key={index}>
                           {step.text}
@@ -289,7 +330,7 @@ function VersionUpgradeIssueNotice({
                     </ol>
                   )}
                   {notice.unsettledWorkspaces && notice.unsettledWorkspaces.length > 0 && (
-                    <ul className="mt-3 list-disc space-y-1 pl-4 text-sm text-secondary">
+                    <ul className="mt-3 list-disc space-y-1 ps-4 text-sm text-secondary">
                       {notice.unsettledWorkspaces.map((name, index) => (
                         <li key={`${name}-${index}`} className="wrap-anywhere">
                           {name}
@@ -311,6 +352,17 @@ function VersionUpgradeIssueNotice({
           </ModalOverlay>
         </DialogTrigger>
       )}
+      {action ? (
+        <Button
+          type="button"
+          size="xs"
+          color="secondary"
+          isDisabled={action.disabled}
+          onPress={action.onPress}
+        >
+          {action.label}
+        </Button>
+      ) : null}
     </div>
   );
 }

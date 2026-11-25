@@ -1,9 +1,3 @@
-/** What a cloud image replace drops, and what the named volume keeps. */
-export const cloudImageUpdateConsequences = {
-  lost: ["in_flight_runs", "volatile_memory", "brief_disconnect"] as const,
-  kept: ["volume_files", "workspace_bindings", "agents_after_reconnect"] as const,
-};
-
 const IMAGE_LAYER = /(?:^|@)(sha256:[0-9a-f]{64})$/i;
 
 /** The content-addressed layer, whether the value is a raw id or a tagged digest. */

@@ -9,11 +9,15 @@ import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { formatDisplayPath } from "#src/features/agents/display-path";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { formatCalendarDate } from "#src/lib/dates";
+import { formatNumber } from "#src/lib/format-number";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import type { AgentWorkspaceScanSnapshot } from "./agent-workspace-scan.query";
+import { isValidComputerDate } from "./computer-detail-date";
 import type { ComputerAgentWorkspaceScan } from "./computer.schemas";
 import { formatWorkspaceSize } from "./workspace-size";
+
+const WORKSPACE_INVENTORY_PAGE_SIZE = 50;
 
 export function ComputerDetailWorkspaceInventory({
   snapshot,
@@ -35,11 +39,14 @@ export function ComputerDetailWorkspaceInventory({
   const hydrated = useHydrated();
   const listRef = useRef<HTMLDivElement>(null);
   const [deleting, setDeleting] = useState<ComputerAgentWorkspaceScan | null>(null);
-  const unanswered = snapshot?.workspaces.some((item) => item.status === "unavailable") ?? false;
-  const deletedCount = snapshot
-    ? snapshot.workspaces.filter((item) => item.state === "deleted" && item.status === "present")
-        .length
-    : 0;
+  const [visibleCount, setVisibleCount] = useState(WORKSPACE_INVENTORY_PAGE_SIZE);
+  const workspaces = snapshot?.workspaces ?? [];
+  const visibleWorkspaces = workspaces.slice(0, visibleCount);
+  const hiddenCount = Math.max(0, workspaces.length - visibleWorkspaces.length);
+  const unanswered = workspaces.some((item) => item.status === "unavailable");
+  const deletedCount = workspaces.filter(
+    (item) => item.state === "deleted" && item.status === "present",
+  ).length;
   const hasBody = status !== "idle" || snapshot !== null;
 
   return (
@@ -101,18 +108,27 @@ export function ComputerDetailWorkspaceInventory({
                     </p>
                   ) : null}
                   <ul className="divide-y divide-secondary">
-                    {snapshot.workspaces.map((workspace) => {
+                    {visibleWorkspaces.map((workspace) => {
                       const shownRootPath = formatDisplayPath(workspace.rootPath);
+                      const modifiedAt =
+                        workspace.modifiedAtMs > 0 ? new Date(workspace.modifiedAtMs) : null;
+                      const showModifiedAt = Boolean(
+                        hydrated && modifiedAt && isValidComputerDate(modifiedAt),
+                      );
                       return (
                         <li
                           key={workspace.agentId}
-                          className="flex min-w-0 items-center justify-between gap-4 py-2.5 text-sm"
+                          className="flex min-w-0 items-start justify-between gap-4 py-2.5 text-sm"
                         >
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
-                              <span className="truncate font-medium text-primary">
-                                {workspace.displayName}
-                              </span>
+                              <Tooltip title={workspace.displayName}>
+                                <TooltipTrigger className="max-w-full min-w-0 rounded-xs text-start outline-focus-ring focus-visible:outline-2">
+                                  <span className="block truncate font-medium text-primary">
+                                    <bdi>{workspace.displayName}</bdi>
+                                  </span>
+                                </TooltipTrigger>
+                              </Tooltip>
                               <span className="shrink-0 rounded-md bg-secondary px-1.5 py-0.5 text-xs font-medium text-tertiary">
                                 {workspace.state === "deleted"
                                   ? m.computer_agent_workspace_deleted()
@@ -138,14 +154,10 @@ export function ComputerDetailWorkspaceInventory({
                                 </p>
                                 <p className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs text-tertiary tabular-nums">
                                   <span>{workspaceStatistics(workspace)}</span>
-                                  {hydrated && workspace.modifiedAtMs > 0 ? (
+                                  {showModifiedAt && modifiedAt ? (
                                     <span>
                                       {m.computer_agent_workspace_modified({
-                                        date: formatCalendarDate(
-                                          new Date(workspace.modifiedAtMs),
-                                          timeZone,
-                                          getLocale(),
-                                        ),
+                                        date: formatCalendarDate(modifiedAt, timeZone, getLocale()),
                                       })}
                                     </span>
                                   ) : null}
@@ -157,6 +169,7 @@ export function ComputerDetailWorkspaceInventory({
                             <ButtonUtility
                               color="secondary"
                               icon={Trash01}
+                              className="shrink-0"
                               tooltip={m.computer_agent_workspace_delete()}
                               onClick={() => setDeleting(workspace)}
                             />
@@ -165,6 +178,20 @@ export function ComputerDetailWorkspaceInventory({
                       );
                     })}
                   </ul>
+                  {hiddenCount > 0 ? (
+                    <div className="pt-2">
+                      <Button
+                        type="button"
+                        size="xs"
+                        color="secondary"
+                        onPress={() =>
+                          setVisibleCount((count) => count + WORKSPACE_INVENTORY_PAGE_SIZE)
+                        }
+                      >
+                        {m.computer_detail_show_more({ remaining: formatNumber(hiddenCount) })}
+                      </Button>
+                    </div>
+                  ) : null}
                 </>
               ) : (
                 <p className="py-1 text-xs text-tertiary">{m.computer_agent_workspaces_none()}</p>

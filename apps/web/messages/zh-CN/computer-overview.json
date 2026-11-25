@@ -69,5 +69,9 @@
   "computer_detail_cleanup_title": "清理残留工作目录",
   "computer_detail_cleanup_description": "扫描并清理已删除 Agent 留下的本地文件夹，释放空间。",
   "computer_detail_kind_cloud": "云电脑",
-  "computer_detail_kind_local": "本地电脑"
+  "computer_detail_kind_local": "本地电脑",
+  "computer_detail_creator_unnamed": "未命名",
+  "computer_detail_show_more": "展开剩余 {remaining} 项",
+  "computer_detail_copy_name": "复制名称",
+  "computer_detail_name_copied": "已复制"
 }

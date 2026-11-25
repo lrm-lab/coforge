@@ -91,13 +91,17 @@ export function machineUsedPercent(reading: {
   availableBytes: number;
   totalBytes: number;
 }): number {
-  if (reading.totalBytes <= 0) return 0;
-  return Math.round(((reading.totalBytes - reading.availableBytes) / reading.totalBytes) * 100);
+  if (!Number.isFinite(reading.totalBytes) || reading.totalBytes <= 0) return 0;
+  const raw = Math.round(
+    ((reading.totalBytes - reading.availableBytes) / reading.totalBytes) * 100,
+  );
+  if (!Number.isFinite(raw)) return 0;
+  return Math.min(100, Math.max(0, raw));
 }
 
 function capacityLabel(bytes: number, base: number): string {
   const units = ["B", "KB", "MB", "GB", "TB", "PB"];
-  let value = bytes;
+  let value = Number.isFinite(bytes) && bytes > 0 ? bytes : 0;
   let unit = 0;
   const round = (n: number) => (n < 10 && unit > 0 ? Math.round(n * 10) / 10 : Math.round(n));
   while (round(value) >= base && unit < units.length - 1) {

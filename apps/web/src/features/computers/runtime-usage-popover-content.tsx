@@ -123,11 +123,13 @@ export function RuntimeUsagePopoverContent({
       <div className="min-h-0 divide-y divide-secondary overflow-y-auto">
         <div className="flex items-start gap-3 px-4 py-3">
           <div className="min-w-0 flex-1 space-y-1">
-            <h2 className="truncate font-semibold text-primary">{runtime.displayName}</h2>
+            <h2 dir="auto" className="font-semibold wrap-anywhere text-primary">
+              {runtime.displayName}
+            </h2>
             {(runtime.version || (showUsage && data?.result)) && (
               <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs text-tertiary">
                 {runtime.version && (
-                  <span dir="ltr" className="truncate">
+                  <span dir="ltr" className="wrap-anywhere">
                     {runtime.version}
                   </span>
                 )}
@@ -138,7 +140,7 @@ export function RuntimeUsagePopoverContent({
                 )}
               </p>
             )}
-            {notice && <p className="text-sm text-tertiary">{notice}</p>}
+            {notice && <p className="text-sm wrap-anywhere text-tertiary">{notice}</p>}
             {auth && (
               <p className="text-xs text-tertiary">{m.computer_runtime_account_visibility()}</p>
             )}
@@ -149,8 +151,6 @@ export function RuntimeUsagePopoverContent({
             )}
           </div>
           {(showUsage || notice) && (
-            // `isLoading` (React Aria's `isPending`) keeps focus on the button mid-press, where
-            // `isDisabled` would drop it (task #109). The tooltip repeats its name.
             <Tooltip title={refreshLabel}>
               <Button
                 size="xs"
@@ -170,7 +170,7 @@ export function RuntimeUsagePopoverContent({
               size="xs"
               color="tertiary"
               tooltip={m.controls_close()}
-              className="-mt-1 -mr-1.5 shrink-0"
+              className="-mt-1 -me-1.5 shrink-0"
               onClick={onClose}
             />
           )}
@@ -209,14 +209,12 @@ export function RuntimeUsagePopoverContent({
                     )}
                   </div>
                 )}
-                {/* The sign-out button takes the badge's place: the usage below already shows a
-                  limit or a failed read, and a badge beside it would name a state twice. */}
                 {sectionAction ??
                   (badge && (
                     <Badge
                       color={badge.ok ? "success" : "warning"}
                       size="sm"
-                      className="ml-auto shrink-0"
+                      className="ms-auto shrink-0"
                     >
                       {badge.label}
                     </Badge>
@@ -269,9 +267,9 @@ export function RuntimeUsagePopoverContent({
   );
 }
 
-/** A plan as a name: "pro" → "Pro"; a shouted "KIRO POWER" → "Kiro Power". */
 function formatPlan(plan: string) {
-  const words = plan === plan.toUpperCase() ? plan.toLowerCase() : plan;
+  const normalized = plan.replace(/[_-]+/g, " ").trim();
+  const words = normalized === normalized.toUpperCase() ? normalized.toLowerCase() : normalized;
   return words.replace(
     /(^|\s)(\p{L})/gu,
     (_, space: string, letter: string) => space + letter.toUpperCase(),

@@ -308,6 +308,67 @@ export function runtimeUpgradePresentation(input: {
   };
 }
 
+export function imageUpgradePresentation(input: {
+  slot: ComputerUpgradeSlotState | null;
+  canUpgrade: boolean;
+  online: boolean;
+  upgradeInFlight: boolean;
+}): RuntimeUpgradePresentation {
+  const { slot, canUpgrade, online, upgradeInFlight } = input;
+  if (!slot || slot.state === "progress") return {};
+  if (slot.state === "available") {
+    return {
+      headerAction: canUpgrade
+        ? { kind: "upgrade", disabled: !online || upgradeInFlight }
+        : undefined,
+      versionNotice: {
+        kind: "available",
+        version: slot.offer,
+        prerelease: isPrereleaseVersion(slot.offer),
+        offline: !online,
+      },
+    };
+  }
+  if (slot.state === "upgrading") {
+    return {
+      headerAction: canUpgrade ? { kind: "upgrading", disabled: true } : undefined,
+      versionNotice: { kind: "upgrading", version: slot.version },
+    };
+  }
+  const canRetry = canUpgrade && slot.offer !== undefined;
+  return {
+    headerAction: canRetry ? { kind: "retry", disabled: !online || upgradeInFlight } : undefined,
+    versionNotice: {
+      kind: "issue",
+      tone: "error",
+      title: m.computer_cloud_image_update_failed_title(),
+      detail: slot.failure.headline,
+      steps: slot.failure.steps,
+      errorId: slot.failure.errorId,
+    },
+  };
+}
+
+export function resolveHeroUpgradeAction(
+  runtimeAction: RuntimeUpgradeHeaderAction | undefined,
+  imageAction: RuntimeUpgradeHeaderAction | undefined,
+): {
+  heroTarget?: "runtime" | "image";
+  heroAction?: RuntimeUpgradeHeaderAction;
+  inlineImageAction?: RuntimeUpgradeHeaderAction;
+} {
+  if (imageAction?.kind === "upgrading") {
+    return { heroTarget: "image", heroAction: imageAction, inlineImageAction: undefined };
+  }
+  if (runtimeAction) {
+    return { heroTarget: "runtime", heroAction: runtimeAction, inlineImageAction: imageAction };
+  }
+  if (imageAction) {
+    return { heroTarget: "image", heroAction: imageAction, inlineImageAction: undefined };
+  }
+  return {};
+}
+
 export type ComputerUpgradeFailureNotice = {
   id: string;
   title: string;

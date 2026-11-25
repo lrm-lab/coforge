@@ -7,7 +7,7 @@ import type { AgentControlExecute } from "#src/features/agents/agent-runtime-con
 import type { RuntimeCatalog } from "#src/features/agents/agent-runtime-fields";
 import type { CreateAgentInput } from "#src/features/agents/agent.schemas";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import { humanLabel } from "#src/lib/human-label";
+import { humanLabel, UNNAMED_PERSON_NAME } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
 import type { AgentWorkspaceScanSnapshot } from "./agent-workspace-scan.query";
 import { ComputerDetailAdvanced } from "./computer-detail-advanced";
@@ -26,7 +26,12 @@ import { computerLabel } from "./computer-identity";
 import { activeRefusal, ComputerRefusalAlert } from "./computer-refusal";
 import { computerRestartBusy } from "./computer-restart-run";
 import { ComputerRuntimeList } from "./computer-runtimes";
-import { nextProgressDeadline, runtimeUpgradePresentation } from "./computer-upgrade-progress-view";
+import {
+  imageUpgradePresentation,
+  nextProgressDeadline,
+  resolveHeroUpgradeAction,
+  runtimeUpgradePresentation,
+} from "./computer-upgrade-progress-view";
 import { CloudImageUpdateDialog, ComputerUpgradeConfirmDialog } from "./computer-upgrade-slot";
 import type { ComputerRestartStatus, ComputerUpgradeStatus } from "./computer.schemas";
 import { FormatCloudComputerDialog } from "./format-cloud-computer-dialog";
@@ -116,7 +121,9 @@ export function ComputerDetail({
   });
   const workspaceSlug = useWorkspaceSlug();
   const label = computerLabel(computer);
-  const creatorName = computer.creator ? humanLabel(computer.creator) : "";
+  const resolvedCreator = computer.creator ? humanLabel(computer.creator) : "";
+  const creatorName =
+    resolvedCreator === UNNAMED_PERSON_NAME ? m.computer_detail_creator_unnamed() : resolvedCreator;
   const {
     isCloud,
     currentVersion,
@@ -149,6 +156,7 @@ export function ComputerDetail({
   });
   const canUpgrade = Boolean(onUpgrade) && computer.ownedByCurrentUser;
   const visibleRuntimeSlot = computer.ownedByCurrentUser ? runtimeSlot : null;
+  const visibleImageSlot = isCloud && computer.ownedByCurrentUser ? imageSlot : null;
   const [upgradeClockNow, setUpgradeClockNow] = useState(() => Date.now());
   const progressDeadline =
     visibleRuntimeSlot?.state === "progress"
@@ -167,17 +175,46 @@ export function ComputerDetail({
     upgradeInFlight: upgrading,
     now: upgradeClockNow,
   });
-  const heroUpgrade = runtimePresentation.headerAction
+  const imagePresentation = imageUpgradePresentation({
+    slot: visibleImageSlot,
+    canUpgrade,
+    online: computer.online,
+    upgradeInFlight: upgrading,
+  });
+  const { heroTarget, heroAction, inlineImageAction } = resolveHeroUpgradeAction(
+    runtimePresentation.headerAction,
+    imagePresentation.headerAction,
+  );
+  const runtimeActionLabel = (kind: "upgrade" | "upgrading" | "retry") =>
+    kind === "upgrading"
+      ? m.computer_upgrade_in_progress()
+      : kind === "retry"
+        ? m.computer_upgrade_retry_action()
+        : m.computer_upgrade();
+  const imageActionLabel = (kind: "upgrade" | "upgrading" | "retry") =>
+    kind === "upgrading"
+      ? m.computer_cloud_image_update_in_progress()
+      : kind === "retry"
+        ? m.computer_cloud_image_update_retry()
+        : m.computer_cloud_image_update_button();
+  const heroUpgrade = heroAction
     ? {
-        kind: runtimePresentation.headerAction.kind,
+        kind: heroAction.kind,
         label:
-          runtimePresentation.headerAction.kind === "upgrading"
-            ? m.computer_upgrade_in_progress()
-            : runtimePresentation.headerAction.kind === "retry"
-              ? m.computer_upgrade_retry_action()
-              : m.computer_upgrade(),
-        disabled: runtimePresentation.headerAction.disabled,
-        onPress: () => setUpgradeConfirmOpen(true),
+          heroTarget === "image"
+            ? imageActionLabel(heroAction.kind)
+            : runtimeActionLabel(heroAction.kind),
+        disabled: heroAction.disabled,
+        onPress: () =>
+          heroTarget === "image" ? setImageUpdateOpen(true) : setUpgradeConfirmOpen(true),
+      }
+    : undefined;
+  const inlineImageUpgrade = inlineImageAction
+    ? {
+        kind: inlineImageAction.kind,
+        label: imageActionLabel(inlineImageAction.kind),
+        disabled: inlineImageAction.disabled,
+        onPress: () => setImageUpdateOpen(true),
       }
     : undefined;
   const scanWorkspaces = async () => {
@@ -207,7 +244,10 @@ export function ComputerDetail({
           onPress: runRestart,
         }
       : undefined;
-  const autoOpenAdvanced = !computer.online || runtimePresentation.versionNotice?.kind === "issue";
+  const autoOpenAdvanced =
+    !computer.online ||
+    runtimePresentation.versionNotice?.kind === "issue" ||
+    imagePresentation.versionNotice?.kind === "issue";
 
   const runtimesAction = canRescan ? (
     <Button
@@ -305,7 +345,6 @@ export function ComputerDetail({
 
         <ComputerDetailStats
           computer={computer}
-          label={label}
           timeZone={timeZone}
           creatorName={creatorName}
           isCloud={isCloud}
@@ -317,10 +356,10 @@ export function ComputerDetail({
             runtimePresentation.headerAction !== undefined &&
             runtimePresentation.headerAction.kind !== "upgrading"
           }
-          imageSlot={computer.ownedByCurrentUser ? imageSlot : null}
+          imageNotice={imagePresentation.versionNotice}
+          imageAction={inlineImageUpgrade}
           canUpgrade={canUpgrade}
           upgradeInFlight={upgrading}
-          onImageUpgrade={() => setImageUpdateOpen(true)}
           runtimesAction={runtimesAction}
           runtimes={runtimesNode}
         />
@@ -363,6 +402,7 @@ export function ComputerDetail({
       <CloudImageUpdateDialog
         open={imageUpdateOpen}
         name={label}
+        currentVersion={currentImageVersion}
         version={imageOffer}
         onOpenChange={setImageUpdateOpen}
         onConfirm={async () => {

@@ -48,14 +48,14 @@ export function ComputerDetailAdvanced({
       className="group px-page"
     >
       <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 py-3 text-xs font-medium text-secondary transition-colors outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-brand [&::-webkit-details-marker]:hidden">
-        <span className="inline-flex items-center gap-1.5">
+        <span className="inline-flex shrink-0 items-center gap-1.5">
           <ChevronRight
             aria-hidden="true"
-            className="size-3.5 text-fg-quaternary transition-transform duration-(--duration-sm) ease-in-out group-open:rotate-90 rtl:rotate-180 rtl:group-open:rotate-90 motion-reduce:transition-none"
+            className="size-3.5 shrink-0 text-fg-quaternary transition-transform duration-(--duration-sm) ease-in-out group-open:rotate-90 rtl:rotate-180 rtl:group-open:rotate-90 motion-reduce:transition-none"
           />
           <span>{m.computer_detail_advanced_section()}</span>
         </span>
-        <span className="truncate font-normal text-quaternary">{summaryHint}</span>
+        <span className="min-w-0 truncate font-normal text-quaternary">{summaryHint}</span>
       </summary>
 
       <div className="space-y-4 pb-5">

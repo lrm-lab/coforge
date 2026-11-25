@@ -24,7 +24,7 @@ import {
 import { useRuntimeAuthStatusRefresh } from "./use-runtime-auth-signals";
 
 const RUNTIME_CHIP_TRIGGER_CLASS_NAME =
-  "rounded-md outline-none data-focus-visible:ring-2 data-focus-visible:ring-brand";
+  "max-w-full min-w-0 rounded-md outline-none data-focus-visible:ring-2 data-focus-visible:ring-brand";
 
 type AuthDialog = {
   kind: "sign_in" | "sign_out";
@@ -98,7 +98,7 @@ export function ComputerRuntimeList({
             if (!signIn && !(signable && shown === "logged_in")) return undefined;
             const label = signIn ? m.runtime_auth_sign_in() : m.runtime_auth_sign_out();
             return (
-              <div className="ml-auto flex shrink-0 items-center gap-1.5">
+              <div className="ms-auto flex shrink-0 items-center gap-1.5">
                 <PopoverAction onPress={() => open(signIn ? "sign_in" : "sign_out")}>
                   {(press) => (
                     <Tooltip title={label}>
@@ -149,7 +149,7 @@ export function ComputerRuntimeList({
             </div>
           );
           return (
-            <li key={provider}>
+            <li key={provider} className="max-w-full min-w-0">
               <RuntimeUsage
                 computerId={computer.id}
                 runtime={runtime}

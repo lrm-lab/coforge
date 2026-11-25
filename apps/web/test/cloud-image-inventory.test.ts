@@ -9,7 +9,6 @@ import {
 import {
   cloudComputerImage,
   cloudImageUpdateAvailable,
-  cloudImageUpdateConsequences,
 } from "#src/features/computers/cloud-image-update";
 
 describe("host image report", () => {
@@ -143,19 +142,6 @@ describe("cloud image update availability", () => {
       ),
     ).toBeUndefined();
     expect(cloudImageUpdateAvailable("sha256:new", "sha256:new")).toBe(false);
-  });
-
-  test("the replace keeps the volume and reconnects agents after a brief disconnect", () => {
-    expect(cloudImageUpdateConsequences.lost).toEqual([
-      "in_flight_runs",
-      "volatile_memory",
-      "brief_disconnect",
-    ]);
-    expect(cloudImageUpdateConsequences.kept).toEqual([
-      "volume_files",
-      "workspace_bindings",
-      "agents_after_reconnect",
-    ]);
   });
 });
 
