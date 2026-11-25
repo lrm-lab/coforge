@@ -74,6 +74,7 @@
   "computer_runtime_rescan_refreshed": "已刷新 {runtimes} 的模型。",
   "computer_runtime_rescan_provider_failed": "未能刷新 {runtime} 的模型：{reason}。",
   "computer_runtime_rescan_unknown": "原因未知",
+  "computer_runtime_catalog_auth_required": "请在这台电脑上登录 Devin，或检查账号权限",
   "computer_runtime_rescan_sign_in": "请在这台电脑上登录 {runtimes}。",
   "computer_runtime_rescan_failed": "电脑没有响应这次重新检测，请重试。",
   "computer_runtime_detection_pending": "检测中，暂时显示上次结果。",

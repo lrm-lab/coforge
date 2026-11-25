@@ -83,6 +83,7 @@
   "computer_runtime_rescan_refreshed": "Refreshed models for {runtimes}.",
   "computer_runtime_rescan_provider_failed": "Could not refresh {runtime} models: {reason}.",
   "computer_runtime_rescan_unknown": "reason unknown",
+  "computer_runtime_catalog_auth_required": "Sign in on this Computer or check your Devin account permissions",
   "computer_runtime_rescan_sign_in": "Sign in to {runtimes} on this Computer.",
   "computer_runtime_rescan_failed": "The Computer did not answer the rescan. Try again.",
   "computer_runtime_detection_pending": "Detecting… showing the last result for now.",

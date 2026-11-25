@@ -1,4 +1,7 @@
-import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import {
+  RUNTIME_CATALOG_AUTH_REQUIRED_DIAGNOSTIC,
+  type RuntimeProvider,
+} from "@lrm/coforge-sdk/internal";
 import type { RuntimeRescanFailure } from "#src/server/computers/computer-model-catalog-refresh.server";
 import type { ComputerDetailView } from "./computer-detail-view";
 import type { RuntimeCatalogRefreshResult } from "./runtime-catalog-refresh-poll";
@@ -25,11 +28,13 @@ export function runtimeRescanNotice(
     refreshed,
     failures,
     signedOut: failures
-      .map(({ provider }) => provider)
       .filter(
-        (provider) =>
-          isRuntimeLoginStateProvider(provider) && auth?.[provider]?.state === "logged_out",
-      ),
+        ({ provider, diagnostic }) =>
+          diagnostic !== RUNTIME_CATALOG_AUTH_REQUIRED_DIAGNOSTIC &&
+          isRuntimeLoginStateProvider(provider) &&
+          auth?.[provider]?.state === "logged_out",
+      )
+      .map(({ provider }) => provider),
   };
 }
 

@@ -1,4 +1,5 @@
 import { getLogger } from "@logtape/logtape";
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import {
   RUNTIME_AUTH_PROVIDERS,
   sanitizeRuntimeAuthStatus,
@@ -119,17 +120,18 @@ export class RuntimeAuthStatusCollector {
       RUNTIME_AUTH_PROVIDERS.map(async (provider) => {
         if (!installed.has(provider))
           return { provider, state: "unavailable", unavailableReason: "not_installed" } as const;
+        const last = previous.get(provider);
         if (providers && !providers.has(provider)) {
-          const kept = previous.get(provider);
-          if (kept) return kept;
+          if (last) return last;
         }
         // Throttle: an unforced pass inside the window reuses the last read's status. A forced
         // pass — a page open, a login or logout landing — always runs a real probe.
         const fresh =
           !force &&
-          this.#last &&
+          last &&
+          !(provider === RUNTIME_PROVIDER.DEVIN && last.unavailableReason === "not_installed") &&
           now() - (this.#readAt.get(provider) ?? 0) < RUNTIME_AUTH_STATUS_THROTTLE_MS;
-        return fresh ? (previous.get(provider) ?? this.#read(provider)) : this.#read(provider);
+        return fresh ? last : this.#read(provider);
       }),
     );
     const collection = { collectedAtMs: now(), runtimes };
@@ -154,7 +156,10 @@ export class RuntimeAuthStatusCollector {
         timeoutMs,
         () => new Error(`${provider} login status timed out`),
       );
-      return sanitizeRuntimeAuthStatus(status, provider) ?? { provider, state: "unknown" };
+      const sanitized = sanitizeRuntimeAuthStatus(status, provider);
+      if (provider === RUNTIME_PROVIDER.DEVIN && sanitized?.unavailableReason === "not_installed")
+        return { provider, state: "unknown" };
+      return sanitized ?? { provider, state: "unknown" };
     } catch (error) {
       logger.info("runtime auth status read failed", {
         provider,

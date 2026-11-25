@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { runtimeLoginChip } from "#src/features/computers/runtime-login-chip";
+import { shownAccount } from "#src/features/computers/runtime-usage-status";
 
 import {
   parseStoredRuntimeAuth,
@@ -73,4 +75,27 @@ test("a stored label that is not masked is dropped on read", () => {
   expect(runtimeAuthView(stored, { showAccount: true, runtimes: runtimeRows(both) })).toEqual({
     codex: { provider: "codex", state: "logged_in" },
   });
+});
+
+test("a compatible Devin inventory supersedes a missing auth status until the next report", () => {
+  const viewer = { showAccount: true, runtimes: [{ provider: "devin", version: "3000.14.30821" }] };
+  const absent = {
+    provider: "devin",
+    state: "unavailable",
+    unavailableReason: "not_installed",
+  } as const;
+  const report = storedRuntimeAuth(1, [absent]);
+
+  const auth = runtimeAuthView(report, viewer).devin;
+  expect(auth).toEqual({ provider: "devin", state: "unknown" });
+  const chip = runtimeLoginChip({ provider: "devin", status: auth, canSignIn: true });
+  expect(chip.signable).toBe(true);
+  expect(shownAccount(chip.account, undefined)).toBe("logged_out");
+  expect(runtimeAuthView(report, { ...viewer, runtimes: [] }).devin).toBeUndefined();
+  expect(parseStoredRuntimeAuth(report)?.runtimes.devin).toEqual(absent);
+
+  for (const state of ["logged_out", "logged_in"] as const) {
+    const status = { provider: "devin", state } as const;
+    expect(runtimeAuthView(storedRuntimeAuth(2, [status]), viewer).devin).toEqual(status);
+  }
 });

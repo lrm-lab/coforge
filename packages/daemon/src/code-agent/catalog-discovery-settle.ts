@@ -1,7 +1,13 @@
 import { getLogger } from "@logtape/logtape";
-import { RuntimeStartFailedError, RuntimeVersionUnsupportedError } from "@lrm/coforge-anvil";
+import {
+  RuntimeLoginRequiredError,
+  RuntimeStartFailedError,
+  RuntimeVersionUnsupportedError,
+} from "@lrm/coforge-anvil";
 import {
   diagnosticErrorCode,
+  RUNTIME_CATALOG_AUTH_REQUIRED_DIAGNOSTIC,
+  RUNTIME_PROVIDER,
   type RuntimeProvider,
   type RuntimeUnavailableCode,
 } from "@lrm/coforge-sdk/internal";
@@ -11,10 +17,15 @@ const logger = getLogger(["coforge", "daemon", "runtime-inventory"]);
 /** The safe reason a failed catalog discovery reports: the typed classes a person can act on,
  * classified like the runtime report's unavailable codes; anything else stays `unknown` — native
  * diagnostics never leave the daemon. */
-export function catalogFailureOf(error: unknown): {
+export function catalogFailureOf(
+  provider: RuntimeProvider,
+  error: unknown,
+): {
   code: RuntimeUnavailableCode;
   diagnostic?: string;
 } {
+  if (provider === RUNTIME_PROVIDER.DEVIN && error instanceof RuntimeLoginRequiredError)
+    return { code: "probe_failed", diagnostic: RUNTIME_CATALOG_AUTH_REQUIRED_DIAGNOSTIC };
   if (error instanceof RuntimeStartFailedError)
     return {
       code: "start_failed",
@@ -45,7 +56,7 @@ export async function settleCatalogDiscoveries<T extends object>(
       try {
         return { provider, result: await discovery };
       } catch (error) {
-        const failure = catalogFailureOf(error);
+        const failure = catalogFailureOf(provider, error);
         logger.warning("Code Agent model catalog discovery failed", {
           event: "code_agent_catalog:discovery_failed",
           provider,

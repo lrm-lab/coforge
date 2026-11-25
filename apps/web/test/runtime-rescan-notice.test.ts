@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { RUNTIME_CATALOG_AUTH_REQUIRED_DIAGNOSTIC } from "@lrm/coforge-sdk/internal";
 import type { RuntimeCatalogRefreshResult } from "#src/features/computers/runtime-catalog-refresh-poll";
 import {
   runtimeDetectionStatus,
@@ -19,6 +20,24 @@ describe("runtimeRescanNotice", () => {
 
   test("a request that could not start still shows the rescan error", () => {
     expect(runtimeRescanNotice({ status: "error" })).toEqual({ kind: "error" });
+  });
+
+  test("a Devin authentication diagnostic already gives the sign-in action", () => {
+    const failures = [
+      {
+        provider: "devin",
+        code: "probe_failed",
+        diagnostic: RUNTIME_CATALOG_AUTH_REQUIRED_DIAGNOSTIC,
+      },
+    ] as const;
+    expect(
+      runtimeRescanNotice(
+        { status: "reported", refreshed: [], failures: [...failures] },
+        {
+          devin: { provider: "devin", state: "logged_out" },
+        },
+      ),
+    ).toEqual({ kind: "reported", refreshed: [], failures, signedOut: [] });
   });
 
   test("keeps login state independent of the refresh result and uses only visible reports", () => {

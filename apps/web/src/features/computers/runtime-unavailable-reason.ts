@@ -1,4 +1,7 @@
-import type { RuntimeUnavailableCode } from "@lrm/coforge-sdk/internal";
+import {
+  RUNTIME_CATALOG_AUTH_REQUIRED_DIAGNOSTIC,
+  type RuntimeUnavailableCode,
+} from "@lrm/coforge-sdk/internal";
 
 import { m } from "#src/paraglide/messages";
 
@@ -11,6 +14,8 @@ export function runtimeUnavailableReason(
   unavailableCode: RuntimeUnavailableCode,
   diagnostic?: string | null,
 ): string {
+  if (unavailableCode === "probe_failed" && diagnostic === RUNTIME_CATALOG_AUTH_REQUIRED_DIAGNOSTIC)
+    return m.computer_runtime_catalog_auth_required();
   const reason =
     unavailableCode === "version_unsupported"
       ? m.computer_runtime_unavailable_version_unsupported()

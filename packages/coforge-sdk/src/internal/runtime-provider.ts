@@ -38,6 +38,9 @@ export function requireRuntimeProvider(value: unknown, message: string): Runtime
   return provider;
 }
 
+export const RUNTIME_CATALOG_AUTH_REQUIRED_DIAGNOSTIC =
+  "Sign in on this Computer or check your Devin account permissions";
+
 export function parseRuntimeProvider(value: unknown): RuntimeProvider | undefined {
   return typeof value === "string" && RUNTIME_PROVIDERS.has(value)
     ? (value as RuntimeProvider)

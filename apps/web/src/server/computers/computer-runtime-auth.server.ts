@@ -5,7 +5,11 @@ import {
   type RuntimeAuthProvider,
   type RuntimeAuthStatus,
 } from "@lrm/coforge-anvil";
-import type { RuntimeAuthReportedState, RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import {
+  RUNTIME_PROVIDER,
+  type RuntimeAuthReportedState,
+  type RuntimeProvider,
+} from "@lrm/coforge-sdk/internal";
 import { runtimeAuthChannel } from "#src/features/computers/runtime-auth-realtime";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
@@ -99,16 +103,23 @@ export function runtimeAuthView(
   viewer: {
     showAccount: boolean;
     /** The runtimes this viewer may see; an unusable one has no login state to show. */
-    runtimes: readonly { provider: string; unavailableCode?: string | null }[];
+    runtimes: readonly { provider: string; version?: string; unavailableCode?: string | null }[];
   },
 ): Partial<Record<RuntimeAuthProvider, RuntimeAuthStatus>> {
-  const visibleProviders = viewer.runtimes
-    .filter((runtime) => !runtime.unavailableCode)
-    .map((runtime) => runtime.provider);
+  const visibleRuntimes = viewer.runtimes.filter((runtime) => !runtime.unavailableCode);
   const view: Partial<Record<RuntimeAuthProvider, RuntimeAuthStatus>> = {};
   for (const status of Object.values(parseStoredRuntimeAuth(column)?.runtimes ?? {})) {
-    if (!visibleProviders.includes(status.provider)) continue;
     const { provider, state, unavailableReason } = status;
+    const runtime = visibleRuntimes.find((entry) => entry.provider === provider);
+    if (!runtime) continue;
+    if (
+      provider === RUNTIME_PROVIDER.DEVIN &&
+      runtime.version &&
+      unavailableReason === "not_installed"
+    ) {
+      view[provider] = { provider, state: "unknown" };
+      continue;
+    }
     view[provider] = viewer.showAccount
       ? status
       : { provider, state, ...(unavailableReason ? { unavailableReason } : {}) };

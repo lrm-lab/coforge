@@ -3,8 +3,10 @@ import {
   type CodeAgentModelCatalog,
   diagnosticErrorCode,
 } from "@lrm/coforge-sdk/internal";
+import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import { getLogger } from "@logtape/logtape";
 import { catalogErrorMessage, within } from "#src/catalog-discovery";
+import { RuntimeLoginRequiredError } from "#src/contract";
 import { scrubStderrHint } from "#src/stderr-hint";
 import { devinConnection, devinBounded, type DevinConnection } from "./connection";
 import type { DevinRuntimeHost } from "./host";
@@ -14,6 +16,7 @@ const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.DE
 
 /** `devin acp` plus `session/new` is not a text-command catalog; a cold CLI can take a while. */
 export const DEVIN_CATALOG_TIMEOUT_MS = 30_000;
+const ACP_AUTH_REQUIRED_CODE = RequestError.authRequired().code;
 
 /**
  * The model list is `session/new`'s `model` select, exactly as `devin acp` reports it: every
@@ -45,7 +48,11 @@ export async function discoverDevinCatalog(
     });
     await transport.initialize(timeoutMs);
     const session = await within(
-      transport.connection.agent.request("session/new", { cwd, mcpServers: [] }),
+      transport.connection.agent.request("session/new", { cwd, mcpServers: [] }).catch((error) => {
+        if (error instanceof RequestError && error.code === ACP_AUTH_REQUIRED_CODE)
+          throw new RuntimeLoginRequiredError("Devin catalog requires authentication");
+        throw error;
+      }),
       timeoutMs,
     );
     sessionId = session.sessionId;
@@ -75,6 +82,7 @@ export async function discoverDevinCatalog(
     if (models.length === 0) throw new Error("Devin model catalog unavailable");
     return { provider: RUNTIME_PROVIDER.DEVIN, models };
   } catch (error) {
+    if (error instanceof RuntimeLoginRequiredError) throw error;
     logger.warning("Devin model discovery unavailable", {
       event: "devin.catalog.unavailable",
       error_code: diagnosticErrorCode(error),
@@ -91,7 +99,6 @@ export async function discoverDevinCatalog(
         timeoutMs,
       ).catch(() => undefined);
     }
-    // Discovery reports "unavailable", never a rejection, even when cleanup fails.
     await transport?.dispose().catch(() => undefined);
   }
 }
