@@ -30,7 +30,7 @@ export function ActivityInboxHeader({
     return (
       <header className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-secondary px-4">
         <div className="flex min-w-0 items-center gap-2">
-          <h1 className="truncate text-md font-semibold text-primary">{m.navigation_activity()}</h1>
+          <h1 className="truncate text-lg font-semibold text-primary">{m.navigation_activity()}</h1>
           {activeCount !== undefined && (
             <span data-activity-active-count className="sr-only">
               {m.activity_inbox_active_count({ count: activeCount })}

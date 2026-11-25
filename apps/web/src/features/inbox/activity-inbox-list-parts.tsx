@@ -64,14 +64,14 @@ function ActivityInboxSectionHeading({
   return (
     <h2
       className={cn(
-        "flex items-center gap-1.5 px-4 pt-2 pb-1 text-xs font-medium text-quaternary",
+        "flex items-center gap-1.5 px-4 pt-2 pb-1 text-sm font-medium text-quaternary",
         className,
       )}
     >
-      {Icon && <Icon aria-hidden="true" className="size-3 shrink-0 text-fg-quaternary" />}
+      {Icon && <Icon aria-hidden="true" className="size-3.5 shrink-0 text-fg-quaternary" />}
       {label}
       {count !== undefined && (
-        <span className="font-normal text-quaternary tabular-nums">{count}</span>
+        <span className="text-xs font-normal text-quaternary tabular-nums">{count}</span>
       )}
     </h2>
   );

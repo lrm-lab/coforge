@@ -15,10 +15,10 @@ export function ActivityInboxPending() {
       <div className="flex min-h-0 flex-1 flex-col bg-primary lg:w-list-column lg:flex-none lg:shrink-0">
         {desktop ? (
           <header className="flex h-12 shrink-0 items-center gap-2 border-b border-secondary px-4">
-            <h1 className="truncate text-md font-semibold text-primary">
+            <h1 className="truncate text-lg font-semibold text-primary">
               {m.navigation_activity()}
             </h1>
-            <Skeleton className="h-7 w-14 rounded-md" />
+            <Skeleton className="h-8 w-16 rounded-md" />
           </header>
         ) : (
           <>
@@ -33,8 +33,8 @@ export function ActivityInboxPending() {
             <li key={row} className="flex items-center gap-3 rounded-lg px-2.5 py-2.5">
               <Skeleton className="size-8 shrink-0 rounded-md" />
               <div className="min-w-0 flex-1">
-                <Skeleton className="h-4 w-2/5" />
-                <Skeleton className="mt-1.5 h-3.5 w-4/5" />
+                <Skeleton className="h-5 w-2/5" />
+                <Skeleton className="mt-1.5 h-4 w-4/5" />
               </div>
             </li>
           ))}

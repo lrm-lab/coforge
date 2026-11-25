@@ -89,7 +89,7 @@ export const ActivityArtifactRow = memo(function ActivityArtifactRow({
             <span className="flex min-w-0 items-center gap-2">
               <span
                 className={cn(
-                  "min-w-0 flex-1 truncate text-xs",
+                  "min-w-0 flex-1 truncate text-sm",
                   unread ? "text-tertiary" : "text-quaternary",
                 )}
               >

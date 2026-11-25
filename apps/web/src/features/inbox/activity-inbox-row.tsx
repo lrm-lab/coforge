@@ -167,7 +167,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="flex min-w-0 items-center gap-1.5">
               {taskMeta && (
-                <span className="shrink-0 text-xs text-quaternary tabular-nums">
+                <span className="shrink-0 text-sm text-quaternary tabular-nums">
                   #{taskMeta.number}
                   {thread?.task?.ownerName ? (
                     <span className={cn(NARROW_HIDDEN, "ms-1")}>
@@ -203,7 +203,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
             <span className="flex min-w-0 items-center gap-2">
               <span
                 className={cn(
-                  "min-w-0 flex-1 truncate text-xs [&_[data-mention-label]]:bg-transparent [&_[data-mention-label]]:px-0 [&_code]:bg-transparent [&_code]:p-0 [&_code]:text-inherit",
+                  "min-w-0 flex-1 truncate text-sm [&_[data-mention-label]]:bg-transparent [&_[data-mention-label]]:px-0 [&_code]:bg-transparent [&_code]:p-0 [&_code]:text-inherit",
                   unread ? "text-tertiary" : "text-quaternary",
                 )}
               >

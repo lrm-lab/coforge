@@ -37,7 +37,7 @@ export function ActivityInboxFilterPicker({
     <Dropdown.Root>
       <AriaButton
         aria-label={m.activity_inbox_filter_label()}
-        className="inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-md border border-secondary bg-primary px-2 text-xs font-medium text-secondary outline-focus-ring transition-colors hover:bg-primary_hover hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2"
+        className="inline-flex min-h-8 shrink-0 cursor-pointer items-center gap-1 rounded-md border border-secondary bg-primary px-2.5 py-1 text-sm font-medium text-secondary outline-focus-ring transition-colors hover:bg-primary_hover hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2"
       >
         <span>{current.label()}</span>
         <CountBadge count={counts[current.id]} size="sm" />
@@ -90,7 +90,7 @@ export function ActivityInboxUnreadToggle({
       onHoverStart={() => onFilterIntent?.(next)}
       onFocus={() => onFilterIntent?.(next)}
       className={cn(
-        "inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 text-xs font-medium outline-focus-ring transition-colors focus-visible:outline-2 focus-visible:outline-offset-2",
+        "inline-flex min-h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2.5 py-1 text-sm font-medium outline-focus-ring transition-colors focus-visible:outline-2 focus-visible:outline-offset-2",
         active
           ? "bg-active text-primary"
           : "text-tertiary hover:bg-primary_hover hover:text-primary",

@@ -41,7 +41,7 @@ export function ActivityRowTitle({
   return (
     <span
       className={cn(
-        "block min-w-0 truncate text-sm",
+        "block min-w-0 truncate text-md",
         unread ? "font-semibold text-primary" : "text-tertiary",
       )}
     >
