@@ -25,21 +25,31 @@ export class CodexProvider implements CodeAgentProvider {
   readonly reportsCompaction = true;
   readonly idleRecycleMinColdGapMs = CODEX_IDLE_RECYCLE_MIN_COLD_GAP_MS;
   readonly supportsSessionSummaryRecycle = true;
-  readonly #command: readonly string[];
+  readonly #command: () => readonly string[] | Promise<readonly string[]>;
   readonly #host: CodexRuntimeHost;
 
-  constructor(options: { host: CodexRuntimeHost; command?: readonly string[] }) {
+  constructor(options: {
+    host: CodexRuntimeHost;
+    command?: readonly string[] | (() => Promise<readonly string[]>);
+  }) {
     this.#host = options.host;
-    this.#command = options.command ?? [RUNTIME_PROVIDER.CODEX, "app-server"];
+    const command = options.command ?? [RUNTIME_PROVIDER.CODEX, "app-server"];
+    this.#command = typeof command === "function" ? command : () => command;
   }
 
   async readUsage(options: {
     workingDirectory: string;
     timeoutMs?: number;
   }): Promise<UsageSnapshot | null> {
+    let command: readonly string[];
+    try {
+      command = await this.#command();
+    } catch {
+      return null;
+    }
     return readCodexUsage(options.workingDirectory, {
       host: this.#host,
-      command: this.#command,
+      command,
       timeoutMs: options.timeoutMs,
     });
   }
@@ -48,9 +58,15 @@ export class CodexProvider implements CodeAgentProvider {
     workingDirectory: string;
     idempotencyKey: string;
   }): Promise<ResetCreditOutcome> {
+    let command: readonly string[];
+    try {
+      command = await this.#command();
+    } catch {
+      return "unknown";
+    }
     return consumeCodexResetCredit(options.workingDirectory, {
       host: this.#host,
-      command: this.#command,
+      command,
       idempotencyKey: options.idempotencyKey,
     });
   }
@@ -63,9 +79,11 @@ export class CodexProvider implements CodeAgentProvider {
   async createAgentSession(options: AgentSessionOptions): Promise<AgentSession> {
     if (options.sessionId !== undefined && !options.sessionId.trim())
       throw new Error("Invalid session ID");
+    const command = await this.#command();
+    options.startupSignal?.throwIfAborted();
     const environment = this.#host.buildSessionEnvironment(options);
     const process = new JsonlProcess(
-      this.#command,
+      command,
       options.agentWorkspaceDirectory,
       environment,
       this.#host.processTreeSpawner,

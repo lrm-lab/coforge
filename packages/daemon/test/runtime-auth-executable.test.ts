@@ -3,6 +3,7 @@ import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CODEX_LOGIN_STATUS_TIMEOUT_MS } from "@lrm/coforge-anvil/codex";
+import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 
 // The probe runs with an owned HOME and empty PATH, so even the broken adapter cannot read
 // a real account. The Codex installer directory is outside the enriched search path too.
@@ -28,6 +29,13 @@ for (const provider of ["codex", "claude-code"] as const) {
           await chmod(decoy, 0o755);
         }
         const executable = join(install, provider === "codex" ? "codex" : "claude");
+        const codexCommands = `case "$1" in
+  app-server) exec "$AUTH_FIXTURE_BUN" "$AUTH_FIXTURE_CODEX_SERVER" ;;
+  --version) echo "codex-cli 0.169.0" ;;
+  login) [ "$2" = "status" ] || exit 12
+         echo "Logged in using ChatGPT" >&2 ;;
+  *) exit 13 ;;
+esac`;
         await Bun.write(
           executable,
           `#!/bin/sh
@@ -36,7 +44,7 @@ for (const provider of ["codex", "claude-code"] as const) {
 [ "$CLAUDE_CONFIG_DIR" = "$HOME/claude-profile" ] || exit 9
 [ -z "$COFORGE_AGENT_PROXY_URL" ] || exit 10
 auth-fixture-helper || exit 11
-${provider === "codex" ? 'echo "Logged in using ChatGPT" >&2' : 'echo \'{"loggedIn":true,"authMethod":"oauth"}\''}
+${provider === "codex" ? codexCommands : 'echo \'{"loggedIn":true,"authMethod":"oauth"}\''}
 `,
         );
         await chmod(executable, 0o755);
@@ -51,6 +59,8 @@ ${provider === "codex" ? 'echo "Logged in using ChatGPT" >&2' : 'echo \'{"logged
             HOME: home,
             PATH: emptyPath,
             AUTH_FIXTURE_HOME: home,
+            AUTH_FIXTURE_BUN: process.execPath,
+            AUTH_FIXTURE_CODEX_SERVER: anvilRuntimeFixtures.codex,
             CODEX_HOME: join(home, "codex-profile"),
             CLAUDE_CONFIG_DIR: join(home, "claude-profile"),
             CODEX_INSTALL_DIR: install,

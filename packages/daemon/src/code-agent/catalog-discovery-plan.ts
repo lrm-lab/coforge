@@ -1,3 +1,5 @@
+import { ensureCodexExecutable } from "./runtime-probe";
+import { fileStatCacheKey } from "./runtime-inventory-cache";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -121,23 +123,34 @@ export async function planCatalogDiscoveries(
       })),
   ]);
   if (usable(RUNTIME_PROVIDER.CODEX)) {
-    const executable = await resolveExecutable(RUNTIME_PROVIDER.CODEX);
-    if (executable)
-      discoveries.push([
-        RUNTIME_PROVIDER.CODEX,
-        () =>
-          discoverCodexCatalog(
-            commands.codex ?? [executable, "app-server"],
-            cwd,
-            environment,
-            codexCatalogHost,
-            options.catalogDiscoveryTimeoutMs ?? CATALOG_DISCOVERY_TIMEOUT_MS,
-            options.force,
-          ).then((catalog) => ({
-            keyPaths: [executable],
-            catalog,
-          })),
-      ]);
+    discoveries.push([
+      RUNTIME_PROVIDER.CODEX,
+      async () => {
+        const executable = probe.probeCodex
+          ? await ensureCodexExecutable(
+              environment,
+              options.platform,
+              probe,
+              options.cacheDirectory,
+              options.codexProbeTimeoutMs,
+            )
+          : await resolveExecutable(RUNTIME_PROVIDER.CODEX);
+        if (!executable) return {};
+        const keyPaths = [executable];
+        const cacheKey = options.cacheDirectory
+          ? await fileStatCacheKey(keyPaths, Boolean(probe.probeCodex))
+          : undefined;
+        const catalog = await discoverCodexCatalog(
+          commands.codex ?? [executable, "app-server"],
+          cwd,
+          environment,
+          codexCatalogHost,
+          options.catalogDiscoveryTimeoutMs ?? CATALOG_DISCOVERY_TIMEOUT_MS,
+          options.force,
+        );
+        return { keyPaths, cacheKey, catalog };
+      },
+    ]);
   }
   if (usable(RUNTIME_PROVIDER.CLAUDE_CODE)) {
     discoveries.push([

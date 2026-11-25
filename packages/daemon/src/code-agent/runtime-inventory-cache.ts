@@ -76,12 +76,19 @@ export async function updateInventoryCache(
  * file cannot be stat'd (missing, unreadable), which every caller treats as an unconditional
  * cache miss.
  */
-export async function fileStatCacheKey(paths: readonly string[]): Promise<string | undefined> {
+export async function fileStatCacheKey(
+  paths: readonly string[],
+  includeIdentity = false,
+): Promise<string | undefined> {
   if (!paths.length) return undefined;
   try {
     const stats = await Promise.all(paths.map((path) => stat(path)));
     return paths
-      .map((path, index) => `${path}:${stats[index]!.mtimeMs}:${stats[index]!.size}`)
+      .map((path, index) => {
+        const { mtimeMs, size, ctimeMs, dev, ino, mode } = stats[index]!;
+        const basic = `${path}:${mtimeMs}:${size}`;
+        return includeIdentity ? `${basic}:${ctimeMs}:${dev}:${ino}:${mode}` : basic;
+      })
       .join("|");
   } catch {
     return undefined;

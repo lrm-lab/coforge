@@ -75,6 +75,7 @@ export async function discoverCodeAgentRuntimes(
       undefined,
       options.cacheDirectory,
       options.versionProbeTimeoutMs,
+      options.codexProbeTimeoutMs,
     )),
   ];
 }
@@ -195,17 +196,20 @@ export async function discoverCodeAgentCatalogs(
     const probedAt = Date.now();
     const updates = (
       await Promise.all(
-        results.map(async ({ provider, keyPaths, catalog }) => {
+        results.map(async ({ provider, keyPaths, cacheKey, catalog }) => {
           if (!provider || !keyPaths || !catalog) return undefined;
           const version = runtimes.find((runtime) => runtime.provider === provider)?.version;
-          const key = await catalogCacheKeyFor(
-            provider,
-            probe,
-            searchPath,
-            environment,
-            options.platform ?? process.platform,
-            version,
-          );
+          const key =
+            provider === RUNTIME_PROVIDER.CODEX
+              ? cacheKey
+              : await catalogCacheKeyFor(
+                  provider,
+                  probe,
+                  searchPath,
+                  environment,
+                  options.platform ?? process.platform,
+                  version,
+                );
           return key ? { provider, key, catalog } : undefined;
         }),
       )
@@ -214,8 +218,12 @@ export async function discoverCodeAgentCatalogs(
     // restore a runtime or entry another discovery changed or dropped in between.
     if (updates.length)
       await updateInventoryCache(cacheDirectory, (current) => {
-        for (const { provider, key, catalog } of updates)
-          current[provider] = { ...current[provider], key, catalog, catalogProbedAt: probedAt };
+        for (const { provider, key, catalog } of updates) {
+          const previous = current[provider];
+          if (provider === RUNTIME_PROVIDER.CODEX && previous?.runtime && previous.key !== key)
+            continue;
+          current[provider] = { ...previous, key, catalog, catalogProbedAt: probedAt };
+        }
       });
   }
   return {

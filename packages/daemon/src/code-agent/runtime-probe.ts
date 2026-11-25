@@ -4,15 +4,14 @@ import {
   type RuntimeUnavailableCode,
   diagnosticErrorCode,
 } from "@lrm/coforge-sdk/internal";
-import { processSpawner } from "#src/code-agent/process-host";
 import { agentEnvironment } from "./environment";
 import { withoutClaudeCodeMarker } from "@lrm/coforge-anvil/claude-code";
-import { JsonlProcess } from "@lrm/coforge-anvil/execution";
 import {
   VERSION_PROBE_TIMEOUT_MS,
   withDeadline,
   type CodeAgentProbe,
-  CATALOG_DISCOVERY_TIMEOUT_MS,
+  AgentProcessCleanupError,
+  RuntimeStartFailedError,
   within,
 } from "@lrm/coforge-anvil";
 import { stderrHint } from "#src/code-agent/version-probe";
@@ -28,13 +27,19 @@ import { codeAgentExecutableSearchPath } from "#src/platform/code-agent-path";
 import { getLogger } from "@logtape/logtape";
 import {
   externalCodeAgents,
+  readSelectedCodexExecutable,
+  remainingCodexExecutables,
+  rememberCodexExecutable,
   resolveExternalCodeAgentExecutable,
   type ExternalCodeAgentProbe,
   type ExternalCodeAgentProvider,
 } from "./runtime-executable";
 
-import { initializeCodex } from "@lrm/coforge-anvil/codex";
-import { codexClientInfo } from "./codex/host";
+import {
+  CODEX_PROBE_TIMEOUT_MS,
+  CODEX_PROBE_BUDGET_MULTIPLIER,
+  probeCodexExecutable,
+} from "./codex/executable-probe";
 import {
   fileStatCacheKey,
   readInventoryCache,
@@ -63,21 +68,7 @@ export const hostCodeAgentProbe: ExternalCodeAgentProbe = {
       // when the probe child sees the same environment the discovery saw.
       env: env ?? agentEnvironment(undefined),
     }),
-  probe: async (provider, executable, env) => {
-    if (provider !== RUNTIME_PROVIDER.CODEX) return undefined;
-    const child = new JsonlProcess(
-      [executable, "app-server"],
-      process.cwd(),
-      agentEnvironment(undefined, env ?? Bun.env),
-      processSpawner,
-    );
-    try {
-      await initializeCodex(child, CATALOG_DISCOVERY_TIMEOUT_MS, codexClientInfo);
-    } finally {
-      await child.dispose().catch(() => undefined);
-    }
-    return readVersionWithBun(executable, env);
-  },
+  probeCodex: probeCodexExecutable,
   resolve: async (provider, _name, searchPath) =>
     provider === RUNTIME_PROVIDER.CLAUDE_CODE
       ? await resolveClaudeCodeExecutable(
@@ -96,14 +87,13 @@ async function probeRuntimeVersion(
    * Agent process would get it, so version probing sees the same launchers. */
   environment: Readonly<Record<string, string | undefined>>,
   versionProbeTimeoutMs: number,
+  codexProbeTimeoutMs: number,
 ): Promise<RuntimeVersionProbe> {
   const probeEnvironment = agentEnvironment(undefined, environment);
-  const providerProbe =
-    provider === RUNTIME_PROVIDER.CODEX
-      ? probe.probe?.(provider, executable, probeEnvironment)
-      : undefined;
-  if (providerProbe !== undefined) {
-    const version = await within(providerProbe);
+  if (provider === RUNTIME_PROVIDER.CODEX && (probe.probeCodex || probe.probe)) {
+    const version = probe.probeCodex
+      ? await probe.probeCodex(executable, probeEnvironment, codexProbeTimeoutMs)
+      : await within(probe.probe!(provider, executable, probeEnvironment));
     return version
       ? { kind: "runtime", runtime: { provider, version, displayName: "Codex" } }
       : { kind: "unavailable", code: "probe_failed" };
@@ -206,109 +196,236 @@ function unusableRuntime(
 /** A live probe that read a refused version must erase this provider's cached runtime. A later
  * miss would otherwise restore an older, still-supported entry for a different executable. */
 type DiscoveredExternalAgent =
-  | { runtime: RuntimeMetadata; executable?: string; cacheKey?: string }
+  | { runtime: RuntimeMetadata; executable?: string; cacheKey?: string; executableKey?: string }
   | { dropProvider: ExternalCodeAgentProvider; unusable: RuntimeMetadata };
 
+function usableResult(
+  result: DiscoveredExternalAgent,
+): result is Extract<DiscoveredExternalAgent, { runtime: RuntimeMetadata }> {
+  return "runtime" in result && !result.runtime.unavailableCode;
+}
+
+type DiscoveryEnvironment = Readonly<Record<string, string | undefined>>;
+const codexProbes = new WeakMap<
+  DiscoveryEnvironment,
+  Promise<DiscoveredExternalAgent | undefined>
+>();
+
+function shareCodexProbe(
+  environment: DiscoveryEnvironment,
+  probe: () => Promise<DiscoveredExternalAgent | undefined>,
+): Promise<DiscoveredExternalAgent | undefined> {
+  const running = codexProbes.get(environment);
+  if (running) return running;
+  const pending = probe().finally(() => codexProbes.delete(environment));
+  codexProbes.set(environment, pending);
+  return pending;
+}
+
+export async function ensureCodexExecutable(
+  environment: DiscoveryEnvironment = Bun.env,
+  platform: NodeJS.Platform = process.platform,
+  probe: ExternalCodeAgentProbe = hostCodeAgentProbe,
+  cacheDirectory?: string,
+  timeoutMs?: number,
+): Promise<string | undefined> {
+  const selected = await readSelectedCodexExecutable(environment);
+  if (selected) return selected;
+  const runtimes = await discoverExternalCodeAgents(
+    probe,
+    environment,
+    platform,
+    RUNTIME_PROVIDER.CODEX,
+    cacheDirectory,
+    undefined,
+    timeoutMs,
+  );
+  const executable = await readSelectedCodexExecutable(environment);
+  if (executable) return executable;
+  if (!runtimes.length) return undefined;
+  throw new RuntimeStartFailedError("No compatible Codex executable could be started");
+}
+
 export async function discoverExternalCodeAgents(
+  ...args: Parameters<typeof discoverExternalCodeAgentDetails>
+): Promise<RuntimeMetadata[]> {
+  return (await discoverExternalCodeAgentDetails(...args)).map(({ runtime }) => runtime);
+}
+
+export async function discoverExternalCodeAgentDetails(
   probe: ExternalCodeAgentProbe,
   environment: Readonly<Record<string, string | undefined>> = Bun.env,
   platform: NodeJS.Platform = process.platform,
   requestedProvider?: RuntimeMetadata["provider"],
   cacheDirectory?: string,
   versionProbeTimeoutMs: number = VERSION_PROBE_TIMEOUT_MS,
-): Promise<RuntimeMetadata[]> {
-  const runtimes: RuntimeMetadata[] = [];
+  codexProbeTimeoutMs: number = CODEX_PROBE_TIMEOUT_MS,
+): Promise<Array<{ runtime: RuntimeMetadata; executable?: string }>> {
+  const runtimes: Array<{ runtime: RuntimeMetadata; executable?: string }> = [];
   const searchPath = codeAgentExecutableSearchPath(environment, platform);
   const cache = cacheDirectory ? await readInventoryCache(cacheDirectory) : undefined;
   const results = await Promise.all(
     externalCodeAgents
       .filter(({ provider }) => !requestedProvider || requestedProvider === provider)
-      .map(async (agent): Promise<DiscoveredExternalAgent | undefined> => {
-        const { provider, executable: name } = agent;
-        let executable: string | undefined;
-        try {
-          executable = await resolveExternalCodeAgentExecutable(
-            agent,
-            probe,
-            searchPath,
-            environment,
-            platform,
-          );
-          if (!executable) {
-            logger.info("Code Agent executable was not found", {
-              event: "code_agent_runtime:not_found",
-              provider,
-              executable_name: name,
-              outcome: "unavailable",
-            });
-            return undefined;
-          }
-          const cacheKey = cache ? await fileStatCacheKey([executable]) : undefined;
-          const cached = cacheKey ? cache?.[provider] : undefined;
-          if (cacheKey && cached?.key === cacheKey && cached.runtime) {
-            if (cachedBelowFloor(provider, name, cached.runtime))
-              return {
-                runtime: unusableRuntime(provider, cached.runtime.version, "version_unsupported"),
-              };
-            logger.info("Code Agent runtime probe served from cache", {
-              event: "code_agent_runtime:cache_hit",
-              provider,
-              executable_name: name,
-              outcome: "ok",
-            });
-            return { runtime: cached.runtime, executable, cacheKey: undefined };
-          }
-          const probed = await probeRuntimeVersion(
-            provider,
-            name,
-            executable,
-            probe,
-            environment,
-            versionProbeTimeoutMs,
-          );
-          if (probed.kind === "runtime") return { runtime: probed.runtime, executable, cacheKey };
-          if (probed.kind === "rejected")
-            return {
-              dropProvider: provider,
-              unusable: unusableRuntime(provider, probed.version, "version_unsupported"),
-            };
-          return {
-            runtime: unusableRuntime(
-              provider,
-              cached?.runtime?.version ?? "",
-              probed.code,
-              probed.diagnostic,
-            ),
-          };
-        } catch (error) {
-          logger.warning("Code Agent runtime probe failed", {
-            event: "code_agent_runtime:probe_failed",
-            provider,
-            executable_name: name,
-            error_code: diagnosticErrorCode(error),
-            outcome: "unavailable",
-          });
-          if (!executable) return undefined;
-          const fallbackCacheKey = cache ? await fileStatCacheKey([executable]) : undefined;
-          const fallbackCached = fallbackCacheKey ? cache?.[provider] : undefined;
-          if (fallbackCached?.runtime && cachedBelowFloor(provider, name, fallbackCached.runtime))
-            return {
-              runtime: unusableRuntime(
-                provider,
-                fallbackCached.runtime.version,
-                "version_unsupported",
-              ),
-            };
-          return {
-            runtime: unusableRuntime(
-              provider,
-              fallbackCached?.runtime?.version ?? "",
-              "probe_failed",
-            ),
-          };
-        }
+      .map((agent) => {
+        const hostCodex = agent.provider === RUNTIME_PROVIDER.CODEX && Boolean(probe.probeCodex);
+        const discover = () => probeAgent(agent, hostCodex);
+        return hostCodex ? shareCodexProbe(environment, discover) : discover();
       }),
   );
+
+  async function probeAgent(
+    agent: (typeof externalCodeAgents)[number],
+    hostCodex: boolean,
+  ): Promise<DiscoveredExternalAgent | undefined> {
+    const { provider, executable: name } = agent;
+    let primary: string | undefined;
+    try {
+      primary = await resolveExternalCodeAgentExecutable(
+        agent,
+        probe,
+        searchPath,
+        environment,
+        platform,
+      );
+    } catch (error) {
+      if (hostCodex) rememberCodexExecutable(environment, undefined);
+      logFailure(error);
+      return undefined;
+    }
+    if (!primary) {
+      if (hostCodex) rememberCodexExecutable(environment, undefined);
+      logger.info("Code Agent executable was not found", {
+        event: "code_agent_runtime:not_found",
+        provider,
+        executable_name: name,
+        outcome: "unavailable",
+      });
+      return undefined;
+    }
+
+    let cleanupFailed = false;
+    async function probeExecutable(
+      executable: string,
+      timeoutMs: number,
+    ): Promise<DiscoveredExternalAgent> {
+      try {
+        const cacheKey =
+          cache || hostCodex ? await fileStatCacheKey([executable], hostCodex) : undefined;
+        const cached = cacheKey ? cache?.[provider] : undefined;
+        if (cacheKey && cached?.key === cacheKey && cached.runtime) {
+          if (cachedBelowFloor(provider, name, cached.runtime))
+            return {
+              runtime: unusableRuntime(provider, cached.runtime.version, "version_unsupported"),
+            };
+          logger.info("Code Agent runtime probe served from cache", {
+            event: "code_agent_runtime:cache_hit",
+            provider,
+            executable_name: name,
+            outcome: "ok",
+          });
+          return { runtime: cached.runtime, executable, executableKey: cacheKey };
+        }
+        const probed = await probeRuntimeVersion(
+          provider,
+          name,
+          executable,
+          probe,
+          environment,
+          versionProbeTimeoutMs,
+          timeoutMs,
+        );
+        if (probed.kind === "runtime") {
+          if (hostCodex && (!cacheKey || cacheKey !== (await fileStatCacheKey([executable], true))))
+            return { runtime: unusableRuntime(provider, "", "probe_failed") };
+          return { runtime: probed.runtime, executable, cacheKey, executableKey: cacheKey };
+        }
+        if (probed.kind === "rejected")
+          return {
+            dropProvider: provider,
+            unusable: unusableRuntime(provider, probed.version, "version_unsupported"),
+          };
+        return {
+          runtime: unusableRuntime(
+            provider,
+            cached?.runtime?.version ?? "",
+            probed.code,
+            probed.diagnostic,
+          ),
+        };
+      } catch (error) {
+        cleanupFailed = error instanceof AgentProcessCleanupError;
+        logFailure(error);
+        const fallbackCacheKey = cache
+          ? await fileStatCacheKey([executable], hostCodex)
+          : undefined;
+        const fallbackCached = fallbackCacheKey ? cache?.[provider] : undefined;
+        if (fallbackCached?.runtime && cachedBelowFloor(provider, name, fallbackCached.runtime))
+          return {
+            runtime: unusableRuntime(
+              provider,
+              fallbackCached.runtime.version,
+              "version_unsupported",
+            ),
+          };
+        return {
+          runtime: unusableRuntime(
+            provider,
+            fallbackCached?.runtime?.version ?? "",
+            "probe_failed",
+          ),
+        };
+      }
+    }
+
+    function logFailure(error: unknown): void {
+      logger.warning("Code Agent runtime probe failed", {
+        event: "code_agent_runtime:probe_failed",
+        provider,
+        executable_name: name,
+        error_code: diagnosticErrorCode(error),
+        outcome: "unavailable",
+      });
+    }
+
+    const deadline = performance.now() + CODEX_PROBE_BUDGET_MULTIPLIER * codexProbeTimeoutMs;
+    const first = await probeExecutable(primary, codexProbeTimeoutMs);
+    if (!hostCodex) return first;
+
+    let selected = first;
+    if (!usableResult(first) && !cleanupFailed) {
+      try {
+        for await (const candidate of remainingCodexExecutables(
+          primary,
+          probe,
+          searchPath,
+          environment,
+          platform,
+        )) {
+          const remainingMs = deadline - performance.now();
+          if (remainingMs <= 0) break;
+          const result = await probeExecutable(
+            candidate,
+            Math.min(remainingMs, codexProbeTimeoutMs),
+          );
+          if (usableResult(result)) {
+            selected = result;
+            break;
+          }
+          if (cleanupFailed) break;
+        }
+      } catch (error) {
+        logFailure(error);
+      }
+    }
+    rememberCodexExecutable(
+      environment,
+      usableResult(selected) && selected.executable && selected.executableKey
+        ? { executable: selected.executable, key: selected.executableKey }
+        : undefined,
+    );
+    return selected;
+  }
   const dropped = new Set<ExternalCodeAgentProvider>();
   const probed: {
     provider: RuntimeMetadata["provider"];
@@ -320,10 +437,10 @@ export async function discoverExternalCodeAgents(
     if (!result) continue;
     if ("dropProvider" in result) {
       dropped.add(result.dropProvider);
-      runtimes.push(result.unusable);
+      runtimes.push({ runtime: result.unusable });
       continue;
     }
-    runtimes.push(result.runtime);
+    runtimes.push({ runtime: result.runtime, executable: result.executable });
     if (result.executable && result.runtime.version && !result.runtime.unavailableCode) {
       observations.push({
         provider: result.runtime.provider,
@@ -392,24 +509,6 @@ export async function versionProbeOutput(
 
 function lastWord(output: string): string | undefined {
   return output.trim().split(/\s+/).pop() || undefined;
-}
-
-async function readVersionWithBun(
-  executable: string,
-  env?: Readonly<Record<string, string>>,
-): Promise<string | undefined> {
-  const process = Bun.spawn({
-    cmd: [executable, "--version"],
-    stdout: "pipe",
-    stderr: "pipe",
-    env: env ?? agentEnvironment(undefined),
-  });
-  try {
-    const { output, exitCode } = await versionProbeOutput(process);
-    return exitCode === 0 ? lastWord(output) : undefined;
-  } finally {
-    await killProbeChild(process);
-  }
 }
 
 /**

@@ -11,7 +11,10 @@ import {
   type ExternalCodeAgentProvider,
 } from "#src/code-agent/runtime-executable";
 import { updateInventoryCache } from "#src/code-agent/runtime-inventory-cache";
-import { discoverExternalCodeAgents, hostCodeAgentProbe } from "#src/code-agent/runtime-probe";
+import {
+  discoverExternalCodeAgentDetails,
+  hostCodeAgentProbe,
+} from "#src/code-agent/runtime-probe";
 import { codeAgentExecutableSearchPath } from "#src/platform/code-agent-path";
 import {
   isManagedRuntimeProvider,
@@ -58,27 +61,27 @@ async function defaultInspectRuntime(
   const agent = externalCodeAgent[provider as ExternalCodeAgentProvider];
   if (!agent) return { installed: false };
   const searchPath = codeAgentExecutableSearchPath(environment, platform);
-  const executablePath = await resolveExternalCodeAgentExecutable(
+  const preferredPath = await resolveExternalCodeAgentExecutable(
     agent,
     hostCodeAgentProbe,
     searchPath,
     environment,
     platform,
   );
-  if (!executablePath) return { installed: false };
-  const discovered = await discoverExternalCodeAgents(
+  if (!preferredPath) return { installed: false };
+  const discovered = await discoverExternalCodeAgentDetails(
     hostCodeAgentProbe,
     environment,
     platform,
     agent.provider,
     cacheDirectory,
   );
-  const match = discovered.find((entry) => entry.provider === agent.provider);
+  const match = discovered.find(({ runtime }) => runtime.provider === agent.provider);
   return {
     installed: true,
-    executablePath,
-    ...(match?.version ? { version: match.version } : {}),
-    ...(match?.unavailableCode ? { unavailableCode: match.unavailableCode } : {}),
+    executablePath: match?.executable ?? preferredPath,
+    ...(match?.runtime.version ? { version: match.runtime.version } : {}),
+    ...(match?.runtime.unavailableCode ? { unavailableCode: match.runtime.unavailableCode } : {}),
   };
 }
 

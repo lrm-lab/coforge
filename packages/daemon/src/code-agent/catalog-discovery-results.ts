@@ -13,6 +13,7 @@ export type CatalogDiscoveryFailure = {
 
 export type CatalogDiscoveryResult = {
   keyPaths?: string[];
+  cacheKey?: string;
   catalog?: CodeAgentModelCatalog;
 };
 
@@ -35,6 +36,7 @@ export function collectCatalogDiscoveryResults(
   results: Array<{
     provider: RuntimeProvider;
     keyPaths?: string[];
+    cacheKey?: string;
     catalog: CodeAgentModelCatalog;
   }>;
   failures: CatalogDiscoveryFailure[];
@@ -42,6 +44,7 @@ export function collectCatalogDiscoveryResults(
   const results: Array<{
     provider: RuntimeProvider;
     keyPaths?: string[];
+    cacheKey?: string;
     catalog: CodeAgentModelCatalog;
   }> = [];
   const failures: CatalogDiscoveryFailure[] = [];

@@ -6,6 +6,7 @@ import { fileStatCacheKey } from "./runtime-inventory-cache";
 import { piRuntimeHost } from "./pi/host";
 import {
   externalCodeAgent,
+  readSelectedCodexExecutable,
   resolveExternalCodeAgentExecutable,
   type ExternalCodeAgentProbe,
   type ExternalCodeAgentProvider,
@@ -33,15 +34,12 @@ export async function catalogCacheKeyFor(
   if (provider === RUNTIME_PROVIDER.PI) return fileStatCacheKey(piCacheKeyPaths(environment));
   const agent = externalCodeAgent[provider as ExternalCodeAgentProvider];
   if (!agent) return undefined;
-  const executable = await resolveExternalCodeAgentExecutable(
-    agent,
-    probe,
-    searchPath,
-    environment,
-    platform,
-  );
+  const hostCodex = provider === RUNTIME_PROVIDER.CODEX && Boolean(probe.probeCodex);
+  const executable = hostCodex
+    ? await readSelectedCodexExecutable(environment)
+    : await resolveExternalCodeAgentExecutable(agent, probe, searchPath, environment, platform);
   if (!executable) return undefined;
-  const install = await fileStatCacheKey([executable]);
+  const install = await fileStatCacheKey([executable], hostCodex);
   if (!install) return undefined;
   if (provider !== RUNTIME_PROVIDER.ANTIGRAVITY) return install;
   // The account decides the model list, and its version can change what the account offers even

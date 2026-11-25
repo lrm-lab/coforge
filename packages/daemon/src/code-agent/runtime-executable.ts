@@ -1,10 +1,19 @@
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import { codeAgentExecutableSearchPath } from "#src/platform/code-agent-path";
+import {
+  codeAgentExecutableSearchPath,
+  executablePathDelimiter,
+} from "#src/platform/code-agent-path";
 import type { CodeAgentProbe } from "@lrm/coforge-anvil";
+import { fileStatCacheKey } from "./runtime-inventory-cache";
 
 export type ExternalCodeAgentProbe = CodeAgentProbe & {
+  probeCodex?(
+    executable: string,
+    environment: Readonly<Record<string, string>>,
+    timeoutMs: number,
+  ): Promise<string | undefined>;
   /** Provider-specific installer locations are outside PATH; production checks them on disk while
    * tests declare their own hermetic filesystem boundary. */
   exists?(executable: string): boolean | Promise<boolean>;
@@ -187,6 +196,50 @@ export const externalCodeAgent: Record<ExternalCodeAgentProvider, ExternalCodeAg
     ExternalCodeAgent
   >;
 
+type CodexSelection = { executable: string; key: string };
+const codexSelections = new WeakMap<Readonly<Record<string, string | undefined>>, CodexSelection>();
+
+export function rememberCodexExecutable(
+  environment: Readonly<Record<string, string | undefined>>,
+  selection: CodexSelection | undefined,
+): void {
+  if (selection) codexSelections.set(environment, selection);
+  else codexSelections.delete(environment);
+}
+
+export async function readSelectedCodexExecutable(
+  environment: Readonly<Record<string, string | undefined>>,
+): Promise<string | undefined> {
+  const selection = codexSelections.get(environment);
+  if (selection && (await fileStatCacheKey([selection.executable], true)) === selection.key)
+    return selection.executable;
+  return undefined;
+}
+
+export async function* remainingCodexExecutables(
+  primary: string,
+  probe: ExternalCodeAgentProbe,
+  searchPath: string,
+  environment: Readonly<Record<string, string | undefined>>,
+  platform: NodeJS.Platform,
+): AsyncIterable<string> {
+  const seen = new Set([resolve(primary)]);
+  for (const directory of searchPath.split(executablePathDelimiter(platform))) {
+    if (!directory) continue;
+    const candidate = probe.which(RUNTIME_PROVIDER.CODEX, directory);
+    if (candidate && !seen.has(resolve(candidate))) {
+      seen.add(resolve(candidate));
+      yield resolve(candidate);
+    }
+  }
+  for (const candidate of codexInstalledExecutableCandidates(environment, platform)) {
+    if (!seen.has(resolve(candidate)) && (await probe.exists?.(candidate))) {
+      seen.add(resolve(candidate));
+      yield resolve(candidate);
+    }
+  }
+}
+
 export async function resolveExternalCodeAgentExecutable(
   agent: ExternalCodeAgent | typeof dshCodeAgent | typeof commandCodeAgent,
   probe: ExternalCodeAgentProbe,
@@ -197,9 +250,15 @@ export async function resolveExternalCodeAgentExecutable(
   const resolved = await probe.resolve?.(agent.provider, agent.executable, searchPath);
   if (resolved) return resolved;
   const fromPath = probe.which(executableName(agent, platform), searchPath);
-  if (fromPath) return fromPath;
+  if (fromPath)
+    return probe.probeCodex && agent.provider === RUNTIME_PROVIDER.CODEX
+      ? resolve(fromPath)
+      : fromPath;
   for (const candidate of agent.installedExecutableCandidates(environment, platform))
-    if (await probe.exists?.(candidate)) return candidate;
+    if (await probe.exists?.(candidate))
+      return probe.probeCodex && agent.provider === RUNTIME_PROVIDER.CODEX
+        ? resolve(candidate)
+        : candidate;
   return undefined;
 }
 

@@ -70,17 +70,17 @@ function versionAtLeast(
 
 export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
   readonly provider = RUNTIME_PROVIDER.CODEX;
-  readonly #command: readonly string[];
+  readonly #command: readonly string[] | (() => Promise<readonly string[]>);
   readonly #host: CodexAuthHost;
   readonly #version: string | undefined;
-  readonly #create: CodexAppServerFactory;
+  readonly #create: CodexAppServerFactory | undefined;
   readonly #accountReadTimeoutMs: number;
   readonly #runCli: CodexCliRunner;
   #active?: { id: string; process: CodexAppServerProcess; cancelled: boolean };
 
   constructor(options: {
     host: CodexAuthHost;
-    command?: readonly string[];
+    command?: readonly string[] | (() => Promise<readonly string[]>);
     version?: string;
     create?: CodexAppServerFactory;
     accountReadTimeoutMs?: number;
@@ -92,15 +92,7 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
     this.#accountReadTimeoutMs = options.accountReadTimeoutMs ?? 20_000;
     this.#runCli =
       options.runCli ?? ((command, cwd, timeoutMs) => this.#host.runCli(command, cwd, timeoutMs));
-    this.#create =
-      options.create ??
-      ((cwd) =>
-        new JsonlProcess(
-          this.#command,
-          cwd,
-          this.#host.buildAuthEnvironment(),
-          this.#host.processTreeSpawner,
-        ));
+    this.#create = options.create;
   }
 
   get activeOperationId(): string | undefined {
@@ -111,8 +103,16 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
     workingDirectory: string;
     timeoutMs?: number;
   }): Promise<RuntimeAuthStatus> {
+    const command = typeof this.#command === "function" ? await this.#command() : this.#command;
+    return this.#readStatus(command[0]!, options);
+  }
+
+  async #readStatus(
+    executable: string,
+    options: { workingDirectory: string; timeoutMs?: number },
+  ): Promise<RuntimeAuthStatus> {
     const output = await this.#runCli(
-      [this.#command[0]!, "login", "status"],
+      [executable, "login", "status"],
       options.workingDirectory,
       options.timeoutMs ?? CODEX_LOGIN_STATUS_TIMEOUT_MS,
     );
@@ -150,8 +150,18 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
         reason: "version_unsupported",
         detail: `Codex ${CODEX_LOGIN_MINIMUM_VERSION} or newer is required`,
       };
+    const command = typeof this.#command === "function" ? await this.#command() : this.#command;
+    if (interaction.signal?.aborted) return { status: "cancelled" };
+    if (this.#active) return { status: "busy" };
     const id = crypto.randomUUID();
-    const process = this.#create(options.workingDirectory);
+    const process =
+      this.#create?.(options.workingDirectory) ??
+      new JsonlProcess(
+        command,
+        options.workingDirectory,
+        this.#host.buildAuthEnvironment(),
+        this.#host.processTreeSpawner,
+      );
     this.#active = { id, process, cancelled: false };
     let loginId: string | undefined;
     const earlyCompletions: RecordValue[] = [];
@@ -334,12 +344,14 @@ export class CodexRuntimeAuthAdapter implements RuntimeAuthAdapter {
         reason: "version_unsupported",
         detail: `Codex ${CODEX_LOGOUT_MINIMUM_VERSION} or newer is required`,
       };
+    const command = typeof this.#command === "function" ? await this.#command() : this.#command;
+    const executable = command[0]!;
     const result = await this.#runCli(
-      [this.#command[0]!, "logout"],
+      [executable, "logout"],
       options.workingDirectory,
       options.timeoutMs ?? CODEX_LOGOUT_TIMEOUT_MS,
     );
-    const authStatus = await this.readStatus(options);
+    const authStatus = await this.#readStatus(executable, options);
     if (authStatus.state === "logged_out") return { status: "logged_out", authStatus };
     if (result.timedOut)
       return {

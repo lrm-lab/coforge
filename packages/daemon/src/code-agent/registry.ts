@@ -41,6 +41,7 @@ import { GrokProvider } from "@lrm/coforge-anvil/grok";
 import { PiProvider } from "@lrm/coforge-anvil/pi";
 import { ClaudeCodeProvider } from "@lrm/coforge-anvil/claude-code";
 import { CodexProvider, CodexRuntimeAuthAdapter } from "@lrm/coforge-anvil/codex";
+import { ensureCodexExecutable } from "#src/code-agent/runtime-probe";
 import { codexRuntimeHost, createCodexAuthHost } from "#src/code-agent/codex/host";
 import { ClaudeRuntimeAuthAdapter } from "@lrm/coforge-anvil/claude-code";
 import { CoforgeProvider } from "#src/code-agent/pi/provider";
@@ -64,6 +65,11 @@ function providerExecutable(
   return resolveHostCodeAgentExecutable(provider, options.environment, options.platform);
 }
 
+async function codexCommand(options: CodeAgentProviderRegistryOptions): Promise<readonly string[]> {
+  const executable = await ensureCodexExecutable(options.environment, options.platform);
+  return [executable ?? RUNTIME_PROVIDER.CODEX, "app-server"];
+}
+
 export function createRuntimeAuthAdapter(
   provider: RuntimeAuthProvider,
   options: CodeAgentProviderRegistryOptions = {},
@@ -72,10 +78,7 @@ export function createRuntimeAuthAdapter(
     case RUNTIME_PROVIDER.CODEX:
       return new CodexRuntimeAuthAdapter({
         host: createCodexAuthHost(options),
-        command: [
-          providerExecutable(RUNTIME_PROVIDER.CODEX, options) ?? RUNTIME_PROVIDER.CODEX,
-          "app-server",
-        ],
+        command: () => codexCommand(options),
       });
     case RUNTIME_PROVIDER.KIRO:
       return new KiroRuntimeAuthAdapter(createKiroAuthHost(options.platform));
@@ -118,13 +121,11 @@ export function createCodeAgentProvider(
       return new CoforgeProvider();
     case RUNTIME_PROVIDER.PI:
       return new PiProvider({ host: piRuntimeHost });
-    case RUNTIME_PROVIDER.CODEX: {
-      const executable = providerExecutable(RUNTIME_PROVIDER.CODEX, options);
+    case RUNTIME_PROVIDER.CODEX:
       return new CodexProvider({
         host: codexRuntimeHost,
-        ...(executable ? { command: [executable, "app-server"] } : {}),
+        command: () => codexCommand(options),
       });
-    }
     case RUNTIME_PROVIDER.CLAUDE_CODE:
       return new ClaudeCodeProvider({ host: claudeRuntimeHost });
     case RUNTIME_PROVIDER.KIRO:

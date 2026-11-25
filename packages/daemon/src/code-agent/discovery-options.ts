@@ -37,9 +37,9 @@ export type CodeAgentDiscoveryOptions = {
   /** The wait for each external runtime's generic `--version` probe (`versionProbeOutput`);
    * `VERSION_PROBE_TIMEOUT_MS` when unset. Provider-specific probes keep their own bounds. */
   versionProbeTimeoutMs?: number;
+  codexProbeTimeoutMs?: number;
   /** Each bounded wait of Codex or DSH model catalog discovery. Defaults are
-   * `CATALOG_DISCOVERY_TIMEOUT_MS` for Codex and the native ACP 120-second budget for DSH.
-   * The runtime probe's own `initialize` wait is not affected. */
+   * `CATALOG_DISCOVERY_TIMEOUT_MS` for Codex and the native ACP 120-second budget for DSH. */
   catalogDiscoveryTimeoutMs?: number;
   /** Pi's in-process catalog discovery; `PI_CATALOG_DISCOVERY_TIMEOUT_MS` when unset. */
   piCatalogDiscoveryTimeoutMs?: number;

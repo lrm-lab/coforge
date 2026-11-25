@@ -115,8 +115,13 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
 ## Codex
 
 - Supply session, catalog, usage and auth host capabilities through `codex/host.ts`.
-  Keep their environment composition and client identities distinct; auth CLI and
-  app-server use the registry-resolved executable and the same effective environment.
+  Keep their environment composition and client identities distinct. The runtime inventory probes
+  the preferred Codex executable first, then tries the remaining PATH and installer candidates if
+  it cannot initialize and read a version. Each candidate gets up to 5 seconds within the shared
+  10-second budget. Await process cleanup before probing another candidate. The selected path also
+  supplies session launch, auth and model discovery. An operation validates the selected file
+  before use and shares an in-flight probe when the file changed or the inventory has yet to run.
+  The daemon's ready report never waits for Codex selection.
 - Native Codex rules live in [Anvil Codex instructions](../../../anvil/src/codex/AGENTS.md).
 
 ## Claude Code

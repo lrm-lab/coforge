@@ -42,7 +42,8 @@ const result = await Bun.build({
         build.onLoad({ filter: /\/code-agent\/runtime-probe\.ts$/ }, () => ({
           loader: "ts",
           contents: `export const hostCodeAgentProbe={}
-             export function discoverExternalCodeAgents(){throw new Error("Lifecycle fixture must not probe external providers")}
+             export function discoverExternalCodeAgentDetails(){throw new Error("Lifecycle fixture must not probe external providers")}
+             export function ensureCodexExecutable(){throw new Error("Lifecycle fixture must not probe Codex")}
              export async function versionProbeOutput(){throw new Error("Lifecycle fixture must not probe git")}`,
         }));
         build.onLoad({ filter: /\/code-agent\/claude-code\/catalog\.ts$/ }, () => ({
