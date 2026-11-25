@@ -50,6 +50,16 @@ function assertResumePrompt(
   if (prompt !== undefined && hasRecovery)
     throw error("resume prompt cannot carry message recovery");
 }
+function unreadSequenceProof(
+  sequence: number | undefined,
+  count: number,
+  conversationId: string | undefined,
+): number | undefined {
+  if (sequence === undefined || !Number.isSafeInteger(sequence)) return;
+  if (!conversationId?.trim() || count < 1 || sequence < count) return;
+  return sequence;
+}
+
 export function encodeAgentStartIntent(value: AgentStartIntent): Uint8Array {
   assertResumePrompt(
     value.resumePrompt,
@@ -122,11 +132,20 @@ export function encodeAgentStartIntent(value: AgentStartIntent): Uint8Array {
         sequence: BigInt(message.sequence),
         createdAtMs: recoveryCreatedAt(message),
       })),
-      unreadSummary: Object.entries(value.unreadSummary ?? {}).map(([target, count]) => ({
-        target,
-        count,
-        conversationId: value.unreadConversationIds?.[target],
-      })),
+      unreadSummary: Object.entries(value.unreadSummary ?? {}).map(([target, count]) => {
+        const conversationId = value.unreadConversationIds?.[target];
+        const sequence = unreadSequenceProof(
+          value.lastUnreadSequences?.[target],
+          count,
+          conversationId,
+        );
+        return {
+          target,
+          count,
+          conversationId,
+          lastUnreadSequence: sequence === undefined ? undefined : BigInt(sequence),
+        };
+      }),
       openTasks,
     }),
   );
@@ -223,6 +242,14 @@ export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
       : {}),
   });
   const openTasks = normalizeAgentStartOpenTasks(v.openTasks);
+  const sequenceProofs = v.unreadSummary.flatMap((entry) => {
+    const sequence = unreadSequenceProof(
+      Number(entry.lastUnreadSequence),
+      entry.count,
+      entry.conversationId,
+    );
+    return sequence === undefined ? [] : [[entry.target, sequence] as const];
+  });
   return {
     protocolMajor: v.protocolMajor,
     requestId: v.requestId,
@@ -268,6 +295,7 @@ export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
           ),
         }
       : {}),
+    ...(sequenceProofs.length ? { lastUnreadSequences: Object.fromEntries(sequenceProofs) } : {}),
     ...(openTasks ? { openTasks } : {}),
   };
 }
