@@ -21,6 +21,12 @@ function claudeModelWindow(type: unknown): RuntimeModelWindow | undefined {
   }
 }
 
+function claudeAccountWindow(type: unknown): ProviderLimit["accountWindow"] {
+  if (type === "five_hour") return "five_hour";
+  if (type === "seven_day") return "weekly";
+  return undefined;
+}
+
 export function claudeModelWindowAvailable(
   record: Readonly<Record<string, unknown>>,
 ): RuntimeModelWindowAvailable | undefined {
@@ -67,7 +73,12 @@ export class ClaudeRateLimitState {
   readonly #now: () => number;
   #usage: UsageSnapshot = { provider: RUNTIME_PROVIDER.CLAUDE_CODE };
   #rejected:
-    | { sessionId: string | undefined; resetsAt?: Date; modelWindow?: RuntimeModelWindow }
+    | {
+        sessionId: string | undefined;
+        resetsAt?: Date;
+        modelWindow?: RuntimeModelWindow;
+        accountWindow?: ProviderLimit["accountWindow"];
+      }
     | undefined;
 
   constructor(now: () => number = Date.now) {
@@ -90,6 +101,9 @@ export class ClaudeRateLimitState {
               sessionId,
               resetsAt,
               modelWindow: options.modelScope ? claudeModelWindow(info.rateLimitType) : undefined,
+              accountWindow: options.modelScope
+                ? claudeAccountWindow(info.rateLimitType)
+                : undefined,
             }
           : undefined;
     const usageWindow = claudeRateLimitWindow(info, resetsAt);
@@ -120,11 +134,13 @@ export class ClaudeRateLimitState {
         sessionId && rejected.resetsAt.getTime() - this.#now() <= WEEK_PLUS_CLOCK_SKEW_MS
           ? rejected.modelWindow
           : undefined;
-      if (rejected.modelWindow) this.#rejected = undefined;
+      const accountWindow = sessionId ? rejected.accountWindow : undefined;
+      if (rejected.modelWindow || rejected.accountWindow) this.#rejected = undefined;
       return {
         kind: "window_limit",
         resetsAt: rejected.resetsAt.toISOString(),
         ...(modelWindow ? { modelWindow } : {}),
+        ...(accountWindow ? { accountWindow } : {}),
       };
     }
     if (rejected && !rejected.resetsAt) return { kind: "window_limit" };

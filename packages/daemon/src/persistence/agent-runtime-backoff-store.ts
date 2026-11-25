@@ -9,6 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import { escapePathIdentity, isSafePathScope } from "./path-scope";
 
@@ -19,14 +20,37 @@ const logger = getLogger(["coforge", "daemon", "runtime-backoff"]);
 export type PersistedBackoffReason = "rate_limit_backoff" | "runtime_error_backoff";
 
 /** One Agent's backoff as it outlives the process: when it ends, and why it was taken. */
-export type PersistedRuntimeBackoff = Readonly<{
-  agentId: string;
+export type RuntimeBackoffWait = Readonly<{
   untilMs: number;
   reason: PersistedBackoffReason;
-  /** The runtime provider whose failure raised the wait, so a restarted Daemon can tell whose
-   * limit it waits on before the Agent is relaunched. Absent in a record from before it was kept. */
   provider?: string;
+  claudeScope?: "account_window" | "transient_rate_limit";
 }>;
+
+export type PersistedRuntimeBackoff = RuntimeBackoffWait &
+  Readonly<{ agentId: string; companion?: RuntimeBackoffWait }>;
+
+function readWait(value: unknown): RuntimeBackoffWait | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const { untilMs, reason, provider, claudeScope } = value as Record<string, unknown>;
+  if (
+    typeof untilMs !== "number" ||
+    !Number.isFinite(untilMs) ||
+    untilMs <= Date.now() ||
+    (reason !== "rate_limit_backoff" && reason !== "runtime_error_backoff")
+  )
+    return undefined;
+  return {
+    untilMs,
+    reason,
+    ...(typeof provider === "string" && provider ? { provider } : {}),
+    ...(provider === RUNTIME_PROVIDER.CLAUDE_CODE &&
+    reason === "rate_limit_backoff" &&
+    (claudeScope === "account_window" || claudeScope === "transient_rate_limit")
+      ? { claudeScope }
+      : {}),
+  };
+}
 
 /** This OS process's lifetime, so a record written here is not restored by the same process: an
  * in-memory hold is the live authority for it, and a record only has to survive a *new* process. */
@@ -76,31 +100,19 @@ export class AgentRuntimeBackoffStore {
       try {
         const value = JSON.parse(readFileSync(path, "utf8")) as {
           owner?: unknown;
-          untilMs?: unknown;
-          reason?: unknown;
-          provider?: unknown;
-        };
-        // Written by this very process: its in-memory hold is the authority, not the file.
+          companion?: unknown;
+        } | null;
         if (value?.owner === this.owner) continue;
-        const untilMs = value?.untilMs;
-        const reason = value?.reason;
-        if (
-          typeof untilMs === "number" &&
-          Number.isFinite(untilMs) &&
-          (reason === "rate_limit_backoff" || reason === "runtime_error_backoff")
-        ) {
-          // A wait that ended while the Daemon was down is dropped, not restored.
-          if (untilMs > Date.now())
-            records.push({
-              agentId,
-              untilMs,
-              reason,
-              ...(typeof value.provider === "string" && value.provider
-                ? { provider: value.provider }
-                : {}),
-            });
-          else this.clear(agentId);
-        } else void this.clear(agentId);
+        const primary = readWait(value);
+        const companion = readWait(value?.companion);
+        if (primary) {
+          const distinct =
+            companion &&
+            (primary.claudeScope === "account_window") !==
+              (companion.claudeScope === "account_window");
+          records.push({ agentId, ...primary, ...(distinct ? { companion } : {}) });
+        } else if (companion) records.push({ agentId, ...companion });
+        else this.clear(agentId);
       } catch {
         if (existsSync(path)) void this.clear(agentId);
       }
@@ -116,11 +128,9 @@ export class AgentRuntimeBackoffStore {
       mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
       chmodSync(dirname(path), 0o700);
       const temporary = `${path}.tmp`;
-      writeFileSync(
-        temporary,
-        `${JSON.stringify({ version: 1, owner: this.owner, untilMs: state.untilMs, reason: state.reason, provider: state.provider })}\n`,
-        { mode: 0o600 },
-      );
+      writeFileSync(temporary, `${JSON.stringify({ version: 1, owner: this.owner, ...state })}\n`, {
+        mode: 0o600,
+      });
       renameSync(temporary, path);
     } catch (error) {
       // The hold decides delivery; a disk failure must not become a delivery failure.

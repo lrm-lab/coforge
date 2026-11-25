@@ -271,3 +271,99 @@ test("only newer same-launch model availability ends a model wait and leaves the
   jest.advanceTimersByTime(short.untilMs - Date.now() + 1);
   expect(flushed).toEqual([{ agentId: "agent-a", count: 1 }]);
 });
+
+test("the Claude account window survives a later 503 and a matching model recovery", () => {
+  jest.useFakeTimers();
+  const { hold, held, flushed, saved, queue } = harness();
+  const launch = { provider: "claude-code", model: "fable" };
+  const now = Date.now();
+  const accountLimit = {
+    type: "error",
+    message: "Account limit reached",
+    providerLimit: {
+      kind: "window_limit",
+      accountWindow: "weekly",
+      resetsAt: new Date(now + HOUR_MS / 2).toISOString(),
+    },
+  } as const;
+  const modelLimit = fableLimit(now + HOUR_MS / 3);
+  const unavailable = { type: "error", message: "Service unavailable", httpStatus: 503 } as const;
+
+  hold.noteRuntimeFailure("agent-a", launch, accountLimit, classifyRuntimeError(accountLimit));
+  hold.noteRuntimeFailure("agent-a", launch, modelLimit, classifyRuntimeError(modelLimit));
+  hold.noteRuntimeFailure("agent-a", launch, unavailable, classifyRuntimeError(unavailable));
+  queue("agent-a");
+
+  jest.advanceTimersByTime(60_000);
+  expect(
+    hold.noteModelWindowAvailable("agent-a", launch, {
+      type: "model-window-available",
+      modelWindow: modelLimit.providerLimit.modelWindow,
+      resetsAt: modelLimit.providerLimit.resetsAt,
+      occurredAt: new Date().toISOString(),
+    }),
+  ).toBe(true);
+  expect(held.get("agent-a")).toBe("rate_limit_backoff");
+  expect(saved.at(-1)).toMatchObject({ reason: "rate_limit_backoff", provider: "claude-code" });
+  expect(flushed).toEqual([]);
+
+  jest.advanceTimersByTime(now + HOUR_MS / 2 - Date.now() + 1);
+  expect(flushed).toEqual([{ agentId: "agent-a", count: 1 }]);
+});
+
+test("lifting the Claude account window leaves its pre-existing 503 backoff", () => {
+  jest.useFakeTimers();
+  const { hold, held, flushed, saved, queue } = harness();
+  const launch = { provider: "claude-code", model: "sonnet" };
+  const unavailable = { type: "error", message: "Service unavailable", httpStatus: 503 } as const;
+  const accountLimit = {
+    type: "error",
+    message: "Account limit reached",
+    providerLimit: {
+      kind: "window_limit",
+      accountWindow: "weekly",
+      resetsAt: new Date(Date.now() + HOUR_MS).toISOString(),
+    },
+  } as const;
+  hold.noteRuntimeFailure("agent-a", launch, unavailable, classifyRuntimeError(unavailable));
+  const shortUntilMs = saved.at(-1)!.untilMs;
+  hold.noteRuntimeFailure("agent-a", launch, accountLimit, classifyRuntimeError(accountLimit));
+  queue("agent-a");
+
+  expect(hold.releaseRateLimitBackoffs("claude-code", withSession)).toBe(1);
+  expect(held.get("agent-a")).toBe("runtime_error_backoff");
+  expect(flushed).toEqual([]);
+  jest.advanceTimersByTime(shortUntilMs - Date.now() + 1);
+  expect(flushed).toEqual([{ agentId: "agent-a", count: 1 }]);
+});
+
+test("Claude account quota recovery does not release a transient Claude 429", () => {
+  jest.useFakeTimers();
+  const { hold, held, flushed, saved, queue } = harness();
+  const launch = { provider: "claude-code", model: "sonnet" };
+  const transient = {
+    type: "error",
+    message: "Service rate limited",
+    providerLimit: { kind: "transient_rate_limit" },
+  } as const;
+  const accountLimit = {
+    type: "error",
+    message: "Account limit reached",
+    providerLimit: {
+      kind: "window_limit",
+      accountWindow: "weekly",
+      resetsAt: new Date(Date.now() + HOUR_MS).toISOString(),
+    },
+  } as const;
+  hold.noteRuntimeFailure("agent-a", launch, transient, classifyRuntimeError(transient));
+  const transientUntilMs = saved.at(-1)!.untilMs;
+  hold.noteRuntimeFailure("agent-a", launch, accountLimit, classifyRuntimeError(accountLimit));
+  queue("agent-a");
+
+  expect(hold.releaseRateLimitBackoffs("claude-code", withSession)).toBe(1);
+  expect(hold.releaseRateLimitBackoffs("claude-code", withSession)).toBe(0);
+  expect(held.get("agent-a")).toBe("rate_limit_backoff");
+  expect(flushed).toEqual([]);
+  jest.advanceTimersByTime(transientUntilMs - Date.now() + 1);
+  expect(flushed).toEqual([{ agentId: "agent-a", count: 1 }]);
+});

@@ -192,3 +192,49 @@ test("a retryable failure records what it waits for, and forget clears it", () =
   hold.forget("agent-c");
   expect(cleared).toContain("agent-c");
 });
+
+test("Claude's account limit and short retry restore together and are retired independently", async () => {
+  jest.useFakeTimers();
+  const state = await directory();
+  try {
+    const now = Date.now();
+    const account = {
+      untilMs: now + HOUR_MS,
+      reason: "rate_limit_backoff",
+      provider: "claude-code",
+      claudeScope: "account_window",
+    } as const;
+    const short = {
+      untilMs: now + 10_000,
+      reason: "runtime_error_backoff",
+      provider: "claude-code",
+    } as const;
+    const writer = new AgentRuntimeBackoffStore(() => state, "process-a");
+    const reader = new AgentRuntimeBackoffStore(() => state, "process-b");
+    writer.save("agent-a", { ...account, companion: short });
+
+    expect(reader.list()).toEqual([{ agentId: "agent-a", ...account, companion: short }]);
+    const downgrade = await Bun.file(
+      join(state, "agent-state", escapePathIdentity("agent-a"), "runtime-backoff.json"),
+    ).json();
+    expect(downgrade).toMatchObject({
+      version: 1,
+      untilMs: account.untilMs,
+      reason: account.reason,
+      provider: account.provider,
+    });
+
+    const { held, saved, cleared } = holdWith(reader.list());
+    expect(held.get("agent-a")).toBe("runtime_error_backoff");
+    jest.advanceTimersByTime(10_001);
+    expect(held.get("agent-a")).toBe("rate_limit_backoff");
+    expect(saved).toEqual([{ agentId: "agent-a", ...account }]);
+    expect(cleared).toEqual([]);
+    expect(reader.list()).toEqual([{ agentId: "agent-a", ...account }]);
+    jest.advanceTimersByTime(account.untilMs - Date.now() + 1);
+    expect(held.has("agent-a")).toBe(false);
+    expect(cleared).toEqual(["agent-a"]);
+  } finally {
+    await rm(state, { recursive: true, force: true });
+  }
+});

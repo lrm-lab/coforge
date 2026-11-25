@@ -69,6 +69,29 @@ describe("ClaudeRateLimitState: the limit a Claude error reports", () => {
     expect(limitOf(limits, "rate_limit")).toEqual({ kind: "transient_rate_limit" });
   });
 
+  test.each([
+    ["five_hour", "five_hour"],
+    ["seven_day", "weekly"],
+  ] as const)(
+    "a structured %s limit retains its named account window",
+    (rateLimitType, accountWindow) => {
+      const limits = state();
+      limits.observe(
+        rateLimitEvent({ status: "rejected", rateLimitType, resetsAt: IN_AN_HOUR_S }),
+        SESSION,
+      );
+      expect(limitOf(limits, "rate_limit", undefined, "different-session")).toEqual({
+        kind: "transient_rate_limit",
+      });
+      expect(limitOf(limits, "rate_limit")).toEqual({
+        kind: "window_limit",
+        resetsAt: IN_AN_HOUR_ISO,
+        accountWindow,
+      });
+      expect(limitOf(limits, "rate_limit")).toEqual({ kind: "transient_rate_limit" });
+    },
+  );
+
   test("a rejected event in milliseconds reads the same reset", () => {
     const limits = state();
     limits.observe(rateLimitEvent({ status: "rejected", resetsAt: IN_AN_HOUR_S * 1000 }), SESSION);

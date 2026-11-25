@@ -5,7 +5,7 @@ import {
   fingerprintRuntimeError,
   type RuntimeErrorEvent,
 } from "#src/agent-runtime/runtime-error-activity";
-import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
+import { RUNTIME_PROVIDER, type AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import {
   RUNTIME_ERROR_CLASS,
   RUNTIME_ERROR_RETRY_DECISION,
@@ -13,6 +13,7 @@ import {
 } from "#src/agent-runtime/runtime-error-classification";
 import {
   isZeroEvidenceReason,
+  QUOTA_RESET_BACKOFF_MAX_MS,
   RUNTIME_ERROR_FENCE_EXEMPT_CLASSES,
   RUNTIME_ERROR_RECOVERY_EFFECTS,
   RuntimeErrorDeliveryBackoff,
@@ -23,6 +24,10 @@ import {
   type RuntimeErrorFingerprintFenceState,
   type RuntimeErrorRecoverySignal,
 } from "#src/agent-runtime/runtime-error-recovery";
+import type {
+  PersistedRuntimeBackoff,
+  RuntimeBackoffWait,
+} from "#src/persistence/agent-runtime-backoff-store";
 import type { AgentDeliveryGate } from "./agent-delivery-gate";
 import type { CredentialInvalidHolds } from "./credential-invalid-holds";
 
@@ -45,7 +50,7 @@ function matchingModelWindow(
   const limit = event.providerLimit;
   const model = limit?.modelWindow?.model;
   if (
-    launch.provider !== "claude-code" ||
+    launch.provider !== RUNTIME_PROVIDER.CLAUDE_CODE ||
     limit?.kind !== "window_limit" ||
     limit.modelWindow?.window !== "weekly" ||
     !model ||
@@ -63,15 +68,10 @@ function matchingModelWindow(
     return { modelWindow: limit.modelWindow, untilMs };
 }
 
+type ScheduledWait = RuntimeBackoffWait & { timer: ReturnType<typeof setTimeout> };
+
 export type RuntimeErrorBackoffPersistence = Readonly<{
-  save(
-    agentId: string,
-    state: Readonly<{
-      untilMs: number;
-      reason: "rate_limit_backoff" | "runtime_error_backoff";
-      provider?: string;
-    }>,
-  ): void;
+  save(agentId: string, state: Omit<PersistedRuntimeBackoff, "agentId">): void;
   clear(agentId: string): void;
 }>;
 
@@ -96,14 +96,8 @@ export class RuntimeErrorDeliveryHold {
   readonly #turnProgress = new Set<string>();
   readonly #modelWaits = new Map<string, ModelWait>();
 
-  readonly #releaseTimers = new Map<
-    string,
-    {
-      timer: ReturnType<typeof setTimeout>;
-      reason: "rate_limit_backoff" | "runtime_error_backoff";
-      provider?: string;
-    }
-  >();
+  readonly #releaseTimers = new Map<string, ScheduledWait>();
+  readonly #accountTimers = new Map<string, ScheduledWait>();
 
   constructor(ports: RuntimeErrorDeliveryHoldPorts) {
     this.#ports = ports;
@@ -141,12 +135,15 @@ export class RuntimeErrorDeliveryHold {
         ? "rate_limit_backoff"
         : "runtime_error_backoff";
     this.#ports.deliveryGate.hold(agentId, reason);
-    this.#ports.store?.save(agentId, {
+    this.#scheduleRelease(this.#releaseTimers, agentId, {
       untilMs: backoff.untilMs,
       reason,
       ...(provider ? { provider } : {}),
+      ...(provider === RUNTIME_PROVIDER.CLAUDE_CODE && classification.errorReason === "rate_limited"
+        ? { claudeScope: "transient_rate_limit" }
+        : {}),
     });
-    this.#scheduleRelease(agentId, backoff.untilMs, reason, provider);
+    this.#persistWaits(agentId);
     logger.info("Held deliveries for a retrying runtime", {
       event: "agent.runtime.delivery_held",
       agent_id: agentId,
@@ -162,7 +159,8 @@ export class RuntimeErrorDeliveryHold {
 
   holdCredentialInvalid(agentId: string): boolean {
     if (this.#isFenced(agentId)) return false;
-    this.#clearReleaseTimer(agentId);
+    this.#clearTimer(this.#releaseTimers, agentId);
+    this.#clearTimer(this.#accountTimers, agentId);
     this.#clearModelWait(agentId);
     this.#backoff.reset(agentId);
     this.#ports.store?.clear(agentId);
@@ -170,30 +168,22 @@ export class RuntimeErrorDeliveryHold {
     return true;
   }
 
-  restore(
-    records: readonly Readonly<{
-      agentId: string;
-      untilMs: number;
-      reason: "rate_limit_backoff" | "runtime_error_backoff";
-      provider?: string;
-    }>[],
-  ): void {
+  restore(records: readonly PersistedRuntimeBackoff[]): void {
     const now = Date.now();
-    for (const record of records) {
-      if (record.untilMs <= now) {
-        this.#ports.store?.clear(record.agentId);
-        continue;
+    for (const { agentId, companion, ...primary } of records) {
+      for (const wait of [primary, companion]) {
+        if (!wait || wait.untilMs <= now) continue;
+        const timers =
+          wait.claudeScope === "account_window" ? this.#accountTimers : this.#releaseTimers;
+        this.#scheduleRelease(timers, agentId, wait);
+        logger.info("Runtime backoff restored", {
+          event: "agent.runtime.backoff_restored",
+          agent_id: agentId,
+          until_ms: wait.untilMs,
+          reason: wait.reason,
+        });
       }
-      this.#ports.deliveryGate.hold(record.agentId, record.reason);
-      this.#scheduleRelease(record.agentId, record.untilMs, record.reason, record.provider);
-      // A restarted Daemon says which waits it picked up: the only line that shows a usage limit
-      // surviving the process without a live failure to point at.
-      logger.info("Runtime backoff restored", {
-        event: "agent.runtime.backoff_restored",
-        agent_id: record.agentId,
-        until_ms: record.untilMs,
-        reason: record.reason,
-      });
+      if (!this.#projectWait(agentId)) this.#ports.store?.clear(agentId);
     }
   }
 
@@ -211,23 +201,40 @@ export class RuntimeErrorDeliveryHold {
     const classFence = (launch.runtimeErrorClassFence ??= new RuntimeErrorClassFence()).note(
       classification,
     );
-    const modelWait = matchingModelWindow(launch, event, Date.now());
+    const now = Date.now();
+    const modelWait = matchingModelWindow(launch, event, now);
+    const limit = event.providerLimit;
+    const accountUntilMs = Date.parse(limit?.resetsAt ?? "");
+    const accountWindow =
+      launch.provider === RUNTIME_PROVIDER.CLAUDE_CODE &&
+      limit?.kind === "window_limit" &&
+      (limit.accountWindow === "five_hour" || limit.accountWindow === "weekly") &&
+      !limit.modelWindow &&
+      accountUntilMs > now;
+    const isScopedRetry =
+      (modelWait !== undefined || accountWindow) &&
+      classification.retryDecision === RUNTIME_ERROR_RETRY_DECISION.RETRY;
     if (
-      modelWait !== undefined &&
-      classification.retryDecision === RUNTIME_ERROR_RETRY_DECISION.RETRY
+      isScopedRetry &&
+      !this.#isFenced(agentId) &&
+      !this.#ports.deliveryGate.credentialHeld(agentId)
     ) {
-      if (!this.#isFenced(agentId) && !this.#ports.deliveryGate.credentialHeld(agentId))
+      if (modelWait)
         this.#holdModelWindow(agentId, launch, modelWait.modelWindow, modelWait.untilMs);
+      else
+        this.#holdAccountWindow(
+          agentId,
+          Math.min(accountUntilMs, now + QUOTA_RESET_BACKOFF_MAX_MS),
+        );
     }
-    const fingerprintFence =
-      modelWait === undefined
-        ? this.noteFailure(
-            agentId,
-            classification,
-            built.runtimeError?.fingerprint ?? fingerprintRuntimeError(event.message),
-            launch.provider,
-          )
-        : undefined;
+    const fingerprintFence = isScopedRetry
+      ? undefined
+      : this.noteFailure(
+          agentId,
+          classification,
+          built.runtimeError?.fingerprint ?? fingerprintRuntimeError(event.message),
+          launch.provider,
+        );
     if (fingerprintFence)
       return {
         built,
@@ -263,14 +270,33 @@ export class RuntimeErrorDeliveryHold {
   }
 
   releaseRateLimitBackoffs(provider: string, hasSession: (agentId: string) => boolean): number {
-    let released = 0;
-    for (const [agentId, waiting] of Array.from(this.#releaseTimers)) {
-      if (waiting.provider !== provider) continue;
-      if (waiting.reason !== "rate_limit_backoff") continue;
-      this.#endBackoff(agentId, hasSession(agentId));
-      released += 1;
+    const matching = new Set<string>();
+    for (const [agentId, wait] of this.#releaseTimers) {
+      if (this.#canLiftProviderWait(wait, provider)) matching.add(agentId);
     }
-    return released;
+    for (const [agentId, wait] of this.#accountTimers) {
+      if (wait.provider === provider) matching.add(agentId);
+    }
+    for (const agentId of matching) {
+      const account = this.#accountTimers.get(agentId);
+      if (account?.provider === provider) this.#clearTimer(this.#accountTimers, agentId);
+      const regular = this.#releaseTimers.get(agentId);
+      if (regular && this.#canLiftProviderWait(regular, provider)) {
+        this.#clearTimer(this.#releaseTimers, agentId);
+        this.#backoff.reset(agentId);
+      }
+      this.#persistWaits(agentId);
+      this.#finishWaitTransition(agentId, hasSession(agentId));
+    }
+    return matching.size;
+  }
+
+  #canLiftProviderWait(wait: RuntimeBackoffWait, provider: string): boolean {
+    return (
+      wait.provider === provider &&
+      wait.reason === "rate_limit_backoff" &&
+      wait.claudeScope !== "transient_rate_limit"
+    );
   }
 
   noteTurnEnd(agentId: string): void {
@@ -282,7 +308,8 @@ export class RuntimeErrorDeliveryHold {
   forget(agentId: string): void {
     this.#ports.credential?.forget(agentId);
     this.#clearModelWait(agentId);
-    this.#clearReleaseTimer(agentId);
+    this.#clearTimer(this.#releaseTimers, agentId);
+    this.#clearTimer(this.#accountTimers, agentId);
     this.#backoff.reset(agentId);
     this.#fence.reset(agentId);
     this.#turnProgress.delete(agentId);
@@ -291,35 +318,60 @@ export class RuntimeErrorDeliveryHold {
 
   disposeAll(): void {
     this.#ports.credential?.dispose();
-    for (const agentId of this.#modelWaits.keys()) {
+    const waiting = new Set([
+      ...this.#modelWaits.keys(),
+      ...this.#releaseTimers.keys(),
+      ...this.#accountTimers.keys(),
+    ]);
+    for (const agentId of waiting) {
       this.#clearModelWait(agentId);
-      if (!this.#releaseTimers.has(agentId)) this.#ports.deliveryGate.release(agentId);
-    }
-    for (const [agentId, { timer }] of this.#releaseTimers) {
-      clearTimeout(timer);
+      this.#clearTimer(this.#releaseTimers, agentId);
+      this.#clearTimer(this.#accountTimers, agentId);
       this.#ports.deliveryGate.release(agentId);
     }
-    this.#releaseTimers.clear();
   }
 
-  #endBackoff(agentId: string, flush = true): void {
-    this.#clearReleaseTimer(agentId);
-    const fenced = this.#isFenced(agentId);
-    if (!fenced && this.#modelWaits.has(agentId))
-      this.#ports.deliveryGate.hold(agentId, "rate_limit_backoff");
-    else if (!fenced) {
-      if (flush) this.#releaseHeld(agentId);
-      else this.#ports.deliveryGate.endHoldForNextLaunch(agentId);
-    }
+  #endBackoff(agentId: string): void {
+    this.#clearTimer(this.#releaseTimers, agentId);
     this.#backoff.reset(agentId);
-    this.#ports.store?.clear(agentId);
-    if (!fenced && !this.#modelWaits.has(agentId)) this.#ports.backoffEnded?.(agentId);
+    this.#persistWaits(agentId);
+    this.#finishWaitTransition(agentId, true);
   }
 
   #holdFenced(agentId: string): void {
-    this.#clearReleaseTimer(agentId);
+    this.#clearTimer(this.#releaseTimers, agentId);
+    this.#clearTimer(this.#accountTimers, agentId);
     this.#clearModelWait(agentId);
     this.#ports.deliveryGate.hold(agentId, "fingerprint_fence");
+  }
+
+  #projectWait(agentId: string): boolean {
+    const regular = this.#releaseTimers.get(agentId);
+    const hasQuotaWait = this.#accountTimers.has(agentId) || this.#modelWaits.has(agentId);
+    const reason = regular?.reason ?? (hasQuotaWait ? "rate_limit_backoff" : undefined);
+    if (!reason) return false;
+    this.#ports.deliveryGate.hold(agentId, reason);
+    return true;
+  }
+
+  #finishWaitTransition(agentId: string, flush: boolean, notify = true): void {
+    if (this.#isFenced(agentId) || this.#ports.deliveryGate.credentialHeld(agentId)) return;
+    if (this.#projectWait(agentId)) return;
+    if (flush) this.#releaseHeld(agentId);
+    else this.#ports.deliveryGate.endHoldForNextLaunch(agentId);
+    if (notify) this.#ports.backoffEnded?.(agentId);
+  }
+
+  #persistWaits(agentId: string): void {
+    const regular = this.#releaseTimers.get(agentId);
+    const account = this.#accountTimers.get(agentId);
+    const primary = account && (!regular || account.untilMs >= regular.untilMs) ? account : regular;
+    if (!primary) return this.#ports.store?.clear(agentId);
+    const companion = primary === account ? regular : account;
+    const { timer: _primaryTimer, ...state } = primary;
+    if (!companion) return this.#ports.store?.save(agentId, state);
+    const { timer: _companionTimer, ...extra } = companion;
+    this.#ports.store?.save(agentId, { ...state, companion: extra });
   }
 
   #isFenced(agentId: string): boolean {
@@ -327,31 +379,38 @@ export class RuntimeErrorDeliveryHold {
   }
 
   #scheduleRelease(
+    timers: Map<string, ScheduledWait>,
     agentId: string,
-    untilMs: number,
-    reason: "rate_limit_backoff" | "runtime_error_backoff",
-    provider?: string,
+    wait: RuntimeBackoffWait,
   ): void {
-    this.#clearReleaseTimer(agentId);
-    const remainingMs = untilMs - Date.now();
+    this.#clearTimer(timers, agentId);
+    const remainingMs = wait.untilMs - Date.now();
     const timer = setTimeout(
       () => {
         if (remainingMs > MAX_TIMER_DELAY_MS) {
-          this.#scheduleRelease(agentId, untilMs, reason, provider);
+          this.#scheduleRelease(timers, agentId, wait);
           return;
         }
-        this.#releaseTimers.delete(agentId);
-        if (this.#modelWaits.has(agentId)) {
-          this.#ports.deliveryGate.hold(agentId, "rate_limit_backoff");
-        } else {
-          this.#releaseHeld(agentId);
-          this.#ports.backoffEnded?.(agentId);
-        }
-        this.#ports.store?.clear(agentId);
+        timers.delete(agentId);
+        this.#persistWaits(agentId);
+        this.#finishWaitTransition(agentId, true);
       },
       Math.min(Math.max(0, remainingMs), MAX_TIMER_DELAY_MS),
     );
-    this.#releaseTimers.set(agentId, { timer, reason, ...(provider ? { provider } : {}) });
+    timers.set(agentId, { ...wait, timer });
+  }
+
+  #holdAccountWindow(agentId: string, untilMs: number): void {
+    const previous = this.#accountTimers.get(agentId);
+    if (previous && previous.untilMs >= untilMs) return;
+    this.#scheduleRelease(this.#accountTimers, agentId, {
+      untilMs,
+      reason: "rate_limit_backoff",
+      provider: RUNTIME_PROVIDER.CLAUDE_CODE,
+      claudeScope: "account_window",
+    });
+    this.#projectWait(agentId);
+    this.#persistWaits(agentId);
   }
 
   #holdModelWindow(
@@ -404,18 +463,7 @@ export class RuntimeErrorDeliveryHold {
 
   #endModelWait(agentId: string, flush: boolean): void {
     this.#clearModelWait(agentId);
-    if (
-      this.#releaseTimers.has(agentId) ||
-      this.#isFenced(agentId) ||
-      this.#ports.deliveryGate.credentialHeld(agentId)
-    )
-      return;
-    if (flush) {
-      this.#releaseHeld(agentId);
-      this.#ports.backoffEnded?.(agentId);
-    } else {
-      this.#ports.deliveryGate.endHoldForNextLaunch(agentId);
-    }
+    this.#finishWaitTransition(agentId, flush, flush);
   }
 
   #clearModelWait(agentId: string): void {
@@ -425,11 +473,11 @@ export class RuntimeErrorDeliveryHold {
     this.#modelWaits.delete(agentId);
   }
 
-  #clearReleaseTimer(agentId: string): void {
-    const timer = this.#releaseTimers.get(agentId)?.timer;
-    if (timer === undefined) return;
-    clearTimeout(timer);
-    this.#releaseTimers.delete(agentId);
+  #clearTimer(timers: Map<string, ScheduledWait>, agentId: string): void {
+    const wait = timers.get(agentId);
+    if (!wait) return;
+    clearTimeout(wait.timer);
+    timers.delete(agentId);
   }
 
   #releaseHeld(agentId: string): void {

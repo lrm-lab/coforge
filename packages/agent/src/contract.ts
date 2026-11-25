@@ -271,6 +271,7 @@ export type AgentRuntimeEvent = {
         kind: "quota_exhausted" | "window_limit" | "transient_rate_limit";
         resetsAt?: string;
         modelWindow?: RuntimeModelWindow;
+        accountWindow?: "five_hour" | "weekly";
       };
       occurredAt?: string;
     }
