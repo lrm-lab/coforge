@@ -27,7 +27,7 @@ import { launchAgentProcJob } from "./proc-job-launch";
 import {
   markProcJobExited,
   procJobLedgerPath,
-  readProcJobLedger,
+  readProcJobLedgerState,
   removeWorkspaceProcJobLedger,
   writeProcJobLedger,
   type StoredProcJob,
@@ -41,6 +41,7 @@ import {
 import { ProcJobMemoryMonitor, settleProcJobMemoryStop } from "./proc-job-memory-monitor";
 import { PROC_JOB_RSS_INTERVAL_MS, type ProcJobRssSampler } from "./proc-job-rss-sampler";
 import { stopProcJobTargets } from "./proc-job-stop";
+import { ProcJobMemoryNotices, type PublishProcJobMemoryNotice } from "./proc-job-memory-notices";
 
 const logger = getLogger(["coforge", "daemon", "proc"]);
 const DEFAULT_SWEEP_MS = 15_000;
@@ -62,6 +63,7 @@ export type ProcJobManagerOptions = {
   retainSampledProcessGroup?: boolean;
   memoryConfigPath?: string;
   rssSampler?: ProcJobRssSampler;
+  publishMemoryNotice?: PublishProcJobMemoryNotice;
   systemdMemoryScope?: ReturnType<typeof createProcJobMemoryScopeDetector>;
 };
 
@@ -84,12 +86,14 @@ export class ProcJobManager {
       | "retainSampledProcessGroup"
     >
   >;
-  readonly #memoryConfigPath?: string;
-  readonly #systemdMemoryScope: ReturnType<typeof createProcJobMemoryScopeDetector>;
+  readonly #launchOptions: Pick<
+    ProcJobManagerOptions,
+    "readIdentity" | "memoryConfigPath" | "systemdMemoryScope"
+  >;
   readonly #memory: ProcJobMemoryMonitor;
+  readonly #notices: ProcJobMemoryNotices;
   #samplingMemory = false;
   #sweepGeneration = 0;
-  readonly #readIdentity?: typeof readProcJobIdentity;
   readonly #jobs = new Map<string, StoredProcJob[]>();
   readonly #queues = new Map<string, Promise<unknown>>();
   #adoptPromise: Promise<void> | undefined;
@@ -102,10 +106,12 @@ export class ProcJobManager {
   constructor(options: ProcJobManagerOptions) {
     const platform = options.platform ?? process.platform;
     let cachedSystemdRun: Promise<boolean> | undefined;
-    this.#readIdentity = options.readIdentity;
-    this.#memoryConfigPath = options.memoryConfigPath;
-    this.#systemdMemoryScope =
-      options.systemdMemoryScope ?? createProcJobMemoryScopeDetector(platform);
+    this.#launchOptions = {
+      readIdentity: options.readIdentity,
+      memoryConfigPath: options.memoryConfigPath,
+      systemdMemoryScope: options.systemdMemoryScope ?? createProcJobMemoryScopeDetector(platform),
+    };
+    this.#notices = new ProcJobMemoryNotices(options.publishMemoryNotice);
     this.#memory = new ProcJobMemoryMonitor(platform, options.rssSampler);
     this.#options = {
       workspaceId: options.workspaceId,
@@ -134,7 +140,10 @@ export class ProcJobManager {
   }
 
   async #adopt(): Promise<void> {
-    const stored = await readProcJobLedger(procJobLedgerPath(this.#options.stateDirectory));
+    const { jobs: stored, memoryNotices } = await readProcJobLedgerState(
+      procJobLedgerPath(this.#options.stateDirectory),
+    );
+    this.#notices.restore(memoryNotices);
     let dirty = false;
     const reconciled = await Promise.all(
       stored.map(async (storedRecord) => {
@@ -168,12 +177,8 @@ export class ProcJobManager {
   startSweep(): void {
     if (this.#purged) return;
     this.#closed = false;
-    if (this.#adoptPromise) {
-      this.#ensureSweepTimer();
-      void this.#sweepAll().catch(() => {});
-      return;
-    }
-    void this.#ensureAdopted().catch(() => {});
+    if (this.#adoptPromise) this.#ensureSweepTimer();
+    void this.#sweepAll().catch(() => {});
   }
 
   #enqueueAgent<T>(agentId: string, fn: () => Promise<T>): Promise<T> {
@@ -191,15 +196,13 @@ export class ProcJobManager {
     return next;
   }
 
-  #persistLedger(): Promise<void> {
+  #persistLedger(durable = false): Promise<void> {
     if (this.#purged) return this.#writeQueue;
-    const snapshot: StoredProcJob[] = [];
-    for (const list of this.#jobs.values()) snapshot.push(...list);
-    const ledgerPath = procJobLedgerPath(this.#options.stateDirectory);
-    this.#writeQueue = this.#writeQueue.then(
-      () => writeProcJobLedger(ledgerPath, snapshot),
-      () => writeProcJobLedger(ledgerPath, snapshot),
-    );
+    const jobs = [...this.#jobs.values()].flat();
+    const notices = this.#notices.snapshot();
+    const write = () =>
+      writeProcJobLedger(procJobLedgerPath(this.#options.stateDirectory), jobs, notices, durable);
+    this.#writeQueue = this.#writeQueue.then(write, write);
     return this.#writeQueue;
   }
 
@@ -241,10 +244,20 @@ export class ProcJobManager {
     if (this.#closed) return;
     await this.#ensureAdopted();
     await Promise.all(
-      Array.from(this.#jobs.keys(), (agentId) =>
-        this.#enqueueAgent(agentId, () => this.#reconcileAgent(agentId)),
+      Array.from(
+        new Set([...this.#jobs.keys(), ...this.#notices.snapshot().map((n) => n.agentId)]),
+        (agentId) =>
+          this.#enqueueAgent(agentId, async () => {
+            await this.#reconcileAgent(agentId);
+            await this.#deliverMemoryNotices(agentId);
+          }),
       ),
     );
+  }
+
+  #deliverMemoryNotices(agentId: string): Promise<void> {
+    if (this.#closed || this.#purged) return Promise.resolve();
+    return this.#notices.deliver(agentId, () => this.#persistLedger(true));
   }
 
   async #sweepMemory(): Promise<void> {
@@ -284,9 +297,14 @@ export class ProcJobManager {
               await this.#persistLedger();
               return;
             }
-            list[index] = await settleProcJobMemoryStop(pending, this.#options).catch(() => record);
+            const result = await settleProcJobMemoryStop(pending, this.#options).catch(
+              () => record,
+            );
+            list[index] = result;
+            this.#notices.add(result);
             await this.#pruneExited(record.agentId);
             await this.#persistLedger();
+            await this.#deliverMemoryNotices(record.agentId);
           }),
         ),
       );
@@ -295,13 +313,15 @@ export class ProcJobManager {
     }
   }
 
+  async #ensureAvailable(): Promise<void> {
+    if (!this.#purged) await this.#ensureAdopted();
+    if (this.#purged)
+      throw new ProcJobError("proc_runtime_restricted", 403, "Workspace has been removed.");
+  }
+
   list(agentId: string): Promise<AgentProcListResponse> {
     return this.#enqueueAgent(agentId, async () => {
-      if (this.#purged)
-        throw new ProcJobError("proc_runtime_restricted", 403, "Workspace has been removed.");
-      await this.#ensureAdopted();
-      if (this.#purged)
-        throw new ProcJobError("proc_runtime_restricted", 403, "Workspace has been removed.");
+      await this.#ensureAvailable();
       const jobs = await this.#reconcileAgent(agentId);
       return {
         ok: true,
@@ -319,28 +339,16 @@ export class ProcJobManager {
   }): Promise<AgentProcStartResponse> {
     const { agentId, provider, agentEnvVars, request } = input;
     return this.#enqueueAgent(agentId, async () => {
-      if (this.#purged)
-        throw new ProcJobError("proc_runtime_restricted", 403, "Workspace has been removed.");
-      await this.#ensureAdopted();
-      if (this.#purged)
-        throw new ProcJobError("proc_runtime_restricted", 403, "Workspace has been removed.");
+      await this.#ensureAvailable();
       const list = await this.#reconcileAgent(agentId);
       const finalRecord = await launchAgentProcJob({
         agentId,
-        workspaceId: this.#options.workspaceId,
-        workspaceRoot: this.#options.workspaceRoot,
-        platform: this.#options.platform,
         provider,
         agentEnvVars,
         request,
         existingJobs: list,
-        maxJobsPerAgent: this.#options.maxJobsPerAgent,
-        systemdRunAvailable: this.#options.systemdRunAvailable,
-        systemdMemoryScope: this.#systemdMemoryScope,
-        systemdPresentCheck: this.#options.systemdPresentCheck,
-        readIdentity: this.#readIdentity,
-        retainSampledProcessGroup: this.#options.retainSampledProcessGroup,
-        memoryConfigPath: this.#memoryConfigPath,
+        ...this.#options,
+        ...this.#launchOptions,
         onLateExit: (jobId, exitCode, signal) => {
           void this.#recordProcessExit(agentId, jobId, exitCode, signal);
         },
@@ -412,11 +420,7 @@ export class ProcJobManager {
 
   logs(agentId: string, request: AgentProcLogsRequest): Promise<AgentProcLogsResponse> {
     return this.#enqueueAgent(agentId, async () => {
-      if (this.#purged)
-        throw new ProcJobError("proc_runtime_restricted", 403, "Workspace has been removed.");
-      await this.#ensureAdopted();
-      if (this.#purged)
-        throw new ProcJobError("proc_runtime_restricted", 403, "Workspace has been removed.");
+      await this.#ensureAvailable();
       const list = await this.#reconcileAgent(agentId);
       const job = list.find((item) => item.name === request.name);
       if (!job)
@@ -510,6 +514,7 @@ export class ProcJobManager {
         );
       }
       this.#jobs.delete(agentId);
+      this.#notices.forget(agentId);
       await this.#persistLedger();
       const logsDir = agentProcLogsDirectory(
         agentWorkspaceDirectory(this.#options.workspaceRoot, this.#options.workspaceId, agentId),

@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
   PROC_JOB_LEDGER_FILE,
@@ -13,6 +13,8 @@ import {
   type ProcJobMemoryScopeIdentity,
 } from "#src/platform/proc-job-systemd-memory";
 import { writePrivateFileAtomic } from "#src/platform/private-file";
+import { writePrivateJsonRecord } from "#src/persistence/private-json-record";
+import { decodeProcJobMemoryNotice, type ProcJobMemoryNotice } from "./proc-job-memory-notices";
 import { workspaceStateDirectory } from "#src/supervisor/workspace-instance";
 
 export type StoredProcJob = AgentProcJob & {
@@ -84,26 +86,35 @@ function decodeStoredProcJob(value: unknown): StoredProcJob | undefined {
 }
 
 export async function readProcJobLedger(ledgerPath: string): Promise<StoredProcJob[]> {
+  return (await readProcJobLedgerState(ledgerPath)).jobs;
+}
+
+export async function readProcJobLedgerState(
+  ledgerPath: string,
+): Promise<{ jobs: StoredProcJob[]; memoryNotices: ProcJobMemoryNotice[] }> {
   try {
     const raw = JSON.parse(await readFile(ledgerPath, "utf8")) as unknown;
-    if (!isRecord(raw) || raw.version !== 1 || !Array.isArray(raw.jobs)) return [];
-    const parsed: StoredProcJob[] = [];
-    for (const item of raw.jobs) {
-      const job = decodeStoredProcJob(item);
-      if (job) parsed.push(job);
+    if (isRecord(raw) && raw.version === 1 && Array.isArray(raw.jobs)) {
+      const jobs = raw.jobs.map(decodeStoredProcJob).filter((job) => job !== undefined);
+      const memoryNotices = Array.isArray(raw.memoryNotices)
+        ? raw.memoryNotices.map(decodeProcJobMemoryNotice).filter((notice) => notice !== undefined)
+        : [];
+      return { jobs, memoryNotices };
     }
-    return parsed;
-  } catch {
-    return [];
-  }
+  } catch {}
+  return { jobs: [], memoryNotices: [] };
 }
 
 export async function writeProcJobLedger(
   ledgerPath: string,
   jobs: readonly StoredProcJob[],
+  memoryNotices: readonly ProcJobMemoryNotice[] = [],
+  durable = false,
 ): Promise<void> {
-  await mkdir(join(ledgerPath, ".."), { recursive: true, mode: 0o700 });
-  await writePrivateFileAtomic(ledgerPath, JSON.stringify({ version: 1, jobs }));
+  const value = { version: 1, jobs, ...(memoryNotices.length ? { memoryNotices } : {}) };
+  if (durable || memoryNotices.length)
+    await writePrivateJsonRecord(ledgerPath, value, { durable: true });
+  else await writePrivateFileAtomic(ledgerPath, JSON.stringify(value));
 }
 
 async function collectWorkspaceLedgerPaths(
@@ -186,7 +197,7 @@ export async function stopMachineRunningProcJobs(
 
   await Promise.all(
     ledgerPaths.map(async (ledgerPath) => {
-      const jobs = await readProcJobLedger(ledgerPath);
+      const { jobs, memoryNotices } = await readProcJobLedgerState(ledgerPath);
       let dirty = false;
       const nextJobs = await Promise.all(
         jobs.map(async (job) => {
@@ -212,7 +223,7 @@ export async function stopMachineRunningProcJobs(
           return job;
         }),
       );
-      if (dirty) await writeProcJobLedger(ledgerPath, nextJobs).catch(() => {});
+      if (dirty) await writeProcJobLedger(ledgerPath, nextJobs, memoryNotices).catch(() => {});
     }),
   );
   return result;

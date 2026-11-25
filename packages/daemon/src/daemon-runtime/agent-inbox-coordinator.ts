@@ -17,6 +17,7 @@ import {
   mergedReminderAppInboxNoticeText,
   reminderAppInboxNoticeText,
 } from "#src/agent-reminder/reminder-app-inbox-text";
+import { PROC_MEMORY_APP_ID } from "#src/agent-app-inbox/registry";
 import type { AgentAppInboxSeals } from "#src/agent-app-inbox/app-inbox-seals";
 import type { AgentProcessManager, AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
@@ -35,7 +36,7 @@ const GENERIC_APP_ITEM_NOTICE = "New app item available. Run coforge inbox check
 const REMINDER_APP_ID = "system.reminder";
 const REMINDER_DUE_CLASS = "due";
 
-type AppItemNotice = Readonly<{ itemIds: readonly string[]; text: string }>;
+type AppItemNotice = Readonly<{ itemIds: readonly string[]; text: string; startStopped?: false }>;
 
 const isDueReminder = (item: AgentAppItem) =>
   item.appId === REMINDER_APP_ID && item.notificationClass === REMINDER_DUE_CLASS;
@@ -58,7 +59,11 @@ function planAppItemNotices(items: readonly AgentAppItem[]): AppItemNotice[] {
     });
   for (const item of items)
     if (!isDueReminder(item))
-      notices.push({ itemIds: [item.itemId], text: GENERIC_APP_ITEM_NOTICE });
+      notices.push({
+        itemIds: [item.itemId],
+        text: GENERIC_APP_ITEM_NOTICE,
+        ...(item.appId === PROC_MEMORY_APP_ID ? { startStopped: false } : {}),
+      });
   return notices;
 }
 
@@ -305,7 +310,7 @@ export class AgentInboxCoordinator {
         }
         let session = this.ports.processManager.session(agentId);
         if (!session) {
-          if (!startStopped) return false;
+          if (!startStopped || notice.startStopped === false) return false;
           // A credential known invalid is no reason to start the Agent: the item waits with the rest.
           if (this.ports.deliveryGate.credentialHeld(agentId)) {
             for (const itemId of itemIds) this.ports.deliveryGate.holdAppItem(agentId, itemId);

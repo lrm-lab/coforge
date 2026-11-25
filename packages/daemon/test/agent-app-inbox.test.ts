@@ -2,6 +2,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
+import type { AgentRuntimeConfig } from "@coforge/agent";
+import { AgentInboxCoordinator } from "#src/daemon-runtime/agent-inbox-coordinator";
+import { AgentDeliveryGate } from "#src/daemon-runtime/agent-delivery-gate";
+import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
+import { AgentAppInboxPersistence } from "#src/persistence/agent-app-inbox-store";
+import { FileAppNotifiedStore } from "#src/persistence/app-notified-store";
+import { sessionSpy } from "./fixtures/session-spy";
 import { AgentAppInbox } from "#src/agent-app-inbox/agent-app-inbox";
 
 const roots: string[] = [];
@@ -149,4 +156,109 @@ describe("AgentAppInbox commands", () => {
       `coforge reminder ack --id ${reminderId} --revision 3`,
     );
   });
+});
+
+test("one-shot publication can retry after restart and a concurrent read without reminting", async () => {
+  const directory = root();
+  const workspace = "workspace-a";
+  let inbox = await AgentAppInbox.open(directory, workspace, "agent-a");
+  const input = {
+    appId: "system.proc",
+    notificationClass: "memory_limit",
+    sourceRef: { kind: "proc_job", id: crypto.randomUUID(), revision: "1" },
+    title: "Background job stopped at its memory cap",
+  };
+  await expect(
+    inbox.publishOnce(input, async () => {
+      throw new Error("crash before outbox commit");
+    }),
+  ).rejects.toThrow("crash before outbox commit");
+
+  await inbox.upsert(due());
+  const legacy = new AgentAppInboxPersistence(directory, workspace, "agent-a");
+  expect((await legacy.read())?.map((item) => (item as { appId: string }).appId)).toEqual([
+    "system.reminder",
+  ]);
+  await inbox.remove(`reminder:${reminderId}:1`);
+
+  inbox = await AgentAppInbox.open(directory, workspace, "agent-a");
+  const other = await AgentAppInbox.open(directory, workspace, "agent-b");
+  expect(await other.read()).toEqual([]);
+  const [item] = await inbox.read();
+  expect(item?.sourceRef).toEqual(input.sourceRef);
+  expect(item?.command).toBe("coforge proc list");
+
+  inbox = await AgentAppInbox.open(directory, workspace, "agent-a");
+  let committed = false;
+  expect(
+    await inbox.publishOnce(input, async () => {
+      committed = true;
+    }),
+  ).toBeUndefined();
+  expect(committed).toBe(true);
+  expect(await inbox.read()).toEqual([]);
+  const next = { ...input, sourceRef: { ...input.sourceRef, id: crypto.randomUUID() } };
+  expect(await inbox.publishOnce(next, async () => {})).toMatchObject({
+    sourceRef: next.sourceRef,
+  });
+  expect(await inbox.read()).toHaveLength(1);
+  expect(await inbox.read()).toEqual([]);
+});
+
+test("a persisted proc notice waits even when a stopped Agent has a restart config", async () => {
+  const directory = root();
+  const workspaceId = "workspace-a";
+  const agentId = "agent-a";
+  const notices: string[] = [];
+  let active = false;
+  let starts = 0;
+  const session = {
+    ...sessionSpy(),
+    notify: async (text: string) => {
+      notices.push(text);
+    },
+  };
+  const config: AgentRuntimeConfig = { provider: "pi", model: "default", reasoning: "balanced" };
+  const coordinator = new AgentInboxCoordinator({
+    workspaceId,
+    stateDirectory: directory,
+    notifiedAppItems: new FileAppNotifiedStore(directory, workspaceId),
+    consumedSeqs: new AgentConsumedSeqStore(directory),
+    messageAttention: { check: () => [] },
+    deliveryGate: new AgentDeliveryGate(),
+    runtimeRelease: { isRecovering: () => false },
+    processManager: {
+      session: () => (active ? session : undefined),
+      restartConfig: () => ({ config, sessionId: "session-a" }),
+    },
+    startAgent: async () => {
+      starts++;
+      return { config, session };
+    },
+    currentActivityLaunch: () => undefined,
+    reconcileIdleTurn: () => false,
+    mentionDeliveries: { settleRedelivery: () => {} },
+    assertRunning: () => {},
+    agentIdForContext: () => agentId,
+  });
+  const inbox = await coordinator.appInbox(agentId);
+  await inbox.publishOnce(
+    {
+      appId: "system.proc",
+      notificationClass: "memory_limit",
+      sourceRef: { kind: "proc_job", id: crypto.randomUUID(), revision: "1" },
+    },
+    async () => {},
+  );
+
+  await coordinator.drainAppInboxNotices(agentId);
+  expect(starts).toBe(0);
+  expect(notices).toEqual([]);
+  active = true;
+  await coordinator.drainAppInboxNotices(agentId);
+  await coordinator.drainAppInboxNotices(agentId);
+  expect(notices).toEqual(["New app item available. Run coforge inbox check."]);
+  expect(await inbox.read()).toHaveLength(1);
+  expect(await inbox.read()).toEqual([]);
+  expect(starts).toBe(0);
 });

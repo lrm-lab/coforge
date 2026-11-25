@@ -129,6 +129,13 @@ export function composeRuntimeServices(ports: RuntimeServicesPorts): RuntimeServ
     workspaceId: connection.workspaceId,
     workspaceRoot: connection.workspaceRoot,
     stateDirectory,
+    publishMemoryNotice: async (agentId, item, commit) => {
+      const coordinator = ports.reminderInbox().inboxCoordinator;
+      const inbox = await coordinator.appInbox(agentId);
+      const published = await inbox.publishOnce(item, commit);
+      if (published && !ports.isWorking(agentId))
+        void coordinator.notifyAppItem(agentId, published, { startStopped: false }).catch(() => {});
+    },
   });
   const migrations = transport().agentMigrationServer
     ? new MigrationRunner({

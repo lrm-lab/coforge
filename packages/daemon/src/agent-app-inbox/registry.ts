@@ -150,9 +150,35 @@ export const AGENT_APP_REGISTRY: Readonly<
   },
 };
 
+export const PROC_MEMORY_APP_ID = "system.proc";
+export const PROC_MEMORY_NOTICE_CLASS = "memory_limit";
+
+const procMemoryLimit: AppInboxDefinition = {
+  retention: "until_explicit_ack",
+  action: { kind: "run_command", commandId: "proc.list" },
+  command: () => "coforge proc list",
+  consumeOnRead: true,
+  normalizeSourceRef(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      throw new Error("proc memory notice source must identify a job");
+    const input = value as Record<string, unknown>;
+    if (
+      Object.keys(input).some((key) => !["kind", "id", "revision"].includes(key)) ||
+      input.kind !== "proc_job" ||
+      typeof input.id !== "string" ||
+      !RFC_UUID_PATTERN.test(input.id) ||
+      input.revision !== "1"
+    )
+      throw new Error("proc memory notice source must identify a job");
+    return { kind: "proc_job", id: input.id, revision: "1" };
+  },
+  itemId: (sourceRef) => `proc:memory_limit:${sourceRef.id}`,
+};
+
 export const SYSTEM_NOTICE_SOURCES: Readonly<
   Record<string, Readonly<Record<string, AppInboxDefinition>>>
 > = {
+  [PROC_MEMORY_APP_ID]: { [PROC_MEMORY_NOTICE_CLASS]: procMemoryLimit },
   [APP_REGISTRATION_NOTICE_SOURCE]: { [APP_REGISTRY_SECRET_CLASS]: appClientSecret },
 };
 

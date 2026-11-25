@@ -33,6 +33,7 @@ export type MintAppItem = Readonly<{
  * Only `until_explicit_ack` items reach disk; a `transient` item ends with this process. */
 export class AgentAppInbox {
   readonly #items = new Map<string, AgentAppItem>();
+  readonly #published = new Set<string>();
   /** When a `ttlMs` item is forgotten, by item id: set on every mint, so a re-mint replaces it. */
   readonly #expiresAt = new Map<string, number>();
   #mutations: Promise<unknown> = Promise.resolve();
@@ -43,7 +44,12 @@ export class AgentAppInbox {
     const inbox = new AgentAppInbox(
       new AgentAppInboxPersistence(stateDirectory, workspaceId, agentId),
     );
-    for (const raw of (await inbox.persistence.read()) ?? []) {
+    const [items, oneShots] = await Promise.all([
+      inbox.persistence.read(),
+      inbox.persistence.readOneShots(),
+    ]);
+    for (const id of oneShots?.published ?? []) inbox.#published.add(id);
+    for (const raw of [...(items ?? []), ...(oneShots?.items ?? [])]) {
       const item = restoreItem(raw);
       if (inbox.#items.has(item.itemId))
         throw new Error("App Inbox persisted identity is duplicated");
@@ -60,20 +66,49 @@ export class AgentAppInbox {
     );
   }
 
-  /** The items for the Agent's own read: a transient item that is shown once (`consumeOnRead`)
-   * is removed as it is listed, so a second read no longer holds it. */
   async read(): Promise<AgentAppItem[]> {
     return this.#mutate(async () => {
       const items = this.list();
-      for (const item of items)
-        if (appInboxDefinition(item.appId, item.notificationClass).consumeOnRead)
-          this.#items.delete(item.itemId);
+      const consumed = items.filter(
+        (item) => appInboxDefinition(item.appId, item.notificationClass).consumeOnRead,
+      );
+      for (const item of consumed) this.#items.delete(item.itemId);
+      if (consumed.some((item) => item.retention !== "transient")) {
+        try {
+          await this.#persistOneShots();
+        } catch (error) {
+          for (const item of consumed) this.#items.set(item.itemId, item);
+          throw error;
+        }
+      }
       return items;
     });
   }
 
   async upsert(input: MintAppItem): Promise<AgentAppItem> {
     return this.#mutate(() => this.#upsert(input));
+  }
+
+  publishOnce(input: MintAppItem, commit: () => Promise<void>): Promise<AgentAppItem | undefined> {
+    return this.#mutate(async () => {
+      const definition = appInboxDefinition(input.appId, input.notificationClass);
+      if (definition.retention === "transient" || !definition.consumeOnRead)
+        throw new Error("App Inbox one-shot items require persistent consume-on-read");
+      const itemId = definition.itemId(definition.normalizeSourceRef(input.sourceRef));
+      if (!this.#published.has(itemId)) {
+        this.#published.add(itemId);
+        try {
+          await this.#upsert(input);
+        } catch (error) {
+          this.#published.delete(itemId);
+          throw error;
+        }
+      }
+      await commit();
+      this.#published.delete(itemId);
+      await this.#persistOneShots().catch(() => {});
+      return this.#items.get(itemId);
+    });
   }
 
   async remove(itemId: string): Promise<boolean> {
@@ -84,7 +119,7 @@ export class AgentAppInbox {
       this.#expiresAt.delete(itemId);
       if (previous.retention === "transient") return true;
       try {
-        await this.#persist();
+        await this.#persistItem(previous);
       } catch (error) {
         this.#items.set(itemId, previous);
         throw error;
@@ -117,7 +152,7 @@ export class AgentAppInbox {
     else this.#expiresAt.set(itemId, Date.now() + definition.ttlMs);
     if (item.retention === "transient") return item;
     try {
-      await this.#persist();
+      await this.#persistItem(item);
     } catch (error) {
       if (previous) this.#items.set(itemId, previous);
       else this.#items.delete(itemId);
@@ -135,8 +170,15 @@ export class AgentAppInbox {
       }
   }
 
-  #persist(): Promise<void> {
-    return this.persistence.write(this.list().filter((item) => item.retention !== "transient"));
+  #persistItem(item: AgentAppItem): Promise<void> {
+    if (isOneShot(item)) return this.#persistOneShots();
+    return this.persistence.write(
+      this.list().filter((entry) => entry.retention !== "transient" && !isOneShot(entry)),
+    );
+  }
+
+  #persistOneShots(): Promise<void> {
+    return this.persistence.writeOneShots(this.list().filter(isOneShot), [...this.#published]);
   }
 
   #mutate<T>(operation: () => Promise<T>): Promise<T> {
@@ -144,6 +186,13 @@ export class AgentAppInbox {
     this.#mutations = next.catch(() => {});
     return next;
   }
+}
+
+function isOneShot(item: AgentAppItem): boolean {
+  return (
+    item.retention !== "transient" &&
+    appInboxDefinition(item.appId, item.notificationClass).consumeOnRead === true
+  );
 }
 
 function boundedSingleLine(

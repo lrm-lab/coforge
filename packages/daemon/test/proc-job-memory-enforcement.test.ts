@@ -2,11 +2,13 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { AgentAppInbox } from "#src/agent-app-inbox/agent-app-inbox";
 import { decodeAgentProcJob } from "@lrm/coforge-sdk/agent";
 import { readProcJobMemoryLimit } from "#src/proc-jobs/proc-job-memory-config";
 import {
   procJobLedgerPath,
   readProcJobLedger,
+  readProcJobLedgerState,
   toPublicProcJob,
   writeProcJobLedger,
   type StoredProcJob,
@@ -53,12 +55,21 @@ test.each(["existing daemon", "adopted ledger"] as const)(
         ]);
       },
     });
+    const inbox = await AgentAppInbox.open(stateDirectory, "ws", "agent");
+    const ledgerPath = procJobLedgerPath(stateDirectory);
     const options = {
       workspaceId: "ws",
       workspaceRoot: directory,
       stateDirectory,
       memoryConfigPath,
       rssSampler,
+      publishMemoryNotice: async (owner, item, commit) => {
+        const state = await readProcJobLedgerState(ledgerPath);
+        expect(owner).toBe("agent");
+        expect(state.jobs[0]?.memory?.termination).toBe("memory_limit");
+        expect(state.memoryNotices).toEqual([{ agentId: owner, jobId: state.jobs[0]!.id }]);
+        await inbox.publishOnce(item, commit);
+      },
       sweepIntervalMs: 15,
       graceMs: 100,
       systemdRunAvailable: async () => false,
@@ -95,6 +106,7 @@ test.each(["existing daemon", "adopted ledger"] as const)(
         return job?.memory?.usageBytes === 3 * mib ? job : undefined;
       });
       expect(first.status).toBe("running");
+      expect(inbox.list()).toEqual([]);
       if (mode === "adopted ledger") {
         manager.close();
         const beforeAdopt = reads;
@@ -118,6 +130,13 @@ test.each(["existing daemon", "adopted ledger"] as const)(
         termination: "memory_limit",
       });
       expect(decodeAgentProcJob(terminal).stopReason).toBe("exited");
+      const notices = await waitFor(async () => {
+        const state = await readProcJobLedgerState(ledgerPath);
+        return state.memoryNotices.length === 0 ? inbox.list() : undefined;
+      });
+      expect(notices.map((item) => item.itemId)).toEqual([`proc:memory_limit:${job.id}`]);
+      expect(await inbox.read()).toHaveLength(1);
+      expect(await inbox.read()).toEqual([]);
 
       if (mode === "adopted ledger") return;
       await Bun.write(memoryConfigPath, JSON.stringify({ memoryMaxMb: -1 }));
@@ -235,6 +254,37 @@ test("capped scope identity is retained privately through a ledger round trip", 
     expect(uncertain?.memory?.mode).toBe("systemd_cgroup");
     expect(uncertain?.memoryScope).toBeUndefined();
   } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a daemon startup retries a pending notice after its terminal job has been pruned", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "coforge-proc-notice-adopt-"));
+  const stateDirectory = join(directory, "state");
+  const ledgerPath = procJobLedgerPath(stateDirectory);
+  const jobId = crypto.randomUUID();
+  const agentId = "agent";
+  const inbox = await AgentAppInbox.open(stateDirectory, "ws", agentId);
+  const recovered = Promise.withResolvers<void>();
+  const manager = new ProcJobManager({
+    workspaceId: "ws",
+    workspaceRoot: directory,
+    stateDirectory,
+    publishMemoryNotice: async (owner, item, commit) => {
+      expect(owner).toBe(agentId);
+      await inbox.publishOnce(item, commit);
+      recovered.resolve();
+    },
+  });
+  try {
+    await writeProcJobLedger(ledgerPath, [], [{ agentId, jobId }]);
+    manager.startSweep();
+    await recovered.promise;
+    expect(await readProcJobLedgerState(ledgerPath)).toEqual({ jobs: [], memoryNotices: [] });
+    expect((await inbox.read()).map((item) => item.sourceRef.id)).toEqual([jobId]);
+    expect(await inbox.read()).toEqual([]);
+  } finally {
+    manager.close();
     await rm(directory, { recursive: true, force: true });
   }
 });
