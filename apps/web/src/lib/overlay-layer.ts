@@ -1,12 +1,6 @@
-import { useCallback, useLayoutEffect, useState, type Ref } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type Ref, type RefObject } from "react";
+import { flushSync } from "react-dom";
 
-/**
- * The one layer every overlay that covers the screen sits on: the official modal's `z-50`. React
- * Aria portals each overlay to the end of `<body>` as it opens, so among overlays on one layer the
- * one opened last is on top, whichever kind each is (task #519: a profile slideout opened from a
- * Task popup had no layer and showed under it). Popovers and tooltips are React Aria's to place,
- * above all of these (`useOverlayPosition`'s inline `z-index: 100000`).
- */
 export const OVERLAY_LAYER = "z-50";
 
 export const OVERLAY_SCRIM_Z = 0;
@@ -30,7 +24,10 @@ export function composeOverlayRefs<T>(
   };
 }
 
-export function useOverlayHost(open: boolean): {
+export function useOverlayHost(
+  open: boolean,
+  pageFlow = false,
+): {
   host: HTMLDivElement | null;
   overlayRef: (node: HTMLElement | null) => void;
 } {
@@ -46,6 +43,13 @@ export function useOverlayHost(open: boolean): {
   const active = open || overlayMounted;
 
   useLayoutEffect(() => {
+    if (!host) return;
+    host.className = pageFlow
+      ? `relative ${OVERLAY_LAYER}`
+      : `absolute inset-x-0 top-0 ${OVERLAY_LAYER}`;
+  }, [host, pageFlow]);
+
+  useLayoutEffect(() => {
     if (!host || !active) return;
     if (!host.isConnected) document.body.appendChild(host);
     return () => {
@@ -59,4 +63,117 @@ export function useOverlayHost(open: boolean): {
   }, [host, open]);
 
   return { host, overlayRef };
+}
+
+type OverlayAnimationHandler = (element: HTMLElement) => void | Promise<void>;
+
+function useOverlayAnimation(
+  ref: RefObject<HTMLElement | null>,
+  isActive: boolean,
+  onStart: OverlayAnimationHandler | undefined,
+  onEnd: () => void,
+) {
+  const isActiveRef = useRef<boolean | null>(null);
+  const onStartRef = useRef(onStart);
+  onStartRef.current = onStart;
+
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (isActive && element && isActiveRef.current !== isActive) {
+      isActiveRef.current = isActive;
+      if (!("getAnimations" in element)) {
+        onEnd();
+        return;
+      }
+      const startPromise = onStartRef.current?.(element);
+      const animations = element
+        .getAnimations()
+        .filter(
+          (animation) =>
+            (typeof DocumentTimeline === "undefined" ||
+              animation.timeline instanceof DocumentTimeline) &&
+            animation.playState === "running",
+        );
+      if (animations.length === 0 && !startPromise) {
+        onEnd();
+        return;
+      }
+      let cancelled = false;
+      const finish = () => {
+        if (cancelled) return;
+        flushSync(() => {
+          onEnd();
+        });
+      };
+      void Promise.all([startPromise, ...animations.map((animation) => animation.finished)]).then(
+        finish,
+        finish,
+      );
+      return () => {
+        cancelled = true;
+        if (isActiveRef.current === true) {
+          isActiveRef.current = null;
+        }
+      };
+    }
+    isActiveRef.current = isActive;
+  }, [ref, isActive, onEnd]);
+}
+
+export function useOverlayEnterAnimation(
+  ref: RefObject<HTMLElement | null>,
+  isReady = true,
+  onEnter?: OverlayAnimationHandler,
+): boolean {
+  const [isEntering, setEntering] = useState(true);
+  const isAnimationReady = isEntering && isReady;
+
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!isReady && element) {
+      const prevOpacity = element.style.opacity;
+      element.style.opacity = "0";
+      return () => {
+        element.style.opacity = prevOpacity;
+      };
+    }
+  }, [ref, isReady]);
+
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (isAnimationReady && element && "getAnimations" in element) {
+      for (const animation of element.getAnimations()) {
+        if (animation instanceof CSSTransition) {
+          animation.cancel();
+        }
+      }
+    }
+  }, [ref, isAnimationReady]);
+
+  const finishEnter = useCallback(() => setEntering(false), []);
+  useOverlayAnimation(ref, isAnimationReady, onEnter, finishEnter);
+  return isAnimationReady;
+}
+
+export function useOverlayExitAnimation(
+  ref: RefObject<HTMLElement | null>,
+  isOpen: boolean,
+  onExit?: OverlayAnimationHandler,
+): boolean {
+  const [exitState, setExitState] = useState<"closed" | "open" | "exiting">(
+    isOpen ? "open" : "closed",
+  );
+
+  if (exitState === "open" && !isOpen) {
+    setExitState("exiting");
+  } else if (exitState !== "open" && isOpen) {
+    setExitState("open");
+  }
+
+  const isExiting = exitState === "exiting";
+  const finishExit = useCallback(() => {
+    setExitState((state) => (state === "exiting" ? "closed" : state));
+  }, []);
+  useOverlayAnimation(ref, isExiting, onExit, finishExit);
+  return isExiting;
 }

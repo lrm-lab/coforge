@@ -7,6 +7,7 @@ import {
   animationsSettled,
   browserSession,
   devBrowserWorkspace,
+  elementAtRest,
   localBrowserE2e,
   menuItemNamed,
   pageHydrated,
@@ -46,14 +47,172 @@ test("external Agent: page credential, browser-approved login, presence, revoke 
       `${pageHydrated} && [...document.querySelectorAll("button")].some((el) => el.textContent?.trim() === "New Agent")`,
     );
 
+    const phoneShots = async (name: string) => {
+      await shoot(name);
+      await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
+      await shoot(`${name}-dark`);
+      await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
+    };
+
+    await evaluate(
+      `(() => {
+        const record = {
+          sawEntering: false,
+          enteringAnims: 0,
+          sawExiting: false,
+          exitingAnims: 0,
+          dialogMountedWhileExiting: false,
+        };
+        const inspect = () => {
+          for (const el of document.querySelectorAll("[data-entering]")) {
+            if (!el.querySelector('[role="dialog"]')) continue;
+            record.sawEntering = true;
+            const running = el
+              .getAnimations()
+              .filter(
+                (a) => a.timeline instanceof DocumentTimeline && a.playState === "running",
+              ).length;
+            record.enteringAnims = Math.max(record.enteringAnims, running);
+          }
+          for (const el of document.querySelectorAll("[data-exiting]")) {
+            if (!el.querySelector('[role="dialog"]')) continue;
+            record.sawExiting = true;
+            record.dialogMountedWhileExiting = true;
+            const running = el
+              .getAnimations()
+              .filter(
+                (a) => a.timeline instanceof DocumentTimeline && a.playState === "running",
+              ).length;
+            record.exitingAnims = Math.max(record.exitingAnims, running);
+          }
+        };
+        const observer = new MutationObserver(inspect);
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: ["data-entering", "data-exiting"],
+        });
+        window.__pageModalLifecycle = { record, observer, inspect };
+        return true;
+      })()`,
+    );
+
     await browser("find", "role", "button", "click", "--name", "New Agent", "--exact");
     await browser(
       "wait",
       "--fn",
       `document.querySelector('[role="dialog"] input[value="external"]') !== null`,
     );
+    await settled();
+    const enterCheck = await evaluate<{
+      sawEntering: boolean;
+      enteringAnims: number;
+      stillEntering: boolean;
+      modalOpacity: string;
+    }>(
+      `(() => {
+        window.__pageModalLifecycle?.inspect();
+        const modal = document.querySelector('[role="dialog"]')?.parentElement;
+        return {
+          sawEntering: Boolean(window.__pageModalLifecycle?.record.sawEntering),
+          enteringAnims: window.__pageModalLifecycle?.record.enteringAnims ?? 0,
+          stillEntering: document.querySelector("[data-entering]") !== null,
+          modalOpacity: modal ? getComputedStyle(modal).opacity : "",
+        };
+      })()`,
+    );
+    expect(enterCheck).toEqual({
+      sawEntering: true,
+      enteringAnims: enterCheck.enteringAnims,
+      stillEntering: false,
+      modalOpacity: "1",
+    });
+    expect(enterCheck.enteringAnims).toBeGreaterThan(0);
+
+    await browser("press", "Escape");
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('[role="dialog"]') === null && document.querySelector('[data-exiting]') === null && document.querySelector('[data-overlay-host]') === null`,
+    );
+    const exitCheck = await evaluate<{
+      sawExiting: boolean;
+      exitingAnims: number;
+      dialogMountedWhileExiting: boolean;
+      rootInert: boolean;
+    }>(
+      `(() => {
+        window.__pageModalLifecycle?.observer.disconnect();
+        const r = window.__pageModalLifecycle?.record;
+        delete window.__pageModalLifecycle;
+        const root = document.getElementById("coforge-app-root");
+        return {
+          sawExiting: Boolean(r?.sawExiting),
+          exitingAnims: r?.exitingAnims ?? 0,
+          dialogMountedWhileExiting: Boolean(r?.dialogMountedWhileExiting),
+          rootInert: Boolean(root?.inert),
+        };
+      })()`,
+    );
+    expect(exitCheck.sawExiting).toBe(true);
+    expect(exitCheck.exitingAnims).toBeGreaterThan(0);
+    expect(exitCheck.dialogMountedWhileExiting).toBe(true);
+    expect(exitCheck.rootInert).toBe(false);
+
+    await browser("find", "role", "button", "click", "--name", "New Agent", "--exact");
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('[role="dialog"] input[value="external"]') !== null`,
+    );
+    await browser("set", "viewport", "390", "844");
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('[data-phone-page-flow]') !== null && document.querySelector('[role="dialog"] input[value="external"]') !== null`,
+    );
+    await browser("press", "Escape");
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('[role="dialog"]') === null && document.querySelector('[data-phone-page-flow]') === null`,
+    );
+    const rootAfterEscape = await evaluate<{
+      inert: boolean;
+      visibility: string;
+      docOverflow: string;
+    }>(
+      `(() => { const root = document.getElementById("coforge-app-root"); return { inert: Boolean(root?.inert), visibility: root ? getComputedStyle(root).visibility : "", docOverflow: document.documentElement.style.overflow }; })()`,
+    );
+    expect(rootAfterEscape.inert).toBe(false);
+    expect(rootAfterEscape.visibility).toBe("visible");
+    expect(rootAfterEscape.docOverflow).not.toBe("hidden");
+
+    await browser("find", "role", "button", "click", "--name", "New Agent", "--exact");
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('[data-phone-page-flow]') !== null && document.querySelector('[role="dialog"] input[value="external"]') !== null`,
+    );
     await browser("click", `label:has(input[value="external"])`);
     await browser("fill", `input[name="name"]`, agentName);
+    expect(
+      await evaluate<boolean>(
+        `document.documentElement.scrollWidth <= document.documentElement.clientWidth`,
+      ),
+    ).toBe(true);
+    await browser("set", "viewport", "1280", "860");
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('[data-phone-page-flow]') === null && document.querySelector('[data-page-scrim]') !== null`,
+    );
+    expect(
+      await evaluate<{ externalChecked: boolean; nameValue: string; rootVisibility: string }>(
+        `(() => { const root = document.getElementById("coforge-app-root"); return { externalChecked: document.querySelector('[role="dialog"] input[value="external"]')?.checked === true, nameValue: document.querySelector('[role="dialog"] input[name="name"]')?.value ?? "", rootVisibility: root ? getComputedStyle(root).visibility : "" }; })()`,
+      ),
+    ).toEqual({ externalChecked: true, nameValue: agentName, rootVisibility: "visible" });
     await browser("click", `[role="dialog"] button[type="submit"]`);
     await browser(
       "wait",
@@ -78,8 +237,24 @@ test("external Agent: page credential, browser-approved login, presence, revoke 
     ).toBe("waiting");
     await shots("1-connect-waiting");
     await browser("set", "viewport", "390", "844");
-    await shoot("1-connect-waiting-phone");
+    await browser("wait", "--fn", `document.querySelector('[data-phone-page-flow]') !== null`);
+    expect(
+      await evaluate<{ key: string; state: string | undefined; noOverflowX: boolean }>(
+        `({ key: document.querySelector('[data-testid="external-agent-credential"]')?.textContent?.trim() ?? "", state: document.querySelector('[data-testid="external-agent-state"]')?.dataset.state, noOverflowX: document.documentElement.scrollWidth <= document.documentElement.clientWidth })`,
+      ),
+    ).toEqual({ key: pageKey, state: "waiting", noOverflowX: true });
+    await phoneShots("1-connect-waiting-phone");
     await browser("set", "viewport", "1280", "860");
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('[data-phone-page-flow]') === null && document.querySelector('[data-page-scrim]') !== null`,
+    );
+    expect(
+      await evaluate<{ key: string; rootVisibility: string }>(
+        `(() => { const root = document.getElementById("coforge-app-root"); return { key: document.querySelector('[data-testid="external-agent-credential"]')?.textContent?.trim() ?? "", rootVisibility: root ? getComputedStyle(root).visibility : "" }; })()`,
+      ),
+    ).toEqual({ key: pageKey, rootVisibility: "visible" });
 
     const agentRow = await db.agent.findFirst({
       where: { workspaceId, name: agentName, deletedAt: null },
@@ -201,9 +376,10 @@ test("external Agent: page credential, browser-approved login, presence, revoke 
     const chooseInRowMenu = async (rowText: string, item: string) => {
       expect(
         await evaluate<boolean>(
-          `(() => { const row = [...document.querySelectorAll('[data-testid="external-agent-credential-row"]')].find((el) => el.textContent?.includes(${JSON.stringify(rowText)})); row?.querySelector('button[aria-label="Credential actions"]')?.setAttribute("data-e2e-menu", ""); return Boolean(row); })()`,
+          `(() => { document.querySelectorAll("[data-e2e-menu]").forEach((el) => el.removeAttribute("data-e2e-menu")); const row = [...document.querySelectorAll('[data-testid="external-agent-credential-row"]')].find((el) => el.textContent?.includes(${JSON.stringify(rowText)})); row?.querySelector('button[aria-label="Credential actions"]')?.setAttribute("data-e2e-menu", ""); return Boolean(row); })()`,
         ),
       ).toBe(true);
+      await browser("wait", "--fn", elementAtRest('document.querySelector("[data-e2e-menu]")'));
       await browser("click", "[data-e2e-menu]");
       await browser("wait", "--fn", `Boolean(${menuItemNamed(item)})`);
       await browser("find", "role", "menuitem", "click", "--name", item);
@@ -240,6 +416,7 @@ test("external Agent: page credential, browser-approved login, presence, revoke 
     await browser("set", "viewport", "390", "844");
     await shoot("4-profile-online-phone");
     await browser("set", "viewport", "1280", "860");
+    await settled();
 
     await chooseInRowMenu(machineName, "Revoke");
     await confirmInDialog("Revoke");

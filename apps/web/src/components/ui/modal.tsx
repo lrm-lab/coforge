@@ -12,7 +12,7 @@ import {
   OverlayTriggerStateContext,
   type ModalOverlay as AriaModalOverlay,
 } from "react-aria-components";
-import { useOverlayTriggerState } from "react-stately";
+import { useOverlayTriggerState, type OverlayTriggerState } from "react-stately";
 
 import {
   Modal as OfficialModal,
@@ -33,11 +33,13 @@ import { cx } from "#src/utils/cx";
 import {
   ModalContext,
   PageCoordinateScrim,
-  PageFlowModal,
-  PhonePageFlowOverlay,
+  PageModalContext,
   resolveScrimConfig,
+  UnifiedPageModal,
+  UnifiedPageModalOverlay,
   useKeepFocusedFieldInView,
   type ModalForm,
+  type ModalOverlayProps,
 } from "./page-modal-overlay";
 
 export { PageCoordinateScrim } from "./page-modal-overlay";
@@ -54,11 +56,7 @@ export function ModalOverlay({
   ref,
   UNSTABLE_portalContainer,
   ...props
-}: Omit<ComponentProps<typeof RefForwardingModalOverlay>, "style"> & {
-  confirmation?: boolean;
-  page?: boolean;
-  instant?: boolean;
-}) {
+}: ModalOverlayProps) {
   const trigger = useContext(OverlayTriggerStateContext);
   const usesLocalState = props.isOpen !== undefined || props.defaultOpen !== undefined || !trigger;
   const localState = useOverlayTriggerState({
@@ -67,42 +65,60 @@ export function ModalOverlay({
     onOpenChange: props.onOpenChange,
   });
   const overlayState = usesLocalState ? localState : trigger;
-  const open = overlayState.isOpen;
   const wide = useBreakpoint("sm");
-  const usePhonePageFlow = Boolean(page) && !wide;
-  const { host, overlayRef } = useOverlayHost(open && !usePhonePageFlow);
-  const viewportTop = useVisualViewportTop(open && !usePhonePageFlow);
-  const keyboardMayBeUp = useKeyboardFieldFocused(open && !usePhonePageFlow);
-  const form: ModalForm = confirmation ? "sheet" : page ? "page" : null;
-  const modalContext = useMemo(() => ({ form, instant }), [form, instant]);
-  const scrim = useMemo(() => resolveScrimConfig(className, instant), [className, instant]);
-  useKeepFocusedFieldInView(open && !usePhonePageFlow);
 
-  if (usePhonePageFlow) {
-    const close = () => {
-      overlayState.close();
-    };
-    const resolvedChildren =
-      typeof props.children === "function"
-        ? props.children({
-            isEntering: false,
-            isExiting: false,
-            state: overlayState,
-            defaultChildren: undefined,
-          })
-        : props.children;
+  if (page) {
     return (
-      <PhonePageFlowOverlay
-        open={open}
+      <UnifiedPageModalOverlay
+        {...props}
+        className={className}
         instant={instant}
-        state={overlayState}
-        isKeyboardDismissDisabled={props.isKeyboardDismissDisabled}
-        onClose={close}
-      >
-        {resolvedChildren}
-      </PhonePageFlowOverlay>
+        overlayState={overlayState}
+        wide={wide}
+        ref={ref}
+        UNSTABLE_portalContainer={UNSTABLE_portalContainer}
+      />
     );
   }
+
+  return (
+    <StandardModalOverlay
+      {...props}
+      className={className}
+      confirmation={confirmation}
+      instant={instant}
+      overlayState={overlayState}
+      usesLocalState={usesLocalState}
+      wide={wide}
+      ref={ref}
+      UNSTABLE_portalContainer={UNSTABLE_portalContainer}
+    />
+  );
+}
+
+function StandardModalOverlay({
+  className,
+  confirmation,
+  instant = false,
+  overlayState,
+  usesLocalState,
+  wide,
+  ref,
+  UNSTABLE_portalContainer,
+  ...props
+}: ModalOverlayProps & {
+  overlayState: OverlayTriggerState;
+  usesLocalState: boolean;
+  wide: boolean;
+}) {
+  const open = overlayState.isOpen;
+  const { host, overlayRef } = useOverlayHost(open);
+  const viewportTop = useVisualViewportTop(open);
+  const keyboardMayBeUp = useKeyboardFieldFocused(open);
+  const form: ModalForm = confirmation ? "sheet" : null;
+  const modalContext = useMemo(() => ({ form, instant }), [form, instant]);
+  const scrim = useMemo(() => resolveScrimConfig(className, instant), [className, instant]);
+  useKeepFocusedFieldInView(open);
 
   return (
     <ModalContext.Provider value={modalContext}>
@@ -132,8 +148,6 @@ export function ModalOverlay({
         }
         className={(state) =>
           cx(
-            /* Safari 26+ samples fixed overlays that touch the viewport foot; hide the fixed shell
-               with visibility: hidden while PageCoordinateScrim dims the page in page coordinates. */
             "invisible z-10 bg-transparent backdrop-blur-none",
             instant
               ? "animate-none!"
@@ -142,8 +156,6 @@ export function ModalOverlay({
             !keyboardMayBeUp &&
               "max-sm:[--visual-viewport-height:var(--app-height,100dvh)]! max-sm:[--visual-viewport-top:0px]!",
             confirmation && "max-sm:px-0 max-sm:[--modal-pb:0px]",
-            page &&
-              "max-sm:items-stretch max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px]",
             typeof className === "function" ? className(state) : className,
             "invisible z-10 bg-transparent backdrop-blur-none",
           )
@@ -160,12 +172,13 @@ export function useConfirmationSheet(): boolean {
 
 export function Modal({ className, children, ...props }: ComponentProps<typeof OfficialModal>) {
   const { form, instant } = useContext(ModalContext);
+  const pageModal = useContext(PageModalContext);
 
-  if (form === "page-flow") {
+  if (pageModal) {
     return (
-      <PageFlowModal className={className} {...props}>
+      <UnifiedPageModal pageModal={pageModal} instant={instant} className={className} {...props}>
         {children}
-      </PageFlowModal>
+      </UnifiedPageModal>
     );
   }
 
@@ -180,8 +193,6 @@ export function Modal({ className, children, ...props }: ComponentProps<typeof O
               ? "animate-none!"
               : [state.isEntering && "sm:fade-in", state.isExiting && "fade-out"],
             typeof className === "function" ? className(state) : className,
-            form === "page" &&
-              "max-sm:h-full max-sm:w-full max-sm:max-w-none max-sm:rounded-none max-sm:ring-0 max-sm:safe-area-padding",
           )
         }
       >
