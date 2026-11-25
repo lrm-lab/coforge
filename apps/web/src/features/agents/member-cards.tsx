@@ -1,8 +1,8 @@
 import { GridListItem } from "react-aria-components";
 import { Link } from "@tanstack/react-router";
 
-import { StatusDot } from "#src/components/ui/status-dot";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { ComputerGlyph } from "#src/features/computers/computer-status-icon";
 import { useMemberOnline } from "#src/features/workspaces/member-presence";
 import { workspaceRoleLabel } from "#src/features/workspaces/workspace-role-label";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -12,12 +12,20 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { AgentDisplayAvatar } from "./agent-display-avatar";
 import { agentDisplay } from "./agent-status-display";
+import { AgentStatusMarker, AgentStatusText } from "./agent-status-marker";
 import {
   formatAgentProfileParam,
   formatPersonProfileParam,
 } from "./profile-panel/profile-panel-search";
 import { useAgentModelName } from "./use-agent-model-name";
 import { useLiveAgentDisplay } from "./workspace-agents-realtime";
+
+/** Shared column template for `AgentsTableView` header and `AgentDirectoryRow` so headers and cells
+ * stay aligned across container widths (profile closed, profile open, and narrow split panes). */
+export const AGENT_TABLE_GRID_CLASS =
+  "@2xl/members:grid @2xl/members:grid-cols-[minmax(12rem,1.4fr)_minmax(7.5rem,1fr)_minmax(8.5rem,1.1fr)] @2xl/members:gap-3 @[45rem]/members:grid-cols-[minmax(12rem,1.45fr)_minmax(7.5rem,0.95fr)_minmax(8.5rem,1.05fr)_minmax(7.5rem,0.85fr)]";
+
+export const AGENT_TABLE_CREATOR_COL_CLASS = "hidden @[45rem]/members:flex";
 
 const COMPACT_CARD_CLASS =
   "relative flex min-w-0 cursor-pointer items-center gap-3 rounded-xl bg-primary px-3.5 py-3 ring-1 ring-secondary ring-inset outline-focus-ring transition-colors hover:bg-primary_hover data-focus-visible:outline-2 data-focus-visible:outline-offset-2";
@@ -184,13 +192,18 @@ export function AgentDirectoryRow({
   const workspaceSlug = useWorkspaceSlug();
   const computer = agentComputerCaption(member);
   const description = member.description.trim();
+  const creatorName = member.owner.displayName.trim();
+  const isError = Boolean(view.alert || view.kind === "error");
+  const showLiveStatus = isError || view.pulse || view.lastActiveAt !== undefined;
+  const computerGlyphKind = member.computerKind ?? (member.computerRevoked ? "local" : undefined);
 
   return (
     <GridListItem
       id={member.id}
       textValue={member.displayName}
       className={cn(
-        "relative flex min-w-0 cursor-pointer flex-col gap-2 px-4 py-3 outline-focus-ring transition-colors hover:bg-primary_hover data-focus-visible:outline-2 data-focus-visible:-outline-offset-2 @2xl/members:grid @2xl/members:grid-cols-[minmax(12rem,1fr)_6.5rem_10rem] @2xl/members:items-center @2xl/members:gap-3 @4xl/members:grid-cols-[minmax(14rem,1.4fr)_6.5rem_11rem_9.5rem_7.5rem]",
+        "relative flex min-w-0 cursor-pointer flex-col gap-2 px-4 py-3 outline-focus-ring transition-colors hover:bg-primary_hover data-focus-visible:outline-2 data-focus-visible:-outline-offset-2 @2xl/members:items-center",
+        AGENT_TABLE_GRID_CLASS,
         selected && "bg-chat-selected-bg",
       )}
     >
@@ -203,64 +216,124 @@ export function AgentDirectoryRow({
           size="md"
         />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="min-w-0 truncate text-sm font-semibold text-primary">
-              <Link
-                to="/w/$workspaceSlug/members"
-                params={{ workspaceSlug }}
-                resetScroll={false}
-                search={(previous) => ({
-                  ...previous,
-                  profile: formatAgentProfileParam(member.id),
-                })}
-                onClick={(event) => {
-                  const rowEl =
-                    event.currentTarget.closest<HTMLElement>('[role="row"]') ?? event.currentTarget;
-                  rememberSharedRect("member-profile-origin", rowEl);
-                }}
-                aria-label={m.agent_open_profile({ name: member.displayName })}
-                aria-current={selected ? "page" : undefined}
-                className="rounded-sm outline-focus-ring outline-offset-4 after:absolute after:inset-0 focus-visible:outline-2"
-              >
-                {member.displayName}
-              </Link>
-            </h2>
-            <span className="flex shrink-0 items-center gap-1.5 text-xs text-tertiary @2xl/members:hidden">
-              <StatusDot tone={view.tone} pulse={view.pulse} />
-              <span>{view.label}</span>
+          <h2 className="min-w-0 truncate text-sm font-semibold text-primary">
+            <Link
+              to="/w/$workspaceSlug/members"
+              params={{ workspaceSlug }}
+              resetScroll={false}
+              search={(previous) => ({
+                ...previous,
+                profile: formatAgentProfileParam(member.id),
+              })}
+              onClick={(event) => {
+                const rowEl =
+                  event.currentTarget.closest<HTMLElement>('[role="row"]') ?? event.currentTarget;
+                rememberSharedRect("member-profile-origin", rowEl);
+              }}
+              aria-label={m.agent_open_profile({ name: member.displayName })}
+              aria-current={selected ? "page" : undefined}
+              className="rounded-sm outline-focus-ring outline-offset-4 after:absolute after:inset-0 focus-visible:outline-2"
+            >
+              {member.displayName}
+            </Link>
+          </h2>
+          {showLiveStatus ? (
+            <p
+              className={cn(
+                "flex min-w-0 items-center gap-1.5 text-xs",
+                isError ? "text-error-primary" : view.pulse ? "text-secondary" : "text-tertiary",
+              )}
+            >
+              {(isError || view.pulse) && <AgentStatusMarker status={view} className="size-1.5" />}
+              <span className="min-w-0 truncate">
+                <AgentStatusText status={view} />
+              </span>
+            </p>
+          ) : (
+            description && <p className="truncate text-xs text-tertiary">{description}</p>
+          )}
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-tertiary @2xl/members:hidden">
+            {resolvedModel && (
+              <span className="min-w-0 truncate text-secondary">{resolvedModel}</span>
+            )}
+            <span
+              className={cn(
+                "inline-flex min-w-0 max-w-full items-center gap-1",
+                computer.warn ? "text-warning-strong" : "text-tertiary",
+              )}
+            >
+              {computerGlyphKind && (
+                <ComputerGlyph
+                  kind={computerGlyphKind}
+                  aria-hidden="true"
+                  className={cn(
+                    "size-3.5 shrink-0",
+                    computer.warn ? "text-warning-strong" : "text-tertiary",
+                  )}
+                />
+              )}
+              <span className="min-w-0 truncate">{computer.text}</span>
             </span>
-          </div>
-          {description && <p className="truncate text-xs text-tertiary">{description}</p>}
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-quaternary @2xl/members:hidden">
-            {resolvedModel && <span className="truncate font-mono">{resolvedModel}</span>}
-            <span className={cn("truncate", computer.warn && "text-warning-primary")}>
-              {computer.text}
+            <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 text-tertiary">
+              <ActorAvatar
+                presence={false}
+                size="xs"
+                userId={member.owner.id}
+                name={creatorName || undefined}
+                src={member.owner.avatarUrl}
+              />
+              <span dir="auto" className="min-w-0 truncate">
+                {creatorName || "—"}
+              </span>
             </span>
-            <span className="truncate">{member.owner.displayName}</span>
           </div>
         </div>
       </div>
 
-      <div className="hidden min-w-0 items-center gap-1.5 text-xs text-secondary @2xl/members:flex">
-        <StatusDot tone={view.tone} pulse={view.pulse} />
-        <span className={cn("truncate", view.alert && "text-warning-primary")}>{view.label}</span>
-      </div>
-
-      <div className="hidden min-w-0 truncate font-mono text-xs text-tertiary @2xl/members:block">
+      <div
+        className={cn(
+          "hidden min-w-0 truncate text-sm @2xl/members:block",
+          resolvedModel ? "text-secondary" : "text-quaternary",
+        )}
+      >
         {resolvedModel || "—"}
       </div>
 
       <div
         className={cn(
-          "hidden min-w-0 truncate text-xs @4xl/members:block",
-          computer.warn ? "text-warning-primary" : "text-tertiary",
+          "hidden min-w-0 items-center gap-1.5 text-sm @2xl/members:flex",
+          computer.warn ? "text-warning-strong" : "text-secondary",
         )}
       >
-        {computer.text}
+        {computerGlyphKind && (
+          <ComputerGlyph
+            kind={computerGlyphKind}
+            aria-hidden="true"
+            className={cn(
+              "size-4 shrink-0",
+              computer.warn ? "text-warning-strong" : "text-tertiary",
+            )}
+          />
+        )}
+        <span className="min-w-0 truncate">{computer.text}</span>
       </div>
 
-      <div className="hidden min-w-0 truncate text-end text-xs text-tertiary @4xl/members:block">
-        {member.owner.displayName}
+      <div
+        className={cn(
+          AGENT_TABLE_CREATOR_COL_CLASS,
+          "min-w-0 items-center gap-2 text-sm text-secondary",
+        )}
+      >
+        <ActorAvatar
+          presence={false}
+          size="xs"
+          userId={member.owner.id}
+          name={creatorName || undefined}
+          src={member.owner.avatarUrl}
+        />
+        <span dir="auto" className="min-w-0 truncate">
+          {creatorName || "—"}
+        </span>
       </div>
     </GridListItem>
   );

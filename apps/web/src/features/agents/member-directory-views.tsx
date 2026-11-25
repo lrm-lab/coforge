@@ -11,7 +11,13 @@ import { formatNumber } from "#src/lib/format-number";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 
-import { AgentCard, AgentDirectoryRow, PersonCard } from "./member-cards";
+import {
+  AGENT_TABLE_CREATOR_COL_CLASS,
+  AGENT_TABLE_GRID_CLASS,
+  AgentCard,
+  AgentDirectoryRow,
+  PersonCard,
+} from "./member-cards";
 import type { AgentCreateKind } from "./new-agent-dialog";
 
 export const COMPACT_CARD_GRID_CLASS =
@@ -331,16 +337,15 @@ export function AgentsTableView({
 
   if (agents.length > 0) {
     return (
-      <div className="overflow-hidden rounded-xl border border-secondary bg-primary">
+      <div className="shrink-0 overflow-hidden rounded-xl border border-secondary bg-primary">
         <div
           aria-hidden="true"
-          className="hidden border-b border-secondary px-4 py-2.5 text-xs font-medium text-tertiary @2xl/members:grid @2xl/members:grid-cols-[minmax(12rem,1fr)_6.5rem_10rem] @2xl/members:gap-3 @4xl/members:grid-cols-[minmax(14rem,1.4fr)_6.5rem_11rem_9.5rem_7.5rem]"
+          className={`hidden border-b border-secondary px-4 py-2.5 text-xs font-medium text-tertiary ${AGENT_TABLE_GRID_CLASS}`}
         >
           <span>{m.member_table_col_agent()}</span>
-          <span>{m.member_table_col_status()}</span>
           <span>{m.member_table_col_model()}</span>
-          <span className="hidden @4xl/members:block">{m.member_table_col_computer()}</span>
-          <span className="hidden text-end @4xl/members:block">{m.member_table_col_owner()}</span>
+          <span>{m.member_table_col_computer()}</span>
+          <span className={AGENT_TABLE_CREATOR_COL_CLASS}>{m.member_table_col_owner()}</span>
         </div>
         <GridList
           aria-label={m.member_tab_agents()}

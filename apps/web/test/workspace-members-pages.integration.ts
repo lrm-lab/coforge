@@ -66,8 +66,26 @@ test("pages the Workspace directory with owner and search filters", async () => 
       },
     });
     const detachedHost = await db.computer.create({
-      data: { ownerId: owner!.id, machineId: `pages-detached-${suffix}`, name: "elsewhere-host" },
+      data: {
+        ownerId: owner!.id,
+        machineId: `pages-detached-${suffix}`,
+        name: "elsewhere-host",
+        kind: "cloud",
+      },
     });
+    const cloudHost = await db.computer.create({
+      data: {
+        ownerId: owner!.id,
+        machineId: `pages-cloud-${suffix}`,
+        name: "cloud-host",
+        displayName: "Cloud Box",
+        kind: "cloud",
+      },
+    });
+    await db.workspaceComputer.create({
+      data: { workspaceId: workspace.id, computerId: cloudHost.id },
+    });
+    specs[2] = { name: "charlie", ownerId: owner!.id, computerId: cloudHost.id };
     specs.push({ name: "foxtrot", ownerId: owner!.id, computerId: detachedHost.id });
     for (const spec of specs) {
       await db.agent.create({
@@ -119,15 +137,33 @@ test("pages the Workspace directory with owner and search filters", async () => 
     expect(names(await page({ query: "secret" }))).toEqual([]);
     // Search matches the handle, the display name and the Computer name, case-insensitively.
     expect(names(await page({ query: "ARL" }))).toEqual(["charlie"]);
-    expect(names(await page({ query: "build mac" }))).toEqual(["alpha", "charlie", "delta"]);
+    expect(names(await page({ query: "build mac" }))).toEqual(["alpha", "delta"]);
+    expect(names(await page({ query: "cloud box" }))).toEqual(["charlie"]);
     expect(names(await page({ query: "nobody" }))).toEqual([]);
+    // Computer kind is returned only for Computers accessible in this Workspace, never leaked on
+    // detached/revoked or unassigned Agents.
+    const allAgents = await page({ owner: "all" });
+    expect(
+      Object.fromEntries(
+        allAgents.items.map((agent) => [
+          agent.name,
+          { computerKind: agent.computerKind, computerRevoked: agent.computerRevoked },
+        ]),
+      ),
+    ).toEqual({
+      alpha: { computerKind: "local", computerRevoked: false },
+      bravo: { computerKind: null, computerRevoked: false },
+      charlie: { computerKind: "cloud", computerRevoked: false },
+      delta: { computerKind: "local", computerRevoked: false },
+      echo: { computerKind: null, computerRevoked: false },
+      foxtrot: { computerKind: null, computerRevoked: true },
+    });
     // Each card says whether the viewer may message the Agent: any public one, their own private
     // one, never another member's private one, which an admin sees but does not message.
     const canMessage = (rows: { items: { name: string; canMessage: boolean }[] }) =>
       Object.fromEntries(rows.items.map((agent) => [agent.name, agent.canMessage]));
     expect(canMessage(await page({ query: "build mac" }))).toEqual({
       alpha: true,
-      charlie: true,
       delta: true,
     });
     await db.workspaceMembership.update({
@@ -161,7 +197,12 @@ test("pages the Workspace directory with owner and search filters", async () => 
     await db.computer.deleteMany({
       where: {
         machineId: {
-          in: [`pages-${suffix}`, `pages-hidden-${suffix}`, `pages-detached-${suffix}`],
+          in: [
+            `pages-${suffix}`,
+            `pages-hidden-${suffix}`,
+            `pages-detached-${suffix}`,
+            `pages-cloud-${suffix}`,
+          ],
         },
       },
     });

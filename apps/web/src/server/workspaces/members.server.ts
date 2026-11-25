@@ -166,6 +166,7 @@ export class WorkspaceMembers {
               id: true,
               name: true,
               displayName: true,
+              kind: true,
               workspaces: { where: { workspaceId }, select: { id: true }, take: 1 },
             },
           },
@@ -175,34 +176,38 @@ export class WorkspaceMembers {
       // An empty cursor is the first page, as before (`after: ""` would be parsed as an id).
       .withCursor({ limit, after: input.cursor || undefined });
     return {
-      items: agents.map((agent) => ({
-        id: agent.id,
-        name: agent.name,
-        displayName: shownAgentName(agent),
-        description: agent.description,
-        avatarUrl: agentFaceUrl(agent),
-        model: readableRuntimeConfig(agent.runtimeConfig, agent.id)?.model ?? "",
-        computerId: agent.computer?.workspaces.length ? agent.computer.id : null,
-        computerName: agent.computer
-          ? agent.computer.displayName.trim() || agent.computer.name.trim()
-          : null,
-        computerRevoked: Boolean(agent.computer && agent.computer.workspaces.length === 0),
-        createdAt: agent.createdAt,
-        owner: {
-          id: agent.owner.id,
-          displayName: humanLabel(agent.owner),
-          avatarUrl: workspaceUserAvatarUrl(
-            workspaceId,
-            agent.owner.id,
-            agent.owner.avatarObjectKey,
-          ),
-        },
-        /** Whether the viewer may open a direct conversation with it (`DirectConversations.open`). */
-        canMessage: canDirectMessageAgent(userId, { ...agent, ownerId: agent.owner.id }),
-        // A weekly-report assistant is protected from deletion (AgentDeletion refuses it), so the
-        // directory never offers a Delete that is certain to fail.
-        deletable: !agent.weeklyReportAssistant && !agent.workspaceAssistantSession,
-      })),
+      items: agents.map((agent) => {
+        const computerAccessible = Boolean(agent.computer?.workspaces.length);
+        return {
+          id: agent.id,
+          name: agent.name,
+          displayName: shownAgentName(agent),
+          description: agent.description,
+          avatarUrl: agentFaceUrl(agent),
+          model: readableRuntimeConfig(agent.runtimeConfig, agent.id)?.model ?? "",
+          computerId: computerAccessible ? agent.computer!.id : null,
+          computerKind: computerAccessible ? agent.computer!.kind : null,
+          computerName: agent.computer
+            ? agent.computer.displayName.trim() || agent.computer.name.trim()
+            : null,
+          computerRevoked: Boolean(agent.computer && !computerAccessible),
+          createdAt: agent.createdAt,
+          owner: {
+            id: agent.owner.id,
+            displayName: humanLabel(agent.owner),
+            avatarUrl: workspaceUserAvatarUrl(
+              workspaceId,
+              agent.owner.id,
+              agent.owner.avatarObjectKey,
+            ),
+          },
+          /** Whether the viewer may open a direct conversation with it (`DirectConversations.open`). */
+          canMessage: canDirectMessageAgent(userId, { ...agent, ownerId: agent.owner.id }),
+          // A weekly-report assistant is protected from deletion (AgentDeletion refuses it), so the
+          // directory never offers a Delete that is certain to fail.
+          deletable: !agent.weeklyReportAssistant && !agent.workspaceAssistantSession,
+        };
+      }),
       nextCursor: meta.hasNextPage ? meta.endCursor : null,
     };
   }
