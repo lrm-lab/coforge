@@ -1,5 +1,7 @@
-# Baked into the cloud-computer image (see Dockerfile). Keep this list light —
-# do not add playwright here (slow image builds); install at runtime if needed.
+# Baked into the cloud-computer image (see Dockerfile). Keep this list light.
+# playwright is the Python client only — PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+# skips browser binaries; agents attach system Chromium over CDP.
 pypdf>=6.0.0
 python-pptx>=1.0.0
 python-xlib>=0.33
+playwright>=1.40.0

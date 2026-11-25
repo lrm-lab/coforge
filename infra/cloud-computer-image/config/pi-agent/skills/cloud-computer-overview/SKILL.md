@@ -12,7 +12,7 @@ description: Map CoForge/Cube cloud-computer resources (shell, /workspace, Chrom
 ```bash
 echo "DISPLAY=$DISPLAY USER=$(id -un) PWD=$PWD"
 command -v chromium coforge-chromium coforge-cdp-endpoint python3 node npm rg fd pi
-python3 -c "import playwright; print('playwright ok')" 2>/dev/null || echo "playwright not installed"
+python3 -c "from playwright.sync_api import sync_playwright; print('playwright ok')"
 ls -la /workspace /workspace/uploads /workspace/browser-shots 2>/dev/null || true
 [ -n "${DISPLAY:-}" ] && coforge-cdp-endpoint || echo "DISPLAY unset"
 ```
@@ -28,7 +28,7 @@ ls -la /workspace /workspace/uploads /workspace/browser-shots 2>/dev/null || tru
 | 显示 | 任务注入的 `DISPLAY`（每 agent 一路，常为 `:20+`；**不是**默认 `:0`） | X11 桌面 |
 | Chromium | `coforge-chromium`（`chromium` 为其包装） | GUI；CDP 经 token 门控 |
 | 本路 CDP | `coforge-cdp-endpoint` | 打印可连接的基址 URL |
-| Playwright | 不预装；`pip install` 进 venv | `connect_over_cdp(coforge-cdp-endpoint 输出)`；勿 `playwright install`、勿装进系统盘 |
+| Playwright | 镜像已 bake Python 客户端 | `connect_over_cdp(coforge-cdp-endpoint 输出)`；勿 `playwright install`、勿再 `pip install playwright` |
 | 填表辅助 | `/usr/local/bin/page-fill.py` | 经 token 化 CDP 填字段；`--inspect` 列出可见输入框 |
 
 ## 隔离提醒（防串台）
