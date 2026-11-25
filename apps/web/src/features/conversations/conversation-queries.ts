@@ -150,16 +150,11 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
   query,
   loadInitialPage,
   loadUpdates,
-  onRealtime,
   onArrived,
 }: {
   query: ReturnType<typeof conversationPages<M, T>>["query"];
-  /** The newest page on its own: how "back to latest" recovers a tail the window evicted. */
   loadInitialPage: () => Promise<T>;
   loadUpdates: (cursor: ConversationUpdatesCursor, signal: AbortSignal) => Promise<M[]>;
-  /** Extra work per realtime event, run alongside reconciliation. */
-  onRealtime?: () => Promise<unknown>;
-  /** The messages `mergeUpdates` folds in, as they arrive. */
   onArrived?: (conversationId: string, messages: readonly M[]) => void;
 }) {
   const queryClient = useQueryClient();
@@ -264,8 +259,6 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
   loadUpdatesRef.current = loadUpdates;
   const mergeUpdatesRef = useRef(mergeUpdates);
   mergeUpdatesRef.current = mergeUpdates;
-  const onRealtimeRef = useRef(onRealtime);
-  onRealtimeRef.current = onRealtime;
 
   const reconciliation = useMemo(
     () =>
@@ -347,7 +340,6 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
     async (options) => {
       await Promise.all([
         reconciliation.reconcile(options),
-        onRealtimeRef.current?.(),
         refreshPendingActionCards(loadedRef.current(), updateMessageRef.current),
       ]);
     },

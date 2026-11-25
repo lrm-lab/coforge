@@ -67,53 +67,59 @@ export function placeOfDraftKey(key: string): DraftPlace | undefined {
   return undefined;
 }
 
-/** The storage key of the draft that changed, or `null` when any of them may have. */
 export type DraftChange = string | null;
-type DraftObserver = (change: DraftChange) => void;
+type DraftObserver = (change: DraftChange, notify: boolean) => void;
+type DraftListener = (change: DraftChange) => void;
 
-const listeners = new Set<DraftObserver>();
-/** Caches of the drafts, told of every change whether or not anyone subscribes, and first. */
+const listeners = new Set<DraftListener>();
 const observers = new Set<DraftObserver>();
+let bridgeRetainers = 0;
+let releaseListenersBridge: (() => void) | undefined;
 
-/** Calls `observer` with every change heard of, before subscribers are called, for as long as the
- * page lives: what lets a cache of the drafts stay right while nobody subscribes. Returns the way
- * to stop. */
 export function observeComposerDrafts(observer: DraftObserver): () => void {
   observers.add(observer);
   return () => void observers.delete(observer);
 }
 
 function draftsChanged(change: DraftChange, notify: boolean = true): void {
-  for (const observer of observers) observer(change);
+  for (const observer of observers) observer(change, notify);
   if (notify) for (const listener of listeners) listener(change);
 }
 
-/** Another tab wrote `localStorage`: a draft's text, or (`null`) everything. */
 function onStorageEvent(event: { key: string | null }): void {
   if (event.key === null || placeOfDraftKey(event.key)) draftsChanged(event.key);
 }
 
-/** Whether there is a window to hear other tabs from (not during SSR). */
 function canListen(): boolean {
   return typeof window !== "undefined" && typeof window.addEventListener === "function";
 }
 
-/**
- * Calls `listener` after a draft's text was written or cleared, here or in another tab, with that
- * draft's storage key (`null`: any draft may have changed). A same-document `localStorage` write
- * fires no `storage` event, so the writers below tell it themselves; the window's `storage` event
- * covers other tabs, and is listened to only while someone subscribes. Returns the way to stop.
- */
-export function subscribeComposerDrafts(listener: (change: DraftChange) => void): () => void {
-  listeners.add(listener);
-  if (listeners.size === 1) {
-    // Another tab may have written while nobody listened: caches read everything again.
+export function retainDraftStorageBridge(): () => void {
+  bridgeRetainers += 1;
+  if (bridgeRetainers === 1) {
     draftsChanged(null, false);
     if (canListen()) window.addEventListener("storage", onStorageEvent);
   }
+  let active = true;
+  return () => {
+    if (!active) return;
+    active = false;
+    bridgeRetainers -= 1;
+    if (bridgeRetainers === 0 && canListen()) {
+      window.removeEventListener("storage", onStorageEvent);
+    }
+  };
+}
+
+export function subscribeComposerDrafts(listener: DraftListener): () => void {
+  const wasEmpty = listeners.size === 0;
+  listeners.add(listener);
+  if (wasEmpty) releaseListenersBridge = retainDraftStorageBridge();
   return () => {
     if (!listeners.delete(listener) || listeners.size > 0) return;
-    if (canListen()) window.removeEventListener("storage", onStorageEvent);
+    const release = releaseListenersBridge;
+    releaseListenersBridge = undefined;
+    release?.();
   };
 }
 

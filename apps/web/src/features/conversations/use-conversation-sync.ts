@@ -22,15 +22,22 @@ type ConversationSyncView = Pick<
   "conversationId" | "messages" | "threadReadThrough"
 >;
 
-/**
- * The browser-only synchronization seam for a loaded conversation.
- *
- * The route loader owns the first page and the Query hook owns the cache. This hook owns the
- * transitions that depend on browser URL state or user visibility: deep-link window reads,
- * thread read acknowledgements, and the remembered set of mounted thread panes. Keeping those
- * effects here makes the data seam explicit instead of making the presentation file coordinate
- * fetches and local state at the same time.
- */
+export const MAX_VISITED_THREADS = 5;
+
+export function rememberVisitedThread(
+  previous: readonly string[],
+  selected: string,
+  limit = MAX_VISITED_THREADS,
+): string[] {
+  if (limit <= 0) return [];
+  const existing = previous.indexOf(selected);
+  if (existing >= 0 && existing === previous.length - 1 && previous.length <= limit)
+    return previous as string[];
+  const without = existing >= 0 ? previous.filter((rootId) => rootId !== selected) : previous;
+  const next = [...without, selected];
+  return next.length > limit ? next.slice(next.length - limit) : next;
+}
+
 export function useConversationSync({
   conversation,
   searchThreadRootId,
@@ -47,7 +54,6 @@ export function useConversationSync({
   conversation: ConversationSyncView;
   searchThreadRootId?: string;
   openTaskMessageId?: string;
-  /** The read cursors that came with a Task popup root read outside the window (`useTaskPopupRoot`). */
   taskRootReads?: Readonly<Record<string, number>>;
   selected?: string;
   threadInView?: string;
@@ -60,8 +66,6 @@ export function useConversationSync({
   const queryClient = useQueryClient();
   const toast = useAppToast();
   const [visited, setVisited] = useState<string[]>([]);
-  // Replacing the window with an "around" read leaves the stream with no messages until its answer
-  // lands; the stream must show loading, not "empty", while that is happening (stream-state.ts).
   const [windowRead, setWindowRead] = useState<StreamRead>("settled");
   const loadWindowAround = useCallback(
     async (messageId: string) => {
@@ -76,8 +80,6 @@ export function useConversationSync({
     [onLoadMessageAround],
   );
 
-  // Only a read's failure is kept: a read that succeeded centres the window on the root
-  // (`loadAround` answers NOT_FOUND otherwise), so until the root shows up it is loading.
   const [threadRootFailure, setThreadRootFailure] = useState<
     { rootId: string; load: Exclude<ThreadRootLoad, { status: "loading" }> } | undefined
   >();
@@ -99,9 +101,6 @@ export function useConversationSync({
   );
 
   const [readThrough, setReadThrough] = useState<Record<string, number>>({});
-  // This thread's read cursor (`threadReadThrough`): the stored one, raised by this visit's reads.
-  // A Task popup root read outside the window brings its own stored cursor; cursors only move
-  // forward, so the later of the two counts.
   const threadCursor = useCallback(
     (rootMessageId: string) => {
       const cursor = threadReadThrough(
@@ -114,12 +113,9 @@ export function useConversationSync({
     [readThrough, conversation.threadReadThrough, taskRootReads],
   );
 
-  // Keep the selected thread mounted while the reader moves between threads. The task popup owns
-  // its own pane, so it removes its root from this retained set below; a thread that stays
-  // selected under the popup (one a host shows alone) comes back once the popup closes.
   useEffect(() => {
     if (!selected || selected === openTaskMessageId) return;
-    setVisited((previous) => (previous.includes(selected) ? previous : [...previous, selected]));
+    setVisited((previous) => rememberVisitedThread(previous, selected));
   }, [selected, openTaskMessageId]);
   useEffect(() => {
     if (!openTaskMessageId) return;

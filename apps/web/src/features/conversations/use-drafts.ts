@@ -7,7 +7,12 @@ import {
 } from "#src/features/agents/workspace-agents-realtime";
 import { m } from "#src/paraglide/messages";
 import { subscribeComposerDrafts } from "./composer-draft";
-import { deviceDrafts, type DeviceDraft } from "./composer-drafts-index";
+import {
+  deviceDrafts,
+  hasConversationDraft,
+  subscribeConversationDraft,
+  type DeviceDraft,
+} from "./composer-drafts-index";
 import { channelNamesQuery } from "./conversation-queries";
 import type { DirectEntry } from "./conversation-directory-rows";
 import { directEntries } from "./directory-layout";
@@ -20,7 +25,6 @@ import {
 } from "./drafts-model";
 import { useSidebarLists } from "./sidebar-lists";
 
-/** A DM as a draft row shows it, named as the sidebar names it. */
 function draftDirect({ name, self, peer, agent }: DirectEntry): DraftDirect {
   const label = self ? m.conversation_dm_self_name({ name }) : name;
   return peer.kind === "people"
@@ -31,10 +35,6 @@ function draftDirect({ name, self, peer, agent }: DirectEntry): DraftDirect {
       };
 }
 
-/** The channels and DMs of the current Workspace, by conversation id: what tells its drafts from
- * those written in another Workspace on this device. An archived channel is not in it, nor a DM
- * with an Agent that is gone: the sidebar lists neither. Channels are built again only when the
- * channels change, DMs only when the DMs or Agents do. */
 function useDraftHomes(): ReadonlyMap<string, DraftHome> {
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const channelNames = useSuspenseQuery(channelNamesQuery(workspaceId)).data;
@@ -68,19 +68,14 @@ function useDraftHomes(): ReadonlyMap<string, DraftHome> {
   return useMemo(() => new Map([...channelHomes, ...directHomes]), [channelHomes, directHomes]);
 }
 
-/** What the server renders: this device's drafts are not known there. */
 const NO_DRAFTS: DeviceDraft[] = [];
 
-/** The Workspace's drafts on this device, the most recently edited first, kept current as the
- * viewer types in any composer. */
 export function useDraftRows(): DraftRow[] {
   const homes = useDraftHomes();
   const drafts = useSyncExternalStore(subscribeComposerDrafts, deviceDrafts, () => NO_DRAFTS);
   return useMemo(() => resolveDrafts(drafts, homes), [drafts, homes]);
 }
 
-/** How many drafts the Workspace has. The snapshot is the number, so a keystroke renders the
- * reader only when the count moves. */
 export function useDraftCount(): number {
   const homes = useDraftHomes();
   const count = useCallback(() => countDrafts(deviceDrafts(), homes), [homes]);
@@ -88,13 +83,10 @@ export function useDraftCount(): number {
 }
 
 export function useHasConversationDraft(conversationId: string): boolean {
-  const check = useCallback(
-    () =>
-      deviceDrafts().some(
-        (draft) =>
-          draft.place.conversationId === conversationId && draft.place.target.kind !== "task",
-      ),
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => subscribeConversationDraft(conversationId, onStoreChange),
     [conversationId],
   );
-  return useSyncExternalStore(subscribeComposerDrafts, check, () => false);
+  const check = useCallback(() => hasConversationDraft(conversationId), [conversationId]);
+  return useSyncExternalStore(subscribe, check, () => false);
 }

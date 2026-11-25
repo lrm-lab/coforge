@@ -20,7 +20,7 @@ import {
 } from "./conversation-queries";
 import {
   ATTACHMENT_COMMENTS_QUERY_PREFIX,
-  threadFollowingAgentsQueryPrefix,
+  threadFollowingAgentsQueryKey,
 } from "./conversation-query-keys";
 import type { SendOptions } from "./composer-outbox";
 import type { Reactor } from "./message-reactions";
@@ -35,18 +35,36 @@ import type { DirectConversationView } from "./conversation-types";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
-/** The viewer as a reaction lists them: who they are and the name teammates see. `undefined` for a
- * non-member, whose chip waits for the server's summary. */
+export function arrivedThreadRootIds(
+  messages: readonly {
+    threadRootId?: string | null;
+    system?: { kind: string; params?: unknown } | null;
+  }[],
+): string[] {
+  const roots = new Set<string>();
+  for (const message of messages) {
+    if (message.threadRootId) roots.add(message.threadRootId);
+    if (message.system?.kind === "channel.agent_thread_unfollowed") {
+      const params = message.system.params;
+      if (
+        params &&
+        typeof params === "object" &&
+        !Array.isArray(params) &&
+        "rootMessageId" in params &&
+        typeof params.rootMessageId === "string"
+      ) {
+        roots.add(params.rootMessageId);
+      }
+    }
+  }
+  return [...roots];
+}
+
 function useViewerReactor(viewerId: string | undefined): Reactor | undefined {
   const label = appRoute.useLoaderData({ select: ({ user }) => user.name });
   return viewerId ? { id: viewerId, label } : undefined;
 }
 
-/**
- * A channel as its page and the Tasks page's popup both show it: the loaded messages (kept live
- * by realtime), its Tasks, and what the viewer does there — send, react, join, read and follow
- * threads. `conversationProps` goes straight to `ChannelConversation`.
- */
 export function useChannelConversation(channelId: string) {
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -59,16 +77,17 @@ export function useChannelConversation(channelId: string) {
   const setThreadFollowed = useServerFn(setPublicChannelThreadFollowed);
   const endReplyIntents = useEndReplyIntentsOnArrival();
   const page = useConversationQuery({
-    onArrived: endReplyIntents,
+    onArrived: (id, arrived) => {
+      endReplyIntents(id, arrived);
+      for (const threadRootId of arrivedThreadRootIds(arrived)) {
+        void queryClient.invalidateQueries({
+          queryKey: threadFollowingAgentsQueryKey(channelId, threadRootId),
+          exact: true,
+        });
+      }
+    },
     ...publicChannelQuery(channelId),
     loadUpdates: publicChannelUpdates(channelId),
-    // No Task refresh here: a Task change arrives as its own `task.changed.v1` event, which
-    // `useConversationTasks` writes into the conversation's Tasks. Reading Tasks again on every
-    // publication meant one read per message in the conversation.
-    onRealtime: () =>
-      queryClient.invalidateQueries({
-        queryKey: threadFollowingAgentsQueryPrefix(channelId),
-      }),
   });
   const { conversation } = page;
   const viewerReactor = useViewerReactor(conversation.viewerId);
