@@ -104,11 +104,12 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # Some suites start their own throwaway `redis-server` on a random port (the external display
-      # suite throws without one), apart from the Redis service above. Install only the binary: the
-      # policy-rc.d guard stops the package from starting its own server on 6379.
-      - name: Install redis-server
-        run: scripts/ci/install-redis.sh
+      - name: Verify the host redis-server is absent
+        run: |
+          if command -v redis-server; then
+            echo 'Runner already supplies redis-server' >&2
+            exit 1
+          fi
 
       - name: Prepare the checkout and database
         run: ./scripts/test/prepare-web-integration.sh
