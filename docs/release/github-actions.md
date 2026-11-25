@@ -88,8 +88,10 @@ jobs instead of queueing behind them.
 PR diffs use the merge base. A push to `main` diffs from the head of CI's last
 successful push run on `main`, so commits whose runs were skipped, cancelled,
 or failed stay in scope until a run passes; with no earlier successful push run
-it gets full coverage. Renames include both old and new paths. A dispatched run
-has no diff base and gets its track's full coverage.
+it gets full coverage. Renames include both old and new paths. Manual CI runs
+compare the selected commit with its merge base on `base_ref` (default `main`).
+Select `full` to run every job. CI also runs every job when the merge base is the
+selected commit. Reusable deploy and release workflows retain their own scopes.
 
 A push to `main`, a maintainer's direct push or a merged PR, is a post-push
 safety net: CI validates it after it has landed and blocks nothing. It holds no

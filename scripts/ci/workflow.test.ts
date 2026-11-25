@@ -388,7 +388,7 @@ test("a push diffs from the last successful run of its workflow, so superseded p
     BRANCH: "${{ github.ref_name }}",
   });
   expect(steps.find((step) => step.id === "select")!.env!.BASE).toBe(
-    "${{ github.event.pull_request.base.sha || steps.base.outputs.sha }}",
+    "${{ github.event.pull_request.base.sha || steps.base.outputs.sha || steps.dispatch-base.outputs.sha }}",
   );
   const dir = await mkdtemp(join(tmpdir(), "coforge-ci-base-"));
   try {
