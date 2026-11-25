@@ -1,10 +1,15 @@
 import { expect, test } from "bun:test";
-import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
+import {
+  conversationRealtimeChannel,
+  workspaceConversationChannel,
+} from "#src/features/conversations/conversation-realtime";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import { browserSession, localBrowserE2e, pageHydrated, seededUuid } from "./helpers/browser-e2e";
+import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
  * A channel renamed, described, archived or unarchived in one tab reaches another open tab
@@ -16,60 +21,8 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
  * `scripts/e2e/same-origin-proxy.ts` (`COFORGE_E2E_WEB_URL=http://127.0.0.1:8790`). The channel is seeded deterministically and reset on
  * every run. Screenshots are written under `.artifacts/e2e/channel-settings-realtime/`.
  */
-const origin = Bun.env.COFORGE_E2E_WEB_URL;
-if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
-  throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
-const browserPath = Bun.which("agent-browser");
-if (!browserPath) throw new Error("agent-browser is required");
-const databaseUrl = Bun.env.DATABASE_URL;
-if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
-  throw new Error("DATABASE_URL must target local PostgreSQL");
+const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/channel-settings-realtime");
-
-/** Deterministic id (seed-dev's sha256→UUID shape), so a rerun updates instead of duplicating. */
-function seededUuid(key: string): string {
-  const hash = createHash("sha256").update(key).digest("hex");
-  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-4${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
-}
-
-function tab(session: string) {
-  async function run(...args: string[]) {
-    const child = Bun.spawn([browserPath!, "--session", session, ...args], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    if (code !== 0) throw new Error(`Browser ${args[0]} failed: ${stderr}`);
-    return stdout;
-  }
-  return {
-    run,
-    /** Waits for `condition`, failing with its text after 20 s rather than at the test timeout. */
-    waitFor: (condition: string) =>
-      Promise.race([
-        run("wait", "--fn", condition),
-        new Promise<never>((_, reject) =>
-          setTimeout(
-            () => reject(new Error(`${session}: timed out waiting for ${condition}`)),
-            20_000,
-          ),
-        ),
-      ]),
-    clickText: async (selector: string, text: string) => {
-      const find = `[...document.querySelectorAll(${JSON.stringify(selector)})].find((element) => element.textContent.trim() === ${JSON.stringify(text)})`;
-      await run("wait", "--fn", `${find} !== undefined`);
-      const clicked = await run(
-        "eval",
-        `(() => { const target = ${find}; target?.click(); return Boolean(target); })()`,
-      );
-      if (!clicked.includes("true")) throw new Error(`"${text}" disappeared before it was clicked`);
-    },
-  };
-}
 
 const channelHeader = `document.querySelector("header h1[data-channel-title]")?.closest("header")`;
 const sidebarHas = (name: string) =>
@@ -79,8 +32,9 @@ const panelOpen = `document.querySelector('${panelSelector}') !== null`;
 
 test("another open tab follows a channel's rename, description and archive live", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-  const editor = tab(`channel-realtime-editor-${process.pid}`);
-  const watcher = tab(`channel-realtime-watcher-${process.pid}`);
+  const watcherProxy = sameOriginProxy(origin, Bun.env.COFORGE_E2E_CENTRIFUGO_URL ?? origin);
+  const editor = browserSession(browserPath, `channel-realtime-editor-${process.pid}`);
+  const watcher = browserSession(browserPath, `channel-realtime-watcher-${process.pid}`);
   const channelId = seededUuid("e2e-channel-settings-realtime:channel");
   const channelName = "e2e-live";
   const renamed = "e2e-live-renamed";
@@ -111,76 +65,53 @@ test("another open tab follows a channel's rename, description and archive live"
       },
     });
     await mkdir(artifacts, { recursive: true });
-    const url = `${origin}${workspacePath}/channel/${channelId}`;
-    for (const browser of [editor, watcher]) {
-      await browser.run("set", "viewport", "1440", "900");
-      await browser.run("open", url);
-      await browser.waitFor(
-        `${channelHeader}?.querySelector("h1 [data-channel-name]").textContent === "${channelName}"`,
-      );
-    }
+    const channelPath = `${workspacePath}/channel/${channelId}`;
 
-    // Rename and describe in the editor tab. The watcher subscribes as its page comes up, and a
-    // change published before its subscription completes can be missed, so warm-up renames prove
-    // the live path end to end before the assertions depend on it.
-    await editor.run("click", '[aria-label="Channel details and settings"]');
+    await editor.browser("set", "viewport", "1440", "900");
+    await editor.browser("open", `${origin}${channelPath}`);
+    await editor.waitFor(
+      `${pageHydrated} && ${channelHeader}?.querySelector("h1 [data-channel-name]")?.textContent === ${JSON.stringify(channelName)}`,
+    );
+
+    await watcher.browser("set", "viewport", "1440", "900");
+    await watcher.browser("open", `${watcherProxy.origin}${channelPath}`);
+    await watcher.waitFor(
+      `${pageHydrated} && ${channelHeader}?.querySelector("h1 [data-channel-name]")?.textContent === ${JSON.stringify(channelName)} && ${sidebarHas(channelName)}`,
+    );
+    await watcherProxy.waitForSubscribed([
+      conversationRealtimeChannel(channelId),
+      workspaceConversationChannel(workspaceId),
+    ]);
+
+    // Watcher has confirmed Centrifugo subscriptions for both this channel and the workspace
+    // sidebar; rename and describe in the editor tab and assert live delivery directly.
+    await editor.browser("click", '[aria-label="Channel details and settings"]');
     await editor.waitFor(panelOpen);
-    const saveName = async (name: string) => {
-      if (
-        await editor
-          .run("eval", `document.querySelector('${panelSelector} input[type="text"]') === null`)
-          .then((v) => v.includes("true"))
-      ) {
-        await editor.clickText(`${panelSelector} button`, "Edit");
-        await editor.waitFor(
-          `document.querySelector('${panelSelector} input[type="text"]') !== null`,
-        );
-      }
-      await editor.run("fill", `${panelSelector} input[type="text"]`, name);
-      await editor.clickText(`${panelSelector} button`, "Save");
-      await editor.waitFor(
-        `${channelHeader}?.querySelector("h1 [data-channel-name]").textContent === "${name}"`,
-      );
-    };
-    for (const warm of ["e2e-live-warm", "e2e-live-warmer"]) {
-      await saveName(warm);
-      try {
-        await watcher.waitFor(
-          `${channelHeader}?.querySelector("h1 [data-channel-name]").textContent === "${warm}"`,
-        );
-        break;
-      } catch {}
-    }
-    if (
-      await editor
-        .run("eval", `document.querySelector('${panelSelector} input[type="text"]') === null`)
-        .then((v) => v.includes("true"))
-    ) {
-      await editor.clickText(`${panelSelector} button`, "Edit");
-      await editor.waitFor(
-        `document.querySelector('${panelSelector} input[type="text"]') !== null`,
-      );
-    }
-    await editor.run("fill", `${panelSelector} input[type="text"]`, renamed);
-    await editor.run("fill", `${panelSelector} textarea`, "Followed live");
+    await editor.clickText(`${panelSelector} button`, "Edit");
+    await editor.waitFor(`document.querySelector('${panelSelector} input[type="text"]') !== null`);
+    await editor.browser("fill", `${panelSelector} input[type="text"]`, renamed);
+    await editor.browser("fill", `${panelSelector} textarea`, "Followed live");
+    await editor.waitFor(
+      `!(${editor.byText(`${panelSelector} button`, "Save")}?.disabled ?? true)`,
+    );
     await editor.clickText(`${panelSelector} button`, "Save");
     await editor.waitFor(
-      `${channelHeader}?.querySelector("h1 [data-channel-name]").textContent === "${renamed}"`,
+      `${channelHeader}?.querySelector("h1 [data-channel-name]")?.textContent === ${JSON.stringify(renamed)}`,
     );
 
     await watcher.waitFor(
-      `${channelHeader}?.querySelector("h1 [data-channel-name]").textContent === "${renamed}"`,
+      `${channelHeader}?.querySelector("h1 [data-channel-name]")?.textContent === ${JSON.stringify(renamed)}`,
     );
-    await watcher.run("click", '[aria-label="Channel details and settings"]');
+    await watcher.browser("click", '[aria-label="Channel details and settings"]');
     await watcher.waitFor(panelOpen);
     await watcher.waitFor(
       `document.querySelector('${panelSelector}')?.textContent.includes("Followed live")`,
     );
-    await watcher.run("press", "Escape");
+    await watcher.browser("press", "Escape");
     await watcher.waitFor(`document.querySelector('${panelSelector}') === null`);
     await watcher.waitFor(sidebarHas(renamed));
-    expect(await watcher.run("eval", sidebarHas(channelName))).toContain("false");
-    await watcher.run("screenshot", join(artifacts, "renamed.png"));
+    expect(await watcher.evaluate<boolean>(sidebarHas(channelName))).toBe(false);
+    await watcher.browser("screenshot", join(artifacts, "renamed.png"));
 
     // Archive in the editor tab: the watcher's composer turns into the archived notice and the
     // row leaves its sidebar.
@@ -188,7 +119,7 @@ test("another open tab follows a channel's rename, description and archive live"
     await editor.clickText("button", "Archive channel");
     await watcher.waitFor(`document.body.textContent.includes("This channel is archived.")`);
     await watcher.waitFor(`!${sidebarHas(renamed)}`);
-    await watcher.run("screenshot", join(artifacts, "archived.png"));
+    await watcher.browser("screenshot", join(artifacts, "archived.png"));
 
     // Unarchive from the editor's notice → panel: the watcher's composer comes back.
     await editor.waitFor(`document.body.textContent.includes("This channel is archived.")`);
@@ -199,12 +130,17 @@ test("another open tab follows a channel's rename, description and archive live"
     await watcher.waitFor(sidebarHas(renamed));
   } catch (error) {
     // Keep what each tab showed when it failed.
-    await editor.run("screenshot", join(artifacts, "failure-editor.png")).catch(() => undefined);
-    await watcher.run("screenshot", join(artifacts, "failure-watcher.png")).catch(() => undefined);
+    await editor
+      .browser("screenshot", join(artifacts, "failure-editor.png"))
+      .catch(() => undefined);
+    await watcher
+      .browser("screenshot", join(artifacts, "failure-watcher.png"))
+      .catch(() => undefined);
     throw error;
   } finally {
-    await editor.run("close").catch(() => undefined);
-    await watcher.run("close").catch(() => undefined);
+    await editor.browser("close").catch(() => undefined);
+    await watcher.browser("close").catch(() => undefined);
+    watcherProxy.stop();
     await db.$disconnect();
   }
 }, 120_000);

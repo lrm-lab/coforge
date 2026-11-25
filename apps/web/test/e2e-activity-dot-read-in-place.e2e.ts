@@ -8,6 +8,10 @@ import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.ser
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
 import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
+import {
+  prepareAppNotificationQueues,
+  stopAppNotificationQueue,
+} from "#src/server/app-notifications/app-notification-queue.server";
 import { browserActivityInbox } from "#src/server/inbox/browser-activity-inbox.server";
 import {
   browserSession,
@@ -53,6 +57,7 @@ test("a DM message read where it arrives leaves the Activity dot dark", async ()
   };
   let conversationId: string | undefined;
   try {
+    await prepareAppNotificationQueues(databaseUrl);
     ({ conversationId } = await dms.open(workspaceId, DEV_BROWSER_USER.id, { userId: mei.id }));
     // Nothing else unread, so the dot shows this message alone.
     await browserActivityInbox(db, centrifugo).markAllRead(workspaceId, DEV_BROWSER_USER.id, {
@@ -92,12 +97,15 @@ test("a DM message read where it arrives leaves the Activity dot dark", async ()
     await browser("wait", "--fn", `${pageHydrated} && ${dot} !== null`);
     await shoot("desktop-unread-elsewhere");
   } finally {
-    await browser("close").catch(() => undefined);
-    proxy.stop();
-    if (conversationId)
-      await db.conversation.deleteMany({ where: { id: conversationId } }).catch(() => undefined);
-    await db.workspaceMembership.deleteMany({ where: { userId: mei.id } }).catch(() => undefined);
-    await db.user.delete({ where: { id: mei.id } }).catch(() => undefined);
-    await db.$disconnect();
+    try {
+      await browser("close").catch(() => undefined);
+      proxy.stop();
+      if (conversationId)
+        await db.conversation.deleteMany({ where: { id: conversationId } }).catch(() => undefined);
+      await db.workspaceMembership.deleteMany({ where: { userId: mei.id } }).catch(() => undefined);
+      await db.user.delete({ where: { id: mei.id } }).catch(() => undefined);
+    } finally {
+      await Promise.all([db.$disconnect(), stopAppNotificationQueue()]);
+    }
   }
 }, 180_000);
