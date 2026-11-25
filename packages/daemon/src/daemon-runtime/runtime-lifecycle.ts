@@ -3,6 +3,7 @@ import type { RecoveredUpgradeResult, UpgradeOperationsReading } from "./upgrade
 import type { UnrefTimerSchedule } from "./unref-timer";
 
 export type DaemonRuntimeLifecycle = {
+  procMemoryConfigPath?: string;
   requestRestart?(requestId: string): Promise<void>;
   requestUpgrade?(
     requestId: string,

@@ -34,11 +34,38 @@ coforge proc stop (<name> | --all) [--force] [--json]
   rejected) and rotated to `.log.1` when a running job exceeds **20 MiB**.
 - Per-Workspace state is stored in `<workspaceState>/proc-jobs.json`.
 
+## Memory limits
+
+New jobs have a **4096 MiB** memory limit. Set `memoryMaxMb` in the Computer configuration
+file `computer/proc.json` under the CoForge user directory (normally
+`~/.coforge/computer/proc.json`). For example, `{"memoryMaxMb": 8192}` sets 8 GiB.
+The value must be a nonnegative integer. Use `0` to disable the limit.
+Changes apply to new jobs. An invalid value rejects new starts.
+
+- **Linux systemd cgroup hard limit** applies when user systemd 253 or later and the cgroup v2
+  memory controller are available. The kernel enforces the cap with swap disabled. Usage
+  reflects memory charged to the cgroup. A kernel stop whose cause cannot be verified is
+  recorded as an exit with no confirmed memory-limit reason.
+- **Process-group RSS sampling** applies on macOS and on Linux when the hard limit is unavailable.
+  The daemon stops the job after two consecutive samples above the limit, taken 15 seconds apart.
+  Shared pages can count more than once, so prefork and copy-on-write workloads can reach the
+  limit earlier. Processes that leave the original group escape this sampling and its automatic
+  stop. If ownership is lost, automatic stops are suspended until ownership can be verified.
+
+`coforge proc list` shows each capped job's mode, limit and last available usage. The JSON from
+`proc list` and `proc logs` includes these fields when known. Computer status shows the mode,
+limit and ownership of running jobs, with usage unknown when it has no cached reading.
+A confirmed memory-limit stop appears as “stopped at its memory cap” and adds one item to the
+owner's App Inbox without starting the Agent. The job stays stopped.
+
+Before downgrading to a version without memory-limit support, stop or finish capped jobs so
+the older daemon does not lose their management records.
+
 ## Lifecycle and operator control
 
 - Running jobs stay alive across Agent turns, session replacement, and normal
-  Daemon stops (the Daemon re-adopts live OS processes by recorded PID/start-time
-  identity on startup).
+  Daemon stops. On startup, the Daemon recovers each job using its recorded
+  process, process-group anchor or cgroup identity.
 - All running jobs for an Agent stop automatically (SIGTERM with SIGKILL
   escalation) when the Agent is stopped, deleted/reset, or migrated, or when
   a Workspace is deleted.

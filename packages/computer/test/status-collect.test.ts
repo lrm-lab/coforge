@@ -558,13 +558,30 @@ test("collects running background proc jobs when supported and falls back cleanl
     status: "running" as const,
     startedAt: "2026-11-17T10:00:00.000Z",
     logPath: "/tmp/ws-1/agent-1/proc-logs/dev-srv.log",
+    memory: { mode: "systemd_cgroup" as const, limitBytes: 4096 },
+    ownership: "unknown" as const,
   };
   const withJobs = await collectComputerStatus(
     fakePorts({
       listProcJobs: { supported: true, list: async () => [sampleJob] },
     }),
   );
-  expect(withJobs.procJobs).toEqual({ supported: true, jobs: [sampleJob] });
+  expect(withJobs.procJobs).toEqual({
+    supported: true,
+    jobs: [
+      {
+        id: sampleJob.id,
+        workspaceId: sampleJob.workspaceId,
+        agentId: sampleJob.agentId,
+        name: sampleJob.name,
+        pid: sampleJob.pid,
+        status: sampleJob.status,
+        startedAt: sampleJob.startedAt,
+        memory: sampleJob.memory,
+        ownership: sampleJob.ownership,
+      },
+    ],
+  });
 
   const unsupported = await collectComputerStatus(
     fakePorts({

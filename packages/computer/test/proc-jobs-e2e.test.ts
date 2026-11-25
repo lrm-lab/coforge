@@ -5,7 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "@lrm/coforge";
 import { connectLocal } from "@lrm/coforge/local-client";
-import { decodeAgentProcListResponse, decodeAgentProcLogsResponse } from "@lrm/coforge-sdk/agent";
+import {
+  decodeAgentProcListResponse,
+  decodeAgentProcLogsResponse,
+  decodeAgentProcStartResponse,
+} from "@lrm/coforge-sdk/agent";
 import {
   DaemonRuntime,
   InMemoryDaemonCredentialStore,
@@ -17,6 +21,7 @@ import {
   type AgentRuntimeConfig,
   type DaemonConfig,
 } from "@lrm/coforge-daemon";
+import { createProcJobMemoryScopeDetector } from "@lrm/coforge-daemon/src/platform/proc-job-systemd-capability";
 import { stopComputer } from "#src/cli/stop-computer";
 import { collectComputerStatus } from "#src/status/collect-status";
 import { createStatusPorts } from "#src/status/create-status-ports";
@@ -55,6 +60,8 @@ test("end-to-end: coforge proc start survives daemon stop, appears in computer s
   const workspaceRoot = join(tempRoot, "workspaces");
   const workspaceId = "ws-e2e";
   const workspaceStateDir = workspaceStateDirectory(coordStateDir, workspaceId);
+  const procConfigDirectory = join(tempRoot, "computer");
+  const procMemoryConfigPath = join(procConfigDirectory, "proc.json");
   await mkdir(join(workspaceRoot, workspaceId, "agents", "agent-a"), { recursive: true });
   await mkdir(installDir, { recursive: true });
 
@@ -71,38 +78,41 @@ test("end-to-end: coforge proc start survives daemon stop, appears in computer s
   const proxy = startAgentProxy({
     runtime: daemonAgentProxyRuntime(() => runtime),
   });
-  runtime = new DaemonRuntime(
-    connection,
-    () => ({
-      provider: "pi",
-      createAgentSession: async () => ({
-        async sendMessage() {},
-        subscribe: () => () => undefined,
-        async interrupt() {},
-        onExit: () => () => undefined,
-        async dispose() {},
+  const buildRuntime = () =>
+    new DaemonRuntime(
+      connection,
+      () => ({
+        provider: "pi",
+        createAgentSession: async () => ({
+          async sendMessage() {},
+          subscribe: () => () => undefined,
+          async interrupt() {},
+          onExit: () => () => undefined,
+          async dispose() {},
+        }),
       }),
-    }),
-    credentials,
-    {
-      create: () => ({
-        async start() {},
-        async ready() {},
-        async stop() {},
-        async requestAgentApiKey() {
-          return agentApiKey;
-        },
-        async revokeAgentApiKey() {},
-      }),
-    },
-    proxy,
-    {
-      async list() {
-        return [];
+      credentials,
+      {
+        create: () => ({
+          async start() {},
+          async ready() {},
+          async stop() {},
+          async requestAgentApiKey() {
+            return agentApiKey;
+          },
+          async revokeAgentApiKey() {},
+        }),
       },
-    } as never,
-    workspaceStateDir,
-  );
+      proxy,
+      {
+        async list() {
+          return [];
+        },
+      } as never,
+      workspaceStateDir,
+      { procMemoryConfigPath },
+    );
+  runtime = buildRuntime();
 
   let jobPid = 0;
   try {
@@ -136,6 +146,13 @@ test("end-to-end: coforge proc start survives daemon stop, appears in computer s
       JSON.parse((await run(["proc", "list", "--json"], transport)) as string),
     );
     expect(listJson.jobs).toHaveLength(1);
+    const hardScope = await createProcJobMemoryScopeDetector(process.platform)();
+    expect(listJson.jobs[0]?.memory).toMatchObject({
+      mode: hardScope ? "systemd_cgroup" : "process_group_rss",
+      limitBytes: 4096 * 1024 * 1024,
+    });
+    const listOut = (await run(["proc", "list"], transport)) as string;
+    expect(listOut).toMatch(/memory=(process-group RSS sampling|systemd cgroup hard limit)/);
     jobPid = listJson.jobs[0]!.pid;
     cleanupPids.add(jobPid);
     expect(pidAlive(jobPid)).toBe(true);
@@ -154,10 +171,48 @@ test("end-to-end: coforge proc start survives daemon stop, appears in computer s
       );
     }
     expect(logsJson.content).toContain("E2E_READY");
+    expect(logsJson.job.memory?.limitBytes).toBe(4096 * 1024 * 1024);
+
+    await mkdir(procConfigDirectory, { recursive: true });
+    await Bun.write(procMemoryConfigPath, '{"memoryMaxMb":-1}');
+    const nextCommand = [
+      "proc",
+      "start",
+      "--name",
+      "uncapped",
+      "--json",
+      "--",
+      process.execPath,
+      "-e",
+      "await Bun.sleep(10000)",
+    ];
+    await expect(run(nextCommand, transport)).rejects.toThrow(
+      "Invalid or unreadable Computer proc memory configuration",
+    );
+    await Bun.write(procMemoryConfigPath, '{"memoryMaxMb":0}');
+    const uncapped = decodeAgentProcStartResponse(
+      JSON.parse((await run(nextCommand, transport)) as string),
+    );
+    cleanupPids.add(uncapped.job.pid);
+    expect(uncapped.job.memory).toBeUndefined();
+    await run(["proc", "stop", "uncapped", "--force"], transport);
 
     await runtime.stop();
-    proxy.close();
     expect(pidAlive(jobPid)).toBe(true);
+    runtime = buildRuntime();
+    await runtime.start(connection);
+    await runtime.startAgent("agent-a", config);
+    const adoptedContext = proxy.issue("agent-a", agentApiKey);
+    const adoptedTransport = connectLocal("", adoptedContext, proxy.url);
+    const adopted = decodeAgentProcListResponse(
+      JSON.parse((await run(["proc", "list", "--json"], adoptedTransport)) as string),
+    );
+    expect(adopted.jobs.find((job) => job.pid === jobPid)).toMatchObject({
+      status: "running",
+      memory: { limitBytes: 4096 * 1024 * 1024 },
+    });
+    await runtime.stop();
+    proxy.close();
 
     const status = await collectComputerStatus(
       createStatusPorts({
@@ -173,6 +228,10 @@ test("end-to-end: coforge proc start survives daemon stop, appears in computer s
     );
     expect(status.procJobs).toBeDefined();
     expect(status.procJobs?.supported).toBe(true);
+    expect(status.procJobs?.jobs[0]?.memory?.limitBytes).toBe(4096 * 1024 * 1024);
+    expect(status.procJobs?.jobs[0]).not.toHaveProperty("command");
+    expect(status.procJobs?.jobs[0]).not.toHaveProperty("cwd");
+    expect(status.procJobs?.jobs[0]).not.toHaveProperty("logPath");
     expect(status.procJobs?.jobs.map((job) => ({ name: job.name, pid: job.pid }))).toEqual([
       { name: "dev-srv", pid: jobPid },
     ]);

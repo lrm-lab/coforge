@@ -535,7 +535,7 @@ export class DaemonRuntime {
       stopAgent: (agentId) => this.stopAgent(agentId),
       runningAgentIds: () => this.#agentProcessManager.runningAgentIds(),
       forgetLocalAgent: (agentId) => this.#forgetLocalAgent(agentId),
-      upgradeResults: this.lifecycle,
+      lifecycle,
     });
     this.systemCleaner = this.#services.systemCleaner;
     this.localQueries = new RuntimeLocalQueries(

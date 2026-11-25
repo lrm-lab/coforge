@@ -318,10 +318,23 @@ function renderProcJobs(report: ComputerStatusReport): string[] {
   if (procJobs.jobs.length === 0) return ["Background jobs", "  none"];
   return [
     `Background jobs (${procJobs.jobs.length} running)`,
-    ...procJobs.jobs.map(
-      (job) =>
-        `  ${terminalText(job.workspaceId)}  agent=${terminalText(job.agentId)}  name=${terminalText(job.name)}  pid=${job.pid}`,
-    ),
+    ...procJobs.jobs.map((job) => {
+      const line = `  ${terminalText(job.workspaceId)}  agent=${terminalText(job.agentId)}  name=${terminalText(job.name)}  pid=${job.pid}`;
+      const ownership = job.ownership === "unknown" ? "  ownership=unknown" : "";
+      const memory = job.memory;
+      if (!memory) return line + ownership;
+      const mode =
+        memory.mode === "process_group_rss"
+          ? "process-group RSS sampling"
+          : "systemd cgroup hard limit";
+      const usage = memory.usageBytes === undefined ? "unknown" : memory.usageBytes + " B";
+      return `${line}${ownership}  memory=${mode} (limit ${memory.limitBytes} B, usage ${usage})`;
+    }),
+    ...(procJobs.jobs.some((job) => job.memory?.mode === "process_group_rss")
+      ? [
+          "  Process-group RSS can count shared pages more than once and excludes processes that leave the group.",
+        ]
+      : []),
     "  Run coforge-computer stop --jobs to stop Agent background jobs.",
   ];
 }

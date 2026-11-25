@@ -20,13 +20,9 @@ import {
 } from "./runtime-agent-api-reminders";
 import { SystemCleaner as Cleaner } from "#src/system-cleaner/system-cleaner";
 import { agentsDirectory, agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
-import {
-  UpgradeResultReporter,
-  type RecoveredUpgradeResult,
-  type UpgradeOperationsReading,
-} from "./upgrade-result-reporter";
+import { UpgradeResultReporter } from "./upgrade-result-reporter";
 import type { RuntimePublicationSubscriptionPorts } from "./runtime-publication-subscriptions";
-import type { UnrefTimerSchedule } from "./unref-timer";
+import type { DaemonRuntimeLifecycle } from "./runtime-lifecycle";
 import { ProviderQuotaState } from "./provider-quota-state";
 import { CLEANER_APP_ID } from "@lrm/coforge-sdk/internal";
 
@@ -50,15 +46,14 @@ export type RuntimeServicesPorts = {
   stopAgent(agentId: string): Promise<void>;
   runningAgentIds(): readonly string[];
   forgetLocalAgent(agentId: string): void;
-  /** The Coordinator's upgrade-operation lifecycle, read by the result reporter: recovered
-   * terminal results, the durable-operations reader it polls, its timer, and the server-side
-   * acknowledgement. */
-  upgradeResults?: {
-    recoveredUpgradeResults?: RecoveredUpgradeResult[];
-    readUpgradeOperations?(): Promise<UpgradeOperationsReading>;
-    upgradeResultSchedule?: UnrefTimerSchedule;
-    acknowledgeUpgradeResult?(requestId: string): Promise<void>;
-  };
+  lifecycle?: Pick<
+    DaemonRuntimeLifecycle,
+    | "procMemoryConfigPath"
+    | "recoveredUpgradeResults"
+    | "readUpgradeOperations"
+    | "upgradeResultSchedule"
+    | "acknowledgeUpgradeResult"
+  >;
 };
 
 export type RuntimeServices = {
@@ -129,6 +124,7 @@ export function composeRuntimeServices(ports: RuntimeServicesPorts): RuntimeServ
     workspaceId: connection.workspaceId,
     workspaceRoot: connection.workspaceRoot,
     stateDirectory,
+    memoryConfigPath: ports.lifecycle?.procMemoryConfigPath,
     publishMemoryNotice: async (agentId, item, commit) => {
       const coordinator = ports.reminderInbox().inboxCoordinator;
       const inbox = await coordinator.appInbox(agentId);
@@ -156,7 +152,7 @@ export function composeRuntimeServices(ports: RuntimeServicesPorts): RuntimeServ
         stateDirectory,
       })
     : undefined;
-  const upgradeLifecycle = ports.upgradeResults ?? {};
+  const upgradeLifecycle = ports.lifecycle ?? {};
   const recovered = { results: upgradeLifecycle.recoveredUpgradeResults ?? [], pending: false };
   const upgradeResults = new UpgradeResultReporter({
     workspaceId: connection.workspaceId,

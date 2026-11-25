@@ -84,21 +84,29 @@ if (Bun.argv[2] === "__pi-chat") {
   performance.mark("coforge:startup:daemon_imported");
   const { COFORGE_COMPUTER_VERSION } = await import("./version");
   const { homedir } = await import("node:os");
-  const { resolveComputerStateDirectory } = await import("./paths");
+  const { join } = await import("node:path");
+  const { resolveComputerConfigDirectory, resolveComputerStateDirectory } = await import("./paths");
   const { currentComputerPlatform } = await import("./platform");
   const { readReleaseChannel } = await import("./release/channel-state");
   const platform = currentComputerPlatform();
-  const stateDirectory = resolveComputerStateDirectory({
+  const paths = {
     platform: platform.os,
     homeDirectory: homedir(),
     environment: process.env,
-  });
+  };
+  const stateDirectory = resolveComputerStateDirectory(paths);
+  const procMemoryConfigPath = join(resolveComputerConfigDirectory(paths), "proc.json");
   const releaseChannel = await readReleaseChannel(stateDirectory);
   // Belt and braces, same reasoning as `__daemon`: `runDaemon` only resolves once its
   // own SIGINT/SIGTERM shutdown has stopped every Workspace runtime, closed the Agent proxy and
   // local RPC server, and disposed logging.
   try {
-    await runDaemon(Bun.argv.slice(3), COFORGE_COMPUTER_VERSION, releaseChannel);
+    await runDaemon(
+      Bun.argv.slice(3),
+      COFORGE_COMPUTER_VERSION,
+      releaseChannel,
+      procMemoryConfigPath,
+    );
     process.exit(process.exitCode ?? 0);
   } catch (error) {
     console.error(error);

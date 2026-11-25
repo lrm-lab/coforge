@@ -134,16 +134,27 @@ export async function verifyProcJobGroupAnchor(
   return current.alive && current.pgid === target.pgid;
 }
 
+export async function procJobOwnership(
+  target: ProcJobStopTarget,
+  platform: NodeJS.Platform,
+): Promise<"verified" | "gone" | "unknown"> {
+  if (target.memoryScope || target.memory?.mode === "systemd_cgroup") {
+    const scope = await observeProcJobMemoryScope(target, platform);
+    return scope === "populated" ? "verified" : scope;
+  }
+  const sameBoot = await bootMayContainProcJobGroup(target, platform);
+  if (sameBoot !== true) return sameBoot === undefined ? "unknown" : "gone";
+  const current = await isVerifiedProcJobAlive(target, platform);
+  if (current.alive)
+    return target.groupAnchor && current.pgid !== target.pgid ? "unknown" : "verified";
+  return target.groupAnchor && !(await procJobGroupIsEmpty(target, platform)) ? "unknown" : "gone";
+}
+
 export async function procJobMayBeRunning(
   target: ProcJobStopTarget,
   platform: NodeJS.Platform,
 ): Promise<boolean> {
-  if (target.memoryScope || target.memory?.mode === "systemd_cgroup")
-    return (await observeProcJobMemoryScope(target, platform)) !== "gone";
-  const sameBoot = await bootMayContainProcJobGroup(target, platform);
-  if (sameBoot !== true) return sameBoot === undefined;
-  if ((await isVerifiedProcJobAlive(target, platform)).alive) return true;
-  return target.groupAnchor === true && !(await procJobGroupIsEmpty(target, platform));
+  return (await procJobOwnership(target, platform)) !== "gone";
 }
 
 async function procJobGroupIsEmpty(

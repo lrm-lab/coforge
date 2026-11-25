@@ -494,18 +494,19 @@ test("renderStatusHuman renders Background jobs and stop --jobs guidance when jo
           workspaceId: "ws-1",
           agentId: "agent-1",
           name: "dev-srv",
-          command: ["bun", "dev"],
-          cwd: "/tmp/ws-1/agent-1",
           pid: 7777,
-          pgid: 7777,
           status: "running",
+          memory: { mode: "process_group_rss", limitBytes: 4096 },
+          ownership: "unknown",
           startedAt: "2026-11-17T10:00:00.000Z",
-          logPath: "/tmp/ws-1/agent-1/proc-logs/dev-srv.log",
         },
       ],
     },
   }).join("\n");
   expect(withJobs).toContain("Background jobs (1 running)");
   expect(withJobs).toContain("ws-1  agent=agent-1  name=dev-srv  pid=7777");
+  expect(withJobs).toContain("ownership=unknown");
+  expect(withJobs).toContain("memory=process-group RSS sampling (limit 4096 B, usage unknown)");
+  expect(withJobs).toContain("excludes processes that leave the group");
   expect(withJobs).toContain("coforge-computer stop --jobs");
 });

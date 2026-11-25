@@ -49,6 +49,7 @@ export async function runDaemon(
   args: string[],
   computerVersion?: string,
   releaseChannel?: string,
+  procMemoryConfigPath?: string,
 ): Promise<void> {
   const stopRequested = captureStopSignal();
   const { socketPath, stateDirectoryArg, daemonStateDirectory } = daemonStartupOptions(args);
@@ -228,6 +229,7 @@ export async function runDaemon(
             defaultCodeAgentDiscovery(daemonStateDirectory),
             daemonStateDirectory,
             {
+              procMemoryConfigPath,
               recoveredRestartRequestIds:
                 (config as { restartRequestIds?: string[] } | null)?.restartRequestIds ?? [],
               recoveredUpgradeRequestIds:

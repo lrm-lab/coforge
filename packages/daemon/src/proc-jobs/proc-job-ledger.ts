@@ -7,7 +7,7 @@ import {
   type AgentProcStopReason,
 } from "@lrm/coforge-sdk/agent";
 import { isRecord } from "@lrm/coforge-sdk/internal";
-import { procJobMayBeRunning, stopVerifiedProcJob } from "#src/platform/proc-job-process";
+import { procJobOwnership, stopVerifiedProcJob } from "#src/platform/proc-job-process";
 import {
   decodeProcJobMemoryScopeIdentity,
   type ProcJobMemoryScopeIdentity,
@@ -30,6 +30,7 @@ export type StoredProcJob = AgentProcJob & {
 export type RunningProcJobSummary = AgentProcJob & {
   agentId: string;
   workspaceId: string;
+  ownership?: "verified" | "unknown";
 };
 
 export type StopMachineProcJobsResult = {
@@ -172,13 +173,15 @@ export async function listMachineRunningProcJobs(
       const checked = await Promise.all(
         jobs.map(async (job): Promise<RunningProcJobSummary | undefined> => {
           if (job.status !== "running") return undefined;
-          return (await procJobMayBeRunning(job, platform))
-            ? {
+          const ownership = await procJobOwnership(job, platform);
+          return ownership === "gone"
+            ? undefined
+            : {
                 ...toPublicProcJob(job),
                 agentId: job.agentId,
                 workspaceId: job.workspaceId,
-              }
-            : undefined;
+                ownership,
+              };
         }),
       );
       return checked.filter((entry): entry is RunningProcJobSummary => entry !== undefined);

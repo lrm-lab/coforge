@@ -2,7 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readProcJobIdentity } from "#src/platform/proc-job-process";
+import { procJobOwnership, readProcJobIdentity } from "#src/platform/proc-job-process";
+import { procJobLedgerPath, readProcJobLedger } from "#src/proc-jobs/proc-job-ledger";
 import { ProcJobManager, type ProcJobManagerOptions } from "#src/proc-jobs/proc-job-manager";
 
 async function waitFor<T>(probe: () => Promise<T | undefined>): Promise<T> {
@@ -15,7 +16,15 @@ async function waitFor<T>(probe: () => Promise<T | undefined>): Promise<T> {
   throw new Error("Timed out waiting for the fixture");
 }
 
-test.each(["force", "adopt-and-stop", "lost-anchor", "natural-completion"] as const)(
+test.each([
+  "force",
+  "adopt-and-stop",
+  "lost-anchor",
+  "natural-completion",
+  "forget",
+  "migration",
+  "workspace-delete",
+] as const)(
   "%s keeps the slot while a same-group child survives the user command",
   async (mode) => {
     if (process.platform !== "darwin" && process.platform !== "linux") return;
@@ -25,7 +34,8 @@ test.each(["force", "adopt-and-stop", "lost-anchor", "natural-completion"] as co
       workspaceRoot: directory,
       stateDirectory: join(directory, "state"),
       maxJobsPerAgent: 1,
-      retainSampledProcessGroup: true,
+      memoryConfigPath: join(directory, "proc.json"),
+      systemdMemoryScope: async () => undefined,
       graceMs: 120,
       systemdRunAvailable: async () => false,
       systemdPresentCheck: () => false,
@@ -96,7 +106,7 @@ while (!(await Bun.file(exitPath).exists()) && performance.now() < deadline) awa
       });
       if (mode === "adopt-and-stop") {
         manager.close();
-        manager = new ProcJobManager({ ...options, retainSampledProcessGroup: false });
+        manager = new ProcJobManager({ ...options, memoryConfigPath: undefined });
       }
       const listing = await manager.list("agent");
       expect(listing.jobs.map(({ id, status }) => ({ id, status }))).toEqual([
@@ -128,14 +138,27 @@ while (!(await Bun.file(exitPath).exists()) && performance.now() < deadline) awa
         await expect(manager.stop("agent", { name: job.name, force: true })).rejects.toMatchObject({
           status: 500,
         });
+        const [record] = await readProcJobLedger(procJobLedgerPath(options.stateDirectory));
+        expect(await procJobOwnership(record!, process.platform)).toBe("unknown");
         expect(await readProcJobIdentity(childPid)).toMatchObject({
           startIdentity: child!.startIdentity,
           zombie: false,
         });
         return;
       }
-      const stopped = await manager.stop("agent", { name: job.name, force: mode === "force" });
-      expect(stopped.stopped).toMatchObject([{ id: job.id, status: "exited" }]);
+      if (mode === "forget") {
+        await manager.forgetAgent("agent", "agent_deleted");
+        expect((await manager.list("agent")).jobs).toEqual([]);
+      } else if (mode === "migration") {
+        const migrated = await manager.stopAllForAgent("agent", "migrated");
+        expect(migrated.stopped).toMatchObject([{ id: job.id, stopReason: "migrated" }]);
+      } else if (mode === "workspace-delete") {
+        await manager.purgeWorkspace();
+        expect(await Bun.file(procJobLedgerPath(options.stateDirectory)).exists()).toBe(false);
+      } else {
+        const stopped = await manager.stop("agent", { name: job.name, force: mode === "force" });
+        expect(stopped.stopped).toMatchObject([{ id: job.id, status: "exited" }]);
+      }
       await waitFor(async () => {
         const identity = await readProcJobIdentity(childPid);
         if (!identity || identity.zombie) return true;

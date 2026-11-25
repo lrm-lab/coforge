@@ -304,5 +304,27 @@ async function collectLeftoverJobs(ports: StatusPorts) {
 
 async function collectProcJobs(ports: StatusPorts) {
   if (!ports.listProcJobs?.supported) return { supported: false, jobs: [] };
-  return { supported: true, jobs: await ports.listProcJobs.list().catch(() => []) };
+  const jobs = await ports.listProcJobs.list().catch(() => []);
+  return {
+    supported: true,
+    jobs: jobs.map(
+      ({ id, workspaceId, agentId, name, pid, status, startedAt, memory, ownership }) => ({
+        id,
+        workspaceId,
+        agentId,
+        name,
+        pid,
+        status,
+        startedAt,
+        ...(memory && {
+          memory: {
+            mode: memory.mode,
+            limitBytes: memory.limitBytes,
+            ...(memory.usageBytes === undefined ? {} : { usageBytes: memory.usageBytes }),
+          },
+        }),
+        ...(ownership && { ownership }),
+      }),
+    ),
+  };
 }

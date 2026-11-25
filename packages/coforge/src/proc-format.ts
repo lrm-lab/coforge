@@ -14,6 +14,21 @@ function formatExitSummary(job: AgentProcJob): string {
   return details.length > 0 ? ` (${details.join(", ")})` : "";
 }
 
+function formatProcMemory(job: AgentProcJob): string {
+  const memory = job.memory;
+  if (!memory) return "";
+  const mode =
+    memory.mode === "process_group_rss"
+      ? "process-group RSS sampling"
+      : "systemd cgroup hard limit";
+  const usage =
+    job.status === "running"
+      ? `, usage ${memory.usageBytes === undefined ? "unknown" : memory.usageBytes + " B"}`
+      : "";
+  const termination = memory.termination === "memory_limit" ? ", stopped at its memory cap" : "";
+  return `  memory=${mode} (limit ${memory.limitBytes} B${usage}${termination})`;
+}
+
 export function formatProcStart(response: AgentProcStartResponse): string {
   const { job } = response;
   const note = job.stopsWithService
@@ -29,7 +44,7 @@ export function formatProcList(response: AgentProcListResponse): string {
   for (const job of response.jobs) {
     const suffix = job.status === "exited" ? formatExitSummary(job) : "";
     lines.push(
-      `  ${job.name}  status=${job.status}${suffix}  pid=${job.pid}  cwd=${job.cwd}  log=${job.logPath}`,
+      `  ${job.name}  status=${job.status}${suffix}  pid=${job.pid}  cwd=${job.cwd}  log=${job.logPath}${formatProcMemory(job)}`,
     );
   }
   return lines.join("\n");

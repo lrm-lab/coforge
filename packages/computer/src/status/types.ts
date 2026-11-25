@@ -154,7 +154,20 @@ export type AgentsStatus = { supported: boolean; workspaces: WorkspaceAgents[] }
 
 export type LeftoverJob = { label: string; pid: number | null; runs: number | null };
 export type LeftoverJobsStatus = { supported: boolean; jobs: LeftoverJob[] };
-export type ProcJobsStatus = { supported: boolean; jobs: RunningProcJobSummary[] };
+export type ProcJobStatus = Pick<
+  RunningProcJobSummary,
+  | "id"
+  | "workspaceId"
+  | "agentId"
+  | "name"
+  | "pid"
+  | "status"
+  | "startedAt"
+  | "memory"
+  | "ownership"
+>;
+
+export type ProcJobsStatus = { supported: boolean; jobs: ProcJobStatus[] };
 
 export type LocksStatus = {
   machineMutationLock: LockState;

@@ -136,10 +136,15 @@ describe("coforge proc CLI", () => {
       exitCode: 0,
       signal: null,
       stopReason: "exited",
+      memory: {
+        mode: "process_group_rss",
+        limitBytes: 4096,
+        termination: "memory_limit",
+      },
     };
 
     const transport = {
-      procList: async () => ({ ok: true as const, jobs: [runningJob], limit: 8 }),
+      procList: async () => ({ ok: true as const, jobs: [runningJob, exitedJob], limit: 8 }),
       procLogs: async (req: AgentProcLogsRequest) => {
         logCalls.push(req);
         if (logCalls.length === 1) {
@@ -167,6 +172,7 @@ describe("coforge proc CLI", () => {
     const listed = (await run(["proc", "list"], transport)) as string;
     expect(listed).toContain("dev-srv");
     expect(listed).toContain("running");
+    expect(listed).toContain("stopped at its memory cap");
 
     const followed = (await run(
       ["proc", "logs", "dev-srv", "--tail", "10", "--follow"],
