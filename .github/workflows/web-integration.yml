@@ -104,10 +104,21 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # Some suites start their own throwaway `redis-server` on a random port (the external display
-      # suite throws without one), apart from the Redis service above. Install only the binary: the
-      # policy-rc.d guard stops the package from starting its own server on 6379.
+      - name: Check whether the shard needs redis-server
+        id: host-redis
+        shell: bash
+        env:
+          WEB_INTEGRATION_SHARD: ${{ matrix.shard }}
+        run: |
+          files=$(bash scripts/test/run-web-integration.sh --shard "$WEB_INTEGRATION_SHARD" --list)
+          required=false
+          if grep -Fxq 'apps/web/test/agent-display-external.integration.ts' <<< "$files"; then
+            required=true
+          fi
+          printf 'required=%s\n' "$required" >> "$GITHUB_OUTPUT"
+
       - name: Install redis-server
+        if: steps.host-redis.outputs.required == 'true'
         run: scripts/ci/install-redis.sh
 
       - name: Prepare the checkout and database

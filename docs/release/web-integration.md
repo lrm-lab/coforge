@@ -20,3 +20,7 @@ to inspect the first job's files. The runner discovers all files in both integra
 The longer files' measured durations from [Linux CI](https://github.com/lrm-lab/coforge/actions/runs/45651877284)
 and a default duration for the rest keep the four groups balanced.
 When one suite imports another, both run in the same shard so Bun loads their tests once.
+
+Only the shard that runs the external Agent display suite installs a host `redis-server`.
+That suite starts its own Redis process on a separate port. Every shard uses the Redis
+service container for the other suites.

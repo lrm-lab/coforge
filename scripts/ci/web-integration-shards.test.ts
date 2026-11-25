@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import { posix } from "node:path";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, posix } from "node:path";
+
+import { type Step, parse } from "./workflow-helpers";
 
 const runner = "scripts/test/run-web-integration.sh";
 const shardNumbers = [1, 2, 3, 4];
@@ -76,4 +80,32 @@ test("the Web integration workflow runs every shard independently with a frozen 
   expect(steps.find(({ name }) => name === "Keep the log of a failed run")?.with?.name).toContain(
     "matrix.shard",
   );
+});
+
+test("only the shard that runs the external display suite installs host Redis", async () => {
+  const workflow = await parse("web-integration.yml");
+  const steps = workflow.jobs.integration.steps as Step[];
+  const plan = steps.find((step) => step.id === "host-redis");
+  const install = steps.find((step) => step.name === "Install redis-server");
+  expect(plan?.env?.WEB_INTEGRATION_SHARD).toBe("${{ matrix.shard }}");
+  expect(install?.if).toBe("steps.host-redis.outputs.required == 'true'");
+  expect(install?.run).toBe("scripts/ci/install-redis.sh");
+  const consumer = "apps/web/test/agent-display-external.integration.ts";
+  const directory = await mkdtemp(join(tmpdir(), "coforge-web-integration-redis-"));
+  try {
+    let requiringRedis = 0;
+    for (const shard of shardNumbers) {
+      const required = listShard(shard).includes(consumer);
+      const output = join(directory, String(shard));
+      const result = Bun.spawnSync(["bash", "-e", "-o", "pipefail", "-c", plan!.run!], {
+        env: { ...Bun.env, GITHUB_OUTPUT: output, WEB_INTEGRATION_SHARD: String(shard) },
+      });
+      expect(result.exitCode, result.stderr.toString()).toBe(0);
+      expect(await Bun.file(output).text()).toBe(`required=${required}\n`);
+      if (required) requiringRedis++;
+    }
+    expect(requiringRedis).toBe(1);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
