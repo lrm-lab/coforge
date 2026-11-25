@@ -22,9 +22,16 @@ on:
       deploy:
         description: Whether the Web track selected Web checks, so the caller builds and deploys the image
         value: ${{ jobs.changes.outputs.deploy }}
-  # Manual runs do full coverage (no push base to diff from) and publish nothing;
-  # they exist so a workflow change can be exercised on its branch (task #38).
   workflow_dispatch:
+    inputs:
+      base_ref:
+        description: Branch to compare with using its merge base
+        type: string
+        default: main
+      full:
+        description: Validate all jobs
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -75,12 +82,23 @@ jobs:
           workflow="$(gh api "repos/$REPOSITORY/actions/runs/$RUN_ID" --jq .workflow_id)"
           sha="$(gh api "repos/$REPOSITORY/actions/workflows/$workflow/runs?branch=$BRANCH&event=push&status=success&per_page=1" --jq '.workflow_runs[0].head_sha // ""')"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - name: Find the dispatch merge base
+        id: dispatch-base
+        if: github.event_name == 'workflow_dispatch' && !inputs.track
+        env:
+          BASE_REF: ${{ inputs.base_ref }}
+          HEAD: ${{ github.sha }}
+        run: |
+          ref="$(git show-ref --verify --hash "refs/remotes/origin/$BASE_REF")"
+          sha="$(git merge-base "$ref" "$HEAD")"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
       - name: Select checks for changed files
         id: select
         env: &plan
           TRACK: ${{ inputs.track || 'changes' }}
           EVENT: ${{ github.event_name }}
-          BASE: ${{ github.event.pull_request.base.sha || steps.base.outputs.sha }}
+          DISPATCH_FULL: ${{ inputs.full }}
+          BASE: ${{ github.event.pull_request.base.sha || steps.base.outputs.sha || steps.dispatch-base.outputs.sha }}
           HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           # A push's own commits, for the author rule; a PR's are all of BASE...HEAD.
           BEFORE: ${{ github.event_name == 'push' && github.event.before || '' }}
@@ -93,6 +111,9 @@ jobs:
             git diff --check "$BASE...$HEAD"
             git diff --name-only --no-renames -z "$BASE...$HEAD" > "$files"
           elif [ "$EVENT" = push ] && git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            git diff --check "$BASE" "$HEAD"
+            git diff --name-only --no-renames -z "$BASE" "$HEAD" > "$files"
+          elif [ "$EVENT" = workflow_dispatch ] && [ "$TRACK" = changes ] && [ "${DISPATCH_FULL:-}" != true ] && [ -n "$BASE" ] && [ "$BASE" != "$HEAD" ]; then
             git diff --check "$BASE" "$HEAD"
             git diff --name-only --no-renames -z "$BASE" "$HEAD" > "$files"
           else
