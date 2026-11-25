@@ -85,6 +85,7 @@ e2e-settings-experiments.e2e.ts 待分拣
 e2e-system-notice-cut-name.e2e.ts 待分拣
 e2e-task-assignment-authority.e2e.ts 待分拣
 e2e-task-card-counts.e2e.ts 待分拣
+e2e-task-detail-escape.e2e.ts 待 Linux runner 准入
 e2e-task-done-owner-menu.e2e.ts 待分拣
 e2e-task-image-open.e2e.ts 待分拣
 e2e-task-label-full-name.e2e.ts 待分拣
