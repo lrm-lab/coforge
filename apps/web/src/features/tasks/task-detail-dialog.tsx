@@ -113,6 +113,7 @@ export type TaskDetailDialogProps = {
   members?: readonly Mentionable[];
   currentMemberId: string | null;
   thread?: (lead: ReactNode) => ReactNode;
+  leadExtra?: ReactNode;
   onOpenRelated?: (task: VisibleTaskName) => void;
 };
 
@@ -131,6 +132,7 @@ function DesktopTaskDrawer({
   members,
   currentMemberId,
   thread,
+  leadExtra,
   onOpenRelated,
 }: TaskDetailDialogProps) {
   const [expanded, setExpanded] = useState(false);
@@ -148,6 +150,7 @@ function DesktopTaskDrawer({
     members,
     currentMemberId,
     thread,
+    leadExtra,
     onOpenRelated,
     expanded,
     onToggleExpand: () => setExpanded((current) => !current),
@@ -198,6 +201,7 @@ function MobileTaskSheet({
   members,
   currentMemberId,
   thread,
+  leadExtra,
   onOpenRelated,
 }: TaskDetailDialogProps) {
   const [detent, setDetent] = useState<TaskDetent>("half");
@@ -228,6 +232,7 @@ function MobileTaskSheet({
     members,
     currentMemberId,
     thread,
+    leadExtra,
     onOpenRelated,
     detent,
     onToggleDetent: toggleDetent,

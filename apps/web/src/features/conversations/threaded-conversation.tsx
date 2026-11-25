@@ -201,28 +201,24 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     media: <MessageSquare aria-hidden="true" className="size-6 text-tertiary" />,
   };
   const popupProfile = useTaskPopupProfile(openTask?.id);
+  const taskLeadExtra =
+    openTask && earlier ? (
+      <TaskEarlierDiscussion
+        replyCount={earlier.replyCount}
+        open={earlierOpen}
+        onOpenChange={(open) => setEarlierOf(open ? openTask.id : undefined)}
+      />
+    ) : undefined;
   const taskThread =
     openTask && (ownDiscussion || openTaskMessageId !== undefined)
       ? (lead: ReactNode) => {
-          const head = earlier ? (
-            <>
-              {lead}
-              <TaskEarlierDiscussion
-                replyCount={earlier.replyCount}
-                open={earlierOpen}
-                onOpenChange={(open) => setEarlierOf(open ? openTask.id : undefined)}
-              />
-            </>
-          ) : (
-            lead
-          );
           if (ownDiscussion && !earlierOpen)
             return (
               <TaskDiscussionPane
                 {...sidePaneProps}
                 jumpMessage={taskPopup?.landingMessageId}
                 {...popupProfile.openers}
-                lead={head}
+                lead={lead}
                 conversationId={taskDiscussionId}
                 board={{ conversationId: conversation.conversationId, number: openTask.number }}
                 changedAt={openTask.updatedAt}
@@ -236,7 +232,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
                 taskNumber={openTask.number}
                 paneProps={threadPaneProps(openTaskRoot)}
                 openers={popupProfile.openers}
-                lead={head}
+                lead={lead}
                 readOnlyNotice={ownDiscussion ? <></> : undefined}
                 emptyState={taskRepliesEmpty}
               />
@@ -259,6 +255,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
       members={conversation.mentionables}
       currentMemberId={conversation.senderMemberId || null}
       thread={taskThread}
+      leadExtra={taskLeadExtra}
     />
   ) : null;
 
@@ -279,6 +276,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
         members={conversation.mentionables}
         currentMemberId={conversation.senderMemberId || null}
         thread={taskThread}
+        leadExtra={taskLeadExtra}
       />
     ) : null;
 
@@ -377,6 +375,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
           members={conversation.mentionables}
           currentMemberId={conversation.senderMemberId || null}
           thread={taskThread}
+          leadExtra={taskLeadExtra}
         />
       )}
       {visibleSlot === "profile" && profileAgentId && (

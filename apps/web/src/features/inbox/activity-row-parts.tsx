@@ -50,7 +50,7 @@ export function ActivityRowTitle({
   );
 }
 
-export function ActivityMentionBadge() {
+function ActivityMentionBadge() {
   return (
     <span className="shrink-0 text-xs font-medium text-(--color-reference-text)">
       @<span className={NARROW_SR_ONLY}>{m.activity_inbox_mention_badge()}</span>
@@ -58,11 +58,11 @@ export function ActivityMentionBadge() {
   );
 }
 
-export function ActivityUnreadCount({ count }: { count: number }) {
+function ActivityUnreadCount({ count }: { count: number }) {
   return <CountBadge count={count} size="sm" srLabel={m.activity_inbox_new({ count })} />;
 }
 
-export function activityRowMetaFadeClass(current: boolean) {
+function activityRowMetaFadeClass(current: boolean) {
   return cn(
     "transition-opacity not-any-pointer-coarse:group-hover:opacity-0 not-any-pointer-coarse:group-focus-within:opacity-0",
     current && "not-any-pointer-coarse:opacity-0",
@@ -79,13 +79,46 @@ export function ActivityRowTime({
   current: boolean;
 }) {
   const className = cn(
-    "ms-auto shrink-0 ps-2 text-xs text-quaternary tabular-nums",
+    "ms-auto shrink-0 ps-2 text-end text-xs text-quaternary tabular-nums",
     activityRowMetaFadeClass(current),
+    "not-any-pointer-coarse:group-hover:min-w-9 not-any-pointer-coarse:group-focus-within:min-w-9",
+    current && "not-any-pointer-coarse:min-w-9",
   );
   return clock ? (
     <ClockTime value={value} plain seconds={false} className={className} />
   ) : (
     <RelativeTime value={value} plain className={className} />
+  );
+}
+
+export function ActivityRowStatus({
+  mention,
+  unreadCount,
+  current = false,
+}: {
+  mention: boolean;
+  unreadCount: number;
+  current?: boolean;
+}) {
+  const hasStatus = mention || unreadCount > 0;
+  return (
+    <span
+      aria-hidden={!hasStatus || undefined}
+      className={cn(
+        "shrink-0 items-center justify-end gap-1.5",
+        hasStatus
+          ? cn("flex", activityRowMetaFadeClass(current))
+          : cn(
+              "hidden not-any-pointer-coarse:group-hover:flex not-any-pointer-coarse:group-focus-within:flex",
+              current && "not-any-pointer-coarse:flex",
+            ),
+        "not-any-pointer-coarse:group-hover:min-w-7 not-any-pointer-coarse:group-focus-within:min-w-7",
+        current && "not-any-pointer-coarse:min-w-7",
+      )}
+    >
+      {mention && <ActivityMentionBadge />}
+      {unreadCount > 0 && <ActivityUnreadCount count={unreadCount} />}
+    </span>
   );
 }
 

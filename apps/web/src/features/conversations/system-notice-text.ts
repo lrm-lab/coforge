@@ -94,7 +94,7 @@ const shownText = (person: SystemPerson) => person.displayName || person.handle;
 const TEXT_NAMES: Names = {
   shown: shownText,
   memberName: (member) => (member.kind === "agent" ? `@${member.handle}` : shownText(member)),
-  mention: (person) => `@${person.handle}`,
+  mention: (person) => (person.kind === "user" ? shownText(person) : `@${person.handle}`),
 };
 
 const reference = (task: SystemTask, locale?: Locale) => {

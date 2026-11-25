@@ -76,6 +76,7 @@ export type TaskDetailPanelProps = {
   members?: readonly Mentionable[];
   currentMemberId: string | null;
   thread?: (lead: ReactNode) => ReactNode;
+  leadExtra?: ReactNode;
   onOpenRelated?: (task: VisibleTaskName) => void;
   navigation?: TaskDetailNavigation;
   expanded?: boolean;
@@ -100,6 +101,7 @@ export function useTaskDetailModel({
   members,
   currentMemberId,
   thread,
+  leadExtra,
   onOpenRelated,
   navigation,
   expanded = false,
@@ -214,7 +216,7 @@ export function useTaskDetailModel({
     <div
       className={cn(
         "flex flex-col gap-5",
-        sidebar ? "px-8 pt-6 pb-6" : isSheet ? "px-4 pt-3 pb-6" : "px-5 pt-4 pb-6",
+        sidebar ? "px-8 pt-6 pb-6" : isSheet ? "px-4 pt-3 pb-6" : "px-4 pt-4 pb-6 md:px-6",
       )}
     >
       <div className="flex flex-col gap-3">
@@ -226,7 +228,9 @@ export function useTaskDetailModel({
         >
           {task.title}
         </Heading>
-        {!sidebar && <div className={cn(isSheet ? "-mx-4" : "-mx-5 [&_dl]:px-5")}>{section}</div>}
+        {!sidebar && (
+          <div className={cn(isSheet ? "-mx-4" : "-mx-4 md:-mx-6 md:[&_dl]:px-6")}>{section}</div>
+        )}
       </div>
       {description && <TaskDescription text={description} />}
       {task.subtasks && (
@@ -237,6 +241,7 @@ export function useTaskDetailModel({
           onOpen={onOpenRelated}
         />
       )}
+      {leadExtra}
     </div>
   );
   const discussion = thread?.(lead);

@@ -49,21 +49,28 @@ export function useTaskEvents<M extends MessageView & { system?: { kind: string 
   });
   const people = useMemo<TaskEventPeople>(() => {
     const unknown = m.system_notice_actor_unknown();
-    const person = (found: Mentionable | undefined, handle: string | null) => ({
+    const person = (
+      found: Mentionable | undefined,
+      handle: string | null,
+      kind?: "user" | "agent",
+    ) => ({
       memberId: null,
       handle: found?.handle ?? handle ?? "",
       displayName: found?.label ?? handle ?? unknown,
+      ...(kind ? { kind } : {}),
     });
     return {
       actor: (type, handle) =>
         person(
           members?.find((member) => member.kind === type && member.handle === handle),
           type === "user" ? null : handle,
+          type === "system" ? undefined : type,
         ),
       assignee: (kind, id) =>
         person(
           members?.find((member) => member.kind === kind && member.id === id),
           null,
+          kind,
         ),
     };
   }, [members]);

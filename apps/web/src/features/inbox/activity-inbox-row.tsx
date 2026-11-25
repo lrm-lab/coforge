@@ -22,11 +22,9 @@ import { activityChatLink, activityOpenTarget } from "./activity-open-target";
 import { activityRowPlace } from "./activity-row-place";
 import {
   ActivityDoneCheck,
-  ActivityMentionBadge,
-  activityRowMetaFadeClass,
+  ActivityRowStatus,
   ActivityRowTime,
   ActivityRowTitle,
-  ActivityUnreadCount,
   ActivityUnreadDot,
   NARROW_HIDDEN,
   useActivityRowShortcuts,
@@ -210,7 +208,11 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
                 {placeLabel && <span className="me-1.5 text-quaternary">{placeLabel}</span>}
                 {sender}: <Preview message={item.latest} />
               </span>
-              <ActivityItemStatus item={item} filter={filter} current={current} />
+              <ActivityRowStatus
+                mention={filter !== "mentions" && item.unreadMention}
+                unreadCount={item.unreadCount}
+                current={current}
+              />
             </span>
           </span>
         </AriaLink>
@@ -295,25 +297,6 @@ export function ActivityItemIcon({ item }: { item: ActivityConversationItem }) {
       ) : (
         <Hash01 aria-hidden="true" className="size-4 text-fg-quaternary" />
       )}
-    </span>
-  );
-}
-
-function ActivityItemStatus({
-  item,
-  filter,
-  current,
-}: {
-  item: ActivityConversationItem;
-  filter: ActivityInboxFilter;
-  current: boolean;
-}) {
-  const showMention = filter !== "mentions" && item.unreadMention;
-  if (!showMention && item.unreadCount === 0) return null;
-  return (
-    <span className={cn("flex shrink-0 items-center gap-1.5", activityRowMetaFadeClass(current))}>
-      {showMention && <ActivityMentionBadge />}
-      {item.unreadCount > 0 && <ActivityUnreadCount count={item.unreadCount} />}
     </span>
   );
 }

@@ -16,11 +16,9 @@ import { artifactEventLine } from "./activity-artifact-event";
 import { ACTIVITY_ROW_ITEM_CLASS, ACTIVITY_ROW_LINK_CLASS } from "./activity-inbox-row";
 import {
   ActivityDoneCheck,
-  ActivityMentionBadge,
-  activityRowMetaFadeClass,
+  ActivityRowStatus,
   ActivityRowTime,
   ActivityRowTitle,
-  ActivityUnreadCount,
   ActivityUnreadDot,
   useActivityRowShortcuts,
 } from "./activity-row-parts";
@@ -95,17 +93,7 @@ export const ActivityArtifactRow = memo(function ActivityArtifactRow({
               >
                 <ActorName inline actor={event.actor} /> {artifactEventLine(item)}
               </span>
-              {(showMention || unread) && (
-                <span
-                  className={cn(
-                    "flex shrink-0 items-center gap-1.5",
-                    activityRowMetaFadeClass(false),
-                  )}
-                >
-                  {showMention && <ActivityMentionBadge />}
-                  {unread && <ActivityUnreadCount count={item.unreadCount} />}
-                </span>
-              )}
+              <ActivityRowStatus mention={showMention} unreadCount={item.unreadCount} />
             </span>
           </span>
         </AriaLink>

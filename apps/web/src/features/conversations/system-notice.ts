@@ -2,7 +2,12 @@ import type { TaskName, TaskPriority, TaskStatus } from "@lrm/coforge-sdk/intern
 
 /** A person a system notice names: the id opens their profile when it resolves; the handle and
  * name survive a deleted person. */
-export type SystemPerson = { memberId: string | null; handle: string; displayName: string };
+export type SystemPerson = {
+  memberId: string | null;
+  handle: string;
+  displayName: string;
+  kind?: "user" | "agent";
+};
 
 /** A Task a system notice names; the id survives a title change. Null in a notice backfilled from
  * text that named no Task the backfill could find. */

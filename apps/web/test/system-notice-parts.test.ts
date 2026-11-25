@@ -7,6 +7,12 @@ import {
 } from "#src/features/conversations/system-notice-text";
 
 const alice = { memberId: "m1", handle: "alice", displayName: "Alice" };
+const frank = {
+  memberId: "m3",
+  handle: "andong3",
+  displayName: "Frank",
+  kind: "user" as const,
+};
 const dax = { memberId: "m2", handle: "dax", displayName: "Dax", kind: "agent" as const };
 const task = { taskId: "t1", number: 7, title: "Ship it" };
 
@@ -40,5 +46,21 @@ test("each person a notice names is a part of its own, with who they are", () =>
   expect(people.map((part) => [part.person.handle, part.text])).toEqual([
     ["alice", "Alice"],
     ["dax", "dax"],
+  ]);
+});
+
+test("a human assignee renders by display name rather than username, while an agent keeps its handle", () => {
+  const assignedToHuman: SystemNoticeSource = {
+    body: "",
+    system: { kind: "task.assigned", params: { actor: dax, task, assignee: frank } },
+  };
+  expect(systemNoticeText(assignedToHuman, "zh-CN")).toContain("Frank");
+  expect(systemNoticeText(assignedToHuman, "zh-CN")).not.toContain("andong3");
+  const people = systemNoticeParts(assignedToHuman, "zh-CN").filter(
+    (part) => typeof part !== "string",
+  );
+  expect(people.map((part) => [part.person.handle, part.text])).toEqual([
+    ["dax", "Dax"],
+    ["andong3", "Frank"],
   ]);
 });

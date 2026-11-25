@@ -13,7 +13,6 @@ import { useMemberDirectory } from "./member-directory";
 import type { Mentionable } from "./mention-text";
 import {
   systemNoticeParts,
-  systemNoticeText,
   withoutAssignmentReason,
   type NoticePerson,
 } from "./system-notice-text";
@@ -47,31 +46,22 @@ export function SystemMessageRow({
   const timeFormat = useTimeFormat();
   const timeZone = useTimeZone();
   const groupDay = useContext(SystemGroupDayContext);
-  // In the viewer's language from the notice's kind; an unstructured one reads as its body. The
-  // line draws each person it names by face (task #521); the tooltip keeps the words alone.
-  // An assignment's reason (task #83) is for its assignee, who gets it in full; the stream shows
-  // the notice alone (Frank, task #92: "直接不显示reason").
   const notice = withoutAssignmentReason(message);
-  const text = systemNoticeText(notice);
   const parts = systemNoticeParts(notice);
   const members = useMemberDirectory();
-  // A notice from a later day than its group's writes its date, before the same clock.
   const time =
     dateLocale && groupDay && groupDay !== dayLabel(message.createdAt, dateLocale, timeZone)
       ? formatMonthDayTime(message.createdAt, timeZone, dateLocale, timeFormat, { hour: "2-digit" })
       : clockLabel(message.createdAt, dateLocale, timeFormat, timeZone);
-  const named = parts.map((part, index) =>
+  const resolvedParts = parts.map((part) =>
+    typeof part === "string" ? part : noticeActor(part, members, message.systemPeople),
+  );
+  const text = resolvedParts.map((part) => (typeof part === "string" ? part : part.name)).join("");
+  const named = resolvedParts.map((part, index) =>
     typeof part === "string" ? (
       part
     ) : (
-      <ActorName
-        key={index}
-        actor={noticeActor(part, members, message.systemPeople)}
-        inline
-        // The people are what the notice is about: their names a step darker and heavier than
-        // its words; no pill or @ (the pill read heavy, #591).
-        className="font-medium text-secondary"
-      />
+      <ActorName key={index} actor={part} inline className="font-medium text-secondary" />
     ),
   );
   const timeElement = (
@@ -117,28 +107,28 @@ export function SystemMessageRow({
   );
 }
 
-/** A person a notice names, by the face the server read from their member row (`systemPeople`),
- * which holds for one who has since left or been archived; otherwise by the conversation's
- * members, for a notice that names no member row. The name is the notice's own words for them. */
 function noticeActor(
   { person, text }: NoticePerson,
   members: readonly Mentionable[] | undefined,
   systemPeople: MessageView["systemPeople"],
 ): NamedActor {
   const resolved = person.memberId ? systemPeople?.[person.memberId] : undefined;
-  if (resolved) return { ...resolved, name: text };
-  // By the member row first: a handle renamed since the notice was posted no longer matches.
   const member =
     (person.memberId && members?.find((candidate) => candidate.memberId === person.memberId)) ||
     members?.find(
       (candidate) =>
         candidate.handle === person.handle && (!person.kind || candidate.kind === person.kind),
     );
+  if (resolved)
+    return {
+      ...resolved,
+      name: resolved.kind === "user" ? member?.label || person.displayName || text : text,
+    };
   return member
     ? {
         kind: member.kind,
         id: member.id,
-        name: text,
+        name: member.kind === "user" ? member.label : text,
         avatarUrl: member.avatarUrl,
       }
     : { kind: person.kind === "agent" ? "agent" : "user", name: text };
