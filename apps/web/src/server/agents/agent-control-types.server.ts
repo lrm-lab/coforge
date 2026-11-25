@@ -18,7 +18,12 @@ import type {
  * `recover()`'s) structurally satisfies this too. */
 export type AgentRecoveryFields = Pick<
   AgentStartIntent,
-  "wakeMessage" | "resumeMessages" | "unreadSummary" | "unreadConversationIds" | "openTasks"
+  | "wakeMessage"
+  | "resumeMessages"
+  | "unreadSummary"
+  | "unreadConversationIds"
+  | "lastUnreadSequences"
+  | "openTasks"
 >;
 /** Reads the surfaced-while-stopped recovery context for a user-initiated Start; the
  * same shape `WorkspaceAgentRecovery.recoverWorkspace` reads for Daemon-ready recovery. */

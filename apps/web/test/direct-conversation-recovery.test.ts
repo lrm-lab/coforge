@@ -30,6 +30,7 @@ describe("PrismaDirectConversationRepository recovery", () => {
       channelName: null,
       otherUsername: "alice",
       unreadCount: 120,
+      lastUnreadSequence: 124,
       globalRank: 1,
       ...overrides,
     });
@@ -51,6 +52,7 @@ describe("PrismaDirectConversationRepository recovery", () => {
         threadRootId: "root-1",
         deliveryId: null,
         unreadCount: 3,
+        lastUnreadSequence: 142,
         globalRank: 121,
       }),
       row({
@@ -62,6 +64,7 @@ describe("PrismaDirectConversationRepository recovery", () => {
         senderUsername: "bob",
         otherUsername: "bob",
         unreadCount: 75,
+        lastUnreadSequence: 91,
         globalRank: 124,
       }),
     ];
@@ -145,6 +148,23 @@ describe("PrismaDirectConversationRepository recovery", () => {
       },
     ]);
     expect(result.unreadSummary).toEqual({ "@alice": 120, "@alice:root-1": 3, "@bob": 75 });
+    expect(result.lastUnreadSequences).toEqual({ "@alice": 124, "@alice:root-1": 142, "@bob": 91 });
+
+    rows.push(
+      row({
+        id: "alias-collision",
+        conversationId: "conversation-2",
+        sequence: 200,
+        unreadCount: 1,
+        lastUnreadSequence: 200,
+        globalRank: 125,
+      }),
+    );
+    const collision = await new PrismaDirectConversationRepository(db).readAgentRecoveryContext(
+      "workspace-1",
+      "agent-1",
+    );
+    expect(collision.lastUnreadSequences).toEqual({ "@alice:root-1": 142, "@bob": 91 });
   });
 
   test("names channel senders individually and direct senders by the conversation user", async () => {

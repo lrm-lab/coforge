@@ -123,6 +123,9 @@ test("thread send and unread ranges stay separate from the main conversation", a
     expect(recovery.resumeMessages.find((m) => m.target === target)?.latestSenderHandle).toBe(
       username,
     );
+    expect(recovery.lastUnreadSequences).toEqual(
+      Object.fromEntries(recovery.resumeMessages.map(({ target, sequence }) => [target, sequence])),
+    );
     await repo.advanceAgentReadThrough(workspace.id, agent.id, target, 999);
     expect((await repo.readAgentRecoveryContext(workspace.id, agent.id)).unreadSummary).toEqual({
       [`@${username}`]: 1,
