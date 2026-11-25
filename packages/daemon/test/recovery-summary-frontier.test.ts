@@ -3,7 +3,7 @@ import { AgentNoticeSuppressedError, type AgentNoticeOptions } from "@coforge/ag
 import { settleForwardedTaskRead } from "#src/daemon-runtime/agent-history-read";
 import { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-attention-index";
 import { carriedStart, mergeCarried } from "#src/daemon-runtime/provider-replay-recovery";
-import { session } from "./fixtures/attention-delivery";
+import { delivery, session } from "./fixtures/attention-delivery";
 
 const agentId = "agent-1";
 const target = "#board:#98";
@@ -166,4 +166,66 @@ test("carried recovery drops the proof if it changes or merges the covered count
     mergeCarried(start, { recovery: { unreadSummary: { "#other": 1 } } }).recovery
       ?.lastUnreadSequences,
   ).toEqual(recovery.lastUnreadSequences);
+});
+
+test("a carried replacement row invalidates the upper bound even when the count agrees", async () => {
+  const next = {
+    ...delivery("replacement"),
+    target,
+    conversationId,
+    sequence: 19,
+  };
+  const changed = carriedStart(
+    { recovery },
+    [{ target, pendingCount: 1, deliveries: [next] }],
+    [],
+    new Map([[target, 1]]),
+  ).recovery!;
+  expect(changed.unreadSummary).toEqual(recovery.unreadSummary);
+  const notices: string[] = [];
+  const index = new AgentMessageAttentionIndex(
+    "workspace-1",
+    { session: () => session((notice) => notices.push(notice)) },
+    async () => {},
+  );
+  taskRead(index, agentId, conversationId, 18);
+  expect(
+    await index.recover(
+      agentId,
+      [],
+      changed.unreadSummary!,
+      changed.unreadConversationIds,
+      undefined,
+      undefined,
+      {
+        snapshotMessages: [],
+        countedDeliveries: changed.countedDeliveries,
+        lastUnreadSequences: changed.lastUnreadSequences,
+        accepted() {},
+      },
+    ),
+  ).toEqual(new Set([target]));
+  expect(notices[0]).toContain(`${target} 2 new messages`);
+  expect(changed.lastUnreadSequences).toBeUndefined();
+});
+
+test("merge drops a bound for a target touched outside the other side's summary", () => {
+  const next = {
+    ...delivery("new"),
+    target,
+    conversationId,
+    sequence: 19,
+    latestSenderKind: "human" as const,
+    latestSenderHandle: "ada",
+    latestSenderDescription: "",
+    body: "new delivery",
+  };
+  for (const other of [
+    { recovery: { countedDeliveries: [next] } },
+    { recovery: { resumeMessages: [next] } },
+    { recovery: { wakeMessage: next } },
+  ]) {
+    expect(mergeCarried({ recovery }, other).recovery?.lastUnreadSequences).toBeUndefined();
+    expect(mergeCarried(other, { recovery }).recovery?.lastUnreadSequences).toBeUndefined();
+  }
 });
