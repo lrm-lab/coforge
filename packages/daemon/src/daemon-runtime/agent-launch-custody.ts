@@ -77,6 +77,7 @@ export class AgentLaunchCustody {
               ? (context.resumeMessages ?? [])
               : [],
             countedDeliveries: context.countedDeliveries,
+            lastUnreadSequences: context.lastUnreadSequences,
             accepted(messages) {
               for (const message of messages)
                 if (isOrdinaryNotice(message)) accepted.add(noticeMessageKey(message));

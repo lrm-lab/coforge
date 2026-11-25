@@ -5,7 +5,7 @@ import {
 } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
 import type { AgentDeliveryQueue } from "./delivery-notice-writer";
-import type { NoticeEligibility } from "./notice-eligibility";
+import type { NoticeCandidate, NoticeEligibility } from "./notice-eligibility";
 import {
   isValidMessageSender,
   type AgentRecoveryMessage,
@@ -35,11 +35,13 @@ export type RecoveryPlan = Readonly<{
   summaryUnreadCount: number;
   summaryOnly: readonly (readonly [string, number])[];
   summaryProof: ReadonlyMap<string, readonly NoticeMessage[]>;
+  summaryFrontiers: ReadonlyMap<string, NoticeCandidate>;
 }>;
 
 export type RecoveryNoticeOptions = {
   snapshotMessages: readonly AgentRecoveryMessage[];
   countedDeliveries?: readonly NoticeMessage[];
+  lastUnreadSequences?: Readonly<Record<string, number>>;
   accepted(messages: readonly NoticeMessage[]): void;
 };
 
@@ -50,6 +52,7 @@ export function planRecovery(input: {
   unreadConversationIds: Readonly<Record<string, string>>;
   snapshotMessages: readonly AgentRecoveryMessage[];
   countedDeliveries?: readonly NoticeMessage[];
+  lastUnreadSequences?: Readonly<Record<string, number>>;
   openTasks?: AgentStartOpenTasks;
   currentAttention: ReadonlyMap<string, MessageAttention>;
   generation: NoticeGeneration;
@@ -102,16 +105,37 @@ export function planRecovery(input: {
     foldMessageAttention(byTarget, message);
   }
   const enumerated = new Map<string, Set<string>>();
+  const invalidFrontiers = new Set<string>();
   for (const message of input.snapshotMessages) {
+    const maximum = input.lastUnreadSequences?.[message.target];
+    if (
+      maximum !== undefined &&
+      (input.unreadConversationIds[message.target] !== message.conversationId ||
+        message.sequence > maximum)
+    )
+      invalidFrontiers.add(message.target);
     if (input.unreadConversationIds[message.target] !== message.conversationId) continue;
     const keys = enumerated.get(message.target) ?? new Set<string>();
     keys.add(noticeMessageKey(message));
     enumerated.set(message.target, keys);
   }
   const summaryOnly: [string, number][] = [];
+  const summaryFrontiers = new Map<string, NoticeCandidate>();
   for (const [target, count] of Object.entries(unreadSummary)) {
     const remaining = count - (enumerated.get(target)?.size ?? 0);
-    if (remaining > 0 && isDeliveryTarget(target)) summaryOnly.push([target, remaining]);
+    if (remaining <= 0 || !isDeliveryTarget(target)) continue;
+    summaryOnly.push([target, remaining]);
+    const sequence = input.lastUnreadSequences?.[target];
+    const conversationId = input.unreadConversationIds[target];
+    if (
+      sequence !== undefined &&
+      Number.isSafeInteger(sequence) &&
+      sequence >= count &&
+      sequence > 0 &&
+      conversationId?.trim() &&
+      !invalidFrontiers.has(target)
+    )
+      summaryFrontiers.set(target, { target, conversationId, sequence, through: true });
   }
   if (!recoveredTargets.size && !summaryOnly.length) return undefined;
   const countedByTarget = new Map<string, Map<string, NoticeMessage>>();
@@ -152,6 +176,7 @@ export function planRecovery(input: {
     announced,
     summaryOnly,
     summaryProof,
+    summaryFrontiers,
     ...notice,
   };
 }
@@ -179,8 +204,14 @@ export async function submitRecoveryNotice(input: {
     const recoveredMessages = plan.recoveredMessages.filter(mayWake);
     const summaryOnly: [string, number][] = [];
     for (const [target, count] of plan.summaryOnly) {
-      const pending = plan.summaryProof.get(target)?.filter(mayWake).length ?? count;
-      if (pending) summaryOnly.push([target, pending]);
+      const frontier = plan.summaryFrontiers.get(target);
+      if (frontier) {
+        if (eligibility(agentId, frontier).disposition === "notify")
+          summaryOnly.push([target, count]);
+      } else {
+        const pending = plan.summaryProof.get(target)?.filter(mayWake).length ?? count;
+        if (pending) summaryOnly.push([target, pending]);
+      }
     }
     if (!recoveredMessages.length && !summaryOnly.length) selected = undefined;
     else {
