@@ -5,6 +5,7 @@ import {
   type LocalInboxRequest,
 } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
+import { AgentNoticeSuppressedError } from "@coforge/agent";
 import type { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
 import type { AppNotifiedStore } from "#src/persistence/app-notified-store";
 import type {
@@ -415,12 +416,13 @@ export class AgentInboxCoordinator {
           ? session.notify(pendingText, {
               deliveryIds,
               ...(conversation ? { conversation } : {}),
-              ...(fallbackText ? { fallbackText } : {}),
+              ...(fallbackText ? { fallbackText, prepareSubmission: fallbackText } : {}),
             })
           : session.notify(pendingText);
       void redelivery.then(
         () => this.ports.mentionDeliveries.settleRedelivery(agentId, deliveryIds, true),
         (error: unknown) => {
+          if (error instanceof AgentNoticeSuppressedError) return;
           logger.warn("A steered notice could not be redelivered after its turn ended", {
             event: "agent.delivery_queue.fallback_notice_rejected",
             agent_id: agentId,

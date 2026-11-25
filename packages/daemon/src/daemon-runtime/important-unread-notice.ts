@@ -1,3 +1,5 @@
+import type { NoticeEligibility } from "./notice-eligibility";
+import { isCardEvent } from "./agent-message-attention-index-helpers";
 import { DELIVERY_IMPORTANCE, deliveryImportance } from "./delivery-importance";
 
 /**
@@ -15,6 +17,8 @@ export type UnreadNoticeConversation = Readonly<{
   target?: string;
   /** The oldest important sequence still unread in this conversation. */
   firstSequence: number;
+  lastSequence?: number;
+  independentEvent?: true;
   /** How many important deliveries it holds, after merging. */
   count: number;
 }>;
@@ -31,6 +35,24 @@ export type ImportantUnreadNotice = Readonly<{
   /** When the next attempt is due; undefined while nothing is waiting to be retried. */
   nextAttemptAtMs?: number;
 }>;
+
+export function unreadConversationEligible(
+  notice: ImportantUnreadNotice,
+  conversation: UnreadNoticeConversation,
+  eligibility: NoticeEligibility,
+): boolean {
+  if (conversation.independentEvent && notice.lastAttempt !== "accepted") return true;
+  return (
+    eligibility(notice.agentId, {
+      target: conversation.target,
+      conversationId: conversation.conversationId,
+      sequence:
+        conversation.lastSequence ??
+        (conversation.count === 1 ? conversation.firstSequence : notice.highestSequence),
+      ...(conversation.count > 1 ? { through: true } : {}),
+    }).disposition === "notify"
+  );
+}
 
 export type ImportantUnreadAttemptOutcome = "accepted" | "rejected";
 
@@ -125,15 +147,24 @@ export class ImportantUnreadNotices {
     );
   }
 
-  /**
-   * The Agent's read position moved. Only a position past the batch's highest sequence settles it:
-   * having run a check without reading these messages is not having read them.
-   */
-  settle(agentId: string, consumedThroughSequence: number): boolean {
+  retainConversations(
+    agentId: string,
+    retain: (conversation: UnreadNoticeConversation) => boolean,
+  ): ImportantUnreadNotice | undefined {
     const notice = this.#notices.get(agentId);
-    if (!notice || consumedThroughSequence < notice.highestSequence) return false;
-    this.#notices.delete(agentId);
-    return true;
+    if (!notice) return undefined;
+    const conversations = notice.conversations.filter(retain);
+    if (conversations.length === notice.conversations.length) return notice;
+    if (!conversations.length) {
+      this.#notices.delete(agentId);
+      return undefined;
+    }
+    const next = {
+      ...notice,
+      conversations,
+    };
+    this.#notices.set(agentId, next);
+    return next;
   }
 
   clear(agentId: string): void {
@@ -158,9 +189,16 @@ function merge(
   delivery: ImportantUnreadDelivery,
 ): UnreadNoticeConversation[] {
   const merged = conversations.map((entry) => ({ ...entry }));
-  const existing = merged.find((entry) => entry.conversationId === delivery.conversationId);
+  const independentEvent = isCardEvent(delivery);
+  const existing = merged.find(
+    (entry) =>
+      entry.conversationId === delivery.conversationId &&
+      Boolean(entry.independentEvent) === independentEvent,
+  );
   if (existing) {
     existing.firstSequence = Math.min(existing.firstSequence, delivery.sequence);
+    if (existing.lastSequence !== undefined)
+      existing.lastSequence = Math.max(existing.lastSequence, delivery.sequence);
     existing.count += 1;
     if (delivery.target !== undefined) existing.target = delivery.target;
   } else
@@ -168,6 +206,8 @@ function merge(
       conversationId: delivery.conversationId,
       ...(delivery.target === undefined ? {} : { target: delivery.target }),
       firstSequence: delivery.sequence,
+      lastSequence: delivery.sequence,
+      ...(independentEvent ? { independentEvent: true as const } : {}),
       count: 1,
     });
   return merged;

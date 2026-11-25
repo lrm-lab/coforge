@@ -32,6 +32,7 @@ import {
 } from "./agent-message-attention-decision-log";
 import { planRecovery, type RecoveryNoticeOptions } from "./agent-message-attention-recovery";
 import { AgentConsumedAttention } from "./agent-consumed-attention";
+import { noticeEligibility } from "./notice-eligibility";
 import { PendingAttention } from "./agent-message-attention-pending";
 import { AcceptedMessageNotices } from "./accepted-message-notices";
 import {
@@ -75,6 +76,7 @@ export class AgentMessageAttentionIndex {
     settlePending: (agentId, target, settled) =>
       this.#pending.settle(agentId, target, settled, (id, name) => this.clear(id, name)),
   });
+  readonly noticeEligibility = noticeEligibility((...args) => this.#consumption.readBasis(...args));
   constructor(
     workspaceId: string,
     runtimes: Pick<AgentProcessManager, "session"> & Partial<Pick<AgentProcessManager, "runtime">>,
@@ -262,7 +264,7 @@ export class AgentMessageAttentionIndex {
     const recordAccepted = this.captureNoticeAcceptance(agentId);
     this.hold.busy(agentId);
     try {
-      await this.#acceptNotice(generation.cancellation.signal, () =>
+      await acceptNotice(generation.cancellation.signal, () =>
         session.notify!(notice, conversation ? { conversation } : undefined),
       );
     } finally {
@@ -301,16 +303,13 @@ export class AgentMessageAttentionIndex {
         previewSeen: this.previewSeen,
         noticeActionClocks: this.noticeActionClocks,
         messageReceived: (agentId, conversation) => this.messageReceived(agentId, conversation),
-        acceptNotice: (signal, send) => this.#acceptNotice(signal, send),
+        acceptNotice,
         recordAccepted: this.captureNoticeAcceptance(message.agentId),
       },
       message,
       attention,
       announced,
     );
-  }
-  async #acceptNotice(signal: AbortSignal, send: () => Promise<void>): Promise<void> {
-    return acceptNotice(signal, send);
   }
   #generation(agentId: string) {
     const existing = this.#generations.get(agentId);

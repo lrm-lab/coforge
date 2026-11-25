@@ -181,7 +181,7 @@ test("a structured reliable retry uses the same task read reconciliation", () =>
     queued: () => [],
     prefix: () => "",
     previewedInFull: () => false,
-    hasSeen: attention.hasSeen.bind(attention),
+    eligibility: attention.noticeEligibility,
   });
   const attempt = compose(
     agentId,
