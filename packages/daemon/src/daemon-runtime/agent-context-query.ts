@@ -100,8 +100,6 @@ export async function queryAgentContext(
   for (const path of candidates) {
     const cached = ports.restoreCache?.get({ key: cacheKey(path), path, allowedRoots });
     if (cached) {
-      sourcePath = path;
-      source = { ok: true, buffer: cached.source, sourceBytes: cached.sourceBytes };
       restored = cached.restored;
       break;
     }
@@ -112,9 +110,9 @@ export async function queryAgentContext(
       break;
     }
   }
-  source ??= readContextViewSource(candidates[0]!, allowedRoots);
-  if (!source.ok) refuse("context source is unavailable", "CONTEXT_SOURCE_UNAVAILABLE");
   if (!restored) {
+    source ??= readContextViewSource(candidates[0]!, allowedRoots);
+    if (!source.ok) refuse("context source is unavailable", "CONTEXT_SOURCE_UNAVAILABLE");
     restored = await (ports.restoreInChild ?? runContextViewRestoreInChild)({
       runtime: entry.runtime,
       sessionId: entry.sessionId,
@@ -126,7 +124,7 @@ export async function queryAgentContext(
     if (sourcePath && ports.restoreCache)
       ports.restoreCache.set(
         { key: cacheKey(sourcePath), path: sourcePath, allowedRoots },
-        source.buffer,
+        source.sourceBytes,
         restored,
       );
   }

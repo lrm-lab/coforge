@@ -20,7 +20,11 @@ export async function postAgentContextViewResult(
 ): Promise<AgentContextViewUploadMetadata> {
   if (!serverHttpUrl || !token) throw new Error("context view HTTP endpoint unavailable");
   const body = encodeAgentContextViewResult(result);
-  const compressed = Bun.gzipSync(Buffer.from(body));
+  const gzipInput =
+    body.buffer instanceof ArrayBuffer
+      ? new Uint8Array(body.buffer, body.byteOffset, body.byteLength)
+      : new Uint8Array(body);
+  const compressed = Bun.gzipSync(gzipInput);
   let response: Response;
   try {
     response = await fetch(

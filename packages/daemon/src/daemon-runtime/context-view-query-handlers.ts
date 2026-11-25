@@ -60,14 +60,13 @@ async function sendResult(
   result: AgentContextViewResult,
   agentApiKey?: string,
 ): Promise<Record<string, unknown>> {
-  const postedBytes = encodeAgentContextViewResult(result).byteLength;
   try {
     if (!agentApiKey) throw new Error("context view Agent API key unavailable");
     if (transport.postAgentContextViewResult) {
       const upload = await transport.postAgentContextViewResult(result, agentApiKey);
       return {
         post_outcome: "accepted",
-        posted_bytes: upload?.postedBytes ?? postedBytes,
+        posted_bytes: upload?.postedBytes ?? encodeAgentContextViewResult(result).byteLength,
         ...(upload?.compressedBytes === undefined
           ? {}
           : { compressed_bytes: upload.compressedBytes }),
@@ -82,10 +81,9 @@ async function sendResult(
       request_id: result.requestId,
       error_code: error instanceof Error ? error.name : "unknown",
     });
-    // The request has already been logged; no local state is mutated by a failed upload.
     return {
       post_outcome: "failed",
-      posted_bytes: uploadError.postedBytes ?? postedBytes,
+      posted_bytes: uploadError.postedBytes ?? encodeAgentContextViewResult(result).byteLength,
       ...(uploadError.compressedBytes === undefined
         ? {}
         : { compressed_bytes: uploadError.compressedBytes }),
@@ -121,6 +119,7 @@ export function subscribeContextViewQueries(
    * not make every other Agent's request expire behind it (task #18). */
   const chains = new Map<string, Promise<void>>();
   const restoreCache = new ContextViewRestoreCache();
+  let unsubscribed = false;
   const queued = (request: AgentContextViewRequest): Promise<void> => {
     const receivedAt = Date.now();
     const run = (chains.get(request.agentId) ?? Promise.resolve()).then(async () => {
@@ -269,12 +268,13 @@ export function subscribeContextViewQueries(
       | { ok: true; buffer: Buffer; sourceBytes: number }
       | { ok: false; failure: "missing" | "outside_root" | "unsafe" | "too_large" | "read_failed" }
       | undefined;
+    let sourceBytes: number | undefined;
     let restored: ContextViewRestoreResult | undefined;
     for (const path of sourcePathCandidates) {
       const cached = restoreCache.get({ key: cacheKey(path), path, allowedRoots });
       if (cached) {
         sourcePath = path;
-        source = { ok: true, buffer: cached.source, sourceBytes: cached.sourceBytes };
+        sourceBytes = cached.sourceBytes;
         restored = cached.restored;
         break;
       }
@@ -282,29 +282,31 @@ export function subscribeContextViewQueries(
       if (candidate.ok) {
         sourcePath = path;
         source = candidate;
+        sourceBytes = candidate.sourceBytes;
         break;
       }
     }
-    source ??= readContextViewSource(sourcePathCandidates[0]!, allowedRoots);
-    if (!source.ok) {
-      const reason =
-        source.failure === "too_large"
-          ? "too_large"
-          : source.failure === "missing"
-            ? "not_found"
-            : "read_failed";
-      const result =
-        reason === "too_large"
-          ? failure(request, reason, source.failure, { tooLargeCause: "session_file" })
-          : failure(request, reason, source.failure);
-      await finish(result, {
-        runtime: entry.runtime,
-        source: providerPath ? "provider" : "workspace_or_state_fallback",
-        index_or_fallback: entry.transcript,
-      });
-      return;
-    }
     if (!restored) {
+      source ??= readContextViewSource(sourcePathCandidates[0]!, allowedRoots);
+      if (!source.ok) {
+        const reason =
+          source.failure === "too_large"
+            ? "too_large"
+            : source.failure === "missing"
+              ? "not_found"
+              : "read_failed";
+        const result =
+          reason === "too_large"
+            ? failure(request, reason, source.failure, { tooLargeCause: "session_file" })
+            : failure(request, reason, source.failure);
+        await finish(result, {
+          runtime: entry.runtime,
+          source: providerPath ? "provider" : "workspace_or_state_fallback",
+          index_or_fallback: entry.transcript,
+        });
+        return;
+      }
+      sourceBytes = source.sourceBytes;
       restored = await (ports.restoreInChild ?? runContextViewRestoreInChild)({
         runtime: entry.runtime,
         sessionId: entry.sessionId,
@@ -313,10 +315,10 @@ export function subscribeContextViewQueries(
         offset: entry.offset,
         maxBytes,
       });
-      if (sourcePath)
+      if (!unsubscribed && sourcePath)
         restoreCache.set(
           { key: cacheKey(sourcePath), path: sourcePath, allowedRoots },
-          source.buffer,
+          source.sourceBytes,
           restored,
         );
     }
@@ -326,7 +328,7 @@ export function subscribeContextViewQueries(
           const content = new TextEncoder().encode(JSON.stringify(restored.view));
           return content.byteLength > maxBytes
             ? failure(request, "too_large", "view_over_max_bytes", {
-                sourceBytes: source.sourceBytes,
+                sourceBytes,
                 tooLargeCause: "request",
               })
             : {
@@ -343,12 +345,12 @@ export function subscribeContextViewQueries(
                 redactedMediaCount: restored.view.redactions.media,
                 redactedDiagnosticCount: restored.view.redactions.diagnostic,
                 viewBytes: content.byteLength,
-                sourceBytes: source.sourceBytes,
+                sourceBytes,
                 verification: restored.view.verification,
               };
         })()
       : failure(request, restored.failure, restored.detail ?? restored.failure, {
-          sourceBytes: source.sourceBytes,
+          sourceBytes,
           ...(restored.failure === "too_large" && restored.tooLargeCause
             ? { tooLargeCause: restored.tooLargeCause }
             : {}),
@@ -383,5 +385,11 @@ export function subscribeContextViewQueries(
         view_bytes: result.viewBytes,
       });
   };
-  return transport.onAgentContextView?.(queued);
+  const unsubscribe = transport.onAgentContextView?.(queued);
+  if (!unsubscribe) return undefined;
+  return () => {
+    unsubscribed = true;
+    restoreCache.clear();
+    unsubscribe();
+  };
 }
