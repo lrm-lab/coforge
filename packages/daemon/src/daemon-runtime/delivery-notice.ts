@@ -1,8 +1,8 @@
-import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
+import { isTaskConversationTarget, type AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { countDistinctMessages } from "./agent-history-read";
 import { inboxNoticeText } from "./inbox-notice-text";
 import { inboxPreviewLimit } from "./inbox-preview";
-import { buildNoticeRows, renderNoticeRows } from "./inbox-preview-rows";
+import { buildNoticeRows, renderNoticeRows, type NoticeRow } from "./inbox-preview-rows";
 import { isTrackedMention } from "./mention-delivery-tracker";
 
 /** What one notice says and what it claims, built from the deliveries it announces plus whatever
@@ -16,6 +16,7 @@ export type DeliveryNotice = Readonly<{
   notice: string;
   /** Tracked mentions, which the session names back if the notice never reaches the model. */
   trackedIds: readonly string[];
+  fallbackText?: () => string | undefined;
 }>;
 
 /**
@@ -31,6 +32,7 @@ export function composeDeliveryNotice(input: {
   /** The Workspace's own prefix for these notices, when it has one. */
   prefix: string;
   previewedInFull: (target: string, sequence: number) => boolean;
+  hasSeen?: (agentId: string, target: string, sequence: number, conversationId: string) => boolean;
 }): DeliveryNotice {
   const { message, announced, queued } = input;
   const view = buildNoticeRows({
@@ -41,11 +43,68 @@ export function composeDeliveryNotice(input: {
     previewedInFull: input.previewedInFull,
   });
   const rows = renderNoticeRows(view.rows);
+  const notice = input.prefix + inboxNoticeText(rows);
+  const fallbackText =
+    input.hasSeen &&
+    taskNoticeFallback(view.rows, announced, queued, input.hasSeen, input.prefix, notice);
   return {
     view,
     rows,
     totalCount: countDistinctMessages([...announced, ...queued]),
-    notice: input.prefix + inboxNoticeText(rows),
+    notice,
+    ...(fallbackText ? { fallbackText } : {}),
     trackedIds: announced.filter(isTrackedMention).map((delivery) => delivery.deliveryId),
+  };
+}
+
+function taskNoticeFallback(
+  rows: readonly NoticeRow[],
+  announced: readonly AgentMessageDelivery[],
+  queued: readonly AgentMessageDelivery[],
+  hasSeen: NonNullable<Parameters<typeof composeDeliveryNotice>[0]["hasSeen"]>,
+  prefix: string,
+  originalText: string,
+): (() => string | undefined) | undefined {
+  if (!rows.some(({ target }) => isTaskConversationTarget(target))) return undefined;
+  const tasks = new Map<
+    string,
+    { agentId: string; target: string; sequence: number; conversationId: string }
+  >();
+  for (const deliveries of [announced, queued]) {
+    for (const {
+      agentId,
+      target,
+      sequence,
+      conversationId,
+      messageId,
+      source,
+      mentionDelivery,
+    } of deliveries) {
+      if (target && isTaskConversationTarget(target) && source !== "app" && !mentionDelivery)
+        tasks.set(messageId, { agentId, target, sequence, conversationId });
+    }
+  }
+  if (!tasks.size) return undefined;
+
+  const read = new Set<string>();
+  return () => {
+    for (const [id, { agentId, target, sequence, conversationId }] of tasks)
+      if (hasSeen(agentId, target, sequence, conversationId)) read.add(id);
+    if (!read.size) return originalText;
+
+    const pending = rows.flatMap(({ target, newIds, heldIds, previews }) => {
+      const newlyWaiting = new Set([...newIds].filter((id) => !read.has(id)));
+      const stillHeld = new Set([...heldIds].filter((id) => !read.has(id)));
+      if (!newlyWaiting.size && !stillHeld.size) return [];
+      return [
+        {
+          target,
+          newIds: newlyWaiting,
+          heldIds: stillHeld,
+          previews: previews.filter(({ messageId }) => !read.has(messageId)),
+        },
+      ];
+    });
+    return pending.length ? prefix + inboxNoticeText(renderNoticeRows(pending)) : undefined;
   };
 }

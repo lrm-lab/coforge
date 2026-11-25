@@ -14,6 +14,7 @@ export type UnreadNoticeComposePorts = Readonly<{
   prefix(agentId: string): string;
   /** Whether the model was already shown this message in full: it is not shown again. */
   previewedInFull(agentId: string, target: string, sequence: number): boolean;
+  hasSeen?(agentId: string, target: string, sequence: number, conversationId: string): boolean;
   captureAcceptance?(agentId: string): (messages: readonly AgentMessageDelivery[]) => boolean;
 }>;
 
@@ -37,11 +38,12 @@ export function unreadNoticeComposer(ports: UnreadNoticeComposePorts) {
     // A record taken over after a restart has no messages of its own: the loop's standing text
     // says where to look instead.
     if (!message) return undefined;
-    const { view, notice } = composeDeliveryNotice({
+    const { view, notice, fallbackText } = composeDeliveryNotice({
       message,
       announced,
       queued: ports.queued(agentId),
       prefix: ports.prefix(agentId),
+      hasSeen: ports.hasSeen,
       previewedInFull: (target, sequence) => ports.previewedInFull(agentId, target, sequence),
     });
     // A retry whose every message the model already has would name the target and nothing else:
@@ -55,6 +57,7 @@ export function unreadNoticeComposer(ports: UnreadNoticeComposePorts) {
     const accepted = announced.filter((item) => included.has(item.messageId));
     return {
       text: notice,
+      ...(fallbackText ? { fallbackText } : {}),
       shown: view.whole,
       ...(record ? { accepted: () => record(accepted) } : {}),
     };

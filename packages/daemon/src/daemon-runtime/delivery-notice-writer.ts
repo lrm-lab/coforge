@@ -57,7 +57,7 @@ export type AgentDeliveryQueue = {
 /** The facts a delivery notice is written from: the index lends these, and keeps its own. */
 export type DeliveryNoticeHost = Pick<
   AgentMessageAttentionIndex,
-  "previewSeen" | "noticeActionClocks" | "session" | "isCurrentGeneration"
+  "previewSeen" | "noticeActionClocks" | "session" | "isCurrentGeneration" | "hasSeen"
 > & {
   hold: AgentDeliveryQueue;
   generation(agentId: string): ReturnType<typeof noticeGeneration>;
@@ -157,11 +157,12 @@ export function writeDeliveryNotice(
   }
   void attention;
   const queued = this.hold.queued?.(message.agentId) ?? [];
-  const { view, rows, totalCount, notice, trackedIds } = composeDeliveryNotice({
+  const { view, rows, totalCount, notice, trackedIds, fallbackText } = composeDeliveryNotice({
     message,
     announced,
     queued,
     prefix: this.hold.noticePrefix?.(message.agentId) ?? "",
+    hasSeen: this.hasSeen,
     previewedInFull: (target, sequence) => this.previewSeen.has(message.agentId, target, sequence),
   });
   const notification = Promise.resolve()
@@ -169,8 +170,11 @@ export function writeDeliveryNotice(
       if (!this.isCurrentGeneration(message.agentId, generation))
         throw new AgentWakeupUnavailableError("Agent notice was cancelled");
       return this.acceptNotice(generation.cancellation.signal, () =>
-        (trackedIds.length
-          ? session.notify!(notice, { deliveryIds: trackedIds })
+        (trackedIds.length || fallbackText
+          ? session.notify!(notice, {
+              ...(trackedIds.length ? { deliveryIds: trackedIds } : {}),
+              ...(fallbackText ? { fallbackText } : {}),
+            })
           : session.notify!(notice)
         ).then(async () => {
           await session.waitForContextViewCapture?.();

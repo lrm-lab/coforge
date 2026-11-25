@@ -403,16 +403,21 @@ export class AgentInboxCoordinator {
     const notices = this.ports.deliveryGate.releaseFallbackNotices(agentId);
     if (!notices.length) return;
     const session = this.ports.processManager.session(agentId);
-    for (const { text, deliveryIds = [], conversation } of notices) {
+    for (const { text, fallbackText, deliveryIds = [], conversation } of notices) {
       if (!session?.notify) {
         this.ports.mentionDeliveries.settleRedelivery(agentId, deliveryIds, false);
         continue;
       }
-      // The tracked mentions it carries are drained once it is accepted, so it names them again.
+      const pendingText = fallbackText ? fallbackText() : text;
+      if (pendingText === undefined) continue;
       const redelivery =
-        deliveryIds.length || conversation
-          ? session.notify(text, { deliveryIds, ...(conversation ? { conversation } : {}) })
-          : session.notify(text);
+        deliveryIds.length || conversation || fallbackText
+          ? session.notify(pendingText, {
+              deliveryIds,
+              ...(conversation ? { conversation } : {}),
+              ...(fallbackText ? { fallbackText } : {}),
+            })
+          : session.notify(pendingText);
       void redelivery.then(
         () => this.ports.mentionDeliveries.settleRedelivery(agentId, deliveryIds, true),
         (error: unknown) => {

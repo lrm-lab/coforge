@@ -23,6 +23,7 @@ export type ImportantUnreadRecord = Pick<ImportantUnreadNoticeStore, "save" | "c
  * the model, recorded only once the write is accepted. */
 export type ImportantUnreadComposedNotice = Readonly<{
   text: string;
+  fallbackText?: () => string | undefined;
   shown?: readonly { target: string; sequence: number }[];
   accepted?(): boolean;
 }>;

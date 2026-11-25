@@ -1,3 +1,4 @@
+import type { AgentSession } from "@coforge/agent";
 import { ImportantUnreadNotices, type ImportantUnreadNotice } from "./important-unread-notice";
 import type { AgentConsumedSeqState } from "#src/persistence/agent-consumed-seq-store";
 import {
@@ -13,11 +14,7 @@ import {
 export type ImportantUnreadWiringPorts = Readonly<{
   store: ImportantUnreadRecord;
   /** The Agent's running session, when it has one. */
-  session(
-    agentId: string,
-  ):
-    | { notify?(text: string): Promise<void>; waitForContextViewCapture?(): Promise<void> }
-    | undefined;
+  session(agentId: string): Pick<AgentSession, "notify" | "waitForContextViewCapture"> | undefined;
   /** What the Agent has not read, as the attention index counts it. */
   unread(agentId: string): readonly { target: string; count: number }[];
   /** One error Activity for a batch whose retries ran out. */
@@ -92,7 +89,11 @@ export function composeImportantUnreadReminder(ports: ImportantUnreadWiringPorts
         // The session queues the text into the Agent's input, and the promise is this attempt's
         // verdict: it rejects when the session refused the notice, so the retry stays and the
         // delivery that asked for the attempt hears the refusal.
-        return Promise.resolve(session.notify(text)).then(async () => {
+        return Promise.resolve(
+          attempt?.fallbackText
+            ? session.notify(text, { fallbackText: attempt.fallbackText })
+            : session.notify(text),
+        ).then(async () => {
           await session.waitForContextViewCapture?.();
           const currentContext = attempt?.accepted?.() !== false;
           if (currentContext && attempt?.shown?.length) ports.shown?.(agentId, attempt.shown);

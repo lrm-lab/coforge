@@ -22,7 +22,7 @@ export type NoticeRow = {
   newIds: Set<string>;
   heldIds: Set<string>;
   /** Up to the preview limit, newest last, for the bodies a notice may show. */
-  previews: string[];
+  previews: { messageId: string; line: string }[];
 };
 
 /** A message whose whole body a notice showed: the model does not need it again. */
@@ -44,7 +44,7 @@ export function buildNoticeRows(input: {
   const byTarget = new Map<string, NoticeRow>();
   const previewCandidates = new Map<
     string,
-    Array<{ sequence: number; line: string; whole: boolean }>
+    Array<{ messageId: string; sequence: number; line: string; whole: boolean }>
   >();
   const rowFor = (target: string) => {
     const existing = byTarget.get(target);
@@ -62,6 +62,7 @@ export function buildNoticeRows(input: {
     if (!line) return;
     const candidates = previewCandidates.get(delivery.target) ?? [];
     candidates.push({
+      messageId: delivery.messageId,
       sequence: delivery.sequence,
       line,
       whole: previewShowsWholeMessage(delivery),
@@ -81,7 +82,7 @@ export function buildNoticeRows(input: {
       .sort((left, right) => right.sequence - left.sequence)
       .slice(0, input.previewLimit)
       .reverse();
-    row.previews = newest.map((candidate) => candidate.line);
+    row.previews = newest.map(({ messageId, line }) => ({ messageId, line }));
     // Only a preview the notice actually rendered counts as shown.
     for (const candidate of newest)
       if (candidate.whole) whole.push({ target: row.target, sequence: candidate.sequence });
@@ -98,7 +99,9 @@ export function renderNoticeRows(rows: readonly NoticeRow[]): string[] {
     if (row.heldIds.size)
       parts.push(`${row.heldIds.size} held message${row.heldIds.size === 1 ? "" : "s"}`);
     const line = `${row.target} ${parts.join(" · ")}`;
-    return row.previews.length ? [line, ...row.previews.map((it) => `  ${it}`)].join("\n") : line;
+    return row.previews.length
+      ? [line, ...row.previews.map(({ line }) => `  ${line}`)].join("\n")
+      : line;
   });
 }
 

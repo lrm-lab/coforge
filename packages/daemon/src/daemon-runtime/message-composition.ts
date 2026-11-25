@@ -204,6 +204,7 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
       prefix: (agentId) => ports.sync.noticePrefix(agentId),
       previewedInFull: (agentId, target, sequence) =>
         messageAttention.previewSeen.has(agentId, target, sequence),
+      hasSeen: messageAttention.hasSeen.bind(messageAttention),
       captureAcceptance: (agentId) => messageAttention.captureNoticeAcceptance(agentId),
     }),
     // An accepted attempt showed the model these bodies; a later attempt does not repeat them.

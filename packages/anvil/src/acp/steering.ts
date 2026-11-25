@@ -231,6 +231,7 @@ export class AcpSteering {
         type: "notice-undelivered",
         text,
         ...(options?.deliveryIds?.length ? { deliveryIds: options.deliveryIds } : {}),
+        ...(options?.fallbackText ? { fallbackText: options.fallbackText } : {}),
       },
       options,
     );

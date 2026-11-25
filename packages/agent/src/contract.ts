@@ -271,6 +271,7 @@ export type AgentRuntimeEvent = {
       type: "notice-undelivered";
       text: string;
       deliveryIds?: readonly string[];
+      fallbackText?: () => string | undefined;
     }
 );
 export type {

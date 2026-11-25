@@ -71,6 +71,11 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   consumption scope for this Agent settles, in every other target of that
   conversation (and thread, matched by root whatever its case), only the
   messages the read returned.
+- Before redelivering a task notice that a steer accepted but never showed,
+  the daemon checks the consumed cursor for each task message's conversation.
+  It removes the covered ordinary messages from the counts and previews and
+  drops an empty notice. Tracked mentions and App notices keep their own
+  redelivery handling. The fallback issues no second delivery ACK.
 - An untracked delivery is ACKed as soon as the daemon takes custody of it:
   when its notice is accepted, or when it is held for a later notice or launch
   (`AgentDeliveryGate`, a failed launch's input queue). A delivery queued

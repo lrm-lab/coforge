@@ -297,6 +297,7 @@ export class AgentMessageAttentionIndex {
         generation: (agentId) => this.#generation(agentId),
         isCurrentGeneration: (agentId, generation) => this.isCurrentGeneration(agentId, generation),
         hold: this.hold,
+        hasSeen: this.hasSeen.bind(this),
         previewSeen: this.previewSeen,
         noticeActionClocks: this.noticeActionClocks,
         messageReceived: (agentId, conversation) => this.messageReceived(agentId, conversation),

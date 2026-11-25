@@ -349,6 +349,7 @@ export function observeRuntimeEvent(
   if (event.type === "notice-undelivered") {
     ports.deliveryGate.holdFallbackNotice(agentId, {
       text: event.text,
+      ...(event.fallbackText ? { fallbackText: event.fallbackText } : {}),
       ...(event.conversation ? { conversation: event.conversation } : {}),
       ...(event.deliveryIds?.length ? { deliveryIds: event.deliveryIds } : {}),
     });

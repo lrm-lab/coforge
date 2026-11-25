@@ -9,6 +9,7 @@ import type {
  * deliveries the notice carries; a provider only echoes them on `notice-undelivered`. */
 export type AgentNoticeOptions = {
   deliveryIds?: readonly string[];
+  fallbackText?: () => string | undefined;
   conversation?: AgentConversationScope;
 };
 export interface AgentSession {

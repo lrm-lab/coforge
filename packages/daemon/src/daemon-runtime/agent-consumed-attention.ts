@@ -122,8 +122,10 @@ export class AgentConsumedAttention {
     this.#consumedState(agentId);
     if (this.#setAlias(agentId, spelling, canonical)) this.#persist(agentId);
   }
-  hasSeen(agentId: string, target: string, sequence: number): boolean {
-    return this.readBasis(agentId, target, sequence) !== undefined;
+  hasSeen(agentId: string, target: string, sequence: number, conversationId?: string): boolean {
+    const entry = this.#consumedState(agentId).targets.get(target);
+    if (conversationId !== undefined && entry?.conversationId !== conversationId) return false;
+    return consumedReadBasis(entry, sequence) !== undefined;
   }
   readBasis(agentId: string, target: string, sequence: number) {
     return consumedReadBasis(this.#consumedState(agentId).targets.get(target), sequence);
