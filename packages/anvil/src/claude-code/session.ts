@@ -11,7 +11,7 @@ import type {
 } from "@coforge/agent";
 import { AGENT_RUNTIME_EVENT_TYPE } from "#src/contract";
 import { InterruptTracker } from "#src/interrupt-tracker";
-import { asRecord, eventTime } from "#src/json-record";
+import { eventTime } from "#src/json-record";
 import type { JsonlProcess } from "#src/jsonl-process";
 import { ClaudeNoticeQueue, type SessionState, type SessionInitialization } from "./session-state";
 import { initializeClaudeSession } from "./initialize";
@@ -26,6 +26,9 @@ import {
   claudeAssistantEvents,
   claudeRefusalEvent,
   claudeToolResults,
+  hasClaudeSessionProgress,
+  isClaudeNativeTurnStart,
+  readClaudeInitSessionId,
   isClaudeMainSessionRecord,
 } from "./message-events";
 import { ClaudeSubagentLineage } from "./subagent-lineage";
@@ -296,17 +299,10 @@ export class ClaudeCodeAgentSession implements AgentSession {
       this.#state === "idle" &&
       ["stream_event", "assistant", "user"].includes(String(record.type))
     ) {
-      const nativeStart =
-        record.parent_tool_use_id == null &&
-        (record.type === "assistant" ||
-          (record.type === "stream_event" && asRecord(record.event)?.type === "message_start"));
-      if (!this.#nativeTurnQueued || !nativeStart) return;
+      if (!this.#nativeTurnQueued || !isClaudeNativeTurnStart(record)) return;
       this.#beginNativeTurn();
     }
-    if (
-      ["stream_event", "assistant", "user", "result"].includes(String(record.type)) ||
-      (record.type === "system" && record.subtype === "init")
-    ) {
+    if (hasClaudeSessionProgress(record)) {
       this.#progressObserved = true;
       this.#firstInput = undefined;
     }
@@ -330,15 +326,13 @@ export class ClaudeCodeAgentSession implements AgentSession {
       if (relayed) this.#emit(relayed);
     }
     if (record.type === "system" && record.subtype === "init") {
-      if (
-        typeof record.session_id !== "string" ||
-        !record.session_id.trim() ||
-        record.session_id === this.#replacedSessionId ||
-        (this.expectedSessionId && record.session_id !== this.expectedSessionId) ||
-        (!this.expectedSessionId &&
-          this.#sessionId !== undefined &&
-          record.session_id !== this.#sessionId)
-      ) {
+      const sessionId = readClaudeInitSessionId(
+        record,
+        this.#replacedSessionId,
+        this.expectedSessionId,
+        this.#sessionId,
+      );
+      if (sessionId === undefined) {
         this.#failRecovery();
         return;
       }
@@ -347,11 +341,9 @@ export class ClaudeCodeAgentSession implements AgentSession {
       // background task opens with this session's top-level init; no ended turn's leftover is one.
       if (this.#state === "idle" && this.#resultObserved && record.parent_tool_use_id == null)
         this.#beginNativeTurn();
-      if (typeof record.session_id === "string" && record.session_id !== this.#sessionId) {
-        this.#sessionId = record.session_id;
-      }
+      this.#sessionId = sessionId;
       if (this.expectedSessionId !== undefined)
-        this.#sessionReadyForNotices = record.session_id === this.expectedSessionId;
+        this.#sessionReadyForNotices = sessionId === this.expectedSessionId;
       this.#setIdentity(this.expectedSessionId ? "resumable" : "empty");
       this.#nativeIdentityObserved = true;
       this.#reportIdentity();

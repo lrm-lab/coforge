@@ -15,6 +15,39 @@ export function isClaudeMainSessionRecord(
   );
 }
 
+export function isClaudeNativeTurnStart(record: Readonly<Record<string, unknown>>): boolean {
+  return (
+    record.parent_tool_use_id == null &&
+    (record.type === "assistant" ||
+      (record.type === "stream_event" && asRecord(record.event)?.type === "message_start"))
+  );
+}
+
+export function hasClaudeSessionProgress(record: Readonly<Record<string, unknown>>): boolean {
+  return (
+    ["stream_event", "assistant", "user", "result"].includes(String(record.type)) ||
+    (record.type === "system" && record.subtype === "init")
+  );
+}
+
+export function readClaudeInitSessionId(
+  record: Readonly<Record<string, unknown>>,
+  replacedSessionId: string | undefined,
+  expectedSessionId: string | undefined,
+  currentSessionId: string | undefined,
+): string | undefined {
+  const id = record.session_id;
+  if (
+    typeof id !== "string" ||
+    !id.trim() ||
+    id === replacedSessionId ||
+    (expectedSessionId && id !== expectedSessionId) ||
+    (!expectedSessionId && currentSessionId !== undefined && id !== currentSessionId)
+  )
+    return undefined;
+  return id;
+}
+
 function isClaudeRefusal(record: Readonly<Record<string, unknown>>): boolean {
   if (!isClaudeMainSessionRecord(record)) return false;
   if (record.type === "result")
