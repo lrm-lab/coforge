@@ -1,22 +1,29 @@
 import { expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { AgentRequestForwarder } from "#src/daemon-runtime/agent-request-forwarder";
+import { AgentContextLedger } from "#src/persistence/agent-context-ledger";
+import { AgentStateDb } from "#src/persistence/agent-state-db";
+
+function taskReadLedger() {
+  const root = mkdtempSync(join(tmpdir(), "coforge-task-read-ledger-"));
+  const stateDb = AgentStateDb.open(root, "agent-a");
+  return {
+    ledger: new AgentContextLedger(stateDb.database),
+    [Symbol.dispose]() {
+      stateDb.close();
+      rmSync(root, { recursive: true, force: true });
+    },
+  };
+}
 
 test("task reads elide repeated sender introductions in the Agent context", async () => {
-  const seen = new Set<string>();
+  using context = taskReadLedger();
   const forwarder = new AgentRequestForwarder({
     connection: { workspaceId: "workspace" },
     authorizedAgent: () => "agent-a",
-    contexts: {
-      ledger: () =>
-        ({
-          claim: (_kind: string, id: string) => {
-            if (seen.has(id)) return false;
-            seen.add(id);
-            return true;
-          },
-          release: () => {},
-        }) as never,
-    },
+    contexts: { ledger: () => context.ledger },
     transport: {
       agentTaskConversation: async () =>
         Response.json({
@@ -61,16 +68,12 @@ test("task reads elide repeated sender introductions in the Agent context", asyn
 });
 
 test("a rewritten task read drops the upstream content-length and content-encoding", async () => {
+  using context = taskReadLedger();
+  context.ledger.claim("sender", "agent:scout", "A scouting Agent");
   const forwarder = new AgentRequestForwarder({
     connection: { workspaceId: "workspace" },
     authorizedAgent: () => "agent-a",
-    contexts: {
-      ledger: () =>
-        ({
-          claim: () => false,
-          release: () => {},
-        }) as never,
-    },
+    contexts: { ledger: () => context.ledger },
     transport: {
       agentTaskConversation: async () =>
         // fetch decodes the wire body but leaves the wire headers: the compressed byte count
