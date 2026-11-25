@@ -378,14 +378,15 @@ export function startAgentProxy(input: {
     async fetch(request) {
       const requestUrl = new URL(request.url);
       input.onRequest?.({ method: request.method, path: requestUrl.pathname });
+      const candidate = request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
+      const token = candidate && LOCAL_PROXY_TOKEN.test(candidate) ? candidate : undefined;
+      const registered = tokens.find(token);
       logger.info("Agent proxy request", {
         event: "agent.proxy.request",
         method: request.method,
         path: requestUrl.pathname,
+        ...(registered ? { agent_id: registered.agentId } : {}),
       });
-      const candidate = request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
-      const token = candidate && LOCAL_PROXY_TOKEN.test(candidate) ? candidate : undefined;
-      const registered = tokens.find(token);
       if (registered && !canAnswerNow(input.runtime, agentApiKeys, registered.agentId))
         return sessionNotRunning();
       const direct = await collab.dispatchDirect(request, requestUrl, registered);
