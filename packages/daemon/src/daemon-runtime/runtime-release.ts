@@ -216,8 +216,15 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     if (!launch || !session || !restart) return;
     await this.#endAndWake(agentId, launch, session, coldIdleRuntimePlan(restart, stop));
   }
+  configApplyAgent(agentId: string): ColdIdleAgent | undefined {
+    const hold = this.#ports.explicitHold?.(agentId);
+    return this.coldIdleAgent(agentId, {
+      ignoreParkedInbox: hold === "rate_limit_backoff" || hold === "runtime_error_backoff",
+    });
+  }
+
   async stopForConfigApply(agentId: string): Promise<"stopped" | "busy" | "failed"> {
-    const agent = this.coldIdleAgent(agentId);
+    const agent = this.configApplyAgent(agentId);
     if (!agent || agent.busyReason !== undefined) return "busy";
     const launch = this.#ports.launch(agentId);
     const session = this.#ports.runtime(agentId)?.session;

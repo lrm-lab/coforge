@@ -48,6 +48,27 @@ describe("ClaudeRateLimitState: the limit a Claude error reports", () => {
     });
   });
 
+  test("a structured Fable rejection carries the model on its one matching error", () => {
+    const limits = state();
+    limits.observe(
+      rateLimitEvent({
+        status: "rejected",
+        rateLimitType: "seven_day_fable",
+        resetsAt: IN_AN_HOUR_S,
+      }),
+      SESSION,
+    );
+    expect(limitOf(limits, "rate_limit", undefined, "other-session")).toEqual({
+      kind: "transient_rate_limit",
+    });
+    expect(limitOf(limits, "rate_limit")).toEqual({
+      kind: "window_limit",
+      resetsAt: IN_AN_HOUR_ISO,
+      modelWindow: { model: "fable", window: "weekly" },
+    });
+    expect(limitOf(limits, "rate_limit")).toEqual({ kind: "transient_rate_limit" });
+  });
+
   test("a rejected event in milliseconds reads the same reset", () => {
     const limits = state();
     limits.observe(rateLimitEvent({ status: "rejected", resetsAt: IN_AN_HOUR_S * 1000 }), SESSION);
@@ -416,6 +437,54 @@ test("a Claude usage limit reaches the session as a window limit with its reset"
         occurredAt: expect.any(String),
       },
       { type: "completed", status: "failed" },
+    ]);
+  } finally {
+    await session.dispose();
+    feed.stop();
+  }
+});
+
+test("Claude stream model windows are bound to the current native session", async () => {
+  const feed = claudeEventFeed();
+  const session = await claudeFixtureProvider().createAgentSession({
+    agentWorkspaceDirectory: tmpdir(),
+    instructions: "Test Agent instructions.",
+    environment: feed.environment,
+  });
+  feed.attach(session);
+  const sessionId = await feed.sessionId();
+  const events: AgentRuntimeEvent[] = [];
+  const resetsAt = Math.floor(Date.now() / 1000) + 3600;
+  const timestamp = new Date().toISOString();
+  const info = { rateLimitType: "seven_day_fable", resetsAt };
+  const rate = (status: "allowed" | "rejected", id: string) => ({
+    ...rateLimitEvent({ ...info, status }),
+    session_id: id,
+    timestamp,
+  });
+  session.subscribe((event) => {
+    if (event.type === "error" || event.type === "model-window-available") events.push(event);
+  });
+  try {
+    await session.sendMessage("wait");
+    await feed.emit(
+      rate("rejected", sessionId),
+      {
+        type: "assistant",
+        error: "rate_limit",
+        message: { content: [{ type: "text", text: "API Error: Rate limit reached" }] },
+      },
+      rate("allowed", "other-session"),
+      rate("allowed", sessionId),
+    );
+    const modelWindow = { model: "fable", window: "weekly" };
+    const reset = new Date(resetsAt * 1000).toISOString();
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "error",
+        providerLimit: { kind: "window_limit", resetsAt: reset, modelWindow },
+      }),
+      { type: "model-window-available", modelWindow, resetsAt: reset, occurredAt: timestamp },
     ]);
   } finally {
     await session.dispose();

@@ -46,8 +46,17 @@ export type RuntimeReconnectingEvent = Extract<AgentRuntimeEvent, { type: "recon
  * visible wording, if its classification knows. Never part of a fingerprint (the same limit is
  * the same failure whatever reset it names), nor of the fence or crash wording, which quote the
  * provider text alone. */
-function limitResetNote(classified: RuntimeErrorClassification): string {
-  return classified.retryNotBefore ? ` (limit resets at ${classified.retryNotBefore})` : "";
+function limitResetNote(classified: RuntimeErrorClassification, event: RuntimeErrorEvent): string {
+  if (!classified.retryNotBefore) return "";
+  const model = event.providerLimit?.modelWindow?.model;
+  switch (model) {
+    case "fable":
+    case "opus":
+    case "sonnet":
+      return ` (${model} weekly limit resets at ${classified.retryNotBefore})`;
+    default:
+      return ` (limit resets at ${classified.retryNotBefore})`;
+  }
 }
 
 const THINKING_LEVEL_UNSUPPORTED = /\bthinking level is unsupported\b/i;
@@ -97,7 +106,7 @@ export function buildRuntimeErrorActivity(
 ): AgentActivity {
   // A provider's own error message is shown as reported; only the crash summary built at
   // process exit is redacted and capped.
-  const detail = `${event.message}${limitResetNote(classified)}${thinkingLevelNote(event.message)}`;
+  const detail = `${event.message}${limitResetNote(classified, event)}${thinkingLevelNote(event.message)}`;
   return {
     detailKind: AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_ERROR,
     level: "error",

@@ -8,7 +8,7 @@ import type { RuntimeRelease } from "./runtime-release";
  * is the runtime's `agentLaunches`. Each is a thunk because the collaborators are bound after the
  * field that holds this one initializes. */
 export function assembleAgentConfigApply(input: {
-  runtimeRelease(): Pick<RuntimeRelease<never>, "coldIdleAgent" | "stopForConfigApply">;
+  runtimeRelease(): Pick<RuntimeRelease<never>, "configApplyAgent" | "stopForConfigApply">;
   processManager(): Pick<AgentProcessManager, "restartConfig" | "replaceRestartRuntime">;
   agentLaunches(): ReadonlyMap<string, unknown>;
   /** Each Agent's current launch, one object per launch (`currentActivityLaunches`). */
@@ -17,7 +17,7 @@ export function assembleAgentConfigApply(input: {
   credentialHolds(): Pick<CredentialInvalidHolds, "modelChanged">;
 }): AgentConfigApply {
   return new AgentConfigApply({
-    agent: (agentId) => input.runtimeRelease().coldIdleAgent(agentId),
+    agent: (agentId) => input.runtimeRelease().configApplyAgent(agentId),
     launching: (agentId) => input.agentLaunches().has(agentId),
     launchOf: (agentId) => input.activityLaunches().get(agentId),
     restartProvider: (agentId) => input.processManager().restartConfig(agentId)?.config.provider,

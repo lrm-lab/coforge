@@ -26,6 +26,7 @@ export type AgentInputDrainPorts = Readonly<{
   isLaunching(agentId: string): boolean;
   isStopping(agentId: string): boolean;
   deliverMessage(agentId: string, message: AgentMessageDelivery): Promise<void>;
+  deliveryParked?(agentId: string, deliveryId: string): boolean;
   runStartup(
     agentId: string,
     session: AgentSession,
@@ -261,6 +262,13 @@ export class AgentInputDrain {
             );
           }
           await this.ports.deliverMessage(agentId, item.message);
+          if (watchedDelivery && this.ports.deliveryParked?.(agentId, watchedDelivery.deliveryId))
+            this.ports.deliveryConsumption?.cancelWrite(
+              agentId,
+              watchedDelivery.launchId,
+              watchedDelivery.generation,
+              watchedDelivery.deliveryId,
+            );
           logger.info("Agent delivery indexed", {
             event: "agent.message.delivery_indexed",
             agent_id: agentId,

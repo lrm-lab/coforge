@@ -169,3 +169,35 @@ test("a Start that only joins a launch in flight neither cancels the pending app
   });
   expect(outcomes(records)).toEqual(["pending"]);
 });
+
+test("a Fable weekly wait does not hold the next delivery after a Sonnet config restart", async () => {
+  const { result: h } = await run({}, async (h, records) => {
+    await h.runtime.handleAgentStart(
+      h.intent({ controlEpoch: 1, launchId: "launch-1", model: "fable" }),
+    );
+    const first = h.sessions[0]!;
+    const modelLimit = {
+      type: "error",
+      message: "Rate limit reached",
+      providerLimit: {
+        kind: "window_limit",
+        resetsAt: new Date(Date.now() + 3 * 60 * 60_000).toISOString(),
+        modelWindow: { model: "fable", window: "weekly" },
+      },
+    } as const;
+    first.emit(modelLimit);
+    const beforeDelivery = [...first.inputs];
+    await h.deliver(2);
+    expect(first.inputs).toEqual(beforeDelivery);
+    await h.runtime.handleAgentConfig(push(2, { model: "sonnet" }));
+    expect({ disposed: first.disposed, outcomes: outcomes(records) }).toEqual({
+      disposed: true,
+      outcomes: ["pending", "idle_stop"],
+    });
+    await until(() => h.sessions[1]?.inputs.length === 1);
+    return h;
+  });
+  expect(h.sessions).toHaveLength(2);
+  expect(h.sessions[1]!.options.runtime?.model).toBe("sonnet");
+  expect(h.sessions[1]!.inputs).toEqual(["[CoForge inbox notice:\n#general 1 new message]"]);
+});

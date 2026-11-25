@@ -40,6 +40,11 @@ export function observeRuntimeEvent(
   controlled: boolean,
   event: AgentRuntimeEvent,
 ): void {
+  if (event.type === "model-window-available") {
+    if (!launch.stopping && !event.conversation)
+      ports.runtimeErrorHold.noteModelWindowAvailable(agentId, launch, event);
+    return;
+  }
   ports.deliveryGate.consumption.observeRuntimeEvent(agentId, launch.launchId, launch, event);
   launch.timing?.phase("first_activity");
   const publish: Publish = (id, source, activity) =>

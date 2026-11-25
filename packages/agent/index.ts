@@ -63,6 +63,8 @@ export type {
   AgentNoticeOptions,
   AgentRuntimeConfig,
   AgentRuntimeEvent,
+  RuntimeModelWindow,
+  RuntimeModelWindowAvailable,
   AgentRuntimeProviderConfig,
   AgentSession,
   AgentSessionExit,

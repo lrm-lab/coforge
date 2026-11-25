@@ -87,8 +87,8 @@ reason），否则退回到通用的 `AgentRuntimeError`/`runtime_failure`。唯
 `quota_exhausted` 是账户余额或套餐配额用光：带 `resetsAt` 时退避到该时间，不带则不可重试、
 Agent 下线（见下节）。`window_limit` 是滚动时间窗的用量上限（五小时、每日、每周）：
 永远可重试——带 `resetsAt` 退避到该时间，不带则走普通指数退避，绝不下线（#574）。
-退避在回合结束后仍保留，运行中错误 Activity 的可见文案在有 `resetsAt` 时末尾追加
-` (limit resets at <ISO>)`。同样的分流也适用于 HTTP 402、余额耗尽措辞，以及窗口限额措辞
+退避在回合结束后仍保留。有 `resetsAt` 的运行中错误 Activity 显示重置时间。Claude 的结构化模型周限额另显示模型，并独立暂停本次启动的投递，直到窗口到期、同会话确认恢复或该次启动结束。
+同样的通用退避分流也适用于 HTTP 402、余额耗尽措辞，以及窗口限额措辞
 （`usage limit reached`、`you've hit your usage limit`、`weekly usage quota has been exhausted`）：
 窗口措辞带明确 ISO/时长/try-again 重置时间时视为等待，否则退避；余额措辞没有重置时间才下线。
 指纹不含重置后缀，指纹熔断和 `runtime_crashed` 的文案也只引用 provider

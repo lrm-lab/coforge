@@ -32,7 +32,7 @@ import {
   isClaudeMainSessionRecord,
 } from "./message-events";
 import { ClaudeSubagentLineage } from "./subagent-lineage";
-import { ClaudeRateLimitState } from "./rate-limit";
+import { claudeModelWindowAvailable, ClaudeRateLimitState } from "./rate-limit";
 import { ClaudeSessionObservations } from "./observations";
 import { CLAUDE_PROCESS_EXITED, observeClaudeProcess } from "./process-observation";
 import { relayTaskLifecycle, taskProgressEvent, type TrackedTask } from "./task-lifecycle";
@@ -350,8 +350,15 @@ export class ClaudeCodeAgentSession implements AgentSession {
       return;
     }
     if (record.type === "rate_limit_event") {
-      const snapshot = this.#rateLimits.observe(record, this.#sessionId);
+      const rateLimitSession = record.session_id === this.#sessionId ? this.#sessionId : undefined;
+      const snapshot = this.#rateLimits.observe(record, rateLimitSession ?? this.#sessionId, {
+        modelScope: currentMainSession && rateLimitSession !== undefined,
+      });
       if (snapshot) this.#emit({ type: AGENT_RUNTIME_EVENT_TYPE.USAGE, snapshot });
+      if (currentMainSession && record.session_id === this.#sessionId && this.#sessionId) {
+        const available = claudeModelWindowAvailable(record);
+        if (available) this.#emit(available);
+      }
       return;
     }
     const refusal =
@@ -429,7 +436,10 @@ export class ClaudeCodeAgentSession implements AgentSession {
   }
 
   #acceptAssistantError(event: ClaudeFailureEvent, currentMainSession: boolean): void {
-    const failure = this.#rateLimits.annotate(event, this.#sessionId);
+    const failure = this.#rateLimits.annotate(
+      event,
+      currentMainSession ? this.#sessionId : undefined,
+    );
     if (currentMainSession) {
       if (this.#state === "running" && this.#compacting && isClaudeCompactionOverflow(failure)) {
         if (!this.#turnErrorReported && !this.#turnRefused)

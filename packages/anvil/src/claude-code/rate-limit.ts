@@ -1,3 +1,4 @@
+import type { RuntimeModelWindow, RuntimeModelWindowAvailable } from "@coforge/agent";
 import { type AgentRuntimeEvent, type UsageSnapshot } from "#src/contract";
 import { asRecord } from "#src/json-record";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
@@ -5,8 +6,44 @@ import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 type FailureEvent = Extract<AgentRuntimeEvent, { type: "error" }>;
 type ProviderLimit = NonNullable<FailureEvent["providerLimit"]>;
 
-/** `opening`, then `closing` at most 60 characters later on the same line, with no period in
- * between; case is ignored. */
+const WEEK_PLUS_CLOCK_SKEW_MS = 8 * 24 * 60 * 60_000;
+
+function claudeModelWindow(type: unknown): RuntimeModelWindow | undefined {
+  switch (type) {
+    case "seven_day_fable":
+      return { model: "fable", window: "weekly" };
+    case "seven_day_opus":
+      return { model: "opus", window: "weekly" };
+    case "seven_day_sonnet":
+      return { model: "sonnet", window: "weekly" };
+    default:
+      return undefined;
+  }
+}
+
+export function claudeModelWindowAvailable(
+  record: Readonly<Record<string, unknown>>,
+): RuntimeModelWindowAvailable | undefined {
+  const info = asRecord(record.rate_limit_info);
+  if (info?.status !== "allowed" && info?.status !== "allowed_warning") return;
+  const modelWindow = claudeModelWindow(info.rateLimitType);
+  const reset = resetTime(info.resetsAt);
+  const observed = record.timestamp;
+  if (
+    !modelWindow ||
+    !reset ||
+    typeof observed !== "string" ||
+    !Number.isFinite(Date.parse(observed))
+  )
+    return;
+  return {
+    type: "model-window-available",
+    modelWindow,
+    resetsAt: reset.toISOString(),
+    occurredAt: observed,
+  };
+}
+
 function phrasePair(opening: string, closing: string): RegExp {
   return new RegExp(`${opening}[^.\\n]{0,60}${closing}`, "i");
 }
@@ -29,8 +66,9 @@ const QUOTA_EXHAUSTED_TEXT = [
 export class ClaudeRateLimitState {
   readonly #now: () => number;
   #usage: UsageSnapshot = { provider: RUNTIME_PROVIDER.CLAUDE_CODE };
-  /** The latest event's reset, with the session it arrived in, while that event is rejected. */
-  #rejected: { sessionId: string | undefined; resetsAt?: Date } | undefined;
+  #rejected:
+    | { sessionId: string | undefined; resetsAt?: Date; modelWindow?: RuntimeModelWindow }
+    | undefined;
 
   constructor(now: () => number = Date.now) {
     this.#now = now;
@@ -41,12 +79,19 @@ export class ClaudeRateLimitState {
   observe(
     record: Readonly<Record<string, unknown>>,
     sessionId: string | undefined,
+    options: { modelScope: boolean } = { modelScope: true },
   ): UsageSnapshot | undefined {
     const info = asRecord(record.rate_limit_info);
     const resetsAt = resetTime(info?.resetsAt);
-    // Only an event that says where the account stands replaces the remembered one.
     if (typeof info?.status === "string" && info.status)
-      this.#rejected = info.status === "rejected" ? { sessionId, resetsAt } : undefined;
+      this.#rejected =
+        info.status === "rejected"
+          ? {
+              sessionId,
+              resetsAt,
+              modelWindow: options.modelScope ? claudeModelWindow(info.rateLimitType) : undefined,
+            }
+          : undefined;
     const usageWindow = claudeRateLimitWindow(info, resetsAt);
     if (!usageWindow) return undefined;
     this.#usage = { ...this.#usage, [usageWindow.key]: usageWindow.window };
@@ -70,8 +115,18 @@ export class ClaudeRateLimitState {
     const rejected = this.#rejected?.sessionId === sessionId ? this.#rejected : undefined;
     // A `rate_limit` code is a usage window's cap (five-hour, weekly), never the balance:
     // `billing_error` owns that. With or without a reset the daemon waits it out.
-    if (rejected?.resetsAt && rejected.resetsAt.getTime() > this.#now())
-      return { kind: "window_limit", resetsAt: rejected.resetsAt.toISOString() };
+    if (rejected?.resetsAt && rejected.resetsAt.getTime() > this.#now()) {
+      const modelWindow =
+        sessionId && rejected.resetsAt.getTime() - this.#now() <= WEEK_PLUS_CLOCK_SKEW_MS
+          ? rejected.modelWindow
+          : undefined;
+      if (rejected.modelWindow) this.#rejected = undefined;
+      return {
+        kind: "window_limit",
+        resetsAt: rejected.resetsAt.toISOString(),
+        ...(modelWindow ? { modelWindow } : {}),
+      };
+    }
     if (rejected && !rejected.resetsAt) return { kind: "window_limit" };
     return QUOTA_EXHAUSTED_TEXT.some((pattern) => pattern.test(message))
       ? { kind: "window_limit" }

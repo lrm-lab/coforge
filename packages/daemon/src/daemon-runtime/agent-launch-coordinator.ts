@@ -375,6 +375,7 @@ export class AgentLaunchCoordinator {
           );
         },
         disposeLaunchObservations: (id) => {
+          this.ports.runtimeErrorHold.endLaunchModelWait(id, launch);
           this.turnEndCompaction.noteTurnFinished(id);
           this.#liveWarmSweep.cancelWarmCheck(id);
           this.ports.disposeLaunchObservations(id);

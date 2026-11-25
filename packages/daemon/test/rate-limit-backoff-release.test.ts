@@ -1,5 +1,8 @@
 import { afterEach, expect, jest, test } from "bun:test";
-import { RUNTIME_ERROR_CLASS } from "#src/agent-runtime/runtime-error-classification";
+import {
+  classifyRuntimeError,
+  RUNTIME_ERROR_CLASS,
+} from "#src/agent-runtime/runtime-error-classification";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { RuntimeErrorDeliveryHold } from "#src/daemon-runtime/runtime-error-delivery-hold";
 
@@ -63,6 +66,18 @@ const serverError = {
 } as never;
 
 const withSession = () => true;
+
+function fableLimit(reset: number) {
+  return {
+    type: "error",
+    message: "Rate limit reached",
+    providerLimit: {
+      kind: "window_limit",
+      resetsAt: new Date(reset).toISOString(),
+      modelWindow: { model: "fable", window: "weekly" },
+    },
+  } as const;
+}
 
 test("a lifted limit ends the provider's rate-limit backoffs: released, flushed, forgotten, timer gone", () => {
   jest.useFakeTimers();
@@ -199,4 +214,60 @@ test("a backoff that already ended on its own is not released again", () => {
 
   expect(hold.releaseRateLimitBackoffs("codex", withSession)).toBe(0);
   expect(flushed).toEqual([]);
+});
+
+test("a Claude weekly model limit holds independently of a pre-existing 503 backoff", () => {
+  jest.useFakeTimers();
+  const { hold, held, flushed, saved, queue } = harness();
+  const launch = { provider: "claude-code", model: "fable" };
+  const unavailable = { type: "error", message: "Service unavailable", httpStatus: 503 } as const;
+  hold.noteRuntimeFailure("agent-a", launch, unavailable, classifyRuntimeError(unavailable));
+  const short = saved.at(-1)!;
+  const reset = Date.now() + HOUR_MS;
+  expect(short.untilMs).toBeLessThan(reset);
+  const modelLimit = fableLimit(reset);
+  hold.noteRuntimeFailure("agent-a", launch, modelLimit, classifyRuntimeError(modelLimit));
+  queue("agent-a");
+
+  expect(hold.releaseRateLimitBackoffs("claude-code", withSession)).toBe(0);
+  jest.advanceTimersByTime(short.untilMs - Date.now() + 1);
+  expect(held.has("agent-a")).toBe(true);
+  expect(flushed).toEqual([]);
+  jest.advanceTimersByTime(reset - Date.now() + 1);
+  expect(held.has("agent-a")).toBe(false);
+  expect(flushed).toEqual([{ agentId: "agent-a", count: 1 }]);
+});
+
+test("only newer same-launch model availability ends a model wait and leaves the 503 timer", () => {
+  jest.useFakeTimers();
+  const { hold, held, flushed, saved, queue } = harness();
+  const launch = { provider: "claude-code", model: "fable" };
+  const unavailable = { type: "error", message: "Service unavailable", httpStatus: 503 } as const;
+  hold.noteRuntimeFailure("agent-a", launch, unavailable, classifyRuntimeError(unavailable));
+  const short = saved.at(-1)!;
+  const observedAt = Date.now();
+  const reset = observedAt + HOUR_MS;
+  const limit = fableLimit(reset);
+  hold.noteRuntimeFailure("agent-a", launch, limit, classifyRuntimeError(limit));
+  queue("agent-a");
+
+  const available = {
+    type: "model-window-available",
+    modelWindow: limit.providerLimit.modelWindow,
+    resetsAt: limit.providerLimit.resetsAt,
+    occurredAt: new Date(observedAt + 1).toISOString(),
+  } as const;
+  expect(hold.noteModelWindowAvailable("agent-a", { ...launch }, available)).toBe(false);
+  expect(
+    hold.noteModelWindowAvailable("agent-a", launch, {
+      ...available,
+      occurredAt: new Date(observedAt - 1).toISOString(),
+    }),
+  ).toBe(false);
+  jest.advanceTimersByTime(1);
+  expect(hold.noteModelWindowAvailable("agent-a", launch, available)).toBe(true);
+  expect(held.has("agent-a")).toBe(true);
+  expect(flushed).toEqual([]);
+  jest.advanceTimersByTime(short.untilMs - Date.now() + 1);
+  expect(flushed).toEqual([{ agentId: "agent-a", count: 1 }]);
 });

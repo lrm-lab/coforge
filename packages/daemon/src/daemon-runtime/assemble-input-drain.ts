@@ -50,6 +50,11 @@ export function assembleInputDrain(ports: InputDrainCollaborators): AgentInputDr
       hasQueuedDeliveries: (agentId) => ports.deliveryGate().hasQueued(agentId),
       isLaunching: (agentId) => ports.agentLaunches().has(agentId),
       isStopping: (agentId) => ports.stopState().stopping(agentId),
+      deliveryParked: (agentId, deliveryId) =>
+        ports
+          .deliveryGate()
+          .pending(agentId)
+          .some((delivery) => delivery.deliveryId === deliveryId),
       deliverMessage: (agentId, message) =>
         deliverContextViewMessage(ports.contextView(), agentId, message, () => {
           const gate = ports.deliveryGate();

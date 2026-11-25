@@ -134,6 +134,18 @@ export type AgentTurnTokenUsage = Readonly<{
   contextWindowTokens?: number;
   occurredAt?: string;
 }>;
+export type RuntimeModelWindow = Readonly<{
+  model: "fable" | "opus" | "sonnet";
+  window: "weekly";
+}>;
+
+export type RuntimeModelWindowAvailable = Readonly<{
+  type: "model-window-available";
+  modelWindow: RuntimeModelWindow;
+  resetsAt: string;
+  occurredAt: string;
+}>;
+
 export type AgentRuntimeEvent = {
   readonly conversation?: AgentConversationScope;
 } & (
@@ -145,6 +157,7 @@ export type AgentRuntimeEvent = {
       type: "usage";
       snapshot: UsageSnapshot;
     }
+  | RuntimeModelWindowAvailable
   | {
       type: "context-usage";
       usedTokens: number;
@@ -257,6 +270,7 @@ export type AgentRuntimeEvent = {
       providerLimit?: {
         kind: "quota_exhausted" | "window_limit" | "transient_rate_limit";
         resetsAt?: string;
+        modelWindow?: RuntimeModelWindow;
       };
       occurredAt?: string;
     }

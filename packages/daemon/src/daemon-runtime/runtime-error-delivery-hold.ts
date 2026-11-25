@@ -1,3 +1,4 @@
+import type { RuntimeModelWindow, RuntimeModelWindowAvailable } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
 import {
   buildRuntimeErrorActivity,
@@ -25,18 +26,49 @@ import {
 import type { AgentDeliveryGate } from "./agent-delivery-gate";
 import type { CredentialInvalidHolds } from "./credential-invalid-holds";
 
-/** The longest delay one `setTimeout` honours (a signed 32-bit millisecond count). */
 const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
+const MAX_MODEL_WINDOW_MS = 8 * 24 * 60 * 60_000;
 
-/** The durable half of a backoff: what a Daemon restart must find again (the reference
- * Computer's `lifecycleRecords`). */
+type ModelWait = {
+  launch: object;
+  modelWindow: RuntimeModelWindow;
+  observedAtMs: number;
+  untilMs: number;
+  timer: ReturnType<typeof setTimeout>;
+};
+
+function matchingModelWindow(
+  launch: { provider?: string; model?: string },
+  event: RuntimeErrorEvent,
+  now: number,
+): { modelWindow: RuntimeModelWindow; untilMs: number } | undefined {
+  const limit = event.providerLimit;
+  const model = limit?.modelWindow?.model;
+  if (
+    launch.provider !== "claude-code" ||
+    limit?.kind !== "window_limit" ||
+    limit.modelWindow?.window !== "weekly" ||
+    !model ||
+    !launch.model
+  )
+    return;
+  if (model !== "fable" && model !== "opus" && model !== "sonnet") return;
+  if (
+    model !== launch.model &&
+    !new RegExp(`^claude-${model}-[0-9]+(?:-[0-9]+)*(?:\\[1m\\])?$`).test(launch.model)
+  )
+    return;
+  const untilMs = Date.parse(limit.resetsAt ?? "");
+  if (untilMs > now && untilMs - now <= MAX_MODEL_WINDOW_MS)
+    return { modelWindow: limit.modelWindow, untilMs };
+}
+
 export type RuntimeErrorBackoffPersistence = Readonly<{
   save(
     agentId: string,
     state: Readonly<{
       untilMs: number;
       reason: "rate_limit_backoff" | "runtime_error_backoff";
-      /** Whose failure raised the wait; absent when the caller could not name one. */
       provider?: string;
     }>,
   ): void;
@@ -44,38 +76,16 @@ export type RuntimeErrorBackoffPersistence = Readonly<{
 }>;
 
 export type RuntimeErrorDeliveryHoldPorts = Readonly<{
-  /** Owns the explicit hold; this module only decides when it starts and ends. */
   deliveryGate: Pick<
     AgentDeliveryGate,
     "hold" | "release" | "endHoldForNextLaunch" | "explicitHold" | "credentialHeld" | "pending"
   >;
-  /** Attempts delivery of what a released hold gave back, never blocking the caller. */
   flush(agentId: string, held: AgentMessageDelivery[]): void;
-  /** A backoff just ended on its own (its time was up, or a lifted limit or an observed recovery
-   * ended it) and left the Agent free to run again: whoever kept something for it wakes it. Not
-   * called when a Stop, an offline-taking failure or the Daemon stopping ends the wait. */
   backoffEnded?(agentId: string): void;
-  /** Where a backoff outlives the process; absent when the caller keeps it in memory only. */
   store?: RuntimeErrorBackoffPersistence;
-  /** The Agents whose provider credential is known invalid, told when one of them produces model
-   * output, is forgotten, or the Daemon stops. */
   credential?: Pick<CredentialInvalidHolds, "modelOutput" | "forget" | "dispose">;
 }>;
 
-/**
- * Turns an Agent's mid-turn runtime errors into its delivery hold: the consecutive-failure
- * backoff, the same-fingerprint repeat fence (both streaks in
- * `agent-runtime/runtime-error-recovery.ts`), and the one release timer per Agent that ends a
- * backoff. `AgentDeliveryGate` records that the Agent is held and why; the release timer here is
- * the single owner of when a backoff ends.
- *
- * What the runtime does next ends them, per the reference behaviour cited at
- * `runtimeErrorRecoverySignal`. A turn end resets the fence's streak only when the turn showed
- * progress (model output, a tool call or its output, or a finished review): the fence trips for
- * the same failure repeating across turns that did nothing, and a compaction ending, or a turn
- * that produced nothing, does not clear it. A tripped fence takes the Agent offline: `runtime.ts` ends the process,
- * and the hold is then cleared via the delivery queue's `clearAgent` and this hold's `forget`.
- */
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
 export class RuntimeErrorDeliveryHold {
@@ -84,30 +94,21 @@ export class RuntimeErrorDeliveryHold {
   readonly #fence = new RuntimeErrorFingerprintFence();
   readonly #zeroEvidence = new RuntimeErrorFingerprintFence(ZERO_EVIDENCE_CRASH_STREAK_CAP);
   readonly #turnProgress = new Set<string>();
-  /** The one release timer per waiting Agent, and the provider whose failure it waits on (absent
-   * when none was recorded, which a lifted limit cannot resolve). */
+  readonly #modelWaits = new Map<string, ModelWait>();
+
   readonly #releaseTimers = new Map<
     string,
-    { timer: ReturnType<typeof setTimeout>; provider?: string }
+    {
+      timer: ReturnType<typeof setTimeout>;
+      reason: "rate_limit_backoff" | "runtime_error_backoff";
+      provider?: string;
+    }
   >();
 
   constructor(ports: RuntimeErrorDeliveryHoldPorts) {
     this.#ports = ports;
   }
 
-  /**
-   * Records one runtime error. Every failure reaching this point counts toward the fingerprint
-   * fence — matching the reference Computer, which fences any non-offline repeat: a terminal
-   * failure that is not worth retrying ends any backoff instead of holding deliveries behind
-   * one that will never usefully resolve, and a retryable one holds deliveries for the next
-   * backoff delay — unless its fingerprint has now repeated enough to trip the fence, whatever
-   * its class. Returns the fence state on a trip so the caller takes the Agent offline with the
-   * fence Activity that names what stopped retrying.
-   *
-   * A class in `RUNTIME_ERROR_FENCE_EXEMPT_CLASSES` is never fenced and leaves the streak alone:
-   * an unreachable provider, its server error and a rate limit are worth retrying for as long as
-   * they last (task #726).
-   */
   noteFailure(
     agentId: string,
     classification: RuntimeErrorClassification,
@@ -135,23 +136,17 @@ export class RuntimeErrorDeliveryHold {
       Date.now(),
       classification.retryNotBefore,
     );
-    this.#ports.deliveryGate.hold(
-      agentId,
+    const reason =
       classification.errorClass === RUNTIME_ERROR_CLASS.RATE_LIMIT
         ? "rate_limit_backoff"
-        : "runtime_error_backoff",
-    );
+        : "runtime_error_backoff";
+    this.#ports.deliveryGate.hold(agentId, reason);
     this.#ports.store?.save(agentId, {
       untilMs: backoff.untilMs,
-      reason:
-        classification.errorClass === RUNTIME_ERROR_CLASS.RATE_LIMIT
-          ? "rate_limit_backoff"
-          : "runtime_error_backoff",
+      reason,
       ...(provider ? { provider } : {}),
     });
-    this.#scheduleRelease(agentId, backoff.untilMs, provider);
-    // One line per step of the wait, so a run of retries is readable from the log alone: which
-    // rung this is, how long it waits and how much is queued behind it. Nothing of the messages.
+    this.#scheduleRelease(agentId, backoff.untilMs, reason, provider);
     logger.info("Held deliveries for a retrying runtime", {
       event: "agent.runtime.delivery_held",
       agent_id: agentId,
@@ -159,35 +154,22 @@ export class RuntimeErrorDeliveryHold {
       attempt: backoff.attempts,
       retry_in_ms: backoff.delayMs,
       held: this.#ports.deliveryGate.pending(agentId).length,
-      reason:
-        classification.errorClass === RUNTIME_ERROR_CLASS.RATE_LIMIT
-          ? "rate_limit_backoff"
-          : "runtime_error_backoff",
+      reason,
       outcome: "held",
     });
     return undefined;
   }
 
-  /**
-   * Holds one Agent's deliveries for a provider credential known invalid (`CredentialInvalidHolds`
-   * decides which Agents and when it ends). A backoff the Agent had ends with the failure that
-   * replaces it; a tripped fence's hold stays, and false says so.
-   */
   holdCredentialInvalid(agentId: string): boolean {
     if (this.#isFenced(agentId)) return false;
     this.#clearReleaseTimer(agentId);
+    this.#clearModelWait(agentId);
     this.#backoff.reset(agentId);
     this.#ports.store?.clear(agentId);
     this.#ports.deliveryGate.hold(agentId, "credential_invalid");
     return true;
   }
 
-  /**
-   * Re-arms the backoffs a previous Daemon recorded (the reference Computer's
-   * `restoreProviderLimitBackoff`): each still-future wait holds its Agent's deliveries again and
-   * keeps the release timer; an already-expired one is dropped. Records whose wait ended while
-   * the Daemon was down are not retried from a stale premise.
-   */
   restore(
     records: readonly Readonly<{
       agentId: string;
@@ -203,7 +185,7 @@ export class RuntimeErrorDeliveryHold {
         continue;
       }
       this.#ports.deliveryGate.hold(record.agentId, record.reason);
-      this.#scheduleRelease(record.agentId, record.untilMs, record.provider);
+      this.#scheduleRelease(record.agentId, record.untilMs, record.reason, record.provider);
       // A restarted Daemon says which waits it picked up: the only line that shows a usage limit
       // surviving the process without a live failure to point at.
       logger.info("Runtime backoff restored", {
@@ -215,10 +197,9 @@ export class RuntimeErrorDeliveryHold {
     }
   }
 
-  /** Class state belongs to the launch. Raft calls this runtime_error_class_fence.tripped. */
   noteRuntimeFailure(
     agentId: string,
-    launch: { runtimeErrorClassFence?: RuntimeErrorClassFence; provider?: string },
+    launch: { runtimeErrorClassFence?: RuntimeErrorClassFence; provider?: string; model?: string },
     event: RuntimeErrorEvent,
     classification: RuntimeErrorClassification,
   ): {
@@ -230,12 +211,23 @@ export class RuntimeErrorDeliveryHold {
     const classFence = (launch.runtimeErrorClassFence ??= new RuntimeErrorClassFence()).note(
       classification,
     );
-    const fingerprintFence = this.noteFailure(
-      agentId,
-      classification,
-      built.runtimeError?.fingerprint ?? fingerprintRuntimeError(event.message),
-      launch.provider,
-    );
+    const modelWait = matchingModelWindow(launch, event, Date.now());
+    if (
+      modelWait !== undefined &&
+      classification.retryDecision === RUNTIME_ERROR_RETRY_DECISION.RETRY
+    ) {
+      if (!this.#isFenced(agentId) && !this.#ports.deliveryGate.credentialHeld(agentId))
+        this.#holdModelWindow(agentId, launch, modelWait.modelWindow, modelWait.untilMs);
+    }
+    const fingerprintFence =
+      modelWait === undefined
+        ? this.noteFailure(
+            agentId,
+            classification,
+            built.runtimeError?.fingerprint ?? fingerprintRuntimeError(event.message),
+            launch.provider,
+          )
+        : undefined;
     if (fingerprintFence)
       return {
         built,
@@ -250,8 +242,6 @@ export class RuntimeErrorDeliveryHold {
     this.#zeroEvidence.reset(agentId);
   }
 
-  /** Applies the signal's `RUNTIME_ERROR_RECOVERY_EFFECTS`. With no backoff nothing is released,
-   * so deliveries queued for another reason (a launch's batch) stay where they are. */
   noteRecoverySignal(
     agentId: string,
     signal: RuntimeErrorRecoverySignal,
@@ -272,41 +262,26 @@ export class RuntimeErrorDeliveryHold {
     if (rateLimited ? effects.endsRateLimitBackoff : effects.endsBackoff) this.#endBackoff(agentId);
   }
 
-  /**
-   * `provider`'s limit was just lifted (a reset credit was spent): ends the rate-limit backoff of
-   * every Agent whose failure was that provider's, through the path an observed recovery takes,
-   * so the persisted record and the release timer go with it. The Agents are the ones this hold
-   * recorded a provider for (`noteFailure`, or a restored record that carried one): an Agent
-   * restored from a record without a provider cannot be told apart and keeps waiting. An Agent
-   * `hasSession` says has a process gets its held deliveries flushed; one without keeps its queue
-   * for its next launch, and only its waiting ends. A backoff for any other failure and a tripped
-   * fence's hold stay. Returns how many backoffs ended.
-   */
   releaseRateLimitBackoffs(provider: string, hasSession: (agentId: string) => boolean): number {
     let released = 0;
     for (const [agentId, waiting] of Array.from(this.#releaseTimers)) {
       if (waiting.provider !== provider) continue;
-      if (this.#ports.deliveryGate.explicitHold(agentId) !== "rate_limit_backoff") continue;
+      if (waiting.reason !== "rate_limit_backoff") continue;
       this.#endBackoff(agentId, hasSession(agentId));
       released += 1;
     }
     return released;
   }
 
-  /** A turn ended, whatever its status. It ends only an unclassified failure's backoff: a
-   * classified one (a rate limit, a provider connection or server error) has a real delay to
-   * honour, and a successful turn with no output ends it no more than a failed one does. */
   noteTurnEnd(agentId: string): void {
     if (this.#turnProgress.delete(agentId)) this.#fence.reset(agentId);
     if (this.#backoff.latestClass(agentId) === RUNTIME_ERROR_CLASS.RUNTIME)
       this.#endBackoff(agentId);
   }
 
-  /** An explicit Stop or an offline-taking failure: a fresh start must not inherit a backoff or
-   * fence from a process that no longer exists. The delivery queue's own `clearAgent`, called
-   * first, drops the hold (the fence's included) and what it held. */
   forget(agentId: string): void {
     this.#ports.credential?.forget(agentId);
+    this.#clearModelWait(agentId);
     this.#clearReleaseTimer(agentId);
     this.#backoff.reset(agentId);
     this.#fence.reset(agentId);
@@ -314,14 +289,12 @@ export class RuntimeErrorDeliveryHold {
     this.#ports.store?.clear(agentId);
   }
 
-  /**
-   * The runtime is stopping: every pending backoff ends now instead of when its timer fires, so no
-   * timer keeps the stopped process alive and no hold outlives the timer that would have released
-   * it. What a backoff held is dropped, not flushed: it was already acknowledged, and the cloud read
-   * boundary recovers it on the next Start. The streaks and a fence's hold stay, as before.
-   */
   disposeAll(): void {
     this.#ports.credential?.dispose();
+    for (const agentId of this.#modelWaits.keys()) {
+      this.#clearModelWait(agentId);
+      if (!this.#releaseTimers.has(agentId)) this.#ports.deliveryGate.release(agentId);
+    }
     for (const [agentId, { timer }] of this.#releaseTimers) {
       clearTimeout(timer);
       this.#ports.deliveryGate.release(agentId);
@@ -329,34 +302,23 @@ export class RuntimeErrorDeliveryHold {
     this.#releaseTimers.clear();
   }
 
-  /** Cancels any pending release timer, releases (and flushes) anything currently held under an
-   * explicit hold, and forgets the consecutive-retryable-failure streak. A tripped fence keeps its
-   * hold instead (see `#holdFenced`): only the streak is forgotten. Leaves the fingerprint fence's
-   * own streak to its callers. With `flush` false the hold ends but what it held stays queued,
-   * for an Agent that has no process to deliver it to. */
   #endBackoff(agentId: string, flush = true): void {
     this.#clearReleaseTimer(agentId);
     const fenced = this.#isFenced(agentId);
-    if (!fenced) {
+    if (!fenced && this.#modelWaits.has(agentId))
+      this.#ports.deliveryGate.hold(agentId, "rate_limit_backoff");
+    else if (!fenced) {
       if (flush) this.#releaseHeld(agentId);
       else this.#ports.deliveryGate.endHoldForNextLaunch(agentId);
     }
     this.#backoff.reset(agentId);
     this.#ports.store?.clear(agentId);
-    if (!fenced) this.#ports.backoffEnded?.(agentId);
+    if (!fenced && !this.#modelWaits.has(agentId)) this.#ports.backoffEnded?.(agentId);
   }
 
-  /**
-   * A tripped fingerprint fence stops retrying — cancels any pending release timer and keeps (or
-   * starts) an explicit hold, so nothing currently held, and nothing newly queued, reaches the
-   * runtime that just failed the same way three times in a row while its process is ending.
-   * Never releases or flushes anything already held: doing so would deliver straight into the
-   * same broken runtime this fence exists to stop retrying. The trip itself takes the Agent
-   * offline (`runtime.ts` ends the process); the hold is then cleared by the delivery queue's
-   * `clearAgent` and this hold's `forget`, as an explicit Stop's is.
-   */
   #holdFenced(agentId: string): void {
     this.#clearReleaseTimer(agentId);
+    this.#clearModelWait(agentId);
     this.#ports.deliveryGate.hold(agentId, "fingerprint_fence");
   }
 
@@ -364,24 +326,103 @@ export class RuntimeErrorDeliveryHold {
     return this.#ports.deliveryGate.explicitHold(agentId) === "fingerprint_fence";
   }
 
-  /** Releases the hold at `untilMs`. A wait longer than one timer can run (a quota reset days
-   * away) re-arms until then: a longer timer delay fires at once. */
-  #scheduleRelease(agentId: string, untilMs: number, provider?: string): void {
+  #scheduleRelease(
+    agentId: string,
+    untilMs: number,
+    reason: "rate_limit_backoff" | "runtime_error_backoff",
+    provider?: string,
+  ): void {
     this.#clearReleaseTimer(agentId);
     const remainingMs = untilMs - Date.now();
     const timer = setTimeout(
       () => {
+        if (remainingMs > MAX_TIMER_DELAY_MS) {
+          this.#scheduleRelease(agentId, untilMs, reason, provider);
+          return;
+        }
         this.#releaseTimers.delete(agentId);
-        if (remainingMs > MAX_TIMER_DELAY_MS) this.#scheduleRelease(agentId, untilMs, provider);
-        else {
+        if (this.#modelWaits.has(agentId)) {
+          this.#ports.deliveryGate.hold(agentId, "rate_limit_backoff");
+        } else {
           this.#releaseHeld(agentId);
-          this.#ports.store?.clear(agentId);
           this.#ports.backoffEnded?.(agentId);
         }
+        this.#ports.store?.clear(agentId);
       },
       Math.min(Math.max(0, remainingMs), MAX_TIMER_DELAY_MS),
     );
-    this.#releaseTimers.set(agentId, { timer, ...(provider ? { provider } : {}) });
+    this.#releaseTimers.set(agentId, { timer, reason, ...(provider ? { provider } : {}) });
+  }
+
+  #holdModelWindow(
+    agentId: string,
+    launch: object,
+    modelWindow: RuntimeModelWindow,
+    untilMs: number,
+  ): void {
+    const previous = this.#modelWaits.get(agentId);
+    if (previous?.launch === launch && previous.untilMs >= untilMs) {
+      if (previous.untilMs === untilMs) previous.observedAtMs = Date.now();
+      return;
+    }
+    this.#clearModelWait(agentId);
+    const timer = setTimeout(() => this.#endModelWait(agentId, true), untilMs - Date.now());
+    this.#modelWaits.set(agentId, {
+      launch,
+      modelWindow,
+      observedAtMs: Date.now(),
+      untilMs,
+      timer,
+    });
+    if (!this.#releaseTimers.has(agentId))
+      this.#ports.deliveryGate.hold(agentId, "rate_limit_backoff");
+  }
+
+  noteModelWindowAvailable(
+    agentId: string,
+    launch: object,
+    event: RuntimeModelWindowAvailable,
+  ): boolean {
+    const wait = this.#modelWaits.get(agentId);
+    const observedAtMs = Date.parse(event.occurredAt);
+    if (
+      !wait ||
+      wait.launch !== launch ||
+      wait.modelWindow.model !== event.modelWindow.model ||
+      wait.modelWindow.window !== event.modelWindow.window ||
+      Date.parse(event.resetsAt) !== wait.untilMs ||
+      !(observedAtMs > wait.observedAtMs && observedAtMs <= Date.now())
+    )
+      return false;
+    this.#endModelWait(agentId, true);
+    return true;
+  }
+
+  endLaunchModelWait(agentId: string, launch: object): void {
+    if (this.#modelWaits.get(agentId)?.launch === launch) this.#endModelWait(agentId, false);
+  }
+
+  #endModelWait(agentId: string, flush: boolean): void {
+    this.#clearModelWait(agentId);
+    if (
+      this.#releaseTimers.has(agentId) ||
+      this.#isFenced(agentId) ||
+      this.#ports.deliveryGate.credentialHeld(agentId)
+    )
+      return;
+    if (flush) {
+      this.#releaseHeld(agentId);
+      this.#ports.backoffEnded?.(agentId);
+    } else {
+      this.#ports.deliveryGate.endHoldForNextLaunch(agentId);
+    }
+  }
+
+  #clearModelWait(agentId: string): void {
+    const wait = this.#modelWaits.get(agentId);
+    if (!wait) return;
+    clearTimeout(wait.timer);
+    this.#modelWaits.delete(agentId);
   }
 
   #clearReleaseTimer(agentId: string): void {
