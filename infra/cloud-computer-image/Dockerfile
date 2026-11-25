@@ -237,6 +237,8 @@ COPY config/xfce/xfce4-session.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfc
 COPY config/xfce/applications/coforge-chromium.desktop /usr/share/applications/coforge-chromium.desktop
 COPY config/xfce/applications/coforge-terminal.desktop /usr/share/applications/coforge-terminal.desktop
 COPY config/xfce/applications/coforge-thunar.desktop /usr/share/applications/coforge-thunar.desktop
+COPY config/xfce/applications/coforge-text-editor.desktop /usr/share/applications/coforge-text-editor.desktop
+COPY config/xfce/mimeapps.list /etc/xdg/mimeapps.list
 COPY config/gtk-3.0/gtk.css /etc/xdg/gtk-3.0/gtk.css
 COPY config/chromium/policies/managed/coforge.json /etc/chromium/policies/managed/coforge.json
 COPY config/chromium/policies/managed/lenovo-intranet.json.template /usr/local/share/coforge/lenovo-intranet.json.template
@@ -319,6 +321,12 @@ RUN mkdir -p /usr/local/lib/coforge /usr/local/share/coforge \
   && grep -q 'coforge-desktop-keyboard-input' /usr/local/share/coforge/vnc-desktop.html \
   && grep -q 'coforgeAttachPhoneKeyboard' /usr/local/share/coforge/vnc-desktop.html \
   && test -x /usr/local/bin/coforge-thunar \
+  && test -f /usr/share/applications/coforge-text-editor.desktop \
+  && test -f /etc/xdg/mimeapps.list \
+  && grep -q '^TryExec=nano$' /usr/share/applications/coforge-text-editor.desktop \
+  && grep -q '^text/plain=coforge-text-editor.desktop$' /etc/xdg/mimeapps.list \
+  && command -v nano \
+  && command -v xfce4-terminal \
   && grep -q 'coforge-dock-ui' /usr/local/share/coforge/vnc-xstartup \
   && grep -q 'coforge-dock-ui' /usr/local/share/coforge/vnc-agent-xstartup \
   && grep -q '.coforge-dock' /etc/xdg/gtk-3.0/gtk.css \
