@@ -2,20 +2,34 @@ import { Button as AriaButton } from "react-aria-components";
 import { ChevronRight } from "@untitledui/icons";
 
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
-import {
-  ActorAvatarStack,
-  ActorAvatarStackMore,
-  AVATAR_STACK_LIMIT,
-} from "#src/features/avatars/actor-avatar-stack";
-import { AVATAR_STACK_RING } from "#src/features/avatars/avatar-stack-ring";
 import { AvatarAddButton } from "#src/components/base/avatar/base-components/avatar-add-button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { Skeleton } from "#src/components/ui/skeleton";
-import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { useChannelMembers } from "./channel-members-query";
 import { SettingsCard } from "./settings-panel-parts";
+
+const MEMBER_GRID_COLUMNS = 5;
+const MEMBER_GRID_ROWS = 3;
+const MEMBER_GRID_SLOTS = MEMBER_GRID_COLUMNS * MEMBER_GRID_ROWS;
+const MEMBER_GRID_HIT_TARGET =
+  "relative any-pointer-coarse:after:absolute any-pointer-coarse:after:top-1/2 any-pointer-coarse:after:left-1/2 any-pointer-coarse:after:size-full any-pointer-coarse:after:min-h-11 any-pointer-coarse:after:min-w-11 any-pointer-coarse:after:-translate-x-1/2 any-pointer-coarse:after:-translate-y-1/2";
+
+export function sliceMembersGrid<T>(
+  entries: readonly T[],
+  hasAddSlot: boolean,
+): { shown: readonly T[]; more: number } {
+  const maxContentSlots = hasAddSlot ? MEMBER_GRID_SLOTS - 1 : MEMBER_GRID_SLOTS;
+  if (entries.length <= maxContentSlots) {
+    return { shown: entries, more: 0 };
+  }
+  const shownCount = maxContentSlots - 1;
+  return {
+    shown: entries.slice(0, shownCount),
+    more: entries.length - shownCount,
+  };
+}
 
 export function MembersStrip({
   channelId,
@@ -35,8 +49,9 @@ export function MembersStrip({
     ...humans.map((human) => ({ key: `user:${human.id}`, ...human })),
     ...agents.map((agent) => ({ key: `agent:${agent.id}`, ...agent })),
   ];
-  const shown = entries.slice(0, AVATAR_STACK_LIMIT);
-  const more = entries.length - shown.length;
+  const { shown, more } = sliceMembersGrid(entries, canAdd);
+  const showAddButton = canAdd && Boolean(members.data);
+  const showGrid = members.isPending || shown.length > 0 || showAddButton;
   return (
     <SettingsCard className="p-3.5">
       <h3>
@@ -57,14 +72,7 @@ export function MembersStrip({
           </span>
         </AriaButton>
       </h3>
-      <div className="mt-3 flex items-center" aria-busy={members.isPending}>
-        {members.isPending && (
-          <div className="flex -space-x-1.5">
-            {Array.from({ length: AVATAR_STACK_LIMIT }, (_, index) => (
-              <Skeleton key={index} className="size-6 rounded-full" />
-            ))}
-          </div>
-        )}
+      <div className="mt-3" aria-busy={members.isPending}>
         {members.isError && (
           <EmptyState
             size="row"
@@ -80,23 +88,30 @@ export function MembersStrip({
             }
           />
         )}
-        {shown.length > 0 && (
-          <ActorAvatarStack aria-label={m.channel_settings_members()}>
+        {!members.isError && showGrid && (
+          <div
+            role="group"
+            aria-label={m.channel_settings_members()}
+            className="grid grid-cols-5 place-items-center gap-x-2 gap-y-3"
+          >
+            {members.isPending &&
+              Array.from({ length: MEMBER_GRID_COLUMNS }, (_, index) => (
+                <Skeleton key={index} className="size-[2.375rem] rounded-full" />
+              ))}
             {shown.map((entry) => (
               <Tooltip key={entry.key} title={entry.displayName}>
                 <TooltipTrigger
-                  className="inline-flex shrink-0 items-center justify-center rounded-full p-0 leading-none hover:z-10 focus-visible:z-10"
+                  className={`inline-flex shrink-0 items-center justify-center rounded-full p-0 leading-none ${MEMBER_GRID_HIT_TARGET}`}
                   onPress={onOpenMembers}
                 >
                   <ActorAvatar
                     presence
                     userId={entry.key.startsWith("user:") ? entry.id : undefined}
                     agentId={entry.key.startsWith("agent:") ? entry.id : undefined}
-                    size="xs"
+                    size="sm"
                     alt=""
                     src={entry.avatarUrl ?? undefined}
                     name={entry.displayName}
-                    className={AVATAR_STACK_RING.outline}
                   />
                   <span className="sr-only">{entry.displayName}</span>
                 </TooltipTrigger>
@@ -105,25 +120,31 @@ export function MembersStrip({
             {more > 0 && (
               <Tooltip title={m.channel_settings_members_more({ count: more })}>
                 <TooltipTrigger
-                  className="inline-flex shrink-0 items-center justify-center rounded-full p-0 leading-none hover:z-10 focus-visible:z-10"
+                  className={`inline-flex shrink-0 items-center justify-center rounded-full p-0 leading-none ${MEMBER_GRID_HIT_TARGET}`}
                   onPress={onOpenMembers}
                 >
-                  <ActorAvatarStackMore more={more} />
+                  <ActorAvatar
+                    presence={false}
+                    size="sm"
+                    alt=""
+                    initials={`+${more}`}
+                    contentClassName="bg-avatar-more text-avatar-more-fg outline-none [&>span]:text-avatar-more-fg [&>span]:tabular-nums"
+                  />
                   <span className="sr-only">
                     {m.channel_settings_members_more({ count: more })}
                   </span>
                 </TooltipTrigger>
               </Tooltip>
             )}
-          </ActorAvatarStack>
-        )}
-        {canAdd && members.data && (
-          <AvatarAddButton
-            size="xs"
-            className={cn("border-secondary text-avatar-add-fg", shown.length > 0 && "ms-2")}
-            title={m.channel_settings_add_members()}
-            onPress={onAddMembers}
-          />
+            {showAddButton && (
+              <AvatarAddButton
+                size="sm"
+                className={`size-[2.375rem] rounded-full border-secondary text-avatar-add-fg ${MEMBER_GRID_HIT_TARGET}`}
+                title={m.channel_settings_add_members()}
+                onPress={onAddMembers}
+              />
+            )}
+          </div>
         )}
       </div>
     </SettingsCard>
