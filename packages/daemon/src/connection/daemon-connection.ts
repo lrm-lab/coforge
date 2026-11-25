@@ -3,7 +3,10 @@ import type {
   DaemonConnectionClient,
   ReceivedAgentMigrationLease,
 } from "./daemon-connection-client";
-import { ownedIntent } from "./owned-intent";
+import {
+  dispatchAgentPublication,
+  type AgentPublicationDispatchDeps,
+} from "./agent-publication-dispatch";
 import {
   type AgentContextViewResult,
   type AgentServerFeatures,
@@ -25,7 +28,6 @@ import {
 } from "@lrm/coforge-sdk/internal/reply-intent";
 import { ListenerSlot } from "./listener-slot";
 import { ServerPublications } from "./server-publications";
-import { routePublication } from "./publication-routing";
 import {
   defaultDaemonConnectionTiming,
   type DaemonConnectionTiming,
@@ -35,7 +37,6 @@ import { DaemonProviderPublications } from "./daemon-provider-publications";
 import { rpcData } from "./rpc-data";
 import { serverEndpoint } from "./daemon-endpoints";
 import { DaemonQueries } from "./daemon-queries";
-import { routeRuntimeAuthPublication } from "./runtime-auth-publication";
 import { DaemonConnectionAgentHttp, type AgentHttpDeps } from "./daemon-connection-agent-http";
 import { agentApiRoutes } from "@lrm/coforge-sdk/agent";
 import type { AgentSendReconciliationResponse } from "@lrm/coforge-sdk/agent";
@@ -56,7 +57,6 @@ import { postAgentContextViewResult } from "./agent-context-view-upload";
 import {
   daemonConnectRejectionReason,
   type DaemonConnectRejectionReason,
-  decodeAgentWorkspaceResetRequest,
   encodeAgentControlResult,
   encodeAgentTurnInterruptResult,
   encodeAgentSessionInvalidate,
@@ -72,13 +72,7 @@ import {
   type AgentTokenUsage,
   type AgentServiceTier,
   type AgentContextViewAvailability,
-  decodeAgentStartIntent,
-  decodeAgentStopIntent,
-  decodeAgentTurnInterruptIntent,
-  decodeAgentActivityProbe,
-  decodeAgentInboxPurge,
   type ComputerUpgradeResult,
-  decodeAgentMessageDelivery,
   encodeAgentActivity,
   encodeAgentStatus,
   type AgentCredentialRestored,
@@ -114,11 +108,7 @@ import {
   type WorkspaceInfoRequest,
   type WorkspaceInfoResponse,
   REMINDER_DUE_ACK_METHOD,
-  REMINDER_SYNC_MESSAGE_TYPE,
   decodeReminderDueAckResponse,
-  decodeReminderSync,
-  decodeAgentMigrationCancel,
-  decodeAgentMigrationLease,
   encodeReminderDueAckRequest,
   type AgentReminderOperationRequest,
   type ReminderDue,
@@ -130,10 +120,7 @@ import {
   type AgentMigrationCancel,
 } from "@lrm/coforge-sdk/internal";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
-import {
-  decodeAppRegistrationNotice,
-  type AppRegistrationNotice,
-} from "@lrm/coforge-sdk/internal/app-registration-notice";
+import { type AppRegistrationNotice } from "@lrm/coforge-sdk/internal/app-registration-notice";
 import { RejectedControl } from "./control-rejection-log";
 import { sendShutdownNoticeOver } from "./shutdown-notice";
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "./shutdown-notice-timeout";
@@ -751,93 +738,28 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     return decodeAppConfigSync(rpcData(reply));
   }
 
+  #publicationDispatchDeps: AgentPublicationDispatchDeps | undefined;
   #handleAgentPublication(data: Uint8Array, config: DaemonConnectionConfig): void {
-    const { workspaceId, computerId } = config;
-    const ownsDaemon = (value: { workspaceId: string; computerId?: string }) =>
-      value.workspaceId === workspaceId && value.computerId === computerId;
-    const handled =
-      routeRuntimeAuthPublication(data, config, this.#runtimeAuthIntent.current) ||
-      this.#queries.receive(data, config) ||
-      routePublication(
-        data,
-        decodeReminderSync,
-        (sync) => sync.messageType === REMINDER_SYNC_MESSAGE_TYPE && ownsDaemon(sync),
-      ) ||
-      this.#serverPublications.route(
-        data,
-        { workspaceId, computerId: config.computerId },
-        this.#readyPublications,
-      ) ||
-      routePublication(data, decodeAppRegistrationNotice, (notice) => {
-        if (!ownsDaemon(notice)) return false;
-        this.#readyPublications.deliver(this.#appRegistrationNotice, notice);
-        return true;
-      }) ||
-      routePublication(data, decodeAgentMigrationLease, (lease) => {
-        if (!ownsDaemon(lease)) return false;
-        this.#readyPublications.deliver(this.#agentMigrationLease, {
-          ...lease,
-          deadline: Date.now() + lease.expiresInMs,
-        });
-        return true;
-      }) ||
-      routePublication(data, decodeAgentMigrationCancel, (cancel) => {
-        if (!ownsDaemon(cancel)) return false;
-        this.#readyPublications.deliver(this.#agentMigrationCancel, cancel);
-        return true;
-      }) ||
-      this.#computerLifecycle.route(data, config, ownsDaemon) ||
-      routePublication(data, decodeAgentWorkspaceResetRequest, (request) => {
-        if (request.workspaceId === workspaceId)
-          this.#readyPublications.deliver(this.#agentWorkspaceReset, request);
-        return true;
-      }) ||
-      this.#providerPublications.route(data, workspaceId) ||
-      routePublication(data, decodeAgentActivityProbe, (probe) => {
-        if (probe.protocolMajor !== 1 || !ownsDaemon(probe)) return false;
-        this.#readyPublications.deliver(this.#agentActivityProbe, probe, "probe");
-        return true;
-      }) ||
-      routePublication(data, decodeAgentInboxPurge, (purge) => {
-        if (purge.protocolMajor !== 1 || !ownsDaemon(purge)) return false;
-        this.#readyPublications.deliver(this.#agentInboxPurge, purge);
-        return true;
-      });
-    if (handled) return;
-    const decoders = [
-      {
-        kind: "agent_message",
-        decode: () =>
-          this.#readyPublications.deliver(
-            this.#agentMessage,
-            ownedIntent(decodeAgentMessageDelivery(data), workspaceId),
-            "notice",
-          ),
-      },
-      {
-        kind: "agent_stop",
-        decode: () => {
-          const intent = ownedIntent(decodeAgentStopIntent(data), workspaceId);
-          this.#readyPublications.deliver(this.#agentStop, intent, "stop");
-        },
-      },
-      {
-        kind: "agent_turn_interrupt",
-        decode: () => {
-          const intent = ownedIntent(decodeAgentTurnInterruptIntent(data), workspaceId);
-          if (!this.#readyPublications.holding)
-            this.#readyPublications.deliver(this.#agentTurnInterrupt, intent);
-        },
-      },
-      {
-        kind: "agent_start",
-        decode: () => {
-          const intent = ownedIntent(decodeAgentStartIntent(data), workspaceId);
-          this.#readyPublications.deliver(this.#agentStart, intent, "start");
-        },
-      },
-    ];
-    this.rejectedControl.decodeFirst(decoders, data, { workspaceId, computerId });
+    this.#publicationDispatchDeps ??= {
+      runtimeAuthIntent: this.#runtimeAuthIntent,
+      queries: this.#queries,
+      serverPublications: this.#serverPublications,
+      computerLifecycle: this.#computerLifecycle,
+      providerPublications: this.#providerPublications,
+      readyPublications: this.#readyPublications,
+      rejectedControl: this.rejectedControl,
+      appRegistrationNotice: this.#appRegistrationNotice,
+      agentMigrationLease: this.#agentMigrationLease,
+      agentMigrationCancel: this.#agentMigrationCancel,
+      agentWorkspaceReset: this.#agentWorkspaceReset,
+      agentActivityProbe: this.#agentActivityProbe,
+      agentInboxPurge: this.#agentInboxPurge,
+      agentMessage: this.#agentMessage,
+      agentStop: this.#agentStop,
+      agentTurnInterrupt: this.#agentTurnInterrupt,
+      agentStart: this.#agentStart,
+    };
+    dispatchAgentPublication(this.#publicationDispatchDeps, data, config);
   }
   async sendAgentControlResult(result: AgentControlResult) {
     await this.#rpc(AGENT_CONTROL_RESULT_METHOD, encodeAgentControlResult(result));
