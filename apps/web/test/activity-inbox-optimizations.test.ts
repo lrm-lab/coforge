@@ -92,6 +92,7 @@ describe("Activity inbox and markRead optimizations", () => {
         attachmentSourceMessageId: null,
         unreadCount: 1,
         firstUnreadMessageId: "msg-1",
+        markedUnreadVersion: null,
       },
     ]);
     expect(calls).toEqual(["message.findMany", "$queryRaw"]);

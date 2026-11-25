@@ -1,3 +1,4 @@
+import type { ThreadUnreadBatch } from "#src/features/conversations/thread-unread-inputs";
 import {
   announceDirectConversationCreated,
   logDirectConversationOpened,
@@ -360,9 +361,21 @@ export class DirectConversations {
     if (advanced) await announceActivityAttention(this.db, this.realtime, workspaceId, viewerId);
   }
 
-  async markAllRead(workspaceId: string, viewerId: string, conversationId: string) {
+  async markAllRead(
+    workspaceId: string,
+    viewerId: string,
+    conversationId: string,
+    batch?: ThreadUnreadBatch,
+  ) {
     await this.authorize(workspaceId, viewerId, conversationId);
-    await markDirectAndThreadsRead(this.db, this.realtime, workspaceId, viewerId, conversationId);
+    await markDirectAndThreadsRead(
+      this.db,
+      this.realtime,
+      workspaceId,
+      viewerId,
+      conversationId,
+      batch,
+    );
   }
 
   /** The viewer's own emoji reaction on a message; returns the message's fresh summaries and

@@ -54,6 +54,7 @@ export type ActivityPageRow = {
   attachmentSourceMessageId: string | null;
   unreadCount: number;
   firstUnreadMessageId: string | null;
+  markedUnreadVersion: string | null;
 };
 
 function viewSql(filter: ActivityInboxFilter) {
@@ -116,11 +117,11 @@ export function activityPageSql(
           AS "activeItemCount"
       FROM items
     )
-    SELECT counts.*, listed.*,
+    SELECT counts.*, listed.*, tr."markedUnreadVersion",
       peer."agentId" AS "agentId",
       CASE
         WHEN listed."mentionId" IS NOT NULL THEN listed."hasUnread"::int
-        WHEN listed."rootMessageId" IS NOT NULL THEN COALESCE(replies."count", 0)
+        WHEN listed."rootMessageId" IS NOT NULL THEN GREATEST(COALESCE(replies."count", 0), listed."hasUnread"::int)
         ELSE COALESCE(unread."count", 0)
       END AS "unreadCount",
       CASE

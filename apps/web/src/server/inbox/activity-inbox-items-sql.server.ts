@@ -110,25 +110,70 @@ export function conversationItemListedSql(userId: string) {
   return Prisma.sql`${conversationItemVisibleSql(userId)} AND ${conversationPastDoneSql}`;
 }
 
-export function threadItemsSql(workspaceId: string, userId: string) {
-  return Prisma.sql`(
-      SELECT 'channel' AS "kind", followed.* FROM (${followedChannelThreadsSql(workspaceId, userId)}) followed
-      UNION ALL
-      SELECT 'direct' AS "kind", direct.* FROM (${directThreadsSql(workspaceId, userId)}) direct
-    ) threads
+function threadSourcesSql(workspaceId: string, userId: string) {
+  return Prisma.sql`
+    SELECT 'channel' AS "kind", followed.* FROM (${followedChannelThreadsSql(workspaceId, userId)}) followed
+    UNION ALL
+    SELECT 'direct' AS "kind", direct.* FROM (${directThreadsSql(workspaceId, userId)}) direct`;
+}
+
+function markedThreadSourcesSql(workspaceId: string, userId: string) {
+  return Prisma.sql`
+    SELECT CASE WHEN c."channelName" IS NULL THEN 'direct' ELSE 'channel' END AS "kind",
+      marked."memberId", marked."conversationId", marked."rootMessageId", TRUE AS "marked"
+    FROM "conversation_members" cm
+    JOIN "thread_reads" marked ON marked."memberId" = cm."id"
+    JOIN "conversations" c ON c."id" = marked."conversationId"
+    WHERE cm."userId" = ${userId}::uuid
+      AND cm."workspaceId" = ${workspaceId}::uuid
+      AND cm."leftAt" IS NULL
+      AND marked."markedUnreadVersion" IS NOT NULL
+      AND c."archivedAt" IS NULL
+      AND c."hiddenFromWorkspaceAt" IS NULL
+      AND c."kind" IS DISTINCT FROM 'task_thread'
+      AND (c."channelName" IS NOT NULL OR ${viewerDirectConversationSql(userId)})
+      AND NOT EXISTS (
+        SELECT 1 FROM "tasks" task
+        WHERE task."messageId" = marked."rootMessageId" AND task."deletedAt" IS NULL
+      )`;
+}
+
+export function threadItemsSql(workspaceId: string, userId: string, includeMarks = false) {
+  const realSources = threadSourcesSql(workspaceId, userId);
+  const sources = includeMarks
+    ? Prisma.sql`SELECT "kind", "memberId", "conversationId", "rootMessageId",
+        BOOL_OR("marked") AS "marked"
+      FROM (
+        SELECT real.*, FALSE AS "marked" FROM (${realSources}) real
+        UNION ALL
+        ${markedThreadSourcesSql(workspaceId, userId)}
+      ) candidates
+      GROUP BY "kind", "memberId", "conversationId", "rootMessageId"`
+    : Prisma.sql`SELECT real.*, FALSE AS "marked" FROM (${realSources}) real`;
+  const joinReply = includeMarks ? Prisma.sql`LEFT JOIN` : Prisma.sql`CROSS JOIN`;
+  return Prisma.sql`(${sources}) threads
     JOIN "conversations" c ON c."id" = threads."conversationId"
     LEFT JOIN "thread_reads" tr
       ON tr."memberId" = threads."memberId" AND tr."rootMessageId" = threads."rootMessageId"
-    CROSS JOIN LATERAL (
+    ${joinReply} LATERAL (
       SELECT m."id", m."sequence", m."createdAt" FROM "messages" m
       WHERE m."conversationId" = threads."conversationId"
         AND m."threadRootId" = threads."rootMessageId"
       ORDER BY m."sequence" DESC LIMIT 1
-    ) latest`;
+    ) latest
+    ${
+      includeMarks
+        ? Prisma.sql`ON TRUE
+      LEFT JOIN "messages" root
+        ON latest."id" IS NULL AND threads."marked"
+        AND root."id" = threads."rootMessageId" AND root."conversationId" = threads."conversationId"`
+        : Prisma.empty
+    }`;
 }
 
 export function threadItemListedSql(userId: string) {
-  return Prisma.sql`latest."sequence" > COALESCE(tr."doneThroughSequence", 0)
+  return Prisma.sql`(latest."sequence" > COALESCE(tr."doneThroughSequence", 0)
+    OR threads."marked")
     AND (threads."kind" = 'channel' OR ${viewerDirectConversationSql(userId)})`;
 }
 
@@ -235,18 +280,18 @@ export function threadItemRowsSql(workspaceId: string, userId: string) {
       c."channelName" AS "channelName",
       c."visibility" AS "visibility",
       c."directKey" AS "directKey",
-      latest."id" AS "latestMessageId",
-      latest."sequence" AS "latestSequence",
-      latest."createdAt" AS "latestAt",
+      COALESCE(latest."id", root."id") AS "latestMessageId",
+      COALESCE(latest."sequence", root."sequence") AS "latestSequence",
+      COALESCE(latest."createdAt", root."createdAt") AS "latestAt",
       TRUE AS "pastDone",
       NULL::int AS "pinOrder",
       NULL::timestamp AS "pinnedAt",
-      unread."found" IS NOT NULL AS "hasUnread",
+      (threads."marked" OR unread."found" IS NOT NULL) AS "hasUnread",
       mention."unread" AS "unreadMention",
       mention."firstId" AS "firstMentionMessageId",
       ${noTaskColumns},
       ${noNoticeColumns}
-    FROM ${threadItemsSql(workspaceId, userId)}
+    FROM ${threadItemsSql(workspaceId, userId, true)}
     ${unreadProbeLateral(
       threadUnreadReplySql("threads"),
       Prisma.sql`latest."sequence" > COALESCE(tr."readThroughSequence", 0)`,
@@ -297,10 +342,10 @@ export function threadUnreadAttentionRowsSql(workspaceId: string, userId: string
   return Prisma.sql`
     SELECT
       'thread:' || threads."rootMessageId" AS "key",
-      latest."createdAt" AS "latestAt",
-      latest."sequence" AS "latestSequence"
-    FROM ${threadItemsSql(workspaceId, userId)}
+      COALESCE(latest."createdAt", root."createdAt") AS "latestAt",
+      COALESCE(latest."sequence", root."sequence") AS "latestSequence"
+    FROM ${threadItemsSql(workspaceId, userId, true)}
     ${unreadProbeLateral(threadUnreadReplySql("threads"), activeUnread)}
-    WHERE ${activeUnread}
-      AND unread."found" IS NOT NULL`;
+    WHERE ${threadItemListedSql(userId)}
+      AND (threads."marked" OR unread."found" IS NOT NULL)`;
 }

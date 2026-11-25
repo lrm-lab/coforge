@@ -22,6 +22,7 @@ export function doneTarget(item: ActivityInboxItem): ActivityItemDone {
       conversationId: item.place.conversationId,
       rootMessageId: item.thread.root.id,
       throughSequence: item.latestSequence,
+      ...(item.markedUnreadVersion && { markedUnreadVersion: item.markedUnreadVersion }),
     };
   return {
     kind: "conversation",

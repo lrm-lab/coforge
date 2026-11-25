@@ -38,6 +38,7 @@ export type ActivityCandidate = {
   latestAt: Date;
   unreadCount: number;
   firstUnreadMessageId: string | null;
+  markedUnreadVersion?: string;
   unreadMention: boolean;
   firstMentionMessageId: string | null;
   mentionAction?: { resolutionId: string; threadRootId: string | null };
@@ -207,6 +208,9 @@ async function hydrateConversationItems(
           : null,
         latest,
         latestSequence: candidate.latestSequence,
+        ...(candidate.markedUnreadVersion && {
+          markedUnreadVersion: candidate.markedUnreadVersion,
+        }),
         unreadCount: candidate.unreadCount,
         firstUnreadMessageId: candidate.firstUnreadMessageId,
         unreadMention: candidate.unreadMention,
@@ -233,6 +237,7 @@ function activityCandidate(row: ActivityPageRow): ActivityCandidate {
     latestMessageId: row.latestMessageId!,
     latestSequence: row.latestSequence,
     latestAt: row.latestAt,
+    ...(row.markedUnreadVersion && { markedUnreadVersion: row.markedUnreadVersion }),
     unreadCount: row.unreadCount,
     firstUnreadMessageId: row.firstUnreadMessageId,
     unreadMention: row.unreadMention,

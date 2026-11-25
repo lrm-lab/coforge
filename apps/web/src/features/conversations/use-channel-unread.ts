@@ -149,6 +149,11 @@ export function useChannelUnread({
       const data = publicationDataOrUndefined(publication.data);
       const event = decodeViewerEvent(data);
       if (event) {
+        if (event.type === REALTIME_EVENTS.threadUnreadChanged) {
+          if (event.workspaceId === refs.current.workspaceId)
+            markOpenReadStale(queryClient, event.conversationId, event.rootMessageId);
+          return;
+        }
         if (event.type === REALTIME_EVENTS.channelThreadUnreadInvalidated) {
           store.invalidateThreadUnread(event.workspaceId, event.conversationId);
           return;

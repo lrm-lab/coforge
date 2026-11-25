@@ -1,9 +1,11 @@
+import { threadUnreadRealtime } from "#src/server/conversations/thread-unread-marks.server";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import {
   workspaceUserMiddleware,
   type WorkspaceUserContext,
 } from "#src/features/auth/function-auth";
+import { threadUnreadBatchInput } from "./thread-unread-inputs";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 
 // A member marks a channel unread, or closes it, in their own sidebar. Nobody else's sidebar
@@ -26,10 +28,12 @@ export const setPublicConversationUnread = createServerFn({ method: "POST" })
 
 export const markPublicConversationAllRead = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(channelInput)
+  .validator(channelInput.extend({ batch: threadUnreadBatchInput.optional() }))
   .handler(async ({ data, context }) => {
-    const { channels, workspaceId, userId } = channelScope(context);
-    await channels.markAllRead(workspaceId, userId, data.channelId);
+    const { db, workspaceId, user } = context;
+    const realtime = data.batch ? threadUnreadRealtime() : undefined;
+    const channels = new PublicChannels(db, undefined, undefined, undefined, realtime);
+    await channels.markAllRead(workspaceId, user.id, data.channelId, data.batch);
   });
 
 /** Closes (hides) the conversation for this member only, or brings it back (#122). */

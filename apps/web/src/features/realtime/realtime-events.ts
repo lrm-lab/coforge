@@ -17,6 +17,7 @@ export const REALTIME_EVENTS = {
   artifactDataChanged: "artifact.data.changed.v1",
   artifactCommentsChanged: "artifact.comments.changed.v1",
   conversationActivity: "conversation.activity.v1",
+  threadUnreadChanged: "conversation.thread-unread.changed.v1",
   channelThreadUnreadInvalidated: "conversation.thread-unread.invalidated.v1",
   conversationRead: "conversation.read.v1",
   messageAvailable: "message.available.v1",

@@ -15,9 +15,37 @@ function unreadReplyPredicate(memberIdSql: Prisma.Sql) {
 const nonTaskThreadRootSql = Prisma.sql`NOT EXISTS (
   SELECT 1 FROM "tasks" t
   WHERE t."messageId" = tf."rootMessageId"
-    AND t."conversationId" = tf."conversationId"
+    AND t."conversationId" = cm."conversationId"
     AND t."deletedAt" IS NULL
 )`;
+
+const unreadThreadLateral = Prisma.sql`
+  CROSS JOIN LATERAL (
+    SELECT candidate."rootMessageId", BOOL_OR(candidate."followed") AS "followed"
+    FROM (
+      SELECT tf."rootMessageId", TRUE AS "followed" FROM "thread_follows" tf
+      WHERE tf."memberId" = cm."id" AND tf."unfollowedAt" IS NULL
+      UNION ALL
+      SELECT tr."rootMessageId", FALSE FROM "thread_reads" tr
+      WHERE tr."memberId" = cm."id" AND tr."markedUnreadVersion" IS NOT NULL
+    ) candidate
+    GROUP BY candidate."rootMessageId"
+  ) tf
+  LEFT JOIN "thread_reads" tr
+    ON tr."memberId" = cm."id" AND tr."rootMessageId" = tf."rootMessageId"
+  CROSS JOIN LATERAL (
+    SELECT BOOL_OR(EXISTS (
+      SELECT 1 FROM "message_mentions" mm
+      WHERE mm."messageId" = m."id" AND mm."memberId" = cm."id"
+      OFFSET 0
+    )) AS "mentioned"
+    FROM "messages" m
+    WHERE tf."followed"
+      AND m."conversationId" = cm."conversationId"
+      AND m."threadRootId" = tf."rootMessageId"
+      AND ${unreadReplyPredicate(Prisma.sql`cm."id"`)}
+    HAVING COUNT(*) > 0 OR tr."markedUnreadVersion" IS NOT NULL
+  ) unread_thread`;
 
 export function workspaceChannelThreadUnreadsSql(
   workspaceId: string,
@@ -37,25 +65,7 @@ export function workspaceChannelThreadUnreadsSql(
      AND c."workspaceId" = ${workspaceId}::uuid
      AND c."channelName" IS NOT NULL
      AND c."hiddenFromWorkspaceAt" IS NULL
-    JOIN "thread_follows" tf
-      ON tf."memberId" = cm."id"
-     AND tf."conversationId" = cm."conversationId"
-     AND tf."unfollowedAt" IS NULL
-    LEFT JOIN "thread_reads" tr
-      ON tr."memberId" = tf."memberId"
-     AND tr."rootMessageId" = tf."rootMessageId"
-    CROSS JOIN LATERAL (
-      SELECT BOOL_OR(EXISTS (
-        SELECT 1 FROM "message_mentions" mm
-        WHERE mm."messageId" = m."id" AND mm."memberId" = cm."id"
-        OFFSET 0
-      )) AS "mentioned"
-      FROM "messages" m
-      WHERE m."conversationId" = tf."conversationId"
-        AND m."threadRootId" = tf."rootMessageId"
-        AND ${unreadReplyPredicate(Prisma.sql`cm."id"`)}
-      HAVING COUNT(*) > 0
-    ) unread_thread
+    ${unreadThreadLateral}
     WHERE cm."userId" = ${userId}::uuid
       AND cm."leftAt" IS NULL
       AND cm."workspaceId" = ${workspaceId}::uuid
@@ -125,30 +135,15 @@ export async function channelThreadUnreadsForMembers(
   const rows = await db.$queryRaw<
     { memberId: string; unreadThreadCount: number; threadMentioned: boolean }[]
   >`
-    SELECT tf."memberId" AS "memberId",
+    SELECT cm."id" AS "memberId",
       COUNT(*)::int AS "unreadThreadCount",
       COALESCE(BOOL_OR(unread_thread."mentioned"), FALSE) AS "threadMentioned"
-    FROM "thread_follows" tf
-    LEFT JOIN "thread_reads" tr
-      ON tr."memberId" = tf."memberId"
-     AND tr."rootMessageId" = tf."rootMessageId"
-    CROSS JOIN LATERAL (
-      SELECT BOOL_OR(EXISTS (
-        SELECT 1 FROM "message_mentions" mm
-        WHERE mm."messageId" = m."id" AND mm."memberId" = tf."memberId"
-        OFFSET 0
-      )) AS "mentioned"
-      FROM "messages" m
-      WHERE m."conversationId" = tf."conversationId"
-        AND m."threadRootId" = tf."rootMessageId"
-        AND ${unreadReplyPredicate(Prisma.sql`tf."memberId"`)}
-      HAVING COUNT(*) > 0
-    ) unread_thread
-    WHERE tf."memberId" = ANY(${[...memberIds]}::uuid[])
-      AND tf."conversationId" = ${conversationId}::uuid
-      AND tf."unfollowedAt" IS NULL
+    FROM "conversation_members" cm
+    ${unreadThreadLateral}
+    WHERE cm."id" = ANY(${[...memberIds]}::uuid[])
+      AND cm."conversationId" = ${conversationId}::uuid
       AND ${nonTaskThreadRootSql}
-    GROUP BY tf."memberId"`;
+    GROUP BY cm."id"`;
   const byMember = new Map<string, ChannelThreadUnreadSummary>();
   for (const memberId of memberIds) {
     byMember.set(memberId, { unreadThreadCount: 0, threadMentioned: false });
@@ -178,25 +173,7 @@ export async function channelThreadUnreadsForUserConversations(
     JOIN "conversations" c
       ON c."id" = cm."conversationId"
      AND c."channelName" IS NOT NULL
-    JOIN "thread_follows" tf
-      ON tf."memberId" = cm."id"
-     AND tf."conversationId" = cm."conversationId"
-     AND tf."unfollowedAt" IS NULL
-    LEFT JOIN "thread_reads" tr
-      ON tr."memberId" = tf."memberId"
-     AND tr."rootMessageId" = tf."rootMessageId"
-    CROSS JOIN LATERAL (
-      SELECT BOOL_OR(EXISTS (
-        SELECT 1 FROM "message_mentions" mm
-        WHERE mm."messageId" = m."id" AND mm."memberId" = cm."id"
-        OFFSET 0
-      )) AS "mentioned"
-      FROM "messages" m
-      WHERE m."conversationId" = tf."conversationId"
-        AND m."threadRootId" = tf."rootMessageId"
-        AND ${unreadReplyPredicate(Prisma.sql`cm."id"`)}
-      HAVING COUNT(*) > 0
-    ) unread_thread
+    ${unreadThreadLateral}
     WHERE cm."userId" = ${userId}::uuid
       AND cm."conversationId" = ANY(${[...conversationIds]}::uuid[])
       AND cm."leftAt" IS NULL

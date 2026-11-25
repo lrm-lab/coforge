@@ -104,6 +104,7 @@ export const sendConversationMessageInputSchema = directConversationInputSchema.
 export const readConversationThreadInputSchema = directConversationInputSchema.extend({
   threadRootId: uuid,
   throughSequence: z.number().int().positive(),
+  markedUnreadVersion: z.uuid().optional(),
 });
 
 /** The viewer's own emoji reaction on one message. Finer emoji validity lives server-side

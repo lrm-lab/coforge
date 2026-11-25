@@ -17,6 +17,10 @@ import {
   markThreadDoneSql,
   markThreadsReadSql,
 } from "#src/server/conversations/human-unread.server";
+import {
+  clearThreadUnreadMarks,
+  publishThreadUnreadChanges,
+} from "#src/server/conversations/thread-unread-marks.server";
 import { announceActivityAttention, announceReadMoved } from "./activity-attention.server";
 
 export type ActivityInboxRealtime = Pick<
@@ -71,27 +75,38 @@ export async function markActivityDone(
   ]);
   if (!member) throw new AppError("ACCESS_DENIED");
   const boundary = Math.min(item.throughSequence, latest?.sequence ?? 0);
-  if (boundary < 1) return;
+  const markedUnreadVersion = item.kind === "thread" ? item.markedUnreadVersion : undefined;
+  if (boundary < 1 && !markedUnreadVersion) return;
   if (rootMessageId) {
-    await db.$transaction(async (tx) => {
-      await tx.$executeRaw(
-        markThreadDoneSql(
-          {
-            memberId: member.id,
-            conversationId: item.conversationId,
-            workspaceId,
-            rootMessageId,
-          },
-          boundary,
-        ),
-      );
-      if (member.conversation.channelName !== null)
-        await recordChannelThreadUnread(tx, {
-          workspaceId,
-          conversationId: item.conversationId,
-          userId,
-        });
+    const scope = { workspaceId, conversationId: item.conversationId, userId };
+    const cleared = await db.$transaction(async (tx) => {
+      if (boundary > 0) {
+        await tx.$executeRaw(
+          markThreadDoneSql(
+            {
+              memberId: member.id,
+              workspaceId,
+              conversationId: item.conversationId,
+              rootMessageId,
+            },
+            boundary,
+          ),
+        );
+      }
+      const marks = markedUnreadVersion
+        ? await clearThreadUnreadMarks(
+            tx,
+            scope,
+            member.id,
+            [{ rootMessageId, version: markedUnreadVersion }],
+            item.throughSequence,
+          )
+        : [];
+      if (member.conversation.channelName !== null && (boundary > 0 || marks.length > 0))
+        await recordChannelThreadUnread(tx, scope);
+      return marks;
     });
+    await publishThreadUnreadChanges(realtime, scope, "cleared", cleared);
   } else {
     await db.$executeRaw(markConversationDoneSql(member.id, boundary));
   }

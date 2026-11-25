@@ -15,6 +15,7 @@ export type WindowThreads = {
   threads: Record<string, ThreadSummary>;
   /** The viewer's thread read cursors, for these roots only. */
   threadReadThrough: Record<string, number>;
+  threadUnreadMarks?: Record<string, string>;
 };
 
 type SummaryRow = {
@@ -84,7 +85,7 @@ export async function readWindowThreads(
     viewerMemberId
       ? db.threadRead.findMany({
           where: { memberId: viewerMemberId, rootMessageId: { in: roots } },
-          select: { rootMessageId: true, readThroughSequence: true },
+          select: { rootMessageId: true, readThroughSequence: true, markedUnreadVersion: true },
         })
       : [],
   ]);
@@ -143,7 +144,9 @@ export async function readWindowThreads(
   }
   const threads: Record<string, ThreadSummary> = {};
   const threadReadThrough = Object.fromEntries(
-    reads.map((read) => [read.rootMessageId, read.readThroughSequence]),
+    reads.flatMap((read) =>
+      read.readThroughSequence > 0 ? [[read.rootMessageId, read.readThroughSequence]] : [],
+    ),
   );
   for (const row of rows) {
     threads[row.rootId] = {
@@ -154,7 +157,14 @@ export async function readWindowThreads(
       latestReplies: latestByRoot.get(row.rootId) ?? [],
     };
   }
-  return { threads, threadReadThrough };
+  const marks = reads.flatMap(({ rootMessageId, markedUnreadVersion }) =>
+    markedUnreadVersion ? [[rootMessageId, markedUnreadVersion] as const] : [],
+  );
+  return {
+    threads,
+    threadReadThrough,
+    ...(marks.length > 0 && { threadUnreadMarks: Object.fromEntries(marks) }),
+  };
 }
 
 /** The ids of the channel threads the viewer follows, among the roots one window holds. */

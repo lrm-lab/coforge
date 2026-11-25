@@ -321,6 +321,13 @@ const viewerEvent = z.discriminatedUnion("type", [
     ...viewerEventIds,
   }),
   z.object({
+    type: z.literal(REALTIME_EVENTS.threadUnreadChanged),
+    ...viewerEventIds,
+    rootMessageId: z.uuid(),
+    version: z.uuid(),
+    action: z.enum(["marked", "cleared"]),
+  }),
+  z.object({
     type: z.literal(REALTIME_EVENTS.channelThreadUnreadInvalidated),
     ...viewerEventIds,
   }),

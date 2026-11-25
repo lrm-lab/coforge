@@ -1,3 +1,4 @@
+import type { ThreadUnreadBatch } from "#src/features/conversations/thread-unread-inputs";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import type { ChannelVisibility } from "#src/features/conversations/channel-visibility";
 import { AgentInboxPurgePublisher } from "#src/server/agents/agent-inbox-purge.server";
@@ -229,8 +230,8 @@ export class PublicChannels {
       ]);
   }
 
-  markAllRead(workspaceId: string, userId: string, channelId: string) {
-    return markChannelAndThreadsRead(this.ports, workspaceId, userId, channelId);
+  markAllRead(workspaceId: string, userId: string, channelId: string, batch?: ThreadUnreadBatch) {
+    return markChannelAndThreadsRead(this.ports, workspaceId, userId, channelId, batch);
   }
 
   names(workspaceId: string, userId: string) {

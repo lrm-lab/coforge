@@ -111,16 +111,17 @@ export async function openChannel(
   // Each thread of the page as a summary, and the viewer's cursors and follows for these roots
   // only: a long-lived channel's whole history of them never rides along with a page.
   const rootIds = pageMessages.map((message) => message.id);
-  const [{ threads, threadReadThrough }, followedRootIds, browserMessages] = await Promise.all([
-    readWindowThreads(db, {
-      workspaceId,
-      conversationId: channelId,
-      rootIds,
-      viewerMemberId: member?.id,
-    }),
-    followedThreadRootIds(db, { viewerMemberId: member?.id, rootIds }),
-    mapBrowserMessages(db, pageMessages, workspaceId),
-  ]);
+  const [{ threads, threadReadThrough, threadUnreadMarks }, followedRootIds, browserMessages] =
+    await Promise.all([
+      readWindowThreads(db, {
+        workspaceId,
+        conversationId: channelId,
+        rootIds,
+        viewerMemberId: member?.id,
+      }),
+      followedThreadRootIds(db, { viewerMemberId: member?.id, rootIds }),
+      mapBrowserMessages(db, pageMessages, workspaceId),
+    ]);
   return {
     conversationId: channel.id,
     name: channel.channelName!,
@@ -155,6 +156,7 @@ export async function openChannel(
       : {}),
     threads,
     threadReadThrough,
+    ...(threadUnreadMarks && { threadUnreadMarks }),
     followedThreadRootIds: followedRootIds,
     mentionables: mentionables(workspaceId, mentionRows, mentionScores),
     hasOlder,

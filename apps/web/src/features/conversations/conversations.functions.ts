@@ -1,5 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { threadUnreadBatchInput } from "./thread-unread-inputs";
+import {
+  markVersionedThreadRead,
+  readThreadUnreadVersion,
+  threadUnreadRealtime,
+} from "#src/server/conversations/thread-unread-marks.server";
 import { humanLabel } from "#src/lib/human-label";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import {
@@ -110,9 +116,14 @@ export const loadConversationAround = createServerFn({ method: "GET" })
 export const loadConversationOpen = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(conversationOpenInputSchema)
-  .handler(async ({ context: { user, db, workspaceId }, data }) => ({
-    firstUnread: await firstUnreadOnOpen(db, { workspaceId, userId: user.id, ...data }),
-  }));
+  .handler(async ({ context: { user, db, workspaceId }, data }) => {
+    const scope = { workspaceId, userId: user.id, conversationId: data.conversationId };
+    const [firstUnread, markedUnreadVersion] = await Promise.all([
+      firstUnreadOnOpen(db, { ...scope, threadRootId: data.threadRootId }),
+      data.threadRootId ? readThreadUnreadVersion(db, scope, data.threadRootId) : undefined,
+    ]);
+    return { firstUnread, ...(markedUnreadVersion && { markedUnreadVersion }) };
+  });
 
 /**
  * Every reply of one thread, for a channel or a direct conversation alike: what its pane shows
@@ -136,6 +147,14 @@ export const markDirectThreadRead = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(readConversationThreadInputSchema)
   .handler(async ({ context: { user, db, workspaceId }, data }) => {
+    if (data.markedUnreadVersion)
+      return markVersionedThreadRead(
+        db,
+        threadUnreadRealtime(),
+        { workspaceId, userId: user.id, conversationId: data.conversationId },
+        { rootMessageId: data.threadRootId, version: data.markedUnreadVersion },
+        data.throughSequence,
+      );
     await new DirectConversations(db).markThreadRead(
       workspaceId,
       user.id,
@@ -197,9 +216,15 @@ export const setDirectConversationUnread = createServerFn({ method: "POST" })
 
 export const markDirectConversationAllRead = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(directConversationInputSchema)
+  .validator(directConversationInputSchema.extend({ batch: threadUnreadBatchInput.optional() }))
   .handler(async ({ context: { user, db, workspaceId }, data }) => {
-    await new DirectConversations(db).markAllRead(workspaceId, user.id, data.conversationId);
+    const realtime = data.batch ? threadUnreadRealtime() : undefined;
+    await new DirectConversations(db, realtime).markAllRead(
+      workspaceId,
+      user.id,
+      data.conversationId,
+      data.batch,
+    );
   });
 
 /** Closes the viewer's DM in their list only, or brings it back (#122). */

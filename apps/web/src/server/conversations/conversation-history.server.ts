@@ -185,16 +185,17 @@ export class ConversationHistory {
       ...afterRows.slice(0, afterCount),
     ];
     const rootIds = roots.map((message) => message.id);
-    const [{ threads, threadReadThrough }, followed, browserMessages] = await Promise.all([
-      readWindowThreads(this.db, {
-        workspaceId,
-        conversationId,
-        rootIds,
-        viewerMemberId: activeMemberId,
-      }),
-      direct ? [] : followedThreadRootIds(this.db, { viewerMemberId: activeMemberId, rootIds }),
-      mapBrowserMessages(this.db, roots, workspaceId),
-    ]);
+    const [{ threads, threadReadThrough, threadUnreadMarks }, followed, browserMessages] =
+      await Promise.all([
+        readWindowThreads(this.db, {
+          workspaceId,
+          conversationId,
+          rootIds,
+          viewerMemberId: activeMemberId,
+        }),
+        direct ? [] : followedThreadRootIds(this.db, { viewerMemberId: activeMemberId, rootIds }),
+        mapBrowserMessages(this.db, roots, workspaceId),
+      ]);
     return {
       conversationId,
       hasOlder: beforeRows.length > beforeCount + 1,
@@ -204,6 +205,7 @@ export class ConversationHistory {
       messages: browserMessages,
       threads,
       threadReadThrough,
+      ...(threadUnreadMarks && { threadUnreadMarks }),
       followedThreadRootIds: followed,
     };
   }

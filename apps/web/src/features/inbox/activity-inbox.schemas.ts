@@ -54,6 +54,7 @@ export const activityItemDoneSchema = z.discriminatedUnion("kind", [
     kind: z.literal("thread"),
     conversationId: z.uuid(),
     rootMessageId: z.uuid(),
+    markedUnreadVersion: z.uuid().optional(),
     throughSequence: z.number().int().min(1),
   }),
   z.object({ kind: z.literal("mention_action"), resolutionId: z.uuid() }),

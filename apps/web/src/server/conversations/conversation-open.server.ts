@@ -25,6 +25,7 @@ export async function firstUnreadOnOpen(
   const unread = threadRootId
     ? Prisma.sql`JOIN "thread_reads" tr
         ON tr."memberId" = cm."id" AND tr."rootMessageId" = ${threadRootId}::uuid
+          AND tr."readThroughSequence" > 0
       JOIN "messages" m
         ON m."conversationId" = cm."conversationId" AND m."threadRootId" = ${threadRootId}::uuid
        AND ${humanUnreadReplySql(Prisma.sql`cm."id"`, Prisma.sql`tr."readThroughSequence"`)}`

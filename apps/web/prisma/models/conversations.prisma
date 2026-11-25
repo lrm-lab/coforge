@@ -168,6 +168,7 @@ model ThreadRead {
   /// Activity inbox Done boundary over this thread's replies, the thread counterpart of
   /// `ConversationMember.doneThroughSequence`. Null = never marked Done.
   doneThroughSequence Int?
+  markedUnreadVersion String?            @db.Uuid
   member              ConversationMember @relation(fields: [memberId, conversationId, workspaceId], references: [id, conversationId, workspaceId], onDelete: Cascade)
   root                Message            @relation(fields: [rootMessageId, conversationId], references: [id, conversationId], onDelete: Cascade)
 

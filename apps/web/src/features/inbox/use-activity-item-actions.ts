@@ -79,6 +79,7 @@ export function useActivityItemActions({
       task,
       latestSequence: throughSequence,
       mentionAction,
+      markedUnreadVersion,
     }: ActivityConversationItem) {
       if (mentionAction)
         return setMentionRead({ data: { resolutionId: mentionAction.resolutionId, read: true } });
@@ -87,13 +88,17 @@ export function useActivityItemActions({
           data: { conversationId: place.conversationId, number: task.number, throughSequence },
         });
       if (thread) {
-        const threadRootId = thread.root.id;
+        const read = {
+          threadRootId: thread.root.id,
+          throughSequence,
+          ...(markedUnreadVersion && { markedUnreadVersion }),
+        };
         return place.kind === "channel"
           ? markChannelThreadRead({
-              data: { channelId: place.conversationId, threadRootId, throughSequence },
+              data: { channelId: place.conversationId, ...read },
             })
           : markDirectThread({
-              data: { conversationId: place.conversationId, threadRootId, throughSequence },
+              data: { conversationId: place.conversationId, ...read },
             });
       }
       return place.kind === "channel"

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { PrismaClient } from "#src/generated/prisma/client";
+import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { isAppError } from "#src/lib/app-error";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 
@@ -114,10 +114,8 @@ function fixture(options: { member?: boolean; newestSequence?: number } = {}) {
     // - the row locks (`FOR UPDATE`, `FOR NO KEY UPDATE`) only need a row to exist;
     // - the unread query is the one that aliases `"arrivedSinceClosed"`;
     // - the channel preview reads (last message, members) find nothing in this fixture.
-    $queryRaw: async (query: unknown) => {
-      const sql = Array.isArray(query)
-        ? query.join("?")
-        : String((query as { sql?: string } | null)?.sql);
+    $queryRaw: async (query: TemplateStringsArray | Prisma.Sql, ...values: unknown[]) => {
+      const sql = "sql" in query ? query.sql : Prisma.sql(query, ...values).sql;
       if (/FOR (NO KEY )?UPDATE$/.test(sql.trim())) return [{ id: CHANNEL_ID }];
       if (sql.includes('"arrivedSinceClosed"'))
         return [

@@ -4,6 +4,10 @@ import {
   workspaceUserMiddleware,
   type WorkspaceUserContext,
 } from "#src/features/auth/function-auth";
+import {
+  markVersionedThreadRead,
+  threadUnreadRealtime,
+} from "#src/server/conversations/thread-unread-marks.server";
 import { AppError } from "#src/lib/app-error";
 import { listChannelThreadUnreads as readChannelThreadUnreads } from "#src/server/conversations/channel-thread-unread.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
@@ -18,6 +22,7 @@ function channelScope({ db, workspaceId, user }: WorkspaceUserContext) {
 const channelThreadReadInput = channelInput.extend({
   threadRootId: z.uuid(),
   throughSequence: z.number().int().positive(),
+  markedUnreadVersion: z.uuid().optional(),
 });
 const channelThreadFollowInput = channelInput.extend({
   threadRootId: z.uuid(),
@@ -47,6 +52,14 @@ export const markPublicChannelThreadRead = createServerFn({ method: "POST" })
   .validator(channelThreadReadInput)
   .handler(async ({ data, context }) => {
     const { channels, workspaceId, userId } = channelScope(context);
+    if (data.markedUnreadVersion)
+      return markVersionedThreadRead(
+        context.db,
+        threadUnreadRealtime(),
+        { workspaceId, userId, conversationId: data.channelId },
+        { rootMessageId: data.threadRootId, version: data.markedUnreadVersion },
+        data.throughSequence,
+      );
     await channels.markThreadReadForUser(
       workspaceId,
       userId,
