@@ -35,10 +35,8 @@ export function overviewSelection(userId: string) {
         channelName: true,
         visibility: true,
         members: {
-          // The viewer's own membership, the Agents, and both sides of a direct conversation
-          // (only ever two): a people-to-people DM is named for the other person.
           where: {
-            OR: [{ userId }, { agentId: { not: null } }, { conversation: { channelName: null } }],
+            OR: [{ userId }, { conversation: { channelName: null } }],
           },
           select: {
             id: true,
@@ -52,12 +50,10 @@ export function overviewSelection(userId: string) {
   } satisfies Prisma.TaskSelect;
 }
 
-/** The single-Task read: the card fields plus the description the popup shows. */
 export function overviewDetailSelection(userId: string) {
   return { ...overviewSelection(userId), description: true } satisfies Prisma.TaskSelect;
 }
 
-/** The page's rows: their relations read together and their discussions counted, once for the page. */
 export async function overviewRows(
   db: PrismaClient,
   workspaceId: string,
@@ -76,36 +72,40 @@ export function overviewRow(
   extras: TaskViewExtras,
 ): TaskOverview["tasks"][number] {
   const channelName = task.conversation.channelName;
-  const agent = task.conversation.members.find((member) => member.agent !== null)?.agent ?? null;
   const currentMemberId =
     task.conversation.members.find((member) => member.userId === userId)?.id ?? null;
-  const peer =
-    task.conversation.members.find((member) => member.userId && member.userId !== userId)?.user ??
-    null;
+  const source = channelName
+    ? {
+        channelName,
+        agentId: null,
+        label: channelLabel({
+          name: channelName,
+          visibility: channelVisibilityOf(task.conversation),
+        }),
+      }
+    : (() => {
+        const agent =
+          task.conversation.members.find((member) => member.agent !== null)?.agent ?? null;
+        if (agent) {
+          return { channelName: null, agentId: agent.id, label: agent.displayName || agent.name };
+        }
+        const peer =
+          task.conversation.members.find((member) => member.userId && member.userId !== userId)
+            ?.user ?? null;
+        return {
+          channelName: null,
+          agentId: null,
+          label: peer
+            ? humanLabel(peer)
+            : humanLabel(
+                task.conversation.members.find((member) => member.userId === userId)!.user!,
+              ),
+        };
+      })();
   return {
     ...taskView(task, "people", extras),
     currentMemberId,
-    source: channelName
-      ? {
-          channelName,
-          agentId: null,
-          label: channelLabel({
-            name: channelName,
-            visibility: channelVisibilityOf(task.conversation),
-          }),
-        }
-      : agent
-        ? { channelName: null, agentId: agent.id, label: agent.displayName || agent.name }
-        : // A people-to-people DM names the other side (a DM with oneself names oneself).
-          {
-            channelName: null,
-            agentId: null,
-            label: peer
-              ? humanLabel(peer)
-              : humanLabel(
-                  task.conversation.members.find((member) => member.userId === userId)!.user!,
-                ),
-          },
+    source,
     project: task.project && withProjectIconUrl(task.project),
   };
 }

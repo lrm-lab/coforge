@@ -285,15 +285,10 @@ export class TaskOverviewReads {
       select: overviewDetailSelection(userId),
     });
     if (!task) return null;
-    const [extras] = await viewsWithCounts(
-      this.db,
-      "people",
-      workspaceId,
-      [task],
-      (_, viewExtras) => viewExtras,
-    );
-    // The detail also names the Tasks waiting for this one, whichever channel they are in.
-    const relations = await showRelations(this.db, "people", task);
+    const [[extras], relations] = await Promise.all([
+      viewsWithCounts(this.db, "people", workspaceId, [task], (_, viewExtras) => viewExtras),
+      showRelations(this.db, "people", task),
+    ]);
     return { ...overviewRow(task, userId, extras!), ...relations };
   }
 
@@ -426,19 +421,25 @@ export class TaskOverviewReads {
       },
       _count: { _all: true },
     });
+    const ownerMemberIds = [
+      ...new Set(rows.flatMap(({ ownerMemberId }) => (ownerMemberId ? [ownerMemberId] : []))),
+    ];
+    const projectIds = [
+      ...new Set(rows.flatMap(({ projectId }) => (projectId ? [projectId] : []))),
+    ];
     const [owners, projects] = await Promise.all([
-      this.db.conversationMember.findMany({
-        where: {
-          id: { in: rows.flatMap(({ ownerMemberId }) => (ownerMemberId ? [ownerMemberId] : [])) },
-        },
-        select: TASK_MEMBER_SELECT,
-      }),
-      this.db.project.findMany({
-        where: {
-          id: { in: [...new Set(rows.flatMap(({ projectId }) => (projectId ? [projectId] : [])))] },
-        },
-        select: { id: true, name: true, slug: true },
-      }),
+      ownerMemberIds.length > 0
+        ? this.db.conversationMember.findMany({
+            where: { id: { in: ownerMemberIds } },
+            select: TASK_MEMBER_SELECT,
+          })
+        : [],
+      projectIds.length > 0
+        ? this.db.project.findMany({
+            where: { id: { in: projectIds } },
+            select: { id: true, name: true, slug: true },
+          })
+        : [],
     ]);
     const ownerById = new Map(owners.map((owner) => [owner.id, taskMember(workspaceId, owner)]));
     const projectOf = new Map(projects.map((project) => [project.id, project]));

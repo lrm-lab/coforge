@@ -123,14 +123,13 @@ export async function listOwnTasks(
         select: {
           channelName: true,
           members: {
-            where: { userId: { not: null } },
+            where: { userId: { not: null }, conversation: { channelName: null } },
             select: { user: { select: { username: true } } },
           },
         },
       },
     },
   });
-  // The shared Task order: priority, then earliest due, then oldest, across conversations.
   const ordered = (
     await viewsWithCounts(ports.db, ports.reader, principal.workspaceId, tasks, (task, extras) => ({
       ...taskView(task, ports.reader, extras),
@@ -150,7 +149,6 @@ export async function listOwnTasks(
   };
 }
 
-/** One task's current card, as `task show` reads it. */
 export async function showTask(
   ports: TaskBoardPorts,
   workspaceId: string,
@@ -162,12 +160,13 @@ export async function showTask(
     select: taskSelection,
   });
   if (!task) throw new AppError("NOT_FOUND");
-  return {
-    tasks: await viewsWithCounts(ports.db, ports.reader, workspaceId, [task], (row, extras) =>
+  const [tasks, relations] = await Promise.all([
+    viewsWithCounts(ports.db, ports.reader, workspaceId, [task], (row, extras) =>
       taskView(row, ports.reader, extras),
     ),
-    ...(await showRelations(ports.db, ports.reader, task)),
-  };
+    showRelations(ports.db, ports.reader, task),
+  ]);
+  return { tasks, ...relations };
 }
 
 /** One conversation's Tasks, optionally of one status. */
