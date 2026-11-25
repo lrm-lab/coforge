@@ -1,5 +1,7 @@
+import { prepareAgentNotice } from "@coforge/agent";
 import type { ClaudeTurnHost } from "./host";
 import type {
+  AgentNoticeOptions,
   AgentSession,
   AgentSessionExit,
   AgentSessionIdentity,
@@ -206,10 +208,10 @@ export class ClaudeCodeAgentSession implements AgentSession {
     return this.#process.pid;
   }
 
-  async #sendInput(text: string): Promise<void> {
+  async #sendInput(text: string, options?: AgentNoticeOptions): Promise<void> {
     this.#notices.throwIfFailed();
+    text = prepareAgentNotice(text, options, this.#state === "idle" ? "prompt" : "steer");
     this.#firstInput ??= text;
-    // Reserve the turn before writing; a native result can arrive during flush.
     if (this.#state === "idle") this.#beginNativeTurn();
     else this.#nativeTurnQueued = true;
     this.#setIdentity("unknown");
@@ -221,18 +223,16 @@ export class ClaudeCodeAgentSession implements AgentSession {
     });
   }
 
-  async notify(notice: string): Promise<void> {
+  async notify(notice: string, options?: AgentNoticeOptions): Promise<void> {
     this.#notices.throwIfFailed();
     if (this.#state === "disposed" || this.#state === "interrupting") {
       throw new Error("code agent cannot accept a notification");
     }
     if (this.#state === "idle") {
-      await this.#sendInput(notice);
+      await this.#sendInput(notice, options);
       return;
     }
-    // Do not inject into an arbitrary thinking/tool execution instant. Only a
-    // native tool-batch, compact, or result boundary drains these pending calls.
-    await this.#notices.enqueue(notice);
+    await this.#notices.enqueue(notice, options);
   }
 
   subscribe(listener: (event: AgentRuntimeEvent) => void): () => void {
@@ -472,8 +472,7 @@ export class ClaudeCodeAgentSession implements AgentSession {
       return;
     if (!this.#sessionReadyForNotices || this.#compacting || this.#outstandingTools.size > 0)
       return;
-    // Written acceptance, not confirmation of model processing.
-    this.#notices.flush((text) => this.#sendInput(text));
+    this.#notices.flush((text, options) => this.#sendInput(text, options));
   }
 
   #emit(event: AgentRuntimeEvent): void {

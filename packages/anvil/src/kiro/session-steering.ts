@@ -1,4 +1,8 @@
-import type { AgentNoticeOptions, AgentRuntimeEvent } from "@coforge/agent";
+import {
+  prepareAgentNotice,
+  type AgentNoticeOptions,
+  type AgentRuntimeEvent,
+} from "@coforge/agent";
 import type { SessionNotification } from "@agentclientprotocol/sdk/unstable";
 
 /** How long a turn end waits for the steering outcome Kiro wrote before its prompt response. The
@@ -64,6 +68,7 @@ export class KiroTurnSteering {
    */
   async steer(message: string, options?: AgentNoticeOptions): Promise<void> {
     if (!this.ports.acceptsInput()) throw new Error("Kiro cannot accept input");
+    message = prepareAgentNotice(message, options, "steer");
     const sessionId = this.ports.sessionId();
     let response: { queued: boolean; messageId: string; dropped?: string } | undefined;
     try {

@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { AgentNoticeSuppressedError, type AgentNoticeOptions } from "@coforge/agent";
 import type { AgentRecoveryMessage } from "@lrm/coforge-sdk/internal";
 import { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-attention-index";
 import { session } from "./fixtures/attention-delivery";
@@ -72,4 +73,109 @@ test("a replacement session receives the same recovery IDs while duplicates stay
   expect(notices.every((notice) => notice.includes("@ada 1 new message"))).toBe(true);
   expect(notices.every((notice) => !notice.includes("recover this body"))).toBe(true);
   expect(index.modelSeenSequence("agent-1", "@ada")).toBe(0);
+});
+
+test("recovery does not submit an enumerated task that becomes read after admission", async () => {
+  const admission = Promise.withResolvers<void>();
+  const submit = Promise.withResolvers<void>();
+  const notices: string[] = [];
+  const runtime = {
+    ...session(),
+    async notify(text: string, options?: AgentNoticeOptions) {
+      admission.resolve();
+      await submit.promise;
+      const next = options?.prepareSubmission ? options.prepareSubmission("prompt") : text;
+      if (next === undefined) throw new AgentNoticeSuppressedError();
+      notices.push(next);
+    },
+  };
+  const index = new AgentMessageAttentionIndex(
+    "workspace-1",
+    { session: () => runtime },
+    async () => {},
+  );
+  const target = "#board:#98";
+  const message: AgentRecoveryMessage = {
+    messageId: "recovered",
+    deliveryId: "recovered-delivery",
+    conversationId: "conversation-1",
+    sequence: 18,
+    target,
+    latestSenderKind: "human",
+    latestSenderHandle: "ada",
+    latestSenderDescription: "",
+    body: "old notice",
+  };
+  const recovering = index.recover(
+    "agent-1",
+    [message],
+    { [target]: 1 },
+    {
+      [target]: message.conversationId,
+    },
+  );
+  await admission.promise;
+  index.recordHistoryRead("agent-1", {
+    spelling: target,
+    target,
+    through: 20,
+    shown: [],
+    scope: { target, conversationId: message.conversationId, channelType: "thread" },
+  });
+  submit.resolve();
+  expect(await recovering).toEqual(new Set());
+  expect(notices).toEqual([]);
+  expect(index.check("agent-1")).toEqual([]);
+});
+
+test("a carried launch summary backed by exact deliveries retains only the fresh count at submission", async () => {
+  const admission = Promise.withResolvers<void>();
+  const submit = Promise.withResolvers<void>();
+  const notices: string[] = [];
+  const runtime = {
+    ...session(),
+    async notify(text: string, options?: AgentNoticeOptions) {
+      admission.resolve();
+      await submit.promise;
+      const next = options?.prepareSubmission ? options.prepareSubmission("prompt") : text;
+      if (next === undefined) throw new AgentNoticeSuppressedError();
+      notices.push(next);
+    },
+  };
+  const index = new AgentMessageAttentionIndex(
+    "workspace-1",
+    { session: () => runtime },
+    async () => {},
+  );
+  const agentId = "agent-1";
+  const target = "#board:#98";
+  const conversationId = "conversation-1";
+  index.bindConversation(agentId, target, conversationId);
+  const countedDeliveries = [12, 15].map((sequence) => ({
+    messageId: `message-${sequence}`,
+    deliveryId: `delivery-${sequence}`,
+    target,
+    conversationId,
+    sequence,
+  }));
+  const recovering = index.recover(
+    agentId,
+    [],
+    { [target]: 2 },
+    { [target]: conversationId },
+    undefined,
+    undefined,
+    {
+      snapshotMessages: [],
+      countedDeliveries,
+      accepted() {},
+    },
+  );
+  await admission.promise;
+  index.recordModelSeen(agentId, target, 13);
+  submit.resolve();
+  expect(await recovering).toEqual(new Set([target]));
+  expect(notices).toHaveLength(1);
+  expect(notices[0]).toContain(`${target} 1 new message`);
+  expect(notices[0]).not.toContain(`${target} 2 new messages`);
 });

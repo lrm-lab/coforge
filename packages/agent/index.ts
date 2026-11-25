@@ -55,7 +55,7 @@ export {
   prepareCloudComputerAgentSkills,
   prepareCloudComputerSessionSkillPaths,
 } from "#src/cloud-computer-skills";
-export { AgentNoticeSuppressedError } from "#src/agent-session-contract";
+export { AgentNoticeSuppressedError, prepareAgentNotice } from "#src/agent-session-contract";
 export type {
   AgentActivity,
   AgentActivityLevel,

@@ -1,6 +1,6 @@
 import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import {
-  AgentNoticeSuppressedError,
+  prepareAgentNotice,
   type AgentNoticeOptions,
   type AgentRuntimeEvent,
   type AgentTurnTokenUsage,
@@ -169,13 +169,11 @@ export class AcpSteering {
       undeliver();
       return;
     }
-    if (options?.prepareSubmission) {
-      const prepared = options.prepareSubmission("steer");
-      if (prepared === undefined) {
-        admission.reject(new AgentNoticeSuppressedError());
-        return;
-      }
-      text = prepared;
+    try {
+      text = prepareAgentNotice(text, options, "steer");
+    } catch (error) {
+      admission.reject(error);
+      return;
     }
     const request = this.profile.request(text, this.ports.sessionId());
     let response: unknown;

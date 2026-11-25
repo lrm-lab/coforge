@@ -1,3 +1,4 @@
+import type { AgentNoticeOptions } from "@coforge/agent";
 import type { JsonlProcess } from "#src/jsonl-process";
 
 export type SessionState = "idle" | "running" | "interrupting" | "disposed";
@@ -9,6 +10,7 @@ export type SessionInitialization = {
 
 type PendingNotice = {
   text: string;
+  options?: AgentNoticeOptions;
   resolve(): void;
   reject(error: Error): void;
 };
@@ -25,13 +27,15 @@ export class ClaudeNoticeQueue {
     if (this.#failure) throw this.#failure;
   }
 
-  enqueue(text: string): Promise<void> {
-    return new Promise<void>((resolve, reject) => this.#waiting.push({ text, resolve, reject }));
+  enqueue(text: string, options?: AgentNoticeOptions): Promise<void> {
+    return new Promise<void>((resolve, reject) =>
+      this.#waiting.push({ text, options, resolve, reject }),
+    );
   }
 
-  flush(send: (text: string) => Promise<void>): void {
+  flush(send: (text: string, options?: AgentNoticeOptions) => Promise<void>): void {
     for (const notice of this.#waiting.splice(0))
-      void send(notice.text).then(notice.resolve, notice.reject);
+      void send(notice.text, notice.options).then(notice.resolve, notice.reject);
   }
 
   reject(error: Error): void {

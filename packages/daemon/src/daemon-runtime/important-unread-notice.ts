@@ -147,22 +147,25 @@ export class ImportantUnreadNotices {
     );
   }
 
-  retainConversations(
+  reconcileConversations(
     agentId: string,
-    retain: (conversation: UnreadNoticeConversation) => boolean,
+    reconcile: (conversation: UnreadNoticeConversation) => UnreadNoticeConversation | undefined,
   ): ImportantUnreadNotice | undefined {
     const notice = this.#notices.get(agentId);
     if (!notice) return undefined;
-    const conversations = notice.conversations.filter(retain);
-    if (conversations.length === notice.conversations.length) return notice;
+    const conversations = notice.conversations
+      .map(reconcile)
+      .filter((entry) => entry !== undefined);
+    if (
+      conversations.every((entry, index) => entry === notice.conversations[index]) &&
+      conversations.length === notice.conversations.length
+    )
+      return notice;
     if (!conversations.length) {
       this.#notices.delete(agentId);
       return undefined;
     }
-    const next = {
-      ...notice,
-      conversations,
-    };
+    const next = { ...notice, conversations };
     this.#notices.set(agentId, next);
     return next;
   }
@@ -193,6 +196,7 @@ function merge(
   const existing = merged.find(
     (entry) =>
       entry.conversationId === delivery.conversationId &&
+      entry.target === delivery.target &&
       Boolean(entry.independentEvent) === independentEvent,
   );
   if (existing) {
