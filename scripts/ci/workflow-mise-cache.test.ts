@@ -239,11 +239,14 @@ test("deploy and release jobs use only the verified mise binary cache", async ()
         if (action === "actions/cache") {
           const path = String(step.with?.path ?? "");
           const key = String(step.with?.key ?? "");
-          if (file === "ci.yml") {
-            // ci.yml keeps the action's built-in full miseDir cache; a mise
-            // cache smuggled in as an actions/cache step would bypass the
-            // bin-only rule, so only unrelated caches (e.g. Bun's) may appear.
-            expect(key.startsWith("mise-bin-") || path.includes("mise"), jobKey).toBe(false);
+          if (file === "ci.yml" || file === "web-e2e.yml") {
+            // Non-credential CI workflows keep mise-action's built-in cache and may
+            // use actions/cache for package/browser caches, never an unverified mise
+            // or credential-job bun binary cache.
+            expect(
+              key.startsWith("mise-bin-") || key.startsWith("bun-bin-") || path.includes("mise"),
+              jobKey,
+            ).toBe(false);
             continue;
           }
           if (key.startsWith("bun-bin-")) {

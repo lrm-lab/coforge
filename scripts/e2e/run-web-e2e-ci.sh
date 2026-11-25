@@ -4,7 +4,7 @@
 # it, a front door on 127.0.0.1:8790 that gives the pages one origin for both (same-origin-proxy.ts),
 # and the PostgreSQL and Redis the caller provides (the workflow's service containers).
 #
-#   scripts/e2e/run-web-e2e-ci.sh <shard> <shards>          e.g. 1 2
+#   scripts/e2e/run-web-e2e-ci.sh <shard> <shards>          e.g. 1 4
 #   scripts/e2e/run-web-e2e-ci.sh <shard> <shards> --list   only print that shard's files
 #
 # With E2E_FILE=<name>.e2e.ts (any file under apps/web/test, listed or not), shard 1 runs only that
@@ -12,11 +12,11 @@
 # Linux runner before it may join the list (docs/release/web-e2e.md). Every run is counted; one
 # failure turns the run red.
 #
-# Shards are balanced by the seconds the list records (longest first, each to the lighter shard),
-# so both finish together. Every file runs once, in its own `bun test` process, with no retry: a
-# file that fails is a red run. Each file's output, the Web's and Centrifugo's logs and the
-# screenshots the tests write under .artifacts/e2e/ end up in $E2E_OUTPUT (default .artifacts/e2e-ci/), which
-# the workflow uploads when the run fails.
+# Shards are balanced by the seconds the list records (longest first, each to the lighter shard,
+# seeding shard 1 with ui-sweep's budget), so all shards finish together. Every file runs once, in
+# its own `bun test` process, with no retry: a file that fails is a red run. Each file's output,
+# the Web's and Centrifugo's logs and the screenshots the tests write under .artifacts/e2e/ end up
+# in $E2E_OUTPUT (default .artifacts/e2e-ci/), which the workflow uploads when the run fails.
 #
 # Two things the opt-in runners do not do and these files need: the full dev seed
 # (apps/web/scripts/seed-dev.ts; many files look up its colleague, attached Computer and Agents
@@ -34,16 +34,23 @@ web_port=8788
 front_port=8790
 
 # The shard's files: longest first, each to whichever shard has the fewest seconds so far.
+# Shard 1 also runs ui-sweep.mjs after its e2e files (186s on Linux CI run 44437566282),
+# so seed shard 1 with that weight when balancing multiple shards.
 # (A read loop, not mapfile: macOS still ships bash 3.2, and the list test runs there too.)
+ui_sweep_seconds=186
 files=()
 while IFS= read -r file; do files+=("$file"); done < <(
   grep -vE '^[[:space:]]*(#|$)' "$list" | LC_ALL=C sort -k2,2nr -k1,1 |
-    awk -v want="$shard" -v n="$shards" '{
-      best = 1
-      for (i = 2; i <= n; i++) if (load[i] < load[best]) best = i
-      load[best] += $2
-      if (best == want) print $1
-    }')
+    awk -v want="$shard" -v n="$shards" -v sweep="$ui_sweep_seconds" '
+      BEGIN {
+        if (n > 1) load[1] = sweep
+      }
+      {
+        best = 1
+        for (i = 2; i <= n; i++) if (load[i] < load[best]) best = i
+        load[best] += $2
+        if (best == want) print $1
+      }')
 if [ -n "${E2E_FILE:-}" ]; then
   repeat=${E2E_REPEAT:-1}
   [[ "$E2E_FILE" =~ ^[A-Za-z0-9._-]+\.e2e\.ts$ ]] && [ -f "$root/apps/web/test/$E2E_FILE" ] ||

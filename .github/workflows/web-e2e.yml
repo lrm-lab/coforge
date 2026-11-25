@@ -2,7 +2,7 @@ name: Web browser e2e
 
 # The browser e2es (apps/web/test/*.e2e.ts) need a built Web, PostgreSQL, Redis, Centrifugo and a
 # headless Chrome, which CI's jobs do not have. This runs the ones listed in
-# scripts/e2e/web-e2e-ci.txt once a day and on demand, in two shards; any failing file turns the
+# scripts/e2e/web-e2e-ci.txt once a day and on demand, in four shards; any failing file turns the
 # run red. It blocks nothing and publishes nothing; docs/release/web-e2e.md.
 on:
   schedule:
@@ -30,17 +30,17 @@ concurrency:
 
 jobs:
   e2e:
-    name: Browser e2e (shard ${{ matrix.shard }} of 2)
+    name: Browser e2e (shard ${{ matrix.shard }} of 4)
     runs-on: ubuntu-latest
     # Setup (images, install, build, services) once took ~24 of the 30 minutes on a slow runner,
     # leaving the shard's files no room; the per-file `timeout 360` still bounds each test.
     timeout-minutes: 45
     strategy:
-      # One shard's failure does not hide the other's.
+      # One shard's failure does not hide the others'.
       fail-fast: false
       matrix:
-        # One file soaked on one runner, or the whole list in two shards.
-        shard: ${{ fromJSON(inputs.file && '[1]' || '[1, 2]') }}
+        # One file soaked on one runner, or the whole list in four shards.
+        shard: ${{ fromJSON(inputs.file && '[1]' || '[1, 2, 3, 4]') }}
 
     # The images staging runs, by digest; scripts/ci/web-integration-images.test.ts fails when
     # they drift apart. Centrifugo is started by the runner, not as a service: its proxies call the
@@ -79,6 +79,7 @@ jobs:
       # The same for the files that launch Chrome themselves (apps/web/test/helpers/headless-chrome.ts);
       # the runner points COFORGE_E2E_CHROME at the Chrome agent-browser installed.
       COFORGE_E2E_CHROME_ARGS: --no-sandbox
+      AGENT_BROWSER_VERSION: "0.41.2"
       E2E_OUTPUT: ${{ github.workspace }}/.artifacts/e2e-ci
 
     steps:
@@ -94,13 +95,53 @@ jobs:
       - name: Install toolchain
         run: scripts/ci/retry.sh 5 10 -- mise install
 
+      - name: Cache Bun packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', 'bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-${{ runner.arch }}-
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # The version the list was measured with; Chrome and its system libraries come with it.
-      - name: Install agent-browser and Chrome
+      - name: Resolve Chrome version for cache key
+        id: chrome-version
+        shell: bash
         run: |
-          scripts/ci/retry.sh 5 10 -- npm install --global agent-browser@0.41.2
+          chrome_version="$(
+            scripts/ci/retry.sh 3 5 -- curl -fsSL \
+              https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json |
+              jq -r '.channels.Stable.version // empty'
+          )" || chrome_version=""
+          echo "version=$chrome_version" >> "$GITHUB_OUTPUT"
+
+      # Cache only the pinned CLI prefix and downloaded Chrome binary; never cache system apt state.
+      - name: Cache agent-browser and Chrome
+        id: agent-browser-cache
+        if: steps.chrome-version.outputs.version != ''
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/agent-browser-cli
+            ~/.agent-browser/browsers
+          key: agent-browser-${{ runner.os }}-${{ runner.arch }}-${{ env.AGENT_BROWSER_VERSION }}-chrome-${{ steps.chrome-version.outputs.version }}
+
+      # The version the list was measured with; Chrome and its system libraries come with it.
+      # System libraries are always installed via --with-deps on each fresh runner, while a cache hit
+      # on ~/.agent-browser/browsers skips re-downloading the Chrome binary zip.
+      - name: Install agent-browser and Chrome
+        shell: bash
+        run: |
+          cli_dir="$HOME/.cache/agent-browser-cli"
+          cli_bin="$cli_dir/node_modules/.bin/agent-browser"
+          if [ ! -x "$cli_bin" ] || [ "$("$cli_bin" --version 2>/dev/null || true)" != "agent-browser $AGENT_BROWSER_VERSION" ]; then
+            rm -rf "$cli_dir"
+            mkdir -p "$cli_dir"
+            scripts/ci/retry.sh 5 10 -- npm install --prefix "$cli_dir" "agent-browser@${AGENT_BROWSER_VERSION}"
+          fi
+          printf '%s\n' "$cli_dir/node_modules/.bin" >> "$GITHUB_PATH"
+          export PATH="$cli_dir/node_modules/.bin:$PATH"
           scripts/ci/retry.sh 5 10 -- agent-browser install --with-deps
 
       - name: Run the shard
@@ -108,7 +149,7 @@ jobs:
         env:
           E2E_FILE: ${{ inputs.file }}
           E2E_REPEAT: ${{ inputs.repeat }}
-        run: ./scripts/e2e/run-web-e2e-ci.sh "${{ matrix.shard }}" 2
+        run: ./scripts/e2e/run-web-e2e-ci.sh "${{ matrix.shard }}" 4
 
       - name: Summarize the shard
         if: always()
@@ -122,7 +163,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: web-e2e-shard-${{ matrix.shard }}
+          name: web-e2e-shard-${{ matrix.shard }}-of-4
           path: |
             ${{ env.E2E_OUTPUT }}/logs
             ${{ env.E2E_OUTPUT }}/screenshots

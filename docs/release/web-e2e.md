@@ -5,7 +5,7 @@ The scheduled browser e2e workflow (`.github/workflows/web-e2e.yml`) runs the br
 demand. It blocks nothing and publishes nothing. Any listed file that fails turns the run red;
 there are no retries.
 
-Each of the two shards runs `scripts/e2e/run-web-e2e-ci.sh <shard> 2`: it builds the Web, runs
+Each of the four shards runs `scripts/e2e/run-web-e2e-ci.sh <shard> 4`: it builds the Web, runs
 the migrations, both dev seeds (`seed-dev-data.ts`, then the full `seed-dev.ts`, which many files
 depend on), starts a Centrifugo container on the host network so its proxies reach the Web, serves
 the Web on `127.0.0.1:8788` behind a front door on `127.0.0.1:8790`
@@ -15,10 +15,10 @@ its share of the list one file per `bun test` process.
 PostgreSQL and Redis are service containers. All three images are the ones staging runs, by
 digest (`scripts/ci/web-integration-images.test.ts`).
 
-The shards are balanced by the seconds recorded beside each file in the list. The run page's
-summary has a table per shard (file, result, seconds). A failed shard uploads
-`web-e2e-shard-<n>` for a week: each file's output, the Web's, Centrifugo's and the front door's
-logs, and the screenshots the tests wrote under `.artifacts/e2e/`.
+The shards are balanced by the seconds recorded beside each file in the list (seeding shard 1 with
+`ui-sweep` time). The run page's summary has a table per shard (file, result, seconds). A failed
+shard uploads `web-e2e-shard-<n>-of-4` for a week: each file's output, the Web's, Centrifugo's and
+the front door's logs, and the screenshots the tests wrote under `.artifacts/e2e/`.
 
 A manual dispatch can instead soak one file: the `file` input (a name under `apps/web/test`,
 listed or not) and `repeat` (1-99) run only that file, that many times in a row, on one runner
@@ -84,7 +84,7 @@ Run one shard locally, against a PostgreSQL and Redis on the default ports, with
 `CENTRIFUGO_IMAGE` set and agent-browser installed:
 
 ```sh
-CENTRIFUGO_IMAGE=centrifugo/centrifugo:v6.9.2 scripts/e2e/run-web-e2e-ci.sh 1 2
+CENTRIFUGO_IMAGE=centrifugo/centrifugo:v6.9.2 scripts/e2e/run-web-e2e-ci.sh 1 4
 ```
 
-`scripts/e2e/run-web-e2e-ci.sh 1 2 --list` prints a shard's files without starting anything.
+`scripts/e2e/run-web-e2e-ci.sh 1 4 --list` prints a shard's files without starting anything.
