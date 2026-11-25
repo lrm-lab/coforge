@@ -1,6 +1,6 @@
 import type { RequestPermissionRequest } from "@agentclientprotocol/sdk/unstable";
 import {
-  AgentNoticeSuppressedError,
+  prepareAgentNotice,
   type AgentNoticeOptions,
   type AgentRuntimeEvent,
   type AgentSession,
@@ -186,13 +186,11 @@ export class AcpSession implements AgentSession {
   #startNext() {
     if (this.#active || this.#disposed || this.#failed || this.#interrupting) return;
     for (let input = this.#queue.shift(); input; input = this.#queue.shift()) {
-      if (input.options?.prepareSubmission) {
-        const text = input.options.prepareSubmission("prompt");
-        if (text === undefined) {
-          input.admission.reject(new AgentNoticeSuppressedError());
-          continue;
-        }
-        input.text = text;
+      try {
+        input.text = prepareAgentNotice(input.text, input.options, "prompt");
+      } catch (error) {
+        input.admission.reject(error);
+        continue;
       }
       this.#active = input;
       this.#turnEmittedTokenUsage = false;

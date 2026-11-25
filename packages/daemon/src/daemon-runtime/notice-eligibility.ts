@@ -3,8 +3,8 @@ import { isCardEvent, type ConsumedReadBasis } from "./agent-message-attention-i
 
 export type NoticeCandidate = Pick<
   AgentMessageDelivery,
-  "target" | "conversationId" | "sequence" | "reason" | "source" | "mentionDelivery"
-> & { through?: true };
+  "target" | "conversationId" | "sequence" | "reason" | "source"
+> & { through?: true; mentionDelivery?: unknown };
 
 export type NoticeEligibility = (
   agentId: string,

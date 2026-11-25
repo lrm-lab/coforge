@@ -1,4 +1,12 @@
 import {
+  AgentNoticeSuppressedError,
+  type AgentConversationScope,
+  type AgentSession,
+} from "@coforge/agent";
+import { getLogger } from "@logtape/logtape";
+import type { AgentDeliveryQueue } from "./delivery-notice-writer";
+import type { NoticeEligibility } from "./notice-eligibility";
+import {
   isValidMessageSender,
   type AgentRecoveryMessage,
   type AgentStartOpenTasks,
@@ -10,10 +18,12 @@ import {
   type AttentionDecisionBasis,
   type AttentionReadBasis,
 } from "./agent-message-attention-decision-log";
-import type { NoticeGeneration } from "./agent-wakeup-unavailable-error";
+import { acceptNotice, type NoticeGeneration } from "./agent-wakeup-unavailable-error";
 import type { MessageAttention } from "./agent-message-attention-index";
 import { foldMessageAttention, isDeliveryTarget } from "./message-attention-fields";
 import { isOrdinaryNotice, noticeMessageKey, type NoticeMessage } from "./accepted-message-notices";
+
+const logger = getLogger(["coforge", "daemon", "message-attention"]);
 
 export type RecoveryPlan = Readonly<{
   byTarget: Map<string, MessageAttention>;
@@ -23,6 +33,8 @@ export type RecoveryPlan = Readonly<{
   notice: string;
   recoveredMessageCount: number;
   summaryUnreadCount: number;
+  summaryOnly: readonly (readonly [string, number])[];
+  summaryProof: ReadonlyMap<string, readonly NoticeMessage[]>;
 }>;
 
 export type RecoveryNoticeOptions = {
@@ -110,9 +122,21 @@ export function planRecovery(input: {
     countedByTarget.set(message.target, counted);
   }
   const acceptedMessages: NoticeMessage[] = [...recoveredMessages];
+  const summaryProof = new Map<string, readonly NoticeMessage[]>();
   for (const [target, count] of summaryOnly) {
     const counted = countedByTarget.get(target);
-    if (counted && counted.size <= count) acceptedMessages.push(...counted.values());
+    if (!counted || counted.size > count) continue;
+    const rows = [...counted.values()];
+    acceptedMessages.push(...rows);
+    const conversationId = input.unreadConversationIds[target] ?? rows[0]?.conversationId;
+    if (
+      counted.size === count &&
+      rows.every(
+        (message) =>
+          message.conversationId === conversationId && Number.isSafeInteger(message.sequence),
+      )
+    )
+      summaryProof.set(target, rows);
   }
   const announced = new Set([...recoveredTargets, ...summaryOnly.map(([target]) => target)]);
   const notice = composeRecoveryNotice({
@@ -121,5 +145,99 @@ export function planRecovery(input: {
     summaryOnly,
     openTasks: input.openTasks,
   });
-  return { byTarget, recoveredMessages, acceptedMessages, announced, ...notice };
+  return {
+    byTarget,
+    recoveredMessages,
+    acceptedMessages,
+    announced,
+    summaryOnly,
+    summaryProof,
+    ...notice,
+  };
+}
+
+export async function submitRecoveryNotice(input: {
+  agentId: string;
+  plan: RecoveryPlan | undefined;
+  eligibility: NoticeEligibility;
+  currentAttention(): ReadonlyMap<string, MessageAttention> | undefined;
+  session: AgentSession;
+  conversation?: AgentConversationScope;
+  openTasks?: AgentStartOpenTasks;
+  signal: AbortSignal;
+  hold: Pick<AgentDeliveryQueue, "busy" | "noticeSettled">;
+  sessionFor(agentId: string): AgentSession | undefined;
+}): Promise<RecoveryPlan | undefined> {
+  const { agentId, plan, eligibility } = input;
+  if (!plan) return;
+  const identity = { agent_id: agentId, attempt_id: crypto.randomUUID(), source: "recovery" };
+  let selected: RecoveryPlan | undefined = plan;
+  const refresh = (boundary: string) => {
+    const mayWake = (message: NoticeMessage) =>
+      message.sequence === undefined ||
+      eligibility(agentId, { ...message, sequence: message.sequence }).disposition === "notify";
+    const recoveredMessages = plan.recoveredMessages.filter(mayWake);
+    const summaryOnly: [string, number][] = [];
+    for (const [target, count] of plan.summaryOnly) {
+      const pending = plan.summaryProof.get(target)?.filter(mayWake).length ?? count;
+      if (pending) summaryOnly.push([target, pending]);
+    }
+    if (!recoveredMessages.length && !summaryOnly.length) selected = undefined;
+    else {
+      const byTarget = new Map(input.currentAttention());
+      for (const message of recoveredMessages) foldMessageAttention(byTarget, message);
+      const announced = new Set([
+        ...recoveredMessages.map(({ target }) => target),
+        ...summaryOnly.map(([target]) => target),
+      ]);
+      selected = {
+        ...plan,
+        byTarget,
+        announced,
+        recoveredMessages,
+        summaryOnly,
+        acceptedMessages: plan.acceptedMessages.filter(mayWake),
+        ...composeRecoveryNotice({
+          agentId,
+          announced: recoveredMessages,
+          summaryOnly,
+          openTasks: input.openTasks,
+        }),
+      };
+    }
+    logger.info("Recovery notice submission decided", {
+      ...identity,
+      event: "agent.inbox_notice.submission_decision",
+      boundary,
+      outcome: selected ? "submit" : "suppress",
+    });
+    return selected?.notice;
+  };
+  input.hold.busy(agentId);
+  try {
+    await acceptNotice(input.signal, () => {
+      const notice = refresh("admission");
+      if (notice === undefined) throw new AgentNoticeSuppressedError();
+      logger.info("Recovery notice handed to the session", {
+        ...identity,
+        event: "agent.inbox_notice.admission_requested",
+      });
+      return input.session.notify!(notice, {
+        conversation: input.conversation,
+        prepareSubmission: refresh,
+        fallbackText: () => refresh("fallback"),
+        onPromptWritten: () =>
+          logger.info("ACP prompt written for recovery notice", {
+            ...identity,
+            event: "agent.inbox_notice.acp_prompt_written",
+          }),
+      });
+    });
+    return selected;
+  } catch (error) {
+    if (!(error instanceof AgentNoticeSuppressedError)) throw error;
+    return undefined;
+  } finally {
+    if (input.sessionFor(agentId) === input.session) input.hold.noticeSettled?.(agentId);
+  }
 }

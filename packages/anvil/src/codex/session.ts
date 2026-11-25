@@ -1,4 +1,5 @@
 import type {
+  AgentNoticeOptions,
   AgentRuntimeEvent,
   AgentSession,
   AgentSessionExit,
@@ -114,8 +115,8 @@ export class CodexAgentSession implements AgentSession {
     return this.#process.pid;
   }
 
-  async notify(notice: string): Promise<void> {
-    await this.#turns.acceptNotice(notice);
+  async notify(notice: string, options?: AgentNoticeOptions): Promise<void> {
+    await this.#turns.acceptNotice(notice, options);
     logger.info("Codex accepted inbox wakeup", {
       event: "codex.wakeup.accepted",
       agent_id: this.#agentId,

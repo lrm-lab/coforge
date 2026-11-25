@@ -42,3 +42,28 @@ test("a steering outcome that arrives before its steer's answer still settles co
     await rm(cwd, { recursive: true, force: true });
   }
 });
+
+test("a notice that became read never enters the Kiro prompt or steer", async () => {
+  const cwd = await mkdtemp(join(tempRoot, "kiro-read-before-submit-"));
+  const session = await kiroProvider({ command }).createAgentSession({
+    agentWorkspaceDirectory: cwd,
+    instructions: "Keep the asymmetric marker 719 in the system prompt.",
+  });
+  const boundaries: string[] = [];
+  const options = {
+    prepareSubmission(boundary: "prompt" | "steer") {
+      boundaries.push(boundary);
+      return undefined;
+    },
+  };
+  try {
+    await expect(session.notify!("stale idle", options)).rejects.toThrow("no longer");
+    expect(session.hasLiveTurn).toBe(false);
+    await session.notify!("events");
+    await expect(session.notify!("stale busy", options)).rejects.toThrow("no longer");
+    expect(boundaries).toEqual(["prompt", "steer"]);
+  } finally {
+    await session.dispose();
+    await rm(cwd, { recursive: true, force: true });
+  }
+});

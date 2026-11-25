@@ -1,3 +1,4 @@
+import { prepareAgentNotice } from "@coforge/agent";
 import { mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type {
@@ -259,15 +260,16 @@ class KiroSession implements AgentSession {
    */
   notify(message: string, options?: AgentNoticeOptions): Promise<void> {
     const accepted = this.#admissions.then(() =>
-      this.#turn ? this.#steering.steer(message, options) : this.#prompt(message),
+      this.#turn ? this.#steering.steer(message, options) : this.#prompt(message, options),
     );
     this.#admissions = accepted.catch(() => {});
     return accepted;
   }
 
-  async #prompt(message: string) {
+  async #prompt(message: string, options?: AgentNoticeOptions) {
     if (this.#disposed || this.#interrupting || !this.#identity)
       throw new Error("Kiro cannot accept input");
+    message = prepareAgentNotice(message, options, "prompt");
     const generation = ++this.#generation;
     // A reason volunteered mid-turn belongs to this turn only; a fresh prompt starts clean.
     this.#turnErrorMessage = undefined;

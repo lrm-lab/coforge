@@ -1,6 +1,7 @@
 import { AgentNoticeSuppressedError, type AgentNoticeOptions } from "@coforge/agent";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
+import { isCardEvent } from "./agent-message-attention-index-helpers";
 import { inboxPreviewLimit } from "./inbox-preview";
 import type { NoticeEligibility } from "./notice-eligibility";
 import type { ImportantUnreadNoticeStore } from "#src/persistence/important-unread-notice-store";
@@ -139,15 +140,22 @@ export class ImportantUnreadReminder {
     const notice = this.notices.pending(agentId);
     const eligibility = this.ports.eligibility;
     if (!notice || !eligibility) return;
-    const retained = this.notices.retainConversations(agentId, (conversation) =>
-      unreadConversationEligible(notice, conversation, eligibility),
-    );
-
     const batch = this.#batches.get(agentId);
     const unshown = this.#unshown.get(agentId);
+    const exactReads = new Map<string, number>();
+    const remaining = new Map<string, number[]>();
+    const scope = (row: { conversationId: string; target?: string }, independent: boolean) =>
+      JSON.stringify([row.conversationId, row.target, independent]);
     if (batch) {
       const newBatch = batch.filter((delivery) => {
-        if (eligibility(agentId, delivery).disposition !== "settle") return true;
+        const key = scope(delivery, isCardEvent(delivery));
+        if (eligibility(agentId, delivery).disposition !== "settle") {
+          const sequences = remaining.get(key) ?? [];
+          sequences.push(delivery.sequence);
+          remaining.set(key, sequences);
+          return true;
+        }
+        exactReads.set(key, (exactReads.get(key) ?? 0) + 1);
         if (delivery.deliveryId && unshown?.delete(delivery.deliveryId)) {
           this.#warnUnobserved(
             agentId,
@@ -160,6 +168,23 @@ export class ImportantUnreadReminder {
       });
       if (newBatch.length !== batch.length) this.#batches.set(agentId, newBatch);
     }
+
+    const retained = this.notices.reconcileConversations(agentId, (conversation) => {
+      if (!unreadConversationEligible(notice, conversation, eligibility)) return undefined;
+      const key = scope(conversation, Boolean(conversation.independentEvent));
+      const removed = exactReads.get(key) ?? 0;
+      if (!removed) return conversation;
+      const count = conversation.count - removed;
+      if (count <= 0) return undefined;
+      const known = remaining.get(key) ?? [];
+      if (known.length !== count) return { ...conversation, count };
+      return {
+        ...conversation,
+        count,
+        firstSequence: Math.min(...known),
+        lastSequence: Math.max(...known),
+      };
+    });
 
     if (!retained) {
       this.#warnUnobserved(agentId, unshown ?? [], notice.attempts, "read_before_attempt");

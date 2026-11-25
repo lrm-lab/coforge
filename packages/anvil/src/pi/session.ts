@@ -1,11 +1,12 @@
 import type {
+  AgentNoticeOptions,
   AgentRuntimeEvent,
   AgentSession,
   AgentSessionExit,
   AgentSessionIdentity,
   AgentSessionOptions,
 } from "@coforge/agent";
-import { createSession, SessionEnvironmentError } from "@coforge/agent";
+import { createSession, prepareAgentNotice, SessionEnvironmentError } from "@coforge/agent";
 import { piContextHasMedia, piRequestBody } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
 import { AGENT_ACTIVITY_DETAIL_KIND, RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
@@ -303,11 +304,13 @@ class AgentSessionImpl implements AgentSession {
         this.#pendingPrompts.size > 0)
     );
   }
-  async notify(notice: string) {
+  async notify(notice: string, options?: AgentNoticeOptions) {
     if (this.#compacting) await this.#compacting;
     if (this.#disposed || this.#interrupting) {
       throw new Error("code agent cannot accept a notification");
     }
+    const boundary = this.#runtime.session.isStreaming ? "steer" : "prompt";
+    notice = prepareAgentNotice(notice, options, boundary);
     // Every notice is a new triggering message (inbox delivery, held-notice
     // redelivery, app item); the memory budget is scoped per triggering
     // message, so it must reset here too — not only on sendMessage.

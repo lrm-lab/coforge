@@ -203,3 +203,15 @@ test("a structured reliable retry uses the same task read reconciliation", () =>
   expect(notices[0]?.text).toContain(unread.body);
   expect(notices[0]?.text).not.toContain(read.body);
 });
+
+test("ordinary task input admitted before a read is withdrawn at the final submission boundary", async () => {
+  const { attention, notices, ...harness } = fallbackHarness();
+  const task = taskDelivery("ordinary-before-submit", 13, "ordinary already read preview");
+  await attention.receive(task);
+  expect(notices).toHaveLength(1);
+  const notice = notices[0]!;
+  expect(notice.options?.prepareSubmission?.("prompt")).toContain(task.body);
+  harness.read(task, 18);
+  expect(notice.options?.prepareSubmission?.("prompt")).toBeUndefined();
+  expect(notice.options?.fallbackText?.()).toBeUndefined();
+});

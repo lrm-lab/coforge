@@ -82,11 +82,15 @@ test("only a read position past the batch settles it", () => {
   notices.observe({ ...mention, sequence: 14 });
   // A check that stopped before these messages read nothing of them.
   expect(
-    notices.retainConversations("agent-a", ({ lastSequence }) => (lastSequence ?? 0) > 13),
+    notices.reconcileConversations("agent-a", (row) =>
+      (row.lastSequence ?? 0) > 13 ? row : undefined,
+    ),
   ).toBeDefined();
   expect(notices.pending("agent-a")).toBeDefined();
   expect(
-    notices.retainConversations("agent-a", ({ lastSequence }) => (lastSequence ?? 0) > 14),
+    notices.reconcileConversations("agent-a", (row) =>
+      (row.lastSequence ?? 0) > 14 ? row : undefined,
+    ),
   ).toBeUndefined();
   expect(notices.pending("agent-a")).toBeUndefined();
   expect(notices.dueForWrite("agent-a")).toBe(false);

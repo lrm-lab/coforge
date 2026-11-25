@@ -30,7 +30,11 @@ import {
   type AttentionDecisionBasis,
   type AttentionReadBasis,
 } from "./agent-message-attention-decision-log";
-import { planRecovery, type RecoveryNoticeOptions } from "./agent-message-attention-recovery";
+import {
+  planRecovery,
+  submitRecoveryNotice,
+  type RecoveryNoticeOptions,
+} from "./agent-message-attention-recovery";
 import { AgentConsumedAttention } from "./agent-consumed-attention";
 import { noticeEligibility } from "./notice-eligibility";
 import { PendingAttention } from "./agent-message-attention-pending";
@@ -244,7 +248,7 @@ export class AgentMessageAttentionIndex {
     const generation = this.#generation(agentId);
     const session = this.#runtimes.session(agentId);
     if (!session?.notify) throw new Error("Agent session cannot receive a wakeup notice");
-    const plan = planRecovery({
+    const draft = planRecovery({
       agentId,
       messages,
       unreadSummary,
@@ -259,17 +263,21 @@ export class AgentMessageAttentionIndex {
       decide: (message, outcome, basis) =>
         this.logDecision({ ...message, workspaceId: this.#workspaceId, agentId }, outcome, basis),
     });
-    if (!plan) return new Set();
-    const { byTarget, recoveredMessages, acceptedMessages, announced, notice } = plan;
     const recordAccepted = this.captureNoticeAcceptance(agentId);
-    this.hold.busy(agentId);
-    try {
-      await acceptNotice(generation.cancellation.signal, () =>
-        session.notify!(notice, conversation ? { conversation } : undefined),
-      );
-    } finally {
-      if (this.#runtimes.session(agentId) === session) this.hold.noticeSettled?.(agentId);
-    }
+    const plan = await submitRecoveryNotice({
+      agentId,
+      plan: draft,
+      eligibility: this.noticeEligibility,
+      currentAttention: () => this.#attention.get(agentId),
+      session,
+      conversation,
+      openTasks,
+      signal: generation.cancellation.signal,
+      hold: this.hold,
+      sessionFor: (id) => this.session(id),
+    });
+    if (!plan) return new Set();
+    const { byTarget, recoveredMessages, acceptedMessages, announced } = plan;
     if (this.#generations.get(agentId) !== generation) return announced;
     if (!recordAccepted(acceptedMessages)) return announced;
     logRecoveryNoticeAccepted(this.#workspaceId, agentId, plan);
@@ -299,7 +307,7 @@ export class AgentMessageAttentionIndex {
         generation: (agentId) => this.#generation(agentId),
         isCurrentGeneration: (agentId, generation) => this.isCurrentGeneration(agentId, generation),
         hold: this.hold,
-        hasSeen: this.hasSeen.bind(this),
+        noticeEligibility: this.noticeEligibility,
         previewSeen: this.previewSeen,
         noticeActionClocks: this.noticeActionClocks,
         messageReceived: (agentId, conversation) => this.messageReceived(agentId, conversation),
