@@ -73,13 +73,17 @@ export function carriedStart(
   carried: ReadonlyMap<string, number> = new Map(),
 ): CarriedStart {
   const counts = new Map<string, number>();
+  const changedTargets = new Set(carried.keys());
   const countedDeliveries = [...(started.recovery?.countedDeliveries ?? []), ...parked];
+  for (const { target } of countedDeliveries) if (target) changedTargets.add(target);
   const add = (target: string | undefined, count: number) => {
     if (target && count > 0) counts.set(target, (counts.get(target) ?? 0) + count);
   };
   for (const [target, count] of Object.entries(started.recovery?.unreadSummary ?? {}))
     add(target, count);
   for (const { target, pendingCount, deliveries = [] } of attention) {
+    changedTargets.add(target);
+    for (const delivery of deliveries) if (delivery.target) changedTargets.add(delivery.target);
     add(target, pendingCount - (carried.get(target) ?? 0));
     countedDeliveries.push(...deliveries);
   }
@@ -87,7 +91,7 @@ export function carriedStart(
   const { recovery } = started;
   const { openTasks, lastUnreadSequences, ...unreadRecovery } = recovery ?? {};
   const sequenceProofs = Object.entries(lastUnreadSequences ?? {}).filter(
-    ([target]) => counts.get(target) === recovery?.unreadSummary?.[target],
+    ([target]) => counts.has(target) && !changedTargets.has(target),
   );
   return carriedOf({
     ...started,
@@ -107,6 +111,17 @@ export function carriedStart(
       : {}),
   });
 }
+function recoveryTargets(recovery: AgentRecoveryContext | undefined): ReadonlySet<string> {
+  const targets = new Set([
+    ...Object.keys(recovery?.unreadSummary ?? {}),
+    ...Object.keys(recovery?.unreadConversationIds ?? {}),
+  ]);
+  if (recovery?.wakeMessage) targets.add(recovery.wakeMessage.target);
+  for (const { target } of recovery?.resumeMessages ?? []) targets.add(target);
+  for (const { target } of recovery?.countedDeliveries ?? []) if (target) targets.add(target);
+  return targets;
+}
+
 export function mergeCarried(own: CarriedStart, owed: CarriedStart): CarriedStart {
   const a = own.recovery;
   const b = owed.recovery;
@@ -123,13 +138,13 @@ export function mergeCarried(own: CarriedStart, owed: CarriedStart): CarriedStar
   const proofsFrom = (
     side: AgentRecoveryContext | undefined,
     other: AgentRecoveryContext | undefined,
-  ) =>
-    Object.entries(side?.lastUnreadSequences ?? {}).filter(
-      ([target]) =>
-        !!side?.unreadSummary?.[target] &&
-        !other?.unreadSummary?.[target] &&
-        conversationIds[target] === side.unreadConversationIds?.[target],
+  ) => {
+    if (!side?.lastUnreadSequences) return [];
+    const touched = recoveryTargets(other);
+    return Object.entries(side.lastUnreadSequences).filter(
+      ([target]) => !!side.unreadSummary?.[target] && !touched.has(target),
     );
+  };
   const sequenceProofs = [...proofsFrom(a, b), ...proofsFrom(b, a)];
   const openTasks = a?.openTasks ?? (hasStartOpenTasks(b?.openTasks) ? b.openTasks : undefined);
   const countedDeliveries = [
