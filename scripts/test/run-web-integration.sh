@@ -24,6 +24,18 @@
 set -euo pipefail
 
 root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
+shard=""
+list_only=false
+if [ "${1:-}" = --shard ]; then
+  if [[ "${2:-}" != [1-4] ]] ||
+    { [ "$#" -ne 2 ] && { [ "$#" -ne 3 ] || [ "${3:-}" != --list ]; }; }; then
+    printf 'Usage: %s --shard <1-4> [--list]\n' "$0" >&2
+    exit 2
+  fi
+  shard=$2
+  [ "$#" -eq 2 ] || list_only=true
+  shift "$#"
+fi
 database="${INTEGRATION_DATABASE_URL:-postgresql://coforge:test@127.0.0.1:15440/coforge}"
 redis="${INTEGRATION_REDIS_URL:-redis://127.0.0.1:16379}"
 
@@ -87,7 +99,29 @@ else
     }
     files+=("$file")
   done
-  files+=("$root"/scripts/migration-safety/*.integration.ts)
+  for file in "$root"/scripts/migration-safety/*.integration.ts; do
+    [ -f "$file" ] || {
+      printf 'No integration files matched under %s/scripts/migration-safety.\n' "$root" >&2
+      exit 1
+    }
+    files+=("$file")
+  done
+fi
+
+if [ -n "$shard" ]; then
+  selected=$(bun "$root/scripts/test/web-integration-shard.ts" "$shard" "${files[@]#"$root"/}")
+  if [ -z "$selected" ]; then
+    printf 'No integration files selected for shard %s.\n' "$shard" >&2
+    exit 1
+  fi
+  if "$list_only"; then
+    printf '%s\n' "$selected"
+    exit 0
+  fi
+  files=()
+  while IFS= read -r file; do
+    files+=("$root/$file")
+  done <<< "$selected"
 fi
 
 cd "$root/apps/web"

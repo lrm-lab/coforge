@@ -20,9 +20,13 @@ concurrency:
 
 jobs:
   integration:
-    name: Web integration suites
+    name: Web integration shard ${{ matrix.shard }}/4
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
 
     # The images are the ones staging runs, by digest; scripts/ci/web-integration-images.test.ts
     # fails when they drift apart.
@@ -115,7 +119,9 @@ jobs:
       - name: Run the integration suites
         # `shell: bash` makes a failing `mise run` fail the pipe, not just `tee`.
         shell: bash
-        run: mise run test:integration:web 2>&1 | tee "$RUNNER_TEMP/web-integration.log"
+        env:
+          WEB_INTEGRATION_SHARD: ${{ matrix.shard }}
+        run: mise run test:integration:web -- --shard "$WEB_INTEGRATION_SHARD" 2>&1 | tee "$RUNNER_TEMP/web-integration.log"
 
       # What failed, in which file, and which files ran before it: a slow or interrupted suite can
       # depend on what the same database held when it started.
@@ -141,7 +147,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: web-integration-log
+          name: web-integration-log-${{ matrix.shard }}
           path: ${{ runner.temp }}/web-integration.log
           if-no-files-found: ignore
           retention-days: 7
