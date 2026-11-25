@@ -12,8 +12,10 @@
     何时显示与宽度锁定由 `src/components/ui/loading.ts`（`useButtonLoadingTransition`）与
     `src/styles/button-loading.css` 决定：进入 `isLoading` 时锁死按钮原宽度，指示器出现时
     文字和图标平滑上滑淡出、原地居中显示旋转加载环，退出后平滑恢复并释放宽度锁定，防止文案
-    变长把相邻按钮顶歪抖动。`data-loading`、`pointer-events-none`、`isPending` 仍在 `isLoading`
-    打开时**立即**生效，只有指示器本身延后出现。
+    变长把相邻按钮顶歪抖动。当 `isLoading` 结束且按钮文案或意图（如图标、色调、尺寸或无障碍标签）
+    发生变化（例如报错后主操作切为「Rename…」/「Retry」）时，立即结束加载过渡并释放冻结内容与宽锁，
+    不继续保留旧文案；内容未变时仍保留完整的最小展示与退场过渡。`data-loading`、`pointer-events-none`、
+    `isPending` 仍在 `isLoading` 打开时**立即**生效，只有指示器本身延后出现。
 
   这不是任意修改官方源码的许可；升级或重新 init 时保留这三处限定修补并重新验证。
 - 例外：`base-components/mobile-header.tsx` 和官方的 `sidebar-simple.tsx`、`sidebar-slim.tsx`

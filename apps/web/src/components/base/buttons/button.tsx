@@ -188,12 +188,16 @@ export const Button: {
         [externalRef],
     );
 
+    const ariaLabel = props["aria-label"];
+    const ariaLabelledBy = props["aria-labelledby"];
+
     const { showIndicator, loadingActive, lockedWidth, frozenContent, captureIdleWidth } =
         useButtonLoadingTransition(
             loading,
             elementRef,
             { children, iconLeading: IconLeading, iconTrailing: IconTrailing },
-            [size, color, className, children, IconLeading, IconTrailing, isIcon],
+            [size, color, className, children, IconLeading, IconTrailing, isIcon, href, ariaLabel, ariaLabelledBy],
+            { color, size, href, ariaLabel, ariaLabelledBy },
         );
 
     const shownChildren = loadingActive && frozenContent ? frozenContent.children : children;
