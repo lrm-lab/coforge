@@ -44,8 +44,18 @@ export function planDeliveryNotice(input: {
     const rows = renderNoticeRows(view.rows.filter((row) => row.newIds.size || row.heldIds.size));
     if (!rows.length) return undefined;
     const included = new Set(view.rows.flatMap((row) => [...row.newIds]));
+    const held = new Set(view.rows.flatMap((row) => [...row.heldIds]));
+    const displayed = announced.filter((delivery) => included.has(delivery.messageId));
     return {
-      announced: announced.filter((delivery) => included.has(delivery.messageId)),
+      announced: displayed,
+      deliveries: [...displayed, ...waiting.filter((delivery) => held.has(delivery.messageId))].map(
+        ({ target, conversationId, sequence, deliveryId }) => ({
+          target,
+          conversationId,
+          sequence,
+          deliveryId,
+        }),
+      ),
       shown: view.whole,
       rows,
       totalCount: countDistinctMessages([...announced, ...waiting]),

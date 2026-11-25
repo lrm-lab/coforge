@@ -226,6 +226,16 @@ export async function submitRecoveryNotice(input: {
         conversation: input.conversation,
         prepareSubmission: refresh,
         fallbackText: () => refresh("fallback"),
+        noticeOrigin: {
+          source: "recovery",
+          attemptId: identity.attempt_id,
+          deliveries:
+            selected?.acceptedMessages.map(({ target, conversationId, sequence }) => ({
+              target,
+              conversationId,
+              sequence,
+            })) ?? [],
+        },
         onPromptWritten: () =>
           logger.info("ACP prompt written for recovery notice", {
             ...identity,

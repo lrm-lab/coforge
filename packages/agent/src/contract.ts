@@ -272,6 +272,7 @@ export type AgentRuntimeEvent = {
       text: string;
       deliveryIds?: readonly string[];
       fallbackText?: () => string | undefined;
+      noticeOrigin?: import("./agent-session-contract").AgentNoticeOptions["noticeOrigin"];
     }
 );
 export type {

@@ -12,6 +12,7 @@ import { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-at
 import { observeRuntimeEvent } from "#src/daemon-runtime/runtime-event-observation";
 import { unreadNoticeComposer } from "#src/daemon-runtime/important-unread-compose";
 import { delivery, session } from "./fixtures/attention-delivery";
+import { captureDaemonLogs } from "./log-capture";
 
 const agentId = "agent-1";
 const target = "#runtime-optimization:#100";
@@ -214,4 +215,48 @@ test("ordinary task input admitted before a read is withdrawn at the final submi
   harness.read(task, 18);
   expect(notice.options?.prepareSubmission?.("prompt")).toBeUndefined();
   expect(notice.options?.fallbackText?.()).toBeUndefined();
+});
+
+test("fallback release preserves origin and checks the read frontier again at submission", async () => {
+  const { attention, notices, ...harness } = fallbackHarness();
+  const task = taskDelivery("fallback-trace", 46, "private preview marker");
+  const { records } = await captureDaemonLogs(async () => {
+    await attention.receive(task);
+    harness.hold(notices[0]!);
+    harness.release();
+    const queued = notices[1]?.options;
+    expect(queued?.noticeOrigin?.source).toBe("fallback");
+    harness.read(task, 54);
+    expect(queued?.prepareSubmission?.("prompt")).toBeUndefined();
+    expect(queued?.prepareSubmission?.("steer")).toBeUndefined();
+  });
+  const events = records.map(({ properties }) => properties);
+  const origin = notices[0]?.options?.noticeOrigin;
+  const attemptId = notices[1]?.options?.noticeOrigin?.attemptId;
+  expect(origin?.attemptId).toBeString();
+  expect(attemptId).toBeString();
+  expect(attemptId).not.toBe(origin?.attemptId);
+  const decisions = events.filter(({ source }) => source === "fallback");
+  expect(decisions.map(({ boundary, outcome }) => [boundary, outcome])).toEqual([
+    ["release", "submit"],
+    ["prompt", "suppress"],
+    ["steer", "suppress"],
+  ]);
+  for (const decision of decisions) {
+    expect(decision).toMatchObject({
+      event: "agent.inbox_notice.submission_decision",
+      attempt_id: attemptId,
+      previous_attempt_id: origin?.attemptId,
+      previous_source: "indexed",
+      deliveries: [
+        {
+          target,
+          sequence: 46,
+          conversationId: task.conversationId,
+          deliveryId: task.deliveryId,
+        },
+      ],
+    });
+  }
+  expect(JSON.stringify(decisions)).not.toContain(task.body);
 });

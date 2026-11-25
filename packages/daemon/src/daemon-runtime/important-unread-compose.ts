@@ -48,6 +48,7 @@ export function unreadNoticeComposer(ports: UnreadNoticeComposePorts) {
     return {
       text: selected.notice,
       requestIds,
+      deliveries: selected.deliveries,
       fallbackText: () => {
         const text = refresh();
         logger.info("Reliable inbox notice fallback decided", {
