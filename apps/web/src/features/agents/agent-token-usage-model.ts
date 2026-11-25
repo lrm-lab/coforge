@@ -19,6 +19,8 @@ export const AGENT_TOKEN_USAGE_RANGES = [1, 7, 14, 30] as const;
 export type AgentTokenUsageRange = (typeof AGENT_TOKEN_USAGE_RANGES)[number];
 
 export type AgentTokenUsagePeriodTotals = {
+  newInputTokens: number;
+  cacheReadTokens: number;
   effectiveTokens: number;
   totalTokens: number;
   turns: number;
@@ -104,11 +106,7 @@ export type AgentTokenUsageSummary = {
   turns: number;
   deltaPercent: number | null;
   cacheHitPercent: number | null;
-  shares: {
-    newInputPercent: number;
-    cacheReadPercent: number;
-    outputPercent: number;
-  };
+  cacheHitDelta: number | null;
   avgEffectivePerTurn: number | null;
   avgTotalPerTurn: number | null;
   contextUsage: { usedTokens: number; windowTokens: number } | null;
@@ -288,6 +286,8 @@ export function aggregateAgentTokenUsageSlices(input: {
   const prevStartDate = currentStartDate.subtract({ days: input.range });
   const prevEndDate = currentStartDate.subtract({ days: 1 });
 
+  let prevNewInput = 0;
+  let prevCacheRead = 0;
   let prevEffective = 0;
   let prevTotal = 0;
   let prevTurns = 0;
@@ -312,19 +312,26 @@ export function aggregateAgentTokenUsageSlices(input: {
       Temporal.PlainDate.compare(sliceDate, prevEndDate) <= 0
     ) {
       const newInput = slice.uncachedInputTokens + slice.cacheWriteTokens;
+      const cacheRead = slice.cacheReadTokens;
       const effective = newInput + slice.outputTokens;
-      const total = effective + slice.cacheReadTokens;
+      const total = effective + cacheRead;
+      prevNewInput += newInput;
+      prevCacheRead += cacheRead;
       prevEffective += effective;
       prevTotal += total;
       prevTurns += slice.turns;
 
       const byProvider = previousPeriodByProvider[slice.provider];
       if (byProvider) {
+        byProvider.newInputTokens += newInput;
+        byProvider.cacheReadTokens += cacheRead;
         byProvider.effectiveTokens += effective;
         byProvider.totalTokens += total;
         byProvider.turns += slice.turns;
       } else {
         previousPeriodByProvider[slice.provider] = {
+          newInputTokens: newInput,
+          cacheReadTokens: cacheRead,
           effectiveTokens: effective,
           totalTokens: total,
           turns: slice.turns,
@@ -351,6 +358,8 @@ export function aggregateAgentTokenUsageSlices(input: {
     currentProvider: input.currentProvider ?? null,
     buckets,
     previousPeriod: {
+      newInputTokens: prevNewInput,
+      cacheReadTokens: prevCacheRead,
       effectiveTokens: prevEffective,
       totalTokens: prevTotal,
       turns: prevTurns,
@@ -461,32 +470,43 @@ export function summarizeAgentTokenUsage(
     ? null
     : computeCacheHitPercent(newInputTokens, cacheReadTokens);
 
-  const shareOf = (part: number) =>
-    totalTokens > 0 ? Math.round((part / totalTokens) * 1000) / 10 : 0;
+  let trackingCoversWindow = !selectedBucket;
+  if (trackingCoversWindow && report.trackingStartedAt && buckets[0]) {
+    const startedDate = Temporal.Instant.fromEpochMilliseconds(Date.parse(report.trackingStartedAt))
+      .toZonedDateTimeISO(report.timeZone)
+      .toPlainDate();
+    const previousWindowStart = Temporal.PlainDate.from(buckets[0].dateKey).subtract({
+      days: report.range,
+    });
+    if (Temporal.PlainDate.compare(startedDate, previousWindowStart) > 0) {
+      trackingCoversWindow = false;
+    }
+  }
 
-  const previousEffective =
+  const previousTotals =
     selectedProvider !== null
-      ? (report.previousPeriodByProvider[selectedProvider]?.effectiveTokens ?? 0)
-      : report.previousPeriod.effectiveTokens;
+      ? report.previousPeriodByProvider[selectedProvider]
+      : report.previousPeriod;
+  const previousEffective = previousTotals?.effectiveTokens ?? 0;
 
   let deltaPercent: number | null = null;
-  if (!selectedBucket && previousEffective > 0) {
-    let trackingCoversWindow = true;
-    if (report.trackingStartedAt && buckets[0]) {
-      const startedDate = Temporal.Instant.fromEpochMilliseconds(
-        Date.parse(report.trackingStartedAt),
-      )
-        .toZonedDateTimeISO(report.timeZone)
-        .toPlainDate();
-      const previousWindowStart = Temporal.PlainDate.from(buckets[0].dateKey).subtract({
-        days: report.range,
-      });
-      if (Temporal.PlainDate.compare(startedDate, previousWindowStart) > 0)
-        trackingCoversWindow = false;
-    }
-    if (trackingCoversWindow) {
-      deltaPercent = Math.round(((effectiveTokens - previousEffective) / previousEffective) * 100);
-    }
+  if (trackingCoversWindow && previousEffective > 0) {
+    const rawDelta = Math.round(((effectiveTokens - previousEffective) / previousEffective) * 100);
+    deltaPercent = rawDelta === 0 ? 0 : rawDelta;
+  }
+
+  const previousCacheHitPercent = previousTotals
+    ? computeCacheHitPercent(previousTotals.newInputTokens, previousTotals.cacheReadTokens)
+    : null;
+  let cacheHitDelta: number | null = null;
+  if (
+    trackingCoversWindow &&
+    !multiRuntimeActive &&
+    cacheHitPercent !== null &&
+    previousCacheHitPercent !== null
+  ) {
+    const rawHitDelta = Math.round((cacheHitPercent - previousCacheHitPercent) * 10) / 10;
+    cacheHitDelta = rawHitDelta === 0 ? 0 : rawHitDelta;
   }
 
   const models: AgentTokenUsageModelShare[] = [...modelsMap.values()]
@@ -549,11 +569,7 @@ export function summarizeAgentTokenUsage(
     turns,
     deltaPercent,
     cacheHitPercent,
-    shares: {
-      newInputPercent: shareOf(newInputTokens),
-      cacheReadPercent: shareOf(cacheReadTokens),
-      outputPercent: shareOf(outputTokens),
-    },
+    cacheHitDelta,
     avgEffectivePerTurn: turns > 0 ? Math.round(effectiveTokens / turns) : null,
     avgTotalPerTurn: turns > 0 ? Math.round(totalTokens / turns) : null,
     contextUsage,

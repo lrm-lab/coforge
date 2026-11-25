@@ -28,6 +28,7 @@ import {
   DailyBarChart,
   TodayHourlyChart,
 } from "./profile-panel/agent-usage-charts";
+import "./profile-panel/agent-usage-motion.css";
 import {
   DEFAULT_WORKSPACE_AGENT_USAGE_SORT,
   sortWorkspaceAgentUsageRows,
@@ -102,12 +103,19 @@ function UsageRangeTabs({
   range: AgentTokenUsageRange;
   onChangeRange: (next: AgentTokenUsageRange) => void;
 }) {
+  const activeIndex = Math.max(0, AGENT_TOKEN_USAGE_RANGES.indexOf(range));
   return (
     <div
       role="group"
       aria-label={m.agent_usage_range_label()}
-      className="inline-flex shrink-0 rounded-lg bg-secondary p-0.5"
+      className="relative grid shrink-0 grid-cols-4 rounded-lg bg-secondary p-0.5"
     >
+      <span aria-hidden="true" className="pointer-events-none absolute inset-0.5 flex">
+        <span
+          className="h-full w-1/4 rounded-md bg-primary shadow-xs transition-transform duration-200 ease-[var(--ease-out)] motion-reduce:transition-none"
+          style={{ transform: `translateX(${activeIndex * 100}%)` }}
+        />
+      </span>
       {AGENT_TOKEN_USAGE_RANGES.map((option) => {
         const active = range === option;
         return (
@@ -116,10 +124,8 @@ function UsageRangeTabs({
             aria-pressed={active}
             onPress={() => onChangeRange(option)}
             className={cn(
-              "min-h-8 cursor-pointer rounded-md px-2.5 text-xs font-medium outline-none transition-colors data-focus-visible:ring-2 data-focus-visible:ring-brand",
-              active
-                ? "bg-primary font-semibold text-primary shadow-xs"
-                : "text-tertiary hover:text-primary",
+              "relative z-10 min-h-8 cursor-pointer rounded-md px-2.5 text-center text-xs font-medium whitespace-nowrap outline-none transition-[scale,color] duration-150 ease-[var(--ease-out)] pressed:scale-[0.97] motion-reduce:transition-colors motion-reduce:pressed:scale-100 data-focus-visible:ring-2 data-focus-visible:ring-brand",
+              active ? "font-semibold text-primary" : "text-tertiary hover:text-primary",
             )}
           >
             {RANGE_LABELS[option]()}
@@ -195,10 +201,12 @@ function UsageTimelinePlot({
 
 function WorkspaceAgentUsageTrendCard({
   range,
+  dataRange,
   selectedKey,
   locale,
   filtersActive,
   hasAnyData,
+  isPlaceholderData,
   avgPerTurn,
   view,
   onChangeRange,
@@ -206,10 +214,12 @@ function WorkspaceAgentUsageTrendCard({
   onToggleSelect,
 }: {
   range: AgentTokenUsageRange;
+  dataRange: AgentTokenUsageRange;
   selectedKey: string | null;
   locale: string;
   filtersActive: boolean;
   hasAnyData: boolean;
+  isPlaceholderData: boolean;
   avgPerTurn: number | null;
   view: ReturnType<typeof summarizeWorkspaceAgentUsage>;
   onChangeRange: (next: AgentTokenUsageRange) => void;
@@ -231,7 +241,12 @@ function WorkspaceAgentUsageTrendCard({
         <div className="flex items-center gap-2">
           <h2 className="text-xs font-semibold text-tertiary">{heading}</h2>
           {timelineSummary.selectedBucket && (
-            <Button size="xs" color="link-color" onPress={onClearSelected}>
+            <Button
+              size="xs"
+              color="link-color"
+              onPress={onClearSelected}
+              className="usage-clear-enter"
+            >
               {m.agent_usage_selected_clear()}
             </Button>
           )}
@@ -240,7 +255,7 @@ function WorkspaceAgentUsageTrendCard({
       </div>
 
       {hasAnyData ? (
-        <>
+        <div className={cn("transition-opacity", isPlaceholderData && "opacity-65")}>
           <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <span className="font-mono text-2xl font-bold tracking-tight text-primary tabular-nums">
               {formatCompactTokens(view.visibleEffectiveTokens, locale)}
@@ -270,14 +285,18 @@ function WorkspaceAgentUsageTrendCard({
             )}
           </div>
 
-          <UsageTimelinePlot
-            range={range}
-            buckets={timelineBuckets}
-            peak={timelineSummary.peakEffective}
-            selectedKey={selectedKey}
-            onToggleSelect={onToggleSelect}
-          />
-        </>
+          <div className="mt-4 flex min-h-60 flex-col">
+            <div key={dataRange} className="usage-chart-enter flex flex-1 flex-col">
+              <UsageTimelinePlot
+                range={dataRange}
+                buckets={timelineBuckets}
+                peak={timelineSummary.peakEffective}
+                selectedKey={selectedKey}
+                onToggleSelect={onToggleSelect}
+              />
+            </div>
+          </div>
+        </div>
       ) : (
         <EmptyState
           size="card"
@@ -320,6 +339,8 @@ export function WorkspaceAgentUsageView({
     enabled: hydrated,
     staleTime: 30_000,
     refetchOnReconnect: "always",
+    placeholderData: (previousData, previousQuery) =>
+      previousQuery?.queryKey[1] === workspaceId ? previousData : undefined,
   });
 
   const view = useMemo(
@@ -398,10 +419,12 @@ export function WorkspaceAgentUsageView({
       >
         <WorkspaceAgentUsageTrendCard
           range={range}
+          dataRange={usageQuery.data.timeline.range}
           selectedKey={selectedKey}
           locale={locale}
           filtersActive={filtersActive}
           hasAnyData={hasAnyData}
+          isPlaceholderData={usageQuery.isPlaceholderData}
           avgPerTurn={avgPerTurn}
           view={view}
           onChangeRange={onChangeRange}

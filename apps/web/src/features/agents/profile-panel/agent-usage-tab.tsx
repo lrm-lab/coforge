@@ -17,6 +17,7 @@ import {
   type AgentTokenUsageRuntimeSummary,
 } from "#src/features/agents/agent-token-usage-model";
 import { browserTimeZone, dateTimeFormat, resolveTimeZone } from "#src/lib/dates";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { AgentTabEmpty } from "./agent-tab-empty";
@@ -27,11 +28,8 @@ import {
   UsageSingleRuntimeHeader,
   UsageToolbar,
 } from "./agent-usage-header";
-import {
-  UsageModelsSection,
-  UsageTabSkeleton,
-  UsageTokenCompositionStrip,
-} from "./agent-usage-sections";
+import { UsageModelsSection, UsageTabSkeleton } from "./agent-usage-sections";
+import "./agent-usage-motion.css";
 
 const LazyCacheHitChart = lazy(() => import("./agent-usage-cache-hit-chart"));
 
@@ -63,7 +61,7 @@ export function AgentUsageTab({ agentId, timeZone }: { agentId: string; timeZone
   const [providerChoice, setProviderChoice] = useState<string | typeof ALL_RUNTIMES_CHOICE | null>(
     null,
   );
-  const [metric, setMetric] = useState<"hit" | "tokens">("hit");
+  const [metric, setMetric] = useState<"hit" | "tokens">("tokens");
 
   const effectiveTimeZone = resolveTimeZone(timeZone, hydrated ? browserTimeZone() : undefined);
   const loadUsage = useServerFn(getAgentTokenUsage);
@@ -81,6 +79,8 @@ export function AgentUsageTab({ agentId, timeZone }: { agentId: string; timeZone
     enabled: hydrated || Boolean(timeZone),
     staleTime: 30_000,
     refetchOnReconnect: "always",
+    placeholderData: (previousData, previousQuery) =>
+      previousQuery?.queryKey[1] === agentId ? previousData : undefined,
   });
 
   const baseSummary = useMemo(
@@ -138,7 +138,6 @@ export function AgentUsageTab({ agentId, timeZone }: { agentId: string; timeZone
   function onSelectProvider(provider: string | null) {
     setProviderChoice(provider ?? ALL_RUNTIMES_CHOICE);
     setSelectedKey(null);
-    if (provider !== null) setMetric("hit");
   }
 
   function onToggleSelect(key: string) {
@@ -185,7 +184,12 @@ export function AgentUsageTab({ agentId, timeZone }: { agentId: string; timeZone
           description={m.agent_usage_empty_description()}
         />
       ) : (
-        <div className="space-y-4 px-4 py-4 sm:px-5">
+        <div
+          className={cn(
+            "space-y-4 px-4 py-4 transition-opacity sm:px-5",
+            query.isPlaceholderData && "opacity-65",
+          )}
+        >
           <section className="overflow-hidden rounded-xl border border-secondary bg-primary">
             {!isAllMultiRuntime ? (
               <UsageSingleRuntimeHeader
@@ -214,7 +218,7 @@ export function AgentUsageTab({ agentId, timeZone }: { agentId: string; timeZone
                         )
                       : activeMetric === "hit"
                         ? m.agent_usage_hit_trend_title()
-                        : range === 1
+                        : query.data.range === 1
                           ? m.agent_usage_hourly_trend_title()
                           : m.agent_usage_daily_trend_title()}
                   </span>
@@ -223,7 +227,7 @@ export function AgentUsageTab({ agentId, timeZone }: { agentId: string; timeZone
                       size="sm"
                       color="link-gray"
                       onPress={() => setSelectedKey(null)}
-                      className="shrink-0 text-xs"
+                      className="usage-clear-enter shrink-0 text-xs"
                     >
                       {m.agent_usage_selected_clear()}
                     </Button>
@@ -236,34 +240,39 @@ export function AgentUsageTab({ agentId, timeZone }: { agentId: string; timeZone
                 </span>
               </div>
 
-              {activeMetric === "hit" ? (
-                <Suspense fallback={<Skeleton className="h-28 w-full rounded-lg" />}>
-                  <LazyCacheHitChart data={cacheHitChartData} locale={locale} />
-                </Suspense>
-              ) : query.data.range === 1 ? (
-                <TodayHourlyChart
-                  buckets={summary.buckets}
-                  peak={summary.peakEffective}
-                  selectedKey={selectedKey}
-                  onToggleSelect={onToggleSelect}
-                />
-              ) : query.data.range === 30 ? (
-                <CalendarHeatmapChart
-                  buckets={summary.buckets}
-                  peak={summary.peakEffective}
-                  selectedKey={selectedKey}
-                  onToggleSelect={onToggleSelect}
-                />
-              ) : (
-                <DailyBarChart
-                  buckets={summary.buckets}
-                  peak={summary.peakEffective}
-                  selectedKey={selectedKey}
-                  onToggleSelect={onToggleSelect}
-                />
-              )}
-
-              <UsageTokenCompositionStrip summary={summary} locale={locale} />
+              <div className="flex min-h-60 flex-col">
+                <div
+                  key={`${query.data.range}:${activeMetric}`}
+                  className="usage-chart-enter flex flex-1 flex-col"
+                >
+                  {activeMetric === "hit" ? (
+                    <Suspense fallback={<Skeleton className="h-60 w-full rounded-lg" />}>
+                      <LazyCacheHitChart data={cacheHitChartData} locale={locale} />
+                    </Suspense>
+                  ) : query.data.range === 1 ? (
+                    <TodayHourlyChart
+                      buckets={summary.buckets}
+                      peak={summary.peakEffective}
+                      selectedKey={selectedKey}
+                      onToggleSelect={onToggleSelect}
+                    />
+                  ) : query.data.range === 30 ? (
+                    <CalendarHeatmapChart
+                      buckets={summary.buckets}
+                      peak={summary.peakEffective}
+                      selectedKey={selectedKey}
+                      onToggleSelect={onToggleSelect}
+                    />
+                  ) : (
+                    <DailyBarChart
+                      buckets={summary.buckets}
+                      peak={summary.peakEffective}
+                      selectedKey={selectedKey}
+                      onToggleSelect={onToggleSelect}
+                    />
+                  )}
+                </div>
+              </div>
             </div>
           </section>
 

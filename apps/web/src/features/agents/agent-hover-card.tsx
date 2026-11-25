@@ -22,6 +22,7 @@ import {
 } from "#src/features/agents/profile-panel/agent-profile-queries";
 import type { OpenAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
 import { runtimeProviderLabel } from "./runtime-provider-display";
+import { RuntimeProviderMark } from "./runtime-provider-mark";
 import type { ActivityEntry } from "./agent-activity";
 import {
   useAgentRecentActivity,
@@ -195,7 +196,15 @@ function AgentCard({
               {data?.runtimeConfig && (
                 <>
                   <CardFact label={m.agent_runtime_field()}>
-                    {runtimeProviderLabel(data.runtimeConfig.runtime)}
+                    <span className="inline-flex max-w-full items-center gap-1.5 align-middle">
+                      <RuntimeProviderMark
+                        provider={data.runtimeConfig.runtime}
+                        className="size-3.5"
+                      />
+                      <span className="truncate">
+                        {runtimeProviderLabel(data.runtimeConfig.runtime)}
+                      </span>
+                    </span>
                   </CardFact>
                   <CardFact label={m.agent_form_model()}>
                     {data.runtimeConfig.model ? modelLabel : m.agent_form_provider_default()}

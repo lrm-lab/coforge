@@ -12,6 +12,7 @@ import { runtimeProviderDisplayName } from "#src/features/agents/runtime-provide
 import { formatNumber } from "#src/lib/format-number";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { UsageRuntimeIcon } from "./agent-usage-header";
 
 export function UsageTabSkeleton() {
   return (
@@ -34,15 +35,7 @@ export function UsageTabSkeleton() {
             <Skeleton className="h-3.5 w-28" />
             <Skeleton className="h-3.5 w-20" />
           </div>
-          <Skeleton className="h-28 w-full rounded-lg" />
-          <div className="space-y-2 border-t border-secondary pt-3">
-            <Skeleton className="h-2 w-full rounded-full" />
-            <div className="grid grid-cols-3 gap-2">
-              <Skeleton className="h-3.5 w-full" />
-              <Skeleton className="h-3.5 w-full" />
-              <Skeleton className="h-3.5 w-full" />
-            </div>
-          </div>
+          <Skeleton className="h-60 w-full rounded-lg" />
         </div>
       </div>
 
@@ -76,76 +69,6 @@ function inputTooltipText(
   });
 }
 
-export function UsageTokenCompositionStrip({
-  summary,
-  locale,
-}: {
-  summary: AgentTokenUsageSummary;
-  locale: string;
-}) {
-  const uncachedInputTokens = Math.max(0, summary.newInputTokens - summary.cacheWriteTokens);
-  return (
-    <div className="space-y-2 border-t border-secondary pt-3">
-      <div className="flex h-2 w-full gap-0.5 overflow-hidden rounded-full bg-secondary">
-        {summary.newInputTokens > 0 && (
-          <span
-            className="block h-full min-w-1 rounded-xs bg-chart-input"
-            style={{ width: `${summary.shares.newInputPercent}%` }}
-          />
-        )}
-        {summary.cacheReadTokens > 0 && (
-          <span
-            className="block h-full min-w-1 rounded-xs bg-chart-cache"
-            style={{ width: `${summary.shares.cacheReadPercent}%` }}
-          />
-        )}
-        {summary.outputTokens > 0 && (
-          <span
-            className="block h-full min-w-1 rounded-xs bg-chart-output"
-            style={{ width: `${summary.shares.outputPercent}%` }}
-          />
-        )}
-      </div>
-      <div className="grid grid-cols-3 gap-2 font-mono text-xs tabular-nums">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span aria-hidden="true" className="size-2 shrink-0 rounded-xs bg-chart-input" />
-          <span className="truncate font-sans text-tertiary">{m.agent_usage_input_short()}</span>
-          <Tooltip
-            title={inputTooltipText(
-              summary.newInputTokens,
-              uncachedInputTokens,
-              summary.cacheWriteTokens,
-              locale,
-            )}
-          >
-            <TooltipTrigger className="shrink-0 cursor-default rounded-xs font-medium text-primary outline-none focus-visible:ring-2 focus-visible:ring-brand">
-              {formatCompactTokens(summary.newInputTokens, locale)}
-            </TooltipTrigger>
-          </Tooltip>
-        </div>
-        <div className="flex min-w-0 items-center justify-center gap-1.5">
-          <span aria-hidden="true" className="size-2 shrink-0 rounded-xs bg-chart-cache" />
-          <span className="truncate font-sans text-tertiary">{m.agent_usage_cached_short()}</span>
-          <Tooltip title={formatExactTokens(summary.cacheReadTokens, locale)}>
-            <TooltipTrigger className="shrink-0 cursor-default rounded-xs font-medium text-primary outline-none focus-visible:ring-2 focus-visible:ring-brand">
-              {formatCompactTokens(summary.cacheReadTokens, locale)}
-            </TooltipTrigger>
-          </Tooltip>
-        </div>
-        <div className="flex min-w-0 items-center justify-end gap-1.5">
-          <span aria-hidden="true" className="size-2 shrink-0 rounded-xs bg-chart-output" />
-          <span className="truncate font-sans text-tertiary">{m.agent_usage_output_short()}</span>
-          <Tooltip title={formatExactTokens(summary.outputTokens, locale)}>
-            <TooltipTrigger className="shrink-0 cursor-default rounded-xs font-medium text-primary outline-none focus-visible:ring-2 focus-visible:ring-brand">
-              {formatCompactTokens(summary.outputTokens, locale)}
-            </TooltipTrigger>
-          </Tooltip>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ModelTableCard({
   runtime,
   models,
@@ -162,12 +85,7 @@ function ModelTableCard({
       {showRuntimeHeader && runtime && (
         <div className="flex items-center justify-between gap-2 border-b border-secondary bg-secondary px-3 py-2 text-xs">
           <span className="flex min-w-0 items-center gap-1.5 font-semibold text-primary">
-            {runtime.isCurrent && (
-              <span
-                aria-hidden="true"
-                className="size-1.5 shrink-0 rounded-full bg-success-solid"
-              />
-            )}
+            <UsageRuntimeIcon provider={runtime.provider} className="size-3.5" />
             <span className="truncate">{runtimeProviderDisplayName(runtime.provider)}</span>
             {runtime.isCurrent && (
               <span className="shrink-0 font-normal text-tertiary">

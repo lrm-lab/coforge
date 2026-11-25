@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import { HelpCircle } from "@untitledui/icons";
+import { parseRuntimeProvider } from "@lrm/coforge-sdk/internal";
+import { CpuChip01, HelpCircle, LayersTwo01 } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
 import { Select, type SelectItemType } from "#src/components/base/select/select";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
@@ -13,6 +14,7 @@ import {
   type AgentTokenUsageSummary,
 } from "#src/features/agents/agent-token-usage-model";
 import { runtimeProviderDisplayName } from "#src/features/agents/runtime-provider-display";
+import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 
@@ -24,6 +26,12 @@ const RANGE_LABELS: Record<AgentTokenUsageRange, () => string> = {
   14: m.agent_usage_range_14d,
   30: m.agent_usage_range_30d,
 };
+
+export function UsageRuntimeIcon({ provider, className }: { provider: string; className: string }) {
+  const parsed = parseRuntimeProvider(provider);
+  if (parsed) return <RuntimeProviderMark provider={parsed} className={className} />;
+  return <CpuChip01 aria-hidden="true" className={cn("shrink-0 text-fg-quaternary", className)} />;
+}
 
 export function UsageToolbar({
   reportRuntimes,
@@ -44,20 +52,12 @@ export function UsageToolbar({
       id: runtime.provider,
       label: runtimeProviderDisplayName(runtime.provider),
       supportingText: runtime.isCurrent ? m.agent_usage_current_tag() : undefined,
-      icon: (
-        <span
-          aria-hidden="true"
-          className={cn(
-            "size-1.5 shrink-0 rounded-full",
-            runtime.isCurrent ? "bg-success-solid" : "bg-chart-input",
-          )}
-        />
-      ),
+      icon: <UsageRuntimeIcon provider={runtime.provider} className="size-4" />,
     }));
     items.push({
       id: ALL_RUNTIMES_KEY,
       label: m.agent_usage_all_runtimes(),
-      icon: <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full bg-chart-input" />,
+      icon: <LayersTwo01 aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />,
     });
     return items;
   }, [reportRuntimes]);
@@ -100,13 +100,7 @@ export function UsageToolbar({
           </Select>
         ) : soleRuntime ? (
           <div className="inline-flex min-h-9 max-w-full items-center gap-2 rounded-lg border border-secondary bg-primary px-3 text-sm font-medium text-primary">
-            <span
-              aria-hidden="true"
-              className={cn(
-                "size-1.5 shrink-0 rounded-full",
-                soleRuntime.isCurrent ? "bg-success-solid" : "bg-chart-input",
-              )}
-            />
+            <UsageRuntimeIcon provider={soleRuntime.provider} className="size-4" />
             <span className="truncate">{runtimeProviderDisplayName(soleRuntime.provider)}</span>
             {soleRuntime.isCurrent && (
               <span className="shrink-0 text-xs font-normal text-tertiary">
@@ -135,6 +129,38 @@ export function UsageToolbar({
   );
 }
 
+function KpiDeltaBadge({
+  value,
+  positiveTone,
+}: {
+  value: number;
+  positiveTone: "warning" | "success";
+}) {
+  const rounded = Math.round(value * 10) / 10;
+  const normalized = rounded === 0 ? 0 : rounded;
+  const toneClass =
+    normalized > 0
+      ? positiveTone === "success"
+        ? "bg-success-primary text-success-primary"
+        : "bg-warning-primary text-warning-primary"
+      : normalized < 0
+        ? positiveTone === "success"
+          ? "bg-warning-primary text-warning-primary"
+          : "bg-success-primary text-success-primary"
+        : "bg-secondary text-tertiary";
+
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 font-mono text-xs font-semibold tabular-nums",
+        toneClass,
+      )}
+    >
+      {normalized > 0 ? `+${normalized}%` : `${normalized}%`}
+    </span>
+  );
+}
+
 export function UsageSingleRuntimeHeader({
   summary,
   activeMetric,
@@ -147,13 +173,42 @@ export function UsageSingleRuntimeHeader({
   onSelectMetric: (metric: "hit" | "tokens") => void;
 }) {
   return (
-    <div className="grid grid-cols-2 divide-x divide-secondary border-b border-secondary">
+    <div className="relative grid grid-cols-2 divide-x divide-secondary border-b border-secondary">
+      <Tooltip title={formatExactTokens(summary.effectiveTokens, locale)}>
+        <AriaButton
+          aria-pressed={activeMetric === "tokens"}
+          onPress={() => onSelectMetric("tokens")}
+          className={cn(
+            "relative flex min-h-11 min-w-0 cursor-pointer flex-col items-start px-3.5 py-3.5 text-left outline-none transition-[scale,background-color] duration-150 ease-[var(--ease-out)] pressed:scale-[0.985] motion-reduce:transition-colors motion-reduce:pressed:scale-100 data-focus-visible:ring-2 data-focus-visible:ring-inset data-focus-visible:ring-brand",
+            activeMetric === "tokens" ? "bg-secondary" : "bg-primary hover:bg-primary_hover",
+          )}
+        >
+          <span className="w-full truncate text-xs text-tertiary">
+            {m.agent_usage_tokens_used()}
+          </span>
+          <span className="mt-1.5 flex min-h-7 w-full min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-1">
+            <span className="font-mono text-2xl font-bold leading-none tracking-tight tabular-nums text-primary">
+              {formatCompactTokens(summary.effectiveTokens, locale)}
+            </span>
+            {summary.deltaPercent !== null && (
+              <KpiDeltaBadge value={summary.deltaPercent} positiveTone="warning" />
+            )}
+          </span>
+          <span className="mt-auto w-full truncate pt-1.5 text-xs tabular-nums text-tertiary">
+            {m.agent_usage_input_output_summary({
+              input: formatCompactTokens(summary.newInputTokens, locale),
+              output: formatCompactTokens(summary.outputTokens, locale),
+            })}
+          </span>
+        </AriaButton>
+      </Tooltip>
+
       <Tooltip title={m.agent_usage_cache_hit_rate()} description={m.agent_usage_cache_hit_help()}>
         <AriaButton
           aria-pressed={activeMetric === "hit"}
           onPress={() => onSelectMetric("hit")}
           className={cn(
-            "relative flex min-h-11 min-w-0 cursor-pointer flex-col items-start px-3.5 py-3.5 text-left outline-none transition-colors data-focus-visible:ring-2 data-focus-visible:ring-inset data-focus-visible:ring-brand",
+            "relative flex min-h-11 min-w-0 cursor-pointer flex-col items-start px-3.5 py-3.5 text-left outline-none transition-[scale,background-color] duration-150 ease-[var(--ease-out)] pressed:scale-[0.985] motion-reduce:transition-colors motion-reduce:pressed:scale-100 data-focus-visible:ring-2 data-focus-visible:ring-inset data-focus-visible:ring-brand",
             activeMetric === "hit" ? "bg-secondary" : "bg-primary hover:bg-primary_hover",
           )}
         >
@@ -161,53 +216,36 @@ export function UsageSingleRuntimeHeader({
             <span className="truncate">{m.agent_usage_cache_hit_rate()}</span>
             <HelpCircle className="size-3 shrink-0 opacity-75" aria-hidden="true" />
           </span>
-          <span
-            className={cn(
-              "mt-1.5 font-mono text-2xl font-bold leading-none tracking-tight tabular-nums",
-              summary.cacheHitPercent !== null ? "text-success-primary" : "text-quaternary",
+          <span className="mt-1.5 flex min-h-7 w-full min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-1">
+            <span
+              className={cn(
+                "font-mono text-2xl font-bold leading-none tracking-tight tabular-nums",
+                summary.cacheHitPercent !== null ? "text-success-primary" : "text-quaternary",
+              )}
+            >
+              {summary.cacheHitPercent !== null
+                ? formatUsagePercent(summary.cacheHitPercent, locale)
+                : "—"}
+            </span>
+            {summary.cacheHitDelta !== null && (
+              <KpiDeltaBadge value={summary.cacheHitDelta} positiveTone="success" />
             )}
-          >
-            {summary.cacheHitPercent !== null
-              ? formatUsagePercent(summary.cacheHitPercent, locale)
-              : "—"}
           </span>
-          <span className="mt-1.5 w-full truncate text-xs tabular-nums text-tertiary">
+          <span className="mt-auto w-full truncate pt-1.5 text-xs tabular-nums text-tertiary">
             {m.agent_usage_cache_read_summary({
               tokens: formatCompactTokens(summary.cacheReadTokens, locale),
             })}
           </span>
-          {activeMetric === "hit" && (
-            <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-0.5 bg-fg-primary" />
-          )}
         </AriaButton>
       </Tooltip>
 
-      <Tooltip title={formatExactTokens(summary.effectiveTokens, locale)}>
-        <AriaButton
-          aria-pressed={activeMetric === "tokens"}
-          onPress={() => onSelectMetric("tokens")}
-          className={cn(
-            "relative flex min-h-11 min-w-0 cursor-pointer flex-col items-start px-3.5 py-3.5 text-left outline-none transition-colors data-focus-visible:ring-2 data-focus-visible:ring-inset data-focus-visible:ring-brand",
-            activeMetric === "tokens" ? "bg-secondary" : "bg-primary hover:bg-primary_hover",
-          )}
-        >
-          <span className="w-full truncate text-xs text-tertiary">
-            {m.agent_usage_tokens_used()}
-          </span>
-          <span className="mt-1.5 font-mono text-2xl font-bold leading-none tracking-tight tabular-nums text-primary">
-            {formatCompactTokens(summary.effectiveTokens, locale)}
-          </span>
-          <span className="mt-1.5 w-full truncate text-xs tabular-nums text-tertiary">
-            {m.agent_usage_input_output_summary({
-              input: formatCompactTokens(summary.newInputTokens, locale),
-              output: formatCompactTokens(summary.outputTokens, locale),
-            })}
-          </span>
-          {activeMetric === "tokens" && (
-            <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-0.5 bg-fg-primary" />
-          )}
-        </AriaButton>
-      </Tooltip>
+      <span
+        aria-hidden="true"
+        className={cn(
+          "pointer-events-none absolute bottom-0 left-0 h-0.5 w-1/2 bg-fg-primary transition-transform duration-200 ease-[var(--ease-out)] motion-reduce:transition-none",
+          activeMetric === "hit" ? "translate-x-full" : "translate-x-0",
+        )}
+      />
     </div>
   );
 }
@@ -244,16 +282,14 @@ export function UsageAllRuntimesHeader({
             <AriaButton
               key={runtime.provider}
               onPress={() => onSelectRuntime(runtime.provider)}
-              className="flex min-h-11 min-w-0 cursor-pointer flex-col items-start rounded-lg border border-secondary bg-primary px-2.5 py-2 text-left outline-none transition-colors hover:bg-primary_hover data-focus-visible:ring-2 data-focus-visible:ring-brand"
+              className="flex min-h-11 min-w-0 cursor-pointer flex-col items-start rounded-lg border border-secondary bg-primary px-2.5 py-2 text-left outline-none transition-[scale,background-color] duration-150 ease-[var(--ease-out)] hover:bg-primary_hover pressed:scale-[0.985] motion-reduce:transition-colors motion-reduce:pressed:scale-100 data-focus-visible:ring-2 data-focus-visible:ring-brand"
             >
-              <span className="flex w-full min-w-0 items-center gap-1 text-xs text-tertiary">
-                {runtime.isCurrent && (
-                  <span
-                    aria-hidden="true"
-                    className="size-1.5 shrink-0 rounded-full bg-success-solid"
-                  />
-                )}
+              <span className="flex w-full min-w-0 items-center gap-1.5 text-xs text-tertiary">
+                <UsageRuntimeIcon provider={runtime.provider} className="size-3.5" />
                 <span className="truncate">{runtimeProviderDisplayName(runtime.provider)}</span>
+                {runtime.isCurrent && (
+                  <span className="shrink-0 text-quaternary">{m.agent_usage_current_tag()}</span>
+                )}
               </span>
               <span
                 className={cn(

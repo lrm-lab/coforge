@@ -31,7 +31,7 @@ export default function AgentUsageCacheHitChart({
 
   if (!hasAnyPoint) {
     return (
-      <div className="flex h-28 items-center justify-center rounded-lg border border-dashed border-secondary font-mono text-xs text-quaternary">
+      <div className="flex h-60 items-center justify-center rounded-lg border border-dashed border-secondary font-mono text-xs text-quaternary">
         —
       </div>
     );
@@ -62,7 +62,7 @@ export default function AgentUsageCacheHitChart({
   }
 
   return (
-    <div className="h-28 w-full">
+    <div className="h-60 w-full">
       <AreaChart
         responsive
         data={chartData}
@@ -129,7 +129,8 @@ export default function AgentUsageCacheHitChart({
             strokeWidth: 1.5,
           }}
           isAnimationActive={!prefersReducedMotion}
-          animationDuration={350}
+          animationDuration={220}
+          animationEasing="ease-out"
         />
       </AreaChart>
     </div>

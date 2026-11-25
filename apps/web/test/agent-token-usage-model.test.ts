@@ -362,3 +362,137 @@ test("supports 24-hour Today mode and suppresses delta when tracking started mid
   expect(heatmapLevel(75, 100)).toBe(3);
   expect(heatmapLevel(100, 100)).toBe(4);
 });
+
+test("computes period-over-period cacheHitDelta and suppresses it for partial tracking, drill-down, and multi-runtime", () => {
+  const now = new Date("2026-11-24T12:00:00.000Z");
+  const fullTrackingStart = new Date("2026-11-01T00:00:00.000Z");
+
+  const multiRuntimeTurns = [
+    turn({
+      recordedAt: new Date("2026-11-23T10:00:00.000Z"),
+      provider: "codex",
+      model: "gpt-5.4",
+      uncachedInputTokens: 120_000,
+      cacheWriteTokens: 0,
+      cacheReadTokens: 880_000,
+      outputTokens: 10_000,
+    }),
+    turn({
+      recordedAt: new Date("2026-11-14T10:00:00.000Z"),
+      provider: "codex",
+      model: "gpt-5.4",
+      uncachedInputTokens: 165_000,
+      cacheWriteTokens: 0,
+      cacheReadTokens: 835_000,
+      outputTokens: 10_000,
+    }),
+    turn({
+      recordedAt: new Date("2026-11-23T11:00:00.000Z"),
+      provider: "claude-code",
+      model: "claude-sonnet-4-6",
+      uncachedInputTokens: 180_000,
+      cacheWriteTokens: 20_000,
+      cacheReadTokens: 600_000,
+      outputTokens: 8_000,
+    }),
+    turn({
+      recordedAt: new Date("2026-11-14T11:00:00.000Z"),
+      provider: "claude-code",
+      model: "claude-sonnet-4-6",
+      uncachedInputTokens: 150_000,
+      cacheWriteTokens: 50_000,
+      cacheReadTokens: 800_000,
+      outputTokens: 8_000,
+    }),
+    turn({
+      recordedAt: new Date("2026-11-22T11:00:00.000Z"),
+      provider: "grok",
+      model: "grok-4",
+      uncachedInputTokens: 200_000,
+      cacheWriteTokens: 0,
+      cacheReadTokens: 800_000,
+      outputTokens: 5_000,
+    }),
+    turn({
+      recordedAt: new Date("2026-11-13T11:00:00.000Z"),
+      provider: "grok",
+      model: "grok-4",
+      uncachedInputTokens: 100_000,
+      cacheWriteTokens: 0,
+      cacheReadTokens: 400_000,
+      outputTokens: 5_000,
+    }),
+  ];
+
+  const report = aggregateAgentTokenUsage({
+    turns: multiRuntimeTurns,
+    range: 7,
+    timeZone: "UTC",
+    now,
+    trackingStartedAt: fullTrackingStart,
+    liveContextUsage: null,
+    currentProvider: "codex",
+  });
+
+  expect(report.previousPeriodByProvider.codex).toMatchObject({
+    newInputTokens: 165_000,
+    cacheReadTokens: 835_000,
+  });
+  expect(report.previousPeriodByProvider["claude-code"]).toMatchObject({
+    newInputTokens: 200_000,
+    cacheReadTokens: 800_000,
+  });
+
+  const codex = summarizeAgentTokenUsage(report, null, "codex");
+  expect(codex.cacheHitPercent).toBe(88);
+  expect(codex.cacheHitDelta).toBe(4.5);
+
+  const claude = summarizeAgentTokenUsage(report, null, "claude-code");
+  expect(claude.cacheHitPercent).toBe(75);
+  expect(claude.cacheHitDelta).toBe(-5);
+
+  const grok = summarizeAgentTokenUsage(report, null, "grok");
+  expect(grok.cacheHitPercent).toBe(80);
+  expect(grok.cacheHitDelta).toBe(0);
+
+  const drilled = summarizeAgentTokenUsage(report, "2026-11-23", "codex");
+  expect(drilled.cacheHitPercent).toBe(88);
+  expect(drilled.cacheHitDelta).toBeNull();
+
+  const allRuntimes = summarizeAgentTokenUsage(report, null, null);
+  expect(allRuntimes.cacheHitPercent).toBeNull();
+  expect(allRuntimes.cacheHitDelta).toBeNull();
+
+  const partialTracking = aggregateAgentTokenUsage({
+    turns: multiRuntimeTurns.filter((t) => t.provider === "codex"),
+    range: 7,
+    timeZone: "UTC",
+    now,
+    trackingStartedAt: new Date("2026-11-15T00:00:00.000Z"),
+    liveContextUsage: null,
+    currentProvider: "codex",
+  });
+  expect(summarizeAgentTokenUsage(partialTracking, null, "codex").cacheHitDelta).toBeNull();
+
+  const singleRuntimeFull = aggregateAgentTokenUsage({
+    turns: multiRuntimeTurns.filter((t) => t.provider === "codex"),
+    range: 7,
+    timeZone: "UTC",
+    now,
+    trackingStartedAt: fullTrackingStart,
+    liveContextUsage: null,
+    currentProvider: "codex",
+  });
+  expect(summarizeAgentTokenUsage(singleRuntimeFull, null, null).cacheHitDelta).toBe(4.5);
+
+  const noPreviousTurns = aggregateAgentTokenUsage({
+    turns: [multiRuntimeTurns[0]!],
+    range: 7,
+    timeZone: "UTC",
+    now,
+    trackingStartedAt: fullTrackingStart,
+    liveContextUsage: null,
+    currentProvider: "codex",
+  });
+  expect(summarizeAgentTokenUsage(noPreviousTurns, null, "codex").cacheHitDelta).toBeNull();
+});

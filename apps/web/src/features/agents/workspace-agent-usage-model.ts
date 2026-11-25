@@ -351,7 +351,13 @@ export function summarizeWorkspaceAgentUsage(
     ? {
         ...report.timeline,
         buckets: timelineBuckets,
-        previousPeriod: { effectiveTokens: 0, totalTokens: 0, turns: 0 },
+        previousPeriod: {
+          newInputTokens: 0,
+          cacheReadTokens: 0,
+          effectiveTokens: 0,
+          totalTokens: 0,
+          turns: 0,
+        },
         previousPeriodByProvider: {},
       }
     : report.timeline;

@@ -11,7 +11,7 @@
   "agent_usage_range_30d": "30d",
   "agent_usage_selected_clear": "Show full range",
   "agent_usage_cache_hit_rate": "Cache hit rate",
-  "agent_usage_cache_hit_help": "Prompt cache reads reuse prior context. Calculated as cache read / (input + cache read).",
+  "agent_usage_cache_hit_help": "Cache reads reuse prior context, computed as cache read / total input (uncached input + cache write + cache read).",
   "agent_usage_cache_read_summary": "Cache read {tokens}",
   "agent_usage_tokens_used": "Tokens",
   "agent_usage_tokens_summary": "Tokens {tokens}",

@@ -11,7 +11,7 @@
   "agent_usage_range_30d": "30 天",
   "agent_usage_selected_clear": "返回全周期",
   "agent_usage_cache_hit_rate": "缓存命中率",
-  "agent_usage_cache_hit_help": "缓存读取会复用前序上下文，按「缓存读取 / (输入 + 缓存读取)」计算。",
+  "agent_usage_cache_hit_help": "缓存读取会复用前序上下文，按「缓存读取 / 总输入」计算，总输入包含未命中输入、缓存写入与缓存读取。",
   "agent_usage_cache_read_summary": "缓存读取 {tokens}",
   "agent_usage_tokens_used": "Token 用量",
   "agent_usage_tokens_summary": "Token 用量 {tokens}",

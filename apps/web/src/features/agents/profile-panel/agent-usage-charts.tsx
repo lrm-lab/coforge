@@ -57,11 +57,11 @@ export function TodayHourlyChart({
     [buckets, peak],
   );
   return (
-    <div className="mt-4">
+    <div className="flex flex-1 flex-col justify-end pt-2">
       <div
         role="group"
         aria-label={m.agent_usage_hourly_label()}
-        className="grid h-20 grid-cols-24 items-end gap-0.5 border-b border-secondary pb-1"
+        className="grid min-h-40 flex-1 grid-cols-24 items-end gap-0.5 border-b border-secondary pb-1"
       >
         {buckets.map((bucket) => {
           const selected = selectedKey === bucket.key;
@@ -75,14 +75,14 @@ export function TodayHourlyChart({
                 aria-label={`${hourLabel} ${valLabel}`}
                 onPress={() => onToggleSelect(bucket.key)}
                 className={cn(
-                  "group flex h-full min-w-0 cursor-pointer flex-col items-center justify-end rounded-xs outline-none transition-colors data-focus-visible:ring-2 data-focus-visible:ring-brand",
+                  "group flex h-full min-w-0 cursor-pointer flex-col items-center justify-end rounded-xs outline-none transition-[scale,background-color] duration-150 ease-[var(--ease-out)] pressed:scale-[0.96] motion-reduce:transition-colors motion-reduce:pressed:scale-100 data-focus-visible:ring-2 data-focus-visible:ring-brand",
                   selected ? "bg-secondary" : "hover:bg-primary_hover",
                 )}
               >
                 {heightPct > 0 ? (
                   <span
                     className={cn(
-                      "block w-full rounded-t-xs transition-opacity",
+                      "block w-full rounded-t-xs transition-opacity duration-200 ease-[var(--ease-out)]",
                       selected
                         ? "bg-chart-input opacity-100"
                         : selectedKey !== null
@@ -128,7 +128,7 @@ export function DailyBarChart({
   const locale = getLocale();
   const compact = buckets.length > 7;
   return (
-    <div className="mt-4">
+    <div className="flex flex-1 flex-col justify-end pt-1">
       <div className="relative">
         {peak > 0 && (
           <div
@@ -162,7 +162,7 @@ export function DailyBarChart({
                   aria-label={`${dateLabel} ${valLabel}`}
                   onPress={() => onToggleSelect(bucket.key)}
                   className={cn(
-                    "group flex min-w-0 cursor-pointer flex-col items-center rounded-md px-0.5 py-1 outline-none transition-colors data-focus-visible:ring-2 data-focus-visible:ring-brand",
+                    "group flex min-w-0 cursor-pointer flex-col items-center rounded-md px-0.5 py-1 outline-none transition-[scale,background-color] duration-150 ease-[var(--ease-out)] pressed:scale-[0.96] motion-reduce:transition-colors motion-reduce:pressed:scale-100 data-focus-visible:ring-2 data-focus-visible:ring-brand",
                     selected ? "bg-secondary" : "hover:bg-primary_hover",
                   )}
                 >
@@ -173,11 +173,16 @@ export function DailyBarChart({
                       </span>
                     ) : null}
                   </span>
-                  <span className="mt-1 flex h-16 w-full items-end justify-center">
+                  <span
+                    className={cn(
+                      "mt-1 flex w-full items-end justify-center",
+                      compact ? "h-36" : "h-32",
+                    )}
+                  >
                     {heightPct > 0 ? (
                       <span
                         className={cn(
-                          "block rounded-t-xs transition-opacity",
+                          "block rounded-t-xs transition-opacity duration-200 ease-[var(--ease-out)]",
                           compact ? "w-full max-w-3.5" : "w-full max-w-6",
                           selected
                             ? "bg-chart-input opacity-100"
@@ -255,46 +260,52 @@ export function CalendarHeatmapChart({
   const leadingEmpty = buckets[0]?.dayOfWeek ? buckets[0].dayOfWeek - 1 : 0;
 
   return (
-    <div className="mt-4">
-      <div className="grid grid-cols-7 gap-1.5">
-        {headers.map((label, idx) => (
-          <span key={idx} aria-hidden="true" className="pb-0.5 text-center text-xs text-quaternary">
-            {label}
-          </span>
-        ))}
-      </div>
-      <div
-        role="group"
-        aria-label={m.agent_usage_calendar_label()}
-        className="mt-1 grid grid-cols-7 gap-1.5"
-      >
-        {Array.from({ length: leadingEmpty }, (_, i) => (
-          <span key={`pad-${i}`} aria-hidden="true" />
-        ))}
-        {buckets.map((bucket) => {
-          const selected = selectedKey === bucket.key;
-          const level = heatmapLevel(bucket.effectiveTokens, peak);
-          const dateLabel = monthDay(bucket.dateKey);
-          const valLabel = formatCompactTokens(bucket.effectiveTokens, locale);
-          return (
-            <Tooltip key={bucket.key} title={`${dateLabel} ${valLabel}`}>
-              <AriaButton
-                aria-pressed={selected}
-                aria-label={`${dateLabel} ${valLabel}`}
-                onPress={() => onToggleSelect(bucket.key)}
-                className={cn(
-                  "flex h-7 min-w-0 cursor-pointer items-center justify-center rounded-sm font-mono text-xs tabular-nums outline-none transition-opacity data-focus-visible:ring-2 data-focus-visible:ring-brand",
-                  HEAT_CELL_CLASS[level],
-                  selectedKey !== null && !selected && "opacity-40 hover:opacity-80",
-                  bucket.isCurrent && !selected && "ring-1 ring-inset ring-primary",
-                  selected && "ring-2 ring-inset ring-chart-heat-ring",
-                )}
-              >
-                {dayNumber(bucket.dateKey)}
-              </AriaButton>
-            </Tooltip>
-          );
-        })}
+    <div className="flex flex-1 flex-col justify-between pt-1">
+      <div>
+        <div className="grid grid-cols-7 gap-1">
+          {headers.map((label, idx) => (
+            <span
+              key={idx}
+              aria-hidden="true"
+              className="pb-0.5 text-center text-xs text-quaternary"
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+        <div
+          role="group"
+          aria-label={m.agent_usage_calendar_label()}
+          className="mt-1 grid grid-cols-7 gap-1"
+        >
+          {Array.from({ length: leadingEmpty }, (_, i) => (
+            <span key={`pad-${i}`} aria-hidden="true" />
+          ))}
+          {buckets.map((bucket) => {
+            const selected = selectedKey === bucket.key;
+            const level = heatmapLevel(bucket.effectiveTokens, peak);
+            const dateLabel = monthDay(bucket.dateKey);
+            const valLabel = formatCompactTokens(bucket.effectiveTokens, locale);
+            return (
+              <Tooltip key={bucket.key} title={`${dateLabel} ${valLabel}`}>
+                <AriaButton
+                  aria-pressed={selected}
+                  aria-label={`${dateLabel} ${valLabel}`}
+                  onPress={() => onToggleSelect(bucket.key)}
+                  className={cn(
+                    "flex h-7 min-w-0 cursor-pointer items-center justify-center rounded-sm font-mono text-xs tabular-nums outline-none transition-[scale,opacity] duration-150 ease-[var(--ease-out)] pressed:scale-[0.96] motion-reduce:transition-opacity motion-reduce:pressed:scale-100 data-focus-visible:ring-2 data-focus-visible:ring-brand",
+                    HEAT_CELL_CLASS[level],
+                    selectedKey !== null && !selected && "opacity-40 hover:opacity-80",
+                    bucket.isCurrent && !selected && "ring-1 ring-inset ring-primary",
+                    selected && "ring-2 ring-inset ring-chart-heat-ring",
+                  )}
+                >
+                  {dayNumber(bucket.dateKey)}
+                </AriaButton>
+              </Tooltip>
+            );
+          })}
+        </div>
       </div>
       <p className="mt-2 text-xs text-quaternary">{m.agent_usage_calendar_hint()}</p>
     </div>
