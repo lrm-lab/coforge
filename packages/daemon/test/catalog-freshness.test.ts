@@ -1,6 +1,7 @@
-import { expect, test } from "bun:test";
+import { expect, jest, test } from "bun:test";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import {
+  CATALOG_FRESHNESS_SWEEP_MS,
   CatalogFreshnessSweep,
   type CatalogFreshnessSweepPorts,
 } from "#src/daemon-runtime/catalog-freshness-sweep";
@@ -11,6 +12,7 @@ import {
   CatalogRetrySchedule,
 } from "#src/daemon-runtime/catalog-retry-schedule";
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import { captureDaemonLogs } from "./log-capture";
 
 const transport = {} as DaemonConnectionClient;
 
@@ -58,6 +60,52 @@ test("concurrent sweeps join rather than repeat", async () => {
   const sweep = new CatalogFreshnessSweep(p);
   await Promise.all([sweep.sweep(), sweep.sweep(), sweep.sweep()]);
   expect(calls).toBe(1);
+});
+
+test("a timer tick during a pending recheck identifies it and a later tick starts a new sweep", async () => {
+  jest.useFakeTimers();
+  const pending = Promise.withResolvers<void>();
+  let calls = 0;
+  const { p } = ports({
+    recheck: () => {
+      calls++;
+      return calls === 1 ? pending.promise : Promise.resolve();
+    },
+  });
+  const sweep = new CatalogFreshnessSweep(p);
+  try {
+    const { records } = await captureDaemonLogs(async () => {
+      sweep.start();
+      jest.advanceTimersByTime(CATALOG_FRESHNESS_SWEEP_MS);
+      expect(calls).toBe(1);
+      jest.advanceTimersByTime(CATALOG_FRESHNESS_SWEEP_MS);
+      expect(calls).toBe(1);
+      const first = sweep.sweep();
+      pending.resolve();
+      await first;
+      jest.advanceTimersByTime(CATALOG_FRESHNESS_SWEEP_MS);
+      expect(calls).toBe(2);
+      await sweep.sweep();
+    });
+    const entries = records.map((record) => record.properties);
+    const started = entries.filter(({ event }) => event === "code_agent_catalog:sweep_started");
+    expect(started).toHaveLength(2);
+    expect(started[0]!.sweep_id).toBeString();
+    expect(started[1]!.sweep_id).not.toBe(started[0]!.sweep_id);
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        event: "code_agent_catalog:sweep_joined",
+        sweep_id: started[0]!.sweep_id,
+      }),
+    );
+    expect(entries.filter(({ event }) => event === "code_agent_catalog:sweep_finished")).toEqual(
+      started.map(({ sweep_id }) => expect.objectContaining({ sweep_id, outcome: "ok" })),
+    );
+  } finally {
+    sweep.stop();
+    pending.resolve();
+    jest.useRealTimers();
+  }
 });
 
 /** The model a `agy models` scan only lists once the account is signed in. */

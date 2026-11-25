@@ -24,16 +24,24 @@ export type CatalogFreshnessSweepPorts = Readonly<{
 export class CatalogFreshnessSweep {
   readonly #ports: CatalogFreshnessSweepPorts;
   #timer: ReturnType<typeof setInterval> | undefined;
-  #running: Promise<void> | undefined;
+  #running: { id: string; promise: Promise<void> } | undefined;
 
   constructor(ports: CatalogFreshnessSweepPorts) {
     this.#ports = ports;
   }
 
-  /** Idempotent; the timer never keeps the process alive. */
   start(): void {
     if (this.#timer) return;
-    this.#timer = setInterval(() => void this.sweep(), CATALOG_FRESHNESS_SWEEP_MS);
+    this.#timer = setInterval(() => {
+      if (this.#running) {
+        logger.info("Code Agent catalog sweep still running", {
+          event: "code_agent_catalog:sweep_joined",
+          sweep_id: this.#running.id,
+        });
+        return;
+      }
+      void this.sweep();
+    }, CATALOG_FRESHNESS_SWEEP_MS);
     this.#timer.unref();
   }
 
@@ -42,19 +50,35 @@ export class CatalogFreshnessSweep {
     this.#timer = undefined;
   }
 
-  /** One sweep; a sweep still running is joined, not repeated. Never rejects. */
   sweep(): Promise<void> {
-    this.#running ??= this.#sweep()
-      .catch((error: unknown) =>
+    if (this.#running) return this.#running.promise;
+    const id = crypto.randomUUID();
+    const startedAt = performance.now();
+    let outcome: "ok" | "failed" = "ok";
+    logger.info("Code Agent catalog sweep started", {
+      event: "code_agent_catalog:sweep_started",
+      sweep_id: id,
+    });
+    const promise = this.#sweep()
+      .catch((error: unknown) => {
+        outcome = "failed";
         logger.warn("Code Agent catalog freshness sweep failed", {
           event: "code_agent_catalog:freshness_sweep_failed",
+          sweep_id: id,
           error: thrownMessage(error),
-        }),
-      )
+        });
+      })
       .finally(() => {
         this.#running = undefined;
+        logger.info("Code Agent catalog sweep finished", {
+          event: "code_agent_catalog:sweep_finished",
+          sweep_id: id,
+          duration_ms: Math.round(performance.now() - startedAt),
+          outcome,
+        });
       });
-    return this.#running;
+    this.#running = { id, promise };
+    return promise;
   }
 
   async #sweep(): Promise<void> {
