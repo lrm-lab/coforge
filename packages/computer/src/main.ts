@@ -47,6 +47,10 @@ if (Bun.argv[2] === "__pi-chat") {
 } else if (Bun.argv[2] === "__restore-context-view" || Bun.argv[1] === "__restore-context-view") {
   const { runContextViewRestoreChildMain } = await import("@lrm/coforge-daemon");
   await runContextViewRestoreChildMain();
+} else if (Bun.argv[2] === "__proc-job-scope-gate" || Bun.argv[1] === "__proc-job-scope-gate") {
+  const { runProcJobScopeGate } =
+    await import("@lrm/coforge-daemon/src/platform/proc-job-scope-gate");
+  await runProcJobScopeGate();
 } else if (Bun.argv[2] === "__daemon") {
   const { runMachineSupervisor } = await import("@lrm/coforge-daemon");
   performance.mark("coforge:startup:daemon_imported");

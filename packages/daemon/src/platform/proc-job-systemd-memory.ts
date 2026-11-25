@@ -1,12 +1,37 @@
 import { basename, join, posix } from "node:path";
 import { isExitedProcState, parseProcStat } from "./linux-process-table";
 
-export type ProcScopeMemoryVerification = (input: {
+type ProcScopeMemoryVerificationInput = {
   unit: string;
   pid: number;
   limitBytes: number;
   signal: AbortSignal;
-}) => Promise<boolean>;
+};
+
+export type ProcScopeMemoryVerification = (
+  input: ProcScopeMemoryVerificationInput,
+) => Promise<boolean>;
+
+export type ProcScopeControl = {
+  systemdRunPath: string;
+  systemctlPath: string;
+  environment: Record<string, string>;
+};
+
+const SCOPE_CONTROL_PATH = "/usr/bin:/bin";
+
+export function resolveProcScopeControl(): ProcScopeControl {
+  const systemdRunPath = Bun.which("systemd-run", { PATH: SCOPE_CONTROL_PATH });
+  const systemctlPath = Bun.which("systemctl", { PATH: SCOPE_CONTROL_PATH });
+  if (!systemdRunPath || !systemctlPath)
+    throw new Error("Trusted systemd executables are unavailable.");
+  const environment: Record<string, string> = { PATH: SCOPE_CONTROL_PATH, LC_ALL: "C" };
+  for (const name of ["DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR"]) {
+    const value = Bun.env[name];
+    if (value !== undefined) environment[name] = value;
+  }
+  return { systemdRunPath, systemctlPath, environment };
+}
 
 const SCOPE_PROPERTIES = [
   "ActiveState",
@@ -50,10 +75,14 @@ export function readProcJobScopeGroup(
   return group;
 }
 
-async function scopeProperties(unit: string, signal: AbortSignal): Promise<string | undefined> {
+async function scopeProperties(
+  unit: string,
+  signal: AbortSignal,
+  control: ProcScopeControl,
+): Promise<string | undefined> {
   const probe = Bun.spawn(
     [
-      "systemctl",
+      control.systemctlPath,
       "--user",
       "show",
       ...SCOPE_PROPERTIES.map((name) => `--property=${name}`),
@@ -61,6 +90,8 @@ async function scopeProperties(unit: string, signal: AbortSignal): Promise<strin
       unit,
     ],
     {
+      cwd: "/",
+      env: control.environment,
       stdin: "ignore",
       stdout: "pipe",
       stderr: "ignore",
@@ -97,12 +128,10 @@ async function verifiedKernelLimit(
   );
 }
 
-export const verifyProcJobMemoryScope: ProcScopeMemoryVerification = async ({
-  unit,
-  pid,
-  limitBytes,
-  signal,
-}) => {
+export async function verifyProcJobMemoryScope(
+  { unit, pid, limitBytes, signal }: ProcScopeMemoryVerificationInput,
+  control: ProcScopeControl,
+): Promise<boolean> {
   if (process.platform !== "linux") return false;
   let anchor: number | undefined;
   try {
@@ -114,7 +143,7 @@ export const verifyProcJobMemoryScope: ProcScopeMemoryVerification = async ({
 
   while (!signal.aborted) {
     try {
-      const properties = await scopeProperties(unit, signal);
+      const properties = await scopeProperties(unit, signal, control);
       const group = properties && readProcJobScopeGroup(properties, unit, limitBytes);
       if (group && (await verifiedKernelLimit(pid, group, limitBytes))) {
         const currentAnchor = await readAnchor(pid);
@@ -126,4 +155,4 @@ export const verifyProcJobMemoryScope: ProcScopeMemoryVerification = async ({
     await Bun.sleep(25);
   }
   return false;
-};
+}

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnDetachedProcJob } from "#src/platform/proc-job-process";
@@ -49,6 +49,11 @@ async function scopeFixture() {
         payload,
       ],
       logPath,
+      scopeControl: {
+        systemdRunPath: join(directory, "systemd-run"),
+        systemctlPath: "/usr/bin/false",
+        environment: { PATH: "/usr/bin:/bin" },
+      },
       systemdUnit: "coforge-proc-fixture.scope",
       memoryLimitBytes: 4_294_967_296,
       onExit: () => exited.resolve(),
@@ -152,4 +157,53 @@ test("scope property read-back requires the requested identity and exact memory 
   expect(
     readProcJobScopeGroup(show + "\nMemoryAccounting=yes", unit, 4_294_967_296),
   ).toBeUndefined();
+});
+
+test("the capped scope starts with the daemon binary and environment", async () => {
+  if (process.platform !== "darwin" && process.platform !== "linux") return;
+  const fixture = await scopeFixture();
+  try {
+    const controlDirectory = join(fixture.directory, "control");
+    await mkdir(controlDirectory);
+    const systemdRunPath = join(controlDirectory, "systemd-run");
+    await writeFile(
+      systemdRunPath,
+      '#!/bin/sh\nprintf "control=%s\\n" "${PROBE_ENV-unset}"\nwhile [ "$#" -gt 0 ] && [ "$1" != -- ]; do shift; done\nshift\nexec "$@"\n',
+      { mode: 0o700 },
+    );
+    await writeFile(
+      join(fixture.directory, "systemd-run"),
+      '#!/bin/sh\nprintf "request PATH selected\\n"\nwhile [ "$#" -gt 0 ] && [ "$1" != -- ]; do shift; done\nshift\nexec "$@"\n',
+      { mode: 0o700 },
+    );
+    const scopeControl = {
+      ...fixture.input.scopeControl,
+      systemdRunPath,
+      environment: { PATH: "/usr/bin:/bin", PROBE_ENV: "daemon" },
+    };
+    const { pid } = await spawnDetachedProcJob({
+      ...fixture.input,
+      scopeControl,
+      env: { ...fixture.input.env, PROBE_ENV: "request" },
+      command: [
+        process.execPath,
+        "-e",
+        "await Bun.write(Bun.argv[1], JSON.stringify([Bun.env.PROBE_ENV, Bun.argv[2], await Bun.stdin.text(), process.pid, process.cwd()]))",
+        fixture.marker,
+        fixture.payload,
+      ],
+      verifySystemdMemoryScope: async () => true,
+    });
+    await fixture.exited;
+    expect(await Bun.file(fixture.input.logPath).text()).toBe("control=daemon\n");
+    expect(await Bun.file(fixture.marker).json()).toEqual([
+      "request",
+      fixture.payload,
+      "",
+      pid,
+      await realpath(fixture.directory),
+    ]);
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
 });

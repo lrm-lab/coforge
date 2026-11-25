@@ -2,8 +2,11 @@ import { closeSync, openSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { isExitedProcState, parseProcStat } from "./linux-process-table";
+import { procJobScopeGateCommand, type ProcJobScopePayload } from "./proc-job-scope-gate";
 import {
+  resolveProcScopeControl,
   verifyProcJobMemoryScope,
+  type ProcScopeControl,
   type ProcScopeMemoryVerification,
 } from "./proc-job-systemd-memory";
 
@@ -207,13 +210,11 @@ async function assertExecutableAvailable(
     if (!info.isFile()) throw new Error(`executable is not a file: ${executable}`);
     return;
   }
-  if (!Bun.which(executable, { PATH: pathEnv ?? "" }))
+  if (!Bun.which(executable, { cwd, PATH: pathEnv ?? "" }))
     throw new Error(`executable not found on PATH: ${executable}`);
 }
 
 const SCOPE_VERIFY_TIMEOUT_MS = 3_000;
-const SCOPE_EXEC_GATE =
-  'IFS= read -r approval && [ "$approval" = run ] || exit 125; exec "$@" </dev/null';
 
 async function verifyScopeBeforeExec(
   child: {
@@ -226,11 +227,12 @@ async function verifyScopeBeforeExec(
   limitBytes: number,
   verify: ProcScopeMemoryVerification,
   timeoutMs: number,
+  payload: Buffer,
 ): Promise<void> {
   const controller = new AbortController();
   const deadline = performance.now() + timeoutMs;
   let timeout: ReturnType<typeof setTimeout> | undefined;
-  let attempted = false;
+  let released = false;
   try {
     const verified = await Promise.race([
       Promise.resolve()
@@ -243,14 +245,14 @@ async function verifyScopeBeforeExec(
     ]);
     if (!verified || performance.now() >= deadline)
       throw new Error("Could not verify the scope memory limit before executing the job.");
-    attempted = true;
-    const sent = await child.stdin.write("run\n");
-    if (sent !== 4) throw new Error("Could not release the scope execution gate.");
+    const sent = await child.stdin.write(payload);
+    if (sent !== payload.byteLength) throw new Error("Could not release the scope execution gate.");
+    await child.stdin.end();
+    released = true;
   } finally {
     controller.abort();
     clearTimeout(timeout);
-    if (!attempted) child.kill("SIGKILL");
-    await child.stdin.end();
+    if (!released) child.kill("SIGKILL");
   }
 }
 
@@ -263,15 +265,25 @@ export async function spawnDetachedProcJob(input: {
   memoryLimitBytes?: number;
   verifySystemdMemoryScope?: ProcScopeMemoryVerification;
   verifyTimeoutMs?: number;
-  systemdSupportsNoArgumentExpansion?: boolean;
+  scopeControl?: ProcScopeControl;
   onExit(exitCode: number | null, signal: string | null): void;
 }): Promise<{ pid: number }> {
   if (input.systemdUnit)
     await assertExecutableAvailable(input.command[0]!, input.cwd, input.env.PATH);
   const limit = input.memoryLimitBytes;
-  const verify = input.verifySystemdMemoryScope ?? verifyProcJobMemoryScope;
   if (limit !== undefined && (!input.systemdUnit || !Number.isSafeInteger(limit) || limit <= 0))
     throw new Error("A scope memory limit requires a systemd unit and positive byte limit.");
+  const scopeControl =
+    limit === undefined ? undefined : (input.scopeControl ?? resolveProcScopeControl());
+  const payload = scopeControl
+    ? Buffer.from(
+        JSON.stringify({
+          command: input.command,
+          cwd: input.cwd,
+          env: input.env,
+        } satisfies ProcJobScopePayload),
+      )
+    : undefined;
   const cappedScopeArgs =
     limit === undefined
       ? []
@@ -281,15 +293,11 @@ export async function spawnDetachedProcJob(input: {
           `--property=MemoryMax=${limit}`,
           "--property=MemorySwapMax=0",
           "--property=OOMPolicy=kill",
-          ...(input.systemdSupportsNoArgumentExpansion ? ["--expand-environment=no"] : []),
         ];
-  const command =
-    limit === undefined
-      ? input.command
-      : ["/bin/sh", "-c", SCOPE_EXEC_GATE, "proc-job", ...input.command];
+  const command = scopeControl ? procJobScopeGateCommand() : input.command;
   const argv = input.systemdUnit
     ? [
-        "systemd-run",
+        scopeControl?.systemdRunPath ?? "systemd-run",
         "--quiet",
         "--user",
         "--scope",
@@ -304,8 +312,8 @@ export async function spawnDetachedProcJob(input: {
   const fd = openSync(input.logPath, "a", 0o600);
   try {
     const child = Bun.spawn(argv, {
-      cwd: input.cwd,
-      env: input.env,
+      cwd: scopeControl ? "/" : input.cwd,
+      env: scopeControl?.environment ?? input.env,
       stdin: limit === undefined ? "ignore" : "pipe",
       stdout: fd,
       stderr: fd,
@@ -314,7 +322,7 @@ export async function spawnDetachedProcJob(input: {
         input.onExit(exitCode ?? null, signalCode ? String(signalCode) : null);
       },
     });
-    if (limit !== undefined && input.systemdUnit) {
+    if (limit !== undefined && input.systemdUnit && scopeControl && payload) {
       if (!child.stdin) {
         child.kill("SIGKILL");
         throw new Error("The scope execution gate has no approval pipe.");
@@ -328,8 +336,10 @@ export async function spawnDetachedProcJob(input: {
         },
         input.systemdUnit,
         limit,
-        verify,
+        input.verifySystemdMemoryScope ??
+          ((request) => verifyProcJobMemoryScope(request, scopeControl)),
         Math.min(input.verifyTimeoutMs ?? SCOPE_VERIFY_TIMEOUT_MS, SCOPE_VERIFY_TIMEOUT_MS),
+        payload,
       );
     }
     child.unref();
