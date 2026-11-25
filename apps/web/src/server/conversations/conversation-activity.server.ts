@@ -29,7 +29,7 @@ import {
  * The viewer's own message is in the list: their other tabs and devices must move the row too, and
  * the page is what ignores it for the badge.
  */
-type ActivityRecipient = { userId: string; memberId?: string };
+type ActivityRecipient = { userId: string; memberId?: string; muted?: boolean };
 
 async function activityRecipients(
   db: PrismaClient,
@@ -57,69 +57,64 @@ async function activityRecipients(
   }
   const members = await db.conversationMember.findMany({
     where: { conversationId: message.conversationId, leftAt: null, userId: { not: null } },
-    select: { id: true, userId: true },
+    select: { id: true, userId: true, notificationLevel: true },
   });
   const byUser = new Map<string, ActivityRecipient>();
   for (const row of members) {
     if (row.userId && !byUser.has(row.userId)) {
-      byUser.set(row.userId, { userId: row.userId, memberId: row.id });
+      byUser.set(row.userId, {
+        userId: row.userId,
+        memberId: row.id,
+        muted: row.notificationLevel === "muted",
+      });
     }
   }
   return [...byUser.values()];
 }
 
-/**
- * Announces one new message: to its conversation's own channel, for the open page to reconcile,
- * and as `conversation.activity.v1` to each recipient's own channel, which is what moves the Chat
- * sidebar's row and the unread and Activity counts without a read.
- *
- * Runs after the write commits, never inside its transaction or its locks: the reads here are one
- * for the message (its body, sender and mentions, for the row's preview) and one for the
- * recipients. Both are required: an announcement that cannot reach the recipients' own channels
- * leaves every other page's sidebar, unread counts and Activity dot behind (task #348: every Agent's
- * message went out without them, its repository passing no database). A write path announces
- * through `announceMessageBestEffort`, which logs a failure instead of failing the write.
- */
 export async function announceMessage(
   db: PrismaClient,
   realtime: Pick<ConversationRealtime, "messageAvailable" | "conversationActivity">,
   message: ConversationRealtimeMessage,
 ): Promise<void> {
-  await realtime.messageAvailable(message);
-  void noticeExternalInbox(db, message);
-  if (!realtime.conversationActivity) {
+  const available = realtime.messageAvailable(message);
+  const conversationActivity = realtime.conversationActivity?.bind(realtime);
+  if (!conversationActivity) {
+    await available;
+    void noticeExternalInbox(db, message);
     unannounced("port_without_activity", message);
     return;
   }
-  const stored = await db.message.findUnique({
-    where: { id: message.messageId },
-    select: {
-      body: true,
-      createdAt: true,
-      threadRootId: true,
-      workspaceId: true,
-      conversation: { select: { channelName: true, kind: true } },
-      sender: {
-        select: {
-          userId: true,
-          agentId: true,
-          user: { select: { displayName: true, username: true } },
-          agent: { select: { name: true, displayName: true } },
+  const [, stored] = await Promise.all([
+    available,
+    db.message.findUnique({
+      where: { id: message.messageId },
+      select: {
+        body: true,
+        createdAt: true,
+        threadRootId: true,
+        workspaceId: true,
+        conversation: { select: { channelName: true, kind: true } },
+        sender: {
+          select: {
+            userId: true,
+            agentId: true,
+            user: { select: { displayName: true, username: true } },
+            agent: { select: { name: true, displayName: true } },
+          },
         },
+        mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
+        forwards: { select: { sourceBody: true }, orderBy: { position: "asc" }, take: 1 },
+        systemMessage: { select: { kind: true, params: true } },
+        actionCard: ACTION_CARD_PREVIEW_SELECT,
       },
-      mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
-      // A note-less forward previews as its first original.
-      forwards: { select: { sourceBody: true }, orderBy: { position: "asc" }, take: 1 },
-      systemMessage: { select: { kind: true, params: true } },
-      actionCard: ACTION_CARD_PREVIEW_SELECT,
-    },
-  });
+    }),
+  ]);
+  void noticeExternalInbox(db, message);
   if (!stored) {
     unannounced("message_not_found", message);
     return;
   }
-  // A task's own conversation is hidden: no sidebar row or count to move. Its readers hear of it
-  // through their Activity (`task-publication.server.ts`).
   if (stored.conversation.kind === "task_thread") return;
   const event: ConversationActivityEvent = {
     type: REALTIME_EVENTS.conversationActivity,
@@ -151,25 +146,31 @@ export async function announceMessage(
     threadRootId: stored.threadRootId ?? undefined,
   });
   if (recipients.length === 0) return;
-  const userIds = recipients.map((recipient) => recipient.userId);
   const mentionedUserIds = new Set(
     stored.mentions.flatMap((mention) => (mention.kind === "user" ? [mention.actorId] : [])),
   );
   const senderUserId = stored.sender?.userId;
-  const muted = stored.threadRootId
-    ? new Set<string>()
-    : new Set(
-        (
-          await db.conversationMember.findMany({
-            where: {
-              conversationId: message.conversationId,
-              userId: { in: userIds },
-              notificationLevel: "muted",
-            },
-            select: { userId: true },
-          })
-        ).flatMap((member) => (member.userId ? [member.userId] : [])),
-      );
+  const muted = new Set<string>();
+  if (!stored.threadRootId) {
+    const unknownMutedUserIds: string[] = [];
+    for (const recipient of recipients) {
+      if (recipient.muted === true) muted.add(recipient.userId);
+      else if (recipient.muted === undefined) unknownMutedUserIds.push(recipient.userId);
+    }
+    if (unknownMutedUserIds.length > 0) {
+      const mutedMembers = await db.conversationMember.findMany({
+        where: {
+          conversationId: message.conversationId,
+          userId: { in: unknownMutedUserIds },
+          notificationLevel: "muted",
+        },
+        select: { userId: true },
+      });
+      for (const member of mutedMembers) {
+        if (member.userId) muted.add(member.userId);
+      }
+    }
+  }
   let threadUnreadsByMember: Map<string, ChannelThreadUnreadSummary> | undefined;
   if (
     stored.threadRootId &&
@@ -211,9 +212,7 @@ export async function announceMessage(
       },
     });
   }
-  for (const bucket of buckets.values()) {
-    await realtime.conversationActivity(bucket);
-  }
+  await Promise.all([...buckets.values()].map((bucket) => conversationActivity(bucket)));
 }
 
 function unannounced(reason: string, message: ConversationRealtimeMessage) {

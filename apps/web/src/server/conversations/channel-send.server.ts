@@ -32,7 +32,7 @@ import {
 } from "./pending-mention-action-recording.server";
 import { getMessageRequestIdempotency } from "./redis-message-request-idempotency.server";
 import { agentMessageSender } from "./sender-display.server";
-import { taskReferenceView } from "./task-reference-view.server";
+import { taskReferenceViews } from "./task-reference-view.server";
 import type { SentMessageHook } from "./sent-message-hook.server";
 import { unresolvedMentionHandles } from "./unresolved-mentions.server";
 import { requireUserMayPostInChannel } from "./channel-post-access.server";
@@ -289,25 +289,15 @@ export async function sendChannel(
     // Only a person sends here; an Agent's channel message goes through `SendDirectMessage`.
     senderUserId: userId,
   });
-  await publishConcurrently(announcement, async () => {
+  const publication = publishConcurrently(announcement, async () => {
     const publisher = ctx.publisher ?? createCentrifugoServerApi();
     const sender = agentMessageSender(message.sender);
-    const taskViews = new Map(
-      await Promise.all(
-        message.deliveries.map(
-          async (delivery) =>
-            [
-              delivery.agentId,
-              await taskReferenceView(
-                ctx.db,
-                workspaceId,
-                delivery.agentId,
-                channelId,
-                message.body,
-              ),
-            ] as const,
-        ),
-      ),
+    const taskViews = await taskReferenceViews(
+      ctx.db,
+      workspaceId,
+      message.deliveries.map((delivery) => delivery.agentId),
+      channelId,
+      message.body,
     );
     const pushed = await new AgentDeliveryPublisher(
       publisher,
@@ -338,9 +328,7 @@ export async function sendChannel(
     const failed = pushed.find((result) => result.status === "rejected");
     if (failed) throw failed.reason;
   });
-  // Read from the stored body, so an idempotent replay reads the same `@handle`s. These two
-  // post-commit reads are independent, so they go together.
-  const [unresolved, pendingMentionActions] = await Promise.all([
+  const postCommitReads = Promise.all([
     unresolvedMentionHandles(ctx.db, workspaceId, { userId }, message.body),
     pendingMentionActionsForMessage(
       ctx.db,
@@ -354,5 +342,9 @@ export async function sendChannel(
       channel,
     ),
   ]);
+  const [published, reads] = await Promise.allSettled([publication, postCommitReads]);
+  if (published.status === "rejected") throw published.reason;
+  if (reads.status === "rejected") throw reads.reason;
+  const [unresolved, pendingMentionActions] = reads.value;
   return { ...message, unresolvedMentionHandles: unresolved, pendingMentionActions };
 }

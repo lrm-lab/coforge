@@ -94,18 +94,18 @@ export class AgentDeliveryPublisher {
     pushes: readonly AgentDeliveryPush[],
   ): Promise<PromiseSettledResult<void>[]> {
     if (!pushes.length) return [];
-    const [features, notices] = await Promise.all([
+    const [features, notices, envelopes] = await Promise.all([
       deliveryFeatures(workspaceId),
       deliveryNoticeViews(workspaceId, pushes),
+      this.mentions?.issue(
+        workspaceId,
+        pushes.map((push) => ({
+          deliveryId: push.deliveryId,
+          agentId: push.agentId,
+          mentionsAgent: push.mentionsAgent === true,
+        })),
+      ),
     ]);
-    const envelopes = await this.mentions?.issue(
-      workspaceId,
-      pushes.map((push) => ({
-        deliveryId: push.deliveryId,
-        agentId: push.agentId,
-        mentionsAgent: push.mentionsAgent === true,
-      })),
-    );
     // Each push to a running Agent gets one result, in push order. A push its encoder refuses
     // fails alone; the rest go to Centrifugo in one batch.
     const entries = pushes.flatMap(({ computerId, ...push }): PushEntry[] => {

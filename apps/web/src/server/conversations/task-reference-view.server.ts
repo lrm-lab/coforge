@@ -24,101 +24,204 @@ export function taskReferenceConversations(body: string): {
   return { channel: [...channel], dm: [...dm] };
 }
 
-/**
- * How a body's task references read for one Agent: a DM's task names the DM's other party from
- * the reader's seat (the peer sees the sender), an own DM's task reads as the local `#N`, and a
- * DM the reader is not in stays canonical. Undefined when the body has no DM reference, so callers
- * skip the read.
- */
-export async function taskReferenceView(
-  db: Pick<PrismaClient, "conversationMember" | "conversation" | "user" | "agent">,
+type TaskReferenceDb = Pick<PrismaClient, "conversationMember" | "conversation" | "user" | "agent">;
+type TaskReferenceFormatter = (reference: TaskReference) => string | undefined;
+
+export async function taskReferenceViews(
+  db: TaskReferenceDb,
   workspaceId: string,
-  readerAgentId: string,
+  readerAgentIds: readonly string[],
   currentConversationId: string,
   body: string,
-): Promise<((reference: TaskReference) => string | undefined) | undefined> {
+): Promise<Map<string, TaskReferenceFormatter>> {
+  const uniqueAgentIds = [...new Set(readerAgentIds)];
+  if (uniqueAgentIds.length === 0) return new Map();
   const referenced = taskReferenceConversations(body);
-  const all = [...referenced.channel, ...referenced.dm];
-  if (all.length === 0) return undefined;
-  const channels = referenced.channel.length
-    ? await db.conversation.findMany({
-        where: {
-          id: { in: referenced.channel },
-          workspaceId,
-          OR: [
-            { visibility: "public" },
-            { members: { some: { agentId: readerAgentId, leftAt: null } } },
-          ],
-        },
-        select: { id: true },
-      })
-    : [];
-  const readableChannels = new Set(channels.map((channel) => channel.id));
-  const conversations = referenced.dm.filter(
+  if (referenced.channel.length === 0 && referenced.dm.length === 0) return new Map();
+  const dmConversations = referenced.dm.filter(
     (conversationId) => conversationId !== currentConversationId,
   );
-  const mine = await db.conversationMember.findMany({
-    where: { conversationId: { in: conversations }, agentId: readerAgentId, leftAt: null },
-    select: { conversationId: true },
-  });
-  const readable = new Set(mine.map((member) => member.conversationId));
-  const others = await db.conversationMember.findMany({
-    where: {
-      conversationId: { in: [...readable] },
-      leftAt: null,
-      // A person's row has a null agentId; `NOT { agentId }` would drop it with SQL's NULL.
-      OR: [{ agentId: null }, { agentId: { not: readerAgentId } }],
-    },
-    select: { conversationId: true, userId: true, agentId: true },
-  });
-  const userIds = others.flatMap((member) => (member.userId ? [member.userId] : []));
-  const agentIds = others.flatMap((member) => (member.agentId ? [member.agentId] : []));
-  const [users, agents] = await Promise.all([
-    userIds.length
-      ? db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, username: true } })
+  const [channels, dmMemberships] = await Promise.all([
+    referenced.channel.length > 0
+      ? db.conversation.findMany({
+          where: {
+            id: { in: referenced.channel },
+            workspaceId,
+            OR: [
+              { visibility: "public" },
+              { members: { some: { agentId: { in: uniqueAgentIds }, leftAt: null } } },
+            ],
+          },
+          select: {
+            id: true,
+            visibility: true,
+            members: {
+              where: {
+                agentId: { in: uniqueAgentIds },
+                leftAt: null,
+                conversation: { visibility: { not: "public" } },
+              },
+              select: { agentId: true },
+            },
+          },
+        })
       : [],
-    agentIds.length
-      ? db.agent.findMany({
-          where: { id: { in: agentIds }, workspaceId },
-          select: { id: true, name: true },
+    dmConversations.length > 0
+      ? db.conversationMember.findMany({
+          where: {
+            conversationId: { in: dmConversations },
+            agentId: { in: uniqueAgentIds },
+            leftAt: null,
+          },
+          select: { conversationId: true, agentId: true },
         })
       : [],
   ]);
-  const usernameOf = new Map(users.map((user) => [user.id, user.username]));
-  const agentNameOf = new Map(agents.map((agent) => [agent.id, agent.name]));
-  const peerOf = new Map<string, { handle: string; kind: "user" | "agent" }>();
-  for (const other of others) {
-    const handle = other.userId ? usernameOf.get(other.userId) : agentNameOf.get(other.agentId!);
-    if (handle) peerOf.set(other.conversationId, { handle, kind: other.userId ? "user" : "agent" });
+
+  const addToSet = (map: Map<string, Set<string>>, key: string, value: string) => {
+    let set = map.get(key);
+    if (!set) {
+      set = new Set<string>();
+      map.set(key, set);
+    }
+    set.add(value);
+  };
+
+  const publicChannels = new Set<string>();
+  const privateChannelsByAgent = new Map<string, Set<string>>();
+  for (const channel of channels) {
+    if (channel.visibility === "public") {
+      publicChannels.add(channel.id);
+      continue;
+    }
+    for (const member of channel.members) {
+      if (member.agentId) addToSet(privateChannelsByAgent, member.agentId, channel.id);
+    }
   }
-  // A handle that names both a person and an Agent needs Raft's kind suffix to be exact.
-  const handles = [...new Set([...peerOf.values()].map((peer) => peer.handle))];
-  const [userHandles, agentHandles] = handles.length
-    ? await Promise.all([
+
+  const readableDmsByAgent = new Map<string, Set<string>>();
+  const allReadableDms = new Set<string>();
+  for (const membership of dmMemberships) {
+    if (!membership.agentId) continue;
+    allReadableDms.add(membership.conversationId);
+    addToSet(readableDmsByAgent, membership.agentId, membership.conversationId);
+  }
+
+  const peerByAgentAndDm = new Map<
+    string,
+    Map<string, { handle: string; kind: "user" | "agent" }>
+  >();
+  let ambiguous = new Set<string>();
+
+  if (allReadableDms.size > 0) {
+    const dmMembers = await db.conversationMember.findMany({
+      where: {
+        conversationId: { in: [...allReadableDms] },
+        leftAt: null,
+      },
+      select: { conversationId: true, userId: true, agentId: true },
+    });
+    const userIds = [
+      ...new Set(dmMembers.flatMap((member) => (member.userId ? [member.userId] : []))),
+    ];
+    const agentIds = [
+      ...new Set(dmMembers.flatMap((member) => (member.agentId ? [member.agentId] : []))),
+    ];
+    const [users, agents] = await Promise.all([
+      userIds.length > 0
+        ? db.user.findMany({ where: { id: { in: userIds } }, select: { id: true, username: true } })
+        : [],
+      agentIds.length > 0
+        ? db.agent.findMany({
+            where: { id: { in: agentIds }, workspaceId },
+            select: { id: true, name: true },
+          })
+        : [],
+    ]);
+    const usernameOf = new Map(users.map((user) => [user.id, user.username]));
+    const agentNameOf = new Map(agents.map((agent) => [agent.id, agent.name]));
+    const membersByDm = new Map<string, typeof dmMembers>();
+    for (const member of dmMembers) {
+      let group = membersByDm.get(member.conversationId);
+      if (!group) {
+        group = [];
+        membersByDm.set(member.conversationId, group);
+      }
+      group.push(member);
+    }
+    const handleSet = new Set<string>();
+    for (const [agentId, dms] of readableDmsByAgent) {
+      const peerOf = new Map<string, { handle: string; kind: "user" | "agent" }>();
+      for (const dmId of dms) {
+        const members = membersByDm.get(dmId) ?? [];
+        for (const other of members) {
+          if (other.agentId === agentId) continue;
+          const handle = other.userId
+            ? usernameOf.get(other.userId)
+            : other.agentId
+              ? agentNameOf.get(other.agentId)
+              : undefined;
+          if (handle) {
+            peerOf.set(dmId, { handle, kind: other.userId ? "user" : "agent" });
+            handleSet.add(handle);
+          }
+        }
+      }
+      peerByAgentAndDm.set(agentId, peerOf);
+    }
+    const handles = [...handleSet];
+    if (handles.length > 0) {
+      const [userHandles, agentHandles] = await Promise.all([
         db.user.findMany({ where: { username: { in: handles } }, select: { username: true } }),
         db.agent.findMany({
           where: { workspaceId, name: { in: handles } },
           select: { name: true },
         }),
-      ])
-    : [[], []];
-  const agentNames = new Set(agentHandles.map((agent) => agent.name));
-  const ambiguous = new Set(
-    userHandles.map((user) => user.username).filter((name) => agentNames.has(name)),
+      ]);
+      const agentNames = new Set(agentHandles.map((agent) => agent.name));
+      ambiguous = new Set(
+        userHandles.map((user) => user.username).filter((name) => agentNames.has(name)),
+      );
+    }
+  }
+
+  const views = new Map<string, TaskReferenceFormatter>();
+  for (const agentId of uniqueAgentIds) {
+    const privateChannels = privateChannelsByAgent.get(agentId);
+    const peerOf = peerByAgentAndDm.get(agentId);
+    views.set(agentId, (reference) => {
+      if (reference.kind === "channel") {
+        return publicChannels.has(reference.conversationId) ||
+          privateChannels?.has(reference.conversationId)
+          ? canonicalTaskReference(reference)
+          : HIDDEN_TASK_REFERENCE;
+      }
+      if (reference.kind !== "dm") return canonicalTaskReference(reference);
+      if (reference.conversationId === currentConversationId) return `#${reference.number}`;
+      const peer = peerOf?.get(reference.conversationId);
+      if (!peer) return canonicalTaskReference(reference);
+      const handle = ambiguous.has(peer.handle)
+        ? `${peer.handle}~${peer.kind === "agent" ? "agent" : "human"}`
+        : peer.handle;
+      return `dm:@${handle}:#${reference.number}`;
+    });
+  }
+  return views;
+}
+
+export async function taskReferenceView(
+  db: TaskReferenceDb,
+  workspaceId: string,
+  readerAgentId: string,
+  currentConversationId: string,
+  body: string,
+): Promise<TaskReferenceFormatter | undefined> {
+  const views = await taskReferenceViews(
+    db,
+    workspaceId,
+    [readerAgentId],
+    currentConversationId,
+    body,
   );
-  return (reference) => {
-    if (reference.kind === "channel")
-      return readableChannels.has(reference.conversationId)
-        ? canonicalTaskReference(reference)
-        : HIDDEN_TASK_REFERENCE;
-    if (reference.kind !== "dm") return canonicalTaskReference(reference);
-    // A DM's own task reads as this conversation's task.
-    if (reference.conversationId === currentConversationId) return `#${reference.number}`;
-    const peer = peerOf.get(reference.conversationId);
-    if (!peer) return canonicalTaskReference(reference);
-    const handle = ambiguous.has(peer.handle)
-      ? `${peer.handle}~${peer.kind === "agent" ? "agent" : "human"}`
-      : peer.handle;
-    return `dm:@${handle}:#${reference.number}`;
-  };
+  return views.get(readerAgentId);
 }
