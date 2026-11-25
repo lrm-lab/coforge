@@ -10,8 +10,16 @@ import type {
 export type AgentNoticeOptions = {
   deliveryIds?: readonly string[];
   fallbackText?: () => string | undefined;
+  prepareSubmission?: (boundary: "prompt" | "steer") => string | undefined;
+  onPromptWritten?: () => void;
   conversation?: AgentConversationScope;
 };
+export class AgentNoticeSuppressedError extends Error {
+  constructor() {
+    super("Notice no longer has eligible messages");
+  }
+}
+
 export interface AgentSession {
   readonly contextViewRequestLogPath?: string;
   /** OS PID of the runtime's owned child process, when backed by one; absent once exited or embedded. */

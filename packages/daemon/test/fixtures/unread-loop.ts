@@ -1,11 +1,9 @@
+import { AgentNoticeSuppressedError, type AgentNoticeOptions } from "@coforge/agent";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-attention-index";
 import type { ImportantUnreadNotice } from "#src/daemon-runtime/important-unread-notice";
 import { unreadNoticeComposer } from "#src/daemon-runtime/important-unread-compose";
-import {
-  composeImportantUnreadReminder,
-  consumedThroughSequence,
-} from "#src/daemon-runtime/important-unread-wiring";
+import { composeImportantUnreadReminder } from "#src/daemon-runtime/important-unread-wiring";
 import { session } from "./attention-delivery";
 import type { AgentConsumedSeqState } from "#src/persistence/agent-consumed-seq-store";
 
@@ -26,6 +24,7 @@ export function unreadLoop(
     /** The session refuses the notice: the attempt is a rejection, exactly as a real session that
      * will not take the text is, so nothing is recorded as written and the retry stays. */
     refuse?: (notice: string) => boolean;
+    beforeSubmit?: () => Promise<void>;
     /** The daemon's durable cursor, and the composition's funnel that tells the loop a read
      * position moved (`consumedSeqs` in `message-composition.ts`). */
     cursor?: boolean;
@@ -45,7 +44,15 @@ export function unreadLoop(
   /** One run of the Agent's process, as the loop's write port sees it. */
   const processSession = () => ({
     ...process,
-    notify: async (notice: string) => {
+    notify: async (notice: string, noticeOptions?: AgentNoticeOptions) => {
+      if (options.beforeSubmit) {
+        await options.beforeSubmit();
+        if (noticeOptions?.prepareSubmission) {
+          const text = noticeOptions.prepareSubmission("prompt");
+          if (text === undefined) throw new AgentNoticeSuppressedError();
+          notice = text;
+        }
+      }
       if (options.refuse?.(notice)) throw new Error("Agent session refused the notice");
       loopNotices.push(notice);
       notices.push(notice);
@@ -62,15 +69,15 @@ export function unreadLoop(
       list: () => [...records.values()],
     },
     session: () => (writable ? loopSession : undefined),
+    eligibility: (...args) => index.noticeEligibility(...args),
     unread: () => index.unreadDeliveries("agent-1"),
     report: (agentId) => void reported.push(agentId),
     compose: unreadNoticeComposer({
+      eligibility: (...args) => index.noticeEligibility(...args),
       queued: () => queue,
       prefix: () => "",
       previewedInFull: (agentId, target, sequence) =>
         index.previewSeen.has(agentId, target, sequence),
-      hasSeen: (agentId, target, sequence, conversationId) =>
-        index.hasSeen(agentId, target, sequence, conversationId),
     }),
     shown: (agentId, shown) => index.previewSeen.record(agentId, shown),
     now: () => clock.nowMs,
@@ -95,7 +102,7 @@ export function unreadLoop(
               read: (agentId) => cursor.get(agentId) ?? EMPTY_CURSOR,
               write: (agentId, state) => {
                 cursor.set(agentId, state);
-                reminder.consumed(agentId, consumedThroughSequence(state));
+                reminder.consumed(agentId);
               },
             },
           }
