@@ -28,6 +28,7 @@ export type ImportantUnreadRecord = Pick<ImportantUnreadNoticeStore, "save" | "c
 export type ImportantUnreadComposedNotice = Readonly<{
   text: string;
   requestIds?: readonly string[];
+  deliveries?: NonNullable<AgentNoticeOptions["noticeOrigin"]>["deliveries"];
   fallbackText?: () => string | undefined;
   prepareSubmission?: AgentNoticeOptions["prepareSubmission"];
   shown?: readonly { target: string; sequence: number }[];

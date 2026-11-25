@@ -138,13 +138,14 @@ test("a steered notice settles on the runtime's answer and reports a cleared out
   const harness = await openSession(steerProfile(abandoned));
   const prompt = await busyTurn(harness);
   const fallbackText = () => "still waiting";
-  const steered = harness.session.notify("second", { fallbackText });
+  const noticeOrigin = { source: "reliable" as const, attemptId: "attempt-1", deliveries: [] };
+  const steered = harness.session.notify("second", { fallbackText, noticeOrigin });
   const insert = await harness.nextRequest("_test/steer");
   insert.resolve({ queued: true, messageId: "m1" });
   await steered;
   harness.notification("_test/outcome", { id: "m1", state: "cleared" });
   expect(harness.events.filter((event) => event.type === "notice-undelivered")).toEqual([
-    { type: "notice-undelivered", text: "second", fallbackText },
+    { type: "notice-undelivered", text: "second", fallbackText, noticeOrigin },
   ]);
   prompt.resolve({ stopReason: "end_turn" });
   await harness.session.dispose();
