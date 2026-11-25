@@ -12,6 +12,11 @@ import {
   animationsSettled,
   pageHydrated,
 } from "./helpers/browser-e2e";
+import {
+  nonTaskDialogs,
+  taskDetailPanels,
+  taskDetailSheetEntered,
+} from "./helpers/task-detail-e2e";
 
 /**
  * "Add sub-task" with an existing Task (task #505): from the Task popup's ··· menu, a search over the
@@ -60,7 +65,7 @@ test("an existing Task is put under the open one, and one under another parent i
         })
       ).parentLinks[0]?.parent.number ?? null;
 
-    const dialogs = `[...document.querySelectorAll('[role="dialog"]')]`;
+    const overlays = nonTaskDialogs();
     const items = `[...document.querySelectorAll('[role="menuitem"]')]`;
     const mark = async (selector: string, name: string) => {
       expect(
@@ -88,11 +93,15 @@ test("an existing Task is put under the open one, and one under another parent i
       const [task] = await create([name("Build the page")], epic);
       const [docs] = await create([name("Write the docs")]);
       const [login] = await create([name("Fix login")], old);
-      const popup = `${dialogs}.find((el) => el.textContent.includes(${JSON.stringify(name("Build the page"))}) && el.querySelector('[aria-label^="More actions"]'))`;
+      const popup = `${taskDetailPanels}.find((el) => el.textContent.includes(${JSON.stringify(name("Build the page"))}) && el.querySelector('[aria-label^="More actions"]'))`;
       const item = (text: string) =>
         `${items}.find((el) => el.textContent.includes(${JSON.stringify(text)}))`;
       const openPicker = async () => {
-        await browser("wait", "--fn", `${dialogs}.length === 1 && ${settled}`);
+        await browser(
+          "wait",
+          "--fn",
+          `${overlays}.length === 0 && ${taskDetailSheetEntered} && ${settled}`,
+        );
         await mark(
           `${popup}?.querySelector('[aria-label^="More actions for task #${task}"]')`,
           "more",
@@ -105,7 +114,7 @@ test("an existing Task is put under the open one, and one under another parent i
         await browser(
           "wait",
           "--fn",
-          `${dialogs}.some((el) => el.textContent.includes("New sub-task")) && ${item(name("Fix login"))} !== undefined && ${settled}`,
+          `${overlays}.some((el) => el.textContent.includes("New sub-task")) && ${item(name("Fix login"))} !== undefined && ${settled}`,
         );
       };
 
@@ -161,13 +170,13 @@ test("an existing Task is put under the open one, and one under another parent i
       await shoot(`${label}-picker-keyboard`);
       await browser("press", "Enter");
       await Bun.sleep(300);
-      expect(await evaluate<number>(`${dialogs}.length`)).toBe(2);
+      expect(await evaluate<number>(`${overlays}.length`)).toBe(1);
       expect(await parentOf(epic!)).toBeNull();
 
       // A free Task joins at once.
       await mark(item(name("Write the docs")), "pick");
       await browser("click", '[data-e2e="pick"]');
-      await browser("wait", "--fn", `${dialogs}.length === 1`);
+      await browser("wait", "--fn", `${overlays}.length === 0`);
       for (let tries = 0; (await parentOf(docs!)) !== task && tries < 50; tries += 1)
         await Bun.sleep(100);
       expect(await parentOf(docs!)).toBe(task);

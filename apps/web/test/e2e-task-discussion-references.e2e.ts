@@ -15,6 +15,7 @@ import {
   localBrowserE2e,
   pageHydrated,
 } from "./helpers/browser-e2e";
+import { taskDetail } from "./helpers/task-detail-e2e";
 
 /**
  * A Task's own discussion names other Tasks of its board (Frank, 11-04): in the Tasks page's popup,
@@ -73,7 +74,7 @@ test("a Task discussion's references to the board's other Tasks show their title
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1280", "860");
     await browser("open", `${origin}/en/w/${workspace.slug}/tasks?task=${channel.id}:${cards}`);
-    const dialog = `document.querySelector('[role="dialog"]')`;
+    const dialog = taskDetail;
     await browser(
       "wait",
       "--fn",

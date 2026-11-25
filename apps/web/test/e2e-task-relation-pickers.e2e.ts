@@ -13,6 +13,12 @@ import {
   animationsSettled,
   pageHydrated,
 } from "./helpers/browser-e2e";
+import {
+  nonTaskDialogs,
+  taskDetail,
+  taskDetailPanels,
+  taskDetailSheetEntered,
+} from "./helpers/task-detail-e2e";
 
 /**
  * The Task popup's ··· menu sets a parent, adds a Task to wait on and adds a sub-task, each from a
@@ -55,6 +61,7 @@ test("the Task popup's menu sets a parent, a Task to wait on and a sub-task", as
       ).tasks.map((each) => each.number);
 
     const dialogs = `[...document.querySelectorAll('[role="dialog"]')]`;
+    const overlays = nonTaskDialogs();
     const items = `[...document.querySelectorAll('[role="menuitem"]')]`;
     const mark = async (selector: string, name: string) => {
       expect(
@@ -85,11 +92,15 @@ test("the Task popup's menu sets a parent, a Task to wait on and a sub-task", as
         `Build the page ${label} ${tail}`,
       ]);
       const title = `Build the page ${label} ${tail}`;
-      const popup = `${dialogs}.find((el) => el.textContent.includes(${JSON.stringify(title)}) && el.querySelector('[aria-label^="More actions"]'))`;
+      const popup = `${taskDetailPanels}.find((el) => el.textContent.includes(${JSON.stringify(title)}) && el.querySelector('[aria-label^="More actions"]'))`;
       const page = `${origin}/en/w/${workspace.slug}/channel/${channel.id}?task=${task}`;
       const menu = async (item: string) => {
         // The last picker has closed and faded out, so nothing lies over the popup.
-        await browser("wait", "--fn", `${dialogs}.length === 1 && ${animationsSettled()}`);
+        await browser(
+          "wait",
+          "--fn",
+          `${overlays}.length === 0 && ${taskDetailSheetEntered} && ${animationsSettled()}`,
+        );
         await mark(
           `${popup}?.querySelector('[aria-label^="More actions for task #${task}"]')`,
           "more",
@@ -204,7 +215,7 @@ test("the Task popup's menu sets a parent, a Task to wait on and a sub-task", as
       await browser(
         "wait",
         "--fn",
-        `${dialogs}.length === 1 && ${dialogs}[0].querySelector("h2")?.textContent.includes("Write the copy ${label} ${tail}") === true`,
+        `${overlays}.length === 0 && ${taskDetail}?.querySelector("h2")?.textContent.includes("Write the copy ${label} ${tail}") === true`,
       );
       await noPageErrors();
       let link = null;
@@ -221,7 +232,11 @@ test("the Task popup's menu sets a parent, a Task to wait on and a sub-task", as
       // The sub-task's trail opens its parent in place, and the parent's Sub-tasks section appears
       // once the copy's announcement reaches its view: the front door gives this run the realtime
       // connection production has, so no reload is needed.
-      await browser("wait", "--fn", `${dialogs}.length === 1 && ${animationsSettled()}`);
+      await browser(
+        "wait",
+        "--fn",
+        `${overlays}.length === 0 && ${taskDetailSheetEntered} && ${animationsSettled()}`,
+      );
       const trailParent = `[...(${popup}?.querySelectorAll('[aria-label="Where this task is"] button') ?? [])].find((el) => el.textContent.includes(${JSON.stringify(title)}))`;
       await mark(trailParent, "parent-trail");
       await browser("click", '[data-e2e="parent-trail"]');

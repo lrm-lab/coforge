@@ -13,6 +13,7 @@ import {
   animationsSettled,
   pageHydrated,
 } from "./helpers/browser-e2e";
+import { taskDetail } from "./helpers/task-detail-e2e";
 
 /**
  * A Project's Tasks (tasks #460, #504): the Project page's Overview lists its Tasks in progress, up
@@ -171,7 +172,7 @@ test("a Project page lists its Tasks as a tree, and a Task's popup moves it betw
     await evaluate(
       `([...document.querySelectorAll("[data-task-board] a")].find((a) => a.textContent.includes(${JSON.stringify(loneTitle)})).click(), true)`,
     );
-    await browser("wait", "--fn", `document.querySelector('[role="dialog"]') !== null`);
+    await browser("wait", "--fn", `${taskDetail} !== null`);
     expect(await evaluate<string>("location.pathname")).toEndWith(`/projects/${home.slug}`);
     await shoot("desktop-tasks-popup");
 
@@ -188,7 +189,7 @@ test("a Project page lists its Tasks as a tree, and a Task's popup moves it betw
     // The popup files the lone Task under the other Project, then back under its own.
     await browser("set", "viewport", "1280", "860");
     await browser("open", `${origin}/zh-CN/w/${workspace.slug}/channel/${channel.id}?task=${lone}`);
-    const dialog = `document.querySelector('[role="dialog"]')`;
+    const dialog = taskDetail;
     await browser(
       "wait",
       "--fn",

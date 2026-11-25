@@ -12,6 +12,13 @@ import {
   animationsSettled,
   pageHydrated,
 } from "./helpers/browser-e2e";
+import {
+  taskDetail,
+  taskDetailChildSelector,
+  taskDetailClosestSelector,
+  taskDetailPanels,
+  taskDetailSheetEntered,
+} from "./helpers/task-detail-e2e";
 
 /**
  * Deleting a Task from its popup offers Undo for a short while (Frank, 11-04, task #507): a toast
@@ -60,20 +67,20 @@ test("a Task deleted from its popup comes back with Undo", async () => {
     const inChannel = `${origin}/en/w/${workspace.slug}/channel/${channel.id}?task=${number}`;
     const onTasksPage = `${origin}/en/w/${workspace.slug}/tasks?task=${channel.id}:${number}`;
     const deleteFromPopup = async (url: string) => {
+      const moreButton = taskDetailChildSelector(
+        `button[aria-label="More actions for task #${number}"]`,
+      );
       await browser("open", url);
       await browser(
         "wait",
         "--fn",
-        `${pageHydrated} && document.querySelector('[role="dialog"] button[aria-label="More actions for task #${number}"]') != null`,
+        `${pageHydrated} && ${taskDetailSheetEntered} && ${settled} && ${taskDetail}?.querySelector('button[aria-label="More actions for task #${number}"]') != null`,
       );
       // The popup is drawn again once its conversation has loaded, which can take a press made
       // just before: press until the menu is open.
       const menuOpen = `document.querySelector('[role="menuitem"][data-key="delete"]') != null`;
       for (let presses = 0; presses < 5 && !(await evaluate<boolean>(menuOpen)); presses++) {
-        await browser(
-          "click",
-          `[role="dialog"] button[aria-label="More actions for task #${number}"]`,
-        );
+        await browser("click", moreButton);
         await browser("wait", "800");
       }
       await browser("wait", "--fn", menuOpen);
@@ -111,11 +118,11 @@ test("a Task deleted from its popup comes back with Undo", async () => {
     await browser(
       "wait",
       "--fn",
-      `${pageHydrated} && [...document.querySelectorAll('[role="dialog"]')].some((el) => el.textContent.includes(${JSON.stringify(title)}))`,
+      `${pageHydrated} && ${taskDetailPanels}.some((el) => el.textContent.includes(${JSON.stringify(title)}))`,
     );
 
     // From the Tasks page: its row leaves, and Undo puts it back.
-    const row = `[...document.querySelectorAll("a, button, span, p, div")].some((el) => el.textContent.trim() === ${JSON.stringify(title)} && !el.closest('[role="dialog"]'))`;
+    const row = `[...document.querySelectorAll("a, button, span, p, div")].some((el) => el.textContent.trim() === ${JSON.stringify(title)} && !el.closest(${JSON.stringify(taskDetailClosestSelector)}))`;
     await browser("open", `${origin}/en/w/${workspace.slug}/tasks`);
     await browser("wait", "--fn", `${pageHydrated} && ${row}`);
     await deleteFromPopup(onTasksPage);

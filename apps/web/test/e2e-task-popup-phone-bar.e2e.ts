@@ -12,15 +12,14 @@ import {
   animationsSettled,
   pageHydrated,
 } from "./helpers/browser-e2e";
+import { taskDetail, taskDetailSheetEntered } from "./helpers/task-detail-e2e";
 
 /**
- * A Task's popup on a phone is a page with a top bar (task #70): close on the left, the channel's
- * group avatar, name and the Task's number centred, More on the right, each 44px to touch. The
- * title does not repeat the status the first chip shows, and the chips are one row of blocks, as
- * in New task (task #54), a long owner's name truncating in its block rather than wrapping. The
- * description shows in full at the head of the discussion's one scroller. A desktop keeps close on
- * the right, the properties in a sidebar and the popup one height. Screenshots, light and dark,
- * at 390 and 320 wide, are written under `.artifacts/e2e/task-popup-phone-bar/`.
+ * A Task's detail sheet on a phone (`TaskDetentSheet`): grab handle, left-aligned channel trail,
+ * More/Expand/Close 44px touch controls on the right, uniform chips row with truncating owner, and
+ * description at the head of the discussion scroller. Desktop opens an inline split pane and
+ * expands to the sidebar properties layout. Screenshots, light and dark, at 390, 320, and 1440
+ * wide, are written under `.artifacts/e2e/task-popup-phone-bar/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/task-popup-phone-bar");
@@ -68,9 +67,11 @@ test("a Task's popup on a phone has a top bar, and its properties are one row of
     evaluate<Box | null>(
       `(() => { const el = ${selector}; if (!el) return null; const r = el.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, width: r.width, height: r.height }; })()`,
     );
-  const dialog = `document.querySelector('[role="dialog"]')`;
+  const dialog = taskDetail;
   const close = `${dialog}.querySelector('button[aria-label="Close"]')`;
   const more = `${dialog}.querySelector('button[aria-label^="More actions"]')`;
+  const expand = `${dialog}.querySelector('button[aria-label="Expand"]')`;
+  const collapse = `${dialog}.querySelector('button[aria-label="Collapse"]')`;
   const place = `${dialog}.querySelector('nav[aria-label="Where this task is"] > span:last-child')`;
   const titleIcon = `${dialog}.querySelector('h2 svg')`;
   const chips = `[...${dialog}.querySelectorAll('dl[data-layout="chips"] > div')]`;
@@ -110,7 +111,7 @@ test("a Task's popup on a phone has a top bar, and its properties are one row of
         "--fn",
         `${pageHydrated} && ${dialog}?.querySelector('nav[aria-label="Where this task is"] .avatar-group') != null`,
       );
-      await settled();
+      await browser("wait", "--fn", `${taskDetailSheetEntered} && ${animationsSettled()}`);
     };
 
     for (const [width, height] of [
@@ -119,26 +120,34 @@ test("a Task's popup on a phone has a top bar, and its properties are one row of
     ] as const) {
       await open(width, height);
       const viewport = Number(width);
+      expect(
+        await evaluate<string | null>(
+          `document.querySelector('[data-detent-sheet]')?.getAttribute("data-detent") ?? null`,
+        ),
+      ).toBe("half");
+      expect(
+        await evaluate<boolean>(
+          `document.querySelector('[data-detent-grab]')?.checkVisibility() ?? false`,
+        ),
+      ).toBe(true);
+
       const closeBox = (await box(close))!;
       const moreBox = (await box(more))!;
+      const expandBox = (await box(expand))!;
       const placeBox = (await box(place))!;
-      // Close at the left edge, More at the right, each 44px square.
-      expect(closeBox.right).toBeLessThanOrEqual(placeBox.left);
-      expect(moreBox.left).toBeGreaterThanOrEqual(placeBox.right);
-      expect(Math.round(closeBox.left)).toBe(0);
-      expect(Math.round(moreBox.right)).toBe(viewport);
-      for (const button of [closeBox, moreBox]) {
+      expect(placeBox.left).toBeGreaterThanOrEqual(0);
+      expect(placeBox.right).toBeLessThanOrEqual(moreBox.left);
+      expect(moreBox.right).toBeLessThanOrEqual(expandBox.left);
+      expect(expandBox.right).toBeLessThanOrEqual(closeBox.left);
+      expect(closeBox.right).toBeLessThanOrEqual(viewport);
+      for (const button of [moreBox, expandBox, closeBox]) {
         expect(Math.round(button.width)).toBe(44);
         expect(Math.round(button.height)).toBe(44);
       }
-      // The place is centred on the page, and reads the channel's name with no `#`.
-      expect(Math.abs(placeBox.left + placeBox.width / 2 - viewport / 2)).toBeLessThan(2);
       expect(await evaluate<string>(`${place}.textContent`)).toBe(
         `e2e-phone-bar-${tail}#${number}`,
       );
-      // The title does not repeat the status; the first chip says it.
       expect(await evaluate<boolean>(`${titleIcon}?.checkVisibility() ?? false`)).toBe(false);
-      // One row of blocks of one height: the long owner's name truncates rather than wrapping.
       const heights = await evaluate<number[]>(
         `${chips}.filter((el) => el.checkVisibility()).map((el) => Math.round(el.getBoundingClientRect().height))`,
       );
@@ -154,16 +163,19 @@ test("a Task's popup on a phone has a top bar, and its properties are one row of
       })()`);
       expect(lines).toBeGreaterThan(2);
       await shots(`phone-${width}`);
+
+      await evaluate(`(${expand}.setAttribute("data-e2e-sheet-expand", ""), true)`);
+      await browser("click", "[data-e2e-sheet-expand]");
+      await browser(
+        "wait",
+        "--fn",
+        `document.querySelector('[data-detent-sheet]')?.getAttribute("data-detent") === "full" && ${collapse} != null`,
+      );
     }
 
     await open("1440", "900");
     expect((await box(close))!.left).toBeGreaterThan((await box(more))!.right);
     expect(await evaluate<boolean>(`${titleIcon} === null`)).toBe(true);
-    expect(
-      await evaluate<boolean>(
-        `${dialog}.querySelector('aside dl[data-layout="sidebar"]') !== null`,
-      ),
-    ).toBe(true);
     expect(
       await evaluate<number>(`${dialog}.getBoundingClientRect().height`),
     ).toBeGreaterThanOrEqual(700);
@@ -171,6 +183,14 @@ test("a Task's popup on a phone has a top bar, and its properties are one row of
       256,
     );
     expect(await evaluate<boolean>(inDiscussion)).toBe(true);
+
+    await evaluate(`(${expand}.setAttribute("data-e2e-panel-expand", ""), true)`);
+    await browser("click", "[data-e2e-panel-expand]");
+    await browser(
+      "wait",
+      "--fn",
+      `${dialog}?.querySelector('aside dl[data-layout="sidebar"]') !== null`,
+    );
     await shots("desktop");
   } finally {
     await browser("close").catch(() => undefined);

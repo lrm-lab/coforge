@@ -14,6 +14,11 @@ import {
   animationsSettled,
   pageHydrated,
 } from "./helpers/browser-e2e";
+import {
+  taskDetail,
+  taskDetailChildSelector,
+  taskDetailSheetEntered,
+} from "./helpers/task-detail-e2e";
 
 /**
  * Task labels, the simple version (task #455): the Task popup's picker ticks the Workspace's labels
@@ -74,7 +79,7 @@ test("labels go on and off a Task, are made from a name, show on cards and filte
         .map((row) => row.label.name)
         .sort();
 
-    const dialog = `document.querySelector('[role="dialog"]')`;
+    const dialog = taskDetail;
     const settled = () => browser("wait", "--fn", animationsSettled());
     const menu = `document.querySelector('[role="menu"][aria-label="Labels"]')`;
     const item = (label: string) =>
@@ -209,7 +214,7 @@ test("labels go on and off a Task, are made from a name, show on cards and filte
 
     // An owner recolors a label from its chip: a click on a swatch applies it and closes.
     const chipSelector = (label: string) =>
-      `[role="dialog"] button[aria-label="Change color of ${label}"]`;
+      taskDetailChildSelector(`button[aria-label="Change color of ${label}"]`);
     const chipDot = (label: string) =>
       `document.querySelector(${JSON.stringify(chipSelector(label))})?.querySelector("svg")?.getAttribute("class") ?? ""`;
     expect(await evaluate<string>(chipDot(name("Bug")))).toContain("text-utility-red-500");
@@ -308,7 +313,11 @@ test("labels go on and off a Task, are made from a name, show on cards and filte
     await browser("set", "viewport", "390", "844");
     await browser("open", popup);
     const chipRow = `${dialog}?.querySelector('dl[data-layout="chips"]')`;
-    await browser("wait", "--fn", `${pageHydrated} && ${chipRow} != null`);
+    await browser(
+      "wait",
+      "--fn",
+      `${pageHydrated} && ${taskDetailSheetEntered} && ${animationsSettled()} && ${chipRow} != null`,
+    );
     expect(
       await evaluate<boolean>(`${chipRow}.textContent.includes(${JSON.stringify(name("Bug"))})`),
     ).toBe(true);

@@ -15,6 +15,7 @@ import {
   localBrowserE2e,
   pageHydrated,
 } from "./helpers/browser-e2e";
+import { taskDetail } from "./helpers/task-detail-e2e";
 
 /**
  * A Task popup's discussion opens on its oldest replies and leaves the reader's read position where
@@ -115,7 +116,7 @@ test("a Task popup's discussion opens on its oldest replies and is read on reach
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1280", "860");
     await browser("open", `${origin}/en/w/${workspace.slug}/tasks?task=${channel.id}:${number}`);
-    const dialog = `document.querySelector('[role="dialog"]')`;
+    const dialog = taskDetail;
     const history = `${dialog}?.querySelector('[data-scroll-restoration-id^="conversation-"]')`;
     await browser(
       "wait",
@@ -167,7 +168,7 @@ test("a Task popup whose discussion fits is read once it opens", async () => {
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1280", "860");
     await browser("open", `${origin}/en/w/${workspace.slug}/tasks?task=${channel.id}:${number}`);
-    const dialog = `document.querySelector('[role="dialog"]')`;
+    const dialog = taskDetail;
     await browser(
       "wait",
       "--fn",

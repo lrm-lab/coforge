@@ -6,11 +6,13 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import {
+  animationsSettled,
   browserSession,
   devBrowserWorkspace,
   localBrowserE2e,
   pageHydrated,
 } from "./helpers/browser-e2e";
+import { taskDetailSheetEntered, topTaskDetail } from "./helpers/task-detail-e2e";
 
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/avatars-everywhere");
@@ -64,14 +66,18 @@ test("names carry their faces", async () => {
       await browser("screenshot", join(artifacts, `${name}-dark.png`));
       await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
     };
-    const dialog = `[...document.querySelectorAll('[role="dialog"]')].at(-1)`;
+    const dialog = topTaskDetail;
     const openHistory = async () => {
       await browser(
         "open",
         `${origin}/en/w/${workspace.slug}/channel/${channel.id}?task=${number}`,
       );
       const actions = `${dialog}?.querySelector('button[aria-label="More actions for task #${number}"]')`;
-      await browser("wait", "--fn", `${pageHydrated} && ${actions} != null`);
+      await browser(
+        "wait",
+        "--fn",
+        `${pageHydrated} && ${taskDetailSheetEntered} && ${animationsSettled()} && ${actions} != null`,
+      );
       await evaluate(`(${actions}.setAttribute("data-e2e-actions", ""), true)`);
       await browser("click", "[data-e2e-actions]");
       const fullHistory = `[...document.querySelectorAll('[role^="menuitem"]')].find((el) => el.textContent.trim() === "View full history")`;

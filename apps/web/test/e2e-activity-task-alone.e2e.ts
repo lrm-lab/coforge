@@ -10,11 +10,13 @@ import { getMessageRequestIdempotency } from "#src/server/conversations/redis-me
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { TaskConversations } from "#src/server/tasks/task-conversations.server";
 import {
+  animationsSettled,
   browserSession,
   devBrowserWorkspace,
   localBrowserE2e,
   pageHydrated,
 } from "./helpers/browser-e2e";
+import { taskDetail, taskDetailSheetEntered } from "./helpers/task-detail-e2e";
 
 /**
  * A Task's discussion card on Activity opens the Task's popup alone, over Activity, not its
@@ -120,7 +122,7 @@ test("a Task card on Activity opens the Task's popup, not its channel's chat", a
     await browser("wait", "--fn", `${pageHydrated} && ${row} != null`);
     await evaluate(`(${row}.setAttribute("data-e2e-task-row", ""), true)`);
     await browser("click", "[data-e2e-task-row]");
-    const dialog = `document.querySelector('[role="dialog"]')`;
+    const dialog = taskDetail;
     await browser(
       "wait",
       "--fn",
@@ -155,7 +157,10 @@ test("a Task card on Activity opens the Task's popup, not its channel's chat", a
     await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
 
     // Closing it goes back to the list.
-    await browser("press", "Escape");
+    await evaluate(
+      `(${dialog}.querySelector('button[aria-label="Close"]')?.setAttribute("data-e2e-close", ""), true)`,
+    );
+    await browser("click", "[data-e2e-close]");
     await browser("wait", "--fn", `${dialog} === null`);
     expect(await evaluate<string | null>(`new URL(location.href).searchParams.get("open")`)).toBe(
       null,
@@ -167,7 +172,7 @@ test("a Task card on Activity opens the Task's popup, not its channel's chat", a
     await evaluate(`(${row}.setAttribute("data-e2e-task-row", ""), true)`);
     await browser("click", "[data-e2e-task-row]");
     await browser("wait", "--fn", `(${dialog}?.textContent ?? "").includes("sign-up flow works")`);
-    await browser("wait", "500");
+    await browser("wait", "--fn", `${taskDetailSheetEntered} && ${animationsSettled()}`);
     await browser("screenshot", join(artifacts, "phone.png"));
     await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
     await browser("wait", "300");
