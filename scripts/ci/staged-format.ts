@@ -78,8 +78,9 @@ export function checkOxfmtAvailable(
   spawn: typeof Bun.spawnSync = Bun.spawnSync,
   root = repositoryRoot,
 ): boolean {
-  const result = spawn([process.execPath, "x", "--no-install", "oxfmt", "--version"], {
+  const result = spawn([process.execPath, "x", "--bun", "--no-install", "oxfmt", "--version"], {
     cwd: root,
+    stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -110,6 +111,7 @@ export function runStagedFormat(): number {
       [
         process.execPath,
         "x",
+        "--bun",
         "--no-install",
         "oxfmt",
         "--check",
@@ -117,14 +119,15 @@ export function runStagedFormat(): number {
         "--",
         ...temporaryFiles,
       ],
-      { cwd: repositoryRoot, stdout: "pipe", stderr: "pipe" },
+      { cwd: repositoryRoot, stdin: "ignore", stdout: "pipe", stderr: "pipe" },
     );
     if (result.exitCode !== 0) {
       const output = `${result.stdout.toString()}${result.stderr.toString()}`.trim();
       if (output) console.error(output);
       console.error(
-        "pre-commit: staged files are not formatted. Run `bunx oxfmt --write <file>` and stage " +
-          "the result, then commit again.",
+        "pre-commit: staged files are not formatted. Run the workspace's format script (for " +
+          "example `bun run format:ci` or `bun run --cwd <workspace> format`) and stage the " +
+          "result, then commit again.",
       );
       return 1;
     }

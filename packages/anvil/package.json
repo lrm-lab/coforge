@@ -24,9 +24,9 @@
   },
   "scripts": {
     "typecheck": "bun check",
-    "check": "oxfmt --check index.ts src test && oxlint src test index.ts && tsc --noEmit",
+    "check": "bun --bun oxfmt --check index.ts src test && bun --bun oxlint src test index.ts && tsc --noEmit",
     "test": "bun test",
-    "format": "oxfmt index.ts src test",
+    "format": "bun --bun oxfmt index.ts src test",
     "build": "bun run typecheck"
   },
   "dependencies": {

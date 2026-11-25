@@ -7,6 +7,7 @@
 // 3. Script-contract and library suite checks (`validate-each`).
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { sanitizedStdio } from "./safe-stdio";
 
 export type WorkspaceInfo = {
   dir: string;
@@ -101,7 +102,7 @@ export function downstreamWorkspaces(root: string, changedPaths: string[]): Work
 }
 
 function runCommand(cmd: string[], cwd: string): boolean {
-  const result = Bun.spawnSync(cmd, { cwd, stdout: "inherit", stderr: "inherit" });
+  const result = Bun.spawnSync(cmd, { cwd, stdio: sanitizedStdio({ detachStdin: true }) });
   return result.exitCode === 0;
 }
 
@@ -159,7 +160,8 @@ export function lintFilesStrict(root: string, paths: string[]): boolean {
     const rootBin = join(root, "node_modules/.bin/oxlint");
     const oxlintBin = existsSync(localBin) ? localBin : existsSync(rootBin) ? rootBin : fallbackBin;
     if (!existsSync(oxlintBin)) continue;
-    if (!runCommand([oxlintBin, "--deny-warnings", ...files], cwd)) ok = false;
+    if (!runCommand([process.execPath, "--bun", oxlintBin, "--deny-warnings", ...files], cwd))
+      ok = false;
   }
   return ok;
 }

@@ -24,8 +24,8 @@
     "typecheck": "tsc --noEmit",
     "generate": "bun ./node_modules/@bufbuild/buf/bin/buf generate",
     "test": "bun test",
-    "check": "bun run generate && bun ./node_modules/@bufbuild/buf/bin/buf lint && bun ./node_modules/@bufbuild/buf/bin/buf format --diff --exit-code && oxfmt --check . && oxlint . && tsc --noEmit",
-    "format": "oxfmt ."
+    "check": "bun run generate && bun ./node_modules/@bufbuild/buf/bin/buf lint && bun ./node_modules/@bufbuild/buf/bin/buf format --diff --exit-code && bun --bun oxfmt --check . && bun --bun oxlint . && tsc --noEmit",
+    "format": "bun --bun oxfmt ."
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.17.0",

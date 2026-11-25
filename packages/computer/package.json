@@ -9,9 +9,9 @@
   "scripts": {
     "build": "bun scripts/build.ts",
     "check": "bun run format:check && bun run lint && bun run typecheck",
-    "format": "oxfmt .",
-    "format:check": "oxfmt --check .",
-    "lint": "oxlint .",
+    "format": "bun --bun oxfmt .",
+    "format:check": "bun --bun oxfmt --check .",
+    "lint": "bun --bun oxlint .",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "generate:installer-contract": "bun scripts/installer-contract.ts"

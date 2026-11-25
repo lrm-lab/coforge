@@ -22,9 +22,9 @@
   },
   "scripts": {
     "test": "bun test",
-    "format": "oxfmt .",
-    "format:check": "oxfmt --check .",
-    "lint": "oxlint .",
+    "format": "bun --bun oxfmt .",
+    "format:check": "bun --bun oxfmt --check .",
+    "lint": "bun --bun oxlint .",
     "typecheck": "tsc --noEmit",
     "check": "bun run format:check && bun run lint && bun run typecheck",
     "build": "bun build --compile ./src/cli.ts --outfile ./dist/coforge"

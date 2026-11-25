@@ -20,7 +20,7 @@ test("the staged-format scope matches every root CI oxfmt command", () => {
   const directories = new Set<string>();
   const files = new Set<string>();
   for (const command of Object.values(root.scripts)) {
-    for (const match of command.matchAll(/bunx oxfmt --check ([^&]+)/g)) {
+    for (const match of command.matchAll(/bunx --bun oxfmt --check ([^&]+)/g)) {
       for (const path of match[1]!.trim().split(/\s+/)) {
         if (!path.startsWith("scripts/")) continue;
         if (/\.[a-z]+$/i.test(path)) files.add(path);

@@ -55,7 +55,7 @@ run = 'bun run --cwd packages/coforge-sdk generate && cd packages/daemon && bun 
 
 [tasks."check:daemon"]
 description = "Run Daemon package checks"
-run = "bun run --cwd packages/coforge-sdk generate && cd packages/daemon && bun run check"
+run = 'bun run --cwd packages/coforge-sdk generate && cd packages/daemon && bun "{{config_root}}/scripts/ci/safe-stdio.ts" bun run check'
 
 [tasks."build:daemon"]
 description = "Build the Daemon package"
@@ -63,7 +63,7 @@ run = "bun run --cwd packages/coforge-sdk generate && cd packages/daemon && bun 
 
 [tasks."check:computer"]
 description = "Run Computer package checks"
-run = "bun run --cwd packages/coforge-sdk generate && cd packages/computer && bun run check"
+run = 'bun run --cwd packages/coforge-sdk generate && cd packages/computer && bun "{{config_root}}/scripts/ci/safe-stdio.ts" bun run check'
 
 [tasks."build:computer"]
 description = "Build the Computer package"
@@ -122,7 +122,7 @@ run = 'bun "{{config_root}}/scripts/test/isolated-test-run.ts" ./scripts/e2e/run
 
 [tasks."check:web"]
 description = "Run Web package checks"
-run = "bun run --cwd packages/coforge-sdk generate && cd apps/web && bun run check"
+run = 'bun run --cwd packages/coforge-sdk generate && cd apps/web && bun "{{config_root}}/scripts/ci/safe-stdio.ts" bun run check'
 
 [tasks."smoke:web"]
 description = "Start the built Web server and request its pages (needs the Web build)"

@@ -42,11 +42,26 @@ const isFormatter = (word: string) => /(^|\/)oxfmt$/.test(word);
 
 function runsFormatter(words: string[]): boolean {
   let i = 0;
-  // Skip what only launches the real command: `FOO=1`, `env`, `bunx`, `bun x`, `mise exec --`, flags.
+  // Skip what only launches the real command: `FOO=1`, `env`, `bunx`, `bun x`, `bun --bun`, `mise exec --`, flags.
   for (; i < words.length; i++) {
     const word = words[i]!;
     if (/^[A-Za-z_]\w*=/.test(word) || word.startsWith("-") || WRAPPERS.has(word)) continue;
-    if ((word === "bun" || word === "mise") && LAUNCH.has(words[i + 1] ?? "")) i++;
+    if (word === "bun") {
+      let next = i + 1;
+      while (words[next]?.startsWith("-")) {
+        if (words[next] === "--cwd" && words[next + 1]) next += 2;
+        else next++;
+      }
+      if (LAUNCH.has(words[next] ?? "")) {
+        i = next;
+        continue;
+      }
+      if (isFormatter(words[next] ?? "")) {
+        i = next;
+        break;
+      }
+    }
+    if (word === "mise" && LAUNCH.has(words[i + 1] ?? "")) i++;
     else break;
   }
   const head = words[i];

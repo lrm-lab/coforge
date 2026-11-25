@@ -7,8 +7,8 @@
     "build": "vitepress build",
     "preview": "vitepress preview",
     "test": "bun test",
-    "check": "oxfmt --check . && oxlint .",
-    "format": "oxfmt ."
+    "check": "bun --bun oxfmt --check . && bun --bun oxlint .",
+    "format": "bun --bun oxfmt ."
   },
   "devDependencies": {
     "@types/bun": "1.4.5",
