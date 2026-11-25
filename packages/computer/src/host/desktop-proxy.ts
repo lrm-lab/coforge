@@ -13,13 +13,13 @@ export const DESKTOP_PROXY_SECRET_HEADER = "x-coforge-desktop-proxy-secret";
  */
 export const DESKTOP_WEBSOCKET_IDLE_TIMEOUT_SECONDS = 960;
 
+export const DESKTOP_ENDPOINT_CACHE_TTL_MS = 5_000;
+export const DESKTOP_ENDPOINT_CACHE_MAX_ENTRIES = 256;
+export const DESKTOP_WS_MAX_QUEUED_FRAMES = 64;
+export const DESKTOP_WS_MAX_QUEUED_BYTES = 2 * 1024 * 1024;
+
 export type DesktopEndpoint = { host: string; port: number; token: string };
 
-/**
- * When `expectedSecret` is set, only callers that present the same value may
- * use `/desktop/...` (including `/fill` and `/inspect`). Empty expected means
- * local/dev without a gate.
- */
 export function desktopProxySecretAllows(
   request: Request,
   expectedSecret: string | undefined,
@@ -32,8 +32,11 @@ export function desktopProxySecretAllows(
 }
 
 type SocketData = {
+  computerId: string;
+  opened: boolean;
   upstream?: WebSocket;
   queue: Array<string | ArrayBuffer>;
+  queuedBytes: number;
   target: DesktopEndpoint;
   upstreamPath: string;
 };
@@ -49,14 +52,8 @@ export function newDesktopToken(): string {
   return randomBytes(24).toString("base64url");
 }
 
-/** noVNC files that share the computer desktop. An Agent id is anything else. */
 const DESKTOP_ASSET = new Set(["websockify", "core", "vendor", "app", "desktop.html"]);
 
-/**
- * `/desktop/<computer>/` is the computer's own screen.
- * `/desktop/<computer>/<agent>/` is that Agent's screen on the same computer.
- * The container serves the Agent page at `/screen/<agent>/`.
- */
 export function parseDesktopRoute(
   pathname: string,
 ): { computerId: string; upstreamPath: string } | undefined {
@@ -65,9 +62,6 @@ export function parseDesktopRoute(
   const computerId = match[1];
   const suffix = match[2] ?? "/";
   const parts = suffix.split("/").filter((part) => part.length > 0);
-  // `/fill` types into the shared desktop. `/<agent>/fill` types into that Agent's screen.
-  // `/inspect` lists visible fields. `/clipboard` GET/POST reads or sets UTF-8 CLIPBOARD.
-  // Bodies are forwarded as-is and are not desktop assets.
   if (
     parts.length === 1 &&
     (parts[0] === "fill" || parts[0] === "inspect" || parts[0] === "clipboard")
@@ -97,14 +91,84 @@ export function parseDesktopRoute(
   };
 }
 
+function sameEndpoint(a: DesktopEndpoint, b: DesktopEndpoint): boolean {
+  return a.host === b.host && a.port === b.port && a.token === b.token;
+}
+
 export function startDesktopProxy(input: {
   hostname: string;
   port: number;
   resolve: (computerId: string) => Promise<DesktopEndpoint | undefined>;
   handleRequest?: (request: Request) => Promise<Response | undefined>;
-  /** Shared with Caddy; when set, bare clients cannot open a desktop or fill. */
   proxySecret?: string;
+  endpointCacheTtlMs?: number;
+  now?: () => number;
 }): { port: number; stop: () => void } {
+  const ttlMs = input.endpointCacheTtlMs ?? DESKTOP_ENDPOINT_CACHE_TTL_MS;
+  const now = input.now ?? Date.now;
+  const cache = new Map<string, { endpoint: DesktopEndpoint; expiresAt: number }>();
+  type InflightEntry = {
+    promise: Promise<DesktopEndpoint | undefined>;
+    failedEndpoint?: DesktopEndpoint;
+  };
+  const inflight = new Map<string, InflightEntry>();
+
+  function invalidateEndpoint(computerId: string, failedEndpoint: DesktopEndpoint): void {
+    const cached = cache.get(computerId);
+    if (cached && sameEndpoint(cached.endpoint, failedEndpoint)) {
+      cache.delete(computerId);
+    }
+    const pending = inflight.get(computerId);
+    if (
+      pending &&
+      (!pending.failedEndpoint || !sameEndpoint(pending.failedEndpoint, failedEndpoint))
+    ) {
+      inflight.delete(computerId);
+    }
+  }
+
+  async function resolveEndpoint(
+    computerId: string,
+    failedEndpoint?: DesktopEndpoint,
+  ): Promise<{ target: DesktopEndpoint | undefined; fromCache: boolean }> {
+    if (failedEndpoint) invalidateEndpoint(computerId, failedEndpoint);
+    if (ttlMs > 0) {
+      const cached = cache.get(computerId);
+      if (cached) {
+        if (cached.expiresAt > now()) {
+          return { target: cached.endpoint, fromCache: true };
+        }
+        cache.delete(computerId);
+      }
+    }
+    const existing = inflight.get(computerId);
+    if (existing) {
+      return { target: await existing.promise, fromCache: false };
+    }
+    const entry: InflightEntry = {
+      promise: Promise.resolve(undefined),
+      failedEndpoint,
+    };
+    entry.promise = input
+      .resolve(computerId)
+      .then((endpoint) => {
+        if (endpoint && ttlMs > 0 && inflight.get(computerId) === entry) {
+          cache.delete(computerId);
+          if (cache.size >= DESKTOP_ENDPOINT_CACHE_MAX_ENTRIES) {
+            const oldest = cache.keys().next().value;
+            if (oldest !== undefined) cache.delete(oldest);
+          }
+          cache.set(computerId, { endpoint, expiresAt: now() + ttlMs });
+        }
+        return endpoint;
+      })
+      .finally(() => {
+        if (inflight.get(computerId) === entry) inflight.delete(computerId);
+      });
+    inflight.set(computerId, entry);
+    return { target: await entry.promise, fromCache: false };
+  }
+
   const server = Bun.serve<SocketData>({
     hostname: input.hostname,
     port: input.port,
@@ -117,21 +181,49 @@ export function startDesktopProxy(input: {
       if (!desktopProxySecretAllows(request, input.proxySecret)) {
         return new Response("forbidden", { status: 403 });
       }
-      let target: DesktopEndpoint | undefined;
+      let resolved: { target: DesktopEndpoint | undefined; fromCache: boolean };
       try {
-        target = await input.resolve(route.computerId);
+        resolved = await resolveEndpoint(route.computerId);
       } catch {
         console.error("[desktop] lookup failed");
         return new Response("desktop lookup failed", { status: 502 });
       }
-      if (!target) return new Response("desktop is not running", { status: 404 });
+      if (!resolved.target) return new Response("desktop is not running", { status: 404 });
       if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
         const upgraded = bun.upgrade(request, {
-          data: { queue: [], target, upstreamPath: route.upstreamPath },
+          data: {
+            computerId: route.computerId,
+            opened: false,
+            queue: [],
+            queuedBytes: 0,
+            target: resolved.target,
+            upstreamPath: route.upstreamPath,
+          },
         });
         return upgraded ? undefined : new Response("websocket upgrade failed", { status: 400 });
       }
-      return proxyHttp(request, target, route.upstreamPath, url.search);
+      try {
+        return await proxyHttp(request, resolved.target, route.upstreamPath, url.search);
+      } catch {
+        invalidateEndpoint(route.computerId, resolved.target);
+        if (!resolved.fromCache || (request.method !== "GET" && request.method !== "HEAD")) {
+          return new Response("desktop upstream unavailable", { status: 502 });
+        }
+        let refreshed: { target: DesktopEndpoint | undefined; fromCache: boolean };
+        try {
+          refreshed = await resolveEndpoint(route.computerId, resolved.target);
+        } catch {
+          console.error("[desktop] lookup failed");
+          return new Response("desktop lookup failed", { status: 502 });
+        }
+        if (!refreshed.target) return new Response("desktop is not running", { status: 404 });
+        try {
+          return await proxyHttp(request, refreshed.target, route.upstreamPath, url.search);
+        } catch {
+          invalidateEndpoint(route.computerId, refreshed.target);
+          return new Response("desktop upstream unavailable", { status: 502 });
+        }
+      }
     },
     websocket: {
       idleTimeout: DESKTOP_WEBSOCKET_IDLE_TIMEOUT_SECONDS,
@@ -144,13 +236,18 @@ export function startDesktopProxy(input: {
         ws.data.upstream = upstream;
         upstream.binaryType = "arraybuffer";
         upstream.addEventListener("open", () => {
+          ws.data.opened = true;
           for (const item of ws.data.queue) upstream.send(item);
           ws.data.queue = [];
+          ws.data.queuedBytes = 0;
         });
         upstream.addEventListener("message", (event) => {
           if (ws.readyState === WebSocket.OPEN) ws.send(event.data);
         });
         const closeBrowser = () => {
+          ws.data.queue = [];
+          ws.data.queuedBytes = 0;
+          if (!ws.data.opened) invalidateEndpoint(ws.data.computerId, ws.data.target);
           if (ws.readyState === WebSocket.OPEN) ws.close();
         };
         upstream.addEventListener("close", closeBrowser);
@@ -160,19 +257,41 @@ export function startDesktopProxy(input: {
         const upstream = ws.data.upstream;
         const payload = frame(message);
         if (!upstream || upstream.readyState !== WebSocket.OPEN) {
+          const size =
+            typeof payload === "string" ? Buffer.byteLength(payload) : payload.byteLength;
+          if (
+            ws.data.queue.length >= DESKTOP_WS_MAX_QUEUED_FRAMES ||
+            ws.data.queuedBytes + size > DESKTOP_WS_MAX_QUEUED_BYTES
+          ) {
+            ws.data.queue = [];
+            ws.data.queuedBytes = 0;
+            ws.close(1008, "pre-open queue limit exceeded");
+            ws.data.upstream?.close();
+            return;
+          }
           ws.data.queue.push(payload);
+          ws.data.queuedBytes += size;
           return;
         }
         upstream.send(payload);
       },
       close(ws) {
+        ws.data.queue = [];
+        ws.data.queuedBytes = 0;
         ws.data.upstream?.close();
       },
     },
   });
   if (server.port === undefined) throw new Error("desktop proxy did not bind a port");
   console.log(`[desktop] listening on ${input.hostname}:${server.port}`);
-  return { port: server.port, stop: () => server.stop(true) };
+  return {
+    port: server.port,
+    stop: () => {
+      cache.clear();
+      inflight.clear();
+      server.stop(true);
+    },
+  };
 }
 
 async function proxyHttp(
