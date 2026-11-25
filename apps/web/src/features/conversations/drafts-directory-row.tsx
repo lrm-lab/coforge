@@ -1,7 +1,7 @@
 import { Edit03 } from "@untitledui/icons";
 
-import { ListIconTile } from "#src/components/ui/list-icon-tile";
 import { m } from "#src/paraglide/messages";
+import { cx } from "#src/utils/cx";
 import { ConversationRow } from "./conversation-row";
 import { useDraftCount } from "./use-drafts";
 import { useDraftsOn } from "./use-drafts-on";
@@ -18,7 +18,12 @@ function DraftsRow({ current }: { current?: boolean }) {
       current={current}
       count={count ? { value: count, label: m.conversation_drafts_count({ count }) } : undefined}
       label={m.conversation_drafts_nav()}
-      icon={<ListIconTile icon={Edit03} tone={current ? "brand" : "default"} />}
+      icon={
+        <Edit03
+          aria-hidden="true"
+          className={cx("size-4", current ? "text-brand-secondary" : "text-primary")}
+        />
+      }
     >
       {m.conversation_drafts_nav()}
     </ConversationRow>

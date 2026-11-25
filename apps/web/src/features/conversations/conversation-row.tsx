@@ -167,15 +167,23 @@ export function ConversationRow({
       className={cx(
         "flex w-full cursor-pointer items-center p-2 outline-focus-ring transition duration-100 ease-out select-none [-webkit-user-drag:none] focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2",
         card ? "rounded-xl border" : "rounded-md",
-        lastMessage ? "gap-2" : "min-h-10 gap-2 any-pointer-coarse:min-h-11",
+        lastMessage
+          ? "gap-2"
+          : "max-h-9 gap-1.5 any-pointer-coarse:min-h-11 any-pointer-coarse:max-h-none",
         current ? (card ? "bg-chat-selected-bg" : "bg-sidebar-accent") : "hover:bg-primary_hover",
         card && (current ? "border-chat-selected-border" : "border-transparent"),
       )}
     >
       <RowHoverContext.Provider value={hover}>
-        <span ref={iconRef} className="flex shrink-0 items-center justify-center">
-          {icon}
-        </span>
+        {lastMessage ? (
+          <span ref={iconRef} className="flex shrink-0 items-center justify-center">
+            {icon}
+          </span>
+        ) : (
+          <span ref={iconRef} className="flex h-5 w-4 shrink-0 items-center justify-center">
+            {icon}
+          </span>
+        )}
       </RowHoverContext.Provider>
       {lastMessage ? (
         <span className="flex min-w-0 flex-1 flex-col justify-center">
