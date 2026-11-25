@@ -86,6 +86,7 @@ export type TaskDetailPanelProps = {
   onBeforeOpenPicker?: () => void;
   active?: boolean;
   closeOnEscape?: boolean;
+  overlay?: boolean;
   titleSlot?: string;
 };
 
@@ -111,6 +112,7 @@ export function useTaskDetailModel({
   onBeforeOpenPicker,
   active = true,
   closeOnEscape = true,
+  overlay = false,
   titleSlot,
 }: TaskDetailPanelProps) {
   const deleteTask = useDeleteTask({
@@ -178,24 +180,47 @@ export function useTaskDetailModel({
         event.stopPropagation();
         return;
       }
-      if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+      if (event.nativeEvent.isComposing || event.keyCode === 229) {
+        event.stopPropagation();
+        return;
+      }
       if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return;
-      const isInline = mode === "split" || mode === "expanded";
-      const handled = handleEscape(isInline && closeOnEscape);
-      if (handled) event.preventDefault();
+      const handled = handleEscape(!overlay && closeOnEscape);
+      if (handled) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
     },
-    [mode, closeOnEscape, handleEscape],
+    [overlay, closeOnEscape, handleEscape],
   );
 
   useHotkey(
     "Escape",
     (event) => {
-      if (event.target !== document.body && event.target !== document.documentElement) return;
+      if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
+      const target = event.target;
+      if (overlay) {
+        if (target !== document.body && target !== document.documentElement) return;
+        const ownDialog =
+          rootRef.current?.closest('[role="dialog"]') ??
+          rootRef.current?.querySelector('[role="dialog"]');
+        const overlays = document.querySelectorAll(OPEN_OVERLAY_SELECTOR);
+        if (!ownDialog || overlays.item(overlays.length - 1) !== ownDialog) return;
+        const handled = handleEscape(true);
+        if (handled) event.preventDefault();
+        return;
+      }
+      if (target instanceof Node && rootRef.current?.contains(target)) return;
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable || target.matches("input, textarea, select"))
+      )
+        return;
       if (document.querySelector(OPEN_OVERLAY_SELECTOR) !== null) return;
       const handled = handleEscape(closeOnEscape);
       if (handled) event.preventDefault();
     },
-    { enabled: active && (mode === "split" || mode === "expanded"), preventDefault: false },
+    { enabled: active, preventDefault: false, ignoreInputs: false },
   );
 
   const section = (

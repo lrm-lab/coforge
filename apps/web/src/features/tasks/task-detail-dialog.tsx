@@ -156,6 +156,7 @@ function DesktopTaskDrawer({
     onToggleExpand: () => setExpanded((current) => !current),
     active: open,
     closeOnEscape: false,
+    overlay: true,
     titleSlot: "title",
   });
   return (
@@ -239,6 +240,7 @@ function MobileTaskSheet({
     onBeforeOpenPicker: promoteFull,
     active: open,
     closeOnEscape: false,
+    overlay: true,
     titleSlot: "title",
   });
   return (
@@ -254,14 +256,11 @@ function MobileTaskSheet({
       composer={thread && !model.hasHistory ? <div ref={setComposerPortal} /> : undefined}
       autoExpandOnComposerFocus
       keyboardDismiss={model.keyboardDismiss}
+      onKeyDown={model.onKeyDown}
     >
       <ComposerHostContext value={MOBILE_SHEET_COMPOSER_HOST}>
         <ComposerScopeProvider value={composerScope}>
-          <div
-            ref={model.rootRef}
-            onKeyDown={model.onKeyDown}
-            className="flex min-h-0 min-w-0 flex-1 flex-col"
-          >
+          <div ref={model.rootRef} className="flex min-h-0 min-w-0 flex-1 flex-col">
             {model.body}
           </div>
         </ComposerScopeProvider>

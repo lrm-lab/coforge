@@ -1,4 +1,4 @@
-import type { ReactNode, RefObject } from "react";
+import type { KeyboardEvent, ReactNode, RefObject } from "react";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { cx } from "#src/utils/cx";
@@ -20,6 +20,7 @@ export type TaskDetentSheetProps = {
   autoExpandOnComposerFocus?: boolean;
   keyboardDismiss?: boolean;
   dismissRef?: RefObject<(() => void) | null>;
+  onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
 };
 
 export function TaskDetentSheet({
@@ -35,6 +36,7 @@ export function TaskDetentSheet({
   autoExpandOnComposerFocus = true,
   keyboardDismiss = true,
   dismissRef,
+  onKeyDown,
 }: TaskDetentSheetProps): ReactNode {
   const {
     effectiveDetent,
@@ -89,6 +91,7 @@ export function TaskDetentSheet({
           data-detent-sheet=""
           data-detent={effectiveDetent}
           data-dragging="false"
+          onKeyDown={onKeyDown}
           style={{ transform: "translate3d(0, 100%, 0)" }}
           className="group/sheet visible pointer-events-auto relative z-10 flex h-full w-full flex-col overflow-visible rounded-t-[1.25rem] bg-primary shadow-2xl ring-1 ring-secondary will-change-transform after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-16 after:bg-primary after:content-['']"
         >
