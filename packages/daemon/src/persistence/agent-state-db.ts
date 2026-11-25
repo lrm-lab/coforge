@@ -250,14 +250,14 @@ function unsafeLegacyPath(path: string): string | undefined {
 }
 
 export function readMeta(db: Database, key: string): string | undefined {
-  const row = db.prepare(`SELECT value FROM meta WHERE key = ?`).get(key) as {
+  const row = db.query(`SELECT value FROM meta WHERE key = ?`).get(key) as {
     value: string;
   } | null;
   return row?.value;
 }
 
 export function writeMeta(db: Database, key: string, value: string): void {
-  db.prepare(
+  db.query(
     `INSERT INTO meta (key, value) VALUES (?, ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
   ).run(key, value);

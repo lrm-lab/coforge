@@ -63,3 +63,35 @@ test("a released claim is shown again, unless the context has moved on", () => {
   ledger.release("sender", "x", "text");
   expect(ledger.claim("sender", "x", "text")).toBe(true);
 });
+
+test("claimBatch and releaseBatch handle deduplication, A-B-A transitions, and generation checks", () => {
+  const { ledger } = open();
+  expect(ledger.claimBatch([])).toEqual([]);
+  const results = ledger.claimBatch([
+    ["sender", "human:ada", "v1"],
+    ["sender", "human:ada", "v1"],
+    ["sender", "human:ada", "v2"],
+    ["sender", "human:ada", "v1"],
+    ["channel", "#team", "role-1"],
+  ]);
+  expect(results).toEqual([true, false, true, true, true]);
+  expect(
+    ledger.claimBatch([
+      ["sender", "human:ada", "v1"],
+      ["channel", "#team", "role-1"],
+    ]),
+  ).toEqual([false, false]);
+  ledger.releaseBatch([
+    ["sender", "human:ada", "v1"],
+    ["channel", "#team", "role-1"],
+  ]);
+  expect(
+    ledger.claimBatch([
+      ["sender", "human:ada", "v1"],
+      ["channel", "#team", "role-1"],
+    ]),
+  ).toEqual([true, true]);
+  ledger.advance();
+  ledger.releaseBatch([["sender", "human:ada", "v1"]]);
+  expect(ledger.claim("sender", "human:ada", "v1")).toBe(true);
+});

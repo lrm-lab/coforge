@@ -106,3 +106,42 @@ test("giving the claims back shows the same text on the next read", () =>
     expect(again.senderDescription).toBe("Staff engineer");
     expect(again.channelCoordination).toBe(ROLE);
   }));
+
+test("deduplicates repeated channel and sender descriptions into one ledger batch while preserving A-B-A changes", () =>
+  withLedger((ledger) => {
+    const claimBatchCalls: number[] = [];
+    const releaseBatchCalls: number[] = [];
+    const originalClaimBatch = ledger.claimBatch.bind(ledger);
+    const originalReleaseBatch = ledger.releaseBatch.bind(ledger);
+    ledger.claimBatch = (entries) => {
+      claimBatchCalls.push(entries.length);
+      return originalClaimBatch(entries);
+    };
+    ledger.releaseBatch = (entries) => {
+      releaseBatchCalls.push(entries.length);
+      return originalReleaseBatch(entries);
+    };
+
+    const page = [
+      ...Array.from({ length: 20 }, (_, i) =>
+        message({
+          sequence: i + 1,
+          senderHandle: `user-${i % 4}`,
+          senderDescription: `Role ${i % 4}`,
+        }),
+      ),
+      message({ sequence: 21, senderHandle: "user-0", senderDescription: "Role 0 updated" }),
+      message({ sequence: 22, senderHandle: "user-0", senderDescription: "Role 0" }),
+    ];
+
+    const first = elideSeenInContext(page, ledger);
+    expect(claimBatchCalls).toEqual([7]);
+    expect(first.messages[0]!.senderDescription).toBe("Role 0");
+    expect(first.messages[4]!.senderDescription).toBe("");
+    expect(first.messages[20]!.senderDescription).toBe("Role 0 updated");
+    expect(first.messages[21]!.senderDescription).toBe("Role 0");
+    expect(first.messages.filter((m) => m.channelCoordination === ROLE)).toHaveLength(1);
+
+    first.release();
+    expect(releaseBatchCalls).toEqual([7]);
+  }));

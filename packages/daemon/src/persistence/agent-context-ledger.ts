@@ -1,28 +1,20 @@
 import type { Database } from "bun:sqlite";
-import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { AGENT_COMMAND_GUIDANCE, type AgentCommandGuidanceResponse } from "@lrm/coforge-sdk/agent";
 import { AgentStateDb, readMeta, writeMeta } from "./agent-state-db";
 import { escapePathIdentity } from "./path-scope";
 
-/** What the ledger remembers having shown the Agent: a sender's description (`sender`), a
- * channel's role line (`channel`), or progressive CLI command guidance (`guidance`). */
 export type ContextObservationKind = "sender" | "channel" | "guidance";
+export type ContextObservationEntry = readonly [ContextObservationKind, string, string];
 
 const GENERATION_KEY = "contextGeneration";
+const CLAIM_SQL = `INSERT INTO context_observations (kind, id, rev, generation) VALUES (?, ?, ?, ?)
+  ON CONFLICT (kind, id) DO UPDATE SET rev = excluded.rev, generation = excluded.generation
+  WHERE rev IS NOT excluded.rev OR generation IS NOT excluded.generation`;
+const RELEASE_SQL = `DELETE FROM context_observations
+  WHERE kind = ? AND id = ? AND rev = ? AND generation = ?`;
 
-/**
- * What one Agent has already been shown in its current context, so a sender's description and a
- * channel's role line appear once instead of on every message (modeled on Raft's observations
- * ledger). The context is a counter, `generation`: a new session or a finished compaction moves it
- * on, which makes every earlier observation stale without deleting a row, and what the Agent has
- * lost from its context is shown again. The counter is stored, not held in memory: after a restart
- * it must not count from zero again, or an old row would pass for one made in this context.
- *
- * A row is one `(kind, id)` with the revision shown last (the hash of the text), so a changed
- * description is shown again even within one context.
- */
 export class AgentContextLedger {
   readonly #db: Database;
 
@@ -30,48 +22,55 @@ export class AgentContextLedger {
     this.#db = db;
   }
 
-  /** The current context's number; 0 until the first advance. */
   generation(): number {
     return Number(readMeta(this.#db, GENERATION_KEY) ?? 0);
   }
 
-  /** Starts a new context: everything shown so far counts as not shown. */
   advance(): number {
     const next = this.generation() + 1;
     writeMeta(this.#db, GENERATION_KEY, String(next));
     return next;
   }
 
-  /**
-   * Records `(kind, id, text)` as shown in the current context; the ledger keeps a hash of the
-   * text, not the text. True for the first appearance (the caller shows it), false when this
-   * context already showed that revision.
-   */
   claim(kind: ContextObservationKind, id: string, text: string): boolean {
     const rev = revisionOf(text);
-    const result = this.#db
-      .prepare(
-        `INSERT INTO context_observations (kind, id, rev, generation) VALUES (?, ?, ?, ?)
-         ON CONFLICT (kind, id) DO UPDATE SET rev = excluded.rev, generation = excluded.generation
-         WHERE rev IS NOT excluded.rev OR generation IS NOT excluded.generation`,
-      )
-      .run(kind, id, rev, this.generation());
+    const result = this.#db.query(CLAIM_SQL).run(kind, id, rev, this.generation());
     return result.changes === 1;
   }
 
-  /** Takes a claim back when what it was made for never reached the Agent, so the next read shows
-   * it. Only a row still at that text in this context goes. */
+  claimBatch(entries: readonly ContextObservationEntry[]): boolean[] {
+    if (entries.length === 0) return [];
+    const statement = this.#db.query(CLAIM_SQL);
+    return this.#db.transaction(() => {
+      const generation = this.generation();
+      const results = new Array<boolean>(entries.length);
+      for (let i = 0; i < entries.length; i++) {
+        const [kind, id, text] = entries[i]!;
+        results[i] = statement.run(kind, id, revisionOf(text), generation).changes === 1;
+      }
+      return results;
+    })();
+  }
+
   release(kind: ContextObservationKind, id: string, text: string): void {
-    this.#db
-      .prepare(
-        `DELETE FROM context_observations
-         WHERE kind = ? AND id = ? AND rev = ? AND generation = ?`,
-      )
-      .run(kind, id, revisionOf(text), this.generation());
+    this.#db.query(RELEASE_SQL).run(kind, id, revisionOf(text), this.generation());
+  }
+
+  releaseBatch(entries: readonly ContextObservationEntry[]): void {
+    if (entries.length === 0) return;
+    const statement = this.#db.query(RELEASE_SQL);
+    this.#db.transaction(() => {
+      const generation = this.generation();
+      for (let i = 0; i < entries.length; i++) {
+        const [kind, id, text] = entries[i]!;
+        statement.run(kind, id, revisionOf(text), generation);
+      }
+    })();
   }
 }
 
-const revisionOf = (text: string) => createHash("sha256").update(text).digest("base64url");
+const revisionOf = (text: string) =>
+  new Bun.CryptoHasher("sha256").update(text).digest("base64url");
 
 /**
  * Evaluates or pre-satisfies (`--help`) progressive CLI command guidance for `agentId`.

@@ -2,54 +2,70 @@ import type { AgentMessageRecord } from "@lrm/coforge-sdk/internal";
 import type { AgentContexts } from "./agent-contexts";
 import type {
   AgentContextLedger,
+  ContextObservationEntry,
   ContextObservationKind,
 } from "#src/persistence/agent-context-ledger";
 import { holdClaims } from "./response-claims";
 
-/** The channel a target belongs to: `#name` for the channel and for any thread in it. */
 function channelOf(target: string): string | undefined {
   return target.startsWith("#") ? target.split(":")[0] : undefined;
 }
 
-/**
- * The messages as the Agent should read them in its current context: a sender's description is
- * kept only on the first message of that sender (and revision of the description) the context has
- * shown, and a channel's role line only on the first message of that channel. The input is not
- * changed. Raft's `elideSeenSenders`, with the channel role line in the place of its channel card.
- * `release` gives the claims back when the messages never reached the Agent.
- */
 export function elideSeenInContext(
   messages: readonly AgentMessageRecord[],
   ledger: AgentContextLedger,
 ): { messages: AgentMessageRecord[]; release: () => void } {
-  const claimed: Array<[ContextObservationKind, string, string]> = [];
-  const claim = (kind: ContextObservationKind, id: string, text: string) => {
-    const first = ledger.claim(kind, id, text);
-    if (first) claimed.push([kind, id, text]);
-    return first;
+  const candidates: ContextObservationEntry[] = [];
+  const lastTextByKey = new Map<string, string>();
+  const senderSlot = new Int32Array(messages.length).fill(-2);
+  const channelSlot = new Int32Array(messages.length).fill(-2);
+
+  const enqueue = (kind: ContextObservationKind, id: string, text: string): number => {
+    const key = `${kind}\0${id}`;
+    if (lastTextByKey.get(key) === text) return -1;
+    lastTextByKey.set(key, text);
+    candidates.push([kind, id, text]);
+    return candidates.length - 1;
   };
-  const elided = messages.map((message) => {
-    let next = message;
-    if (
-      message.senderDescription &&
-      message.senderKind !== "system" &&
-      !claim("sender", `${message.senderKind}:${message.senderHandle}`, message.senderDescription)
-    )
-      next = { ...next, senderDescription: "" };
+
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i]!;
+    if (message.senderDescription && message.senderKind !== "system") {
+      senderSlot[i] = enqueue(
+        "sender",
+        `${message.senderKind}:${message.senderHandle}`,
+        message.senderDescription,
+      );
+    }
     const channel = channelOf(message.target);
-    if (
-      message.channelCoordination &&
-      channel &&
-      !claim("channel", channel, message.channelCoordination)
-    ) {
+    if (message.channelCoordination && channel) {
+      channelSlot[i] = enqueue("channel", channel, message.channelCoordination);
+    }
+  }
+
+  const results = ledger.claimBatch(candidates);
+  const claimed: ContextObservationEntry[] = [];
+  for (let i = 0; i < candidates.length; i++) {
+    if (results[i]) claimed.push(candidates[i]!);
+  }
+
+  const elided = messages.map((message, i) => {
+    let next = message;
+    const sIdx = senderSlot[i]!;
+    if (sIdx === -1 || (sIdx >= 0 && !results[sIdx])) {
+      next = { ...next, senderDescription: "" };
+    }
+    const cIdx = channelSlot[i]!;
+    if (cIdx === -1 || (cIdx >= 0 && !results[cIdx])) {
       const { channelCoordination: _shown, ...rest } = next;
       next = rest;
     }
     return next;
   });
+
   return {
     messages: elided,
-    release: () => claimed.forEach(([kind, id, text]) => ledger.release(kind, id, text)),
+    release: () => ledger.releaseBatch(claimed),
   };
 }
 
