@@ -21,6 +21,7 @@ import {
   readProcJobIdentity,
   stopVerifiedProcJob,
 } from "#src/platform/proc-job-process";
+import { createProcJobMemoryScopeDetector } from "#src/platform/proc-job-systemd-capability";
 import { ProcJobError } from "./proc-job-error";
 import { launchAgentProcJob } from "./proc-job-launch";
 import {
@@ -61,6 +62,7 @@ export type ProcJobManagerOptions = {
   retainSampledProcessGroup?: boolean;
   memoryConfigPath?: string;
   rssSampler?: ProcJobRssSampler;
+  systemdMemoryScope?: ReturnType<typeof createProcJobMemoryScopeDetector>;
 };
 
 export class ProcJobManager {
@@ -83,6 +85,7 @@ export class ProcJobManager {
     >
   >;
   readonly #memoryConfigPath?: string;
+  readonly #systemdMemoryScope: ReturnType<typeof createProcJobMemoryScopeDetector>;
   readonly #memory: ProcJobMemoryMonitor;
   #samplingMemory = false;
   #sweepGeneration = 0;
@@ -101,6 +104,8 @@ export class ProcJobManager {
     let cachedSystemdRun: Promise<boolean> | undefined;
     this.#readIdentity = options.readIdentity;
     this.#memoryConfigPath = options.memoryConfigPath;
+    this.#systemdMemoryScope =
+      options.systemdMemoryScope ?? createProcJobMemoryScopeDetector(platform);
     this.#memory = new ProcJobMemoryMonitor(platform, options.rssSampler);
     this.#options = {
       workspaceId: options.workspaceId,
@@ -331,6 +336,7 @@ export class ProcJobManager {
         existingJobs: list,
         maxJobsPerAgent: this.#options.maxJobsPerAgent,
         systemdRunAvailable: this.#options.systemdRunAvailable,
+        systemdMemoryScope: this.#systemdMemoryScope,
         systemdPresentCheck: this.#options.systemdPresentCheck,
         readIdentity: this.#readIdentity,
         retainSampledProcessGroup: this.#options.retainSampledProcessGroup,
@@ -393,7 +399,11 @@ export class ProcJobManager {
       const idx = list.findIndex((job) => job.id === id);
       if (idx === -1 || list[idx]!.status === "exited") return;
       const record = list[idx]!;
-      if (record.groupAnchor && (await procJobMayBeRunning(record, this.#options.platform))) return;
+      if (
+        (record.groupAnchor || record.memory?.mode === "systemd_cgroup") &&
+        (await procJobMayBeRunning(record, this.#options.platform))
+      )
+        return;
       list[idx] = markProcJobExited(record, "exited", exitCode, signal);
       await this.#pruneExited(agentId);
       await this.#persistLedger();

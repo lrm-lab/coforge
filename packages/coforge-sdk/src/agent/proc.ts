@@ -38,7 +38,7 @@ export const AGENT_PROC_ERROR_CODES = [
 export type AgentProcErrorCode = (typeof AGENT_PROC_ERROR_CODES)[number];
 
 export type AgentProcMemory = {
-  mode: "process_group_rss";
+  mode: "process_group_rss" | "systemd_cgroup";
   limitBytes: number;
   usageBytes?: number;
   termination?: "memory_limit";
@@ -212,7 +212,11 @@ export function decodeAgentProcJob(value: unknown): AgentProcJob {
   }
   if (value.memory !== undefined) {
     const memory = value.memory;
-    if (!isRecord(memory) || memory.mode !== "process_group_rss") fail("invalid proc memory");
+    if (
+      !isRecord(memory) ||
+      (memory.mode !== "process_group_rss" && memory.mode !== "systemd_cgroup")
+    )
+      fail("invalid proc memory");
     job.memory = {
       mode: memory.mode,
       limitBytes: requirePositiveInt(memory.limitBytes, "memory limit"),

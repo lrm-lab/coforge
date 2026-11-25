@@ -5,11 +5,14 @@ import { isExitedProcState, parseProcStat } from "./linux-process-table";
 import { procJobGroupAnchorCommand, procJobGroupHasMembers } from "./proc-job-group-anchor";
 import { procJobScopeGateCommand, type ProcJobScopePayload } from "./proc-job-scope-gate";
 import {
+  readProcJobLinuxBootId,
   resolveProcScopeControl,
   verifyProcJobMemoryScope,
   type ProcScopeControl,
+  type ProcJobMemoryScopeIdentity,
   type ProcScopeMemoryVerification,
 } from "./proc-job-systemd-memory";
+import { observeProcJobMemoryScope, stopProcJobMemoryScope } from "./proc-job-systemd-scope";
 
 export type ProcJobStopTarget = {
   pid: number;
@@ -18,6 +21,8 @@ export type ProcJobStopTarget = {
   systemdUnit?: string;
   groupAnchor?: true;
   groupAnchorBootId?: string;
+  memoryScope?: ProcJobMemoryScopeIdentity;
+  memory?: { mode: "process_group_rss" | "systemd_cgroup" };
 };
 
 export type ProcJobIdentity = {
@@ -100,18 +105,10 @@ export async function isVerifiedProcJobAlive(
   return { alive: true, pgid: identity.pgid, identity };
 }
 
-const linuxBootId = () =>
-  Bun.file("/proc/sys/kernel/random/boot_id")
-    .text()
-    .then((id) => id.trim());
-
 export async function requireProcJobGroupBootId(
   platform: NodeJS.Platform,
 ): Promise<string | undefined> {
-  if (platform !== "linux") return undefined;
-  const id = await linuxBootId();
-  if (!id) throw new Error("Could not verify the Linux boot identity.");
-  return id;
+  return platform === "linux" ? readProcJobLinuxBootId() : undefined;
 }
 
 async function bootMayContainProcJobGroup(
@@ -141,6 +138,8 @@ export async function procJobMayBeRunning(
   target: ProcJobStopTarget,
   platform: NodeJS.Platform,
 ): Promise<boolean> {
+  if (target.memoryScope || target.memory?.mode === "systemd_cgroup")
+    return (await observeProcJobMemoryScope(target, platform)) !== "gone";
   const sameBoot = await bootMayContainProcJobGroup(target, platform);
   if (sameBoot !== true) return sameBoot === undefined;
   if ((await isVerifiedProcJobAlive(target, platform)).alive) return true;
@@ -214,6 +213,8 @@ export async function stopVerifiedProcJob(
   } = {},
 ): Promise<"stopped" | "already_exited" | "failed"> {
   const platform = options.platform ?? process.platform;
+  if (target.memoryScope || target.memory?.mode === "systemd_cgroup")
+    return stopProcJobMemoryScope(target, { ...options, platform });
   const readIdentity = options.readIdentity ?? readProcJobIdentity;
   const signalUnit = options.signalSystemdUnit ?? stopSystemdScopeUnit;
   const graceMs = options.graceMs ?? 10_000;
@@ -309,7 +310,7 @@ async function verifyScopeBeforeExec(
   verify: ProcScopeMemoryVerification,
   timeoutMs: number,
   payload: Buffer,
-): Promise<void> {
+): Promise<ProcJobMemoryScopeIdentity | undefined> {
   const controller = new AbortController();
   const deadline = performance.now() + timeoutMs;
   let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -320,7 +321,7 @@ async function verifyScopeBeforeExec(
         .then(() => verify({ unit, pid: child.pid, limitBytes, signal: controller.signal }))
         .catch(() => false),
       child.exited.then(() => false),
-      new Promise<boolean>((resolve) => {
+      new Promise<false>((resolve) => {
         timeout = setTimeout(() => resolve(false), timeoutMs);
       }),
     ]);
@@ -330,6 +331,7 @@ async function verifyScopeBeforeExec(
     if (sent !== payload.byteLength) throw new Error("Could not release the scope execution gate.");
     await child.stdin.end();
     released = true;
+    return typeof verified === "object" ? verified : undefined;
   } finally {
     controller.abort();
     clearTimeout(timeout);
@@ -349,7 +351,7 @@ export async function spawnDetachedProcJob(input: {
   scopeControl?: ProcScopeControl;
   groupAnchor?: true;
   onExit(exitCode: number | null, signal: string | null): void;
-}): Promise<{ pid: number; startIdentity?: string }> {
+}): Promise<{ pid: number; startIdentity?: string; memoryScope?: ProcJobMemoryScopeIdentity }> {
   if (input.groupAnchor && input.systemdUnit)
     throw new Error("A sampled process group cannot run in a managed systemd scope.");
   if (input.systemdUnit || input.groupAnchor)
@@ -413,12 +415,13 @@ export async function spawnDetachedProcJob(input: {
         input.onExit(exitCode ?? null, signalCode ? String(signalCode) : null);
       },
     });
+    let memoryScope: ProcJobMemoryScopeIdentity | undefined;
     if (limit !== undefined && input.systemdUnit && scopeControl && payload) {
       if (!child.stdin) {
         child.kill("SIGKILL");
         throw new Error("The scope execution gate has no approval pipe.");
       }
-      await verifyScopeBeforeExec(
+      memoryScope = await verifyScopeBeforeExec(
         {
           pid: child.pid,
           exited: child.exited,
@@ -451,6 +454,7 @@ export async function spawnDetachedProcJob(input: {
     return {
       pid: child.pid,
       ...(anchorIdentity ? { startIdentity: anchorIdentity.startIdentity } : {}),
+      ...(memoryScope ? { memoryScope } : {}),
     };
   } finally {
     closeSync(fd);

@@ -8,6 +8,10 @@ import {
 } from "@lrm/coforge-sdk/agent";
 import { isRecord } from "@lrm/coforge-sdk/internal";
 import { procJobMayBeRunning, stopVerifiedProcJob } from "#src/platform/proc-job-process";
+import {
+  decodeProcJobMemoryScopeIdentity,
+  type ProcJobMemoryScopeIdentity,
+} from "#src/platform/proc-job-systemd-memory";
 import { writePrivateFileAtomic } from "#src/platform/private-file";
 import { workspaceStateDirectory } from "#src/supervisor/workspace-instance";
 
@@ -18,6 +22,7 @@ export type StoredProcJob = AgentProcJob & {
   groupAnchor?: true;
   groupAnchorBootId?: string;
   memoryStopRequested?: true;
+  memoryScope?: ProcJobMemoryScopeIdentity;
 };
 
 export type RunningProcJobSummary = AgentProcJob & {
@@ -39,6 +44,7 @@ export function toPublicProcJob(stored: StoredProcJob): AgentProcJob {
     groupAnchor: _groupAnchor,
     groupAnchorBootId: _bootId,
     memoryStopRequested: _memoryStopRequested,
+    memoryScope: _memoryScope,
     ...job
   } = stored;
   return job;
@@ -55,8 +61,14 @@ function decodeStoredProcJob(value: unknown): StoredProcJob | undefined {
   if (value.startIdentity !== undefined && typeof value.startIdentity !== "string")
     return undefined;
   try {
+    const job = decodeAgentProcJob(value);
+    const memoryScope =
+      job.systemdUnit && job.memory?.mode === "systemd_cgroup"
+        ? decodeProcJobMemoryScopeIdentity(value.memoryScope, job.systemdUnit)
+        : undefined;
     return {
-      ...decodeAgentProcJob(value),
+      ...job,
+      ...(memoryScope ? { memoryScope } : {}),
       agentId: value.agentId,
       workspaceId: value.workspaceId,
       ...(value.groupAnchor === true ? { groupAnchor: true } : {}),

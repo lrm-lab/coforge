@@ -4,7 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodeAgentProcJob } from "@lrm/coforge-sdk/agent";
 import { readProcJobMemoryLimit } from "#src/proc-jobs/proc-job-memory-config";
-import { procJobLedgerPath, readProcJobLedger } from "#src/proc-jobs/proc-job-ledger";
+import {
+  procJobLedgerPath,
+  readProcJobLedger,
+  toPublicProcJob,
+  writeProcJobLedger,
+  type StoredProcJob,
+} from "#src/proc-jobs/proc-job-ledger";
 import { ProcJobManager, type ProcJobManagerOptions } from "#src/proc-jobs/proc-job-manager";
 import { PROC_JOB_RSS_INTERVAL_MS, ProcJobRssSampler } from "#src/proc-jobs/proc-job-rss-sampler";
 
@@ -56,6 +62,7 @@ test.each(["existing daemon", "adopted ledger"] as const)(
       sweepIntervalMs: 15,
       graceMs: 100,
       systemdRunAvailable: async () => false,
+      systemdMemoryScope: async () => undefined,
       systemdPresentCheck: () => false,
     } satisfies ProcJobManagerOptions;
     let manager = new ProcJobManager(options);
@@ -142,6 +149,91 @@ test("local memory config defaults to 4096 MiB and fails closed on invalid bytes
       await Bun.write(path, JSON.stringify({ memoryMaxMb }));
       await expect(readProcJobMemoryLimit(path)).rejects.toMatchObject({ status: 400 });
     }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a selected Linux hard scope that fails verification does not relaunch the user job", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "coforge-proc-scope-rejected-"));
+  const stateDirectory = join(directory, "state");
+  const memoryConfigPath = join(directory, "proc.json");
+  const marker = join(directory, "command-ran");
+  const manager = new ProcJobManager({
+    platform: "linux",
+    workspaceId: "ws",
+    workspaceRoot: directory,
+    stateDirectory,
+    memoryConfigPath,
+    systemdMemoryScope: async () => ({
+      systemdRunPath: "/usr/bin/false",
+      systemctlPath: "/usr/bin/false",
+      environment: { PATH: "/usr/bin:/bin" },
+    }),
+  });
+  try {
+    await mkdir(join(directory, "ws", "agents", "agent"), { recursive: true });
+    await expect(
+      manager.start({
+        agentId: "agent",
+        provider: "pi",
+        request: {
+          command: [process.execPath, "-e", 'await Bun.write(Bun.argv[1], "")', marker],
+        },
+      }),
+    ).rejects.toMatchObject({
+      errorCode: "proc_spawn_failed",
+      message: expect.stringContaining("Could not verify the scope memory limit"),
+    });
+    expect(await Bun.file(marker).exists()).toBe(false);
+    expect((await manager.list("agent")).jobs).toEqual([]);
+  } finally {
+    await manager.stop("agent", { all: true, force: true }).catch(() => {});
+    manager.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 10_000);
+
+test("capped scope identity is retained privately through a ledger round trip", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "coforge-proc-scope-ledger-"));
+  try {
+    const path = procJobLedgerPath(directory);
+    const systemdUnit = "coforge-proc-memory-ledger.scope";
+    const record: StoredProcJob = {
+      id: "job",
+      name: "scope-ledger",
+      agentId: "agent",
+      workspaceId: "ws",
+      pid: 123,
+      pgid: 123,
+      status: "running",
+      startedAt: new Date().toISOString(),
+      cwd: directory,
+      logPath: join(directory, "job.log"),
+      command: ["/bin/true"],
+      systemdUnit,
+      memory: { mode: "systemd_cgroup", limitBytes: 32 * mib },
+      memoryScope: {
+        bootId: "98e33974-1087-4277-87bc-01fdd0827554",
+        invocationId: "b".repeat(32),
+        group: "/user.slice/" + systemdUnit,
+        directory: "45:1234",
+        rootDirectory: "45:1",
+      },
+    };
+    await writeProcJobLedger(path, [record]);
+    const [loaded] = await readProcJobLedger(path);
+    expect(loaded).toEqual(record);
+    expect(toPublicProcJob(loaded!)).not.toHaveProperty("memoryScope");
+
+    const broken = {
+      ...record,
+      memoryScope: { ...record.memoryScope!, group: "/scope/../../" + systemdUnit },
+    };
+    await writeProcJobLedger(path, [broken]);
+    const [uncertain] = await readProcJobLedger(path);
+    expect(uncertain?.memory?.mode).toBe("systemd_cgroup");
+    expect(uncertain?.memoryScope).toBeUndefined();
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

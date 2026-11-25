@@ -1,3 +1,4 @@
+import { stat } from "node:fs/promises";
 import { basename, join, posix } from "node:path";
 import { isExitedProcState, parseProcStat } from "./linux-process-table";
 
@@ -10,7 +11,7 @@ type ProcScopeMemoryVerificationInput = {
 
 export type ProcScopeMemoryVerification = (
   input: ProcScopeMemoryVerificationInput,
-) => Promise<boolean>;
+) => Promise<boolean | ProcJobMemoryScopeIdentity>;
 
 export type ProcScopeControl = {
   systemdRunPath: string;
@@ -33,6 +34,71 @@ export function resolveProcScopeControl(): ProcScopeControl {
   return { systemdRunPath, systemctlPath, environment };
 }
 
+export type ProcJobMemoryScopeIdentity = {
+  bootId: string;
+  invocationId: string;
+  group: string;
+  directory: string;
+  rootDirectory: string;
+};
+
+export const CGROUP_ROOT = "/sys/fs/cgroup";
+
+export function readProcJobLinuxBootId(): Promise<string> {
+  return Bun.file("/proc/sys/kernel/random/boot_id")
+    .text()
+    .then((id) => {
+      const bootId = id.trim();
+      if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(bootId))
+        throw new Error("Could not verify the Linux boot identity.");
+      return bootId;
+    });
+}
+
+function matchesScopePath(group: string, unit: string): boolean {
+  return (
+    /^[A-Za-z0-9_-]+\.scope$/.test(unit) &&
+    group.startsWith("/") &&
+    !group.startsWith("//") &&
+    !group.includes("\0") &&
+    posix.normalize(group) === group &&
+    basename(group) === unit
+  );
+}
+
+function validInvocationId(value: string): boolean {
+  return /^[0-9a-f]{32}$/.test(value) && !/^0+$/.test(value);
+}
+
+export function decodeProcJobMemoryScopeIdentity(
+  value: unknown,
+  unit: string,
+): ProcJobMemoryScopeIdentity | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const { bootId, invocationId, group, directory, rootDirectory } =
+    value as Partial<ProcJobMemoryScopeIdentity>;
+  if (
+    typeof bootId !== "string" ||
+    !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(bootId) ||
+    typeof invocationId !== "string" ||
+    !validInvocationId(invocationId) ||
+    typeof group !== "string" ||
+    !matchesScopePath(group, unit) ||
+    typeof directory !== "string" ||
+    !/^\d+:\d+$/.test(directory) ||
+    typeof rootDirectory !== "string" ||
+    !/^\d+:\d+$/.test(rootDirectory)
+  )
+    return undefined;
+  return { bootId, invocationId, group, directory, rootDirectory };
+}
+
+export async function procJobCgroupDirectoryIdentity(folder: string): Promise<string> {
+  const identity = await stat(folder, { bigint: true });
+  if (!identity.isDirectory()) throw new Error("Invalid cgroup directory.");
+  return `${identity.dev}:${identity.ino}`;
+}
+
 const SCOPE_PROPERTIES = [
   "ActiveState",
   "ControlGroup",
@@ -43,11 +109,7 @@ const SCOPE_PROPERTIES = [
   "OOMPolicy",
 ] as const;
 
-export function readProcJobScopeGroup(
-  show: string,
-  unit: string,
-  limitBytes: number,
-): string | undefined {
+function readProcJobScopeProperties(show: string): Map<string, string> | undefined {
   const values = new Map<string, string>();
   for (const line of show.trim().split("\n")) {
     const separator = line.indexOf("=");
@@ -56,15 +118,22 @@ export function readProcJobScopeGroup(
     if (values.has(name)) return undefined;
     values.set(name, line.slice(separator + 1));
   }
+  return values;
+}
+
+function verifiedScopeProperties(
+  show: string,
+  unit: string,
+  limitBytes: number,
+): { group: string; invocationId: string } | undefined {
+  const values = readProcJobScopeProperties(show);
+  if (!values) return undefined;
   const group = values.get("ControlGroup");
   const invocationId = values.get("InvocationID") ?? "";
   if (
-    !group?.startsWith("/") ||
-    group.startsWith("//") ||
-    posix.normalize(group) !== group ||
-    basename(group) !== unit ||
-    !/^[0-9a-f]{32}$/.test(invocationId) ||
-    /^0+$/.test(invocationId) ||
+    !group ||
+    !matchesScopePath(group, unit) ||
+    !validInvocationId(invocationId) ||
     values.get("ActiveState") !== "active" ||
     values.get("MemoryAccounting") !== "yes" ||
     values.get("MemoryMax") !== String(limitBytes) ||
@@ -72,10 +141,29 @@ export function readProcJobScopeGroup(
     values.get("OOMPolicy") !== "kill"
   )
     return undefined;
-  return group;
+  return { group, invocationId };
 }
 
-async function scopeProperties(
+export function readProcJobScopeGroup(
+  show: string,
+  unit: string,
+  limitBytes: number,
+): string | undefined {
+  return verifiedScopeProperties(show, unit, limitBytes)?.group;
+}
+
+export function scopePropertiesMatchIdentity(
+  show: string,
+  identity: ProcJobMemoryScopeIdentity,
+): boolean {
+  const values = readProcJobScopeProperties(show);
+  return (
+    values?.get("ControlGroup") === identity.group &&
+    values.get("InvocationID") === identity.invocationId
+  );
+}
+
+export async function scopeProperties(
   unit: string,
   signal: AbortSignal,
   control: ProcScopeControl,
@@ -113,7 +201,7 @@ async function verifiedKernelLimit(
   group: string,
   limitBytes: number,
 ): Promise<boolean> {
-  const folder = join("/sys/fs/cgroup", group);
+  const folder = join(CGROUP_ROOT, group);
   const [membership, memoryMax, swapMax, oomGroup] = await Promise.all([
     Bun.file(`/proc/${pid}/cgroup`).text(),
     Bun.file(join(folder, "memory.max")).text(),
@@ -131,11 +219,17 @@ async function verifiedKernelLimit(
 export async function verifyProcJobMemoryScope(
   { unit, pid, limitBytes, signal }: ProcScopeMemoryVerificationInput,
   control: ProcScopeControl,
-): Promise<boolean> {
+): Promise<ProcJobMemoryScopeIdentity | false> {
   if (process.platform !== "linux") return false;
   let anchor: number | undefined;
+  let bootId: string;
+  let rootDirectory: string;
   try {
-    anchor = await readAnchor(pid);
+    [anchor, bootId, rootDirectory] = await Promise.all([
+      readAnchor(pid),
+      readProcJobLinuxBootId(),
+      procJobCgroupDirectoryIdentity(CGROUP_ROOT),
+    ]);
   } catch {
     return false;
   }
@@ -144,10 +238,25 @@ export async function verifyProcJobMemoryScope(
   while (!signal.aborted) {
     try {
       const properties = await scopeProperties(unit, signal, control);
-      const group = properties && readProcJobScopeGroup(properties, unit, limitBytes);
-      if (group && (await verifiedKernelLimit(pid, group, limitBytes))) {
-        const currentAnchor = await readAnchor(pid);
-        return !signal.aborted && currentAnchor === anchor;
+      const scope = properties && verifiedScopeProperties(properties, unit, limitBytes);
+      if (scope) {
+        const folder = join(CGROUP_ROOT, scope.group);
+        const directory = await procJobCgroupDirectoryIdentity(folder);
+        if (!(await verifiedKernelLimit(pid, scope.group, limitBytes))) {
+          await Bun.sleep(25);
+          continue;
+        }
+        const [currentAnchor, currentDirectory, currentRoot] = await Promise.all([
+          readAnchor(pid),
+          procJobCgroupDirectoryIdentity(folder),
+          procJobCgroupDirectoryIdentity(CGROUP_ROOT),
+        ]);
+        return !signal.aborted &&
+          currentAnchor === anchor &&
+          currentDirectory === directory &&
+          currentRoot === rootDirectory
+          ? { ...scope, directory, rootDirectory, bootId }
+          : false;
       }
     } catch {
       if (signal.aborted) return false;

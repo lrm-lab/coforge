@@ -9,10 +9,15 @@ import {
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import {
+  procJobMayBeRunning,
   readProcJobIdentity,
   requireProcJobGroupBootId,
   spawnDetachedProcJob,
 } from "#src/platform/proc-job-process";
+import type {
+  ProcScopeControl,
+  ProcJobMemoryScopeIdentity,
+} from "#src/platform/proc-job-systemd-memory";
 import { isPidAlive } from "#src/platform/process-liveness";
 import { runtimeAllowsProcJobs, sanitizeProcJobEnvironment } from "./proc-job-environment";
 import { readProcJobMemoryLimit } from "./proc-job-memory-config";
@@ -65,6 +70,7 @@ export async function launchAgentProcJob(input: {
   existingJobs: readonly StoredProcJob[];
   maxJobsPerAgent: number;
   systemdRunAvailable: () => Promise<boolean>;
+  systemdMemoryScope?: () => Promise<ProcScopeControl | undefined>;
   systemdPresentCheck: () => boolean;
   onLateExit: (jobId: string, exitCode: number | null, signal: string | null) => void;
   readIdentity?: typeof readProcJobIdentity;
@@ -140,8 +146,16 @@ export async function launchAgentProcJob(input: {
   }
 
   const id = randomUUID();
-  const useUserSystemd = input.platform === "linux" && (await input.systemdRunAvailable());
-  const systemdUnit = useUserSystemd ? systemdScopeName(input.agentId, name, id) : undefined;
+  const scopeControl =
+    limitBytes > 0 && input.platform === "linux" ? await input.systemdMemoryScope?.() : undefined;
+  const useUserSystemd =
+    Boolean(scopeControl) ||
+    (limitBytes === 0 && input.platform === "linux" && (await input.systemdRunAvailable()));
+  const systemdUnit = scopeControl
+    ? `coforge-proc-memory-${id}.scope`
+    : useUserSystemd
+      ? systemdScopeName(input.agentId, name, id)
+      : undefined;
   const groupAnchor =
     (input.retainSampledProcessGroup || limitBytes > 0) && !systemdUnit ? true : undefined;
   const stopsWithService =
@@ -158,8 +172,8 @@ export async function launchAgentProcJob(input: {
     pgid: null,
     ...(systemdUnit ? { systemdUnit } : {}),
     ...(groupAnchor ? { groupAnchor } : {}),
-    ...(groupAnchor && limitBytes > 0
-      ? { memory: { mode: "process_group_rss" as const, limitBytes } }
+    ...(limitBytes > 0
+      ? { memory: { mode: scopeControl ? "systemd_cgroup" : "process_group_rss", limitBytes } }
       : {}),
     ...(stopsWithService ? { stopsWithService: true } : {}),
     status: "running",
@@ -172,6 +186,7 @@ export async function launchAgentProcJob(input: {
   let pid: number;
   let groupAnchorBootId: string | undefined;
   let anchorStartIdentity: string | undefined;
+  let memoryScope: ProcJobMemoryScopeIdentity | undefined;
   try {
     if (groupAnchor) groupAnchorBootId = await requireProcJobGroupBootId(input.platform);
     const spawned = await spawnDetachedProcJob({
@@ -181,6 +196,7 @@ export async function launchAgentProcJob(input: {
       logPath,
       systemdUnit,
       groupAnchor,
+      ...(scopeControl ? { memoryLimitBytes: limitBytes, scopeControl } : {}),
       onExit: (exitCode, signal) => {
         if (!spawnSucceeded) {
           exitedEarly = { exitCode, signal };
@@ -191,6 +207,9 @@ export async function launchAgentProcJob(input: {
     });
     pid = spawned.pid;
     anchorStartIdentity = spawned.startIdentity;
+    memoryScope = spawned.memoryScope;
+    if (scopeControl && !memoryScope)
+      throw new Error("Could not identify the verified memory scope.");
   } catch (error) {
     throw new ProcJobError(
       "proc_spawn_failed",
@@ -199,6 +218,19 @@ export async function launchAgentProcJob(input: {
     );
   }
 
+  if (memoryScope) {
+    const record = { ...pendingRecord, pid, pgid: pid, memoryScope };
+    const remains = await procJobMayBeRunning(record, input.platform);
+    spawnSucceeded = true;
+    return remains
+      ? record
+      : markProcJobExited(
+          record,
+          "exited",
+          exitedEarly?.exitCode ?? null,
+          exitedEarly?.signal ?? null,
+        );
+  }
   if (groupAnchorBootId) pendingRecord.groupAnchorBootId = groupAnchorBootId;
   if (anchorStartIdentity && !exitedEarly) {
     spawnSucceeded = true;
