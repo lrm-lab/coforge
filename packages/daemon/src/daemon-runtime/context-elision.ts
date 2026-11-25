@@ -43,10 +43,7 @@ export function elideSeenInContext(
     }
   }
 
-  const results =
-    typeof ledger.claimBatch === "function"
-      ? ledger.claimBatch(candidates)
-      : candidates.map(([kind, id, text]) => ledger.claim(kind, id, text));
+  const results = ledger.claimBatch(candidates);
   const claimed: ContextObservationEntry[] = [];
   for (let i = 0; i < candidates.length; i++) {
     if (results[i]) claimed.push(candidates[i]!);
@@ -68,13 +65,7 @@ export function elideSeenInContext(
 
   return {
     messages: elided,
-    release: () => {
-      if (typeof ledger.releaseBatch === "function") {
-        ledger.releaseBatch(claimed);
-        return;
-      }
-      claimed.forEach(([kind, id, text]) => ledger.release(kind, id, text));
-    },
+    release: () => ledger.releaseBatch(claimed),
   };
 }
 
