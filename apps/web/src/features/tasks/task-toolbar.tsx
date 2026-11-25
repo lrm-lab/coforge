@@ -161,7 +161,7 @@ export function TaskToolbar({
   const chips = candidates.filter((chip) => chip !== false && chip !== undefined);
 
   return (
-    <div className="flex min-h-11 shrink-0 items-center justify-between gap-3 px-page py-1.5 max-sm:flex-wrap">
+    <div className="flex min-h-11 shrink-0 items-center justify-between gap-1.5 px-page py-1.5 max-sm:flex-wrap sm:gap-3">
       <div className="flex min-w-0 flex-wrap items-center gap-1">
         <Dropdown.Root>
           <Button size="sm" color="tertiary" iconLeading={FilterLines} className="-ms-3">
@@ -244,7 +244,7 @@ export function TaskToolbar({
           </TagGroup>
         )}
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
         <LayoutSwitch layout={layout} onLayoutChange={onLayoutChange} />
         {action}
       </div>
@@ -366,7 +366,7 @@ function LayoutSwitch({
           id="board"
           iconLeading={Columns03}
           aria-label={m.tasks_layout_board()}
-          className="bg-transparent selected:bg-transparent rtl:first:rounded-l-none rtl:first:rounded-s-lg rtl:last:rounded-r-none rtl:last:rounded-e-lg"
+          className="bg-transparent max-sm:px-2.5 selected:bg-transparent rtl:first:rounded-l-none rtl:first:rounded-s-lg rtl:last:rounded-r-none rtl:last:rounded-e-lg"
         >
           {words && m.tasks_layout_board()}
         </ButtonGroupItem>
@@ -374,7 +374,7 @@ function LayoutSwitch({
           id="list"
           iconLeading={List}
           aria-label={m.tasks_layout_list()}
-          className="bg-transparent selected:bg-transparent rtl:first:rounded-l-none rtl:first:rounded-s-lg rtl:last:rounded-r-none rtl:last:rounded-e-lg"
+          className="bg-transparent max-sm:px-2.5 selected:bg-transparent rtl:first:rounded-l-none rtl:first:rounded-s-lg rtl:last:rounded-r-none rtl:last:rounded-e-lg"
         >
           {words && m.tasks_layout_list()}
         </ButtonGroupItem>
