@@ -29,6 +29,8 @@ test("the tab bar shows on a tab home only", () => {
 test("an inner page goes back to the tab it belongs to", () => {
   for (const section of [
     "projects",
+    "artifacts",
+    "artifact",
     "tasks",
     "members",
     "agent",

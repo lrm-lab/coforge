@@ -5,6 +5,7 @@
   "computer_overview_attention_banner_one": "1 Computer needs attention",
   "computer_overview_search_placeholder": "Search computers…",
   "computer_overview_search_label": "Search computers",
+  "computer_overview_filters_label": "Filter",
   "computer_overview_status_label": "Status",
   "computer_overview_status_all": "All statuses",
   "computer_overview_status_online": "Online",

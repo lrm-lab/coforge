@@ -1,25 +1,22 @@
+import { useRef } from "react";
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import { ArrowUp, FilterLines, Grid01, List, Plus, SearchLg } from "@untitledui/icons";
 import {
-  ArrowUp,
-  ChevronDown,
-  CpuChip01,
-  Grid01,
-  LayersThree01,
-  List,
-  Plus,
-  SearchLg,
-  Sliders04,
-  SwitchVertical01,
-} from "@untitledui/icons";
+  Dialog as AriaDialog,
+  DialogTrigger as AriaDialogTrigger,
+  Popover as AriaPopover,
+} from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
-import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Input } from "#src/components/base/input/input";
+import { Select, type SelectItemType } from "#src/components/base/select/select";
+import { CountBadge } from "#src/components/ui/unread-marker";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { POPOVER_MOTION } from "#src/utils/popover-motion";
 import type { ComputersOverviewLayout } from "./computer-overview-layout";
 import type {
   ComputerOverviewGroupBy,
@@ -49,57 +46,6 @@ export type ComputerOverviewToolbarProps = {
   compact: boolean;
 };
 
-function statusLabel(status: ComputerOverviewStatusFilter): string {
-  switch (status) {
-    case "online":
-      return m.computer_overview_status_online();
-    case "offline":
-      return m.computer_overview_status_offline();
-    case "attention":
-      return m.computer_overview_status_attention();
-    default:
-      return m.computer_overview_status_all();
-  }
-}
-
-function runtimeFilterLabel(runtime: ComputerOverviewRuntimeFilter): string {
-  if (runtime === "all") return m.computer_overview_runtime_all();
-  if (runtime === "other") return m.computer_overview_runtime_other();
-  return runtimeProviderLabel(runtime);
-}
-
-function groupByLabel(groupBy: ComputerOverviewGroupBy): string {
-  switch (groupBy) {
-    case "owner":
-      return m.computer_overview_group_owner();
-    case "kind":
-      return m.computer_overview_group_kind();
-    case "prefix":
-      return m.computer_overview_group_prefix();
-    default:
-      return m.computer_overview_group_none();
-  }
-}
-
-function sortByLabel(sortBy: ComputerOverviewSortBy): string {
-  switch (sortBy) {
-    case "attention":
-      return m.computer_overview_sort_attention();
-    case "name":
-      return m.computer_overview_sort_name();
-    case "disk":
-      return m.computer_overview_sort_disk();
-    case "memory":
-      return m.computer_overview_sort_memory();
-    default: {
-      const provider = sortBy.slice("runtime:".length) as RuntimeProvider;
-      return m.computer_overview_sort_runtime_left({
-        runtime: runtimeProviderLabel(provider),
-      });
-    }
-  }
-}
-
 export function ComputerOverviewToolbar({
   query,
   onQueryChange,
@@ -120,10 +66,70 @@ export function ComputerOverviewToolbar({
   onAdd,
   compact,
 }: ComputerOverviewToolbarProps) {
-  const statusActive = status !== "all";
-  const runtimeActive = runtime !== "all";
-  const groupActive = groupBy !== "none";
-  const sortActive = sortBy !== "attention";
+  const dialogRef = useRef<HTMLElement>(null);
+
+  const activeCount =
+    Number(status !== "all") +
+    Number(runtime !== "all") +
+    Number(groupBy !== "none") +
+    Number(sortBy !== "attention");
+
+  const statusItems: SelectItemType[] = [
+    { id: "all", label: m.computer_overview_status_all() },
+    { id: "online", label: m.computer_overview_status_online() },
+    { id: "offline", label: m.computer_overview_status_offline() },
+    { id: "attention", label: m.computer_overview_status_attention() },
+  ];
+
+  const runtimeItems: SelectItemType[] = [
+    { id: "all", label: m.computer_overview_runtime_all() },
+    ...runtimeOptions.map((provider) => ({
+      id: provider,
+      label: runtimeProviderLabel(provider),
+      icon: <RuntimeProviderMark provider={provider} className="size-4" />,
+    })),
+    ...(hasOtherRuntime ? [{ id: "other", label: m.computer_overview_runtime_other() }] : []),
+  ];
+
+  const groupItems: SelectItemType[] = [
+    { id: "none", label: m.computer_overview_group_none() },
+    { id: "owner", label: m.computer_overview_group_owner() },
+    { id: "kind", label: m.computer_overview_group_kind() },
+    { id: "prefix", label: m.computer_overview_group_prefix() },
+  ];
+
+  const sortItems: SelectItemType[] = [
+    { id: "attention", label: m.computer_overview_sort_attention() },
+    { id: "name", label: m.computer_overview_sort_name() },
+    { id: "disk", label: m.computer_overview_sort_disk() },
+    { id: "memory", label: m.computer_overview_sort_memory() },
+    ...runtimeOptions.map((provider) => ({
+      id: `runtime:${provider}`,
+      label: m.computer_overview_sort_runtime_left({
+        runtime: runtimeProviderLabel(provider),
+      }),
+      icon: <RuntimeProviderMark provider={provider} className="size-4" />,
+    })),
+  ];
+
+  const resetAll = () => {
+    onStatusChange("all");
+    onRuntimeChange("all");
+    onGroupByChange("none");
+    onSortByChange("attention");
+    dialogRef.current?.focus();
+  };
+
+  const filterButtonContent = compact ? (
+    activeCount > 0 ? (
+      <CountBadge count={activeCount} size="sm" />
+    ) : null
+  ) : (
+    <>
+      <span>{m.computer_overview_filters_label()}</span>
+      {activeCount > 0 ? <CountBadge count={activeCount} size="sm" /> : null}
+    </>
+  );
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-secondary bg-primary px-page py-2.5">
@@ -139,133 +145,95 @@ export function ComputerOverviewToolbar({
         />
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Dropdown.Root>
-          <Button
-            type="button"
-            size="sm"
-            color="secondary"
-            aria-label={`${m.computer_overview_status_label()}: ${statusLabel(status)}`}
-            iconLeading={Sliders04}
-            iconTrailing={ChevronDown}
-            className={cn(statusActive && "text-brand-secondary ring-brand")}
+      <AriaDialogTrigger>
+        <Button
+          type="button"
+          size="sm"
+          color="secondary"
+          aria-label={compact ? m.computer_overview_filters_label() : undefined}
+          iconLeading={FilterLines}
+          className={cn(
+            "shrink-0 [&>[data-text]]:inline-flex [&>[data-text]]:items-center [&>[data-text]]:gap-1.5",
+            activeCount > 0 && "text-brand-secondary ring-brand",
+          )}
+        >
+          {filterButtonContent}
+        </Button>
+        <AriaPopover
+          placement="bottom start"
+          offset={6}
+          className={cn(
+            "w-72 max-w-[calc(100vw-2rem)] origin-(--trigger-anchor-point) rounded-xl bg-primary p-3.5 shadow-lg ring-1 ring-secondary",
+            POPOVER_MOTION,
+          )}
+        >
+          <AriaDialog
+            ref={dialogRef}
+            aria-label={m.computer_overview_filters_label()}
+            className="flex flex-col gap-3 outline-hidden"
           >
-            {compact ? null : statusLabel(status)}
-          </Button>
-          <Dropdown.Popover placement="bottom start">
-            <Dropdown.Menu
-              aria-label={m.computer_overview_status_label()}
-              selectionMode="single"
-              selectedKeys={new Set([status])}
-              onAction={(key) => onStatusChange(String(key) as ComputerOverviewStatusFilter)}
+            <Select
+              size="sm"
+              label={m.computer_overview_status_label()}
+              selectedKey={status}
+              onSelectionChange={(key) =>
+                onStatusChange(String(key) as ComputerOverviewStatusFilter)
+              }
+              items={statusItems}
             >
-              <Dropdown.Item id="all" label={m.computer_overview_status_all()} />
-              <Dropdown.Item id="online" label={m.computer_overview_status_online()} />
-              <Dropdown.Item id="offline" label={m.computer_overview_status_offline()} />
-              <Dropdown.Item id="attention" label={m.computer_overview_status_attention()} />
-            </Dropdown.Menu>
-          </Dropdown.Popover>
-        </Dropdown.Root>
+              {(item) => <Select.Item id={item.id}>{item.label}</Select.Item>}
+            </Select>
 
-        <Dropdown.Root>
-          <Button
-            type="button"
-            size="sm"
-            color="secondary"
-            aria-label={`${m.computer_overview_runtime_label()}: ${runtimeFilterLabel(runtime)}`}
-            iconLeading={CpuChip01}
-            iconTrailing={ChevronDown}
-            className={cn(runtimeActive && "text-brand-secondary ring-brand")}
-          >
-            {compact ? null : runtimeFilterLabel(runtime)}
-          </Button>
-          <Dropdown.Popover placement="bottom start">
-            <Dropdown.Menu
-              aria-label={m.computer_overview_runtime_label()}
-              selectionMode="single"
-              selectedKeys={new Set([runtime])}
-              onAction={(key) => onRuntimeChange(String(key) as ComputerOverviewRuntimeFilter)}
+            <Select
+              size="sm"
+              label={m.computer_overview_runtime_label()}
+              selectedKey={runtime}
+              onSelectionChange={(key) =>
+                onRuntimeChange(String(key) as ComputerOverviewRuntimeFilter)
+              }
+              items={runtimeItems}
             >
-              <Dropdown.Item id="all" label={m.computer_overview_runtime_all()} />
-              {runtimeOptions.map((provider) => (
-                <Dropdown.Item
-                  key={provider}
-                  id={provider}
-                  label={runtimeProviderLabel(provider)}
-                  leading={<RuntimeProviderMark provider={provider} className="size-4" />}
-                />
-              ))}
-              {hasOtherRuntime ? (
-                <Dropdown.Item id="other" label={m.computer_overview_runtime_other()} />
-              ) : null}
-            </Dropdown.Menu>
-          </Dropdown.Popover>
-        </Dropdown.Root>
+              {(item) => (
+                <Select.Item id={item.id} icon={item.icon}>
+                  {item.label}
+                </Select.Item>
+              )}
+            </Select>
 
-        <Dropdown.Root>
-          <Button
-            type="button"
-            size="sm"
-            color="secondary"
-            aria-label={`${m.computer_overview_group_label()}: ${groupByLabel(groupBy)}`}
-            iconLeading={LayersThree01}
-            iconTrailing={ChevronDown}
-            className={cn(groupActive && "text-brand-secondary ring-brand")}
-          >
-            {compact ? null : groupByLabel(groupBy)}
-          </Button>
-          <Dropdown.Popover placement="bottom start">
-            <Dropdown.Menu
-              aria-label={m.computer_overview_group_label()}
-              selectionMode="single"
-              selectedKeys={new Set([groupBy])}
-              onAction={(key) => onGroupByChange(String(key) as ComputerOverviewGroupBy)}
+            <Select
+              size="sm"
+              label={m.computer_overview_group_label()}
+              selectedKey={groupBy}
+              onSelectionChange={(key) => onGroupByChange(String(key) as ComputerOverviewGroupBy)}
+              items={groupItems}
             >
-              <Dropdown.Item id="none" label={m.computer_overview_group_none()} />
-              <Dropdown.Item id="owner" label={m.computer_overview_group_owner()} />
-              <Dropdown.Item id="kind" label={m.computer_overview_group_kind()} />
-              <Dropdown.Item id="prefix" label={m.computer_overview_group_prefix()} />
-            </Dropdown.Menu>
-          </Dropdown.Popover>
-        </Dropdown.Root>
+              {(item) => <Select.Item id={item.id}>{item.label}</Select.Item>}
+            </Select>
 
-        <Dropdown.Root>
-          <Button
-            type="button"
-            size="sm"
-            color="secondary"
-            aria-label={`${m.computer_overview_sort_label()}: ${sortByLabel(sortBy)}`}
-            iconLeading={SwitchVertical01}
-            iconTrailing={ChevronDown}
-            className={cn(sortActive && "text-brand-secondary ring-brand")}
-          >
-            {compact ? null : sortByLabel(sortBy)}
-          </Button>
-          <Dropdown.Popover placement="bottom start">
-            <Dropdown.Menu
-              aria-label={m.computer_overview_sort_label()}
-              selectionMode="single"
-              selectedKeys={new Set([sortBy])}
-              onAction={(key) => onSortByChange(String(key) as ComputerOverviewSortBy)}
+            <Select
+              size="sm"
+              label={m.computer_overview_sort_label()}
+              selectedKey={sortBy}
+              onSelectionChange={(key) => onSortByChange(String(key) as ComputerOverviewSortBy)}
+              items={sortItems}
             >
-              <Dropdown.Item id="attention" label={m.computer_overview_sort_attention()} />
-              <Dropdown.Item id="name" label={m.computer_overview_sort_name()} />
-              <Dropdown.Item id="disk" label={m.computer_overview_sort_disk()} />
-              <Dropdown.Item id="memory" label={m.computer_overview_sort_memory()} />
-              {runtimeOptions.map((provider) => (
-                <Dropdown.Item
-                  key={provider}
-                  id={`runtime:${provider}`}
-                  label={m.computer_overview_sort_runtime_left({
-                    runtime: runtimeProviderLabel(provider),
-                  })}
-                  leading={<RuntimeProviderMark provider={provider} className="size-4" />}
-                />
-              ))}
-            </Dropdown.Menu>
-          </Dropdown.Popover>
-        </Dropdown.Root>
-      </div>
+              {(item) => (
+                <Select.Item id={item.id} icon={item.icon}>
+                  {item.label}
+                </Select.Item>
+              )}
+            </Select>
+
+            {activeCount > 0 ? (
+              <div className="flex justify-end border-t border-secondary pt-2">
+                <Button type="button" size="xs" color="link-gray" onPress={resetAll}>
+                  {m.computer_overview_clear_filters()}
+                </Button>
+              </div>
+            ) : null}
+          </AriaDialog>
+        </AriaPopover>
+      </AriaDialogTrigger>
 
       <div className="ms-auto flex shrink-0 items-center gap-2">
         {batchUpgradeCount >= 2 ? (

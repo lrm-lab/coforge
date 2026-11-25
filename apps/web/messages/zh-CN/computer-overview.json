@@ -5,6 +5,7 @@
   "computer_overview_attention_banner_one": "1 台电脑需要处理",
   "computer_overview_search_placeholder": "按名称、系统、归属人或 Agent 搜索…",
   "computer_overview_search_label": "搜索电脑",
+  "computer_overview_filters_label": "筛选",
   "computer_overview_status_label": "状态",
   "computer_overview_status_all": "全部状态",
   "computer_overview_status_online": "在线",
