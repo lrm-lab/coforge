@@ -1,14 +1,26 @@
-import { fstatSync, lstatSync, openSync, constants, closeSync, readSync } from "node:fs";
-import { ContextViewStore, type ContextViewIndexEntry } from "./context-view-store";
+import { closeSync, fstatSync, lstatSync, openSync, readSync } from "node:fs";
+import { lstat } from "node:fs/promises";
+import {
+  findProviderTranscript,
+  providerTranscriptRoot,
+  type ProviderTranscriptSource,
+} from "./context-view-provider-locator";
 import {
   CONTEXT_VIEW_PROVIDERS,
   contextViewRuntime,
   type ContextViewRuntime,
 } from "./context-view-providers";
+import {
+  CONTEXT_VIEW_READ_FLAGS,
+  ContextViewStore,
+  type ContextViewIndexEntry,
+} from "./context-view-store";
 
 export const AGENT_CONTEXT_VIEW_AVAILABILITY_REFRESH_MAX_MS = 24 * 60 * 60 * 1000;
 export const AGENT_CONTEXT_VIEW_AVAILABILITY_REFRESH_JITTER_MS = 4 * 60 * 60 * 1000;
 const SUPPORT_SCAN_BYTES = 8 * 1024 * 1024;
+const SUPPORT_SCAN_CHUNK_BYTES = 64 * 1024;
+const TRANSCRIPT_CACHE_MAX_ENTRIES = 256;
 
 export function agentContextViewAvailabilityRefreshDelay(random = Math.random): number {
   const sample = Math.min(0.999999, Math.max(0, random()));
@@ -42,6 +54,31 @@ export type ContextViewAgentFacts = {
   contextViewRequestLogPath?: string;
 };
 
+type CachedProviderTranscript = {
+  runtime: string;
+  root: string;
+  sessionId: string;
+  source: ProviderTranscriptSource;
+};
+
+type CachedTranscriptSupport =
+  | {
+      supported: true;
+      runtime: ContextViewRuntime;
+      dev: number;
+      ino: number;
+      markerOffset: number;
+    }
+  | {
+      supported: false;
+      runtime: ContextViewRuntime;
+      dev: number;
+      ino: number;
+      size: number;
+      mtimeMs: number;
+      ctimeMs: number;
+    };
+
 type Options = {
   stateDirectory: string;
   serverId: string;
@@ -52,7 +89,17 @@ type Options = {
   now?: () => number;
   random?: () => number;
   reportAvailability?: (availability: ContextViewAvailability) => void;
+  locateProviderTranscript?: typeof findProviderTranscript;
 };
+
+async function isLiveRegularFile(path: string): Promise<boolean> {
+  try {
+    const info = await lstat(path);
+    return !info.isSymbolicLink() && info.isFile() && info.nlink === 1;
+  } catch {
+    return false;
+  }
+}
 
 export class AgentContextViewService {
   readonly #stateDirectory: string;
@@ -63,12 +110,18 @@ export class AgentContextViewService {
   readonly #now: () => number;
   readonly #random: () => number;
   readonly #reportAvailability?: Options["reportAvailability"];
+  readonly #locateProviderTranscript: typeof findProviderTranscript;
   readonly #stores = new Map<string, ContextViewStore>();
   readonly #reported = new Map<string, string>();
   readonly #availabilityFacts = new Map<
     string,
     { facts: ContextViewAgentFacts; enabled: boolean; lastReportedAt: number }
   >();
+  readonly #providerTranscripts = new Map<string, CachedProviderTranscript>();
+  readonly #transcriptCache = new Map<string, CachedTranscriptSupport>();
+  readonly #scanBuffer = Buffer.allocUnsafe(SUPPORT_SCAN_CHUNK_BYTES);
+  readonly #markerProbe = Buffer.allocUnsafe(64);
+  #providerTranscriptGeneration = 0;
   #maintenance?: ReturnType<typeof setInterval>;
   #availabilityRefreshTimer?: ReturnType<typeof setTimeout>;
   #maintenanceActive = false;
@@ -82,6 +135,47 @@ export class AgentContextViewService {
     this.#now = options.now ?? Date.now;
     this.#random = options.random ?? Math.random;
     this.#reportAvailability = options.reportAvailability;
+    this.#locateProviderTranscript = options.locateProviderTranscript ?? findProviderTranscript;
+  }
+
+  async resolveProviderTranscript(
+    agentId: string,
+    runtime: string,
+    sessionId: string,
+    envVars?: Readonly<Record<string, string>>,
+  ): Promise<ProviderTranscriptSource | undefined> {
+    if (contextViewRuntime(runtime) === undefined) return undefined;
+    const root = providerTranscriptRoot(runtime, envVars);
+    const generation = this.#providerTranscriptGeneration;
+    let expected = this.#providerTranscripts.get(agentId);
+    if (
+      expected &&
+      root !== undefined &&
+      expected.runtime === runtime &&
+      expected.root === root &&
+      expected.sessionId === sessionId
+    ) {
+      if (await isLiveRegularFile(expected.source.absolute)) return expected.source;
+      if (
+        this.#providerTranscriptGeneration === generation &&
+        this.#providerTranscripts.get(agentId) === expected
+      ) {
+        this.#providerTranscripts.delete(agentId);
+        expected = undefined;
+      }
+    }
+    const located = await this.#locateProviderTranscript(runtime, sessionId, envVars);
+    if (
+      this.#providerTranscriptGeneration === generation &&
+      this.#providerTranscripts.get(agentId) === expected
+    ) {
+      if (located && root !== undefined) {
+        this.#providerTranscripts.set(agentId, { runtime, root, sessionId, source: located });
+      } else if (expected) {
+        this.#providerTranscripts.delete(agentId);
+      }
+    }
+    return located;
   }
 
   onMessageCommitted(facts: ContextViewAgentFacts, messageId: string, enabled: boolean): void {
@@ -95,8 +189,8 @@ export class AgentContextViewService {
       this.#report(facts, runtime, false, "no_session", "message");
       return;
     }
-    const offset = this.#safeFileSize(facts.transcriptPath);
-    if (offset === undefined || !this.#hasSupportedTranscript(facts.transcriptPath, runtime)) {
+    const inspected = this.#inspectTranscript(facts.transcriptPath, runtime);
+    if (!inspected?.supported) {
       this.#report(facts, runtime, false, "no_session", "message");
       return;
     }
@@ -106,10 +200,10 @@ export class AgentContextViewService {
       runtime,
       sessionId: facts.sessionId,
       transcript: facts.transcript,
-      offset,
+      offset: inspected.size,
     };
-    this.#store(facts.agentId).record(entry);
-    this.#report(facts, runtime, true, undefined, "message");
+    const retainedSince = this.#store(facts.agentId).record(entry);
+    this.#report(facts, runtime, true, undefined, "message", false, retainedSince);
   }
 
   reportAvailability(
@@ -134,7 +228,7 @@ export class AgentContextViewService {
       this.#report(facts, runtime, false, "no_session", trigger, force);
     } else if (
       facts.transcriptPath &&
-      !this.#hasSupportedTranscript(facts.transcriptPath, runtime) &&
+      !this.#inspectTranscript(facts.transcriptPath, runtime)?.supported &&
       !this.#hasRetainedIndex(facts.agentId)
     ) {
       this.#report(facts, runtime, false, "no_session", trigger, force);
@@ -144,6 +238,8 @@ export class AgentContextViewService {
   }
 
   disable(agentId: string): void {
+    this.#providerTranscriptGeneration += 1;
+    this.#providerTranscripts.delete(agentId);
     if (ContextViewStore.exists(this.#stateDirectory, this.#serverId, agentId))
       this.#store(agentId).markOff(this.#now());
   }
@@ -161,6 +257,8 @@ export class AgentContextViewService {
       const off = store.sweepOff(this.#now());
       if (off) {
         this.#stores.delete(agentId);
+        this.#providerTranscriptGeneration += 1;
+        this.#providerTranscripts.delete(agentId);
         continue;
       }
       store.sweepRequestLogs(this.#now() - this.#retentionDays * 24 * 60 * 60 * 1000);
@@ -235,8 +333,11 @@ export class AgentContextViewService {
     unsupportedReason?: "unsupported_runtime" | "no_session",
     trigger: ContextViewAvailability["trigger"] = "startup",
     force = false,
+    knownRetainedSince?: string,
   ): void {
-    const retainedSince = supported ? this.#store(facts.agentId).oldestSentAt() : undefined;
+    const retainedSince = supported
+      ? (knownRetainedSince ?? this.#store(facts.agentId).oldestSentAt())
+      : undefined;
     const availability: ContextViewAvailability = {
       type: "agent:context_view_availability",
       protocolMajor: 1,
@@ -261,48 +362,109 @@ export class AgentContextViewService {
     return !store.isOff() && store.oldestSentAt() !== undefined;
   }
 
-  #safeFileSize(path: string): number | undefined {
+  #rememberTranscript(path: string, entry: CachedTranscriptSupport): void {
+    if (
+      !this.#transcriptCache.has(path) &&
+      this.#transcriptCache.size >= TRANSCRIPT_CACHE_MAX_ENTRIES
+    ) {
+      const oldest = this.#transcriptCache.keys().next().value;
+      if (oldest !== undefined) this.#transcriptCache.delete(oldest);
+    }
+    this.#transcriptCache.set(path, entry);
+  }
+
+  #inspectTranscript(
+    path: string,
+    runtime: ContextViewRuntime,
+  ): { size: number; supported: boolean } | undefined {
     try {
       const stat = lstatSync(path);
-      if (!stat.isFile() || stat.nlink > 1) return undefined;
-      const fd = openSync(
-        path,
-        constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0),
-      );
+      if (!stat.isFile() || stat.nlink > 1) {
+        this.#transcriptCache.delete(path);
+        return undefined;
+      }
+      const fd = openSync(path, CONTEXT_VIEW_READ_FLAGS);
       try {
         const info = fstatSync(fd);
-        return info.isFile() && info.nlink === 1 ? info.size : undefined;
+        if (!info.isFile() || info.nlink !== 1) {
+          this.#transcriptCache.delete(path);
+          return undefined;
+        }
+        const dev = Number(info.dev);
+        const ino = Number(info.ino);
+        const size = Number(info.size);
+        const marker = CONTEXT_VIEW_PROVIDERS[runtime].marker;
+        const cached = this.#transcriptCache.get(path);
+        if (cached && cached.runtime === runtime && cached.dev === dev && cached.ino === ino) {
+          if (cached.supported) {
+            if (
+              cached.markerOffset + marker.length <= size &&
+              cached.markerOffset + marker.length <= SUPPORT_SCAN_BYTES
+            ) {
+              const probe =
+                marker.length <= this.#markerProbe.length
+                  ? this.#markerProbe
+                  : Buffer.allocUnsafe(marker.length);
+              const bytesRead = readSync(fd, probe, 0, marker.length, cached.markerOffset);
+              if (bytesRead === marker.length && probe.subarray(0, marker.length).equals(marker)) {
+                return { size, supported: true };
+              }
+            }
+          } else if (
+            cached.size === size &&
+            cached.mtimeMs === Number(info.mtimeMs) &&
+            cached.ctimeMs === Number(info.ctimeMs)
+          ) {
+            return { size, supported: false };
+          }
+          this.#transcriptCache.delete(path);
+        }
+
+        const markerOffset = this.#findMarkerOffset(fd, Math.min(size, SUPPORT_SCAN_BYTES), marker);
+        if (markerOffset !== undefined) {
+          this.#rememberTranscript(path, { supported: true, runtime, dev, ino, markerOffset });
+          return { size, supported: true };
+        }
+        this.#rememberTranscript(path, {
+          supported: false,
+          runtime,
+          dev,
+          ino,
+          size,
+          mtimeMs: Number(info.mtimeMs),
+          ctimeMs: Number(info.ctimeMs),
+        });
+        return { size, supported: false };
       } finally {
         closeSync(fd);
       }
     } catch {
+      this.#transcriptCache.delete(path);
       return undefined;
     }
   }
 
-  #hasSupportedTranscript(path: string, runtime: ContextViewRuntime): boolean {
-    try {
-      const fd = openSync(
-        path,
-        constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0),
-      );
-      try {
-        const info = fstatSync(fd);
-        if (!info.isFile() || info.nlink !== 1) return false;
-        const size = Math.min(info.size, SUPPORT_SCAN_BYTES);
-        const buffer = Buffer.alloc(size);
-        let read = 0;
-        while (read < size) {
-          const count = readSync(fd, buffer, read, size - read, read);
-          if (count === 0) break;
-          read += count;
-        }
-        return buffer.subarray(0, read).includes(CONTEXT_VIEW_PROVIDERS[runtime].marker);
-      } finally {
-        closeSync(fd);
+  #findMarkerOffset(fd: number, limit: number, marker: Buffer): number | undefined {
+    if (limit < marker.length) return undefined;
+    const overlap = Math.max(0, marker.length - 1);
+    let fileOffset = 0;
+    let carry = 0;
+    while (fileOffset < limit) {
+      const toRead = Math.min(this.#scanBuffer.length - carry, limit - fileOffset);
+      const bytesRead = readSync(fd, this.#scanBuffer, carry, toRead, fileOffset);
+      if (bytesRead === 0) break;
+      const valid = carry + bytesRead;
+      const hit = this.#scanBuffer.subarray(0, valid).indexOf(marker);
+      if (hit !== -1) return fileOffset - carry + hit;
+      fileOffset += bytesRead;
+      if (fileOffset < limit && overlap > 0) {
+        const nextCarry = Math.min(overlap, valid);
+        this.#scanBuffer.copyWithin(0, valid - nextCarry, valid);
+        carry = nextCarry;
+      } else {
+        carry = 0;
       }
-    } catch {
-      return false;
     }
+    return undefined;
   }
 }

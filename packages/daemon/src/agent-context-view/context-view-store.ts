@@ -160,14 +160,16 @@ export class ContextViewStore {
     return this.#requestLogDirectory;
   }
 
-  record(entry: ContextViewIndexEntry): void {
+  record(entry: ContextViewIndexEntry): string | undefined {
     assertEntry(entry);
     const line = `${JSON.stringify(entry)}\n`;
+    const lineBytes = Buffer.byteLength(line);
     if (this.#indexCache === undefined) this.#refreshIndex();
-    if (existsSync(this.#indexPath)) {
-      ownRegularFile(this.#indexPath);
-      if (lstatSync(this.#indexPath).size + Buffer.byteLength(line) > AGENT_CONTEXT_INDEX_MAX_BYTES)
-        this.compact();
+    const existing = lstatSync(this.#indexPath, { throwIfNoEntry: false });
+    if (existing) {
+      if (!existing.isFile() || existing.nlink > 1)
+        throw new Error("Context view file is not private");
+      if (existing.size + lineBytes > AGENT_CONTEXT_INDEX_MAX_BYTES) this.compact();
     }
     let fd: number | undefined;
     let before: IndexFingerprint | undefined;
@@ -182,39 +184,28 @@ export class ContextViewStore {
           ? info.size === 0
           : this.#indexFingerprint !== undefined &&
             this.#sameFingerprint(this.#indexFingerprint, before));
-      if (
-        !info.isFile() ||
-        info.nlink > 1 ||
-        info.size + Buffer.byteLength(line) > AGENT_CONTEXT_INDEX_MAX_BYTES
-      )
+      if (!info.isFile() || info.nlink > 1 || info.size + lineBytes > AGENT_CONTEXT_INDEX_MAX_BYTES)
         throw new Error("Context view index is full or unsafe");
       writeFileSync(fd, line, "utf8");
       const after = this.#fingerprint(fstatSync(fd));
-      if (
-        cacheWasCurrent &&
-        before &&
-        after.size === before.size + Buffer.byteLength(line) &&
-        this.#indexCache
-      ) {
-        // Keep the existing first-line lookup semantics for duplicate IDs.
+      if (cacheWasCurrent && before && after.size === before.size + lineBytes && this.#indexCache) {
         if (!this.#indexCache.has(entry.messageId))
           this.#indexCache.set(entry.messageId, { ...entry });
         this.#oldestSentAt = this.#earlierSentAt(this.#oldestSentAt, entry.sentAt);
         this.#indexFingerprint = after;
-      } else {
-        this.#invalidateIndex();
+        return this.#oldestSentAt;
       }
+      this.#invalidateIndex();
     } finally {
       if (fd !== undefined) closeSync(fd);
     }
+    return this.oldestSentAt();
   }
 
   find(messageId: string): ContextViewIndexEntry | undefined {
     if (!ID.test(messageId)) return undefined;
     this.#refreshIndex();
     const entry = this.#indexCache?.get(messageId);
-    // Callers historically received a newly parsed value. Do not let mutation of a result
-    // poison the in-memory cache used by later lookups.
     return entry ? { ...entry } : undefined;
   }
 
@@ -250,49 +241,70 @@ export class ContextViewStore {
     }
     ownRegularFile(this.#indexPath);
     const cutoff = this.#now() - retentionDays * 24 * 60 * 60 * 1000;
-    const parsed = this.#readFileSafely(this.#indexPath)
-      .split("\n")
-      .flatMap((line) => {
-        if (!line) return [];
-        try {
-          const value = JSON.parse(line) as ContextViewIndexEntry;
-          assertEntry(value);
-          return [value];
-        } catch {
-          return [];
-        }
-      });
-    const entries = parsed
-      .filter((entry) => Date.parse(entry.sentAt) >= cutoff)
-      .sort((left, right) => Date.parse(left.sentAt) - Date.parse(right.sentAt));
-    let encodedBytes = entries.reduce(
-      (total, entry) => total + Buffer.byteLength(JSON.stringify(entry)) + 1,
-      0,
-    );
+    const retained: Array<{ entry: ContextViewIndexEntry; timestamp: number }> = [];
+    let parsedCount = 0;
+    for (const line of this.#readFileSafely(this.#indexPath).split("\n")) {
+      if (!line) continue;
+      try {
+        const value = JSON.parse(line) as ContextViewIndexEntry;
+        assertEntry(value);
+        parsedCount += 1;
+        const timestamp = Date.parse(value.sentAt);
+        if (timestamp >= cutoff) retained.push({ entry: value, timestamp });
+      } catch {
+        continue;
+      }
+    }
+    retained.sort((left, right) => left.timestamp - right.timestamp);
+    const entries = retained.map(({ entry }) => {
+      const line = JSON.stringify(entry);
+      return { entry, line, bytes: Buffer.byteLength(line) + 1 };
+    });
+    let encodedBytes = 0;
+    for (const item of entries) encodedBytes += item.bytes;
     let dropCount = 0;
     while (encodedBytes > AGENT_CONTEXT_INDEX_MAX_BYTES && dropCount < entries.length) {
-      encodedBytes -= Buffer.byteLength(JSON.stringify(entries[dropCount]!)) + 1;
+      encodedBytes -= entries[dropCount]!.bytes;
       dropCount += 1;
     }
     const kept = entries.slice(dropCount);
-    const encoded = () =>
-      kept.map((entry) => JSON.stringify(entry)).join("\n") + (kept.length ? "\n" : "");
-    const dropped = parsed.length - kept.length;
+    const dropped = parsedCount - kept.length;
     if (kept.length === 0) {
       unlinkSync(this.#indexPath);
       this.#setIndexCache(new Map(), undefined, null);
       return { kept: 0, dropped };
     }
+    const encoded = `${kept.map((item) => item.line).join("\n")}\n`;
     const temp = `${this.#indexPath}.tmp-${process.pid}`;
     const tempFd = openSync(temp, CONTEXT_VIEW_APPEND_FLAGS | (constants.O_EXCL ?? 0), 0o600);
+    let tempInfo: ReturnType<typeof fstatSync>;
     try {
-      writeFileSync(tempFd, encoded(), "utf8");
+      writeFileSync(tempFd, encoded, "utf8");
+      tempInfo = fstatSync(tempFd);
     } finally {
       closeSync(tempFd);
     }
     renameSync(temp, this.#indexPath);
-    this.#invalidateIndex();
-    this.#refreshIndex();
+    const info = lstatSync(this.#indexPath);
+    if (!info.isFile() || info.nlink > 1) {
+      this.#invalidateIndex();
+      throw new Error("Context view file is not private");
+    }
+    if (
+      Number(info.dev) !== Number(tempInfo.dev) ||
+      Number(info.ino) !== Number(tempInfo.ino) ||
+      Number(info.size) !== Number(tempInfo.size)
+    ) {
+      this.#invalidateIndex();
+      return { kept: kept.length, dropped };
+    }
+    const entriesMap = new Map<string, ContextViewIndexEntry>();
+    let oldestSentAt: string | undefined;
+    for (const { entry } of kept) {
+      if (!entriesMap.has(entry.messageId)) entriesMap.set(entry.messageId, entry);
+      oldestSentAt = this.#earlierSentAt(oldestSentAt, entry.sentAt);
+    }
+    this.#setIndexCache(entriesMap, oldestSentAt, this.#fingerprint(info));
     return { kept: kept.length, dropped };
   }
 

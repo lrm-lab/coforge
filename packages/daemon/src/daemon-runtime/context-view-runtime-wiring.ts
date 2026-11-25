@@ -50,6 +50,7 @@ export async function deliverContextViewMessage(
   if (message.features?.agentContextView !== undefined)
     applyContextViewGate(deps, agentId, message.features.agentContextView);
   await deliver();
+  if (deps.enabled.get(agentId) !== true) return;
   commitContextViewMessage(deps, agentId, message, await contextViewTranscriptPath(deps, agentId));
 }
 
@@ -78,7 +79,9 @@ export async function contextViewTranscriptPath(
   deps: Pick<
     ContextViewRuntimeDeps,
     "runtime" | "restartConfig" | "workspaceRoot" | "stateDirectory" | "reported"
-  >,
+  > & {
+    service?: Pick<AgentContextViewService, "resolveProviderTranscript">;
+  },
   agentId: string,
 ): Promise<{ absolute: string; relative: string } | undefined> {
   const runtime = deps.runtime(agentId);
@@ -90,6 +93,14 @@ export async function contextViewTranscriptPath(
   const sessionId = deps.reported(agentId)?.sessionId;
   if (!sessionId || !runtime) return undefined;
   const envVars = runtime.config.envVars ?? deps.restartConfig(agentId)?.config.envVars;
+  if (deps.service) {
+    return deps.service.resolveProviderTranscript(
+      agentId,
+      runtime.config.provider,
+      sessionId,
+      envVars,
+    );
+  }
   return findProviderTranscript(runtime.config.provider, sessionId, envVars);
 }
 
@@ -118,7 +129,10 @@ export async function reportContextViewAvailability(
   report: { agentId: string; provider: string; sessionId: string },
   trigger: "startup" | "server_features" = "startup",
 ): Promise<void> {
-  const path = await contextViewTranscriptPath(deps, report.agentId);
+  const path =
+    deps.enabled.get(report.agentId) === true
+      ? await contextViewTranscriptPath(deps, report.agentId)
+      : undefined;
   const runtime = deps.runtime(report.agentId);
   deps.service.reportAvailability(
     {

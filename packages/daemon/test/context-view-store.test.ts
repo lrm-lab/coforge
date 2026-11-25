@@ -161,4 +161,41 @@ describe("ContextViewStore", () => {
     symlinkSync(outside, directory);
     expect(() => store.requestLogDirectory).toThrow("Context view directory is a symlink");
   });
+
+  test("keeps oldestSentAt accurate after compaction and still detects subsequent external writes", () => {
+    const root = mkdtempSync(join(tmpdir(), "coforge-context-view-"));
+    try {
+      const now = 31 * 24 * 60 * 60 * 1000;
+      const store = new ContextViewStore(root, "server-1", "agent-1", () => now);
+      const newerA = {
+        ...entry,
+        messageId: "message-2",
+        sentAt: new Date(now - 5_000).toISOString(),
+      };
+      const newerB = {
+        ...entry,
+        messageId: "message-3",
+        sentAt: new Date(now - 1_000).toISOString(),
+      };
+      store.record(entry);
+      store.record(newerB);
+      store.record(newerA);
+
+      expect(store.compactWithStats(30)).toEqual({ kept: 2, dropped: 1 });
+      expect(store.oldestSentAt()).toBe(newerA.sentAt);
+      expect(store.find("message-1")).toBeUndefined();
+      expect(store.find("message-2")).toEqual(newerA);
+      expect(store.find("message-3")).toEqual(newerB);
+
+      const external = {
+        ...entry,
+        messageId: "message-4",
+        sentAt: new Date(now).toISOString(),
+      };
+      writeFileSync(store.indexPath, `${JSON.stringify(external)}\n`, { flag: "a" });
+      expect(store.find("message-4")).toEqual(external);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
