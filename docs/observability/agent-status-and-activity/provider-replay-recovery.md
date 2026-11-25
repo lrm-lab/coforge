@@ -49,8 +49,8 @@
   恢复内容，并在该 launch 的输入送达之后才销账；冷启动 launch 本身失败、进程没起来、恢复通知被
   拒，内容都仍然欠着。并入规则：launch 自己的字段优先；`resumeMessages` 是 launch 自己的加上欠着的里
   `deliveryId` 不重复的；`unreadSummary` 同一 target 取较大的计数，
-  不相加（server Start 的汇总与这份可能描述同一批未读）。只有序列上界仍对应同一份未读计数和会话时才保留，
-  同 target 合并摘要或新增计数都会丢弃原上界。冷启动之后才到、留给下次 launch 的排队投递
+  不相加（server Start 的汇总与这份可能描述同一批未读）。同 target 有本地待读或暂存投递、被抵扣的计数，
+  或与另一份恢复内容合并时涉及该 target，就丢弃原序列上界，即使最终计数相同。冷启动之后才到、留给下次 launch 的排队投递
   另计入（恢复型 launch 会丢弃其中 target 被点名的）。只有三件事会丢掉它：AgentControl 接受的人的 Stop（过了各项围栏、结束进程之前；
   过期或被拒的 Stop 不算；无 epoch 的非托管 Stop 在停完之后）、Agent 被删除、整个 runtime 停止
   （`AgentLaunchCoordinator.clearOwedRecovery`）；失败 launch 之后 AgentControl 做的清理性 stop 不算。欠账只在内存里，Daemon 重启后随之消失：
