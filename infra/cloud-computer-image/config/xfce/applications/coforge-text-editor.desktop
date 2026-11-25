@@ -1,0 +1,14 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Text Editor
+Name[zh_CN]=文本编辑器
+Comment=Open text files with nano in the terminal
+Comment[zh_CN]=在终端中用 nano 打开文本文件
+TryExec=nano
+Exec=xfce4-terminal --disable-server -e nano %f
+Icon=utilities-terminal
+Terminal=false
+Categories=Utility;TextEditor;
+MimeType=text/plain;text/english;text/markdown;text/x-log;text/x-makefile;text/x-c++hdr;text/x-c++src;text/x-chdr;text/x-csrc;text/x-java;text/x-moc;text/x-pascal;text/x-tcl;text/x-tex;text/x-python;text/html;text/csv;text/xml;text/x-c;text/x-c++;application/x-shellscript;application/json;application/xml;
+StartupNotify=false

@@ -1,0 +1,24 @@
+[Default Applications]
+text/plain=coforge-text-editor.desktop
+text/english=coforge-text-editor.desktop
+text/markdown=coforge-text-editor.desktop
+text/x-log=coforge-text-editor.desktop
+text/x-makefile=coforge-text-editor.desktop
+text/x-c++hdr=coforge-text-editor.desktop
+text/x-c++src=coforge-text-editor.desktop
+text/x-chdr=coforge-text-editor.desktop
+text/x-csrc=coforge-text-editor.desktop
+text/x-java=coforge-text-editor.desktop
+text/x-moc=coforge-text-editor.desktop
+text/x-pascal=coforge-text-editor.desktop
+text/x-tcl=coforge-text-editor.desktop
+text/x-tex=coforge-text-editor.desktop
+text/x-python=coforge-text-editor.desktop
+text/html=coforge-text-editor.desktop
+text/csv=coforge-text-editor.desktop
+text/xml=coforge-text-editor.desktop
+text/x-c=coforge-text-editor.desktop
+text/x-c++=coforge-text-editor.desktop
+application/x-shellscript=coforge-text-editor.desktop
+application/json=coforge-text-editor.desktop
+application/xml=coforge-text-editor.desktop
