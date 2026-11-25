@@ -40,15 +40,18 @@ export function visibleToMemberSql(workspaceId: string, userId: string): Prisma.
 
 function readableSql(workspaceId: string, reader: ArtifactActor, goneReach: Prisma.Sql) {
   const home = actorConversationHomeSql("home", workspaceId, reader);
-  const homeKeyOfConversation = Prisma.sql`'conversation:' || home."id"::text`;
+  const homeConversationId = Prisma.sql`(CASE
+    WHEN a."homeKey" ~ '^conversation:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    THEN substring(a."homeKey" FROM 14)::uuid
+  END)`;
   return Prisma.sql`(a."access" IN ('workspace', 'link') OR a."homeKey" = 'workspace'
     OR EXISTS (
       SELECT 1 FROM "conversations" home
-      WHERE a."homeKey" = ${homeKeyOfConversation} AND ${home.reads})
+      WHERE home."id" = ${homeConversationId} AND ${home.reads})
     OR (${goneReach} AND a."homeKey" LIKE 'conversation:%'
       AND NOT EXISTS (
         SELECT 1 FROM "conversations" home
-        WHERE a."homeKey" = ${homeKeyOfConversation} AND ${home.stands})))`;
+        WHERE home."id" = ${homeConversationId} AND ${home.stands})))`;
 }
 
 const ownedAuthorSql = (workspaceId: string, userId: string) =>

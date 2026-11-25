@@ -76,21 +76,29 @@ export class ArtifactGallery {
       reader: { userId: input.userId },
       artifactIds: input.artifactIds,
     });
-    const cards = await this.cards(
-      input.userId,
-      readable.map((card) => card.id),
-    );
-    return cards.map(
-      ({ id, link, openedAt, commentCount, hasUpdates, newComments, mentionsYou }) => ({
-        id,
-        link,
-        openedAt,
-        commentCount,
-        hasUpdates,
-        newComments,
-        mentionsYou,
+    if (readable.length === 0) return [];
+    const ids = readable.map((card) => card.id);
+    const [counts, positions] = await Promise.all([
+      this.db.artifactComment.groupBy({
+        by: ["artifactId"],
+        where: { artifactId: { in: ids }, deletedAt: null },
+        _count: { _all: true },
       }),
-    );
+      this.#viewerPositions(input.userId, ids),
+    ]);
+    const total = new Map(counts.map((row) => [row.artifactId, row._count._all]));
+    return readable.map((item) => {
+      const place = positions.get(item.id);
+      return {
+        id: item.id,
+        link: item.access === "link",
+        openedAt: place?.openedAt ?? null,
+        commentCount: total.get(item.id) ?? 0,
+        hasUpdates: place !== undefined && place.seenVersion < item.currentVersion,
+        newComments: place?.newComments ?? 0,
+        mentionsYou: place?.mentioned ?? false,
+      };
+    });
   }
 
   async page(input: GalleryInput) {
@@ -127,10 +135,14 @@ export class ArtifactGallery {
     after: { key: number; updatedAt: number; id: string } | undefined,
   ) {
     const { workspaceId, userId } = input;
-    const key =
-      input.sort === "opened"
-        ? Prisma.sql`COALESCE(p."openedAt", TIMESTAMP 'epoch')`
-        : Prisma.sql`a."updatedAt"`;
+    const byOpened = input.sort === "opened";
+    const key = byOpened
+      ? Prisma.sql`COALESCE(p."openedAt", TIMESTAMP 'epoch')`
+      : Prisma.sql`a."updatedAt"`;
+    const joinPosition = byOpened
+      ? Prisma.sql`LEFT JOIN "artifact_viewer_positions" p
+          ON p."artifactId" = a."id" AND p."userId" = ${userId}::uuid`
+      : Prisma.empty;
     const where = [
       visibleToReaderSql({
         workspaceId,
@@ -153,8 +165,7 @@ export class ArtifactGallery {
     ];
     const rows = await this.db.$queryRaw<{ id: string; key: Date; updatedAt: Date }[]>`
       SELECT a."id", ${key} AS "key", a."updatedAt" FROM "artifacts" a
-      LEFT JOIN "artifact_viewer_positions" p
-        ON p."artifactId" = a."id" AND p."userId" = ${userId}::uuid
+      ${joinPosition}
       WHERE a."workspaceId" = ${workspaceId}::uuid AND a."deletedAt" IS NULL
         AND ${Prisma.join(where, " AND ")}
       ORDER BY ${key} DESC, a."updatedAt" DESC, a."id" DESC
@@ -194,12 +205,18 @@ export class ArtifactGallery {
         WHERE f."artifactId" = a."id" AND f."userId" = ${userId}::uuid AND f."following"))`;
   }
 
-  async #unseenComments(userId: string, ids: readonly string[]) {
+  async #viewerPositions(userId: string, ids: readonly string[]) {
     const artifactIds = Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`));
     const rows = await this.db.$queryRaw<
-      { artifactId: string; newComments: number; mentioned: boolean }[]
+      {
+        artifactId: string;
+        openedAt: Date;
+        seenVersion: number;
+        newComments: number;
+        mentioned: boolean;
+      }[]
     >`
-      SELECT p."artifactId",
+      SELECT p."artifactId", p."openedAt", p."seenVersion",
         (SELECT COUNT(*)::int FROM "artifact_comments" c
           WHERE c."artifactId" = p."artifactId" AND c."deletedAt" IS NULL
             AND (c."authorUserId" IS NULL OR c."authorUserId" <> p."userId")
@@ -209,34 +226,27 @@ export class ArtifactGallery {
             AND mm."mentionedAt" > p."openedAt") AS "mentioned"
       FROM "artifact_viewer_positions" p
       WHERE p."userId" = ${userId}::uuid AND p."artifactId" IN (${artifactIds})`;
-    return {
-      newComments: new Map(rows.map((row) => [row.artifactId, row.newComments])),
-      mentioned: new Set(rows.filter((row) => row.mentioned).map((row) => row.artifactId)),
-    };
+    return new Map(rows.map((row) => [row.artifactId, row]));
   }
 
   private async cards(userId: string, ids: readonly string[]) {
     if (ids.length === 0) return [];
-    const [rows, positions, counts, unseen] = await Promise.all([
+    const [rows, counts, positions] = await Promise.all([
       this.db.artifact.findMany({ where: { id: { in: [...ids] } }, select: CARD_SELECT }),
-      this.db.artifactViewerPosition.findMany({
-        where: { userId, artifactId: { in: [...ids] } },
-      }),
       this.db.artifactComment.groupBy({
         by: ["artifactId"],
         where: { artifactId: { in: [...ids] }, deletedAt: null },
         _count: { _all: true },
       }),
-      this.#unseenComments(userId, ids),
+      this.#viewerPositions(userId, ids),
     ]);
     const byId = new Map(rows.map((row) => [row.id, row]));
-    const position = new Map(positions.map((row) => [row.artifactId, row]));
     const total = new Map(counts.map((row) => [row.artifactId, row._count._all]));
     return ids.flatMap((id) => {
       const row = byId.get(id);
       if (!row) return [];
       const { authorAgentId, ...shown } = row;
-      const place = position.get(id);
+      const place = positions.get(id);
       const tier = artifactAccessTier(row);
       return [
         {
@@ -248,8 +258,8 @@ export class ArtifactGallery {
           openedAt: place?.openedAt ?? null,
           commentCount: total.get(id) ?? 0,
           hasUpdates: place !== undefined && place.seenVersion < row.currentVersion,
-          newComments: unseen.newComments.get(id) ?? 0,
-          mentionsYou: unseen.mentioned.has(id),
+          newComments: place?.newComments ?? 0,
+          mentionsYou: place?.mentioned ?? false,
         },
       ];
     });

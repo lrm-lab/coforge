@@ -79,13 +79,6 @@ function eventAfterSql(userId: string, boundary: Boundary, upTo?: Prisma.Sql) {
         AND v."createdAt" >= fo."followedAt" AND v."createdAt" > ${after} ${bound('v."createdAt"')}))`;
 }
 
-function mentionAfterSql(userId: string, boundary: Boundary) {
-  const after = Prisma.raw(`fo."${boundary}"`);
-  return Prisma.sql`EXISTS (SELECT 1 FROM "artifact_comment_mentions" mm
-    WHERE mm."artifactId" = fo."artifactId" AND mm."userId" = ${userId}::uuid
-      AND mm."mentionedAt" >= fo."followedAt" AND mm."mentionedAt" > ${after})`;
-}
-
 function viewSql(filter: ActivityInboxFilter) {
   if (filter === "tasks") return Prisma.sql`FALSE`;
   if (filter === "unread") return Prisma.sql`listed."hasUnread"`;
@@ -117,9 +110,9 @@ export function artifactActivityPageSql(
     WITH follows AS MATERIALIZED (${followsSql(workspaceId, userId)}),
     listed AS MATERIALIZED (
       SELECT fo."artifactId", 'artifact:' || fo."artifactId" AS "key", latest."at" AS "latestAt",
-        ${eventAfterSql(userId, "readAt")} AS "hasUnread",
-        ${mentionAfterSql(userId, "readAt")} AS "unreadMention",
-        ${mentionAfterSql(userId, "doneAt")} AS "hasMention"
+        COALESCE(latest."at" > fo."readAt", FALSE) AS "hasUnread",
+        COALESCE(latest_mention."at" > fo."readAt", FALSE) AS "unreadMention",
+        COALESCE(latest_mention."at" > fo."doneAt", FALSE) AS "hasMention"
       FROM follows fo
       CROSS JOIN LATERAL (
         SELECT GREATEST(
@@ -130,13 +123,20 @@ export function artifactActivityPageSql(
           (SELECT MAX(c."editedAt") FROM "artifact_comments" c
             WHERE c."artifactId" = fo."artifactId" AND ${othersComment(userId)}
               AND c."editedAt" >= fo."followedAt"),
-          (SELECT v."createdAt" FROM "artifact_versions" v
+          (SELECT MAX(v."createdAt") FROM "artifact_versions" v
             WHERE v."artifactId" = fo."artifactId" AND ${othersVersion(userId)}
-              AND v."createdAt" >= fo."followedAt"
-            ORDER BY v."number" DESC LIMIT 1)
+              AND v."createdAt" >= fo."followedAt")
         ) AS "at"
       ) latest
-      WHERE ${eventAfterSql(userId, "doneAt")}
+      CROSS JOIN LATERAL (
+        SELECT (
+          SELECT mm."mentionedAt" FROM "artifact_comment_mentions" mm
+          WHERE mm."artifactId" = fo."artifactId" AND mm."userId" = ${userId}::uuid
+            AND mm."mentionedAt" >= fo."followedAt"
+          ORDER BY mm."mentionedAt" DESC LIMIT 1
+        ) AS "at"
+      ) latest_mention
+      WHERE latest."at" > fo."doneAt"
     ), page AS (
       SELECT * FROM listed
       WHERE ${viewSql(options.filter)} AND ${after}
@@ -239,19 +239,16 @@ export function artifactActivityRowsSql(
 
 type Mark = { through: Date; artifactId?: string };
 
-const only = (artifactId: string | undefined) =>
-  artifactId ? Prisma.sql`AND fo."artifactId" = ${artifactId}::uuid` : Prisma.empty;
-
 const throughOf = (mark: Mark) =>
   Prisma.sql`LEAST(${mark.through.toISOString()}::timestamp, ${dbNow})`;
 
 export function readArtifactsSql(workspaceId: string, userId: string, mark: Mark) {
   return Prisma.sql`
-    WITH follows AS MATERIALIZED (${followsSql(workspaceId, userId)}),
+    WITH follows AS MATERIALIZED (${followsSql(workspaceId, userId, mark.artifactId ? [mark.artifactId] : undefined)}),
     target AS (
       SELECT fo."artifactId", ${throughOf(mark)} AS "through"
       FROM follows fo
-      WHERE ${eventAfterSql(userId, "readAt", throughOf(mark))} ${only(mark.artifactId)}
+      WHERE ${eventAfterSql(userId, "readAt", throughOf(mark))}
     )
     UPDATE "artifact_follows" f
     SET "readAt" = GREATEST(f."readAt", target."through"), "updatedAt" = ${dbNow}
@@ -262,11 +259,11 @@ export function readArtifactsSql(workspaceId: string, userId: string, mark: Mark
 
 export function doneArtifactsSql(workspaceId: string, userId: string, mark: Mark) {
   return Prisma.sql`
-    WITH follows AS MATERIALIZED (${followsSql(workspaceId, userId)}),
+    WITH follows AS MATERIALIZED (${followsSql(workspaceId, userId, mark.artifactId ? [mark.artifactId] : undefined)}),
     target AS (
       SELECT fo."artifactId", ${throughOf(mark)} AS "through"
       FROM follows fo
-      WHERE ${eventAfterSql(userId, "doneAt", throughOf(mark))} ${only(mark.artifactId)}
+      WHERE ${eventAfterSql(userId, "doneAt", throughOf(mark))}
     ), previous AS (
       SELECT f."artifactId", f."readAt", f."doneAt" FROM "artifact_follows" f
       JOIN target ON f."artifactId" = target."artifactId" AND f."userId" = ${userId}::uuid
