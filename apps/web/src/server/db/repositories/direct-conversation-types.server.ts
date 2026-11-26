@@ -168,6 +168,7 @@ export type DirectConversationRepository = {
       inboxPolled?: boolean;
       target?: string;
       deliveryTarget?: string;
+      senderDisplayName?: string | null;
       attachments: AttachmentMetadata[];
     } & Partial<LatestSenderFields>
   >;
@@ -286,6 +287,8 @@ export type DirectConversationRepository = {
       workspaceId: string;
       agentId: string;
       target: string;
+      channelName?: string | null;
+      senderDisplayName?: string | null;
       deliveries?: {
         deliveryId: string;
         agentId: string;

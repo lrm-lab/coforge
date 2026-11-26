@@ -43,9 +43,6 @@ export async function sendAgentMessage(
   attachmentIds?: string[],
   threadRootId?: string,
   mentions?: readonly AgentMentionBinding[],
-  /** A channel send may join the channel first: the Agent's membership lands in this send's
-   * transaction (with the same `channel.member_added` recording `channel join` makes), so a
-   * failed send leaves none. The caller limits it to channels the Agent could join anyway. */
   joinChannel?: boolean,
 ) {
   const conversation = await ports.db.conversation.findUnique({
@@ -55,10 +52,6 @@ export async function sendAgentMessage(
   if (!conversation) throw new AppError("TARGET_NOT_ACCESSIBLE");
   const agentPeer = !conversation.channelName && isAgentPeerDirectKey(conversation.directKey ?? "");
   if (conversation.channelName && conversation.archivedAt) throw new AppError("CONFLICT");
-  // A DM's two members; in a channel, not the whole roster (#general holds the whole
-  // Workspace) but the sending Agent's own row and the members its `--mention` bindings name.
-  // The body's plain `@handle`s load their members in `storeMessageBody` below. The peer and
-  // thread-root reads need only `conversation`, so all three run together.
   const [members, peer, root] = await Promise.all([
     ports.db.conversationMember.findMany({
       where: {
@@ -80,7 +73,7 @@ export async function sendAgentMessage(
         }),
       },
       include: {
-        agent: MESSAGE_SENDER_SELECT.select.agent,
+        agent: { select: { ...MESSAGE_SENDER_SELECT.select.agent.select, displayName: true } },
         user: MESSAGE_SENDER_SELECT.select.user,
       },
     }),
@@ -91,8 +84,6 @@ export async function sendAgentMessage(
   ]);
   let sender = members.find((m) => m.agentId === agentId && !m.leftAt);
   const user = members.find((m) => m.userId && !m.leftAt);
-  // Clear leftAt for live Agent DMs: visibility changes never leave DMs, and deleted Agents
-  // have revoked keys. Preserve channel soft-leaves, which represent intentional removals.
   if (!sender && !conversation.channelName) {
     const softLeft = members.find((m) => m.agentId === agentId && m.leftAt);
     if (softLeft) {
@@ -109,17 +100,10 @@ export async function sendAgentMessage(
       }
     }
   }
-  // Between two Agents the other is the recipient, while live. A channel send that joins on the
-  // way keeps its missing `sender` for the transaction below instead of refusing here.
   const joining = joinChannel === true && !sender && conversation.channelName !== null;
   if (!sender || (!conversation.channelName && !(agentPeer ? peer : user))) {
     if (!joining) throw new AgentSendRejectedError(403, "agent is not a conversation member");
   }
-  // A private Agent's own outbound DM is just as read-only as the human side of it
-  // ("neither side can send"). Channels are unaffected — a private Agent is never a channel
-  // member in the first place, so this only ever narrows the direct-conversation case.
-  // The channels a `#name` reference may name: the Agent's own, but a Workspace assistant's
-  // person's in the DM it keeps with them (`agentChannelReader`).
   let reader: ChannelActor = { agentId };
   if (!conversation.channelName && user) {
     const self = await ports.db.agent.findUnique({
@@ -136,8 +120,6 @@ export async function sendAgentMessage(
   }
   const result = await ports.db.$transaction(async (tx) => {
     if (joining) {
-      // Read the archive state inside the transaction, so a channel archived since the send's
-      // resolution still refuses, taking the membership with it.
       const state = await tx.conversation.findUniqueOrThrow({
         where: { id: conversationId },
         select: { archivedAt: true },
@@ -147,7 +129,7 @@ export async function sendAgentMessage(
       sender = await tx.conversationMember.findFirstOrThrow({
         where: { conversationId, agentId, ...ACTIVE_MEMBER_WHERE },
         include: {
-          agent: MESSAGE_SENDER_SELECT.select.agent,
+          agent: { select: { ...MESSAGE_SENDER_SELECT.select.agent.select, displayName: true } },
           user: MESSAGE_SENDER_SELECT.select.user,
         },
       });
@@ -160,8 +142,20 @@ export async function sendAgentMessage(
         workspaceId: conversation.workspaceId,
         senderAgentId: agentId,
       });
-    // Require the sending Agent's own uploads before creating the message; link messageId
-    // and position afterward in the same transaction.
+    if (mentions?.length) {
+      for (const mention of mentions) {
+        const match = members.find((member) =>
+          mention.type === "user"
+            ? member.userId === mention.id && member.user?.username === mention.name
+            : member.agentId === mention.id && member.agent?.name === mention.name,
+        );
+        if (!match)
+          throw new AgentSendRejectedError(
+            400,
+            `mention binding does not match a conversation member: @${mention.name}`,
+          );
+      }
+    }
     const requestedAttachmentIds = attachmentIds ?? [];
     const availableAttachments = requestedAttachmentIds.length
       ? await tx.attachment.findMany({
@@ -197,23 +191,6 @@ export async function sendAgentMessage(
       );
     for (const attachmentId of requestedAttachmentIds)
       attachments.push(attachmentsById.get(attachmentId)!);
-    if (mentions?.length) {
-      for (const mention of mentions) {
-        const match = members.find((member) =>
-          mention.type === "user"
-            ? member.userId === mention.id && member.user?.username === mention.name
-            : member.agentId === mention.id && member.agent?.name === mention.name,
-        );
-        if (!match)
-          throw new AgentSendRejectedError(
-            400,
-            `mention binding does not match a conversation member: @${mention.name}`,
-          );
-      }
-    }
-    // Channel member mentions (structured or plain) become <@kind:uuid> plus MessageMention;
-    // DM @handles stay plain. Resolved task/channel/thread references become stored tokens
-    // in either conversation kind, rendered as chips without reparsing prose.
     const stored = await storeMessageBody(
       tx,
       { workspaceId: conversation.workspaceId, conversationId, reader },
@@ -230,8 +207,6 @@ export async function sendAgentMessage(
         bindings: mentions ?? [],
       },
     );
-    // Everyone the reply mentions follows the thread: exactly the members its stored mention
-    // rows name (each mention's key is the member id), plus every `--mention` binding.
     if (conversation.channelName && root)
       await enrollThreadReplyFollowers(tx, {
         workspaceId: conversation.workspaceId,
@@ -239,8 +214,6 @@ export async function sendAgentMessage(
         root,
         participantMemberIds: [sender.id, ...stored.mentions.map((mention) => mention.key)],
       });
-    // A person's DM wakes no Agent (its only Agent is the sender); a DM between two Agents wakes
-    // the other, whatever its state.
     const recipients = conversation.channelName
       ? await channelAgentRecipients(tx, {
           conversationId,
@@ -251,9 +224,6 @@ export async function sendAgentMessage(
       : peer
         ? [peer.id]
         : [];
-    // Keep the message write flat: nested relation creates make Prisma read the message and each
-    // relation back while this transaction holds the conversation's sequence lock. The send
-    // already has the mention payload and recipient Agent ids in memory.
     const created = await tx.message.create({
       data: {
         conversationId,
@@ -268,7 +238,6 @@ export async function sendAgentMessage(
         body: true,
         createdAt: true,
         sequence: true,
-        // Carried so the browser signal can exclude thread replies from channel unread.
         threadRootId: true,
       },
     });
@@ -290,8 +259,6 @@ export async function sendAgentMessage(
           handle: mention.handle,
         })),
       });
-    // Generate UUIDv7 ids in Bun so the raw insert keeps the repository's id-order contract while
-    // returning each recipient's Computer in the same statement as the delivery rows.
     const deliveryIds = recipients.map(() => Bun.randomUUIDv7());
     const deliveries = recipients.length
       ? await tx.$queryRaw<{ deliveryId: string; agentId: string; computerId: string | null }[]>`
@@ -311,10 +278,6 @@ export async function sendAgentMessage(
           JOIN "agents" agent ON agent."id" = inserted."agentId"
           ORDER BY array_position(${recipients}::uuid[], inserted."agentId")`
       : [];
-    // A channel mention of someone outside the channel reached nobody; the sending Agent may
-    // still act on it. A DM stores every `@handle` as text, so it records nothing. A binding that
-    // matched a member but stored no mention — the member left before the in-transaction
-    // resolution — degrades the same way: no token, no mention row, just the pending action.
     if (conversation.channelName) {
       await recordPendingMentionActions(
         tx,
@@ -336,14 +299,12 @@ export async function sendAgentMessage(
           messageId: created.id,
         });
     }
-    await Promise.all(
-      attachments.map((attachment, position) =>
-        tx.attachment.update({
-          where: { id: attachment.id },
-          data: { messageId: created.id, position },
-        }),
-      ),
-    );
+    for (const [position, attachment] of attachments.entries()) {
+      await tx.attachment.update({
+        where: { id: attachment.id },
+        data: { messageId: created.id, position },
+      });
+    }
     return {
       ...created,
       mentions: stored.mentions.map((mention) => ({
@@ -355,16 +316,15 @@ export async function sendAgentMessage(
       attachments,
     };
   });
-  // Never falls back to the internal Agent id: a missing name fails loudly. A joining send's
-  // `sender` came from the transaction above; the throws before it keep it non-null here.
   const senderIdentity = agentMessageSender({ agentId, agent: sender!.agent, user: null });
   return {
     ...result,
     joinedChannel: joining ? `#${conversation.channelName}` : undefined,
-    // Agent-originated messages must never be enqueued back to the sender.
     deliveryId: undefined,
     workspaceId: conversation.workspaceId,
     agentId,
+    channelName: conversation.channelName,
+    senderDisplayName: sender!.agent?.displayName ?? null,
     latestSenderKind: senderIdentity.kind,
     latestSenderHandle: senderIdentity.handle,
     latestSenderDescription: senderIdentity.description,
@@ -378,8 +338,6 @@ export async function sendAgentMessage(
       : peer
         ? deliveryTarget(await peerSeatTarget(ports.db, conversation, members, peer.id), root?.id)
         : "",
-    // Agent-facing shape: metadata only; the object key never leaves the backend (never
-    // selected above, unlike the browser-facing `browserMessageFields`).
     attachments: result.attachments,
   };
 }

@@ -17,7 +17,10 @@ import { deliveryMentionsAgent } from "./mentions.server";
 import { dmParentTarget } from "#src/server/db/repositories/agent-peer-direct.repositories.server";
 import type { MentionDeliveryIssuer } from "./mention-deliveries.server";
 import type { MessageNotifier } from "#src/server/notifications/web-push-composition.server";
-import { announceMessageBestEffort } from "./conversation-activity.server";
+import {
+  announceMessageBestEffort,
+  type AnnounceMessageSnapshot,
+} from "./conversation-activity.server";
 import { publishConcurrently } from "./concurrent-publication.server";
 
 export class ReadDirectMessages {
@@ -37,7 +40,6 @@ export class ReadDirectMessages {
   }
 }
 
-/** Persists a canonical User-Agent direct message before attempting transport publication. */
 export class SendDirectMessage {
   constructor(
     private readonly conversations: DirectConversationRepository,
@@ -45,7 +47,6 @@ export class SendDirectMessage {
     private readonly centrifugo: Pick<CentrifugoServerApi, "publishBatch">,
     private readonly realtime?: ConversationRealtime,
     private readonly notifications?: MessageNotifier,
-    /** Tracks the @mentions an Agent's message delivers; untracked without it. */
     private readonly mentionIssuer?: Pick<MentionDeliveryIssuer, "issue">,
   ) {}
 
@@ -58,15 +59,13 @@ export class SendDirectMessage {
     body: string;
     attachmentIds?: string[];
     threadRootId?: string;
-    /** Runs inside the send's transaction once the message and its uploads are written. */
     withinSend?: SentMessageHook;
-    /** A forward's body is the forwarder's note and may be empty; no other send accepts that. */
     allowEmptyBody?: boolean;
-    /** The forwarded originals, oldest first, as an Agent that is delivered the message reads them. */
     forwarded?: readonly ForwardedMessage[];
   }) {
     if (!input.idempotencyKey || (!input.body && !input.allowEmptyBody))
       throw new Error("invalid direct message");
+    let userSenderDisplayName: string | null | undefined;
     const message = await this.idempotency.execute(
       {
         workspaceId: input.workspaceId,
@@ -74,8 +73,8 @@ export class SendDirectMessage {
         senderId: input.senderUserId,
         idempotencyKey: input.idempotencyKey,
       },
-      () =>
-        this.conversations.sendMessage(
+      async () => {
+        const persisted = await this.conversations.sendMessage(
           input.conversationId,
           input.senderMemberId,
           input.senderUserId,
@@ -83,16 +82,47 @@ export class SendDirectMessage {
           input.attachmentIds,
           input.threadRootId,
           input.withinSend,
-        ),
+        );
+        userSenderDisplayName = persisted.senderDisplayName;
+        return persisted;
+      },
     );
     const { agentId } = message;
     if (!agentId) throw new Error("message is not an Agent direct message");
+    const userSnapshot: AnnounceMessageSnapshot | undefined =
+      !input.withinSend &&
+      userSenderDisplayName !== undefined &&
+      message.latestSenderHandle &&
+      typeof message.body === "string" &&
+      message.createdAt instanceof Date
+        ? {
+            body: message.body,
+            createdAt: message.createdAt,
+            threadRootId: message.threadRootId ?? null,
+            workspaceId: message.workspaceId,
+            conversation: { channelName: null, kind: null },
+            sender: {
+              userId: input.senderUserId,
+              agentId: null,
+              user: {
+                displayName: userSenderDisplayName,
+                username: message.latestSenderHandle,
+              },
+              agent: null,
+            },
+            mentions: [],
+            forwards: [],
+            systemMessage: null,
+            actionCard: null,
+          }
+        : undefined;
     await publishConcurrently(
       this.publishBrowserEvent(
         message,
         input.conversationId,
         { userId: input.senderUserId, agentId, senderUserId: input.senderUserId },
         input.idempotencyKey,
+        userSnapshot,
       ),
       () =>
         this.publishUserMessageToAgent(
@@ -122,7 +152,6 @@ export class SendDirectMessage {
     )
       throw new Error("invalid agent direct message");
     const isChannel = isChannelMessageTarget(input.target);
-    // A direct target names a person (their DM with this Agent) or another Agent (their shared DM).
     const direct = isChannel
       ? undefined
       : await this.conversations.openAgentDirect?.(
@@ -132,8 +161,6 @@ export class SendDirectMessage {
         );
     if (!isChannel && !direct) throw new AppError("TARGET_NOT_ACCESSIBLE");
     const dmUserId = direct?.peer.kind === "user" ? direct.peer.userId : undefined;
-    // The send path's channel: the Agent's own, or one it can still join on the way to posting —
-    // the send's transaction writes that membership with the message.
     const sendChannel = isChannel
       ? await (this.conversations.getAgentSendChannel ?? this.conversations.getAgentChannel)?.call(
           this.conversations,
@@ -144,6 +171,13 @@ export class SendDirectMessage {
       : undefined;
     const conversation = isChannel ? sendChannel : direct?.conversation;
     if (!conversation) throw new Error("channel access is unavailable");
+    let persistedAgentMeta:
+      | {
+          mentionCount: number;
+          senderDisplayName: string | null | undefined;
+          channelName: string | null | undefined;
+        }
+      | undefined;
     const message = await this.idempotency.execute(
       {
         workspaceId: input.workspaceId,
@@ -163,9 +197,7 @@ export class SendDirectMessage {
             isChannel && (sendChannel as { needsJoin?: boolean } | undefined)?.needsJoin === true,
           )
           .catch(async (error: unknown) => {
-            // A limit between two Agents is told to whoever reads their conversation, once.
             if (isAppErrorCode(error, "AGENT_DM_CHAIN_LIMIT", "AGENT_DM_RATE_LIMIT"))
-              // Best effort: a failed notice must not hide the refusal from the Agent.
               await this.conversations
                 .noteAgentDmLimit?.({
                   conversationId: conversation.id,
@@ -176,6 +208,11 @@ export class SendDirectMessage {
             throw error;
           });
         if (!persisted) throw new Error("agent message persistence is unavailable");
+        persistedAgentMeta = {
+          mentionCount: persisted.mentions?.length ?? 0,
+          senderDisplayName: persisted.senderDisplayName,
+          channelName: persisted.channelName,
+        };
         return persisted;
       },
     );
@@ -184,6 +221,35 @@ export class SendDirectMessage {
         workspaceId: input.workspaceId,
         conversationIds: [conversation.id],
       });
+    const agentSnapshot: AnnounceMessageSnapshot | undefined =
+      persistedAgentMeta &&
+      persistedAgentMeta.mentionCount === 0 &&
+      persistedAgentMeta.senderDisplayName !== undefined &&
+      persistedAgentMeta.channelName !== undefined &&
+      message.latestSenderHandle &&
+      typeof message.body === "string" &&
+      message.createdAt instanceof Date
+        ? {
+            body: message.body,
+            createdAt: message.createdAt,
+            threadRootId: message.threadRootId ?? null,
+            workspaceId: message.workspaceId,
+            conversation: { channelName: persistedAgentMeta.channelName, kind: null },
+            sender: {
+              userId: null,
+              agentId: input.agentId,
+              user: null,
+              agent: {
+                name: message.latestSenderHandle,
+                displayName: persistedAgentMeta.senderDisplayName,
+              },
+            },
+            mentions: [],
+            forwards: [],
+            systemMessage: null,
+            actionCard: null,
+          }
+        : undefined;
     const browser = (async () => {
       if (!isChannel && !dmUserId) return;
       await this.publishBrowserEvent(
@@ -192,6 +258,8 @@ export class SendDirectMessage {
         isChannel
           ? { workspaceId: input.workspaceId }
           : { userId: dmUserId!, agentId: input.agentId },
+        undefined,
+        agentSnapshot,
       );
       await this.notifications?.notifyMessage(message.id);
     })();
@@ -210,11 +278,6 @@ export class SendDirectMessage {
     return { ...message, ...report.value };
   }
 
-  /**
-   * Push a committed channel Message to every Agent it was delivered to. Best effort: attention
-   * is volatile, the canonical Message/read boundary recovers a missed publication, and a
-   * publish failure must not reject a send the database already accepted.
-   */
   private async publishAgentMentionDeliveries(
     idempotencyKey: string,
     conversationId: string,
@@ -256,20 +319,25 @@ export class SendDirectMessage {
     message: { id: string; sequence: number; threadRootId?: string | null },
     conversationId: string,
     scope: { workspaceId?: string; userId?: string; agentId?: string; senderUserId?: string },
-    /** A person's send only: lets the sender's page match its pending copy. */
     idempotencyKey?: string,
+    snapshot?: AnnounceMessageSnapshot,
   ) {
-    await announceMessageBestEffort(this.conversations.database, this.realtime, {
-      conversationId,
-      messageId: message.id,
-      sequence: message.sequence,
-      ...(scope.workspaceId ? { workspaceId: scope.workspaceId } : {}),
-      ...(scope.userId ? { userId: scope.userId } : {}),
-      ...(scope.agentId ? { agentId: scope.agentId } : {}),
-      ...(scope.senderUserId ? { senderUserId: scope.senderUserId } : {}),
-      ...(message.threadRootId ? { threadRootId: message.threadRootId } : {}),
-      ...(idempotencyKey ? { idempotencyKey } : {}),
-    });
+    await announceMessageBestEffort(
+      this.conversations.database,
+      this.realtime,
+      {
+        conversationId,
+        messageId: message.id,
+        sequence: message.sequence,
+        ...(scope.workspaceId ? { workspaceId: scope.workspaceId } : {}),
+        ...(scope.userId ? { userId: scope.userId } : {}),
+        ...(scope.agentId ? { agentId: scope.agentId } : {}),
+        ...(scope.senderUserId ? { senderUserId: scope.senderUserId } : {}),
+        ...(message.threadRootId ? { threadRootId: message.threadRootId } : {}),
+        ...(idempotencyKey ? { idempotencyKey } : {}),
+      },
+      snapshot,
+    );
   }
 
   private async publishUserMessageToAgent(
@@ -281,12 +349,6 @@ export class SendDirectMessage {
   ) {
     if (!message) throw new Error("message publication is unavailable");
     if (!message.deliveryId) throw new Error("message delivery is unavailable");
-    // This path only ever carries a human sender (a browser-authored direct message). The shared
-    // `agentMessageSender` projection already failed loudly upstream if the handle could not be
-    // resolved, but this guard checks something that projection cannot: that the resolved sender
-    // is specifically `human` on this human-only send path (never `agent`, never absent), and
-    // that the handle is well-formed. `encodeAgentMessageDelivery`'s own boundary check does not
-    // cover an entirely absent `latestSenderKind`, so this stays the one place that does.
     if (
       message.latestSenderKind !== "human" ||
       !message.latestSenderHandle ||
@@ -313,8 +375,6 @@ export class SendDirectMessage {
           createdAtMs: message.createdAt.getTime(),
           conversationId,
           agentId: message.agentId,
-          // A DM has no mention rows; its task and channel tokens still read back as text. It
-          // carries no `mentionsAgent`, so the issuer tracks it only once a DM can mention.
           body: message.body,
           mentions: [],
           forwarded,

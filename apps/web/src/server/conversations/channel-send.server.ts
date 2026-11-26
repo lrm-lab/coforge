@@ -2,6 +2,10 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import type { ForwardedMessage, MentionSelectorInput } from "@lrm/coforge-sdk/internal";
 import { recordThreadCreatedByReply } from "#src/server/app-notifications/channel-events.server";
+import {
+  ATTACHMENT_VIEW_SELECT,
+  type AttachmentViewRow,
+} from "#src/server/attachments/attachment-view.server";
 import { userUploadedAttachmentWhere } from "#src/server/attachments/message-attachments.server";
 import {
   createCentrifugoServerApi,
@@ -18,7 +22,7 @@ import { allocateSequence } from "#src/server/db/repositories/sequence-allocatio
 import { browserMessageFields } from "./browser-message-projection.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
 import { MentionDeliveryIssuer } from "./mention-deliveries.server";
-import { deliveryMentionsAgent } from "./mentions.server";
+import { BROWSER_MESSAGE_MENTIONS_SELECT, deliveryMentionsAgent } from "./mentions.server";
 import {
   channelMentionTargets,
   storeMessageBody,
@@ -36,6 +40,11 @@ import { taskReferenceViews } from "./task-reference-view.server";
 import type { SentMessageHook } from "./sent-message-hook.server";
 import { unresolvedMentionHandles } from "./unresolved-mentions.server";
 import { requireUserMayPostInChannel } from "./channel-post-access.server";
+import {
+  announceMessageBestEffort,
+  type AnnounceMessageSnapshot,
+} from "./conversation-activity.server";
+import { publishConcurrently } from "./concurrent-publication.server";
 
 export type ChannelSendPorts = {
   db: PrismaClient;
@@ -44,8 +53,47 @@ export type ChannelSendPorts = {
   realtime?: ConversationRealtime;
   publisher?: CentrifugoServerApi;
 };
-import { announceMessageBestEffort } from "./conversation-activity.server";
-import { publishConcurrently } from "./concurrent-publication.server";
+
+type CreatedAttachmentRow = AttachmentViewRow & {
+  forwardPosition: number | null;
+};
+
+type CreatedChannelMessageState = {
+  id: string;
+  sequence: number;
+  threadRootId: string | null;
+  senderMemberId: string;
+  body: string;
+  createdAt: Date;
+  attachments: CreatedAttachmentRow[];
+  mentionCount: number;
+  deliveryCount: number;
+  recordedPendingActions: number;
+};
+
+const CHANNEL_SEND_RELOAD_SELECT = {
+  ...browserMessageFields,
+  sender: {
+    select: {
+      agentId: true,
+      agent: {
+        select: { name: true, displayName: true, deletedAt: true, description: true },
+      },
+      user: {
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          avatarObjectKey: true,
+          description: true,
+        },
+      },
+    },
+  },
+  deliveries: {
+    select: { deliveryId: true, agentId: true, agent: { select: { computerId: true } } },
+  },
+};
 
 export async function sendChannel(
   ctx: ChannelSendPorts,
@@ -57,81 +105,63 @@ export async function sendChannel(
     body: string;
     attachmentIds?: string[];
     threadRootId?: string;
-    /** Members the sender named by id (the composer's picks), beside the `@handle`s in `body`. */
     mentions?: readonly MentionSelectorInput[];
-    /** Runs inside the send's transaction once the message and its uploads are written. */
     withinSend?: SentMessageHook;
-    /** A forward's body is the forwarder's note and may be empty; no other send accepts that. */
     allowEmptyBody?: boolean;
-    /** The forwarded originals, oldest first, as an Agent that is delivered the message reads them. */
     forwarded?: readonly ForwardedMessage[];
   },
 ) {
   const { workspaceId, userId, channelId, idempotencyKey, attachmentIds, threadRootId } = input;
-  // This key is also the daemon delivery's request_id. A missing one is omitted on the wire
-  // and the daemon drops the frame, so the Agent never sees the message.
   if (!idempotencyKey?.trim()) throw new AppError("INVALID_INPUT");
-  const { channel, member } = await requireUserMayPostInChannel(
-    ctx.db,
-    workspaceId,
-    userId,
-    channelId,
-  );
+  const [accessResult, rootResult] = await Promise.allSettled([
+    requireUserMayPostInChannel(ctx.db, workspaceId, userId, channelId),
+    threadRootId
+      ? ctx.db.message.findFirst({
+          where: { id: threadRootId, conversationId: channelId },
+          select: { id: true, threadRootId: true, senderMemberId: true },
+        })
+      : Promise.resolve(undefined),
+  ]);
+  if (accessResult.status === "rejected") throw accessResult.reason;
+  const { channel, member } = accessResult.value;
   const body = input.body.trim();
-  // Postgres `message.body` is unbounded text. The browser composer stays at 8_000
-  // (`sendConversationMessageInputSchema`); this path also accepts an eval prompt or an
-  // Agent channel reply past that, which otherwise throws and kills the eval runner.
   if ((!body && !input.allowEmptyBody) || body.length > 64_000) throw new AppError("INVALID_INPUT");
+  if (rootResult.status === "rejected") throw rootResult.reason;
+  const root = rootResult.value;
+  if (threadRootId && !root)
+    throw new AgentMessageValidationError("message anchor not found in this conversation");
+  if (root?.threadRootId)
+    throw new AgentMessageValidationError("thread root must be a top-level message");
   let created = false;
+  let createdState: CreatedChannelMessageState | undefined;
   const saved = await (ctx.idempotency ?? getMessageRequestIdempotency()).execute(
     { workspaceId, senderKind: "user", senderId: userId, idempotencyKey },
     () =>
       ctx.db.$transaction(async (tx) => {
         await lockConversation(tx, channelId);
-        const root = threadRootId
-          ? await tx.message.findFirst({
-              where: { id: threadRootId, conversationId: channelId },
-              select: { id: true, threadRootId: true, senderMemberId: true },
-            })
-          : undefined;
-        if (threadRootId && !root)
-          throw new AgentMessageValidationError("message anchor not found in this conversation");
-        if (root?.threadRootId)
-          throw new AgentMessageValidationError("thread root must be a top-level message");
-        // Validated before the message exists, then linked (messageId + position) once it does.
         const requestedAttachmentIds = attachmentIds ?? [];
-        const availableAttachments = requestedAttachmentIds.length
+        const attachmentRowIds = [...new Set(requestedAttachmentIds)];
+        const availableAttachments = attachmentRowIds.length
           ? await tx.attachment.findMany({
               where: {
-                id: { in: [...new Set(requestedAttachmentIds)] },
+                id: { in: attachmentRowIds },
                 conversationId: channelId,
                 workspaceId,
                 ...userUploadedAttachmentWhere(userId),
                 messageId: null,
               },
-              select: { id: true },
+              select: { ...ATTACHMENT_VIEW_SELECT, forwardPosition: true },
             })
           : [];
-        const availableAttachmentIds = new Set(
-          availableAttachments.map((attachment) => attachment.id),
+        const availableById = new Map(
+          availableAttachments.map((attachment) => [attachment.id, attachment]),
         );
-        const missingAttachmentIds = [
-          ...new Set(requestedAttachmentIds.filter((id) => !availableAttachmentIds.has(id))),
-        ];
+        const missingAttachmentIds = attachmentRowIds.filter((id) => !availableById.has(id));
         if (missingAttachmentIds.length > 0) {
           throw new AppError("ATTACHMENTS_UNAVAILABLE", {
             details: { attachmentIds: missingAttachmentIds.join(",") },
           });
         }
-        const attachmentRowIds = requestedAttachmentIds;
-        // Resolve @mentions against the channel's active members they name. The stored body keeps
-        // each resolved mention as an embedded-UUID token (`<@human:…>`/`<@agent:…>`,
-        // Slack-style) and every resolved mention becomes a MessageMention row in the same
-        // transaction, so renders and delivery never re-parse prose. Task references
-        // (`task #68` → `<@task:68>`), channel references (`#product` →
-        // `<@channel:uuid:product>`) and thread references (`#product:abcdef12` →
-        // `<@thread:uuid:uuid:product>`) are resolved in the same pass: the server decides what
-        // names a real task, channel or thread, and anything else stays ordinary text.
         const stored = await storeMessageBody(
           tx,
           { workspaceId, conversationId: channelId, reader: { userId } },
@@ -174,14 +204,16 @@ export async function sendChannel(
                   })),
                 }
               : undefined,
-            deliveries: {
-              create: recipients.map((agentId) => ({
-                workspaceId,
-                conversationId: channelId,
-                agentId,
-                sequence,
-              })),
-            },
+            deliveries: recipients.length
+              ? {
+                  create: recipients.map((agentId) => ({
+                    workspaceId,
+                    conversationId: channelId,
+                    agentId,
+                    sequence,
+                  })),
+                }
+              : undefined,
           },
         });
         await writeMessageReferences(
@@ -198,10 +230,7 @@ export async function sendChannel(
             threadRootId: root.id,
             messageId: message.id,
           });
-        // A mention of someone outside the channel reached nobody; the sender may still act on it.
-        // A binding that stored no mention — its member left before the active-member read —
-        // degrades the same.
-        await recordPendingMentionActions(
+        const recordedPendingActions = await recordPendingMentionActions(
           tx,
           {
             id: message.id,
@@ -213,14 +242,12 @@ export async function sendChannel(
           },
           unboundMentionTargets(input.mentions ?? [], stored.mentions),
         );
-        await Promise.all(
-          attachmentRowIds.map((id, position) =>
-            tx.attachment.update({
-              where: { id },
-              data: { messageId: message.id, position },
-            }),
-          ),
-        );
+        for (const [position, id] of attachmentRowIds.entries()) {
+          await tx.attachment.update({
+            where: { id },
+            data: { messageId: message.id, position },
+          });
+        }
         await input.withinSend?.(tx, {
           id: message.id,
           conversationId: channelId,
@@ -230,12 +257,21 @@ export async function sendChannel(
           threadRootId: root?.id ?? null,
         });
         created = true;
+        createdState = {
+          id: message.id,
+          sequence: message.sequence,
+          threadRootId: message.threadRootId,
+          senderMemberId: member.id,
+          body: message.body,
+          createdAt: message.createdAt,
+          attachments: attachmentRowIds.map((id) => availableById.get(id)!),
+          mentionCount: stored.mentions.length,
+          deliveryCount: recipients.length,
+          recordedPendingActions,
+        };
         return {
           ...message,
           target: `#${channel.channelName}${root ? `:${root.id}` : ""}`,
-          // Never read back: only `saved.id` is used below (the post-transaction reload via
-          // browserMessageFields is the real attachments source). Present only to satisfy
-          // the shared idempotency-cache value's "always present" contract.
           attachments: [] as {
             id: string;
             fileName: string;
@@ -245,51 +281,59 @@ export async function sendChannel(
         };
       }),
   );
-  // Reuse persisted delivery identities on retries; never recompute recipients after mute changes.
-  const message = await ctx.db.message.findFirstOrThrow({
-    where: {
-      id: saved.id,
-      conversationId: channelId,
-      senderMemberId: member.id,
-    },
-    select: {
-      ...browserMessageFields,
-      // Wider than browserMessageFields' sender: this reload alone feeds
-      // `agentMessageSender` below, which needs the sender's description too.
-      sender: {
-        select: {
-          agentId: true,
-          agent: {
-            select: { name: true, displayName: true, deletedAt: true, description: true },
-          },
-          user: {
-            select: {
-              id: true,
-              username: true,
-              displayName: true,
-              avatarObjectKey: true,
-              description: true,
-            },
-          },
-        },
-      },
-      deliveries: {
-        select: { deliveryId: true, agentId: true, agent: { select: { computerId: true } } },
-      },
-    },
+  const message = await loadSentChannelMessage(ctx.db, {
+    channelId,
+    senderMemberId: member.id,
+    savedId: saved.id,
+    createdState: created && !input.withinSend ? createdState : undefined,
+    senderUser: member.user,
   });
   if (created) await ctx.notifications?.notifyMessage(message.id);
-  const announcement = announceMessageBestEffort(ctx.db, ctx.realtime, {
-    conversationId: channelId,
-    messageId: message.id,
-    sequence: message.sequence,
+  const snapshot: AnnounceMessageSnapshot = {
+    body: message.body,
+    createdAt: message.createdAt,
+    threadRootId: message.threadRootId,
     workspaceId,
-    threadRootId: message.threadRootId ?? undefined,
-    idempotencyKey,
-    // Only a person sends here; an Agent's channel message goes through `SendDirectMessage`.
-    senderUserId: userId,
-  });
+    conversation: { channelName: channel.channelName, kind: null },
+    sender: message.sender
+      ? {
+          userId: message.sender.user?.id ?? userId,
+          agentId: message.sender.agentId,
+          user: message.sender.user
+            ? {
+                displayName: message.sender.user.displayName,
+                username: message.sender.user.username,
+              }
+            : null,
+          agent: message.sender.agent
+            ? {
+                name: message.sender.agent.name,
+                displayName: message.sender.agent.displayName,
+              }
+            : null,
+        }
+      : null,
+    mentions: message.mentions,
+    forwards: message.forwards,
+    systemMessage: message.systemMessage,
+    actionCard: null,
+  };
+  const announcement = announceMessageBestEffort(
+    ctx.db,
+    ctx.realtime,
+    {
+      conversationId: channelId,
+      messageId: message.id,
+      sequence: message.sequence,
+      workspaceId,
+      threadRootId: message.threadRootId ?? undefined,
+      idempotencyKey,
+      senderUserId: userId,
+    },
+    snapshot,
+  );
   const publication = publishConcurrently(announcement, async () => {
+    if (message.deliveries.length === 0) return;
     const publisher = ctx.publisher ?? createCentrifugoServerApi();
     const sender = agentMessageSender(message.sender);
     const taskViews = await taskReferenceViews(
@@ -328,23 +372,90 @@ export async function sendChannel(
     const failed = pushed.find((result) => result.status === "rejected");
     if (failed) throw failed.reason;
   });
+  const skipPendingActionsQuery = Boolean(
+    createdState && createdState.recordedPendingActions === 0,
+  );
   const postCommitReads = Promise.all([
     unresolvedMentionHandles(ctx.db, workspaceId, { userId }, message.body),
-    pendingMentionActionsForMessage(
-      ctx.db,
-      {
-        id: message.id,
-        workspaceId,
-        conversationId: channelId,
-        senderMemberId: member.id,
-        body: message.body,
-      },
-      channel,
-    ),
+    skipPendingActionsQuery
+      ? Promise.resolve([])
+      : pendingMentionActionsForMessage(
+          ctx.db,
+          {
+            id: message.id,
+            workspaceId,
+            conversationId: channelId,
+            senderMemberId: member.id,
+            body: message.body,
+          },
+          channel,
+        ),
   ]);
   const [published, reads] = await Promise.allSettled([publication, postCommitReads]);
   if (published.status === "rejected") throw published.reason;
   if (reads.status === "rejected") throw reads.reason;
   const [unresolved, pendingMentionActions] = reads.value;
   return { ...message, unresolvedMentionHandles: unresolved, pendingMentionActions };
+}
+
+async function loadSentChannelMessage(
+  db: PrismaClient,
+  input: {
+    channelId: string;
+    senderMemberId: string;
+    savedId: string;
+    createdState?: CreatedChannelMessageState;
+    senderUser?: {
+      id: string;
+      username: string;
+      displayName: string | null;
+      avatarObjectKey: string | null;
+      description: string;
+    } | null;
+  },
+) {
+  if (input.createdState && input.senderUser) {
+    const [mentions, deliveries] = await Promise.all([
+      input.createdState.mentionCount > 0
+        ? db.messageMention.findMany({
+            where: { messageId: input.createdState.id },
+            ...BROWSER_MESSAGE_MENTIONS_SELECT,
+          })
+        : Promise.resolve([]),
+      input.createdState.deliveryCount > 0
+        ? db.agentMessageDelivery.findMany({
+            where: { messageId: input.createdState.id },
+            select: { deliveryId: true, agentId: true, agent: { select: { computerId: true } } },
+          })
+        : Promise.resolve([]),
+    ]);
+    return {
+      id: input.createdState.id,
+      sequence: input.createdState.sequence,
+      threadRootId: input.createdState.threadRootId,
+      senderMemberId: input.createdState.senderMemberId,
+      body: input.createdState.body,
+      createdAt: input.createdState.createdAt,
+      attachments: input.createdState.attachments,
+      sender: {
+        agentId: null,
+        agent: null,
+        user: input.senderUser,
+      },
+      mentions,
+      reactionVersion: 0,
+      reactions: [],
+      forwards: [],
+      systemMessage: null,
+      deliveries,
+    };
+  }
+  return db.message.findFirstOrThrow({
+    where: {
+      id: input.savedId,
+      conversationId: input.channelId,
+      senderMemberId: input.senderMemberId,
+    },
+    select: CHANNEL_SEND_RELOAD_SELECT,
+  });
 }

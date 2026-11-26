@@ -9,11 +9,24 @@ export async function requireUserMayPostInChannel(
   userId: string,
   channelId: string,
 ) {
-  const channel = await memberChannel(db, workspaceId, userId, channelId);
+  const [channel, member] = await Promise.all([
+    memberChannel(db, workspaceId, userId, channelId),
+    db.conversationMember.findFirst({
+      where: { conversationId: channelId, userId, ...ACTIVE_MEMBER_WHERE },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarObjectKey: true,
+            description: true,
+          },
+        },
+      },
+    }),
+  ]);
   if (channel.archivedAt) throw new AppError("CONFLICT");
-  const member = await db.conversationMember.findFirst({
-    where: { conversationId: channelId, userId, ...ACTIVE_MEMBER_WHERE },
-  });
   if (!member) throw new AppError("ACCESS_DENIED");
   return { channel, member };
 }

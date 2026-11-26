@@ -11,22 +11,14 @@ import { canReadChannel } from "./channel-read-access.server";
 import { canJoinChannel } from "./mention-target-availability.server";
 import { leftoverMentionHandles } from "./unresolved-mentions.server";
 
-/* The pending mentions of a sent message as its sender sees them, with what each still allows;
- * acting on them is `pending-mention-actions.server.ts`. */
-
-/** The channel a mention was sent in, as far as deciding what it still allows needs it. */
 type MentionChannel = { archivedAt: Date | null; channelName: string | null; visibility: string };
 
-/** Whether Notify may let a target outside the channel read the message: only a public channel's
- * message reaches a non-member. The view offers it and `notifyMentionTargets` refuses it alike. */
 export function notifyReachesOutside(channel: { visibility: string }) {
   return canReadChannel(channel, false);
 }
 
-/** What the sender can still do about one pending mention. */
 export type MentionActionKind = "notify" | "add";
 
-/** One mention of a sent message that did not reach its target, as its sender sees it. */
 export type PendingMentionActionView = {
   resolutionId: string;
   messageId: string;
@@ -35,19 +27,12 @@ export type PendingMentionActionView = {
   targetHandle: string;
   targetLabel: string;
   targetAvatarUrl: string | null;
-  /** The channel the mention was sent in, by name. */
   channelName: string;
   visibility: ChannelVisibility;
   availableActions: MentionActionKind[];
   expiresAt: Date;
 };
 
-/**
- * The sender's still-pending mention actions of one message, in the order the body names them:
- * not yet acted on and not expired. What each still allows is read now: Add while the channel is
- * open and the target can join it and is not already a member, and Notify until it was notified,
- * never in a private channel (`notifyMentionTargets` refuses it there).
- */
 export async function pendingMentionActionsForMessage(
   db: Pick<PrismaClient, "pendingMentionAction" | "conversationMember">,
   message: {
@@ -61,16 +46,19 @@ export async function pendingMentionActionsForMessage(
   now: Date = new Date(),
 ): Promise<PendingMentionActionView[]> {
   const order = leftoverMentionHandles(message.body);
-  const rows = await db.pendingMentionAction.findMany({
+  const matchingIds = await db.pendingMentionAction.findMany({
     where: {
       messageId: message.id,
       senderMemberId: message.senderMemberId,
-      // A comment notification row (reason set) is a recipient's inbox item, never a
-      // sender-actionable mention.
       reason: null,
       resolvedAt: null,
       expiresAt: { gt: now },
     },
+    select: { id: true },
+  });
+  if (!matchingIds.length) return [];
+  const rows = await db.pendingMentionAction.findMany({
+    where: { id: { in: matchingIds.map((row) => row.id) } },
     select: PENDING_MENTION_ACTION_SELECT,
   });
   if (!rows.length) return [];
@@ -156,8 +144,6 @@ function pendingMentionActionView(
       : workspaceUserAvatarUrl(workspaceId, targetId, row.targetUser?.avatarObjectKey ?? null),
     channelName: channel.channelName ?? "",
     visibility: channelVisibilityOf(channel),
-    // Notify once, add any time: a notified target can still be added. Whether the sender may add
-    // is decided when they try.
     availableActions:
       channel.archivedAt === null && canJoin && !memberIds.has(targetId)
         ? row.notifiedAt || !notifyReachesOutside(channel)
@@ -176,8 +162,6 @@ type MentionTarget = {
   targetAgentId: string | null;
 };
 
-/** Which of these mentions' targets are already active members of the mention's conversation:
- * ask `has(conversationId, targetId)`. One query for all of them, none when there are none. */
 export async function targetMembership(
   db: Pick<PrismaClient, "conversationMember">,
   rows: readonly MentionTarget[],

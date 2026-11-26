@@ -3,14 +3,8 @@ import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
 import { leftoverMentionHandles } from "./unresolved-mentions.server";
 
-/** How long the sender can act on a mention that did not reach its target. */
 export const PENDING_MENTION_ACTION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-/**
- * In the send transaction, record each non-member human/public-Agent @handle left after
- * member mentions became tokens. Private Agents get none; a public Agent wins a name clash.
- * Message replay creates no duplicates.
- */
 export async function recordPendingMentionActions(
   tx: Pick<Prisma.TransactionClient, "workspaceMembership" | "agent" | "pendingMentionAction">,
   message: {
@@ -21,51 +15,49 @@ export async function recordPendingMentionActions(
     body: string;
     createdAt: Date;
   },
-  /** Bindings the send could not resolve to a member mention — a member who left between the
-   * caller's read and the send's — given the same pending action as an unresolvable `@handle`.
-   * Ids the caller shaped but this Workspace does not have are dropped: a binding can name
-   * anything, and a row it does not belong to would break the FK or leak another Workspace. */
   unboundTargets: readonly {
     targetUserId?: string;
     targetAgentId?: string;
     targetHandle: string;
   }[] = [],
-): Promise<void> {
+): Promise<number> {
   const handles = leftoverMentionHandles(message.body);
-  if (!handles.length && !unboundTargets.length) return;
+  if (!handles.length && !unboundTargets.length) return 0;
   const unboundUserIds = unboundTargets.flatMap((target) =>
     target.targetUserId ? [target.targetUserId] : [],
   );
   const unboundAgentIds = unboundTargets.flatMap((target) =>
     target.targetAgentId ? [target.targetAgentId] : [],
   );
-  const [humans, agents, unboundUsers, unboundAgents] = await Promise.all([
-    tx.workspaceMembership.findMany({
-      where: { workspaceId: message.workspaceId, user: { username: { in: handles } } },
-      select: { user: { select: { id: true, username: true } } },
-    }),
-    tx.agent.findMany({
-      where: {
-        workspaceId: message.workspaceId,
-        name: { in: handles },
-        visibility: AGENT_VISIBILITY.PUBLIC,
-        ...ACTIVE_AGENT_WHERE,
-      },
-      select: { id: true, name: true },
-    }),
-    unboundUserIds.length
-      ? tx.workspaceMembership.findMany({
-          where: { workspaceId: message.workspaceId, userId: { in: unboundUserIds } },
-          select: { userId: true },
-        })
-      : [],
-    unboundAgentIds.length
-      ? tx.agent.findMany({
-          where: { workspaceId: message.workspaceId, id: { in: unboundAgentIds } },
-          select: { id: true },
-        })
-      : [],
-  ]);
+  const humans = handles.length
+    ? await tx.workspaceMembership.findMany({
+        where: { workspaceId: message.workspaceId, user: { username: { in: handles } } },
+        select: { user: { select: { id: true, username: true } } },
+      })
+    : [];
+  const agents = handles.length
+    ? await tx.agent.findMany({
+        where: {
+          workspaceId: message.workspaceId,
+          name: { in: handles },
+          visibility: AGENT_VISIBILITY.PUBLIC,
+          ...ACTIVE_AGENT_WHERE,
+        },
+        select: { id: true, name: true },
+      })
+    : [];
+  const unboundUsers = unboundUserIds.length
+    ? await tx.workspaceMembership.findMany({
+        where: { workspaceId: message.workspaceId, userId: { in: unboundUserIds } },
+        select: { userId: true },
+      })
+    : [];
+  const unboundAgents = unboundAgentIds.length
+    ? await tx.agent.findMany({
+        where: { workspaceId: message.workspaceId, id: { in: unboundAgentIds } },
+        select: { id: true },
+      })
+    : [];
   const agentByHandle = new Map(agents.map((agent) => [agent.name, agent.id]));
   const userByHandle = new Map(humans.map(({ user }) => [user.username, user.id]));
   const expiresAt = new Date(message.createdAt.getTime() + PENDING_MENTION_ACTION_TTL_MS);
@@ -103,11 +95,9 @@ export async function recordPendingMentionActions(
     });
   }
   if (rows.length) await tx.pendingMentionAction.createMany({ data: rows, skipDuplicates: true });
+  return rows.length;
 }
 
-/** The `unboundTargets` a send's mention `bindings` leave: every binding that stored no member
- * mention (its member left before the in-transaction resolution), as the pending-action
- * target shape. */
 export function unboundMentionTargets(
   bindings: readonly { type: string; id: string; name: string }[],
   mentions: readonly { type: string; id: string }[],

@@ -17,35 +17,21 @@ import {
   messageIdMatchesAnchor,
 } from "#src/server/db/message-anchor.server";
 
-/**
- * How many distinct thread references one body resolves, in reading order; any after them stay as
- * written. Mentions, tasks and channels each resolve in one query however many a body holds;
- * thread references read their channels' messages, so their number is bounded to keep that read
- * small inside the send transaction.
- */
 export const MAX_THREAD_REFERENCES = 20;
 
-/**
- * A channel's mention targets for `storeMessageBody`: only its active members the given handles
- * name (`user.username` or `agent.name`), so a send never reads the roster of #general, which
- * holds the whole Workspace. Handles resolve to ids through their unique indexes first, so the
- * member read is by id too, not a join tested against every member of the channel.
- */
 export async function channelMentionTargets(
   tx: Pick<Prisma.TransactionClient, "conversationMember" | "user" | "agent">,
   scope: { workspaceId: string; conversationId: string },
   handles: readonly string[],
 ): Promise<MentionTarget[]> {
-  const [users, agents] = await Promise.all([
-    tx.user.findMany({
-      where: { username: { in: [...handles] } },
-      select: { id: true, username: true },
-    }),
-    tx.agent.findMany({
-      where: { workspaceId: scope.workspaceId, name: { in: [...handles] } },
-      select: { id: true, name: true },
-    }),
-  ]);
+  const users = await tx.user.findMany({
+    where: { username: { in: [...handles] } },
+    select: { id: true, username: true },
+  });
+  const agents = await tx.agent.findMany({
+    where: { workspaceId: scope.workspaceId, name: { in: [...handles] } },
+    select: { id: true, name: true },
+  });
   if (!users.length && !agents.length) return [];
   const usernames = new Map(users.map((user) => [user.id, user.username]));
   const agentNames = new Map(agents.map((agent) => [agent.id, agent.name]));
@@ -69,32 +55,6 @@ export async function channelMentionTargets(
   );
 }
 
-/**
- * The body a send stores, and the mentions it resolved: every reference the server can resolve
- * becomes its structured token, so no reader ever has to parse prose again. The body is read once
- * (`readMessageReferences`) and its candidates answered here:
- *
- * - `@handle` names one of the conversation's mention `targets` (a DM passes none, so its
- *   `@handle` stays text), with `bindings` — the CLI's `--mention` selectors — first. `targets`
- *   may instead load only the members the body's `@handle` candidates and the bindings' names
- *   name (`channelMentionTargets`), so a large channel's roster is never read to resolve a
- *   message that mentions a few members, or none;
- * - `task #N`, or a bare `#N`, names a task of this conversation;
- * - `#name` names a channel of this Workspace the sender (`scope.reader`) may read
- *   (`visibleChannelWhere`, archived ones included): a private channel it is not in stays text, so
- *   a reference reveals no private channel and no message of one. A bare `#N` names one only when
- *   no task has that number (see `readMessageReferences` for the full precedence);
- * - `#name:shortid` names a top-level message of that channel, by a 6–8 hex prefix only that
- *   message's id has, or by its whole id (`channelThreadRootsWhere`, the rule an Agent's thread
- *   target is found by). Only the first `MAX_THREAD_REFERENCES` distinct ones are looked up, in one
- *   read per channel.
- *
- * Anything unresolved stays byte-for-byte as written, a token the sender typed included. A token is
- * a claim, never trusted as stored: every consumer checks it against authoritative data (a mention
- * token against the message's mention rows, a channel or thread token against the Workspace's
- * channels, a task token against the conversation's tasks), so a typed token does nothing that typing the
- * text could not.
- */
 export async function storeMessageBody(
   tx: Pick<
     Prisma.TransactionClient,
@@ -112,14 +72,11 @@ export async function storeMessageBody(
 ): Promise<{
   body: string;
   mentions: ResolvedMention[];
-  /** The body's resolved references, for `message_references` rows (task #465). `targetId` is
-   * the channel's, root message's, or Task's id; `raw` the matched text, `ordinal` its order. */
   references: { kind: string; targetId: string; raw: string; ordinal: number }[];
 }> {
   const references = readMessageReferences(body);
   const { handles } = references.candidates;
   const threads = references.candidates.threads.slice(0, MAX_THREAD_REFERENCES);
-  // A thread reference's channel is looked up with the channels, in the same query.
   const channelTasks = references.candidates.channelTasks;
   const dmTasks = references.candidates.dmTasks;
   const channelNames = [
@@ -129,15 +86,18 @@ export async function storeMessageBody(
       ...channelTasks.map((task) => task.name),
     ]),
   ];
-  // A `#N` above the largest task number names no task, and is never sent to the query, which
-  // would reject it.
   const taskNumbers = references.candidates.taskNumbers.filter(
     (number) => number <= PG_INTEGER_MAX,
   );
-  // A binding need not appear in the body, so the loader is asked for its name as well.
   const targetHandles = [
     ...new Set([...handles, ...(mentionScope.bindings ?? []).map((binding) => binding.name)]),
   ];
+  const needsCrossTaskCheck = channelTasks.length > 0 || dmTasks.length > 0;
+  const crossTaskFlagPromise = needsCrossTaskCheck
+    ? options.crossTaskReferences !== undefined
+      ? Promise.resolve(options.crossTaskReferences)
+      : isFeatureEnabled("task-ref-tokens", { workspaceId: scope.workspaceId })
+    : Promise.resolve(false);
   const targets =
     typeof mentionScope.targets === "function"
       ? targetHandles.length
@@ -145,58 +105,70 @@ export async function storeMessageBody(
         : []
       : mentionScope.targets;
   const mentions = resolveMentionTargets(handles, targets, mentionScope.bindings);
-  const knownTasks = new Map(
-    taskNumbers.length
-      ? (
-          await tx.task.findMany({
-            where: {
-              conversationId: scope.conversationId,
-              number: { in: taskNumbers },
-              ...LIVE_TASK_WHERE,
-            },
-            select: { id: true, number: true },
-          })
-        ).map((task) => [task.number, task.id])
-      : [],
-  );
+  const taskRows = taskNumbers.length
+    ? await tx.task.findMany({
+        where: {
+          conversationId: scope.conversationId,
+          number: { in: taskNumbers },
+          ...LIVE_TASK_WHERE,
+        },
+        select: { id: true, number: true },
+      })
+    : [];
+  const knownTasks = new Map(taskRows.map((task) => [task.number, task.id]));
+  const channelRows = channelNames.length
+    ? await tx.conversation.findMany({
+        where: {
+          ...visibleChannelWhere(scope.workspaceId, scope.reader),
+          channelName: { in: channelNames },
+        },
+        select: { id: true, channelName: true },
+      })
+    : [];
   const channelsByName = new Map(
-    channelNames.length
-      ? (
-          await tx.conversation.findMany({
-            // A channel hidden from the Workspace names nothing: `#general` stays plain text.
-            where: {
-              ...visibleChannelWhere(scope.workspaceId, scope.reader),
-              channelName: { in: channelNames },
-            },
-            select: { id: true, channelName: true },
-          })
-        ).map((channel) => [channel.channelName!, { id: channel.id, name: channel.channelName! }])
-      : [],
+    channelRows.map((channel) => [
+      channel.channelName!,
+      { id: channel.id, name: channel.channelName! },
+    ]),
   );
-  // One read per channel over its top-level messages, for every anchor into it; an anchor two rows
-  // answer is ambiguous, and names nothing.
   const anchorsByChannel = new Map<string, string[]>();
   for (const { name, anchor } of threads) {
     if (!channelsByName.has(name)) continue;
     anchorsByChannel.set(name, [...(anchorsByChannel.get(name) ?? []), anchor]);
   }
   const threadRoots = new Map<string, string>();
-  for (const [name, anchors] of anchorsByChannel) {
-    const rows = await tx.message.findMany({
-      where: channelThreadRootsWhere(channelsByName.get(name)!.id, anchors),
-      select: { id: true },
+  if (anchorsByChannel.size > 0) {
+    const channelEntries = [...anchorsByChannel.entries()].map(([name, anchors]) => ({
+      name,
+      channelId: channelsByName.get(name)!.id,
+      anchors,
+    }));
+    const anchorRows = await tx.message.findMany({
+      where:
+        channelEntries.length === 1
+          ? channelThreadRootsWhere(channelEntries[0]!.channelId, channelEntries[0]!.anchors)
+          : {
+              OR: channelEntries.map((entry) =>
+                channelThreadRootsWhere(entry.channelId, entry.anchors),
+              ),
+            },
+      select: { id: true, conversationId: true },
     });
-    for (const anchor of anchors) {
-      const matches = rows.filter((row) => messageIdMatchesAnchor(row.id, anchor));
-      if (matches.length === 1) threadRoots.set(`${name}:${anchor}`, matches[0]!.id);
+    const rowsByChannelId = new Map<string, string[]>();
+    for (const row of anchorRows) {
+      const list = rowsByChannelId.get(row.conversationId);
+      if (list) list.push(row.id);
+      else rowsByChannelId.set(row.conversationId, [row.id]);
+    }
+    for (const entry of channelEntries) {
+      const ids = rowsByChannelId.get(entry.channelId) ?? [];
+      for (const anchor of entry.anchors) {
+        const matches = ids.filter((id) => messageIdMatchesAnchor(id, anchor));
+        if (matches.length === 1) threadRoots.set(`${entry.name}:${anchor}`, matches[0]!);
+      }
     }
   }
-  // Another conversation's task is a v2 write: v1 only reads the tokens, so nothing is written
-  // until the flag is switched on after a release that can render them.
-  const crossTaskReferences =
-    (channelTasks.length > 0 || dmTasks.length > 0) &&
-    (options.crossTaskReferences ??
-      (await isFeatureEnabled("task-ref-tokens", { workspaceId: scope.workspaceId })));
+  const crossTaskReferences = needsCrossTaskCheck && (await crossTaskFlagPromise);
   const channelTaskByRef = new Map<
     string,
     { conversationId: string; channelName: string; taskId: string }
@@ -233,28 +205,22 @@ export async function storeMessageBody(
     { conversationId: string; peerHandle: string; taskId: string }
   >();
   if (crossTaskReferences && dmTasks.length) {
-    // Raft's rule: a bare handle that both a person and an Agent answer is ambiguous and stays
-    // text; a `~human`/`~agent` suffix picks the kind.
     const nameOf = (peer: string) => peer.replace(/~(?:agent|human)$/i, "");
     const kindOf = (peer: string) =>
       /~agent$/i.test(peer) ? "agent" : /~human$/i.test(peer) ? "user" : null;
     const names = [...new Set(dmTasks.map((task) => nameOf(task.peer)))];
-    const [users, agents] = await Promise.all([
-      tx.user.findMany({
-        where: { username: { in: names } },
-        select: { id: true, username: true },
-      }),
-      tx.agent.findMany({
-        where: { workspaceId: scope.workspaceId, name: { in: names } },
-        select: { id: true, name: true },
-      }),
-    ]);
-    const userByName = new Map(users.map((user) => [user.username, user.id]));
-    const agentByName = new Map(agents.map((agent) => [agent.name, agent.id]));
     const senderWhere =
       "userId" in scope.reader
         ? { userId: scope.reader.userId }
         : { agentId: scope.reader.agentId };
+    const users = await tx.user.findMany({
+      where: { username: { in: names } },
+      select: { id: true, username: true },
+    });
+    const agents = await tx.agent.findMany({
+      where: { workspaceId: scope.workspaceId, name: { in: names } },
+      select: { id: true, name: true },
+    });
     const direct = await tx.conversation.findMany({
       where: {
         workspaceId: scope.workspaceId,
@@ -264,19 +230,22 @@ export async function storeMessageBody(
       },
       select: { id: true, members: { select: { userId: true, agentId: true } } },
     });
+    const userByName = new Map(users.map((user) => [user.username, user.id]));
+    const agentByName = new Map(agents.map((agent) => [agent.name, agent.id]));
     const numbers = [...new Set(dmTasks.map((task) => task.number))].filter(
       (number) => number <= PG_INTEGER_MAX,
     );
-    const tasks = numbers.length
-      ? await tx.task.findMany({
-          where: {
-            number: { in: numbers },
-            conversationId: { in: direct.map((conversation) => conversation.id) },
-            ...LIVE_TASK_WHERE,
-          },
-          select: { id: true, number: true, conversationId: true },
-        })
-      : [];
+    const tasks =
+      numbers.length && direct.length
+        ? await tx.task.findMany({
+            where: {
+              number: { in: numbers },
+              conversationId: { in: direct.map((conversation) => conversation.id) },
+              ...LIVE_TASK_WHERE,
+            },
+            select: { id: true, number: true, conversationId: true },
+          })
+        : [];
     for (const task of dmTasks) {
       const name = nameOf(task.peer);
       const kind = kindOf(task.peer);
@@ -284,8 +253,6 @@ export async function storeMessageBody(
         ...(kind !== "agent" && userByName.has(name) ? [userByName.get(name)!] : []),
         ...(kind !== "user" && agentByName.has(name) ? [agentByName.get(name)!] : []),
       ];
-      // One conversation of the sender's with exactly this peer; two ids (a person and an Agent
-      // sharing the name) is ambiguous, and picks neither.
       if (peerIds.length !== 1) continue;
       const peerId = peerIds[0]!;
       const matches = direct.filter((conversation) => {
@@ -311,8 +278,6 @@ export async function storeMessageBody(
       });
     }
   }
-  // `resolve` reports each adopted reference with its offsets — a `bareNumber` the channel
-  // fallback took is one row, not two; `raw` is the body's own slice, never a reconstructed form.
   const stored = references.resolve({
     mention: mentions.target,
     task: (number) => knownTasks.get(number),
@@ -345,10 +310,6 @@ export async function storeMessageBody(
   };
 }
 
-/** The `message_references` rows a sent or edited body's resolved references write (task #465):
- * one per `raw` in first-seen order, `targetId` the channel's, root message's, or Task's id the
- * sender's own access named — a reference the sender could not resolve writes no row and so
- * leaks nothing about the target. */
 export async function writeMessageReferences(
   tx: Pick<Prisma.TransactionClient, "messageReference">,
   message: { id: string },
@@ -369,9 +330,6 @@ export async function writeMessageReferences(
   });
 }
 
-/** The replace an edit runs (task #465): drop the message's `message_references` rows and write
- * the body's newly resolved set, in the same transaction the body is rewritten in. A message
- * whose body never changes keeps its rows; a body's references that are gone go with them. */
 export async function replaceMessageReferences(
   tx: Pick<Prisma.TransactionClient, "messageReference">,
   message: { id: string },

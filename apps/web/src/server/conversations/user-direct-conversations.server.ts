@@ -26,19 +26,16 @@ type UserDirectMessageInput = {
   body: string;
   attachmentIds?: readonly string[];
   threadRootId?: string;
-  /** Runs inside the send's transaction once the message and its uploads are written. */
   withinSend?: SentMessageHook;
 };
 import { announceMessageBestEffort } from "./conversation-activity.server";
 
-/** Opens the viewer's direct conversation with `peerUserId`, starting it on first open. */
 export async function openPeopleDirectConversation(
   db: PrismaClient,
   workspaceId: string,
   viewerId: string,
   peerUserId: string,
 ) {
-  // One member row each; a member's conversation with themself has one.
   const userIds = [...new Set([viewerId, peerUserId])];
   const directKey = peopleDirectKey(viewerId, peerUserId);
   const members = await db.workspaceMembership.count({
@@ -71,18 +68,12 @@ export async function openPeopleDirectConversation(
     });
     return { conversationId: created.id, created: true };
   } catch (error) {
-    // A concurrent first open won the insert; reuse its conversation.
     if (!isUniqueViolation(error)) throw error;
     const raced = await db.conversation.findUniqueOrThrow({ where, select: { id: true } });
     return { conversationId: raced.id, created: false };
   }
 }
 
-/**
- * A direct conversation between Workspace members: one per pair, whoever opens it, and one a
- * member keeps with themself. No Agent is ever a member, so nothing in it is delivered to one.
- * Its key is `peopleDirectKey`.
- */
 export class UserDirectConversations {
   constructor(
     private readonly db: PrismaClient,
@@ -93,7 +84,6 @@ export class UserDirectConversations {
     >,
   ) {}
 
-  /** Opens the viewer's direct conversation with `peerUserId`, starting it on first open. */
   async open(workspaceId: string, viewerId: string, peerUserId: string) {
     const { conversationId } = await openPeopleDirectConversation(
       this.db,
@@ -104,26 +94,27 @@ export class UserDirectConversations {
     return { conversationId };
   }
 
-  /**
-   * Stores a member's message once per `idempotencyKey`, then tells the conversation's open pages and
-   * each member's list, the sender's included. Nothing is
-   * delivered to an Agent, and `@handle` stays plain text: a direct conversation between people
-   * has no one else to mention.
-   */
   async send(input: UserDirectMessageInput & { idempotencyKey: string }) {
     const { workspaceId, conversationId, senderUserId } = input;
     const conversation = await this.db.conversation.findFirst({
       where: { id: conversationId, workspaceId },
-      // Someone who left the Workspace neither sends here nor hears of new messages.
       select: {
         directKey: true,
-        members: { where: ACTIVE_MEMBER_WHERE, select: { id: true, userId: true } },
+        members: {
+          where: ACTIVE_MEMBER_WHERE,
+          select: {
+            id: true,
+            userId: true,
+            user: { select: { displayName: true, username: true } },
+          },
+        },
       },
     });
     const members = conversation?.members ?? [];
     const sender = members.find((member) => member.userId === senderUserId);
     if (!sender || !conversation?.directKey || !isPeopleDirectKey(conversation.directKey))
       throw new AppError("ACCESS_DENIED");
+    let created = false;
     const message = await this.idempotency.execute(
       {
         workspaceId,
@@ -131,20 +122,51 @@ export class UserDirectConversations {
         senderId: senderUserId,
         idempotencyKey: input.idempotencyKey,
       },
-      () => this.store(input, sender.id),
+      async () => {
+        const stored = await this.store(input, sender.id);
+        created = true;
+        return stored;
+      },
     );
-    await announceMessageBestEffort(this.db, this.realtime, {
-      conversationId,
-      messageId: message.id,
-      sequence: message.sequence,
-      // Every member, the sender included: the sender's other tabs and devices refresh the DM
-      // row. The message names the sender, so it never bumps the sender's own badge.
-      directUserIds: members.flatMap((member) => (member.userId ? [member.userId] : [])),
-      directPair: peopleDirectKeyPair(conversation.directKey),
-      idempotencyKey: input.idempotencyKey,
-      senderUserId,
-      ...(message.threadRootId ? { threadRootId: message.threadRootId } : {}),
-    });
+    const snapshot =
+      created &&
+      !input.withinSend &&
+      sender.user &&
+      typeof message.body === "string" &&
+      message.createdAt instanceof Date
+        ? {
+            body: message.body,
+            createdAt: message.createdAt,
+            threadRootId: message.threadRootId ?? null,
+            workspaceId,
+            conversation: { channelName: null, kind: null },
+            sender: {
+              userId: senderUserId,
+              agentId: null,
+              user: sender.user,
+              agent: null,
+            },
+            mentions: [],
+            forwards: [],
+            systemMessage: null,
+            actionCard: null,
+          }
+        : undefined;
+    await announceMessageBestEffort(
+      this.db,
+      this.realtime,
+      {
+        conversationId,
+        messageId: message.id,
+        sequence: message.sequence,
+        directUserIds: members.flatMap((member) => (member.userId ? [member.userId] : [])),
+        directPair: peopleDirectKeyPair(conversation.directKey),
+        idempotencyKey: input.idempotencyKey,
+        senderUserId,
+        ...(message.threadRootId ? { threadRootId: message.threadRootId } : {}),
+      },
+      snapshot,
+    );
     return message;
   }
 

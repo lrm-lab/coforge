@@ -1,5 +1,5 @@
 import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
-import type { PrismaClient } from "#src/generated/prisma/client";
+import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import type { ConversationActivityEvent } from "#src/features/conversations/conversation-activity-event";
 import { noticeExternalInbox } from "#src/server/agents/external-inbox-landing.server";
 import { BROWSER_MESSAGE_MENTIONS_SELECT, browserMessageMention } from "./mentions.server";
@@ -18,18 +18,25 @@ import {
   type ConversationRealtimeMessage,
 } from "./conversation-realtime.server";
 
-/**
- * The recipients of one message's `conversation.activity.v1`: the people who may read it and whose
- * sidebar or Activity dot it may move. A channel's active human members; for a channel's thread
- * reply, the thread's human followers instead (it never changes a row, and only a follower's
- * Activity lists the thread); for a direct conversation, the people its signal scope names (both
- * people, or the person in a DM with an Agent), thread replies included, since its row counts them and every thread in it is theirs
- * (`ROW_MESSAGES_SQL`, task #734).
- *
- * The viewer's own message is in the list: their other tabs and devices must move the row too, and
- * the page is what ignores it for the badge.
- */
 type ActivityRecipient = { userId: string; memberId?: string; muted?: boolean };
+
+export type AnnounceMessageSnapshot = {
+  body: string;
+  createdAt: Date;
+  threadRootId: string | null;
+  workspaceId: string;
+  conversation: { channelName: string | null; kind?: string | null };
+  sender: {
+    userId: string | null;
+    agentId: string | null;
+    user: { displayName: string | null; username: string } | null;
+    agent: { name: string; displayName: string | null } | null;
+  } | null;
+  mentions: readonly Parameters<typeof browserMessageMention>[0][];
+  forwards: readonly { sourceBody: string }[];
+  systemMessage?: { kind: string; params: Prisma.JsonValue } | null;
+  actionCard?: Parameters<typeof previewCardFieldOf>[0];
+};
 
 async function activityRecipients(
   db: PrismaClient,
@@ -76,6 +83,7 @@ export async function announceMessage(
   db: PrismaClient,
   realtime: Pick<ConversationRealtime, "messageAvailable" | "conversationActivity">,
   message: ConversationRealtimeMessage,
+  snapshot?: AnnounceMessageSnapshot,
 ): Promise<void> {
   const available = realtime.messageAvailable(message);
   const conversationActivity = realtime.conversationActivity?.bind(realtime);
@@ -85,134 +93,136 @@ export async function announceMessage(
     unannounced("port_without_activity", message);
     return;
   }
-  const [, stored] = await Promise.all([
-    available,
-    db.message.findUnique({
-      where: { id: message.messageId },
-      select: {
-        body: true,
-        createdAt: true,
-        threadRootId: true,
-        workspaceId: true,
-        conversation: { select: { channelName: true, kind: true } },
-        sender: {
-          select: {
-            userId: true,
-            agentId: true,
-            user: { select: { displayName: true, username: true } },
-            agent: { select: { name: true, displayName: true } },
+  const activityWork = (async () => {
+    const stored: AnnounceMessageSnapshot | null =
+      snapshot ??
+      (await db.message.findUnique({
+        where: { id: message.messageId },
+        select: {
+          body: true,
+          createdAt: true,
+          threadRootId: true,
+          workspaceId: true,
+          conversation: { select: { channelName: true, kind: true } },
+          sender: {
+            select: {
+              userId: true,
+              agentId: true,
+              user: { select: { displayName: true, username: true } },
+              agent: { select: { name: true, displayName: true } },
+            },
           },
+          mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
+          forwards: { select: { sourceBody: true }, orderBy: { position: "asc" }, take: 1 },
+          systemMessage: { select: { kind: true, params: true } },
+          actionCard: ACTION_CARD_PREVIEW_SELECT,
         },
-        mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
-        forwards: { select: { sourceBody: true }, orderBy: { position: "asc" }, take: 1 },
-        systemMessage: { select: { kind: true, params: true } },
-        actionCard: ACTION_CARD_PREVIEW_SELECT,
-      },
-    }),
-  ]);
-  void noticeExternalInbox(db, message);
-  if (!stored) {
-    unannounced("message_not_found", message);
-    return;
-  }
-  if (stored.conversation.kind === "task_thread") return;
-  const event: ConversationActivityEvent = {
-    type: REALTIME_EVENTS.conversationActivity,
-    workspaceId: stored.workspaceId,
-    conversationId: message.conversationId,
-    messageId: message.messageId,
-    sequence: message.sequence,
-    kind: stored.conversation.channelName === null ? "direct" : "channel",
-    createdAt: stored.createdAt.toISOString(),
-    preview: messagePreviewLine(
-      stored.body,
-      stored.mentions.map((mention) => browserMessageMention(mention)),
-      stored.forwards[0]?.sourceBody,
-    ),
-    ...previewNoticeOf(stored.systemMessage?.kind ?? null, stored.systemMessage?.params),
-    ...previewCardFieldOf(stored.actionCard),
-    sender: {
-      kind: stored.sender?.userId ? "user" : stored.sender?.agentId ? "agent" : "system",
-      name: browserSenderName(
-        stored.sender ? { user: stored.sender.user, agent: stored.sender.agent } : null,
-      ),
-    },
-    ...(stored.sender?.userId ? { senderUserId: stored.sender.userId } : {}),
-    ...(stored.sender?.agentId ? { senderAgentId: stored.sender.agentId } : {}),
-    ...(stored.threadRootId ? { threadRootId: stored.threadRootId } : {}),
-  };
-  const recipients = await activityRecipients(db, {
-    ...message,
-    threadRootId: stored.threadRootId ?? undefined,
-  });
-  if (recipients.length === 0) return;
-  const mentionedUserIds = new Set(
-    stored.mentions.flatMap((mention) => (mention.kind === "user" ? [mention.actorId] : [])),
-  );
-  const senderUserId = stored.sender?.userId;
-  const muted = new Set<string>();
-  if (!stored.threadRootId) {
-    const unknownMutedUserIds: string[] = [];
-    for (const recipient of recipients) {
-      if (recipient.muted === true) muted.add(recipient.userId);
-      else if (recipient.muted === undefined) unknownMutedUserIds.push(recipient.userId);
+      }));
+    void noticeExternalInbox(db, message);
+    if (!stored) {
+      unannounced("message_not_found", message);
+      return;
     }
-    if (unknownMutedUserIds.length > 0) {
-      const mutedMembers = await db.conversationMember.findMany({
-        where: {
-          conversationId: message.conversationId,
-          userId: { in: unknownMutedUserIds },
-          notificationLevel: "muted",
-        },
-        select: { userId: true },
-      });
-      for (const member of mutedMembers) {
-        if (member.userId) muted.add(member.userId);
+    if (stored.conversation.kind === "task_thread") return;
+    const event: ConversationActivityEvent = {
+      type: REALTIME_EVENTS.conversationActivity,
+      workspaceId: stored.workspaceId,
+      conversationId: message.conversationId,
+      messageId: message.messageId,
+      sequence: message.sequence,
+      kind: stored.conversation.channelName === null ? "direct" : "channel",
+      createdAt: stored.createdAt.toISOString(),
+      preview: messagePreviewLine(
+        stored.body,
+        stored.mentions.map((mention) => browserMessageMention(mention)),
+        stored.forwards[0]?.sourceBody,
+      ),
+      ...previewNoticeOf(stored.systemMessage?.kind ?? null, stored.systemMessage?.params),
+      ...previewCardFieldOf(stored.actionCard ?? null),
+      sender: {
+        kind: stored.sender?.userId ? "user" : stored.sender?.agentId ? "agent" : "system",
+        name: browserSenderName(
+          stored.sender ? { user: stored.sender.user, agent: stored.sender.agent } : null,
+        ),
+      },
+      ...(stored.sender?.userId ? { senderUserId: stored.sender.userId } : {}),
+      ...(stored.sender?.agentId ? { senderAgentId: stored.sender.agentId } : {}),
+      ...(stored.threadRootId ? { threadRootId: stored.threadRootId } : {}),
+    };
+    const recipients = await activityRecipients(db, {
+      ...message,
+      threadRootId: stored.threadRootId ?? undefined,
+    });
+    if (recipients.length === 0) return;
+    const mentionedUserIds = new Set(
+      stored.mentions.flatMap((mention) => (mention.kind === "user" ? [mention.actorId] : [])),
+    );
+    const senderUserId = stored.sender?.userId;
+    const muted = new Set<string>();
+    if (!stored.threadRootId) {
+      const unknownMutedUserIds: string[] = [];
+      for (const recipient of recipients) {
+        if (recipient.muted === true) muted.add(recipient.userId);
+        else if (recipient.muted === undefined) unknownMutedUserIds.push(recipient.userId);
+      }
+      if (unknownMutedUserIds.length > 0) {
+        const mutedMembers = await db.conversationMember.findMany({
+          where: {
+            conversationId: message.conversationId,
+            userId: { in: unknownMutedUserIds },
+            notificationLevel: "muted",
+          },
+          select: { userId: true },
+        });
+        for (const member of mutedMembers) {
+          if (member.userId) muted.add(member.userId);
+        }
       }
     }
-  }
-  let threadUnreadsByMember: Map<string, ChannelThreadUnreadSummary> | undefined;
-  if (
-    stored.threadRootId &&
-    event.kind === "channel" &&
-    !(await isLegacyTaskThreadRoot(db, message.conversationId, stored.threadRootId))
-  ) {
-    const followerMemberIds = recipients.flatMap((r) => (r.memberId ? [r.memberId] : []));
-    threadUnreadsByMember = await channelThreadUnreadsForMembers(
-      db,
-      message.conversationId,
-      followerMemberIds,
-    );
-  }
-  const buckets = new Map<string, { userIds: string[]; event: ConversationActivityEvent }>();
-  for (const recipient of recipients) {
-    const isMuted = muted.has(recipient.userId);
-    const isMentioned =
+    let threadUnreadsByMember: Map<string, ChannelThreadUnreadSummary> | undefined;
+    if (
+      stored.threadRootId &&
       event.kind === "channel" &&
-      mentionedUserIds.has(recipient.userId) &&
-      recipient.userId !== senderUserId;
-    const threadSummary =
-      recipient.memberId && threadUnreadsByMember
-        ? threadUnreadsByMember.get(recipient.memberId)
-        : undefined;
-    const bucketKey = `${isMuted ? 1 : 0}:${isMentioned ? 1 : 0}:${threadSummary ? threadSummary.unreadThreadCount : ""}:${threadSummary?.threadMentioned ? 1 : 0}`;
-    const existing = buckets.get(bucketKey);
-    if (existing) {
-      existing.userIds.push(recipient.userId);
-      continue;
+      !(await isLegacyTaskThreadRoot(db, message.conversationId, stored.threadRootId))
+    ) {
+      const followerMemberIds = recipients.flatMap((r) => (r.memberId ? [r.memberId] : []));
+      threadUnreadsByMember = await channelThreadUnreadsForMembers(
+        db,
+        message.conversationId,
+        followerMemberIds,
+      );
     }
-    buckets.set(bucketKey, {
-      userIds: [recipient.userId],
-      event: {
-        ...event,
-        ...(isMuted ? { muted: true as const } : {}),
-        ...(isMentioned ? { mentioned: true as const } : {}),
-        ...(threadSummary ? { unreadThreadCount: threadSummary.unreadThreadCount } : {}),
-        ...(threadSummary?.threadMentioned ? { threadMentioned: true as const } : {}),
-      },
-    });
-  }
-  await Promise.all([...buckets.values()].map((bucket) => conversationActivity(bucket)));
+    const buckets = new Map<string, { userIds: string[]; event: ConversationActivityEvent }>();
+    for (const recipient of recipients) {
+      const isMuted = muted.has(recipient.userId);
+      const isMentioned =
+        event.kind === "channel" &&
+        mentionedUserIds.has(recipient.userId) &&
+        recipient.userId !== senderUserId;
+      const threadSummary =
+        recipient.memberId && threadUnreadsByMember
+          ? threadUnreadsByMember.get(recipient.memberId)
+          : undefined;
+      const bucketKey = `${isMuted ? 1 : 0}:${isMentioned ? 1 : 0}:${threadSummary ? threadSummary.unreadThreadCount : ""}:${threadSummary?.threadMentioned ? 1 : 0}`;
+      const existing = buckets.get(bucketKey);
+      if (existing) {
+        existing.userIds.push(recipient.userId);
+        continue;
+      }
+      buckets.set(bucketKey, {
+        userIds: [recipient.userId],
+        event: {
+          ...event,
+          ...(isMuted ? { muted: true as const } : {}),
+          ...(isMentioned ? { mentioned: true as const } : {}),
+          ...(threadSummary ? { unreadThreadCount: threadSummary.unreadThreadCount } : {}),
+          ...(threadSummary?.threadMentioned ? { threadMentioned: true as const } : {}),
+        },
+      });
+    }
+    await Promise.all([...buckets.values()].map((bucket) => conversationActivity(bucket)));
+  })();
+  await Promise.all([available, activityWork]);
 }
 
 function unannounced(reason: string, message: ConversationRealtimeMessage) {
@@ -226,18 +236,13 @@ function unannounced(reason: string, message: ConversationRealtimeMessage) {
   );
 }
 
-/**
- * `announceMessage` once a write has committed, through `announceBestEffort`: a write path with no
- * port of its own announces through the production one, and a failed publish is logged as
- * `conversation_realtime:message_failed` instead of failing the write. PostgreSQL stays canonical,
- * and a page that missed the announcement reads again when it next subscribes.
- */
 export function announceMessageBestEffort(
   db: PrismaClient,
   realtime: Pick<ConversationRealtime, "messageAvailable" | "conversationActivity"> | undefined,
   message: ConversationRealtimeMessage,
+  snapshot?: AnnounceMessageSnapshot,
 ): Promise<void> {
-  return announceBestEffort(realtime, (port) => announceMessage(db, port, message), {
+  return announceBestEffort(realtime, (port) => announceMessage(db, port, message, snapshot), {
     name: "message",
     workspace_id: message.workspaceId ?? "",
     conversation_id: message.conversationId,
