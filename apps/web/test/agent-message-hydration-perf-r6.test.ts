@@ -144,6 +144,12 @@ test("readChannelCoordinationFromConversations executes 0 queries without coordi
 
   const noCoord = await readChannelCoordinationFromConversations(db, "ws-1", "agent-1", [
     {
+      id: "",
+      channelName: "missing-id",
+      coordinatorAgentId: null,
+      hiddenFromWorkspaceAt: null,
+    },
+    {
       id: "ch-plain",
       channelName: "general",
       coordinatorAgentId: null,
@@ -159,6 +165,7 @@ test("readChannelCoordinationFromConversations executes 0 queries without coordi
   ]);
   expect(conversationQueries).toBe(0);
   expect(memberQueries).toBe(0);
+  expect(noCoord.has("")).toBe(false);
   expect(noCoord.get("ch-plain")).toBe("[CoForge current channel role: member; coordinator=none]");
   expect(noCoord.has("ch-hidden")).toBe(false);
   expect(noCoord.has("dm-1")).toBe(false);

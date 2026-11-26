@@ -47,7 +47,12 @@ export async function readChannelCoordinationFromConversations(
 ): Promise<Map<string, string>> {
   const channelsById = new Map<string, ChannelCoordinationSource>();
   for (const conversation of conversations) {
-    if (conversation.channelName === null || conversation.hiddenFromWorkspaceAt != null) continue;
+    if (
+      !conversation.id ||
+      conversation.channelName === null ||
+      conversation.hiddenFromWorkspaceAt != null
+    )
+      continue;
     if (!channelsById.has(conversation.id)) channelsById.set(conversation.id, conversation);
   }
   if (!channelsById.size) return new Map();
