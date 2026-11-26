@@ -67,12 +67,10 @@ function normalizeSemver(version: string): string | undefined {
 }
 
 export function compareSemver(a: string, b: string): number | undefined {
-  const parsedA = parseComparableSemver(a);
-  const parsedB = parseComparableSemver(b);
-  if (!parsedA || !parsedB) return undefined;
-  if (parsedA[0] !== parsedB[0]) return parsedA[0] - parsedB[0];
-  if (parsedA[1] !== parsedB[1]) return parsedA[1] - parsedB[1];
-  return parsedA[2] - parsedB[2];
+  const normalizedA = normalizeSemver(a);
+  const normalizedB = normalizeSemver(b);
+  if (!normalizedA || !normalizedB) return undefined;
+  return Bun.semver.order(normalizedA, normalizedB);
 }
 
 export async function readRuntimeCliDowngrades(

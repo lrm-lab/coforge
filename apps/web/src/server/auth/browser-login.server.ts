@@ -210,36 +210,25 @@ function isSignedSession(value: SignedSession | null): value is SignedSession {
   );
 }
 
-/** The value of the cookie `name` in a `Cookie` header, or null. */
 export function readCookie(header: string, name: string): string | null {
-  for (const part of header.split(";")) {
-    const [key, ...rest] = part.trim().split("=");
-    if (key === name) return rest.join("=");
-  }
-  return null;
+  return new Bun.CookieMap(header).get(name);
 }
 
-/** A `Set-Cookie` value for a path-wide HttpOnly cookie that browsers send on top-level
- * navigations from other sites (`SameSite=Lax`), as a return from GitHub is. */
 export function serializeCookie(
   name: string,
   value: string,
   maxAgeSeconds: number,
   secure: boolean,
 ): string {
-  return [
-    `${name}=${value}`,
-    "Path=/",
-    "HttpOnly",
-    "SameSite=Lax",
-    `Max-Age=${maxAgeSeconds}`,
-    secure ? "Secure" : "",
-  ]
-    .filter(Boolean)
-    .join("; ");
+  return new Bun.Cookie(name, value, {
+    path: "/",
+    httpOnly: true,
+    sameSite: "lax",
+    maxAge: maxAgeSeconds,
+    secure,
+  }).serialize();
 }
 
-/** A `Set-Cookie` value that expires the cookie `name`. */
 export function clearCookie(name: string, secure: boolean): string {
   return serializeCookie(name, "", 0, secure);
 }

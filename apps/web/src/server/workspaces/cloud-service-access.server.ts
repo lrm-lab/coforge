@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { clearCookie, readCookie, serializeCookie } from "#src/server/auth/browser-login.server";
 
 /** How long one correct password keeps the cloud computer service page operable. */
 export const CLOUD_SERVICE_UNLOCK_SECONDS = 15 * 60;
@@ -48,35 +49,17 @@ export function cloudServiceUnlockValid(
 }
 
 export function serializeCloudServiceCookie(token: string, secure: boolean): string {
-  return [
-    `${COOKIE}=${token}`,
-    "Path=/",
-    "HttpOnly",
-    "SameSite=Lax",
-    `Max-Age=${CLOUD_SERVICE_UNLOCK_SECONDS}`,
-    secure ? "Secure" : "",
-  ]
-    .filter(Boolean)
-    .join("; ");
+  return serializeCookie(COOKIE, token, CLOUD_SERVICE_UNLOCK_SECONDS, secure);
 }
 
 export function clearCloudServiceCookie(secure: boolean): string {
-  return [`${COOKIE}=`, "Path=/", "HttpOnly", "SameSite=Lax", "Max-Age=0", secure ? "Secure" : ""]
-    .filter(Boolean)
-    .join("; ");
+  return clearCookie(COOKIE, secure);
 }
 
 export function cloudServiceCookieValue(header: string | null): string | undefined {
   if (!header) return undefined;
-  for (const part of header.split(";")) {
-    const eq = part.indexOf("=");
-    if (eq === -1) continue;
-    if (part.slice(0, eq).trim() === COOKIE) {
-      const value = part.slice(eq + 1).trim();
-      return value || undefined;
-    }
-  }
-  return undefined;
+  const value = readCookie(header, COOKIE)?.trim();
+  return value || undefined;
 }
 
 /** Refuses a burst of password attempts for one person. */

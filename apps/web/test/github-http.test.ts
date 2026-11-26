@@ -11,8 +11,8 @@ import {
 
 test("GitHub installation state is one-time, HttpOnly, and compared exactly", () => {
   const state = "state-for-this-browser";
-  expect(githubInstallationStateCookie(state)).toContain(
-    `__Host-coforge-github-install-state=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`,
+  expect(githubInstallationStateCookie(state)).toBe(
+    `__Host-coforge-github-install-state=${state}; Path=/; Max-Age=600; Secure; HttpOnly; SameSite=Lax`,
   );
   expect(validGitHubInstallationState(state, state)).toBe(true);
   expect(validGitHubInstallationState(state, `${state}-other`)).toBe(false);
@@ -49,8 +49,8 @@ test("GitHub installation returns through the authorization callback", async () 
 });
 
 test("GitHub returns to the Workspace the connection was started from", async () => {
-  expect(githubReturnCookie("team")).toContain(
-    `${GITHUB_RETURN_COOKIE}=team; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=600`,
+  expect(githubReturnCookie("team")).toBe(
+    `${GITHUB_RETURN_COOKIE}=team; Path=/; Max-Age=600; Secure; HttpOnly; SameSite=Lax`,
   );
   const previousSkipAuth = process.env.COFORGE_DEV_SKIP_AUTH;
   const previousNodeEnv = process.env.NODE_ENV;

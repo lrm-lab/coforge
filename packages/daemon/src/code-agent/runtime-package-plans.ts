@@ -309,28 +309,9 @@ export function sanitizeRuntimeManageEnvironment(
   return result;
 }
 
-function stripAnsiEscapes(value: string): string {
-  let out = "";
-  let i = 0;
-  while (i < value.length) {
-    if (value.charCodeAt(i) === 0x1b && value[i + 1] === "[") {
-      i += 2;
-      while (i < value.length) {
-        const code = value.charCodeAt(i);
-        i += 1;
-        if (code >= 0x40 && code <= 0x7e) break;
-      }
-      continue;
-    }
-    out += value[i]!;
-    i += 1;
-  }
-  return out;
-}
-
 export function sanitizeRuntimeManageDiagnostic(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
-  const lines = stripAnsiEscapes(raw)
+  const lines = Bun.stripANSI(raw)
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);

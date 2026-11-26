@@ -22,10 +22,10 @@ test("forgetting the preferred Workspace expires the same host-only cookie", () 
   expect(cookie.split("; ")).toEqual([
     "coforge_workspace=",
     "Path=/",
-    "HttpOnly",
-    "SameSite=Lax",
     "Max-Age=0",
     "Secure",
+    "HttpOnly",
+    "SameSite=Lax",
   ]);
   expect(readPreferredWorkspaceSlug(cookie.split(";", 1)[0]!)).toBeUndefined();
 });

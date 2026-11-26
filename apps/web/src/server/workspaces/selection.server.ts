@@ -2,6 +2,7 @@ import { getRequest, setResponseHeader } from "@tanstack/react-start/server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 
 import { AppError } from "#src/lib/app-error";
+import { clearCookie, readCookie, serializeCookie } from "#src/server/auth/browser-login.server";
 import { PrismaWorkspaceAccess } from "#src/server/db/repositories/setup.repositories.server";
 import { workspaceSlugFromPath } from "#src/features/workspaces/workspace-url";
 import type { RememberedWorkspace } from "./departure.server";
@@ -10,36 +11,16 @@ import { requireExistingWorkspaceId } from "./enrollment.server";
 const WORKSPACE_COOKIE = "coforge_workspace";
 
 export function readPreferredWorkspaceSlug(cookieHeader: string): string | undefined {
-  for (const part of cookieHeader.split(";")) {
-    const [key, ...rest] = part.trim().split("=");
-    if (key === WORKSPACE_COOKIE) {
-      const slug = rest.join("=").trim();
-      return slug || undefined;
-    }
-  }
-  return undefined;
-}
-
-function serializeCookie(value: string, maxAge: number, secure: boolean): string {
-  return [
-    `${WORKSPACE_COOKIE}=${value}`,
-    "Path=/",
-    "HttpOnly",
-    "SameSite=Lax",
-    `Max-Age=${maxAge}`,
-    secure ? "Secure" : "",
-  ]
-    .filter(Boolean)
-    .join("; ");
+  const slug = readCookie(cookieHeader, WORKSPACE_COOKIE)?.trim();
+  return slug || undefined;
 }
 
 export function serializeWorkspaceCookie(slug: string, secure: boolean): string {
-  return serializeCookie(slug, 31536000, secure);
+  return serializeCookie(WORKSPACE_COOKIE, slug, 31536000, secure);
 }
 
-/** Expires the cookie, so `/` no longer names a Workspace. */
 export function serializeForgottenWorkspaceCookie(secure: boolean): string {
-  return serializeCookie("", 0, secure);
+  return clearCookie(WORKSPACE_COOKIE, secure);
 }
 
 export function preferredWorkspaceSlugFromRequest(): string | undefined {

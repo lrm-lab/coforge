@@ -351,10 +351,6 @@ export class DroidRuntimeAuthAdapter implements RuntimeAuthAdapter {
   }
 }
 
-/** Drops ANSI escapes so the printed sentence and its code read as one line. */
 function stripAnsi(value: string): string {
-  return value
-    .replace(/\u001b\][^\u0007]*\u0007/g, "")
-    .replace(/\u001b\[[0-9;?]*[a-zA-Z]/g, "")
-    .replace(/[\r\n]+/g, " ");
+  return Bun.stripANSI(value).replace(/[\r\n]+/g, " ");
 }

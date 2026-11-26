@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { readCookie, serializeCookie } from "#src/server/auth/browser-login.server";
 import { optionalBrowserUser } from "#src/server/auth/require-user.server";
 import { requireDatabaseClient } from "#src/server/db/client.server";
 import { readPreferredWorkspaceSlug } from "#src/server/workspaces/selection.server";
@@ -19,24 +20,19 @@ export const GITHUB_INSTALL_STATE_COOKIE = "__Host-coforge-github-install-state"
 export const GITHUB_RETURN_COOKIE = "__Host-coforge-github-return";
 
 export function githubStateCookie(state: string) {
-  return `${GITHUB_STATE_COOKIE}=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${state ? 600 : 0}`;
+  return serializeCookie(GITHUB_STATE_COOKIE, state, state ? 600 : 0, true);
 }
 
 export function githubInstallationStateCookie(state: string) {
-  return `${GITHUB_INSTALL_STATE_COOKIE}=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${state ? 600 : 0}`;
+  return serializeCookie(GITHUB_INSTALL_STATE_COOKIE, state, state ? 600 : 0, true);
 }
 
 function cookieValue(header: string, name: string) {
-  return (
-    header
-      .split(/;\s*/)
-      .find((part) => part.startsWith(`${name}=`))
-      ?.slice(name.length + 1) ?? ""
-  );
+  return readCookie(header, name) ?? "";
 }
 
 export function githubReturnCookie(workspaceSlug: string) {
-  return `${GITHUB_RETURN_COOKIE}=${workspaceSlug}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${workspaceSlug ? 600 : 0}`;
+  return serializeCookie(GITHUB_RETURN_COOKIE, workspaceSlug, workspaceSlug ? 600 : 0, true);
 }
 
 export function validGitHubInstallationState(cookie: string, state: string) {
