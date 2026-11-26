@@ -47,7 +47,10 @@ export function replay(message: AgentMessageDelivery): AgentMessageDelivery {
   return { ...message, deliveryId: `${message.deliveryId}-replay` };
 }
 
-export function readPositionHarness(stateDirectory: string) {
+export function readPositionHarness(
+  stateDirectory: string,
+  discussion = { board: "#acceptance", target: taskTarget },
+) {
   const store = new AgentConsumedSeqStore(stateDirectory);
   const notices: string[] = [];
   const activeSession = session((notice) => notices.push(notice));
@@ -67,7 +70,7 @@ export function readPositionHarness(stateDirectory: string) {
       boundary: number,
       messages: readonly AgentMessageDelivery[] = [],
     ) {
-      const query = { channel: "#acceptance", task_number: "42", unread: "true" };
+      const query = { channel: discussion.board, task_number: "42", unread: "true" };
       await forwardedTaskReadResponse(
         {
           agentId,
@@ -75,7 +78,12 @@ export function readPositionHarness(stateDirectory: string) {
           recordRead: (id, request, body) => settleForwardedTaskRead(attention, id, request, body),
         },
         Response.json({
-          consumptionScope: { agentId, conversationId, channelType: "thread", target: taskTarget },
+          consumptionScope: {
+            agentId,
+            conversationId,
+            channelType: "thread",
+            target: discussion.target,
+          },
           messages: messages.map((message) => ({
             id: message.messageId,
             sequence: message.sequence,

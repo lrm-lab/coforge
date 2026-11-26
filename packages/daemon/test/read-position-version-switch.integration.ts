@@ -100,81 +100,104 @@ async function expectDrafts(
   ).toMatchObject({ status: "open", continuation: continuation(target, draft) });
 }
 
-const readInA = taskDelivery(oldConversation, 31);
-const readInB = taskDelivery(newConversation, 5);
-
-test("a real old→new→old→new switch retains A=31, advances B=5→7 and preserves held sends", async () => {
-  const state = temporaryReadPositionState();
-  try {
-    const old = new legacy.AgentConsumedSeqStore(state.path);
+test.each([
+  { kind: "channel", board: "#acceptance", target: taskTarget },
+  { kind: "DM", board: "dm:@ada", target: "@ada:#42" },
+  { kind: "human DM", board: "dm:@ada~human", target: "@ada~human:#42" },
+  { kind: "Agent DM", board: "dm:@ada~agent", target: "@ada~agent:#42" },
+])(
+  "an old→new→old→new switch retains A=31, B=7 and held sends ($kind discussion)",
+  async (discussion) => {
+    const { target } = discussion;
+    const readInA = taskDelivery(oldConversation, 31, undefined, target);
+    const readInB = taskDelivery(newConversation, 5, undefined, target);
+    const state = temporaryReadPositionState();
     try {
-      old.apply(agentId, {
-        upsertTargets: [
-          { target: taskTarget, entry: { conversationId: oldConversation, seq: 31 } },
-        ],
-      });
-      await saveDrafts(old.stateDb(agentId), taskTarget, initialDraft);
-    } finally {
-      old.close();
-    }
+      const old = new legacy.AgentConsumedSeqStore(state.path);
+      try {
+        old.apply(agentId, {
+          upsertTargets: [{ target, entry: { conversationId: oldConversation, seq: 31 } }],
+        });
+        await saveDrafts(old.stateDb(agentId), target, initialDraft);
+      } finally {
+        old.close();
+      }
 
-    const firstUpgrade = readPositionHarness(state.path);
-    try {
-      await firstUpgrade.attention.receive(readInA);
-      expect(firstUpgrade.notices).toHaveLength(0);
-      await expectDrafts(firstUpgrade.store.stateDb(agentId), taskTarget, initialDraft);
-      await firstUpgrade.attention.receive(readInB);
-      expect(firstUpgrade.notices).toHaveLength(1);
-      await firstUpgrade.readPage(newConversation, 5, [readInB]);
-    } finally {
-      firstUpgrade.close();
-    }
+      const firstUpgrade = readPositionHarness(state.path, discussion);
+      let oldBoundaryWrites: number;
+      try {
+        await firstUpgrade.attention.receive(readInA);
+        oldBoundaryWrites = firstUpgrade.notices.length;
+        await expectDrafts(firstUpgrade.store.stateDb(agentId), target, initialDraft);
+        await firstUpgrade.attention.receive(readInB);
+        expect(firstUpgrade.notices).toHaveLength(oldBoundaryWrites + 1);
+        await firstUpgrade.readPage(newConversation, 5, [readInB]);
+      } finally {
+        firstUpgrade.close();
+      }
 
-    const rollback = new legacy.AgentConsumedSeqStore(state.path);
-    try {
-      const agentDb = rollback.stateDb(agentId);
-      await expectDrafts(agentDb, taskTarget, initialDraft, legacy);
-      rollback.apply(agentId, {
-        upsertTargets: [{ target: taskTarget, entry: { conversationId: newConversation, seq: 7 } }],
-      });
-      expect(rollback.read(agentId).targets[taskTarget]).toMatchObject({
-        conversationId: newConversation,
-        seq: 7,
-      });
-      agentDb.database
-        .query("INSERT INTO consumed_seqs (target, conversation_id, seq) VALUES (?, ?, ?)")
-        .run(rollbackDraftTarget, "", 99);
-      agentDb.database
-        .query("INSERT INTO consumed_seqs (target, conversation_id, seq) VALUES (?, ?, ?)")
-        .run("#acceptance:unresolved scope", newConversation, 99);
-      await saveDrafts(agentDb, rollbackDraftTarget, rollbackDraft);
-    } finally {
-      rollback.close();
-    }
+      const rollback = new legacy.AgentConsumedSeqStore(state.path);
+      try {
+        const agentDb = rollback.stateDb(agentId);
+        await expectDrafts(agentDb, target, initialDraft, legacy);
+        rollback.apply(agentId, {
+          upsertTargets: [{ target, entry: { conversationId: newConversation, seq: 7 } }],
+        });
+        expect(rollback.read(agentId).targets[target]).toMatchObject({
+          conversationId: newConversation,
+          seq: 7,
+        });
+        agentDb.database
+          .query("INSERT INTO consumed_seqs (target, conversation_id, seq) VALUES (?, ?, ?)")
+          .run(rollbackDraftTarget, "", 99);
+        agentDb.database
+          .query("INSERT INTO consumed_seqs (target, conversation_id, seq) VALUES (?, ?, ?)")
+          .run("#acceptance:unresolved scope", newConversation, 99);
+        await saveDrafts(agentDb, rollbackDraftTarget, rollbackDraft);
+      } finally {
+        rollback.close();
+      }
 
-    const reupgrade = readPositionHarness(state.path);
-    try {
-      await expectDrafts(reupgrade.store.stateDb(agentId), taskTarget, initialDraft);
-      await expectDrafts(reupgrade.store.stateDb(agentId), rollbackDraftTarget, rollbackDraft);
-      await reupgrade.attention.receive(taskDelivery(newConversation, 7));
-      await reupgrade.attention.receive(readInA);
-      expect(reupgrade.notices).toEqual([]);
+      const reupgrade = readPositionHarness(state.path, discussion);
+      try {
+        await expectDrafts(reupgrade.store.stateDb(agentId), target, initialDraft);
+        await expectDrafts(reupgrade.store.stateDb(agentId), rollbackDraftTarget, rollbackDraft);
+        await reupgrade.attention.receive(taskDelivery(newConversation, 7, undefined, target));
+        const currentBoundaryWrites = reupgrade.notices.length;
+        await reupgrade.attention.receive(readInA);
+        const reupgradedBoundaryWrites = reupgrade.notices.length;
 
-      await reupgrade.attention.receive(taskDelivery(newConversation, 8));
-      expect(reupgrade.notices).toHaveLength(1);
-      await reupgrade.attention.receive(taskDelivery(oldConversation, 32));
-      expect(reupgrade.notices).toHaveLength(2);
-      await reupgrade.attention.receive(
-        taskDelivery(crypto.randomUUID(), 6, "New unscoped-history task", rollbackDraftTarget),
-      );
-      expect(reupgrade.notices).toHaveLength(3);
+        await reupgrade.attention.receive(taskDelivery(newConversation, 8, undefined, target));
+        const nextCurrentWrites = reupgrade.notices.length - reupgradedBoundaryWrites;
+        await reupgrade.attention.receive(taskDelivery(oldConversation, 32, undefined, target));
+        const nextOldWrites =
+          reupgrade.notices.length - reupgradedBoundaryWrites - nextCurrentWrites;
+        await reupgrade.attention.receive(
+          taskDelivery(crypto.randomUUID(), 6, "New unscoped-history task", rollbackDraftTarget),
+        );
+        expect({
+          oldBoundaryWrites,
+          currentBoundaryWrites,
+          reupgradedBoundaryWrites,
+          nextCurrentWrites,
+          nextOldWrites,
+          totalWrites: reupgrade.notices.length,
+        }).toEqual({
+          oldBoundaryWrites: 0,
+          currentBoundaryWrites: 0,
+          reupgradedBoundaryWrites: 0,
+          nextCurrentWrites: 1,
+          nextOldWrites: 1,
+          totalWrites: 3,
+        });
+      } finally {
+        reupgrade.close();
+      }
     } finally {
-      reupgrade.close();
+      state.remove();
     }
-  } finally {
-    state.remove();
-  }
-});
+  },
+);
 
 async function interruptUpgrade(stateDirectory: string, delayMs: number): Promise<boolean> {
   let started = false;
