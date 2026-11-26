@@ -64,6 +64,9 @@ await mockModuleForFile("#src/features/settings/assumed-viewport.functions", () 
 await mockModuleForFile("#src/features/settings/time-zone-cookie.functions", () => ({
   loadCookieTimeZone: () => undefined,
 }));
+await mockModuleForFile("#src/features/settings/sidebar-layout-cookie.functions", () => ({
+  loadSidebarLayout: () => ({ expanded: false, widthRem: 16 }),
+}));
 let joinPreview: unknown = null;
 const joinFunctions = await import("#src/features/workspaces/join-links.functions");
 await mockModuleForFile("#src/features/workspaces/join-links.functions", () => ({
@@ -231,5 +234,8 @@ test("the Workspace layout loads for a named person", async () => {
     context: { queryClient: new QueryClient() },
   });
   expect(isRedirect(result)).toBe(false);
-  expect(result).toMatchObject({ user: { id: "user-1" } });
+  expect(result).toMatchObject({
+    user: { id: "user-1" },
+    sidebarLayout: { expanded: false, widthRem: 16 },
+  });
 });
