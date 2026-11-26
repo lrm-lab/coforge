@@ -66,6 +66,21 @@ describe("reconcileLeavingItems", () => {
     expect(result.leaving).toEqual([]);
   });
 
+  test("preserves the activeLeaving reference when leaving entries do not change", () => {
+    const items: Item[] = [{ id: "a", label: "A" }];
+    const emptyLeaving: LeavingEntry<Item>[] = [];
+    const emptyResult = reconcileLeavingItems(items, [...items], emptyLeaving, byId);
+    expect(emptyResult.leaving).toBe(emptyLeaving);
+    expect(emptyResult.addedKeys).toEqual([]);
+
+    const activeLeaving: LeavingEntry<Item>[] = [
+      { key: "b", item: { id: "b", label: "B" }, index: 1 },
+    ];
+    const unchangedResult = reconcileLeavingItems(items, [...items], activeLeaving, byId);
+    expect(unchangedResult.leaving).toBe(activeLeaving);
+    expect(unchangedResult.addedKeys).toEqual([]);
+  });
+
   test("never produces duplicate rows when merging leaving items with active items", () => {
     const items: Item[] = [
       { id: "a", label: "A" },

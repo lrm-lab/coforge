@@ -126,7 +126,7 @@ export function ActivityInboxView({
     enabled: filter === "all",
   });
   const [allWaiting, setAllWaiting] = useState(false);
-  const waiting = (filter === "all" && waitingQuery.data) || [];
+  const waiting = (filter === "all" && waitingQuery.data) || EMPTY_WAITING;
   const expandedWaiting = allWaiting && waiting.length > WAITING_SHOWN;
 
   const firstPage = projectedData?.pages[0];
@@ -254,7 +254,10 @@ export function ActivityInboxView({
     onDoneStarted,
     onDoneSettled: settleDone,
   });
-  const shownWaiting = expandedWaiting ? waiting : waiting.slice(0, WAITING_SHOWN);
+  const shownWaiting = useMemo(
+    () => (expandedWaiting ? waiting : waiting.slice(0, WAITING_SHOWN)),
+    [expandedWaiting, waiting],
+  );
   const visibleWaitingRows = useLeavingItems(shownWaiting, {
     getKey: (card) => card.messageId,
     resetKey: filter,
@@ -556,4 +559,5 @@ export function ActivityInboxView({
   );
 }
 
+const EMPTY_WAITING: never[] = [];
 const WAITING_SHOWN = 3;

@@ -27,7 +27,9 @@ export function reconcileLeavingItems<T>(
   addedKeys: readonly string[];
 } {
   const nextKeys = new Set(next.map(getKey));
-  const stillLeaving = activeLeaving.filter((entry) => !nextKeys.has(entry.key));
+  const filteredLeaving = activeLeaving.filter((entry) => !nextKeys.has(entry.key));
+  const stillLeaving =
+    filteredLeaving.length === activeLeaving.length ? activeLeaving : filteredLeaving;
   const gone: LeavingEntry<T>[] = [];
   for (let index = 0; index < previous.length; index++) {
     const item = previous[index]!;
@@ -35,7 +37,9 @@ export function reconcileLeavingItems<T>(
     if (!nextKeys.has(key)) gone.push({ key, item, index });
   }
   if (gone.length === 0) return { leaving: stillLeaving, addedKeys: [] };
-  if (gone.length > MAX_ANIMATED_LEAVES) return { leaving: [], addedKeys: [] };
+  if (gone.length > MAX_ANIMATED_LEAVES) {
+    return { leaving: activeLeaving.length === 0 ? activeLeaving : [], addedKeys: [] };
+  }
   const existingKeys = new Set(stillLeaving.map((entry) => entry.key));
   const added = gone.filter((entry) => !existingKeys.has(entry.key));
   if (added.length === 0) return { leaving: stillLeaving, addedKeys: [] };
