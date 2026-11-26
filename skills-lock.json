@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "break-ui": {
+      "source": "emilkowalski/skills",
+      "sourceType": "github",
+      "skillPath": "skills/break-ui/SKILL.md",
+      "computedHash": "ab458c0ede6bf4bec5335b8c609cde26206597748db3bfb8c86d99d43837d89a"
+    },
     "design-taste-frontend": {
       "source": "leonxlnx/taste-skill",
       "sourceType": "github",
