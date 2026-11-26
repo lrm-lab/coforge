@@ -10,6 +10,7 @@ import { ComputerUpgradeWatcher } from "#src/features/computers/computer-upgrade
 import { TimeFormatProvider } from "#src/lib/time-format-context";
 import { TimeZoneProvider } from "#src/lib/time-zone-context";
 import { loadAssumedPhone } from "#src/features/settings/assumed-viewport.functions";
+import { loadSidebarLayout } from "#src/features/settings/sidebar-layout-cookie.functions";
 import { loadCookieTimeZone } from "#src/features/settings/time-zone-cookie.functions";
 import { useTimeZoneCookie } from "#src/features/settings/use-time-zone-cookie";
 import { AssumedViewportProvider } from "#src/hooks/assumed-viewport";
@@ -131,6 +132,7 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
       observedTimeZone: preferences.observedTimeZone ?? null,
       renderedAt: Date.now(),
       assumedPhone: loadAssumedPhone(),
+      sidebarLayout: loadSidebarLayout(),
       timeFormat: preferences.timeFormat,
       language: preferences.language,
       aiWorkbenchEnabled,
@@ -155,6 +157,7 @@ function AppLayout() {
     cookieTimeZone,
     renderedAt,
     assumedPhone,
+    sidebarLayout,
     timeFormat,
     language,
     aiWorkbenchEnabled,
@@ -265,6 +268,7 @@ function AppLayout() {
                           recordsPreview={recordsPreview}
                           aiWorkbench={aiWorkbench}
                           canSeeUsageLimits={canSeeUsageLimits}
+                          sidebarLayout={sidebarLayout}
                           onSelectWorkspace={handleSelectWorkspace}
                           onCreateWorkspace={createAndOpen}
                           onSignOut={handleSignOut}

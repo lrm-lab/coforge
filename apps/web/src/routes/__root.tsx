@@ -1,6 +1,13 @@
+import { useCallback } from "react";
 import type { QueryClient } from "@tanstack/react-query";
-import { HeadContent, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
+import {
+  HeadContent,
+  Scripts,
+  createRootRouteWithContext,
+  useRouter,
+} from "@tanstack/react-router";
 import { LazyMotion } from "motion/react";
+import { RouterProvider } from "react-aria-components";
 
 import { Favicon } from "#src/components/foundations/logo/favicon";
 import { AppToastProvider } from "#src/components/ui/toast";
@@ -86,6 +93,18 @@ const loadMotionFeatures = () =>
   import("#src/components/ui/motion-features").then((mod) => mod.default);
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const navigate = useCallback(
+    (href: string) => {
+      const url = new URL(href, window.location.href);
+      if (url.origin !== window.location.origin || url.pathname.startsWith("/api/")) {
+        window.location.assign(url.href);
+        return;
+      }
+      void router.navigate({ href: url.pathname + url.search + url.hash });
+    },
+    [router],
+  );
   return (
     <html lang={getLocale()} suppressHydrationWarning>
       <head>
@@ -96,16 +115,18 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <body>
         <HeldEnterGuard />
         <MenuHighlightTracker />
-        <HotkeysProvider defaultOptions={HOTKEY_DEFAULTS}>
-          <LazyMotion features={loadMotionFeatures} strict>
-            <AppToastProvider>
-              <BuildUpdateWatcher />
-              <div id="coforge-app-root" className="isolate">
-                {children}
-              </div>
-            </AppToastProvider>
-          </LazyMotion>
-        </HotkeysProvider>
+        <RouterProvider navigate={navigate}>
+          <HotkeysProvider defaultOptions={HOTKEY_DEFAULTS}>
+            <LazyMotion features={loadMotionFeatures} strict>
+              <AppToastProvider>
+                <BuildUpdateWatcher />
+                <div id="coforge-app-root" className="isolate">
+                  {children}
+                </div>
+              </AppToastProvider>
+            </LazyMotion>
+          </HotkeysProvider>
+        </RouterProvider>
         <Scripts />
       </body>
     </html>

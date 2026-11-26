@@ -14,42 +14,54 @@ import {
   subscribeSidebarExpanded,
   writeSidebarExpanded,
 } from "#src/features/settings/sidebar-expanded";
+import {
+  SIDEBAR_DEFAULT_REM,
+  SIDEBAR_MAX_REM,
+  SIDEBAR_MIN_REM,
+  clampSidebarWidthRem,
+  parseSidebarWidthRem,
+  writeSidebarLayoutCookie,
+} from "#src/features/settings/sidebar-layout-cookie";
 import { m } from "#src/paraglide/messages";
 
 const SIDEBAR_GROUP_ID = "coforge-sidebar";
 const SIDEBAR_PANEL_ID = "sidebar";
 const MAIN_PANEL_ID = "main";
 const SIDEBAR_EXPANDED_WIDTH_KEY = "coforge-sidebar-width";
-const SIDEBAR_DEFAULT_REM = 15;
-const SIDEBAR_MIN_REM = 10;
-const SIDEBAR_MAX_REM = 20;
 const SIDEBAR_RAIL_SIZE = "3.5rem";
 const SIDEBAR_RESIZE_TARGET = { coarse: 44, fine: 12 };
 const SIDEBAR_PANEL_STYLE = { overflow: "hidden" } as const;
 const MAIN_PANEL_STYLE = { overflow: "visible" } as const;
-const PLAIN_NUMBER = /^\d+(\.\d+)?$/;
 
 function rootFontSizePx(): number {
   const parsed = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 16;
 }
 
-function readRememberedExpandedRem(): number {
+function panelsTotalWidthPx(groupElement: HTMLDivElement | null): number {
+  if (!groupElement) return 0;
+  let total = 0;
+  for (const child of groupElement.children) {
+    if (child instanceof HTMLElement && child.hasAttribute("data-panel")) {
+      total += child.offsetWidth;
+    }
+  }
+  return total;
+}
+
+function readStoredExpandedRem(): number | undefined {
   try {
-    const raw = browserLocalStorage()?.getItem(SIDEBAR_EXPANDED_WIDTH_KEY) ?? null;
-    if (raw === null || !PLAIN_NUMBER.test(raw)) return SIDEBAR_DEFAULT_REM;
-    const parsed = Number(raw);
-    const rem = parsed > 80 ? parsed / 16 : parsed;
-    return Math.min(SIDEBAR_MAX_REM, Math.max(SIDEBAR_MIN_REM, rem));
+    return parseSidebarWidthRem(browserLocalStorage()?.getItem(SIDEBAR_EXPANDED_WIDTH_KEY));
   } catch {
-    return SIDEBAR_DEFAULT_REM;
+    return undefined;
   }
 }
 
 function writeRememberedExpandedRem(rem: number) {
+  const clamped = clampSidebarWidthRem(rem);
+  const rounded = Math.round(clamped * 1000) / 1000;
+  writeSidebarLayoutCookie({ widthRem: rounded });
   try {
-    const clamped = Math.min(SIDEBAR_MAX_REM, Math.max(SIDEBAR_MIN_REM, rem));
-    const rounded = Math.round(clamped * 1000) / 1000;
     browserLocalStorage()?.setItem(SIDEBAR_EXPANDED_WIDTH_KEY, String(rounded));
   } catch {}
 }
@@ -65,19 +77,30 @@ function runSyncing(syncingRef: { current: boolean }, fn: () => void) {
 
 export function SidebarShell({
   defaultRail = false,
+  initialExpanded,
+  initialWidthRem,
   expanded,
   rail,
   children,
 }: {
   defaultRail?: boolean;
+  initialExpanded?: boolean;
+  initialWidthRem?: number;
   expanded: ReactNode;
   rail: ReactNode;
   children: ReactNode;
 }) {
+  const groupElementRef = useRef<HTMLDivElement>(null);
   const panelRef = usePanelRef();
   const syncingRef = useRef(false);
-  const rememberedRemRef = useRef(SIDEBAR_DEFAULT_REM);
+  const rememberedRemRef = useRef(initialWidthRem ?? SIDEBAR_DEFAULT_REM);
   const [ready, setReady] = useState(false);
+
+  const [initialSize] = useState(() =>
+    (initialExpanded ?? !defaultRail)
+      ? `${initialWidthRem ?? SIDEBAR_DEFAULT_REM}rem`
+      : SIDEBAR_RAIL_SIZE,
+  );
 
   const syncPanelToExpanded = useCallback(
     (wantExpanded: boolean, applyRememberedWidth = false) => {
@@ -97,10 +120,21 @@ export function SidebarShell({
   );
 
   useLayoutEffect(() => {
-    const remembered = readRememberedExpandedRem();
+    const storedWidth = readStoredExpandedRem();
+    const remembered = storedWidth ?? initialWidthRem ?? SIDEBAR_DEFAULT_REM;
     rememberedRemRef.current = remembered;
-    syncPanelToExpanded(isSidebarExpanded(), remembered !== SIDEBAR_DEFAULT_REM);
-  }, [defaultRail, syncPanelToExpanded]);
+    const wantExpanded = isSidebarExpanded();
+    const explicitClass =
+      document.documentElement.classList.contains("sidebar-expanded") ||
+      document.documentElement.classList.contains("sidebar-collapsed");
+    if (explicitClass && initialExpanded !== wantExpanded) {
+      writeSidebarLayoutCookie({ expanded: wantExpanded });
+    }
+    if (storedWidth !== undefined && initialWidthRem !== storedWidth) {
+      writeSidebarLayoutCookie({ widthRem: storedWidth });
+    }
+    syncPanelToExpanded(wantExpanded, storedWidth !== undefined && storedWidth !== initialWidthRem);
+  }, [defaultRail, initialExpanded, initialWidthRem, syncPanelToExpanded]);
 
   useEffect(() => subscribeSidebarExpanded(syncPanelToExpanded), [syncPanelToExpanded]);
 
@@ -127,13 +161,16 @@ export function SidebarShell({
     }
   };
 
-  const handleLayoutChanged = (_nextLayout: Layout, meta: LayoutChangedMeta) => {
+  const handleLayoutChanged = (nextLayout: Layout, meta: LayoutChangedMeta) => {
     if (!meta.isUserInteraction) return;
     const panel = panelRef.current;
     if (!panel || panel.isCollapsed()) return;
-    const rem = panel.getSize().inPixels / rootFontSizePx();
+    const pct = nextLayout[SIDEBAR_PANEL_ID];
+    const groupPx = panelsTotalWidthPx(groupElementRef.current);
+    const px = pct !== undefined && groupPx > 0 ? (pct / 100) * groupPx : panel.getSize().inPixels;
+    const rem = px / rootFontSizePx();
     if (rem >= SIDEBAR_MIN_REM - 0.1) {
-      const clamped = Math.min(SIDEBAR_MAX_REM, Math.max(SIDEBAR_MIN_REM, rem));
+      const clamped = clampSidebarWidthRem(rem);
       rememberedRemRef.current = clamped;
       writeRememberedExpandedRem(clamped);
     }
@@ -142,11 +179,17 @@ export function SidebarShell({
   const handleSeparatorDoubleClick = () => {
     rememberedRemRef.current = SIDEBAR_DEFAULT_REM;
     writeRememberedExpandedRem(SIDEBAR_DEFAULT_REM);
+    if (!isSidebarExpanded()) {
+      writeSidebarExpanded(true);
+      return;
+    }
+    panelRef.current?.resize(`${SIDEBAR_DEFAULT_REM}rem`);
   };
 
   return (
     <Group
       id={SIDEBAR_GROUP_ID}
+      elementRef={groupElementRef}
       orientation="horizontal"
       onLayoutChanged={handleLayoutChanged}
       resizeTargetMinimumSize={SIDEBAR_RESIZE_TARGET}
@@ -161,7 +204,7 @@ export function SidebarShell({
         collapsedSize={SIDEBAR_RAIL_SIZE}
         minSize={`${SIDEBAR_MIN_REM}rem`}
         maxSize={`${SIDEBAR_MAX_REM}rem`}
-        defaultSize={`${SIDEBAR_DEFAULT_REM}rem`}
+        defaultSize={initialSize}
         groupResizeBehavior="preserve-pixel-size"
         onResize={handleResize}
         data-sidebar-shell=""
@@ -181,6 +224,7 @@ export function SidebarShell({
       </Panel>
       <Separator
         aria-label={m.navigation_resize_sidebar()}
+        disableDoubleClick
         onDoubleClick={handleSeparatorDoubleClick}
         data-sidebar-resize-handle=""
         className="relative z-10 w-px shrink-0 cursor-col-resize touch-none bg-transparent outline-hidden"

@@ -5,6 +5,7 @@ import {
   readDeviceFlag,
   writeDeviceFlag,
 } from "./device-flag";
+import { writeSidebarLayoutCookie } from "./sidebar-layout-cookie";
 
 const STORAGE_KEY = "coforge-sidebar-expanded";
 const COLLAPSED_CLASS = "sidebar-collapsed";
@@ -44,6 +45,7 @@ export function subscribeSidebarExpanded(listener: (expanded: boolean) => void):
 
 export function writeSidebarExpanded(expanded: boolean) {
   writeDeviceFlag(STORAGE_KEY, expanded);
+  writeSidebarLayoutCookie({ expanded });
   document.documentElement.classList.toggle(COLLAPSED_CLASS, !expanded);
   document.documentElement.classList.toggle(EXPANDED_CLASS, expanded);
   for (const listener of listeners) listener(expanded);

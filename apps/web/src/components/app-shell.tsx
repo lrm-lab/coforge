@@ -54,6 +54,7 @@ import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { SearchField, SearchRailButton } from "#src/features/search/search-field";
 import { SidebarToggle } from "#src/components/layout/sidebar/sidebar-toggle";
+import type { SidebarLayoutCookie } from "#src/features/settings/sidebar-layout-cookie";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
 import { cx } from "#src/utils/cx";
 import { FeedbackHost } from "#src/features/feedback/feedback-host";
@@ -177,6 +178,7 @@ const SEARCH_RAIL_BUTTON = <SearchRailButton />;
 type AppShellProps = {
   aiWorkbench?: boolean;
   canSeeUsageLimits?: boolean;
+  sidebarLayout?: SidebarLayoutCookie;
   user: AppUser;
   workspaces: WorkspaceOption[];
   currentWorkspace: WorkspaceOption;
@@ -227,6 +229,7 @@ function WorkspaceChrome({
   children,
   recordsPreview = false,
   aiWorkbench = false,
+  sidebarLayout,
   standalone = false,
 }: AppShellProps & { standalone?: boolean }) {
   const router = useRouter();
@@ -395,6 +398,8 @@ function WorkspaceChrome({
             {!standalone && !phone ? (
               <SidebarShell
                 defaultRail={defaultRail}
+                initialExpanded={sidebarLayout?.expanded}
+                initialWidthRem={sidebarLayout?.widthRem}
                 expanded={
                   <ShellLinks>
                     <MemoSidebarExpanded

@@ -1,12 +1,3 @@
-html.sidebar-collapsed
-  [data-sidebar-group]:not([data-ready])
-  > [data-sidebar-shell]:not([data-default-rail]),
-html:not(.sidebar-expanded)
-  [data-sidebar-group]:not([data-ready])
-  > [data-sidebar-shell][data-default-rail] {
-  max-width: 3.5rem;
-}
-
 [data-sidebar-shell] [data-sidebar-panel="expanded"] {
   opacity: 1;
   visibility: visible;

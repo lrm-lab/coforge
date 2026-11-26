@@ -1,5 +1,5 @@
 import type { FC, ReactNode } from "react";
-import { Button as AriaButton, Pressable } from "react-aria-components";
+import { Button as AriaButton, Link as AriaLink } from "react-aria-components";
 import type { NavItemType } from "#src/components/application/app-navigation/config";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { TooltipGroup } from "#src/components/ui/tooltip-group";
@@ -24,41 +24,34 @@ type RailItemType = NavItemType & {
 function RailItem({ href, icon: Icon, label, current, badge, unreadCount }: RailItemType) {
   return (
     <Tooltip title={label} placement="right" offset={4}>
-      <Pressable>
-        <a
-          href={href}
-          aria-label={
-            unreadCount
-              ? `${label}, ${m.conversation_thread_unread({ count: unreadCount })}`
-              : label
-          }
-          aria-current={current ? "page" : undefined}
-          className={RAIL_TARGET}
+      <AriaLink
+        href={href}
+        aria-label={
+          unreadCount ? `${label}, ${m.conversation_thread_unread({ count: unreadCount })}` : label
+        }
+        aria-current={current ? "page" : undefined}
+        className={RAIL_TARGET}
+      >
+        <span
+          className={cx(RAIL_TILE, current ? "bg-nav-bg-current" : "group-hover:bg-sidebar-accent")}
         >
-          <span
+          <Icon
+            aria-hidden="true"
             className={cx(
-              RAIL_TILE,
-              current ? "bg-nav-bg-current" : "group-hover:bg-sidebar-accent",
+              RAIL_ICON,
+              current ? "text-nav-fg-current" : "text-nav-fg group-hover:text-secondary",
             )}
-          >
-            <Icon
-              aria-hidden="true"
-              className={cx(
-                RAIL_ICON,
-                current ? "text-nav-fg-current" : "text-nav-fg group-hover:text-secondary",
-              )}
+          />
+          {unreadCount ? (
+            <UnreadBadge
+              count={unreadCount}
+              className="absolute -top-1 -right-1.5 h-4 min-w-4 px-1 ring-2 ring-sidebar"
             />
-            {unreadCount ? (
-              <UnreadBadge
-                count={unreadCount}
-                className="absolute -top-1 -right-1.5 h-4 min-w-4 px-1 ring-2 ring-sidebar"
-              />
-            ) : badge ? (
-              <UnreadDot className="absolute top-1.5 right-1.5" />
-            ) : null}
-          </span>
-        </a>
-      </Pressable>
+          ) : badge ? (
+            <UnreadDot className="absolute top-1.5 right-1.5" />
+          ) : null}
+        </span>
+      </AriaLink>
     </Tooltip>
   );
 }
