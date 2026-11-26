@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 import type { LocalAgentMessageRequest } from "@lrm/coforge-sdk/internal";
+import { createAgentMessageHttpClient } from "#src/connection/agent-http-clients";
+import { agentMessage as forwardAgentMessage } from "#src/connection/agent-message-operations";
 import { AgentInboxStateMachine } from "#src/daemon-runtime/agent-inbox-state-machine";
 import { AgentMessageOperations } from "#src/daemon-runtime/agent-message-operations";
 import { AgentContinuationStore } from "#src/persistence/agent-continuation-store";
@@ -29,36 +31,40 @@ function draftHarness(
   const drafts = new AgentMessageDraftStore(agentDb);
   const inbox = new AgentInboxStateMachine(drafts, new AgentContinuationStore(agentDb));
   const consumptionScope = { agentId, conversationId, channelType: "dm" as const, target };
+  const client = createAgentMessageHttpClient(async (input, init) => {
+    if (init?.method === "POST") {
+      const write = JSON.parse(String(init.body)) as { idempotencyKey: string };
+      writes.push(write);
+      return Response.json({
+        idempotencyKey: write.idempotencyKey,
+        state: holdWrites ? "held" : "sent",
+        decision: holdWrites ? "local_hold" : "forward",
+        heldMessages: [],
+        messageId: holdWrites ? "" : "accepted-message",
+        consumptionScope: { conversationId },
+      });
+    }
+    return Response.json({
+      idempotencyKey: new URL(String(input)).searchParams.get("idempotencyKey"),
+      messages: [],
+      hasOlder: false,
+      hasNewer: false,
+      modelSeenUpToSeq: sequence,
+      consumptionScope,
+    });
+  });
+  const connection = {
+    assertConnected() {},
+    serverHttpUrl: "https://acceptance.invalid",
+    keys: (agentApiKey: string) => ({ agentApiKey, daemonApiKey: "fixture-daemon" }),
+    client,
+  };
   const operations = new AgentMessageOperations({
     connection: { workspaceId: "workspace-1", computerId: "acceptance-computer" },
     attention,
     inbox: () => inbox,
     transport: {
-      agentMessage: async (request) => {
-        const { idempotencyKey } = request;
-        if (request.operation === "read")
-          return {
-            idempotencyKey,
-            accepted: true,
-            attentionCount: 0,
-            messages: [],
-            hasOlder: false,
-            hasNewer: false,
-            modelSeenUpToSeq: sequence,
-            consumptionScope,
-          };
-        if (request.operation !== "send") throw new Error(`Unexpected ${request.operation}`);
-        writes.push(JSON.parse(JSON.stringify(request)));
-        return {
-          idempotencyKey,
-          accepted: !holdWrites,
-          state: holdWrites ? "held" : "sent",
-          attentionCount: 0,
-          messages: [],
-          messageId: holdWrites ? "" : "accepted-message",
-          consumptionScope,
-        };
-      },
+      agentMessage: (request, key) => forwardAgentMessage(connection, request, key),
     },
     reportFreshnessHold: () => {},
   });
