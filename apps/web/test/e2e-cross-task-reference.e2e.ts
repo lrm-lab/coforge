@@ -16,6 +16,7 @@ import {
   pageHydrated,
 } from "./helpers/browser-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
+import { nonTaskDialogs, taskDetailPanels } from "./helpers/task-detail-e2e";
 
 /**
  * Another conversation's Task in a message (task #456, the web part of task #437) reads as its
@@ -248,8 +249,8 @@ test("another conversation's Task reads as its live label, or as a Task the read
     // the popup shows its discussion and composer as the Task's own channel does.
     const onThisPage = `location.pathname.endsWith("/channel/${here.id}")`;
     const popupOf = (title: string) =>
-      `[...document.querySelectorAll('[role="dialog"]')].find((el) => el.textContent.includes(${JSON.stringify(title)}))`;
-    const noPopup = `document.querySelector('[role="dialog"]') === null`;
+      `${taskDetailPanels}.find((el) => el.textContent.includes(${JSON.stringify(title)}))`;
+    const noPopup = `(${taskDetailPanels}.length === 0 && ${nonTaskDialogs(true)}.length === 0)`;
     // The popup scales in, and a click aimed while it moves lands where its close button was, beside
     // where it is (task #80), so the button is clicked once the popup is still.
     const closePopup = async () => {
@@ -272,6 +273,7 @@ test("another conversation's Task reads as its live label, or as a Task the read
     // Back closes it, onto the same page; a reload of an open popup keeps it.
     await browser("back");
     await browser("wait", "--fn", `${noPopup} && ${onThisPage} && ${chip(launchTitle)} != null`);
+    expect(await evaluate<string>(`location.search`)).not.toContain("otherTask");
     await browser("forward");
     await browser("wait", "--fn", `${popupOf(launchTitle)} != null && ${onThisPage}`);
     await browser("reload");
