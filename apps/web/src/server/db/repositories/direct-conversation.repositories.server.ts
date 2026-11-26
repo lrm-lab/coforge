@@ -268,6 +268,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
     conversationId: string,
     afterSequence: number,
     afterReplySequence?: number,
+    options?: { viewerUserId?: string },
   ) {
     return updatesSince(
       this.#ports,
@@ -275,6 +276,7 @@ export class PrismaDirectConversationRepository implements DirectConversationRep
       conversationId,
       afterSequence,
       afterReplySequence,
+      options,
     );
   }
 

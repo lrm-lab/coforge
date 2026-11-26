@@ -6,17 +6,14 @@ import { AppError } from "#src/lib/app-error";
 import { followedThreadRootIds, readWindowThreads } from "./thread-summaries.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
 import { findLinkedMessage } from "#src/server/db/message-anchor.server";
+import { actionCardViews } from "./action-card-views.server";
 import {
   browserMessageFields,
   mapBrowserMessages,
   type BrowserMessageRow,
 } from "./browser-message-projection.server";
+import { mapBrowserMessagesWithViewerViews } from "./viewer-views.server";
 
-/**
- * What arrived in a conversation after a window read (`ConversationUpdatesCursor`): every message
- * after `afterSequence`, or, once `afterReplySequence` is given, every top-level message after
- * `afterSequence` and only the replies after `afterReplySequence`.
- */
 export function messagesArrivedWhere(
   conversationId: string,
   afterSequence: number,
@@ -33,17 +30,23 @@ export function messagesArrivedWhere(
   };
 }
 
-/**
- * What arrived in `conversationId` after a cursor, for a window that merges it in. The arriving
- * ids are read first: Prisma loads each relation of `browserMessageFields` (attachments, mentions,
- * reactions, sender) as its own statement, and asks for them even when no message matched, so a
- * read that brings nothing — the usual answer to a reconciliation — costs one statement instead
- * of one per relation. `relationLoadStrategy: "join"` would make it one statement either way, but
- * it is a schema-level preview feature, not a decision this read makes.
- *
- * Both reads are scoped by the conversation, as every browser read here is. A message deleted
- * between them is left out: the page already drops a row it cannot hydrate.
- */
+async function hydrateMessagesInOrder(
+  db: Pick<PrismaClient, "message">,
+  conversationId: string,
+  orderedIds: readonly string[],
+): Promise<BrowserMessageRow[]> {
+  if (orderedIds.length === 0) return [];
+  const rows = await db.message.findMany({
+    where: { id: { in: [...orderedIds] }, conversationId },
+    select: browserMessageFields,
+  });
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return orderedIds.flatMap((id) => {
+    const message = byId.get(id);
+    return message ? [message] : [];
+  });
+}
+
 export async function browserMessageUpdates(
   db: Pick<PrismaClient, "message">,
   conversationId: string,
@@ -56,28 +59,16 @@ export async function browserMessageUpdates(
     take: 100,
     select: { id: true },
   });
-  if (arrived.length === 0) return [];
-  const rows = await db.message.findMany({
-    where: { id: { in: arrived.map((row) => row.id) }, conversationId },
-    select: browserMessageFields,
-  });
-  const byId = new Map(rows.map((row) => [row.id, row]));
-  return arrived.flatMap((row) => {
-    const message = byId.get(row.id);
-    return message ? [message] : [];
-  });
+  return hydrateMessagesInOrder(
+    db,
+    conversationId,
+    arrived.map((row) => row.id),
+  );
 }
 
-/** Bounded browser history reads shared by direct conversations and public channels. */
 export class ConversationHistory {
   constructor(private readonly db: PrismaClient) {}
 
-  /**
-   * Resolves to the viewer's own member row in the conversation, if they have one (a Workspace
-   * member may read a public channel without joining it), and the row again as `activeMemberId`
-   * only while they have not left: a member who left reads the read-only preview, with none of
-   * the read cursors, follows or unread their old row kept.
-   */
   async authorize(
     workspaceId: string,
     userId: string,
@@ -93,7 +84,6 @@ export class ConversationHistory {
         select: { userId: true },
       }),
       this.db.conversation.findFirst({
-        // A channel hidden from the Workspace is unreadable for everyone until it is restored.
         where: { id: conversationId, workspaceId, ...VISIBLE_CONVERSATION_WHERE },
         select: {
           directKey: true,
@@ -111,13 +101,10 @@ export class ConversationHistory {
     const viewerMemberId = viewer?.id;
     const activeMemberId = viewer?.leftAt === null ? viewer.id : undefined;
     if (conversation.kind === "task_thread") {
-      // A task's own conversation reads as its board does; the viewer's seat in it only keeps
-      // their read position, and only while they still read the board.
       if (taskDiscussionAccess(conversation) !== "read") throw new AppError("NOT_FOUND");
       return { viewerMemberId, activeMemberId, direct: true };
     }
     if (conversation.channelName !== null) {
-      // A private channel the viewer is not in is a missing one.
       if (!canReadChannel(conversation, activeMemberId !== undefined))
         throw new AppError("NOT_FOUND");
       return { viewerMemberId, activeMemberId, direct: false };
@@ -127,26 +114,15 @@ export class ConversationHistory {
     throw new AppError("ACCESS_DENIED");
   }
 
-  /**
-   * The window around one message, or around its thread's root when the message is a reply (the
-   * answer then names that root, `anchorThreadRootId`: a link to a reply opens its thread). Only
-   * top-level messages come back, each thread as a summary; the same fields of the viewer's
-   * threads that a page carries come with them, for these roots only.
-   */
   async loadAround(
     workspaceId: string,
     userId: string,
     conversationId: string,
     messageId: string,
     requestedLimit = 41,
+    options?: { includeViewerViews?: boolean },
   ) {
     const { activeMemberId, direct } = await this.authorize(workspaceId, userId, conversationId);
-    // The anchor is any message in this conversation. No sender filter: a saved jump (#127) lands
-    // on other members' and Agent messages too, and the viewer's membership — checked just
-    // above — is the whole access decision. (The notification deep link only ever targeted the
-    // viewer's own sends, which is where the old `sender: { userId }` came from; it made every
-    // other-sender anchor a NOT_FOUND and the jump read as a history-load failure.)
-    // A link may carry the short id an Agent sees (#34); one two messages share is refused.
     const anchor = await findLinkedMessage(this.db, conversationId, messageId, {
       id: true,
       sequence: true,
@@ -158,7 +134,7 @@ export class ConversationHistory {
     const limit = clampPageLimit(requestedLimit, 81);
     const beforeCount = Math.floor((limit - 1) / 2);
     const afterCount = limit - beforeCount - 1;
-    const [beforeRows, afterRows] = await Promise.all([
+    const [beforeIds, afterIds] = await Promise.all([
       this.db.message.findMany({
         where: {
           conversationId,
@@ -167,7 +143,7 @@ export class ConversationHistory {
         },
         orderBy: { sequence: "desc" },
         take: beforeCount + 2,
-        select: browserMessageFields,
+        select: { id: true },
       }),
       this.db.message.findMany({
         where: {
@@ -177,16 +153,32 @@ export class ConversationHistory {
         },
         orderBy: { sequence: "asc" },
         take: afterCount + 1,
-        select: browserMessageFields,
+        select: { id: true },
       }),
     ]);
-    const roots = [
-      ...beforeRows.slice(0, beforeCount + 1).reverse(),
-      ...afterRows.slice(0, afterCount),
-    ];
-    const rootIds = roots.map((message) => message.id);
-    const [{ threads, threadReadThrough, threadUnreadMarks }, followed, browserMessages] =
+    const rootIds = [
+      ...beforeIds.slice(0, beforeCount + 1).reverse(),
+      ...afterIds.slice(0, afterCount),
+    ].map((row) => row.id);
+    const [browserMessages, { threads, threadReadThrough, threadUnreadMarks }, followed] =
       await Promise.all([
+        options?.includeViewerViews
+          ? Promise.all([
+              hydrateMessagesInOrder(this.db, conversationId, rootIds),
+              rootIds.length > 0
+                ? actionCardViews(this.db, workspaceId, userId, rootIds, {
+                    authorizedConversationId: conversationId,
+                  })
+                : Promise.resolve(new Map()),
+            ]).then(([roots, preloadedCards]) =>
+              mapBrowserMessagesWithViewerViews(this.db, roots, workspaceId, userId, {
+                authorizedConversationId: conversationId,
+                actionCards: Promise.resolve(preloadedCards),
+              }),
+            )
+          : hydrateMessagesInOrder(this.db, conversationId, rootIds).then((roots) =>
+              mapBrowserMessages(this.db, roots, workspaceId),
+            ),
         readWindowThreads(this.db, {
           workspaceId,
           conversationId,
@@ -194,12 +186,11 @@ export class ConversationHistory {
           viewerMemberId: activeMemberId,
         }),
         direct ? [] : followedThreadRootIds(this.db, { viewerMemberId: activeMemberId, rootIds }),
-        mapBrowserMessages(this.db, roots, workspaceId),
       ]);
     return {
       conversationId,
-      hasOlder: beforeRows.length > beforeCount + 1,
-      hasNewer: afterRows.length > afterCount,
+      hasOlder: beforeIds.length > beforeCount + 1,
+      hasNewer: afterIds.length > afterCount,
       anchorMessageId: anchor.id,
       anchorThreadRootId: anchor.threadRoot?.id,
       messages: browserMessages,
@@ -210,21 +201,15 @@ export class ConversationHistory {
     };
   }
 
-  /**
-   * Every reply of one thread, oldest first, system notices included: what its pane shows. Read
-   * under the same rule as the conversation's window (`authorize`); `NOT_FOUND` unless the message
-   * is a top-level message of this conversation.
-   */
   async loadThread(
     workspaceId: string,
     userId: string,
     conversationId: string,
     threadRootId: string,
+    options?: { includeViewerViews?: boolean },
   ) {
     await this.authorize(workspaceId, userId, conversationId);
-    // The replies are read beside the check that their root is a top-level message here: nothing
-    // is returned before it passes.
-    const [root, replies] = await Promise.all([
+    const [root, replyIdRows] = await Promise.all([
       this.db.message.findFirst({
         where: { id: threadRootId, conversationId, threadRootId: null },
         select: { id: true },
@@ -232,10 +217,27 @@ export class ConversationHistory {
       this.db.message.findMany({
         where: { conversationId, threadRootId },
         orderBy: { sequence: "asc" },
-        select: browserMessageFields,
+        select: { id: true },
       }),
     ]);
     if (!root) throw new AppError("NOT_FOUND");
+    const replyIds = replyIdRows.map((row) => row.id);
+    if (replyIds.length === 0) return { replies: [] };
+    if (options?.includeViewerViews) {
+      const [replies, preloadedCards] = await Promise.all([
+        hydrateMessagesInOrder(this.db, conversationId, replyIds),
+        actionCardViews(this.db, workspaceId, userId, replyIds, {
+          authorizedConversationId: conversationId,
+        }),
+      ]);
+      return {
+        replies: await mapBrowserMessagesWithViewerViews(this.db, replies, workspaceId, userId, {
+          authorizedConversationId: conversationId,
+          actionCards: Promise.resolve(preloadedCards),
+        }),
+      };
+    }
+    const replies = await hydrateMessagesInOrder(this.db, conversationId, replyIds);
     return { replies: await mapBrowserMessages(this.db, replies, workspaceId) };
   }
 }

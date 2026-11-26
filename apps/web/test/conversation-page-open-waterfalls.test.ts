@@ -140,7 +140,7 @@ describe("conversation page-open and viewer-hydration concurrency", () => {
     expect(events.indexOf("comments:start")).toBeLessThan(events.indexOf("follows:end"));
   });
 
-  test("ConversationHistory.loadAround overlaps mapBrowserMessages with readWindowThreads", async () => {
+  test("ConversationHistory.loadAround overlaps message hydration and mapBrowserMessages with readWindowThreads", async () => {
     const events: string[] = [];
     const db = {
       workspaceMembership: {
@@ -157,11 +157,20 @@ describe("conversation page-open and viewer-hydration concurrency", () => {
       },
       message: {
         findFirst: async () => ({ id: MESSAGE_ID, sequence: 1, threadRoot: null }),
-        findMany: async ({ orderBy }: { orderBy: { sequence: string } }) =>
-          orderBy.sequence === "desc" ? [browserMessageRow()] : [],
+        findMany: async ({ orderBy }: { orderBy?: { sequence: string } }) => {
+          if (!orderBy) {
+            events.push("hydrate:start");
+            await Promise.resolve();
+            events.push("hydrate:end");
+            return [browserMessageRow()];
+          }
+          return orderBy.sequence === "desc" ? [browserMessageRow()] : [];
+        },
       },
       $queryRaw: async () => {
         events.push("threads:start");
+        await Promise.resolve();
+        await Promise.resolve();
         await Promise.resolve();
         events.push("threads:end");
         return [];
@@ -189,6 +198,8 @@ describe("conversation page-open and viewer-hydration concurrency", () => {
       MESSAGE_ID,
     );
 
+    expect(events.indexOf("hydrate:start")).toBeGreaterThan(-1);
+    expect(events.indexOf("hydrate:start")).toBeLessThan(events.indexOf("threads:end"));
     expect(events.indexOf("comments:start")).toBeGreaterThan(-1);
     expect(events.indexOf("comments:start")).toBeLessThan(events.indexOf("threads:end"));
   });

@@ -486,7 +486,7 @@ describe("P1-7 review fixes (#44 & #47)", () => {
             committedByUserId: null,
             committedAt: null,
             result: null,
-            preparedByAgent: { ownerId: USER_ALICE },
+            preparedByAgentId: AGENT_ID,
           },
         ],
         updateMany: async () => ({ count: 1 }),
@@ -525,6 +525,7 @@ describe("P1-7 review fixes (#44 & #47)", () => {
       },
       agent: {
         findUnique: async () => ({ computerId: "0196ed00-0000-7000-8000-000000000040" }),
+        findMany: async () => [{ id: AGENT_ID, ownerId: USER_ALICE }],
       },
       agentMessageDelivery: {
         create: async () => {

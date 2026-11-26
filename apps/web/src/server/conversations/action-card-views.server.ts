@@ -28,7 +28,6 @@ import { appRecoverOwnerView } from "./app-recover-owner-action-cards.server";
 import { appRegisterView } from "./app-register-action-cards.server";
 import { previewCardOf } from "./action-card-preview.server";
 
-/** The person's Workspace role, or `undefined` when they are no longer a member. */
 export async function safeWorkspaceRole(db: PrismaClient, workspaceId: string, userId: string) {
   try {
     return await workspaceMemberRole(db, workspaceId, userId);
@@ -37,35 +36,37 @@ export async function safeWorkspaceRole(db: PrismaClient, workspaceId: string, u
   }
 }
 
-/**
- * Browser-facing views for a page of messages, one batched lookup per page (never per message):
- * every referenced user/Agent/channel/computer, plus the viewer's Workspace role and channel
- * memberships, in one `Promise.all`. Messages without a card are absent from the returned map,
- * and so is a card in a conversation the viewer cannot read (a private channel they are not in, a
- * direct conversation not theirs): the ids come from the browser. Names that no longer resolve (a
- * deleted user, Agent, channel, or computer) render as "unknown".
- */
+export type ActionCardViewsOptions = {
+  authorizedConversationId?: string;
+};
+
 export async function actionCardViews(
   db: PrismaClient,
   workspaceId: string,
   viewerUserId: string,
   messageIds: string[],
+  options?: ActionCardViewsOptions,
 ): Promise<Map<string, ActionCardView>> {
   const ids = [...new Set(messageIds)];
   if (!ids.length) return new Map();
   const cards = await db.actionCard.findMany({
-    where: {
-      workspaceId,
-      messageId: { in: ids },
-      conversation: {
-        ...readableConversationWhere(workspaceId, { userId: viewerUserId }),
-        // A direct conversation only its members read; `readableConversationWhere` leaves that here.
-        OR: [
-          { directKey: null },
-          { members: { some: { userId: viewerUserId, ...ACTIVE_MEMBER_WHERE } } },
-        ],
-      },
-    },
+    where: options?.authorizedConversationId
+      ? {
+          workspaceId,
+          conversationId: options.authorizedConversationId,
+          messageId: { in: ids },
+        }
+      : {
+          workspaceId,
+          messageId: { in: ids },
+          conversation: {
+            ...readableConversationWhere(workspaceId, { userId: viewerUserId }),
+            OR: [
+              { directKey: null },
+              { members: { some: { userId: viewerUserId, ...ACTIVE_MEMBER_WHERE } } },
+            ],
+          },
+        },
     select: {
       messageId: true,
       kind: true,
@@ -76,7 +77,7 @@ export async function actionCardViews(
       committedByUserId: true,
       committedAt: true,
       result: true,
-      preparedByAgent: { select: { ownerId: true } },
+      preparedByAgentId: true,
     },
   });
   if (!cards.length) return new Map();
@@ -85,7 +86,9 @@ export async function actionCardViews(
   const agentIds = new Set<string>();
   const channelIds = new Set<string>();
   const computerIds = new Set<string>();
+  const preparedByAgentIds = new Set<string>();
   for (const card of cards) {
+    preparedByAgentIds.add(card.preparedByAgentId);
     const payload = card.payload as ResolvedActionCardPayload;
     if (payload.type === "channel:create") {
       const created = card.result as { channelId?: string } | null;
@@ -109,7 +112,7 @@ export async function actionCardViews(
     if (card.committedByUserId) userIds.add(card.committedByUserId);
   }
 
-  const [users, agents, channels, computers, viewerRole, viewerChannelMemberships] =
+  const [users, agents, preparedAgents, channels, computers, viewerRole, viewerChannelMemberships] =
     await Promise.all([
       userIds.size
         ? db.user.findMany({
@@ -129,9 +132,14 @@ export async function actionCardViews(
             },
           })
         : Promise.resolve([]),
+      preparedByAgentIds.size
+        ? db.agent.findMany({
+            where: { id: { in: [...preparedByAgentIds] } },
+            select: { id: true, ownerId: true },
+          })
+        : Promise.resolve([]),
       channelIds.size
         ? db.conversation.findMany({
-            // A channel hidden from the Workspace is named on no card.
             where: { id: { in: [...channelIds] }, ...VISIBLE_CONVERSATION_WHERE },
             select: { id: true, channelName: true, visibility: true },
           })
@@ -153,6 +161,7 @@ export async function actionCardViews(
 
   const userName = new Map(users.map((u) => [u.id, humanLabel(u)]));
   const agentName = new Map(agents.map((a) => [a.id, a.displayName?.trim() || a.name]));
+  const preparedOwnerByAgentId = new Map(preparedAgents.map((a) => [a.id, a.ownerId]));
   const userAvatar = new Map(
     users.map((u) => [u.id, workspaceUserAvatarUrl(workspaceId, u.id, u.avatarObjectKey)]),
   );
@@ -160,8 +169,6 @@ export async function actionCardViews(
   const viewerInChannel = new Set(
     viewerChannelMemberships.flatMap((m) => (m.leftAt === null ? [m.conversationId] : [])),
   );
-  // A private channel is named, linked and acted on only by those in it; to anyone else it is
-  // unknown, as a missing one is (task #302).
   const channelName = new Map(
     channels
       .filter((c) => canReadChannel(c, viewerInChannel.has(c.id)))
@@ -194,7 +201,7 @@ export async function actionCardViews(
     const payload = card.payload as ResolvedActionCardPayload;
     const state = effectiveActionCardState(card.state, card.expiresAt);
     const pending = state === "pending";
-    // The asked person may cancel their choice/questions card (to ignore it), as `cancel` allows.
+    const preparedByOwnerId = preparedOwnerByAgentId.get(card.preparedByAgentId) ?? "";
     const askedViewer =
       (payload.type === "choice" || payload.type === "questions") &&
       (payload.to === viewerUserId || payload.to === CHOICE_ANYONE_TARGET);
@@ -209,8 +216,7 @@ export async function actionCardViews(
       committedAt: card.committedAt?.toISOString(),
       expiresAt: card.expiresAt?.toISOString(),
       canCommit: false,
-      canCancel:
-        pending && (card.preparedByAgent.ownerId === viewerUserId || isAdminViewer || askedViewer),
+      canCancel: pending && (preparedByOwnerId === viewerUserId || isAdminViewer || askedViewer),
     };
     if (payload.type === "channel:create") {
       views.set(card.messageId, {
@@ -240,10 +246,12 @@ export async function actionCardViews(
         result: card.result as { agentId: string } | undefined,
       });
     } else if (payload.type === APP_GRANT_AGENT_CARD_KIND) {
-      // Managing the Agent's app access, by the server's rule.
       const canManage =
         pending &&
-        canManageAgentAppAccess({ userId: viewerUserId, role: viewerRole }, card.preparedByAgent);
+        canManageAgentAppAccess(
+          { userId: viewerUserId, role: viewerRole },
+          { ownerId: preparedByOwnerId },
+        );
       views.set(card.messageId, {
         ...base,
         kind: APP_GRANT_AGENT_CARD_KIND,
@@ -265,11 +273,26 @@ export async function actionCardViews(
           | undefined,
       });
     } else if (payload.type === "page:fill") {
-      views.set(card.messageId, pageFillActionCardView(base, card, payload, viewerUserId, pending));
+      views.set(
+        card.messageId,
+        pageFillActionCardView(
+          base,
+          { ...card, preparedByAgent: { ownerId: preparedByOwnerId } },
+          payload,
+          viewerUserId,
+          pending,
+        ),
+      );
     } else if (payload.type === "desktop:takeover") {
       views.set(
         card.messageId,
-        desktopTakeoverActionCardView(base, card, payload, viewerUserId, pending),
+        desktopTakeoverActionCardView(
+          base,
+          { ...card, preparedByAgent: { ownerId: preparedByOwnerId } },
+          payload,
+          viewerUserId,
+          pending,
+        ),
       );
     } else if (payload.type === "choice") {
       views.set(

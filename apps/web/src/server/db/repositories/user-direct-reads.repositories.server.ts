@@ -18,6 +18,7 @@ import {
   browserMessageFields,
   mapBrowserMessages,
 } from "#src/server/conversations/browser-message-projection.server";
+import { mapBrowserMessagesWithViewerViews } from "#src/server/conversations/viewer-views.server";
 import { readWindowThreads } from "#src/server/conversations/thread-summaries.server";
 import { windowPageFlags } from "#src/lib/conversation-window";
 import { othersReadThroughSequence } from "#src/server/conversations/conversation-read-state.server";
@@ -31,15 +32,10 @@ const PEER_PROFILE_SELECT = {
 } satisfies Prisma.UserSelect;
 type PeerProfile = Prisma.UserGetPayload<{ select: typeof PEER_PROFILE_SELECT }>;
 
-/** A direct conversation with neither an Agent nor another person on the other side. */
 function unauthorizedScope(): never {
   throw new Error("conversation scope is not authorized");
 }
 
-/**
- * The member on the other side of a DM between people, named by its key: the viewer in their
- * conversation with themself, and still the same person after they left the Workspace.
- */
 export async function peerOf(
   ports: DirectConversationPorts,
   conversation: {
@@ -56,10 +52,6 @@ export async function peerOf(
   );
 }
 
-/**
- * Who is in one of the viewer's direct conversations, from the viewer's seat: every member's
- * public profile, the viewer's own row, and the Agent or member on the other side.
- */
 async function viewerSide(ports: DirectConversationPorts, conversationId: string, userId: string) {
   const row = await ports.db.conversation.findUnique({
     where: { id: conversationId },
@@ -70,16 +62,10 @@ async function viewerSide(ports: DirectConversationPorts, conversationId: string
           id: true,
           userId: true,
           agentId: true,
-          // The other side keeps its row after leaving (a deleted Agent's DM stays readable);
-          // only the seen-by aggregate below restricts itself to active members.
           leftAt: true,
-          // Each member's read cursor, for how far the others have read the viewer's messages.
           readThroughSequence: true,
           agentReadThroughSequence: true,
           collapseLongMessages: true,
-          // The full public profile: the pane resolves stored `<@kind:uuid>` tokens (and offers
-          // @-completion) from these rows, so a mention of the viewer — the row that used to be
-          // missing — is resolvable without a second query.
           user: {
             select: {
               id: true,
@@ -97,11 +83,8 @@ async function viewerSide(ports: DirectConversationPorts, conversationId: string
               description: true,
               deletedAt: true,
               avatarMascot: true,
-              // Not sent to the browser (see the trimmed `agent:` field of the open); read only
-              // to compute `dmWritable`.
               ownerId: true,
               visibility: true,
-              // An app's bot shows its app's logo wherever it shows a face.
               appBot: APP_BOT_LOGO_SELECT,
             },
           },
@@ -109,8 +92,6 @@ async function viewerSide(ports: DirectConversationPorts, conversationId: string
       },
     },
   });
-  // The other side keeps its row after leaving; the viewer's own side must not: a member who
-  // left cannot read the DM back through this seam.
   const sender = row?.members.find((member) => member.userId === userId && member.leftAt === null);
   if (!row || !sender) throw new Error("conversation scope is not authorized");
   const agent = row.members.find((member) => member.agent)?.agent;
@@ -118,7 +99,6 @@ async function viewerSide(ports: DirectConversationPorts, conversationId: string
   return { members: row.members, sender, agent, peer };
 }
 
-/** What a conversation member row carries for the pane to offer and resolve them. */
 export type ConversationMentionableMember = {
   user: {
     id: string;
@@ -137,11 +117,6 @@ export type ConversationMentionableMember = {
   } | null;
 };
 
-/**
- * The people and Agents of a conversation as the pane offers and resolves them: their public
- * profiles, sorted by handle; mention affinity is zero (nobody has been named yet), and the viewer
- * is included so their own stored mention resolves instead of rendering a raw token.
- */
 export function conversationMentionables(
   workspaceId: string,
   members: readonly ConversationMentionableMember[],
@@ -181,11 +156,6 @@ export function conversationMentionables(
     .sort((left, right) => left.handle.localeCompare(right.handle));
 }
 
-/**
- * A window of one of the viewer's direct conversations, by its id, and who is on the other side:
- * an Agent, or a member (the viewer themself in their own). Whether the viewer may read it is
- * `DirectConversations.authorize`'s to decide.
- */
 export async function openConversationForUser(
   ports: DirectConversationPorts,
   workspaceId: string,
@@ -194,12 +164,7 @@ export async function openConversationForUser(
   page: HistoryWindow = {},
 ) {
   const limit = Math.min(page.limit ?? 50, 100);
-  // A forward fetch reads towards the live end, from the newest sequence the retained window
-  // still holds; a backward fetch reads history upwards from its oldest. Neither is the initial
-  // (uncursored) load, which lands on the newest page (see `lib/conversation-window.ts`).
   const forward = page.afterSequence !== undefined;
-  // The window does not wait for the conversation's members: both are read by the conversation
-  // id alone, and whether the viewer may read it is the caller's to have decided already.
   const [{ members, sender, agent, peer }, windowRows] = await Promise.all([
     viewerSide(ports, conversationId, userId),
     ports.db.message.findMany({
@@ -212,8 +177,6 @@ export async function openConversationForUser(
             ? { lt: page.beforeSequence }
             : undefined,
       },
-      // Both directions take `limit + 1` rows to learn whether one more remains; the page
-      // itself is re-sorted by sequence below, so only the overflow row's presence matters.
       orderBy: { sequence: forward ? ("asc" as const) : ("desc" as const) },
       take: limit + 1,
       select: browserMessageFields,
@@ -224,9 +187,6 @@ export async function openConversationForUser(
     forward ? "forward" : page.beforeSequence ? "backward" : "initial",
     overflow,
   );
-  // The overflow row is always the newest of the fetched rows, so dropping the tail of the
-  // ordered list keeps the reader's side of the window and drops the row that only proved there
-  // was more.
   const pageRows = windowRows.slice(0, limit);
   const messages = forward ? pageRows : pageRows.reverse();
   const [{ threads, threadReadThrough }, browserMessages] = await Promise.all([
@@ -236,7 +196,11 @@ export async function openConversationForUser(
       rootIds: messages.map((message) => message.id),
       viewerMemberId: sender.id,
     }),
-    mapBrowserMessages(ports.db, messages, workspaceId),
+    page.includeViewerViews
+      ? mapBrowserMessagesWithViewerViews(ports.db, messages, workspaceId, userId, {
+          authorizedConversationId: conversationId,
+        })
+      : mapBrowserMessages(ports.db, messages, workspaceId),
   ]);
   const agentMember = agent ? members.find((member) => member.agentId === agent.id) : undefined;
   return {
@@ -283,14 +247,13 @@ export async function openConversationForUser(
   };
 }
 
-/** What arrived in a direct conversation after `afterSequence`, threads included (see
- * `messagesArrivedWhere` for `afterReplySequence`). */
 export async function updatesSince(
   ports: DirectConversationPorts,
   workspaceId: string,
   conversationId: string,
   afterSequence: number,
   afterReplySequence?: number,
+  options?: { viewerUserId?: string },
 ) {
   const messages = await browserMessageUpdates(
     ports.db,
@@ -298,7 +261,11 @@ export async function updatesSince(
     afterSequence,
     afterReplySequence,
   );
-  return mapBrowserMessages(ports.db, messages, workspaceId);
+  return options?.viewerUserId
+    ? mapBrowserMessagesWithViewerViews(ports.db, messages, workspaceId, options.viewerUserId, {
+        authorizedConversationId: conversationId,
+      })
+    : mapBrowserMessages(ports.db, messages, workspaceId);
 }
 
 /** Advances the person's DM read cursor (`markHumanRead`): where it left them, or undefined

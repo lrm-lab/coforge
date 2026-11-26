@@ -85,8 +85,22 @@ describe("ConversationHistory", () => {
           messageQueries.push(input);
           return { id: "message-10", sequence: 10, threadRoot: null };
         },
-        findMany: async (input: { orderBy: { sequence: string } }) => {
+        findMany: async (input: {
+          orderBy?: { sequence: string };
+          where?: { id?: { in: string[] } };
+        }) => {
           messageQueries.push(input);
+          if (!input.orderBy) {
+            const all = [
+              message("message-7", 7),
+              message("message-9", 9),
+              message("message-10", 10),
+              message("message-11", 11),
+              message("message-13", 13),
+            ];
+            const wanted = new Set(input.where?.id?.in ?? []);
+            return all.filter((row) => wanted.has(row.id));
+          }
           return input.orderBy.sequence === "desc"
             ? [message("message-10", 10), message("message-9", 9), message("message-7", 7)]
             : [message("message-11", 11), message("message-13", 13)];

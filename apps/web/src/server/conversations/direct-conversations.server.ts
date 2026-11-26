@@ -288,14 +288,13 @@ export class DirectConversations {
     return { ...rest, ...collapse, ...(welcome ? { workspaceAssistantWelcome: true } : {}) };
   }
 
-  /** What arrived after `afterSequence`, and of the replies only those after `afterReplySequence`
-   * when it is given. */
   async updates(
     workspaceId: string,
     viewerId: string,
     conversationId: string,
     afterSequence: number,
     afterReplySequence?: number,
+    options?: { includeViewerViews?: boolean },
   ) {
     await this.authorize(workspaceId, viewerId, conversationId);
     return this.conversations.updatesSince(
@@ -303,6 +302,7 @@ export class DirectConversations {
       conversationId,
       afterSequence,
       afterReplySequence,
+      options?.includeViewerViews ? { viewerUserId: viewerId } : undefined,
     );
   }
 

@@ -345,7 +345,12 @@ export class PublicChannels {
     workspaceId: string,
     userId: string,
     channelId: string,
-    page?: { beforeSequence?: number; afterSequence?: number; limit?: number },
+    page?: {
+      beforeSequence?: number;
+      afterSequence?: number;
+      limit?: number;
+      includeViewerViews?: boolean;
+    },
   ) {
     return openChannel(this.ports, workspaceId, userId, channelId, page);
   }
@@ -364,6 +369,7 @@ export class PublicChannels {
     channelId: string,
     afterSequence: number,
     afterReplySequence?: number,
+    options?: { includeViewerViews?: boolean },
   ) {
     return channelUpdates(
       this.ports,
@@ -372,6 +378,7 @@ export class PublicChannels {
       channelId,
       afterSequence,
       afterReplySequence,
+      options,
     );
   }
 

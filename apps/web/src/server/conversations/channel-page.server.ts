@@ -24,13 +24,8 @@ import { browserMessageFields, mapBrowserMessages } from "./browser-message-proj
 import { othersReadThroughSequence } from "./conversation-read-state.server";
 import { mentionAffinityScores } from "./mentions.server";
 import { followedThreadRootIds, readWindowThreads } from "./thread-summaries.server";
+import { mapBrowserMessagesWithViewerViews } from "./viewer-views.server";
 
-/** A channel's page as a Workspace member opens it: one window of top-level messages with their
- * threads as summaries, the viewer's own state in the channel, and what they may do there; and
- * the messages that arrived after a window. */
-
-/** The viewer's own member row in a channel, whether or not they left it, with everything an
- * open shows them from it. `openChannel` reads it alongside the channel, not after it. */
 function viewerMemberRow(db: PrismaClient, channelId: string, userId: string) {
   return db.conversationMember.findUnique({
     where: { conversationId_userId: { conversationId: channelId, userId } },
@@ -46,22 +41,20 @@ export async function openChannel(
   workspaceId: string,
   userId: string,
   channelId: string,
-  page: { beforeSequence?: number; afterSequence?: number; limit?: number } = {},
+  page: {
+    beforeSequence?: number;
+    afterSequence?: number;
+    limit?: number;
+    includeViewerViews?: boolean;
+  } = {},
 ) {
   const [{ channel, serverRole }, viewerRow] = await Promise.all([
     viewerChannel(db, workspaceId, userId, channelId),
     viewerMemberRow(db, channelId, userId),
   ]);
-  // Only an active row (ACTIVE_MEMBER_WHERE): a human who left or was removed sees the read-only
-  // preview (`senderMemberId` empty) like anyone who never joined, not their old member state.
-  // The row itself survives untouched for a later rejoin.
   const member = viewerRow?.leftAt === null ? viewerRow : undefined;
-  // What the settings panel offers this viewer: edit, archive, leave.
   const authority = deriveChannelAuthority({ userId }, channel, serverRole, member);
   const limit = Math.min(page.limit ?? 50, 100);
-  // A forward fetch reads towards the live end from the newest sequence the retained window still
-  // holds; a backward fetch reads history upwards. Neither is the initial (uncursored) load,
-  // which lands on the newest page (see `lib/conversation-window.ts`).
   const forward = page.afterSequence !== undefined;
   const [messages, mentionRows, recentMentions] = await Promise.all([
     db.message.findMany({
@@ -74,13 +67,10 @@ export async function openChannel(
             ? { lt: page.beforeSequence }
             : undefined,
       },
-      // Both directions take `limit + 1` rows to learn whether one more remains; the page is
-      // re-sorted by sequence below, so only the overflow row's presence matters.
       orderBy: { sequence: forward ? ("asc" as const) : ("desc" as const) },
       take: limit + 1,
       select: browserMessageFields,
     }),
-    // The composer's @-completion source: every other active member's public profile.
     db.conversationMember.findMany({
       where: { conversationId: channelId, ...ACTIVE_MEMBER_WHERE },
       select: {
@@ -89,7 +79,6 @@ export async function openChannel(
         ...MENTIONABLE_MEMBER_SELECT,
       },
     }),
-    // Scores each completion candidate by the viewer's own recent mentions here.
     viewerRecentMentions(db, viewerRow?.id),
   ]);
   const mentionScores = mentionAffinityScores(recentMentions);
@@ -103,13 +92,8 @@ export async function openChannel(
     forward ? "forward" : page.beforeSequence ? "backward" : "initial",
     overflow,
   );
-  // The overflow row is always the newest of the fetched rows, so dropping the tail of the
-  // ordered list keeps the reader's side of the window and drops the row that only proved there
-  // was more.
   const fetched = messages.slice(0, limit);
   const pageMessages = forward ? fetched : fetched.reverse();
-  // Each thread of the page as a summary, and the viewer's cursors and follows for these roots
-  // only: a long-lived channel's whole history of them never rides along with a page.
   const rootIds = pageMessages.map((message) => message.id);
   const [{ threads, threadReadThrough, threadUnreadMarks }, followedRootIds, browserMessages] =
     await Promise.all([
@@ -120,7 +104,11 @@ export async function openChannel(
         viewerMemberId: member?.id,
       }),
       followedThreadRootIds(db, { viewerMemberId: member?.id, rootIds }),
-      mapBrowserMessages(db, pageMessages, workspaceId),
+      page.includeViewerViews
+        ? mapBrowserMessagesWithViewerViews(db, pageMessages, workspaceId, userId, {
+            authorizedConversationId: channelId,
+          })
+        : mapBrowserMessages(db, pageMessages, workspaceId),
     ]);
   return {
     conversationId: channel.id,
@@ -172,8 +160,13 @@ export async function channelUpdates(
   channelId: string,
   afterSequence: number,
   afterReplySequence?: number,
+  options?: { includeViewerViews?: boolean },
 ) {
   await memberChannel(db, workspaceId, userId, channelId);
   const messages = await browserMessageUpdates(db, channelId, afterSequence, afterReplySequence);
-  return mapBrowserMessages(db, messages, workspaceId);
+  return options?.includeViewerViews
+    ? mapBrowserMessagesWithViewerViews(db, messages, workspaceId, userId, {
+        authorizedConversationId: channelId,
+      })
+    : mapBrowserMessages(db, messages, workspaceId);
 }

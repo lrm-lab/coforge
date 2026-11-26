@@ -35,12 +35,10 @@ import { productionCloudComputers } from "#src/server/hosts/host-production.serv
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
 import { firstUnreadOnOpen } from "#src/server/conversations/conversation-open.server";
-import { attachViewerViews } from "#src/server/conversations/viewer-views.server";
 import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import { withMessageSendTrace } from "#src/server/observability/tracing.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 
-/** The viewer's direct conversation with an Agent or a member, started on first open. */
 export const openDirectConversation = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(z.union([z.object({ agentId: z.uuid() }), z.object({ userId: z.uuid() })]))
@@ -53,7 +51,7 @@ export const loadDirectConversation = createServerFn({ method: "GET" })
   .validator(directConversationPageInputSchema)
   .handler(async ({ context, data }) => {
     const { user, db, workspaceId } = context;
-    const page = await readWindowAfterStreamPosition(
+    return readWindowAfterStreamPosition(
       data,
       conversationRealtimeChannel(data.conversationId),
       () =>
@@ -61,12 +59,9 @@ export const loadDirectConversation = createServerFn({ method: "GET" })
           beforeSequence: data.beforeSequence,
           afterSequence: data.afterSequence,
           limit: data.limit,
+          includeViewerViews: true,
         }),
     );
-    return {
-      ...page,
-      messages: await attachViewerViews(db, workspaceId, user.id, page.messages),
-    };
   });
 
 export const loadDirectConversationUpdates = createServerFn({ method: "GET" })
@@ -74,22 +69,20 @@ export const loadDirectConversationUpdates = createServerFn({ method: "GET" })
   .validator(directConversationUpdatesInputSchema)
   .handler(async ({ context, data }) => {
     const { user, db, workspaceId } = context;
-    const messages = await new DirectConversations(db).updates(
+    return new DirectConversations(db).updates(
       workspaceId,
       user.id,
       data.conversationId,
       data.afterSequence,
       data.afterReplySequence,
+      { includeViewerViews: true },
     );
-    return attachViewerViews(db, workspaceId, user.id, messages);
   });
 
 export const loadConversationAround = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(conversationAroundInputSchema)
   .handler(async ({ context: { user, db, workspaceId }, data }) => {
-    // The window replaces the one a page holds whole (task #358): where it stands in the stream,
-    // read first, and the viewer's cursor come with it, not from an earlier read of the window.
     const { streamPositions, data: page } = await readAfterStreamPositions(
       [conversationRealtimeChannel(data.conversationId)],
       () =>
@@ -98,21 +91,17 @@ export const loadConversationAround = createServerFn({ method: "GET" })
           user.id,
           data.conversationId,
           data.messageId,
+          undefined,
+          { includeViewerViews: true },
         ),
     );
     return {
       viewerId: user.id,
       ...page,
       streamPositions,
-      messages: await attachViewerViews(db, workspaceId, user.id, page.messages),
     };
   });
 
-/**
- * Where the viewer's unread starts in one of their conversations, or in one thread of it, read
- * each time a pane opens (`firstUnreadOnOpen`): the pane's divider, landing and read cursor wait for
- * it, never for a window the page held from earlier.
- */
 export const loadConversationOpen = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(conversationOpenInputSchema)
@@ -125,22 +114,17 @@ export const loadConversationOpen = createServerFn({ method: "GET" })
     return { firstUnread, ...(markedUnreadVersion && { markedUnreadVersion }) };
   });
 
-/**
- * Every reply of one thread, for a channel or a direct conversation alike: what its pane shows
- * when it opens (the window carries only each thread's summary). Read under the conversation's own
- * rule, so whoever may read the window may read its threads.
- */
 export const loadConversationThread = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(conversationThreadInputSchema)
   .handler(async ({ context: { user, db, workspaceId }, data }) => {
-    const { replies } = await new ConversationHistory(db).loadThread(
+    return new ConversationHistory(db).loadThread(
       workspaceId,
       user.id,
       data.conversationId,
       data.threadRootId,
+      { includeViewerViews: true },
     );
-    return { replies: await attachViewerViews(db, workspaceId, user.id, replies) };
   });
 
 export const markDirectThreadRead = createServerFn({ method: "POST" })
@@ -329,40 +313,29 @@ export const toggleDirectMessageReaction = createServerFn({ method: "POST" })
     return reactions ?? undefined;
   });
 
-/** The newest page of a task's own conversation (older ones by `beforeSequence`), read by its
- * board's rule: the same shape as a direct conversation's, so the message list shows it. */
 export const loadTaskConversation = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(directConversationPageInputSchema)
   .handler(async ({ context, data }) => {
     const { user, db, workspaceId } = context;
-    const page = await new TaskConversationPages(db).page(
-      workspaceId,
-      user.id,
-      data.conversationId,
-      {
-        beforeSequence: data.beforeSequence,
-        afterSequence: data.afterSequence,
-        limit: data.limit,
-      },
-    );
-    return {
-      ...page,
-      messages: await attachViewerViews(db, workspaceId, user.id, page.messages),
-    };
+    return new TaskConversationPages(db).page(workspaceId, user.id, data.conversationId, {
+      beforeSequence: data.beforeSequence,
+      afterSequence: data.afterSequence,
+      limit: data.limit,
+      includeViewerViews: true,
+    });
   });
 
-/** What arrived in a task's conversation after `afterSequence`. */
 export const loadTaskConversationUpdates = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(directConversationUpdatesInputSchema)
   .handler(async ({ context, data }) => {
     const { user, db, workspaceId } = context;
-    const messages = await new TaskConversationPages(db).updates(
+    return new TaskConversationPages(db).updates(
       workspaceId,
       user.id,
       data.conversationId,
       data.afterSequence,
+      { includeViewerViews: true },
     );
-    return attachViewerViews(db, workspaceId, user.id, messages);
   });

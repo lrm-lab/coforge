@@ -81,6 +81,7 @@ export type HistoryWindow = {
   beforeSequence?: number;
   afterSequence?: number;
   limit?: number;
+  includeViewerViews?: boolean;
 };
 export type DirectConversationRepository = {
   readonly database: PrismaClient;

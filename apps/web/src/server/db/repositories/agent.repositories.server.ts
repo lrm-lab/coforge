@@ -60,7 +60,26 @@ export type AgentRecord = {
   systemKind?: string | null;
 };
 
-function mapAgent(agent: {
+export const AGENT_RECORD_SELECT = {
+  id: true,
+  workspaceId: true,
+  name: true,
+  displayName: true,
+  description: true,
+  createdAt: true,
+  ownerId: true,
+  computerId: true,
+  hosting: true,
+  runtimeConfig: true,
+  runtimeConfigRevision: true,
+  stoppedAt: true,
+  deletedAt: true,
+  visibility: true,
+  avatarMascot: true,
+  systemKind: true,
+} satisfies Prisma.AgentSelect;
+
+export function mapAgent(agent: {
   id: string;
   workspaceId: string;
   name: string;
@@ -95,10 +114,6 @@ function mapAgent(agent: {
     runtimeConfigRevision: agent.runtimeConfigRevision ?? 0,
     stoppedAt: agent.stoppedAt ?? null,
     deletedAt: agent.deletedAt ?? null,
-    // A real row's column is `NOT NULL DEFAULT 'public'`, so `agent.visibility` is always a real
-    // string in production; a hand-built fixture that omits it reads as `"public"`, matching the
-    // column's own default. Anything else — including an unrecognized persisted value — fails
-    // closed to `"private"`, the same way `canSeeAgent`/`visibleAgentWhere` do.
     visibility:
       agent.visibility === undefined || agent.visibility === AGENT_VISIBILITY.PUBLIC
         ? AGENT_VISIBILITY.PUBLIC
@@ -112,7 +127,6 @@ export type AgentCreateInput = Omit<AgentRecord, "id" | "createdAt" | "runtimeCo
   runtimeConfig: AgentRuntimeConfig;
   id?: string;
   introductionDueAt?: Date;
-  /** Set by a cloud creation; unique per Workspace with it (`Agent.createRequestId`). */
   createRequestId?: string;
 };
 
@@ -120,15 +134,9 @@ export interface AgentRepository {
   getById(id: string): Promise<AgentRecord | undefined>;
   listInWorkspace(workspaceId: string): Promise<AgentRecord[]>;
   listForComputer(workspaceId: string, computerId: string): Promise<AgentRecord[]>;
-  /** Deleted Agents still assigned to one Computer: recovery stops these rather than
-   * starting them, so a delete whose Stop never reached an offline Daemon is reconciled. */
   listDeletedForComputer(workspaceId: string, computerId: string): Promise<AgentRecord[]>;
   listOwnedInWorkspace(workspaceId: string, ownerId: string): Promise<AgentRecord[]>;
-  /** `introductionDueAt` is set only by a person's create (`ManageAgents.create`). */
   create(input: AgentCreateInput): Promise<AgentRecord>;
-  /** `name` (the @mention username) is fixed at creation and is never part of an update. With a
-   * `fence` the write is a config push: it also re-fences the control state in the same
-   * transaction, or throws `ControlFenceLostError` having written nothing. */
   update(
     id: string,
     input: Pick<AgentRecord, "displayName" | "description"> &
@@ -140,19 +148,15 @@ export interface AgentRepository {
 export class PrismaAgentRepository implements AgentRepository {
   constructor(private readonly db: PrismaClient) {}
 
-  /**
-   * The raw row, deliberately *not* filtered by `ACTIVE_AGENT_WHERE`: control, session and
-   * deletion code must be able to observe a deleted Agent to keep it inert, and every caller that
-   * serves a live view applies `ACTIVE_AGENT_WHERE` itself.
-   */
   async getById(id: string) {
-    const agent = await this.db.agent.findUnique({ where: { id } });
+    const agent = await this.db.agent.findUnique({ where: { id }, select: AGENT_RECORD_SELECT });
     return agent ? mapAgent(agent) : undefined;
   }
 
   async listInWorkspace(workspaceId: string) {
     const agents = await this.db.agent.findMany({
       where: { workspaceId, ...ACTIVE_AGENT_WHERE },
+      select: AGENT_RECORD_SELECT,
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
     return agents.map(mapAgent);
@@ -161,19 +165,18 @@ export class PrismaAgentRepository implements AgentRepository {
   async listForComputer(workspaceId: string, computerId: string) {
     const agents = await this.db.agent.findMany({
       where: { workspaceId, computerId, ...ACTIVE_AGENT_WHERE },
+      select: AGENT_RECORD_SELECT,
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
     return agents.map(mapAgent);
   }
 
-  /** The active Agents on one Computer and where their Activity may be published. */
   async listVisibilityForComputer(workspaceId: string, computerId: string) {
     const agents = await this.db.agent.findMany({
       where: { workspaceId, computerId, ...ACTIVE_AGENT_WHERE },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: { id: true, visibility: true },
     });
-    // An unrecognized persisted value fails closed to private, as `mapAgent` reads it.
     return agents.map(({ id, visibility }) => ({
       id,
       visibility:
@@ -184,6 +187,7 @@ export class PrismaAgentRepository implements AgentRepository {
   async listDeletedForComputer(workspaceId: string, computerId: string) {
     const agents = await this.db.agent.findMany({
       where: { workspaceId, computerId, deletedAt: { not: null } },
+      select: AGENT_RECORD_SELECT,
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
     return agents.map(mapAgent);
@@ -192,6 +196,7 @@ export class PrismaAgentRepository implements AgentRepository {
   async listOwnedInWorkspace(workspaceId: string, ownerId: string) {
     const agents = await this.db.agent.findMany({
       where: { workspaceId, ownerId, ...ACTIVE_AGENT_WHERE, ...ROSTER_AGENT_WHERE },
+      select: AGENT_RECORD_SELECT,
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
     return agents.map(mapAgent);

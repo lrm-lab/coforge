@@ -257,7 +257,7 @@ export async function listUserSavedMessages(
     input.limit ?? SAVED_MESSAGES_DEFAULT_LIMIT,
     SAVED_MESSAGES_MAX_LIMIT,
   );
-  const rows = await db.savedMessage.findMany({
+  const keys = await db.savedMessage.findMany({
     where: {
       workspaceId,
       member: { workspaceId, userId },
@@ -271,12 +271,26 @@ export async function listUserSavedMessages(
           }
         : {}),
     },
-    select: savedMessageSelect,
+    select: { messageId: true, memberId: true },
     orderBy: [{ createdAt: "desc" }, { messageId: "desc" }],
     take,
   });
-  if (rows.length === 0) return [];
-  const views = rows.map((row) => savedMessageView(row, workspaceId, userId));
+  if (keys.length === 0) return [];
+  const rows = await db.savedMessage.findMany({
+    where: {
+      workspaceId,
+      messageId: { in: [...new Set(keys.map((key) => key.messageId))] },
+      memberId: { in: [...new Set(keys.map((key) => key.memberId))] },
+    },
+    select: { messageId: true, memberId: true, ...savedMessageSelect },
+  });
+  const byKey = new Map(rows.map((row) => [`${row.messageId}:${row.memberId}`, row] as const));
+  const ordered = keys.flatMap((key) => {
+    const matched = byKey.get(`${key.messageId}:${key.memberId}`);
+    return matched ? [matched] : [];
+  });
+  if (ordered.length === 0) return [];
+  const views = ordered.map((row) => savedMessageView(row, workspaceId, userId));
   const messages = await attachForwardedAccess(
     db,
     workspaceId,

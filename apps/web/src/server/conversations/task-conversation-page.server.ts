@@ -14,14 +14,8 @@ import { conversationMentionables } from "#src/server/db/repositories/user-direc
 import { BROWSER_MESSAGE_MENTIONS_SELECT } from "./mentions.server";
 import { ConversationHistory } from "./conversation-history.server";
 import { browserMessageFields, mapBrowserMessages } from "./browser-message-projection.server";
+import { mapBrowserMessagesWithViewerViews } from "./viewer-views.server";
 
-/**
- * A task's own conversation as the message list shows it: the newest page of its messages, older
- * ones by `beforeSequence`, the way a direct conversation's is, with the people who can be
- * mentioned in it (the members of the board the task sits on). Whether the viewer reads it is the
- * board's to say (`ConversationHistory.authorize`); a conversation that is not a task's is not
- * found.
- */
 export class TaskConversationPages {
   constructor(private readonly db: PrismaClient) {}
 
@@ -122,8 +116,6 @@ export class TaskConversationPages {
       conversationId,
       taskNumber: task.number,
       viewerId: userId,
-      // The viewer's seat keeps their read position; without one, whatever page this is, nothing is
-      // unread for them.
       senderMemberId: activeMemberId,
       readThroughSequence: seat?.readThroughSequence ?? newest.lastSequence,
       firstUnreadMessageId: seat?.firstUnreadMessageId ?? null,
@@ -133,14 +125,14 @@ export class TaskConversationPages {
       mentionables: conversationMentionables(workspaceId, board),
       hasOlder,
       hasNewer,
-      messages: await mapBrowserMessages(this.db, messages, workspaceId),
+      messages: window.includeViewerViews
+        ? await mapBrowserMessagesWithViewerViews(this.db, messages, workspaceId, userId, {
+            authorizedConversationId: conversationId,
+          })
+        : await mapBrowserMessages(this.db, messages, workspaceId),
     };
   }
 
-  /**
-   * How many top-level messages with a sender (never a system notice, never the viewer's own) lie
-   * past the viewer's read position or their mark-as-unread marker, and the first one's id.
-   */
   async unread(workspaceId: string, userId: string, conversationId: string) {
     const { activeMemberId } = await this.authorize(workspaceId, userId, conversationId);
     const empty = { unreadCount: 0, firstUnreadMessageId: null };
@@ -156,18 +148,20 @@ export class TaskConversationPages {
     return unread ?? empty;
   }
 
-  /** What arrived after `afterSequence`. */
   async updates(
     workspaceId: string,
     userId: string,
     conversationId: string,
     afterSequence: number,
+    options?: { includeViewerViews?: boolean },
   ) {
     await this.authorize(workspaceId, userId, conversationId);
     return new PrismaDirectConversationRepository(this.db).updatesSince(
       workspaceId,
       conversationId,
       afterSequence,
+      undefined,
+      options?.includeViewerViews ? { viewerUserId: userId } : undefined,
     );
   }
 

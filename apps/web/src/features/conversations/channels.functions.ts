@@ -12,7 +12,6 @@ import { AppError } from "#src/lib/app-error";
 import { humanLabel } from "#src/lib/human-label";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { toggleChannelReaction } from "#src/server/conversations/reaction-toggles.server";
-import { attachViewerViews } from "#src/server/conversations/viewer-views.server";
 import { attachmentView } from "#src/server/attachments/attachment-view.server";
 import {
   attachmentIdsSchema,
@@ -34,9 +33,6 @@ import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile
 const channelPageInput = channelInput.extend(conversationPageInputSchema);
 const channelUpdatesInput = channelInput.extend(conversationUpdatesCursorSchema.shape);
 
-/** Creates a channel, public unless asked private, then adds the people and Agents picked for it
- * (`PublicChannels.createWithMembers`). `membersAddFailed` says the channel exists but the picked
- * members were not added. */
 export const createPublicChannel = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(
@@ -56,25 +52,17 @@ export const loadPublicChannel = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(channelPageInput)
   .handler(async ({ data, context }) => {
-    const { channels, db, workspaceId, userId } = channelScope(context);
-    const page = await readWindowAfterStreamPosition(
-      data,
-      conversationRealtimeChannel(data.channelId),
-      () =>
-        channels.open(workspaceId, userId, data.channelId, {
-          beforeSequence: data.beforeSequence,
-          afterSequence: data.afterSequence,
-          limit: data.limit,
-        }),
+    const { channels, workspaceId, userId } = channelScope(context);
+    return readWindowAfterStreamPosition(data, conversationRealtimeChannel(data.channelId), () =>
+      channels.open(workspaceId, userId, data.channelId, {
+        beforeSequence: data.beforeSequence,
+        afterSequence: data.afterSequence,
+        limit: data.limit,
+        includeViewerViews: true,
+      }),
     );
-    return {
-      ...page,
-      messages: await attachViewerViews(db, workspaceId, userId, page.messages),
-    };
   });
 
-/** The composer's @-completion group of the Workspace's people and public Agents outside a
- * channel. */
 export const loadPublicChannelMentionOutsiders = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(channelInput)
@@ -95,15 +83,15 @@ export const loadPublicChannelUpdates = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(channelUpdatesInput)
   .handler(async ({ data, context }) => {
-    const { channels, db, workspaceId, userId } = channelScope(context);
-    const messages = await channels.updates(
+    const { channels, workspaceId, userId } = channelScope(context);
+    return channels.updates(
       workspaceId,
       userId,
       data.channelId,
       data.afterSequence,
       data.afterReplySequence,
+      { includeViewerViews: true },
     );
-    return attachViewerViews(db, workspaceId, userId, messages);
   });
 
 export const loadPublicChannelMembers = createServerFn({ method: "GET" })
