@@ -1,6 +1,6 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir, userInfo } from "node:os";
-import { dirname, join } from "node:path";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test } from "bun:test";
 import { connectLocal } from "@lrm/coforge/local-client";
 import { startAgentProxy } from "#src/agent-proxy";

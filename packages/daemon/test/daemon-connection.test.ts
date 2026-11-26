@@ -39,12 +39,6 @@ import {
   decodeComputerUpgradeResult,
   COMPUTER_UPGRADE_RESULT_METHOD,
   type AgentReminderOperationRequest,
-  APP_CONFIG_SNAPSHOT_METHOD,
-  APP_CONFIG_SYNC_MESSAGE_TYPE,
-  CLEANER_APP_ID,
-  decodeAppConfigSnapshotRequest,
-  encodeAppConfigSync,
-  type AppConfigSync,
 } from "@lrm/coforge-sdk/internal";
 import {
   AGENT_SEND_REQUEST_TIMEOUT_MS,

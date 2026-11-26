@@ -80,13 +80,6 @@ async function setup(stateDirectory: string) {
   };
 }
 
-const checkInbox = (runtime: DaemonRuntime, agentId: string) =>
-  runtime.inbox(runtime.issueAgentContext(agentId), {
-    idempotencyKey: crypto.randomUUID(),
-    context: runtime.issueAgentContext(agentId),
-    operation: "check",
-  });
-
 test("deleting an Agent forgets its cursor ledger, attention state, and App Inbox", async () => {
   const stateDirectory = join(workspaceRoot, `state-${crypto.randomUUID()}`);
   const { runtime, deleteAgent } = await setup(stateDirectory);
