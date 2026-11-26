@@ -119,3 +119,42 @@ export function CascadeSubmenuPortalProvider({
     </CascadeSubmenuPortalContext.Provider>
   );
 }
+
+export function toRectLike(el: HTMLElement): RectLike {
+  const rect = el.getBoundingClientRect();
+  return {
+    left: rect.left,
+    right: rect.right,
+    top: rect.top,
+    bottom: rect.bottom,
+    width: rect.width,
+    height: rect.height,
+  };
+}
+
+export function measureCascadeLevels(
+  anchorEl: HTMLElement | null,
+  levelEls: ReadonlyMap<number, HTMLElement>,
+  point: Point,
+  containsPoint: (pt: Point, rect: RectLike) => boolean,
+): {
+  measuredLevels: Map<number, RectLike>;
+  rects: RectLike[];
+  insideSubmenuDepth: number;
+} {
+  const measuredLevels = new Map<number, RectLike>();
+  const rects: RectLike[] = [];
+  if (anchorEl) {
+    rects.push(toRectLike(anchorEl));
+  }
+  let insideSubmenuDepth = -1;
+  for (const [depth, el] of levelEls.entries()) {
+    const rect = toRectLike(el);
+    measuredLevels.set(depth, rect);
+    rects.push(rect);
+    if (depth >= 1 && containsPoint(point, rect)) {
+      insideSubmenuDepth = Math.max(insideSubmenuDepth, depth);
+    }
+  }
+  return { measuredLevels, rects, insideSubmenuDepth };
+}

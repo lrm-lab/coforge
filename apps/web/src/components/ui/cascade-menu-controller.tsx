@@ -16,6 +16,8 @@ import {
 import {
   CascadeDepthContext,
   CascadeMenuContext,
+  measureCascadeLevels,
+  toRectLike,
   type CascadeMenuContextValue,
   type CascadeRowState,
 } from "#src/components/ui/cascade-menu-context";
@@ -48,18 +50,6 @@ interface PendingSafeHover {
   readonly rowId: string;
   readonly submenuId: string | null;
   readonly startedAt: number;
-}
-
-function toRectLike(el: HTMLElement): RectLike {
-  const rect = el.getBoundingClientRect();
-  return {
-    left: rect.left,
-    right: rect.right,
-    top: rect.top,
-    bottom: rect.bottom,
-    width: rect.width,
-    height: rect.height,
-  };
 }
 
 export interface CascadeMenuProviderProps {
@@ -432,20 +422,12 @@ export function CascadeMenuProvider({
       const point: Point = { x: event.clientX, y: event.clientY };
       pointerTrailRef.current = pushPointerPoint(pointerTrailRef.current, point);
 
-      const measuredLevels = new Map<number, RectLike>();
-      const rects: RectLike[] = [];
-      if (anchorElRef.current) {
-        rects.push(toRectLike(anchorElRef.current));
-      }
-      let insideSubmenuDepth = -1;
-      for (const [depth, el] of levelElsRef.current.entries()) {
-        const rect = toRectLike(el);
-        measuredLevels.set(depth, rect);
-        rects.push(rect);
-        if (depth >= 1 && pointInRect(point, rect)) {
-          insideSubmenuDepth = Math.max(insideSubmenuDepth, depth);
-        }
-      }
+      const { measuredLevels, rects, insideSubmenuDepth } = measureCascadeLevels(
+        anchorElRef.current,
+        levelElsRef.current,
+        point,
+        pointInRect,
+      );
 
       if (insideSubmenuDepth >= 1) {
         if (pendingSafeHoverRef.current && pendingSafeHoverRef.current.depth < insideSubmenuDepth) {
