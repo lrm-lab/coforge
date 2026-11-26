@@ -5,13 +5,23 @@ import {
   type AgentContextViewResult,
 } from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
-import { readContextViewSource } from "#src/agent-context-view/context-view-source";
+import {
+  contextViewSourceMaxBytes,
+  openContextViewSourceAsync,
+  readContextViewSourceAsync,
+  type ContextViewOpenedSourceResult,
+  type ContextViewSourceFailure,
+  type ContextViewSourceResult,
+} from "#src/agent-context-view/context-view-source";
 import { ContextViewRestoreCache } from "#src/agent-context-view/context-view-restore-cache";
 import {
   providerTranscriptRoot,
   resolveProviderTranscriptToken,
 } from "#src/agent-context-view/context-view-provider-locator";
-import { runContextViewRestoreInChild } from "#src/agent-context-view/context-view-restore-runner";
+import {
+  runContextViewRestoreFileInChild,
+  runContextViewRestoreInChild,
+} from "#src/agent-context-view/context-view-restore-runner";
 import type { AgentContextViewService } from "#src/agent-context-view/agent-context-view-service";
 import type { ContextViewIndexEntry } from "#src/agent-context-view/context-view-store";
 import type { DaemonConfig } from "./runtime";
@@ -20,9 +30,6 @@ import { getLogger } from "@logtape/logtape";
 import type { ContextViewRestoreResult } from "#src/agent-context-view/context-view-restore";
 
 const MAX_RESULT_BYTES = 32 * 1024 * 1024;
-/** How long a request may wait behind this Agent's own restore before it is answered `expired`.
- * The page polls for 30 seconds and the server keeps a result for 35, so this leaves the last
- * seconds of the page's window for the upload and the poll that reads it. */
 export const CONTEXT_VIEW_QUEUE_DEADLINE_MS = 23_000;
 const logger = getLogger(["coforge", "daemon", "context-view"]);
 
@@ -114,9 +121,6 @@ export function subscribeContextViewQueries(
   transport: DaemonConnectionClient,
   ports: Ports,
 ): (() => void) | undefined {
-  /** One restore at a time per Agent — a second request for the same Agent waits rather than
-   * racing its own read — but not one at a time for the whole Computer: a slow Agent's read must
-   * not make every other Agent's request expire behind it (task #18). */
   const chains = new Map<string, Promise<void>>();
   const restoreCache = new ContextViewRestoreCache();
   let unsubscribed = false;
@@ -130,8 +134,6 @@ export function subscribeContextViewQueries(
           agent_id: request.agentId,
           queued_ms: queuedMs,
         });
-        // Answered, not dropped: a page that hears nothing waits out its own deadline and blames
-        // an old daemon, when what happened is that its Computer was busy (task #18).
         const expired = failure(request, "expired", "queue_deadline");
         const postTrace = await sendResult(
           transport,
@@ -168,8 +170,6 @@ export function subscribeContextViewQueries(
     });
     const settled = run.catch(() => undefined);
     chains.set(request.agentId, settled);
-    // The chain is dropped once it drains, so a long-lived daemon keeps no entry per Agent it has
-    // ever seen — unless a newer request already replaced it.
     void settled.then(() => {
       if (chains.get(request.agentId) === settled) chains.delete(request.agentId);
     });
@@ -254,6 +254,7 @@ export function subscribeContextViewQueries(
       join(ports.stateDirectory, entry.transcript),
     ];
     const maxBytes = Math.min(MAX_RESULT_BYTES, request.maxBytes);
+    const maxSourceBytes = contextViewSourceMaxBytes();
     const cacheKey = (path: string) =>
       JSON.stringify([
         request.agentId,
@@ -264,10 +265,9 @@ export function subscribeContextViewQueries(
         path,
       ]);
     let sourcePath: string | undefined;
-    let source:
-      | { ok: true; buffer: Buffer; sourceBytes: number }
-      | { ok: false; failure: "missing" | "outside_root" | "unsafe" | "too_large" | "read_failed" }
-      | undefined;
+    let openedSource: Extract<ContextViewOpenedSourceResult, { ok: true }> | undefined;
+    let bufferedSource: Extract<ContextViewSourceResult, { ok: true }> | undefined;
+    let firstFailure: ContextViewSourceFailure | undefined;
     let sourceBytes: number | undefined;
     let restored: ContextViewRestoreResult | undefined;
     for (const path of sourcePathCandidates) {
@@ -278,27 +278,39 @@ export function subscribeContextViewQueries(
         restored = cached.restored;
         break;
       }
-      const candidate = readContextViewSource(path, allowedRoots);
-      if (candidate.ok) {
-        sourcePath = path;
-        source = candidate;
-        sourceBytes = candidate.sourceBytes;
-        break;
+      if (ports.restoreInChild) {
+        const candidate = await readContextViewSourceAsync(path, allowedRoots, maxSourceBytes);
+        if (candidate.ok) {
+          sourcePath = path;
+          bufferedSource = candidate;
+          sourceBytes = candidate.sourceBytes;
+          break;
+        }
+        firstFailure ??= candidate.failure;
+      } else {
+        const candidate = await openContextViewSourceAsync(path, allowedRoots, maxSourceBytes);
+        if (candidate.ok) {
+          sourcePath = path;
+          openedSource = candidate;
+          sourceBytes = candidate.size;
+          break;
+        }
+        firstFailure ??= candidate.failure;
       }
     }
     if (!restored) {
-      source ??= readContextViewSource(sourcePathCandidates[0]!, allowedRoots);
-      if (!source.ok) {
+      if (!bufferedSource && !openedSource) {
+        const failureKind = firstFailure ?? "read_failed";
         const reason =
-          source.failure === "too_large"
+          failureKind === "too_large"
             ? "too_large"
-            : source.failure === "missing"
+            : failureKind === "missing"
               ? "not_found"
               : "read_failed";
         const result =
           reason === "too_large"
-            ? failure(request, reason, source.failure, { tooLargeCause: "session_file" })
-            : failure(request, reason, source.failure);
+            ? failure(request, reason, failureKind, { tooLargeCause: "session_file" })
+            : failure(request, reason, failureKind);
         await finish(result, {
           runtime: entry.runtime,
           source: providerPath ? "provider" : "workspace_or_state_fallback",
@@ -306,19 +318,33 @@ export function subscribeContextViewQueries(
         });
         return;
       }
-      sourceBytes = source.sourceBytes;
-      restored = await (ports.restoreInChild ?? runContextViewRestoreInChild)({
-        runtime: entry.runtime,
-        sessionId: entry.sessionId,
-        messageId: entry.messageId,
-        buffer: source.buffer,
-        offset: entry.offset,
-        maxBytes,
-      });
+      if (ports.restoreInChild) {
+        sourceBytes = bufferedSource!.sourceBytes;
+        restored = await ports.restoreInChild({
+          runtime: entry.runtime,
+          sessionId: entry.sessionId,
+          messageId: entry.messageId,
+          buffer: bufferedSource!.buffer,
+          offset: entry.offset,
+          maxBytes,
+        });
+      } else {
+        const streamed = await runContextViewRestoreFileInChild({
+          runtime: entry.runtime,
+          sessionId: entry.sessionId,
+          messageId: entry.messageId,
+          handle: openedSource!.handle,
+          offset: entry.offset,
+          maxBytes,
+          maxSourceBytes,
+        });
+        restored = streamed.result;
+        sourceBytes = streamed.sourceBytes;
+      }
       if (!unsubscribed && sourcePath)
         restoreCache.set(
           { key: cacheKey(sourcePath), path: sourcePath, allowedRoots },
-          source.sourceBytes,
+          sourceBytes,
           restored,
         );
     }

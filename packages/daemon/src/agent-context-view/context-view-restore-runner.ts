@@ -1,9 +1,10 @@
+import type { FileHandle } from "node:fs/promises";
+import { writeFileSync } from "node:fs";
 import {
   restoreContextView,
   type RestoreRequest,
   type ContextViewRestoreResult,
 } from "./context-view-restore";
-import { writeFileSync } from "node:fs";
 
 export const CONTEXT_VIEW_RESTORE_TIMEOUT_MS = 25_000;
 export const CONTEXT_VIEW_RESTORE_HEAP_MB = 1_024;
@@ -14,34 +15,71 @@ export const CONTEXT_VIEW_RESTORE_RSS_MAX_BYTES = 1_024 * 1024 * 1024;
 export const CONTEXT_VIEW_RESTORE_INPUT_FRAME_MAX_BYTES =
   Math.ceil((CONTEXT_VIEW_RESTORE_INPUT_MAX_BYTES * 4) / 3) + CONTEXT_VIEW_RESTORE_HEADER_MAX_BYTES;
 
+const STREAM_CHUNK_BYTES = 256 * 1024;
+
 type ChildRequest = Omit<RestoreRequest, "buffer"> & { bufferBase64: string };
+type ChildStreamHeader = Omit<RestoreRequest, "buffer"> & { version: 2 };
 type ChildHeader = { version: 1; outcome: "ok" | "failed"; bytes: number };
 
-function childRequest(request: RestoreRequest): ChildRequest {
-  if (request.buffer.byteLength > CONTEXT_VIEW_RESTORE_INPUT_MAX_BYTES)
-    throw new Error("context view restore input is too large");
-  const { buffer, ...rest } = request;
-  return { ...rest, bufferBase64: buffer.toString("base64") };
+export type RestoreFileRequest = Omit<RestoreRequest, "buffer"> & {
+  handle: FileHandle;
+  maxSourceBytes?: number;
+};
+
+function encodeStreamHeader(request: Omit<RestoreRequest, "buffer">): string {
+  const header: ChildStreamHeader = {
+    version: 2,
+    runtime: request.runtime,
+    sessionId: request.sessionId,
+    messageId: request.messageId,
+    offset: request.offset,
+    ...(request.maxBytes !== undefined ? { maxBytes: request.maxBytes } : {}),
+  };
+  return `${JSON.stringify(header)}\n`;
 }
 
-function restorePayload(request: ChildRequest): ContextViewRestoreResult {
-  return restoreContextView({ ...request, buffer: Buffer.from(request.bufferBase64, "base64") });
+function decodeChildInput(combined: Buffer): RestoreRequest | { tooLarge: true } {
+  const headerSearchLimit = Math.min(
+    combined.byteLength,
+    CONTEXT_VIEW_RESTORE_HEADER_MAX_BYTES + 1,
+  );
+  const newline = combined.indexOf(0x0a);
+  if (newline >= 0 && newline < headerSearchLimit) {
+    try {
+      const parsed = JSON.parse(
+        combined.subarray(0, newline).toString("utf8"),
+      ) as Partial<ChildStreamHeader>;
+      if (parsed && parsed.version === 2) {
+        const buffer = combined.subarray(newline + 1);
+        if (buffer.byteLength > CONTEXT_VIEW_RESTORE_INPUT_MAX_BYTES) return { tooLarge: true };
+        return {
+          runtime: parsed.runtime!,
+          sessionId: parsed.sessionId!,
+          messageId: parsed.messageId!,
+          offset: parsed.offset!,
+          ...(parsed.maxBytes !== undefined ? { maxBytes: parsed.maxBytes } : {}),
+          buffer,
+        };
+      }
+    } catch {
+      void 0;
+    }
+  }
+  const request = JSON.parse(combined.toString("utf8")) as ChildRequest;
+  const buffer = Buffer.from(request.bufferBase64, "base64");
+  if (buffer.byteLength > CONTEXT_VIEW_RESTORE_INPUT_MAX_BYTES) return { tooLarge: true };
+  return {
+    runtime: request.runtime,
+    sessionId: request.sessionId,
+    messageId: request.messageId,
+    offset: request.offset,
+    ...(request.maxBytes !== undefined ? { maxBytes: request.maxBytes } : {}),
+    buffer,
+  };
 }
 
-/** The prefix of an entrypoint Bun holds inside its own binary (measured on a compiled Computer:
- * `process.argv[1]` and `Bun.main` are both `/$bunfs/root/<name>`). */
 const EMBEDDED_SCRIPT_PREFIX = "/$bunfs/";
 
-/**
- * How this program asks itself to run a subcommand. A compiled Computer is its own entrypoint, so
- * the subcommand is its first argument; under `bun` the script has to come first, or the runtime
- * looks for a file named after the subcommand.
- *
- * The script path is what tells the two apart, and it says so directly: a path inside the runtime's
- * own binary is no file the child could be asked to run, so it is not passed at all. Reading the
- * executable's name instead would guess — a compiled binary may be named `bun-something`, and bun
- * itself can be renamed or reached through a shim (task #739).
- */
 export function selfSubcommand(
   subcommand: string,
   self: Readonly<{ execPath: string; script?: string }> = {
@@ -106,7 +144,7 @@ export async function runContextViewRestoreChildMain(
     try {
       writeFileSync("/proc/self/oom_score_adj", "1000");
     } catch {
-      // Best effort; the RSS guard below remains authoritative.
+      void 0;
     }
   }
   const chunks: Uint8Array[] = [];
@@ -125,7 +163,18 @@ export async function runContextViewRestoreChildMain(
     }
     chunks.push(chunk);
   }
-  const request = JSON.parse(Buffer.concat(chunks).toString("utf8")) as ChildRequest;
+  const combined = Buffer.concat(chunks, bytes);
+  const decoded = decodeChildInput(combined);
+  if ("tooLarge" in decoded) {
+    process.stdout.write(
+      encodeContextViewRestoreChildResult({
+        ok: false,
+        failure: "too_large",
+        tooLargeCause: "session_file",
+      }),
+    );
+    return;
+  }
   const result =
     process.memoryUsage().rss > CONTEXT_VIEW_RESTORE_RSS_MAX_BYTES
       ? {
@@ -133,21 +182,16 @@ export async function runContextViewRestoreChildMain(
           failure: "too_large" as const,
           tooLargeCause: "restore_limit" as const,
         }
-      : restorePayload(request);
+      : restoreContextView(decoded);
   process.stdout.write(encodeContextViewRestoreChildResult(result));
 }
 
-export async function runContextViewRestoreInChild(
-  request: RestoreRequest,
-  options: { timeoutMs?: number; command?: string[] } = {},
-): Promise<ContextViewRestoreResult> {
+function spawnRestoreChild(options: { command?: string[] }) {
   const command = options.command ?? selfSubcommand("__restore-context-view");
-  const child = Bun.spawn({
+  return Bun.spawn({
     cmd: command,
     stdin: "pipe",
     stdout: "pipe",
-    // Kept, not dropped: a child that cannot start says why on stderr, and that first line is the
-    // only clue a failed read leaves behind (task #739).
     stderr: "pipe",
     maxBuffer: CONTEXT_VIEW_RESTORE_RESULT_MAX_BYTES + CONTEXT_VIEW_RESTORE_HEADER_MAX_BYTES,
     ...(process.execPath.endsWith("bun")
@@ -159,32 +203,43 @@ export async function runContextViewRestoreInChild(
         }
       : {}),
   });
+}
+
+async function finishRestoreChild(
+  child: ReturnType<typeof spawnRestoreChild>,
+  stderr: Promise<string>,
+): Promise<ContextViewRestoreResult> {
+  const [raw] = await Promise.all([new Response(child.stdout).text(), child.exited]);
+  if (
+    Buffer.byteLength(raw, "utf8") >
+    CONTEXT_VIEW_RESTORE_RESULT_MAX_BYTES + CONTEXT_VIEW_RESTORE_HEADER_MAX_BYTES
+  )
+    return { ok: false, failure: "too_large", tooLargeCause: "request" };
+  const result = decodeContextViewRestoreChildResult(raw);
+  if (result.ok && process.memoryUsage().rss > CONTEXT_VIEW_RESTORE_RSS_MAX_BYTES)
+    return { ok: false, failure: "too_large", tooLargeCause: "restore_limit" };
+  if (!result.ok) {
+    const detail = firstStderrLine(await stderr);
+    return detail === undefined ? result : { ...result, detail };
+  }
+  return result;
+}
+
+export async function runContextViewRestoreInChild(
+  request: RestoreRequest,
+  options: { timeoutMs?: number; command?: string[] } = {},
+): Promise<ContextViewRestoreResult> {
+  if (request.buffer.byteLength > CONTEXT_VIEW_RESTORE_INPUT_MAX_BYTES)
+    return { ok: false, failure: "too_large", tooLargeCause: "session_file" };
+  const child = spawnRestoreChild(options);
   const timeoutMs = options.timeoutMs ?? CONTEXT_VIEW_RESTORE_TIMEOUT_MS;
   const timer = setTimeout(() => child.kill(), timeoutMs);
   const stderr = new Response(child.stderr as ReadableStream<Uint8Array>).text();
   try {
-    let body: string;
-    try {
-      body = JSON.stringify(childRequest(request));
-    } catch {
-      return { ok: false, failure: "too_large", tooLargeCause: "session_file" };
-    }
-    await child.stdin.write(body);
-    child.stdin.end();
-    const [raw] = await Promise.all([new Response(child.stdout).text(), child.exited]);
-    if (
-      Buffer.byteLength(raw, "utf8") >
-      CONTEXT_VIEW_RESTORE_RESULT_MAX_BYTES + CONTEXT_VIEW_RESTORE_HEADER_MAX_BYTES
-    )
-      return { ok: false, failure: "too_large", tooLargeCause: "request" };
-    const result = decodeContextViewRestoreChildResult(raw);
-    if (result.ok && process.memoryUsage().rss > CONTEXT_VIEW_RESTORE_RSS_MAX_BYTES)
-      return { ok: false, failure: "too_large", tooLargeCause: "restore_limit" };
-    if (!result.ok) {
-      const detail = firstStderrLine(await stderr);
-      return detail === undefined ? result : { ...result, detail };
-    }
-    return result;
+    child.stdin.write(encodeStreamHeader(request));
+    if (request.buffer.byteLength > 0) child.stdin.write(request.buffer);
+    await child.stdin.end();
+    return await finishRestoreChild(child, stderr);
   } catch {
     const detail = firstStderrLine(await stderr);
     return detail === undefined
@@ -196,7 +251,59 @@ export async function runContextViewRestoreInChild(
   }
 }
 
-/** The child's own words about why it failed, bounded: one line, no paths beyond what it said. */
+export async function runContextViewRestoreFileInChild(
+  request: RestoreFileRequest,
+  options: { timeoutMs?: number; command?: string[] } = {},
+): Promise<{ result: ContextViewRestoreResult; sourceBytes: number }> {
+  const maxSourceBytes = Math.min(
+    request.maxSourceBytes ?? CONTEXT_VIEW_RESTORE_INPUT_MAX_BYTES,
+    CONTEXT_VIEW_RESTORE_INPUT_MAX_BYTES,
+  );
+  let child: ReturnType<typeof spawnRestoreChild> | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stderr: Promise<string> | undefined;
+  let sourceBytes = 0;
+  try {
+    child = spawnRestoreChild(options);
+    const timeoutMs = options.timeoutMs ?? CONTEXT_VIEW_RESTORE_TIMEOUT_MS;
+    const spawned = child;
+    timer = setTimeout(() => spawned.kill(), timeoutMs);
+    stderr = new Response(child.stderr as ReadableStream<Uint8Array>).text();
+    child.stdin.write(encodeStreamHeader(request));
+    const chunk = Buffer.allocUnsafe(STREAM_CHUNK_BYTES);
+    while (true) {
+      const { bytesRead } = await request.handle.read(chunk, 0, chunk.byteLength, null);
+      if (bytesRead === 0) break;
+      sourceBytes += bytesRead;
+      if (sourceBytes > maxSourceBytes) {
+        child.kill();
+        return {
+          result: { ok: false, failure: "too_large", tooLargeCause: "session_file" },
+          sourceBytes,
+        };
+      }
+      child.stdin.write(bytesRead === chunk.byteLength ? chunk : chunk.subarray(0, bytesRead));
+      await child.stdin.flush();
+    }
+    await child.stdin.end();
+    const result = await finishRestoreChild(child, stderr);
+    return { result, sourceBytes };
+  } catch {
+    const detail = stderr ? firstStderrLine(await stderr) : undefined;
+    return {
+      result:
+        detail === undefined
+          ? { ok: false, failure: "read_failed" }
+          : { ok: false, failure: "read_failed", detail },
+      sourceBytes,
+    };
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    child?.kill();
+    await request.handle.close().catch(() => {});
+  }
+}
+
 export function firstStderrLine(stderr: string, maxChars = 300): string | undefined {
   const line = stderr.split("\n").find((each) => each.trim() !== "");
   if (line === undefined) return undefined;

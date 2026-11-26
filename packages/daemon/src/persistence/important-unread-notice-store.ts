@@ -8,6 +8,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { chmod, mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { getLogger } from "@logtape/logtape";
 import type {
@@ -18,30 +19,35 @@ import { escapePathIdentity, isSafePathScope } from "./path-scope";
 
 const logger = getLogger(["coforge", "daemon", "important-unread"]);
 
-/** This OS process's lifetime, so a record written here is not restored by the same process: the
- * live state is the authority, and the record only has to survive a *new* process. */
 const PROCESS_OWNER = `${process.pid}:${Date.now()}`;
 
-/** The file one Agent's pending notice lives in, beside its other state. */
+type PendingOp = { kind: "save"; notice: ImportantUnreadNotice } | { kind: "clear" };
+
+export type ImportantUnreadNoticeStoreOptions = Readonly<{
+  asyncWrites?: boolean;
+}>;
+
 function noticePath(stateDirectory: string, agentId: string): string {
   if (!isSafePathScope(agentId)) throw new Error("invalid Agent state scope");
   return join(stateDirectory, "agent-state", escapePathIdentity(agentId), "important-unread.json");
 }
 
-/**
- * An Agent's pending "you have important unread messages", kept where a restarted Daemon finds
- * it. The state is what a fresh process re-sends once: a notice written before the restart is not
- * re-sent into the same process (the live state decides that), but a new process cannot know it
- * was written at all. Writes are one small private JSON file per Agent; a corrupt or unreadable
- * file is dropped rather than trusted.
- */
 export class ImportantUnreadNoticeStore {
   readonly #preparedDirs = new Set<string>();
+  readonly #asyncWrites: boolean;
+  readonly #pending = new Map<string, PendingOp>();
+  readonly #latest = new Map<string, { gen: number; op: PendingOp }>();
+  readonly #scheduled = new Set<string>();
+  readonly #running = new Map<string, Promise<void>>();
+  #gen = 0;
 
   constructor(
     private readonly stateDirectory: () => string | undefined,
     private readonly owner: string = PROCESS_OWNER,
-  ) {}
+    options: ImportantUnreadNoticeStoreOptions = {},
+  ) {
+    this.#asyncWrites = options.asyncWrites === true;
+  }
 
   list(): ImportantUnreadNotice[] {
     const stateDirectory = this.stateDirectory();
@@ -64,32 +70,108 @@ export class ImportantUnreadNoticeStore {
         if (value?.owner === this.owner) continue;
         const notice = readNotice(value, agentId);
         if (notice) notices.push(notice);
-        else this.clear(agentId);
+        else this.#clearSync(agentId);
       } catch {
-        if (existsSync(path)) this.clear(agentId);
+        if (existsSync(path)) this.#clearSync(agentId);
       }
     }
     return notices;
   }
 
   save(notice: ImportantUnreadNotice): void {
+    if (this.#asyncWrites) {
+      this.#enqueue(notice.agentId, { kind: "save", notice });
+      return;
+    }
+    this.#saveSync(notice);
+  }
+
+  clear(agentId: string): void {
+    if (this.#asyncWrites) {
+      this.#enqueue(agentId, { kind: "clear" });
+      return;
+    }
+    this.#clearSync(agentId);
+  }
+
+  async flush(): Promise<void> {
+    while (this.#pending.size > 0 || this.#running.size > 0) {
+      for (const agentId of this.#pending.keys()) {
+        if (!this.#running.has(agentId)) this.#startDrain(agentId);
+      }
+      if (this.#running.size > 0) await Promise.all(this.#running.values());
+    }
+  }
+
+  flushSync(): void {
+    const agents = new Set<string>();
+    for (const agentId of this.#pending.keys()) agents.add(agentId);
+    for (const agentId of this.#running.keys()) agents.add(agentId);
+    for (const agentId of agents) {
+      this.#pending.delete(agentId);
+      const entry = this.#latest.get(agentId);
+      if (!entry) continue;
+      const op = entry.op;
+      if (this.#running.has(agentId)) this.#latest.set(agentId, { gen: ++this.#gen, op });
+      else this.#latest.delete(agentId);
+      if (op.kind === "save") this.#saveSync(op.notice);
+      else this.#clearSync(agentId);
+    }
+  }
+
+  #enqueue(agentId: string, op: PendingOp): void {
+    this.#latest.set(agentId, { gen: ++this.#gen, op });
+    this.#pending.set(agentId, op);
+    if (this.#running.has(agentId) || this.#scheduled.has(agentId)) return;
+    this.#scheduled.add(agentId);
+    queueMicrotask(() => {
+      this.#scheduled.delete(agentId);
+      if (!this.#running.has(agentId) && this.#pending.has(agentId)) this.#startDrain(agentId);
+    });
+  }
+
+  #startDrain(agentId: string): void {
+    const drain = (async () => {
+      while (true) {
+        const op = this.#pending.get(agentId);
+        if (!op) break;
+        const startedGen = this.#latest.get(agentId)?.gen;
+        this.#pending.delete(agentId);
+        if (op.kind === "save") await this.#saveAsync(op.notice);
+        else await this.#clearAsync(agentId);
+        const latest = this.#latest.get(agentId);
+        if (latest && latest.gen !== startedGen && !this.#pending.has(agentId)) {
+          this.#pending.set(agentId, latest.op);
+        } else if (!this.#pending.has(agentId) && latest?.gen === startedGen) {
+          this.#latest.delete(agentId);
+        }
+      }
+    })();
+    const settled = drain
+      .catch(() => {})
+      .finally(() => {
+        if (this.#running.get(agentId) === settled) this.#running.delete(agentId);
+        if (this.#pending.has(agentId) && !this.#running.has(agentId)) this.#startDrain(agentId);
+      });
+    this.#running.set(agentId, settled);
+  }
+
+  #saveSync(notice: ImportantUnreadNotice): void {
     try {
       const stateDirectory = this.stateDirectory();
       if (!stateDirectory) return;
       const path = noticePath(stateDirectory, notice.agentId);
       const dir = dirname(path);
       const body = `${JSON.stringify({ version: 1, owner: this.owner, ...notice })}\n`;
-      const temporary = `${path}.tmp`;
-      if (!this.#preparedDirs.has(dir)) {
-        this.#prepareDir(dir);
-      }
+      const temporary = `${path}.${crypto.randomUUID()}.tmp`;
+      if (!this.#preparedDirs.has(dir)) this.#prepareDirSync(dir);
       try {
         writeFileSync(temporary, body, { mode: 0o600 });
         renameSync(temporary, path);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
         this.#preparedDirs.delete(dir);
-        this.#prepareDir(dir);
+        this.#prepareDirSync(dir);
         writeFileSync(temporary, body, { mode: 0o600 });
         renameSync(temporary, path);
       }
@@ -102,26 +184,69 @@ export class ImportantUnreadNoticeStore {
     }
   }
 
-  clear(agentId: string): void {
-    const stateDirectory = this.stateDirectory();
-    if (!stateDirectory) return;
-    const path = noticePath(stateDirectory, agentId);
-    this.#preparedDirs.delete(dirname(path));
+  async #saveAsync(notice: ImportantUnreadNotice): Promise<void> {
     try {
+      const stateDirectory = this.stateDirectory();
+      if (!stateDirectory) return;
+      const path = noticePath(stateDirectory, notice.agentId);
+      const dir = dirname(path);
+      const body = `${JSON.stringify({ version: 1, owner: this.owner, ...notice })}\n`;
+      const temporary = `${path}.${crypto.randomUUID()}.tmp`;
+      if (!this.#preparedDirs.has(dir)) await this.#prepareDirAsync(dir);
+      try {
+        await writeFile(temporary, body, { mode: 0o600 });
+        await rename(temporary, path);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        this.#preparedDirs.delete(dir);
+        await this.#prepareDirAsync(dir);
+        await writeFile(temporary, body, { mode: 0o600 });
+        await rename(temporary, path);
+      }
+    } catch (error) {
+      logger.warn("Important unread notice could not be recorded", {
+        event: "agent.runtime.important_unread_persist_failed",
+        agent_id: notice.agentId,
+        error_type: error instanceof Error ? error.name : typeof error,
+      });
+    }
+  }
+
+  #clearSync(agentId: string): void {
+    try {
+      const stateDirectory = this.stateDirectory();
+      if (!stateDirectory) return;
+      const path = noticePath(stateDirectory, agentId);
       unlinkSync(path);
     } catch {
       return;
     }
   }
 
-  #prepareDir(dir: string): void {
+  async #clearAsync(agentId: string): Promise<void> {
+    try {
+      const stateDirectory = this.stateDirectory();
+      if (!stateDirectory) return;
+      const path = noticePath(stateDirectory, agentId);
+      await unlink(path);
+    } catch {
+      return;
+    }
+  }
+
+  #prepareDirSync(dir: string): void {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     chmodSync(dir, 0o700);
     this.#preparedDirs.add(dir);
   }
+
+  async #prepareDirAsync(dir: string): Promise<void> {
+    await mkdir(dir, { recursive: true, mode: 0o700 });
+    await chmod(dir, 0o700);
+    this.#preparedDirs.add(dir);
+  }
 }
 
-/** One stored record, or undefined when it says nothing a restart can act on. */
 function readNotice(
   value: Record<string, unknown>,
   agentId: string,

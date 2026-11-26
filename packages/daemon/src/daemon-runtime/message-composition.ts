@@ -66,9 +66,7 @@ export type MessageCompositionPorts = {
 };
 export type MessageComposition = {
   mentionDeliveries: MentionDeliveryTracker;
-  /** The unread loop the delivery guarantees hang off (task #14). */
   importantUnread: ReturnType<typeof composeImportantUnreadReminder>;
-  /** What writes the loop's due retries, started with this composition and stopped with it. */
   messageAttention: AgentMessageAttentionIndex;
   inboxCoordinator: AgentInboxCoordinator;
   messageOperations: AgentMessageOperations;
@@ -76,8 +74,6 @@ export type MessageComposition = {
 export function composeMessages(ports: MessageCompositionPorts): MessageComposition {
   const { connection, transport } = ports;
   let messageAttention!: AgentMessageAttentionIndex;
-  /** The unread loop and its sweep are built once the index exists, and the index's cursor funnel
-   * (declared with it) is where they hear a read. */
   let importantUnread!: MessageComposition["importantUnread"];
   const mentionDeliveries = new MentionDeliveries(connection.computerId, {
     transition: (report) =>
@@ -165,8 +161,6 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
         },
       },
       noticePrefix: (agentId) => ports.sync.noticePrefix(agentId),
-      // Task #14: a reliable delivery has one writer, the unread loop. The index hands the batch
-      // over instead of writing its own notice, and the loop keeps it until the Agent reads it.
       unread: (announced) => importantUnread.observeDeliveries(announced),
     },
   );
@@ -191,15 +185,16 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
     assertRunning: () => ports.assertRunning(),
     agentIdForContext: (context) => ports.agentIdForContext(context),
   });
-  // Task #14: the unread loop. It writes into whichever session the Agent has and reports a batch
-  // whose retries ran out as one error, so "written but nobody read it" cannot pass unnoticed.
+  const importantUnreadStore = new ImportantUnreadNoticeStore(
+    () => ports.stateDirectory,
+    undefined,
+    { asyncWrites: true },
+  );
   importantUnread = composeImportantUnreadReminder({
-    store: new ImportantUnreadNoticeStore(() => ports.stateDirectory),
+    store: importantUnreadStore,
     eligibility: messageAttention.noticeEligibility,
     session: (agentId) => ports.processManager.session(agentId),
     unread: (agentId) => messageAttention.unreadDeliveries(agentId),
-    // Every attempt asks for the notice again: the batch's own messages plus whatever waits in the
-    // queue now, so a retry counts what arrived meanwhile instead of repeating a stale snapshot.
     compose: unreadNoticeComposer({
       eligibility: messageAttention.noticeEligibility,
       queued: (agentId) => ports.deliveryGate.pending(agentId),
@@ -208,7 +203,6 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
         messageAttention.previewSeen.has(agentId, target, sequence),
       captureAcceptance: (agentId) => messageAttention.captureNoticeAcceptance(agentId),
     }),
-    // An accepted attempt showed the model these bodies; a later attempt does not repeat them.
     shown: (agentId, shown) => messageAttention.previewSeen.record(agentId, shown),
     report: (agentId, notice) => {
       const launch = ports.currentActivityLaunch(agentId);
@@ -228,13 +222,13 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
       );
     },
   });
-  // A starting Daemon takes over what the last process left; the first sweep tells the Agent.
   importantUnread.restore();
-  // The watchdog does not wait for a delivery that may never come: the sweep writes what the state
-  // machine's schedule says is due — the retries of a notice a session refused, and the record a
-  // restarted process took over — so the retry is the loop's, not an arriving message's. It starts
-  // and stops with the runtime's other sweeps, and never keeps the process alive.
-  ports.sweeps.add(new ImportantUnreadSweep({ flushDue: () => importantUnread.flushDue() }));
+  ports.sweeps.add(
+    new ImportantUnreadSweep({
+      flushDue: () => importantUnread.flushDue(),
+      onStop: () => importantUnreadStore.flushSync(),
+    }),
+  );
 
   const messageOperations = new MessageOperations({
     connection: { workspaceId: connection.workspaceId, computerId: connection.computerId },

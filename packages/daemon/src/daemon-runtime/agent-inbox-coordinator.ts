@@ -41,9 +41,6 @@ type AppItemNotice = Readonly<{ itemIds: readonly string[]; text: string; startS
 const isDueReminder = (item: AgentAppItem) =>
   item.appId === REMINDER_APP_ID && item.notificationClass === REMINDER_DUE_CLASS;
 
-/** The notices a set of pending App items produces: due reminders share one merged text while
- * every other item keeps the generic pointer, so only `system.reminder` ever names its content —
- * an App Inbox title or summary is never copied into a notice. */
 function planAppItemNotices(items: readonly AgentAppItem[]): AppItemNotice[] {
   const reminders = items.filter(isDueReminder);
   const notices: AppItemNotice[] = [];
@@ -88,7 +85,6 @@ export type AgentInboxCoordinatorPorts = {
   agentIdForContext: (context: string) => string;
 };
 
-/** Coordinates the per-Agent message and App Inbox state owned by a daemon runtime. */
 export class AgentInboxCoordinator {
   readonly #agentInboxes = new Map<string, AgentInboxStateMachine>();
   readonly #appInboxes = new Map<string, Promise<AgentAppInbox>>();
@@ -129,8 +125,6 @@ export class AgentInboxCoordinator {
     return item;
   }
 
-  /** Removes an App Inbox item and forgets that it was announced, so an item minted again under
-   * the same id is announced again. */
   async removeAppItem(agentId: string, itemId: string): Promise<boolean> {
     const removed = await (await this.appInbox(agentId)).remove(itemId);
     this.#notifiedAppItems.get(agentId)?.delete(itemId);
@@ -138,8 +132,6 @@ export class AgentInboxCoordinator {
     return removed;
   }
 
-  /** Forgets which App Inbox items the Agent was told of, so its next launch announces them all:
-   * for a Session replaced with a fresh one, which was told of none. */
   forgetAnnouncedAppItems(agentId: string): void {
     this.#notifiedAppItems.delete(agentId);
     void this.ports.notifiedAppItems.clear(agentId).catch((error: unknown) => {
@@ -169,7 +161,6 @@ export class AgentInboxCoordinator {
     };
   }
 
-  /** The revisions of the App Inbox items one source identity has now: what a seal calls live. */
   async appItemRevisions(
     agentId: string,
     appId: string,
@@ -187,8 +178,6 @@ export class AgentInboxCoordinator {
       .map((item) => item.sourceRef.revision);
   }
 
-  /** Every sealed source identity with the state `inbox check` reports: its registered revision
-   * against the source's live one, or DETACHED when it names no revision or nothing is live. */
   async #seals(agentId: string): Promise<InboxSeal[]> {
     const seals = await (await this.appSeals(agentId)).list();
     const items = (await this.appInbox(agentId)).list();
@@ -228,8 +217,6 @@ export class AgentInboxCoordinator {
   async drainAppInboxNotices(agentId: string): Promise<void> {
     const notified = this.#notifiedAppItems.get(agentId);
     const items = (await this.appInbox(agentId)).list();
-    // A notice already in flight keeps its own outcome: the drain waits on it exactly as the
-    // per-item awaits did, so a rejected send still fails the drain.
     const inFlight = items.flatMap((item) => {
       const pending = notified?.get(item.itemId);
       return pending ? [pending] : [];
@@ -237,11 +224,14 @@ export class AgentInboxCoordinator {
     const sessionId = this.#sessionId(agentId);
     const told = await this.ports.notifiedAppItems.read(agentId, sessionId);
     const present = new Set(items.map((item) => item.itemId));
-    for (const gone of told.filter((itemId) => !present.has(itemId)))
-      await this.ports.notifiedAppItems.remove(agentId, gone);
-    const fresh = items.filter(
-      (item) => !notified?.has(item.itemId) && !told.includes(item.itemId),
-    );
+    const gone = told.filter((itemId) => !present.has(itemId));
+    if (gone.length > 0) {
+      if (this.ports.notifiedAppItems.removeMany)
+        await this.ports.notifiedAppItems.removeMany(agentId, gone);
+      else for (const itemId of gone) await this.ports.notifiedAppItems.remove(agentId, itemId);
+    }
+    const toldSet = new Set(told);
+    const fresh = items.filter((item) => !notified?.has(item.itemId) && !toldSet.has(item.itemId));
     await Promise.all(inFlight);
     await this.#notifyAppItemNotices(agentId, planAppItemNotices(fresh));
   }
@@ -277,10 +267,6 @@ export class AgentInboxCoordinator {
     return this.#notifyAppItemNotices(agentId, notices, { startStopped });
   }
 
-  /** Sends each planned notice through the gates `notifyAppItem` always ran — recovery, credential
-   * hold, busy hold, session resolution — once per notice instead of once per item, in order and
-   * stopping at the first failure exactly as the per-item drain did. Every item id keeps its own
-   * notified bookkeeping, so dedup, hold/release and acknowledgement stay per item. */
   async #notifyAppItemNotices(
     agentId: string,
     notices: readonly AppItemNotice[],
@@ -303,7 +289,6 @@ export class AgentInboxCoordinator {
         continue;
       }
       const pending = Promise.resolve().then(async () => {
-        // An ending runtime takes no notice: it waits for the launch that follows.
         if (this.ports.runtimeRelease.isRecovering(agentId)) {
           for (const itemId of itemIds) this.ports.deliveryGate.holdAppItem(agentId, itemId);
           return false;
@@ -311,7 +296,6 @@ export class AgentInboxCoordinator {
         let session = this.ports.processManager.session(agentId);
         if (!session) {
           if (!startStopped || notice.startStopped === false) return false;
-          // A credential known invalid is no reason to start the Agent: the item waits with the rest.
           if (this.ports.deliveryGate.credentialHeld(agentId)) {
             for (const itemId of itemIds) this.ports.deliveryGate.holdAppItem(agentId, itemId);
             return false;
@@ -322,9 +306,6 @@ export class AgentInboxCoordinator {
             .session;
         }
         if (!session.notify) return false;
-        // A queue_until_idle provider's session/notify has no safe busy path, same as an
-        // ordinary message delivery — hold these app-item notices instead of sending them now, and
-        // release them (re-attempting this same call) at the next turn end.
         if (this.ports.deliveryGate.shouldHold(agentId)) {
           for (const itemId of itemIds) this.ports.deliveryGate.holdAppItem(agentId, itemId);
           return false;
@@ -355,7 +336,6 @@ export class AgentInboxCoordinator {
     return accepted;
   }
 
-  /** Keeps the items the Agent was just told about, so a restart does not announce them again. */
   async #recordNotified(agentId: string, itemIds: readonly string[]): Promise<void> {
     try {
       await this.ports.notifiedAppItems.add(agentId, this.#sessionId(agentId), itemIds);
@@ -368,10 +348,6 @@ export class AgentInboxCoordinator {
     }
   }
 
-  /** Re-attempts every app-item notice `AgentDeliveryGate` held for `agentId` — each
-   * one re-checks `shouldHold` itself inside `notifyAppItem`, so one that is still busy (e.g. a
-   * coalesced delivery flush that just re-armed busy) simply re-holds itself for the next
-   * release rather than being lost or sent too early. */
   releaseHeldAppItems(agentId: string): void {
     const itemIds = this.ports.deliveryGate.releaseAppItems(agentId);
     if (itemIds.length === 0) return;
@@ -392,20 +368,10 @@ export class AgentInboxCoordinator {
         if (!byId.has(itemId)) notices.push({ itemIds: [itemId], text: GENERIC_APP_ITEM_NOTICE });
       await this.#notifyAppItemNotices(agentId, notices);
     } catch {
-      // Best-effort, same as the per-item `.catch(() => {})` this replaces: a failed release
-      // leaves its items unannounced for the next turn end.
+      void 0;
     }
   }
 
-  /**
-   * Redelivers every fallback notice text `AgentDeliveryGate` held for `agentId`
-   * (Kiro's `notice-undelivered` event) as a bare `session.notify` call — never through
-   * `AgentMessageAttentionIndex`, since the delivery or App Inbox item this text originally
-   * came from already settled its own ACK (or never had one); this call must never produce a second
-   * one. If the Agent has gone busy again by the time this runs (e.g. its own steer of another
-   * held text just started a fresh turn), `notify` steers this one into that turn instead of
-   * losing it.
-   */
   releaseFallbackNotices(agentId: string): void {
     if (this.ports.currentActivityLaunch(agentId)?.modelQuotaInputHeld) return;
     const notices = this.ports.deliveryGate.releaseFallbackNotices(agentId);

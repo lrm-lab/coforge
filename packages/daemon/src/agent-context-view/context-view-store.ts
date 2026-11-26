@@ -98,6 +98,8 @@ export class ContextViewStore {
   #indexCache?: Map<string, ContextViewIndexEntry>;
   #indexFingerprint?: IndexFingerprint | null;
   #oldestSentAt?: string;
+  #indexEntryCount = 0;
+  #indexHasInvalidLines = false;
 
   constructor(
     stateDirectory: string,
@@ -192,6 +194,7 @@ export class ContextViewStore {
         if (!this.#indexCache.has(entry.messageId))
           this.#indexCache.set(entry.messageId, { ...entry });
         this.#oldestSentAt = this.#earlierSentAt(this.#oldestSentAt, entry.sentAt);
+        this.#indexEntryCount += 1;
         this.#indexFingerprint = after;
         return this.#oldestSentAt;
       }
@@ -235,14 +238,23 @@ export class ContextViewStore {
     kept: number;
     dropped: number;
   } {
-    if (!existsSync(this.#indexPath)) {
-      this.#setIndexCache(new Map(), undefined, null);
-      return { kept: 0, dropped: 0 };
+    this.#refreshIndex();
+    if (this.#indexFingerprint === null) return { kept: 0, dropped: 0 };
+    const cutoff = this.#now() - retentionDays * 24 * 60 * 60 * 1000;
+    if (
+      this.#indexFingerprint !== undefined &&
+      this.#indexFingerprint.size <= AGENT_CONTEXT_INDEX_MAX_BYTES &&
+      !this.#indexHasInvalidLines &&
+      this.#indexEntryCount > 0 &&
+      this.#oldestSentAt !== undefined &&
+      Date.parse(this.#oldestSentAt) >= cutoff
+    ) {
+      return { kept: this.#indexEntryCount, dropped: 0 };
     }
     ownRegularFile(this.#indexPath);
-    const cutoff = this.#now() - retentionDays * 24 * 60 * 60 * 1000;
     const retained: Array<{ entry: ContextViewIndexEntry; timestamp: number }> = [];
     let parsedCount = 0;
+    let hasInvalidLines = false;
     for (const line of this.#readFileSafely(this.#indexPath).split("\n")) {
       if (!line) continue;
       try {
@@ -252,6 +264,7 @@ export class ContextViewStore {
         const timestamp = Date.parse(value.sentAt);
         if (timestamp >= cutoff) retained.push({ entry: value, timestamp });
       } catch {
+        hasInvalidLines = true;
         continue;
       }
     }
@@ -271,8 +284,16 @@ export class ContextViewStore {
     const dropped = parsedCount - kept.length;
     if (kept.length === 0) {
       unlinkSync(this.#indexPath);
-      this.#setIndexCache(new Map(), undefined, null);
+      this.#setIndexCache(new Map(), undefined, null, 0, false);
       return { kept: 0, dropped };
+    }
+    if (
+      dropped === 0 &&
+      !hasInvalidLines &&
+      this.#indexFingerprint !== undefined &&
+      this.#indexFingerprint.size <= AGENT_CONTEXT_INDEX_MAX_BYTES
+    ) {
+      return { kept: kept.length, dropped: 0 };
     }
     const encoded = `${kept.map((item) => item.line).join("\n")}\n`;
     const temp = `${this.#indexPath}.tmp-${process.pid}`;
@@ -304,7 +325,7 @@ export class ContextViewStore {
       if (!entriesMap.has(entry.messageId)) entriesMap.set(entry.messageId, entry);
       oldestSentAt = this.#earlierSentAt(oldestSentAt, entry.sentAt);
     }
-    this.#setIndexCache(entriesMap, oldestSentAt, this.#fingerprint(info));
+    this.#setIndexCache(entriesMap, oldestSentAt, this.#fingerprint(info), kept.length, false);
     return { kept: kept.length, dropped };
   }
 
@@ -349,7 +370,7 @@ export class ContextViewStore {
     }
     if (existsSync(this.#offSincePath)) unlinkSync(this.#offSincePath);
     rmSync(this.#directory, { recursive: true, force: true });
-    this.#setIndexCache(new Map(), undefined, null);
+    this.#setIndexCache(new Map(), undefined, null, 0, false);
     return true;
   }
 
@@ -428,7 +449,7 @@ export class ContextViewStore {
     const snapshot = this.#openIndex();
     if (!snapshot) {
       if (this.#indexCache !== undefined && this.#indexFingerprint === null) return;
-      this.#setIndexCache(new Map(), undefined, null);
+      this.#setIndexCache(new Map(), undefined, null, 0, false);
       return;
     }
     try {
@@ -442,11 +463,17 @@ export class ContextViewStore {
       )
         return;
       if (snapshot.info.size > AGENT_CONTEXT_INDEX_MAX_BYTES) {
-        this.#setIndexCache(new Map(), undefined, fingerprint);
+        this.#setIndexCache(new Map(), undefined, fingerprint, 0, false);
         return;
       }
       const parsed = this.#parseIndex(readFileSync(snapshot.fd, "utf8"));
-      this.#setIndexCache(parsed.entries, parsed.oldestSentAt, fingerprint);
+      this.#setIndexCache(
+        parsed.entries,
+        parsed.oldestSentAt,
+        fingerprint,
+        parsed.entryCount,
+        parsed.hasInvalidLines,
+      );
     } finally {
       closeSync(snapshot.fd);
     }
@@ -474,37 +501,48 @@ export class ContextViewStore {
   #parseIndex(content: string): {
     entries: Map<string, ContextViewIndexEntry>;
     oldestSentAt?: string;
+    entryCount: number;
+    hasInvalidLines: boolean;
   } {
     const entries = new Map<string, ContextViewIndexEntry>();
     let oldestSentAt: string | undefined;
+    let entryCount = 0;
+    let hasInvalidLines = false;
     for (const line of content.split("\n")) {
       if (!line) continue;
       try {
         const value = JSON.parse(line) as ContextViewIndexEntry;
         assertEntry(value);
+        entryCount += 1;
         if (!entries.has(value.messageId)) entries.set(value.messageId, value);
         oldestSentAt = this.#earlierSentAt(oldestSentAt, value.sentAt);
       } catch {
-        // A torn or malformed line is ignored, as it was before the cache existed.
+        hasInvalidLines = true;
       }
     }
-    return { entries, oldestSentAt };
+    return { entries, oldestSentAt, entryCount, hasInvalidLines };
   }
 
   #setIndexCache(
     entries: Map<string, ContextViewIndexEntry>,
     oldestSentAt: string | undefined,
     fingerprint: IndexFingerprint | null,
+    entryCount: number,
+    hasInvalidLines: boolean,
   ): void {
     this.#indexCache = entries;
     this.#oldestSentAt = oldestSentAt;
     this.#indexFingerprint = fingerprint;
+    this.#indexEntryCount = entryCount;
+    this.#indexHasInvalidLines = hasInvalidLines;
   }
 
   #invalidateIndex(): void {
     this.#indexCache = undefined;
     this.#oldestSentAt = undefined;
     this.#indexFingerprint = undefined;
+    this.#indexEntryCount = 0;
+    this.#indexHasInvalidLines = false;
   }
 
   #fingerprint(info: ReturnType<typeof fstatSync>): IndexFingerprint {

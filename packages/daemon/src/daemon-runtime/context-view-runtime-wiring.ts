@@ -60,6 +60,7 @@ export function applyContextViewGate(
   enabled: boolean | undefined,
 ): void {
   if (enabled === undefined) return;
+  if (deps.enabled.get(agentId) === enabled) return;
   deps.enabled.set(agentId, enabled);
   if (enabled) deps.service.enable(agentId);
   else deps.service.disable(agentId);

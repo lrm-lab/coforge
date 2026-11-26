@@ -4,8 +4,17 @@ import type {
   AgentContextReadRequest,
   AgentContextSearchRequest,
 } from "@lrm/coforge-sdk/agent";
-import { runContextViewRestoreInChild } from "#src/agent-context-view/context-view-restore-runner";
-import { readContextViewSource } from "#src/agent-context-view/context-view-source";
+import {
+  runContextViewRestoreFileInChild,
+  runContextViewRestoreInChild,
+} from "#src/agent-context-view/context-view-restore-runner";
+import {
+  contextViewSourceMaxBytes,
+  openContextViewSourceAsync,
+  readContextViewSourceAsync,
+  type ContextViewOpenedSourceResult,
+  type ContextViewSourceResult,
+} from "#src/agent-context-view/context-view-source";
 import { ContextViewRestoreCache } from "#src/agent-context-view/context-view-restore-cache";
 import {
   providerTranscriptRoot,
@@ -58,7 +67,6 @@ function sourceCandidates(
   return { candidates, allowedRoots };
 }
 
-/** Own-Agent context query: authorization precedes index lookup and every filesystem operation. */
 export async function queryAgentContext(
   ports: AgentContextQueryPorts,
   agentId: string,
@@ -89,12 +97,11 @@ export async function queryAgentContext(
 
   const { candidates, allowedRoots } = sourceCandidates(ports, agentId, entry);
   const maxBytes = 32 * 1024 * 1024;
+  const maxSourceBytes = contextViewSourceMaxBytes();
   const cacheKey = (path: string) =>
     JSON.stringify([agentId, entry.sessionId, entry.messageId, entry.offset, maxBytes, path]);
-  let source:
-    | { ok: true; buffer: Buffer; sourceBytes: number }
-    | { ok: false; failure: "missing" | "outside_root" | "unsafe" | "too_large" | "read_failed" }
-    | undefined;
+  let openedSource: Extract<ContextViewOpenedSourceResult, { ok: true }> | undefined;
+  let bufferedSource: Extract<ContextViewSourceResult, { ok: true }> | undefined;
   let sourcePath: string | undefined;
   let restored: Awaited<ReturnType<typeof runContextViewRestoreInChild>> | undefined;
   for (const path of candidates) {
@@ -103,36 +110,59 @@ export async function queryAgentContext(
       restored = cached.restored;
       break;
     }
-    const candidate = readContextViewSource(path, allowedRoots);
-    if (candidate.ok) {
-      sourcePath = path;
-      source = candidate;
-      break;
+    if (ports.restoreInChild) {
+      const candidate = await readContextViewSourceAsync(path, allowedRoots, maxSourceBytes);
+      if (candidate.ok) {
+        sourcePath = path;
+        bufferedSource = candidate;
+        break;
+      }
+    } else {
+      const candidate = await openContextViewSourceAsync(path, allowedRoots, maxSourceBytes);
+      if (candidate.ok) {
+        sourcePath = path;
+        openedSource = candidate;
+        break;
+      }
     }
   }
   if (!restored) {
-    source ??= readContextViewSource(candidates[0]!, allowedRoots);
-    if (!source.ok) refuse("context source is unavailable", "CONTEXT_SOURCE_UNAVAILABLE");
-    restored = await (ports.restoreInChild ?? runContextViewRestoreInChild)({
-      runtime: entry.runtime,
-      sessionId: entry.sessionId,
-      messageId: entry.messageId,
-      buffer: source.buffer,
-      offset: entry.offset,
-      maxBytes,
-    });
+    let sourceBytes: number;
+    if (ports.restoreInChild) {
+      if (!bufferedSource) refuse("context source is unavailable", "CONTEXT_SOURCE_UNAVAILABLE");
+      sourceBytes = bufferedSource.sourceBytes;
+      restored = await ports.restoreInChild({
+        runtime: entry.runtime,
+        sessionId: entry.sessionId,
+        messageId: entry.messageId,
+        buffer: bufferedSource.buffer,
+        offset: entry.offset,
+        maxBytes,
+      });
+    } else {
+      if (!openedSource) refuse("context source is unavailable", "CONTEXT_SOURCE_UNAVAILABLE");
+      const streamed = await runContextViewRestoreFileInChild({
+        runtime: entry.runtime,
+        sessionId: entry.sessionId,
+        messageId: entry.messageId,
+        handle: openedSource.handle,
+        offset: entry.offset,
+        maxBytes,
+        maxSourceBytes,
+      });
+      restored = streamed.result;
+      sourceBytes = streamed.sourceBytes;
+    }
     if (sourcePath && ports.restoreCache)
       ports.restoreCache.set(
         { key: cacheKey(sourcePath), path: sourcePath, allowedRoots },
-        source.sourceBytes,
+        sourceBytes,
         restored,
       );
   }
   if (ports.currentSessionId(agentId) !== request.sessionId)
     refuse("context session changed while it was being restored", "CONTEXT_SESSION_MISMATCH");
   if (!restored.ok)
-    // The child's own first stderr line, when it left one: the difference between "the restore
-    // said no" and "the restore never ran" (task #739).
     refuse(
       restored.detail === undefined
         ? "context could not be restored"

@@ -6,11 +6,11 @@ import { writePrivateJsonRecord } from "./private-json-record";
 
 const logger = getLogger(["coforge", "daemon", "inbox"]);
 
-/** The App Inbox items one Agent was already told about, kept where the next daemon reads it. */
 export interface AppNotifiedStore {
   read(agentId: string, sessionId: string | undefined): Promise<readonly string[]>;
   add(agentId: string, sessionId: string | undefined, itemIds: readonly string[]): Promise<void>;
   remove(agentId: string, itemId: string): Promise<void>;
+  removeMany?(agentId: string, itemIds: readonly string[]): Promise<void>;
   clear(agentId: string): Promise<void>;
 }
 
@@ -18,6 +18,7 @@ type Record = { sessionId: string | undefined; itemIds: readonly string[] };
 
 export class FileAppNotifiedStore implements AppNotifiedStore {
   readonly #queues = new Map<string, Promise<unknown>>();
+  readonly #cache = new Map<string, Record>();
 
   constructor(
     private readonly stateDirectory: string,
@@ -34,7 +35,11 @@ export class FileAppNotifiedStore implements AppNotifiedStore {
 
   async read(agentId: string, sessionId: string | undefined): Promise<readonly string[]> {
     if (sessionId === undefined) return [];
-    const record = await this.#load(agentId);
+    if (!this.#queues.has(agentId)) {
+      const cached = this.#cache.get(agentId);
+      if (cached !== undefined) return cached.sessionId === sessionId ? cached.itemIds : [];
+    }
+    const record = await this.#serial(agentId, () => this.#load(agentId));
     return record.sessionId === sessionId ? record.itemIds : [];
   }
 
@@ -51,20 +56,33 @@ export class FileAppNotifiedStore implements AppNotifiedStore {
   }
 
   remove(agentId: string, itemId: string): Promise<void> {
+    return this.removeMany(agentId, [itemId]);
+  }
+
+  removeMany(agentId: string, itemIds: readonly string[]): Promise<void> {
+    if (itemIds.length === 0) return Promise.resolve();
     return this.#serial(agentId, async () => {
       const record = await this.#load(agentId);
       if (record.sessionId === undefined) return;
       const current = new Set(record.itemIds);
-      if (!current.delete(itemId)) return;
+      let changed = false;
+      for (const itemId of itemIds) {
+        if (current.delete(itemId)) changed = true;
+      }
+      if (!changed) return;
       await this.#write(agentId, { sessionId: record.sessionId, itemIds: [...current] });
     });
   }
 
   clear(agentId: string): Promise<void> {
-    return this.#serial(agentId, () => this.#write(agentId, { sessionId: undefined, itemIds: [] }));
+    return this.#serial(agentId, async () => {
+      const record = await this.#load(agentId);
+      if (record.sessionId === undefined && record.itemIds.length === 0) return;
+      await this.#write(agentId, { sessionId: undefined, itemIds: [] });
+    });
   }
 
-  #serial(agentId: string, operation: () => Promise<void>): Promise<void> {
+  #serial<T>(agentId: string, operation: () => Promise<T>): Promise<T> {
     const next = (this.#queues.get(agentId) ?? Promise.resolve()).then(operation, operation);
     const settled = next.catch(() => {});
     this.#queues.set(agentId, settled);
@@ -75,9 +93,15 @@ export class FileAppNotifiedStore implements AppNotifiedStore {
   }
 
   async #load(agentId: string): Promise<Record> {
+    const cached = this.#cache.get(agentId);
+    if (cached !== undefined) return cached;
     const path = this.#path(agentId);
     const file = Bun.file(path);
-    if (!(await file.exists())) return { sessionId: undefined, itemIds: [] };
+    if (!(await file.exists())) {
+      const empty: Record = { sessionId: undefined, itemIds: [] };
+      this.#cache.set(agentId, empty);
+      return empty;
+    }
     const text = await file.text();
     try {
       const value = JSON.parse(text) as {
@@ -87,22 +111,32 @@ export class FileAppNotifiedStore implements AppNotifiedStore {
       } | null;
       if (value?.version !== 1 || !Array.isArray(value.itemIds))
         throw new Error("app notified records are corrupt");
-      return {
+      const record: Record = {
         sessionId: isSessionId(value.sessionId) ? value.sessionId : undefined,
         itemIds: value.itemIds.filter((itemId): itemId is string => isItemId(itemId)),
       };
+      this.#cache.set(agentId, record);
+      return record;
     } catch (error) {
       await this.#quarantine(agentId, path, error);
-      return { sessionId: undefined, itemIds: [] };
+      const empty: Record = { sessionId: undefined, itemIds: [] };
+      this.#cache.set(agentId, empty);
+      return empty;
     }
   }
 
   async #write(agentId: string, record: Record): Promise<void> {
-    await writePrivateJsonRecord(
-      this.#path(agentId),
-      { version: 1, sessionId: record.sessionId, itemIds: record.itemIds },
-      { durable: true },
-    );
+    try {
+      await writePrivateJsonRecord(
+        this.#path(agentId),
+        { version: 1, sessionId: record.sessionId, itemIds: record.itemIds },
+        { durable: true },
+      );
+      this.#cache.set(agentId, record);
+    } catch (error) {
+      this.#cache.delete(agentId);
+      throw error;
+    }
   }
 
   async #quarantine(agentId: string, path: string, error: unknown): Promise<void> {

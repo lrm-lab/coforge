@@ -7,6 +7,7 @@ import {
   readFileSync,
   realpathSync,
 } from "node:fs";
+import { lstat, open, realpath, type FileHandle } from "node:fs/promises";
 import { totalmem } from "node:os";
 import { isAbsolute, relative } from "node:path";
 import { isPrivateRegularFile } from "#src/agent-runtime/private-file";
@@ -23,6 +24,9 @@ export type ContextViewSourceFailure =
   | "read_failed";
 export type ContextViewSourceResult =
   | { ok: true; buffer: Buffer; sourceBytes: number }
+  | { ok: false; failure: ContextViewSourceFailure };
+export type ContextViewOpenedSourceResult =
+  | { ok: true; handle: FileHandle; size: number }
   | { ok: false; failure: ContextViewSourceFailure };
 
 export type ContextViewSourceFingerprint = Readonly<{
@@ -48,7 +52,6 @@ function contained(path: string, root: string): boolean {
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 
-/** Securely inspects a source without reading its bytes, for short-lived restore cache hits. */
 export function fingerprintContextViewSource(
   sourcePath: string,
   allowedRoots: readonly string[],
@@ -128,5 +131,66 @@ export function readContextViewSource(
   } catch (error) {
     const code = error instanceof Error && "code" in error ? error.code : undefined;
     return { ok: false, failure: code === "ENOENT" ? "missing" : "read_failed" };
+  }
+}
+
+export async function openContextViewSourceAsync(
+  sourcePath: string,
+  allowedRoots: readonly string[],
+  maxBytes = contextViewSourceMaxBytes(),
+): Promise<ContextViewOpenedSourceResult> {
+  if (!sourcePath || !allowedRoots.length) return { ok: false, failure: "outside_root" };
+  try {
+    const realRoots: string[] = [];
+    for (const root of allowedRoots) {
+      try {
+        realRoots.push(await realpath(root));
+      } catch {
+        return { ok: false, failure: "outside_root" };
+      }
+    }
+    const realSource = await realpath(sourcePath);
+    if (!realRoots.some((root) => contained(realSource, root)))
+      return { ok: false, failure: "outside_root" };
+    const listed = await lstat(sourcePath);
+    if (!isPrivateRegularFile(listed)) return { ok: false, failure: "unsafe" };
+    const handle = await open(sourcePath, CONTEXT_VIEW_SOURCE_READ_FLAGS);
+    try {
+      const info = await handle.stat();
+      if (!isPrivateRegularFile(info) || info.dev !== listed.dev || info.ino !== listed.ino) {
+        await handle.close();
+        return { ok: false, failure: "unsafe" };
+      }
+      if (info.size > maxBytes) {
+        await handle.close();
+        return { ok: false, failure: "too_large" };
+      }
+      return { ok: true, handle, size: info.size };
+    } catch (error) {
+      await handle.close().catch(() => {});
+      throw error;
+    }
+  } catch (error) {
+    const code = error instanceof Error && "code" in error ? error.code : undefined;
+    return { ok: false, failure: code === "ENOENT" ? "missing" : "read_failed" };
+  }
+}
+
+export async function readContextViewSourceAsync(
+  sourcePath: string,
+  allowedRoots: readonly string[],
+  maxBytes = contextViewSourceMaxBytes(),
+): Promise<ContextViewSourceResult> {
+  const opened = await openContextViewSourceAsync(sourcePath, allowedRoots, maxBytes);
+  if (!opened.ok) return opened;
+  try {
+    const buffer = await opened.handle.readFile();
+    if (buffer.byteLength > maxBytes) return { ok: false, failure: "too_large" };
+    return { ok: true, buffer, sourceBytes: buffer.byteLength };
+  } catch (error) {
+    const code = error instanceof Error && "code" in error ? error.code : undefined;
+    return { ok: false, failure: code === "ENOENT" ? "missing" : "read_failed" };
+  } finally {
+    await opened.handle.close().catch(() => {});
   }
 }
