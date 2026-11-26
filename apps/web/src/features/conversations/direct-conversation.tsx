@@ -83,12 +83,10 @@ export function DirectConversationHeader({
           ) : (
             avatar
           )}
-          {/* One line: name, then the live status as a dot and a label. */}
           <div
             className={cn(
               "flex min-w-0 flex-1",
-              // A warning takes a line of its own: the name keeps its width.
-              status.alert ? "flex-col items-start [&_h1]:leading-5" : "items-center gap-2",
+              status.alert ? "flex-col items-start [&_h1]:leading-5" : "items-center gap-2.5",
             )}
           >
             {openProfile ? (
@@ -115,14 +113,18 @@ export function DirectConversationHeader({
             {deleted ? (
               <DeletedAgentLabel />
             ) : (
-              <div className={status.alert ? "flex w-full min-w-0 items-center gap-1" : "contents"}>
+              <div
+                className={cn(
+                  "flex min-w-0 items-center",
+                  status.alert ? "w-full gap-1" : "flex-1 gap-1.5",
+                )}
+              >
                 <AgentStatusMarker status={status} className="size-2" />
                 <p
                   role="status"
                   className={cn(
-                    status.alert
-                      ? "min-w-0 truncate text-xs text-error-primary"
-                      : "min-w-0 flex-1 truncate text-sm text-tertiary",
+                    "min-w-0 truncate",
+                    status.alert ? "text-xs text-error-primary" : "text-sm text-tertiary",
                   )}
                 >
                   <AgentStatusText status={status} />

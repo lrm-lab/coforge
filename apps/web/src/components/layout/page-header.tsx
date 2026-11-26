@@ -15,7 +15,6 @@ export function PageHeader({
   meta,
   actions,
   tabs,
-  tabsStart,
   headingClassName,
 }: {
   leading?: React.ReactNode;
@@ -27,7 +26,6 @@ export function PageHeader({
   meta?: React.ReactNode;
   actions?: React.ReactNode;
   tabs?: React.ReactNode;
-  tabsStart?: boolean;
   headingClassName?: string;
 }) {
   const hasBreadcrumbs = Boolean(breadcrumbs && breadcrumbs.length > 0);
@@ -60,7 +58,6 @@ export function PageHeader({
         identity={title}
         actions={actions && <div className="flex items-center gap-2">{actions}</div>}
         tabs={tabs}
-        tabsStart={tabsStart}
         className="px-page"
       />
     );

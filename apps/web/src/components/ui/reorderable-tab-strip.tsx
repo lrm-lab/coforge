@@ -187,7 +187,12 @@ export function ReorderableTabStrip<T extends string>({
           selectedKey={active}
           className={cx("relative w-max shrink-0", className)}
         >
-          <TabList type="underline" size={size} aria-label={ariaLabel}>
+          <TabList
+            type="underline"
+            size={size}
+            aria-label={ariaLabel}
+            className="gap-1 before:hidden"
+          >
             {shown.map((tab) => (
               <DraggableTab
                 key={tab}
@@ -277,7 +282,7 @@ function DraggableTab({
       onPressStart={onPressStart}
       onPress={onPress}
       data-moving={moving || undefined}
-      className="shrink-0 select-none [-webkit-touch-callout:none] border-transparent text-brand-secondary opacity-60 *:data-icon:text-fg-brand-secondary_hover hover:not-aria-selected:opacity-80 aria-selected:opacity-100 data-moving:rounded-md data-moving:bg-primary_hover"
+      className="shrink-0 select-none [-webkit-touch-callout:none] rounded-md border-b-0 px-2 py-1.5 text-brand-secondary opacity-60 *:data-icon:text-fg-brand-secondary_hover hover:not-aria-selected:bg-primary_hover hover:not-aria-selected:opacity-85 aria-selected:bg-active aria-selected:opacity-100 data-moving:bg-primary_hover"
     >
       <span ref={labelRef}>{meta.label()}</span>
     </Tab>
