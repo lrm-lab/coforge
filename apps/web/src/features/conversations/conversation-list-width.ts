@@ -10,15 +10,6 @@ export type ListColumn = {
   edge?: "left" | "right";
 };
 
-export const SIDEBAR_COLUMN: ListColumn = {
-  key: "coforge-sidebar-width",
-  property: "--sidebar-width",
-  defaultWidth: 15,
-  min: 10,
-  max: 20,
-  label: m.navigation_resize_sidebar,
-};
-
 export const CONVERSATION_LIST_COLUMN: ListColumn = {
   key: "coforge-conversation-list-width",
   property: "--conversation-list-width",
@@ -61,7 +52,6 @@ function bootScript({ key, property, min, max }: ListColumn): string {
 }
 
 export const CONVERSATION_LIST_BOOT =
-  bootScript(SIDEBAR_COLUMN) +
   bootScript(CONVERSATION_LIST_COLUMN) +
   bootScript(LIST_COLUMN) +
   bootScript(ATTACHMENT_COMMENTS_COLUMN);

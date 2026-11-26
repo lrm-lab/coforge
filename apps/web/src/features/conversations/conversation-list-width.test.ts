@@ -4,7 +4,6 @@ import {
   CONVERSATION_LIST_BOOT,
   CONVERSATION_LIST_COLUMN as CHAT,
   LIST_COLUMN as LIST,
-  SIDEBAR_COLUMN,
   clampListWidth,
   dragListWidth,
   keyListWidth,
@@ -114,14 +113,6 @@ describe("list column width", () => {
     expect(keyListWidth(LIST, key("ArrowRight"), 23.75)).toBe(24.75);
     expect(keyListWidth(LIST, key("ArrowLeft"), 18.25)).toBe(18);
     expect(keyListWidth(LIST, key("ArrowRight"), 40)).toBe(40);
-  });
-
-  test("the sidebar narrows down to its collapse threshold and its kept width is restored at boot", () => {
-    expect(SIDEBAR_COLUMN.min).toBe(10);
-    expect(SIDEBAR_COLUMN.defaultWidth).toBe(15);
-    expect(dragListWidth(SIDEBAR_COLUMN, 15, 15, 6)).toBe(10);
-    expect(dragListWidth(SIDEBAR_COLUMN, 15, 15, 35)).toBe(20);
-    expect(CONVERSATION_LIST_BOOT).toContain(SIDEBAR_COLUMN.property);
   });
 
   test("mirrors pointer drag and arrow keys in RTL for both inline-end and inline-start handles", () => {

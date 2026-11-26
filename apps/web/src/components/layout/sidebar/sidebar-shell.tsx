@@ -1,219 +1,108 @@
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
-  useEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type PointerEvent,
-  type ReactNode,
-  type RefObject,
-} from "react";
+  Group,
+  Panel,
+  Separator,
+  usePanelRef,
+  type Layout,
+  type LayoutChangedMeta,
+  type PanelSize,
+} from "react-resizable-panels";
+import { browserLocalStorage } from "#src/features/browser-local-storage";
 import {
-  applyListWidth,
-  getListWidth,
-  setListWidth,
-  useListWidth,
-} from "#src/features/conversations/conversation-list-layout";
-import { SIDEBAR_COLUMN } from "#src/features/conversations/conversation-list-width";
-import { isSidebarExpanded, writeSidebarExpanded } from "#src/features/settings/sidebar-expanded";
-import {
-  SIDEBAR_RAIL_REM,
-  beginSidebarDrag,
-  finishSidebarDrag,
-  keySidebarResize,
-  stepSidebarDrag,
-} from "./sidebar-resize-model";
+  isSidebarExpanded,
+  subscribeSidebarExpanded,
+  writeSidebarExpanded,
+} from "#src/features/settings/sidebar-expanded";
+import { m } from "#src/paraglide/messages";
 
-const RESTORE_AFTER_COLLAPSE_MS = 180;
+const SIDEBAR_GROUP_ID = "coforge-sidebar";
+const SIDEBAR_PANEL_ID = "sidebar";
+const MAIN_PANEL_ID = "main";
+const SIDEBAR_EXPANDED_WIDTH_KEY = "coforge-sidebar-width";
+const SIDEBAR_DEFAULT_REM = 15;
+const SIDEBAR_MIN_REM = 10;
+const SIDEBAR_MAX_REM = 20;
+const SIDEBAR_RAIL_SIZE = "3.5rem";
+const SIDEBAR_RESIZE_TARGET = { coarse: 44, fine: 12 };
+const SIDEBAR_PANEL_STYLE = { overflow: "hidden" } as const;
+const MAIN_PANEL_STYLE = { overflow: "visible" } as const;
+const PLAIN_NUMBER = /^\d+(\.\d+)?$/;
 
 function rootFontSizePx(): number {
   const parsed = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 16;
 }
 
-function isRtlElement(element: HTMLElement): boolean {
-  return getComputedStyle(element).direction === "rtl";
+function readRememberedExpandedRem(): number {
+  try {
+    const raw = browserLocalStorage()?.getItem(SIDEBAR_EXPANDED_WIDTH_KEY) ?? null;
+    if (raw === null || !PLAIN_NUMBER.test(raw)) return SIDEBAR_DEFAULT_REM;
+    const parsed = Number(raw);
+    const rem = parsed > 80 ? parsed / 16 : parsed;
+    return Math.min(SIDEBAR_MAX_REM, Math.max(SIDEBAR_MIN_REM, rem));
+  } catch {
+    return SIDEBAR_DEFAULT_REM;
+  }
 }
 
-function measuredWidthRem(shell: HTMLElement | null): number {
-  const px = shell?.offsetWidth;
-  return px ? px / rootFontSizePx() : getListWidth(SIDEBAR_COLUMN);
+function writeRememberedExpandedRem(rem: number) {
+  try {
+    const clamped = Math.min(SIDEBAR_MAX_REM, Math.max(SIDEBAR_MIN_REM, rem));
+    const rounded = Math.round(clamped * 1000) / 1000;
+    browserLocalStorage()?.setItem(SIDEBAR_EXPANDED_WIDTH_KEY, String(rounded));
+  } catch {}
 }
 
-function setShellDragging(shell: HTMLElement | null, dragging: boolean) {
-  shell?.toggleAttribute("data-dragging", dragging);
-}
-
-function SidebarResizeHandle({ shellRef }: { shellRef: RefObject<HTMLDivElement | null> }) {
-  const width = useListWidth(SIDEBAR_COLUMN);
-  const [dragging, setDragging] = useState(false);
-  const [snapPrimed, setSnapPrimed] = useState(false);
-  const stopDrag = useRef<AbortController | undefined>(undefined);
-  const restoreTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const pendingRestore = useRef<number | undefined>(undefined);
-
-  const flushPendingRestore = () => {
-    if (restoreTimer.current !== undefined) {
-      clearTimeout(restoreTimer.current);
-      restoreTimer.current = undefined;
-    }
-    if (pendingRestore.current !== undefined) {
-      applyListWidth(SIDEBAR_COLUMN, pendingRestore.current);
-      pendingRestore.current = undefined;
-    }
-  };
-
-  useEffect(() => {
-    const shell = shellRef.current;
-    return () => {
-      if (stopDrag.current) {
-        stopDrag.current.abort();
-        stopDrag.current = undefined;
-      }
-      setShellDragging(shell, false);
-      flushPendingRestore();
-    };
-  }, [shellRef]);
-
-  useEffect(() => {
-    if (!dragging) return;
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    return () => {
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-  }, [dragging]);
-
-  function onPointerDown(event: PointerEvent<HTMLDivElement>) {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    flushPendingRestore();
-    const handle = event.currentTarget;
-    const { pointerId, clientX: startX } = event;
-    const remPx = rootFontSizePx();
-    const rtl = isRtlElement(handle);
-    const collapsed = !isSidebarExpanded();
-    const rememberedWidth = getListWidth(SIDEBAR_COLUMN);
-    let dragState = beginSidebarDrag({
-      collapsed,
-      currentWidth: collapsed ? SIDEBAR_RAIL_REM : measuredWidthRem(shellRef.current),
-      rememberedWidth,
-      startX: startX / remPx,
-      rtl,
-    });
-    try {
-      handle.setPointerCapture(pointerId);
-    } catch {}
-    stopDrag.current?.abort();
-    const abort = new AbortController();
-    stopDrag.current = abort;
-    setDragging(true);
-    setShellDragging(shellRef.current, !collapsed);
-
-    const move = (moved: globalThis.PointerEvent) => {
-      if (moved.pointerId !== pointerId) return;
-      const step = stepSidebarDrag(dragState, moved.clientX / remPx);
-      dragState = step.state;
-      setSnapPrimed(step.snapPrimed);
-      setShellDragging(shellRef.current, step.liveResize);
-      if (step.collapsedChanged) {
-        if (!step.collapsed) {
-          applyListWidth(SIDEBAR_COLUMN, step.width);
-        }
-        writeSidebarExpanded(!step.collapsed);
-      } else if (step.liveResize) {
-        applyListWidth(SIDEBAR_COLUMN, step.width);
-      }
-    };
-
-    const end = (ended: globalThis.PointerEvent) => {
-      if (ended.pointerId !== pointerId) return;
-      abort.abort();
-      stopDrag.current = undefined;
-      try {
-        handle.releasePointerCapture(pointerId);
-      } catch {}
-      setDragging(false);
-      setSnapPrimed(false);
-      setShellDragging(shellRef.current, false);
-      const done = finishSidebarDrag(dragState);
-      if (done.commitWidth !== undefined) {
-        setListWidth(SIDEBAR_COLUMN, done.commitWidth);
-      } else if (done.restoreWidth !== undefined) {
-        pendingRestore.current = done.restoreWidth;
-        restoreTimer.current = setTimeout(() => {
-          restoreTimer.current = undefined;
-          if (pendingRestore.current !== undefined) {
-            applyListWidth(SIDEBAR_COLUMN, pendingRestore.current);
-            pendingRestore.current = undefined;
-          }
-        }, RESTORE_AFTER_COLLAPSE_MS);
-      }
-    };
-
-    window.addEventListener("pointermove", move, { signal: abort.signal });
-    window.addEventListener("pointerup", end, { signal: abort.signal });
-    window.addEventListener("pointercancel", end, { signal: abort.signal });
+function runSyncing(syncingRef: { current: boolean }, fn: () => void) {
+  syncingRef.current = true;
+  try {
+    fn();
+  } finally {
+    syncingRef.current = false;
   }
-
-  function onDoubleClick() {
-    flushPendingRestore();
-    setListWidth(SIDEBAR_COLUMN, SIDEBAR_COLUMN.defaultWidth);
-    if (!isSidebarExpanded()) writeSidebarExpanded(true);
-  }
-
-  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    flushPendingRestore();
-    const collapsed = !isSidebarExpanded();
-    const rememberedWidth = getListWidth(SIDEBAR_COLUMN);
-    const current = collapsed ? SIDEBAR_RAIL_REM : measuredWidthRem(shellRef.current);
-    const next = keySidebarResize(event, {
-      collapsed,
-      width: current,
-      rememberedWidth,
-      rtl: isRtlElement(event.currentTarget),
-    });
-    if (!next) return;
-    event.preventDefault();
-    if (next.collapsed) {
-      writeSidebarExpanded(false);
-      return;
-    }
-    setListWidth(SIDEBAR_COLUMN, next.width);
-    if (collapsed) writeSidebarExpanded(true);
-  }
-
-  return (
-    <div
-      role="separator"
-      aria-orientation="vertical"
-      aria-label={SIDEBAR_COLUMN.label()}
-      aria-valuenow={Math.round(width * 10) / 10}
-      aria-valuemin={SIDEBAR_RAIL_REM}
-      aria-valuemax={SIDEBAR_COLUMN.max}
-      tabIndex={0}
-      data-sidebar-resize-handle=""
-      data-dragging={dragging ? "" : undefined}
-      data-snap-primed={snapPrimed ? "" : undefined}
-      onPointerDown={onPointerDown}
-      onDoubleClick={onDoubleClick}
-      onKeyDown={onKeyDown}
-      className="absolute inset-y-0 end-0 z-10 w-3 cursor-col-resize touch-none outline-hidden pointer-coarse:w-6"
-    />
-  );
 }
 
 export function SidebarShell({
   defaultRail = false,
   expanded,
   rail,
+  children,
 }: {
   defaultRail?: boolean;
   expanded: ReactNode;
   rail: ReactNode;
+  children: ReactNode;
 }) {
-  const shellRef = useRef<HTMLDivElement>(null);
+  const panelRef = usePanelRef();
+  const syncingRef = useRef(false);
+  const rememberedRemRef = useRef(SIDEBAR_DEFAULT_REM);
   const [ready, setReady] = useState(false);
+
+  const syncPanelToExpanded = useCallback(
+    (wantExpanded: boolean, applyRememberedWidth = false) => {
+      const panel = panelRef.current;
+      if (!panel) return;
+      runSyncing(syncingRef, () => {
+        if (wantExpanded) {
+          if (panel.isCollapsed() || applyRememberedWidth) {
+            panel.resize(`${rememberedRemRef.current}rem`);
+          }
+        } else if (!panel.isCollapsed()) {
+          panel.collapse();
+        }
+      });
+    },
+    [panelRef],
+  );
+
+  useLayoutEffect(() => {
+    const remembered = readRememberedExpandedRem();
+    rememberedRemRef.current = remembered;
+    syncPanelToExpanded(isSidebarExpanded(), remembered !== SIDEBAR_DEFAULT_REM);
+  }, [defaultRail, syncPanelToExpanded]);
+
+  useEffect(() => subscribeSidebarExpanded(syncPanelToExpanded), [syncPanelToExpanded]);
 
   useEffect(() => {
     let second = 0;
@@ -226,24 +115,84 @@ export function SidebarShell({
     };
   }, []);
 
+  const handleResize = (_size: PanelSize, _id: string | number | undefined, prev?: PanelSize) => {
+    if (prev === undefined || syncingRef.current) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const collapsed = panel.isCollapsed();
+    if (collapsed !== !isSidebarExpanded()) {
+      runSyncing(syncingRef, () => {
+        writeSidebarExpanded(!collapsed);
+      });
+    }
+  };
+
+  const handleLayoutChanged = (_nextLayout: Layout, meta: LayoutChangedMeta) => {
+    if (!meta.isUserInteraction) return;
+    const panel = panelRef.current;
+    if (!panel || panel.isCollapsed()) return;
+    const rem = panel.getSize().inPixels / rootFontSizePx();
+    if (rem >= SIDEBAR_MIN_REM - 0.1) {
+      const clamped = Math.min(SIDEBAR_MAX_REM, Math.max(SIDEBAR_MIN_REM, rem));
+      rememberedRemRef.current = clamped;
+      writeRememberedExpandedRem(clamped);
+    }
+  };
+
+  const handleSeparatorDoubleClick = () => {
+    rememberedRemRef.current = SIDEBAR_DEFAULT_REM;
+    writeRememberedExpandedRem(SIDEBAR_DEFAULT_REM);
+  };
+
   return (
-    <div
-      ref={shellRef}
-      data-sidebar-shell=""
-      data-default-rail={defaultRail ? "" : undefined}
+    <Group
+      id={SIDEBAR_GROUP_ID}
+      orientation="horizontal"
+      onLayoutChanged={handleLayoutChanged}
+      resizeTargetMinimumSize={SIDEBAR_RESIZE_TARGET}
+      data-sidebar-group=""
       data-ready={ready ? "" : undefined}
-      className="relative hidden h-full shrink-0 overflow-hidden lg:block"
+      className="flex min-h-0 min-w-0 flex-1"
     >
-      <div
-        data-sidebar-panel="expanded"
-        className="absolute inset-y-0 start-0 h-full w-(--sidebar-width,15rem)"
+      <Panel
+        id={SIDEBAR_PANEL_ID}
+        panelRef={panelRef}
+        collapsible
+        collapsedSize={SIDEBAR_RAIL_SIZE}
+        minSize={`${SIDEBAR_MIN_REM}rem`}
+        maxSize={`${SIDEBAR_MAX_REM}rem`}
+        defaultSize={`${SIDEBAR_DEFAULT_REM}rem`}
+        groupResizeBehavior="preserve-pixel-size"
+        onResize={handleResize}
+        data-sidebar-shell=""
+        data-default-rail={defaultRail ? "" : undefined}
+        style={SIDEBAR_PANEL_STYLE}
+        className="relative h-full"
       >
-        {expanded}
-      </div>
-      <div data-sidebar-panel="rail" className="absolute inset-y-0 start-0 h-full w-14">
-        {rail}
-      </div>
-      <SidebarResizeHandle shellRef={shellRef} />
-    </div>
+        <div
+          data-sidebar-panel="expanded"
+          className="absolute inset-y-0 start-0 h-full w-full min-w-40"
+        >
+          {expanded}
+        </div>
+        <div data-sidebar-panel="rail" className="absolute inset-y-0 start-0 h-full w-14">
+          {rail}
+        </div>
+      </Panel>
+      <Separator
+        aria-label={m.navigation_resize_sidebar()}
+        onDoubleClick={handleSeparatorDoubleClick}
+        data-sidebar-resize-handle=""
+        className="relative z-10 w-px shrink-0 cursor-col-resize touch-none bg-transparent outline-hidden"
+      />
+      <Panel
+        id={MAIN_PANEL_ID}
+        groupResizeBehavior="preserve-relative-size"
+        style={MAIN_PANEL_STYLE}
+        className="flex min-h-0 min-w-0 flex-1 flex-col"
+      >
+        {children}
+      </Panel>
+    </Group>
   );
 }

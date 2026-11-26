@@ -33,8 +33,18 @@ export function isSidebarExpanded(): boolean {
   return document.querySelector("[data-sidebar-default-rail]") === null;
 }
 
+const listeners = new Set<(expanded: boolean) => void>();
+
+export function subscribeSidebarExpanded(listener: (expanded: boolean) => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 export function writeSidebarExpanded(expanded: boolean) {
   writeDeviceFlag(STORAGE_KEY, expanded);
   document.documentElement.classList.toggle(COLLAPSED_CLASS, !expanded);
   document.documentElement.classList.toggle(EXPANDED_CLASS, expanded);
+  for (const listener of listeners) listener(expanded);
 }

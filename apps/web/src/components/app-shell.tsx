@@ -354,6 +354,24 @@ function WorkspaceChrome({
     [activityUnreadCount, activityUnreadLit],
   );
 
+  const mainArea = (
+    <div
+      ref={contentScrollRootRef}
+      data-phone-tab-bar={tabBar ? "" : undefined}
+      className={cx("flex min-h-0 min-w-0 flex-1 flex-col", !standalone && "lg:p-2 lg:ps-0")}
+    >
+      <div
+        className={cx(
+          "flex min-h-0 min-w-0 flex-1 flex-col bg-primary",
+          !standalone &&
+            "lg:overflow-hidden lg:rounded-xl lg:has-[[data-panel-cards]]:overflow-visible lg:has-[[data-panel-cards]]:rounded-none lg:has-[[data-panel-cards]]:bg-transparent",
+        )}
+      >
+        <ChatListShownContext value={phone && chatListOpen}>{children}</ChatListShownContext>
+      </div>
+    </div>
+  );
+
   return (
     <PhoneShellContext value={phoneShell}>
       <ChatListOpenContext value={setChatListOpen}>
@@ -368,11 +386,11 @@ function WorkspaceChrome({
           )}
         >
           <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-            <div className={standalone ? "hidden" : "contents"}>
-              <ShellLinks>
-                <SidebarShell
-                  defaultRail={defaultRail}
-                  expanded={
+            {!standalone && !phone ? (
+              <SidebarShell
+                defaultRail={defaultRail}
+                expanded={
+                  <ShellLinks>
                     <MemoSidebarExpanded
                       activeUrl={activeUrl}
                       items={navItems}
@@ -380,39 +398,24 @@ function WorkspaceChrome({
                       search={SEARCH_FIELD}
                       footer={expandedFooter}
                     />
-                  }
-                  rail={
+                  </ShellLinks>
+                }
+                rail={
+                  <ShellLinks>
                     <MemoSidebarRail
                       activeUrl={activeUrl}
                       items={navItems}
                       header={railHeader}
                       footer={railFooter}
                     />
-                  }
-                />
-              </ShellLinks>
-            </div>
-
-            <div
-              ref={contentScrollRootRef}
-              data-phone-tab-bar={tabBar ? "" : undefined}
-              className={cx(
-                "flex min-h-0 min-w-0 flex-1 flex-col",
-                !standalone && "lg:p-2 lg:ps-0",
-              )}
-            >
-              <div
-                className={cx(
-                  "flex min-h-0 min-w-0 flex-1 flex-col bg-primary",
-                  !standalone &&
-                    "lg:overflow-hidden lg:rounded-xl lg:has-[[data-panel-cards]]:overflow-visible lg:has-[[data-panel-cards]]:rounded-none lg:has-[[data-panel-cards]]:bg-transparent",
-                )}
+                  </ShellLinks>
+                }
               >
-                <ChatListShownContext value={phone && chatListOpen}>
-                  {children}
-                </ChatListShownContext>
-              </div>
-            </div>
+                {mainArea}
+              </SidebarShell>
+            ) : (
+              mainArea
+            )}
           </div>
           {tabBar && chatHref && activityHref && (
             <ShellLinks>
