@@ -20,6 +20,8 @@ import { FileTypeIcon } from "#src/features/files/file-type-icon";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
+import { PAGE_TAB_CLASS } from "#src/components/ui/reorderable-tab-strip";
+import { cx } from "#src/utils/cx";
 import { WorkspaceTaskBoard } from "#src/features/tasks/workspace-task-board";
 import { ProjectOverview } from "./project-overview";
 import type { getProject, getProjectRepository } from "./projects.functions";
@@ -87,16 +89,24 @@ export function ProjectDetail({
         }}
         className="flex min-h-0 flex-1 flex-col"
       >
-        <div className="shrink-0 border-b border-secondary pt-2">
+        <div className="shrink-0 border-b border-secondary px-page">
           <TabList
             type="underline"
             size="sm"
             aria-label={m.project_sections()}
-            className="-mb-px gap-6 px-page before:hidden"
+            className="-mx-2 -mb-px gap-1 before:hidden"
           >
-            <Tab id="tasks">{m.project_tasks()}</Tab>
-            <Tab id="overview">{m.project_overview()}</Tab>
-            {hasCode && <Tab id="code">{m.project_code()}</Tab>}
+            <Tab id="tasks" className={cx(PAGE_TAB_CLASS, "aria-selected:border-fg-primary")}>
+              {m.project_tasks()}
+            </Tab>
+            <Tab id="overview" className={cx(PAGE_TAB_CLASS, "aria-selected:border-fg-primary")}>
+              {m.project_overview()}
+            </Tab>
+            {hasCode && (
+              <Tab id="code" className={cx(PAGE_TAB_CLASS, "aria-selected:border-fg-primary")}>
+                {m.project_code()}
+              </Tab>
+            )}
           </TabList>
         </div>
         <TabPanel id="overview" className="min-h-0 flex-1 overflow-y-auto outline-hidden">

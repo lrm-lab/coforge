@@ -64,11 +64,11 @@ export function TabbedHeader({
           <div
             ref={tabsScrollRef}
             className={cx(
-              "col-span-2 row-start-2 flex min-w-0 max-w-full items-center overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+              "col-span-2 row-start-2 -mx-2 -mb-px flex min-w-0 items-center overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
               !tabsOverflow && "[touch-action:pan-y_pinch-zoom]",
             )}
           >
-            <div className="flex min-h-8 w-max shrink-0 items-center">{tabs}</div>
+            <div className="flex min-h-9 w-max shrink-0 items-center">{tabs}</div>
           </div>
         )}
       </header>

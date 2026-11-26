@@ -32,8 +32,12 @@ import {
 } from "#src/components/ui/drag-ripple/drag-ripple";
 import { useActiveTabInView } from "#src/hooks/use-active-tab-in-view";
 import { useDocumentDragCursor } from "#src/hooks/use-document-drag-cursor";
+import { useSlidingIndicator } from "#src/hooks/use-sliding-indicator";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
+
+export const PAGE_TAB_CLASS =
+  "relative z-10 h-9 shrink-0 select-none [-webkit-touch-callout:none] gap-1.5 rounded-none border-b-2 border-transparent px-2 py-0 text-sm font-medium text-tertiary transition-colors duration-150 *:data-icon:size-3.5 *:data-icon:text-fg-quaternary before:pointer-events-none before:absolute before:inset-x-0.5 before:inset-y-1.5 before:-z-10 before:rounded-md before:bg-transparent before:transition-colors before:duration-150 hover:not-aria-selected:text-primary hover:not-aria-selected:*:data-icon:text-fg-secondary hover:before:bg-primary_hover aria-selected:font-semibold aria-selected:text-primary aria-selected:*:data-icon:text-fg-primary";
 
 export type ReorderableTabMeta = { label: () => string; icon?: FC<{ className?: string }> };
 
@@ -160,6 +164,11 @@ export function ReorderableTabStrip<T extends string>({
   };
   const LiftedIcon = lifted ? meta[lifted].icon : undefined;
   const stripList = rippleListProps(ripple, STRIP);
+  const indicator = useSlidingIndicator(tabsRef, {
+    activeKey: `${active}:${tabSet}`,
+    paused: lifted !== null,
+    variant: "underline",
+  });
 
   return (
     <DndContext
@@ -200,6 +209,7 @@ export function ReorderableTabStrip<T extends string>({
                 ripple={ripple}
                 meta={meta[tab]}
                 moving={moving?.tab === tab}
+                slidingIndicator={indicator.visible}
                 describedBy={instructions}
                 setElement={setElement}
                 onPressStart={() => (dragged.current = false)}
@@ -209,6 +219,14 @@ export function ReorderableTabStrip<T extends string>({
               />
             ))}
           </TabList>
+          {indicator.visible && (
+            <span
+              ref={indicator.indicatorRef}
+              aria-hidden="true"
+              style={indicator.style}
+              className="pointer-events-none absolute bottom-0 left-0 z-20 h-0.5 rounded-full bg-fg-primary"
+            />
+          )}
           <DragRippleLine ripple={ripple} list={STRIP} className="text-primary" />
         </Tabs>
       </div>
@@ -248,6 +266,7 @@ function DraggableTab({
   ripple,
   meta,
   moving,
+  slidingIndicator,
   describedBy,
   setElement,
   onPressStart,
@@ -257,6 +276,7 @@ function DraggableTab({
   ripple: DragRipple;
   meta: ReorderableTabMeta;
   moving: boolean;
+  slidingIndicator: boolean;
   describedBy: string;
   setElement: (id: string, node: HTMLElement | null) => void;
   onPressStart: () => void;
@@ -282,7 +302,11 @@ function DraggableTab({
       onPressStart={onPressStart}
       onPress={onPress}
       data-moving={moving || undefined}
-      className="shrink-0 select-none [-webkit-touch-callout:none] rounded-md border-b-0 px-2 py-1.5 text-brand-secondary opacity-60 *:data-icon:text-fg-brand-secondary_hover hover:not-aria-selected:bg-primary_hover hover:not-aria-selected:opacity-85 aria-selected:bg-active aria-selected:opacity-100 data-moving:bg-primary_hover"
+      className={cx(
+        PAGE_TAB_CLASS,
+        !slidingIndicator && "aria-selected:border-fg-primary",
+        "data-moving:rounded-md data-moving:bg-primary_hover",
+      )}
     >
       <span ref={labelRef}>{meta.label()}</span>
     </Tab>
