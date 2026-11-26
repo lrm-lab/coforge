@@ -7,7 +7,6 @@ import { Label } from "#src/components/base/input/label";
 import { cn } from "#src/lib/utils";
 import { Face, PickerMenu, PickerSurface, type PickerSingleProps } from "./entity-picker";
 
-/** A picker as a form field: its label, a box showing the chosen row's face and name, and a hint. */
 export function EntityPickerField({
   fieldLabel,
   hint,
@@ -15,7 +14,6 @@ export function EntityPickerField({
   isDisabled,
   ...menu
 }: PickerSingleProps & {
-  /** The field's visible label; `label` names the list. Absent where the form labels it. */
   fieldLabel?: string;
   hint?: string;
   placeholder?: string;
