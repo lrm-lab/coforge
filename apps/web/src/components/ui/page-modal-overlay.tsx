@@ -14,8 +14,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { createPortal } from "react-dom";
-import { DismissButton, FocusScope, mergeProps, useOverlay, usePreventScroll } from "react-aria";
+import { DismissButton, mergeProps, Overlay, useModalOverlay, useOverlay } from "react-aria";
 import {
   OverlayTriggerStateContext,
   type ModalOverlay as AriaModalOverlay,
@@ -26,6 +25,9 @@ import { Modal as OfficialModal } from "#src/components/application/modals/modal
 import { useKeyboardFieldFocused } from "#src/hooks/use-keyboard-field-focused";
 import { useVisualViewportTop } from "#src/hooks/use-visual-viewport-top";
 import {
+  createOverlayHostElement,
+  hasFollowingOverlayHost,
+  hasPrecedingModalHost,
   OVERLAY_CONTENT_Z,
   OVERLAY_LAYER,
   OVERLAY_SCRIM_Z,
@@ -99,7 +101,10 @@ export function UnifiedPageModalOverlay({
   wide: boolean;
 }) {
   const open = overlayState.isOpen;
-  const usePhonePageFlow = !wide;
+  const [ownHost] = useState<HTMLDivElement | null>(() =>
+    typeof document === "undefined" ? null : createOverlayHostElement(),
+  );
+  const portalTarget = UNSTABLE_portalContainer ?? ownHost;
   const layerRef = useRef<HTMLDivElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const modalOnExitRef = useRef<ModalOverlayProps["onExit"] | null>(null);
@@ -110,7 +115,19 @@ export function UnifiedPageModalOverlay({
   const isOverlayExiting = useOverlayExitAnimation(layerRef, open, onExit);
   const isModalExiting = useOverlayExitAnimation(modalRef, open, triggerModalExit);
   const isExiting = isOverlayExiting || isModalExiting || Boolean(propIsExiting);
-  const { host, overlayRef } = useOverlayHost(open || Boolean(propIsExiting), usePhonePageFlow);
+  const active = open || isExiting;
+  const desiredPageFlow = !wide && (!active || !hasPrecedingModalHost(portalTarget));
+  const [latchedPageFlow, setLatchedPageFlow] = useState(desiredPageFlow);
+  const followingOverlay = active && hasFollowingOverlayHost(portalTarget);
+  const usePhonePageFlow = followingOverlay ? latchedPageFlow : desiredPageFlow;
+  if (!followingOverlay && latchedPageFlow !== desiredPageFlow) {
+    setLatchedPageFlow(desiredPageFlow);
+  }
+  const { host, overlayRef } = useOverlayHost(
+    open || Boolean(propIsExiting),
+    usePhonePageFlow,
+    ownHost,
+  );
   const portalContainer = UNSTABLE_portalContainer ?? host;
 
   if ((!open && !isExiting) || typeof document === "undefined" || !portalContainer) return null;
@@ -163,7 +180,6 @@ function UnifiedPageModalOverlayInner({
   modalOnExitRef: RefObject<ModalOverlayProps["onExit"] | null>;
   overlayRef: (node: HTMLElement | null) => void;
 }) {
-  const handoffRef = useRef<ReturnType<typeof acquirePageFlowHandoff> | null>(null);
   const entryIdRef = useRef<symbol | null>(null);
   const onCloseRef = useRef(overlayState.close);
   onCloseRef.current = overlayState.close;
@@ -194,18 +210,35 @@ function UnifiedPageModalOverlayInner({
   );
   useKeepFocusedFieldInView(open && !usePhonePageFlow);
 
-  usePreventScroll({ isDisabled: !open || usePhonePageFlow });
-
-  const { overlayProps: modalProps, underlayProps } = useOverlay(
+  const modalOverlayOpen = open && !usePhonePageFlow;
+  const modalOverlayState = useMemo(
+    () => ({
+      ...overlayState,
+      isOpen: modalOverlayOpen,
+    }),
+    [overlayState, modalOverlayOpen],
+  );
+  const { modalProps: desktopModalProps, underlayProps: desktopUnderlayProps } = useModalOverlay(
     {
-      isOpen: open,
-      onClose: overlayState.close,
       isDismissable: !usePhonePageFlow && Boolean(isDismissable),
+      isKeyboardDismissDisabled,
+      shouldCloseOnInteractOutside,
+    },
+    modalOverlayState,
+    modalRef,
+  );
+  const { overlayProps: pageFlowOverlayProps, underlayProps: pageFlowUnderlayProps } = useOverlay(
+    {
+      isOpen: open && usePhonePageFlow,
+      onClose: overlayState.close,
+      isDismissable: false,
       isKeyboardDismissDisabled,
       shouldCloseOnInteractOutside,
     },
     modalRef,
   );
+  const modalProps = usePhonePageFlow ? pageFlowOverlayProps : desktopModalProps;
+  const underlayProps = usePhonePageFlow ? pageFlowUnderlayProps : desktopUnderlayProps;
 
   const pageModalContext = useMemo<PageModalContextValue>(
     () => ({
@@ -228,16 +261,10 @@ function UnifiedPageModalOverlayInner({
     ],
   );
 
-  useLayoutEffect(() => {
-    if (!open || !portalContainer) return;
-    const releaseInert = acquireOutsideInert(portalContainer);
-    return () => {
-      handoffRef.current?.release();
-      handoffRef.current = null;
-      entryIdRef.current = null;
-      releaseInert();
-    };
-  }, [open, portalContainer]);
+  useEffect(() => {
+    if (!open || !usePhonePageFlow || !portalContainer) return;
+    return acquireOutsideInert(portalContainer);
+  }, [open, usePhonePageFlow, portalContainer]);
 
   useLayoutEffect(() => {
     if (!open || !usePhonePageFlow || typeof window === "undefined") return;
@@ -245,12 +272,11 @@ function UnifiedPageModalOverlayInner({
       root: document.getElementById("coforge-app-root"),
       win: window,
       layerEl: layerRef.current,
+      manageInert: false,
     });
-    handoffRef.current = handoff;
     entryIdRef.current = handoff.id;
     return () => {
-      if (handoffRef.current === handoff) {
-        handoffRef.current = null;
+      if (entryIdRef.current === handoff.id) {
         entryIdRef.current = null;
       }
       handoff.release();
@@ -321,28 +347,25 @@ function UnifiedPageModalOverlayInner({
           className={scrim.className}
         />
       )}
-      {createPortal(
+      <Overlay portalContainer={portalContainer} isExiting={isExiting} shouldContainFocus>
         <OverlayTriggerStateContext.Provider value={overlayState}>
           <ModalContext.Provider value={modalContext}>
             <PageModalContext.Provider value={pageModalContext}>
-              <FocusScope contain restoreFocus>
-                <div
-                  {...underlayProps}
-                  ref={combinedOverlayRef}
-                  data-entering={isOverlayEntering || undefined}
-                  data-exiting={isExiting || undefined}
-                  data-phone-page-flow={usePhonePageFlow ? "" : undefined}
-                  style={overlayStyle}
-                  className={overlayClass}
-                >
-                  {resolvedChildren}
-                </div>
-              </FocusScope>
+              <div
+                {...underlayProps}
+                ref={combinedOverlayRef}
+                data-entering={isOverlayEntering || undefined}
+                data-exiting={isExiting || undefined}
+                data-phone-page-flow={usePhonePageFlow ? "" : undefined}
+                style={overlayStyle}
+                className={overlayClass}
+              >
+                {resolvedChildren}
+              </div>
             </PageModalContext.Provider>
           </ModalContext.Provider>
-        </OverlayTriggerStateContext.Provider>,
-        portalContainer,
-      )}
+        </OverlayTriggerStateContext.Provider>
+      </Overlay>
     </>
   );
 }

@@ -123,3 +123,24 @@ test("nested handoffs pin the outer layer and restore scroll positions in LIFO a
   expect(env2.win.scrollY).toBe(333);
   expect(env2.rootStyle.visibility).toBe("");
 });
+
+test("manageInert: false pins and hides without mutating or restoring inert", () => {
+  const env = fakeEnv(120);
+  env.root.inert = true;
+
+  const handoff = acquirePageFlowHandoff({
+    root: env.root,
+    win: env.win,
+    manageInert: false,
+  });
+
+  expect(env.rootStyle.visibility).toBe("hidden");
+  expect(env.root.inert).toBe(true);
+
+  env.root.inert = false;
+  handoff.release();
+
+  expect(env.rootStyle.visibility).toBe("");
+  expect(env.root.inert).toBe(false);
+  expect(env.win.scrollY).toBe(120);
+});

@@ -11,6 +11,7 @@ type SavedElementStyles = {
   width: string;
   visibility: string;
   pointerEvents: string;
+  manageInert: boolean;
   inert: boolean;
   ariaHidden: string | null;
 };
@@ -26,7 +27,7 @@ type StackEntry = {
 
 const activeStack: StackEntry[] = [];
 
-function snapshotStyles(el: HTMLElement): SavedElementStyles {
+function snapshotStyles(el: HTMLElement, manageInert: boolean): SavedElementStyles {
   return {
     position: el.style.position,
     top: el.style.top,
@@ -35,15 +36,14 @@ function snapshotStyles(el: HTMLElement): SavedElementStyles {
     width: el.style.width,
     visibility: el.style.visibility,
     pointerEvents: el.style.pointerEvents,
+    manageInert,
     inert: Boolean(el.inert),
     ariaHidden: el.getAttribute?.("aria-hidden") ?? null,
   };
 }
 
-function pinAndHide(el: HTMLElement, scrollY: number): SavedElementStyles {
-  const saved = snapshotStyles(el);
-  // Safari 26+: pin and hide the background layer with visibility: hidden while a phone
-  // full-screen sheet/page scrolls in normal document flow.
+function pinAndHide(el: HTMLElement, scrollY: number, manageInert: boolean): SavedElementStyles {
+  const saved = snapshotStyles(el, manageInert);
   el.style.position = "fixed";
   el.style.top = `${-scrollY}px`;
   el.style.left = "0";
@@ -51,8 +51,10 @@ function pinAndHide(el: HTMLElement, scrollY: number): SavedElementStyles {
   el.style.width = "100%";
   el.style.visibility = "hidden";
   el.style.pointerEvents = "none";
-  el.inert = true;
-  el.setAttribute?.("aria-hidden", "true");
+  if (manageInert) {
+    el.inert = true;
+    el.setAttribute?.("aria-hidden", "true");
+  }
   return saved;
 }
 
@@ -64,10 +66,12 @@ function restoreStyles(el: HTMLElement, saved: SavedElementStyles): void {
   el.style.width = saved.width;
   el.style.visibility = saved.visibility;
   el.style.pointerEvents = saved.pointerEvents;
-  el.inert = saved.inert;
-  if (typeof el.setAttribute === "function" && typeof el.removeAttribute === "function") {
-    if (saved.ariaHidden === null) el.removeAttribute("aria-hidden");
-    else el.setAttribute("aria-hidden", saved.ariaHidden);
+  if (saved.manageInert) {
+    el.inert = saved.inert;
+    if (typeof el.setAttribute === "function" && typeof el.removeAttribute === "function") {
+      if (saved.ariaHidden === null) el.removeAttribute("aria-hidden");
+      else el.setAttribute("aria-hidden", saved.ariaHidden);
+    }
   }
 }
 
@@ -76,7 +80,12 @@ export function acquirePageFlowHandoff({
   win,
   layerEl = null,
   initialScrollTop = 0,
-}: PageFlowHost & { layerEl?: HTMLElement | null; initialScrollTop?: number }): {
+  manageInert = true,
+}: PageFlowHost & {
+  layerEl?: HTMLElement | null;
+  initialScrollTop?: number;
+  manageInert?: boolean;
+}): {
   id: symbol;
   release: (onHandBackScroll?: (pageScrollY: number) => void) => void;
 } {
@@ -84,7 +93,7 @@ export function acquirePageFlowHandoff({
   const savedScrollY = win.scrollY;
   const previous = activeStack.at(-1);
   const hiddenTarget = previous ? previous.layerEl : root;
-  const savedStyles = hiddenTarget ? pinAndHide(hiddenTarget, savedScrollY) : null;
+  const savedStyles = hiddenTarget ? pinAndHide(hiddenTarget, savedScrollY, manageInert) : null;
 
   activeStack.push({ id, hiddenTarget, layerEl, win, savedScrollY, savedStyles });
   win.scrollTo(0, Math.max(0, initialScrollTop));

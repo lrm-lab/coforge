@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 
 import {
   composeOverlayRefs,
+  hasFollowingOverlayHost,
+  hasPrecedingModalHost,
   OVERLAY_CONTENT_Z,
   OVERLAY_LAYER,
   OVERLAY_SCRIM_Z,
@@ -33,4 +35,47 @@ test("composeOverlayRefs forwards attach and detach to both internal and externa
   expect(externalObj.current).toBe("overlay-2");
   mergedObj(null);
   expect(externalObj.current).toBeNull();
+});
+
+test("hasPrecedingModalHost detects outer modal hosts before a host and ignores later ones", () => {
+  const makeChild = (kind: string | null) =>
+    ({
+      getAttribute(name: string) {
+        return name === "data-overlay-host" ? kind : null;
+      },
+    }) as unknown as Element;
+
+  const appRoot = makeChild(null);
+  const slideoutHost = makeChild("modal");
+  const pageModalHost = makeChild("page-flow");
+  const childConfirmHost = makeChild("modal");
+
+  expect(hasPrecedingModalHost(pageModalHost, [appRoot, pageModalHost, childConfirmHost])).toBe(
+    false,
+  );
+  expect(hasPrecedingModalHost(pageModalHost, [appRoot, slideoutHost, pageModalHost])).toBe(true);
+  expect(hasPrecedingModalHost(null, [appRoot, slideoutHost])).toBe(true);
+  expect(hasPrecedingModalHost(null, [appRoot, pageModalHost])).toBe(false);
+});
+
+test("hasFollowingOverlayHost detects overlay hosts stacked after a host", () => {
+  const makeChild = (kind: string | null) =>
+    ({
+      hasAttribute(name: string) {
+        return name === "data-overlay-host" && kind !== null;
+      },
+    }) as unknown as Element;
+
+  const appRoot = makeChild(null);
+  const slideoutHost = makeChild("modal");
+  const pageModalHost = makeChild("page-flow");
+  const childConfirmHost = makeChild("modal");
+
+  expect(hasFollowingOverlayHost(pageModalHost, [appRoot, pageModalHost, childConfirmHost])).toBe(
+    true,
+  );
+  expect(hasFollowingOverlayHost(pageModalHost, [appRoot, slideoutHost, pageModalHost])).toBe(
+    false,
+  );
+  expect(hasFollowingOverlayHost(null, [appRoot, slideoutHost])).toBe(false);
 });

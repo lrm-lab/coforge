@@ -8,9 +8,37 @@ export const OVERLAY_CONTENT_Z = 10;
 
 export function createOverlayHostElement(): HTMLDivElement {
   const host = document.createElement("div");
-  host.setAttribute("data-overlay-host", "");
+  host.setAttribute("data-overlay-host", "modal");
   host.className = `absolute inset-x-0 top-0 ${OVERLAY_LAYER}`;
   return host;
+}
+
+export function hasPrecedingModalHost(host: Element | null, siblings?: Iterable<Element>): boolean {
+  const list =
+    siblings ?? (typeof document !== "undefined" ? Array.from(document.body.children) : []);
+  for (const child of list) {
+    if (child === host) break;
+    if (child.getAttribute("data-overlay-host") === "modal") return true;
+  }
+  return false;
+}
+
+export function hasFollowingOverlayHost(
+  host: Element | null,
+  siblings?: Iterable<Element>,
+): boolean {
+  if (!host) return false;
+  const list =
+    siblings ?? (typeof document !== "undefined" ? Array.from(document.body.children) : []);
+  let seen = false;
+  for (const child of list) {
+    if (child === host) {
+      seen = true;
+      continue;
+    }
+    if (seen && child.hasAttribute("data-overlay-host")) return true;
+  }
+  return false;
 }
 
 export function composeOverlayRefs<T>(
@@ -27,13 +55,17 @@ export function composeOverlayRefs<T>(
 export function useOverlayHost(
   open: boolean,
   pageFlow = false,
+  providedHost?: HTMLDivElement | null,
 ): {
   host: HTMLDivElement | null;
   overlayRef: (node: HTMLElement | null) => void;
 } {
-  const [host] = useState<HTMLDivElement | null>(() =>
-    typeof document === "undefined" ? null : createOverlayHostElement(),
+  const [createdHost] = useState<HTMLDivElement | null>(() =>
+    providedHost !== undefined || typeof document === "undefined"
+      ? null
+      : createOverlayHostElement(),
   );
+  const host = providedHost !== undefined ? providedHost : createdHost;
   const [overlayMounted, setOverlayMounted] = useState(false);
 
   const overlayRef = useCallback((node: HTMLElement | null) => {
@@ -44,6 +76,7 @@ export function useOverlayHost(
 
   useLayoutEffect(() => {
     if (!host) return;
+    host.setAttribute("data-overlay-host", pageFlow ? "page-flow" : "modal");
     host.className = pageFlow
       ? `relative ${OVERLAY_LAYER}`
       : `absolute inset-x-0 top-0 ${OVERLAY_LAYER}`;

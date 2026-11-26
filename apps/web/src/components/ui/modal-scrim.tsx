@@ -50,7 +50,7 @@ export function acquireOutsideInert(portalContainer: Element): () => void {
   const acquired: HTMLElement[] = [];
   for (const child of Array.from(document.body.children)) {
     if (!(child instanceof HTMLElement)) continue;
-    if (child === portalContainer || child.contains(portalContainer)) continue;
+    if (child === portalContainer || child.contains(portalContainer)) break;
     if (SKIP_INERT_TAGS.has(child.tagName)) continue;
     if (
       child.dataset.liveAnnouncer === "true" ||
