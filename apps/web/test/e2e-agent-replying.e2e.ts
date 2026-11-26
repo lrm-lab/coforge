@@ -284,8 +284,12 @@ test("a reply that lands before the start of its call keeps that call from showi
   await fx.untilText(`Thread root ${suffix}`);
   const target = `#${fx.joinedName}:${fx.rootId}`;
 
-  // The reply is first; the start of the call arrives after it and repeats every 5s.
-  await agentSends(target, `Early reply ${suffix}`);
+  const reply = `Early reply ${suffix}`;
+  const preview = `[data-message-id="${fx.rootId}"] [data-thread-preview]`;
+  await agentSends(target, reply);
+  await until(
+    `document.querySelector(${JSON.stringify(preview)})?.textContent.includes(${JSON.stringify(reply)}) === true`,
+  );
   const late = await announce(target);
   try {
     await staysFalse(visible(replyingSentence), 10_000);
