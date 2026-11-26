@@ -94,14 +94,6 @@ export const taskSelection = {
   // An archived label stays on its rows (restoring it brings it back) but is no longer the Task's.
   labels: { where: { label: { archivedAt: null } }, select: { label: { select: LABEL_SELECT } } },
   project: { select: TASK_PROJECT_SELECT },
-  executionSessions: {
-    select: { id: true },
-    orderBy: { createdAt: "desc" },
-    take: 1,
-  },
-  // The backing message's sequence, so realtime signals need no second read, and its mention rows
-  // with the names they are shown by, which a title converted from that message needs to read its
-  // mention tokens back for people or for an Agent.
   message: {
     select: { sequence: true, mentions: BROWSER_MESSAGE_MENTIONS_SELECT },
   },
@@ -332,14 +324,16 @@ export const emptyRelations = (): TaskRelations => ({
   subtasks: null,
 });
 
-/** What `taskView` takes besides the row. A reader that did not count discussions leaves `counts`
- * out; the relations are always read, so a view never claims a Task waits for nothing unread. */
-export type TaskViewExtras = { relations: TaskRelations; counts?: DiscussionCounts };
+export type TaskViewExtras = {
+  relations: TaskRelations;
+  counts?: DiscussionCounts;
+  executionSessionId?: string | null;
+};
 
 export function taskView(
   task: TaskViewSource,
   reader: TaskReader,
-  { relations, counts }: TaskViewExtras,
+  { relations, counts, executionSessionId }: TaskViewExtras,
 ): TaskView {
   const resourceReceipt = storedResourceReceipt(task);
   return {
@@ -347,10 +341,7 @@ export function taskView(
     messageId: task.messageId,
     conversationId: task.conversationId,
     number: task.number,
-    // A title converted from a message keeps that message's stored tokens; they read back as text
-    // for whoever reads the Task.
     title: readTaskText(task.title, reader, taskMentions(task)),
-    // A card read leaves `description` out of its row; the key is absent, not undefined.
     ...(task.description !== undefined && { description: task.description }),
     status: storedTaskStatus(task.status, { number: task.number }),
     priority: storedTaskPriority(task.priority),
@@ -360,7 +351,7 @@ export function taskView(
     revision: task.revision,
     ...relations,
     claimedAt: task.claimedAt?.toISOString() ?? null,
-    executionSessionId: task.executionSessions[0]?.id ?? null,
+    executionSessionId: executionSessionId ?? null,
     requiresResourceReceipt: task.createsResource,
     resourceReceiptRecordedAt: task.resourceReceiptRecordedAt?.toISOString() ?? null,
     ...(resourceReceipt && { resourceReceipt }),

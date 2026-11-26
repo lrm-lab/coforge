@@ -1,5 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { loadTaskRelations, relationsOf } from "./task-relations.server";
+import { latestExecutionSessions, loadTaskRelations, relationsOf } from "./task-relations.server";
 import type {
   DiscussionCounts,
   TaskReader,
@@ -7,13 +7,6 @@ import type {
   TaskViewSource,
 } from "./task-view.server";
 
-/**
- * The replies in each task's own conversation, the files sent there, and the replies in the thread
- * it had before (the thread under its source message), for the tasks one read returns: grouped
- * counts bounded by those tasks' ids and the Workspace. They are not part of
- * `taskSelection`: counting through the relation groups every message of the table, once per
- * read. Server notices are not replies; an unsent upload (no message yet) is not a file.
- */
 export async function discussionCounts(
   db: PrismaClient,
   workspaceId: string,
@@ -61,7 +54,6 @@ export async function discussionCounts(
   );
 }
 
-/** `taskView` for each of `tasks`: discussions counted once and relations read once for the page. */
 export async function viewsWithCounts<Task extends TaskViewSource, View>(
   db: PrismaClient,
   reader: TaskReader,
@@ -69,11 +61,16 @@ export async function viewsWithCounts<Task extends TaskViewSource, View>(
   tasks: readonly Task[],
   view: (task: Task, extras: TaskViewExtras) => View,
 ) {
-  const [counts, relations] = await Promise.all([
+  const [counts, relations, executionSessions] = await Promise.all([
     discussionCounts(db, workspaceId, tasks),
     loadTaskRelations(db, reader, tasks),
+    latestExecutionSessions(db, tasks),
   ]);
   return tasks.map((task) =>
-    view(task, { counts: counts.get(task.id), relations: relationsOf(relations, task.id) }),
+    view(task, {
+      counts: counts.get(task.id),
+      relations: relationsOf(relations, task.id),
+      executionSessionId: executionSessions.get(task.id) ?? null,
+    }),
   );
 }

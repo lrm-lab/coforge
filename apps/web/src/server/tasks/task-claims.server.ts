@@ -12,7 +12,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { messageAnchorWhere } from "#src/server/db/message-anchor.server";
 import { AppError } from "#src/lib/app-error";
-import { storedTaskStatus, taskMember, taskSelection, type SelectedTask } from "./task-view.server";
+import { storedTaskStatus, taskMember, type SelectedTask } from "./task-view.server";
 import { taskViewOf } from "./task-relations.server";
 import { TASK_BLOCKED } from "./task-gates.server";
 import type {
@@ -161,12 +161,14 @@ async function claimTask(
       existing.claimedAt !== null &&
       existing.status === "in_progress"
     ) {
-      if (member.agentId && existing.status === "in_progress" && !existing.executionSessions[0]) {
-        await ensureTaskExecutionSession(tx, existing, member.agentId);
-        return tx.task.findUniqueOrThrow({
-          where: { id: existing.id },
-          select: taskSelection,
+      if (member.agentId && existing.status === "in_progress") {
+        const existingSession = await tx.taskExecutionSession.findFirst({
+          where: { taskId: existing.id },
+          select: { id: true },
         });
+        if (!existingSession) {
+          await ensureTaskExecutionSession(tx, existing, member.agentId);
+        }
       }
       return existing;
     }

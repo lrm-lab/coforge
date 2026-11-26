@@ -169,27 +169,53 @@ export async function loadTaskRelations(
 export const relationsOf = (relations: ReadonlyMap<string, TaskRelations>, id: string) =>
   relations.get(id) ?? emptyRelations();
 
-/** One Task's view, its relations read now. */
+export async function latestExecutionSessions(
+  db: Pick<Client, "$queryRaw">,
+  tasks: readonly Pick<SelectedTask, "id">[],
+): Promise<Map<string, string>> {
+  const ids = [...new Set(tasks.map((task) => task.id))];
+  if (!ids.length) return new Map();
+  const rows = await db.$queryRaw<{ taskId: string; id: string }[]>`
+    SELECT DISTINCT ON ("taskId") "taskId"::text AS "taskId", "id"::text AS "id"
+    FROM "task_execution_sessions"
+    WHERE "taskId" = ANY(${ids}::uuid[])
+    ORDER BY "taskId", "createdAt" DESC, "id" DESC`;
+  return new Map(rows.map((row) => [row.taskId, row.id]));
+}
+
 export async function taskViewOf(
   db: Client,
   reader: TaskReader,
   task: SelectedTask,
   counts?: DiscussionCounts,
 ): Promise<TaskView> {
-  const relations = await loadTaskRelations(db, reader, [task]);
-  return taskView(task, reader, { relations: relationsOf(relations, task.id), counts });
+  const [relations, executionSessions] = await Promise.all([
+    loadTaskRelations(db, reader, [task]),
+    latestExecutionSessions(db, [task]),
+  ]);
+  return taskView(task, reader, {
+    relations: relationsOf(relations, task.id),
+    counts,
+    executionSessionId: executionSessions.get(task.id) ?? null,
+  });
 }
 
-/** Each Task's view, the relations of the whole page read together. */
 export async function taskViewsOf(
   db: Client,
   reader: TaskReader,
   tasks: readonly SelectedTask[],
   counts?: DiscussionCounts,
 ): Promise<TaskView[]> {
-  const relations = await loadTaskRelations(db, reader, tasks);
+  const [relations, executionSessions] = await Promise.all([
+    loadTaskRelations(db, reader, tasks),
+    latestExecutionSessions(db, tasks),
+  ]);
   return tasks.map((task) =>
-    taskView(task, reader, { relations: relationsOf(relations, task.id), counts }),
+    taskView(task, reader, {
+      relations: relationsOf(relations, task.id),
+      counts,
+      executionSessionId: executionSessions.get(task.id) ?? null,
+    }),
   );
 }
 
