@@ -134,7 +134,7 @@ function ReminderRow({
         {reminder.title}
       </p>
       <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-tertiary">
-        <RelativeTime value={reminder.fireAt} timeZone={reminder.timezone ?? timeZone} showExact />
+        <RelativeTime value={reminder.fireAt} timeZone={timeZone} showExact />
         {reminder.repeat && (
           <span className="inline-flex min-w-0 items-center gap-1">
             <Repeat className="size-3.5 shrink-0" aria-hidden="true" />

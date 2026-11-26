@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { agentDirectKey } from "#src/features/conversations/direct-key";
 import { PrismaClient } from "#src/generated/prisma/client";
+import { resolveTimeZone } from "#src/lib/dates";
+import { hour12For, isTimeFormat } from "#src/lib/time-format";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
@@ -37,7 +39,7 @@ test("an Agent's reminders read in firing order with their places named", async 
   });
   const viewer = await db.user.findUniqueOrThrow({
     where: { id: DEV_BROWSER_USER.id },
-    select: { displayName: true },
+    select: { displayName: true, preferences: { select: { timeZone: true, timeFormat: true } } },
   });
   const computer = await db.computer.create({
     data: {
@@ -93,6 +95,11 @@ test("an Agent's reminders read in firing order with their places named", async 
   const inDirect = await post(direct, "Noted, I'll remind you.");
   const inChannel = await post(channel, "I'll check the release every morning.");
   const now = Date.now();
+  await browser("open", "about:blank");
+  const browserZone = await evaluate<string>("Intl.DateTimeFormat().resolvedOptions().timeZone");
+  const viewerZone = resolveTimeZone(viewer.preferences?.timeZone, browserZone);
+  const preferredTimeFormat = viewer.preferences?.timeFormat;
+  const timeFormat = isTimeFormat(preferredTimeFormat) ? preferredTimeFormat : null;
   // Created in an order unlike their firing order; the deleted one's message is gone.
   const seeds: [title: string, minutes: number, repeat: string | null, messageId: string][] = [
     ["Follow up on the design review", 6 * 24 * 60, null, inDirect.id],
@@ -120,6 +127,22 @@ test("an Agent's reminders read in firing order with their places named", async 
         ],
     ),
   ];
+  const orderedSeeds = [...seeds].sort((a, b) => a[1] - b[1]);
+  const fireAt = new Date(now + orderedSeeds[0]![1] * MINUTE).toISOString();
+  const formatClock = (zone: string) =>
+    evaluate<string>(
+      `new Intl.DateTimeFormat("en", ${JSON.stringify({
+        dateStyle: "medium",
+        timeStyle: "short",
+        hour12: hour12For(timeFormat),
+        timeZone: zone,
+      })}).format(new Date(${JSON.stringify(fireAt)}))`,
+    );
+  const viewerClock = await formatClock(viewerZone);
+  const scheduleZone =
+    (await formatClock("Pacific/Kiritimati")) === viewerClock
+      ? "America/Los_Angeles"
+      : "Pacific/Kiritimati";
   for (const [title, minutes, repeat, messageId] of seeds)
     await db.reminder.create({
       data: {
@@ -131,10 +154,10 @@ test("an Agent's reminders read in firing order with their places named", async 
         messageId,
         fireAt: new Date(now + minutes * MINUTE),
         repeat,
-        timezone: "Asia/Shanghai",
+        timezone: scheduleZone,
       },
     });
-  const firing = [...seeds].sort((a, b) => a[1] - b[1]).map(([title]) => title);
+  const firing = orderedSeeds.map(([title]) => title);
 
   const rows = `[...document.querySelectorAll("[data-reminder-row]")]`;
   const open = async (locale: string, agentId: string, ready: string) => {
@@ -168,12 +191,22 @@ test("an Agent's reminders read in firing order with their places named", async 
     }
 
     await open("en", agent.id, `${rows}.length === ${seeds.length}`);
-    const read = await evaluate<{ titles: string[]; text: string; places: string[] }>(`({
+    const read = await evaluate<{
+      titles: string[];
+      text: string;
+      places: string[];
+      firstTime: { instant: string; label: string };
+    }>(`({
+      firstTime: {
+        instant: ${rows}[0].querySelector("time").dateTime,
+        label: ${rows}[0].querySelector("time span").textContent,
+      },
       titles: ${rows}.map((row) => row.querySelector("p").textContent),
       text: ${rows}.map((row) => row.innerText).join("\\n"),
       places: ${rows}.map((row) => row.querySelector("a")?.innerText.trim() ?? ""),
     })`);
     expect(read.titles).toEqual(firing);
+    expect(read.firstTime).toEqual({ instant: fireAt, label: `· ${viewerClock}` });
     // A repeat rule is a sentence: never "Every 1 hours".
     expect(read.text).toContain("Every hour");
     expect(read.text).toContain("Every 15 minutes");
