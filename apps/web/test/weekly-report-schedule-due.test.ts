@@ -29,13 +29,35 @@ test("isWeeklyScheduleDue is true at and after sendTime on the matching weekday"
 });
 
 test("isWeeklyScheduleDue is false on a different weekday", () => {
-  // Thursday 15:00 Asia/Shanghai
   const thursday = new Date("2026-09-17T07:00:00.000Z");
   expect(
     isWeeklyScheduleDue({
       now: thursday,
       sendWeekday: 5,
       sendTime: "15:00",
+    }),
+  ).toBe(false);
+});
+
+test("zonedWeekdayAndTime and isWeeklyScheduleDue reject invalid sendTime and honor custom zones", () => {
+  expect(zonedWeekdayAndTime(new Date("2026-09-18T19:00:00.000Z"), "America/New_York")).toEqual({
+    weekday: 5,
+    time: "15:00",
+  });
+  expect(
+    isWeeklyScheduleDue({
+      now: new Date("2026-09-18T19:00:00.000Z"),
+      sendWeekday: 5,
+      sendTime: "24:00",
+      timeZone: "America/New_York",
+    }),
+  ).toBe(false);
+  expect(
+    isWeeklyScheduleDue({
+      now: new Date("2026-09-18T19:00:00.000Z"),
+      sendWeekday: 5,
+      sendTime: "12:60",
+      timeZone: "America/New_York",
     }),
   ).toBe(false);
 });

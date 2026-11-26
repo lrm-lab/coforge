@@ -1,82 +1,47 @@
-import { dateTimeFormat } from "#src/lib/dates";
-
-/** Fixed schedule clock for MVP periodic weekly-report send. The weekly-report stamps render
- * on the same clock, so the two never disagree. */
 export const WEEKLY_REPORT_SCHEDULE_TIME_ZONE = "Asia/Shanghai";
 
-const WEEKDAY_SHORT_TO_ISO: Record<string, number> = {
-  Mon: 1,
-  Tue: 2,
-  Wed: 3,
-  Thu: 4,
-  Fri: 5,
-  Sat: 6,
-  Sun: 7,
-};
+const HH_MM = /^\d{2}:\d{2}$/;
 
-/**
- * These two readers ask for a fixed shape in one timezone, so they format through the process-wide
- * `Intl` cache in `lib/dates.ts` rather than keeping a second cache of their own (`lib/AGENTS.md`:
- * format through `dates.ts`). The options are part of that cache's key, so a shape added here gets
- * its own formatter without disturbing the others.
- */
+export function parseScheduleTime(sendTime: string): Temporal.PlainTime | null {
+  if (!HH_MM.test(sendTime)) return null;
+  try {
+    return Temporal.PlainTime.from(sendTime, { overflow: "reject" });
+  } catch {
+    return null;
+  }
+}
+
 export function zonedWeekdayAndTime(
   now: Date,
   timeZone: string = WEEKLY_REPORT_SCHEDULE_TIME_ZONE,
 ): { weekday: number; time: string } {
-  const parts = dateTimeFormat("en-GB", {
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-    timeZone,
-  }).formatToParts(now);
-  const byType = Object.fromEntries(
-    parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]),
-  );
-  const weekday = WEEKDAY_SHORT_TO_ISO[byType.weekday ?? ""];
-  if (!weekday) throw new Error(`unexpected weekday: ${byType.weekday}`);
-  const hour = byType.hour ?? "00";
-  const minute = byType.minute ?? "00";
-  return { weekday, time: `${hour.padStart(2, "0")}:${minute.padStart(2, "0")}` };
+  const zoned = Temporal.Instant.fromEpochMilliseconds(now.getTime()).toZonedDateTimeISO(timeZone);
+  return {
+    weekday: zoned.dayOfWeek,
+    time: `${String(zoned.hour).padStart(2, "0")}:${String(zoned.minute).padStart(2, "0")}`,
+  };
 }
 
-/** Calendar date components in the schedule timezone (for ISO week alignment). */
-export function zonedCalendarDate(
-  now: Date,
-  timeZone: string = WEEKLY_REPORT_SCHEDULE_TIME_ZONE,
-): Date {
-  const parts = dateTimeFormat("en-CA", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    timeZone,
-  }).formatToParts(now);
-  const byType = Object.fromEntries(
-    parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]),
-  );
-  return new Date(Number(byType.year), Number(byType.month) - 1, Number(byType.day), 12, 0, 0);
-}
-
-/** ISO week-year and week number for the given local calendar date — week-of-date math with no
- * schedule clock. */
 export function isoWeekOfDate(date: Date): { year: number; week: number } {
-  const utc = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = utc.getUTCDay() || 7;
-  utc.setUTCDate(utc.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1));
-  const week = Math.ceil(((utc.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
-  return { year: utc.getUTCFullYear(), week };
+  const zoned = Temporal.Instant.fromEpochMilliseconds(date.getTime()).toZonedDateTimeISO(
+    Temporal.Now.timeZoneId(),
+  );
+  if (zoned.yearOfWeek === undefined || zoned.weekOfYear === undefined) {
+    throw new Error(`missing ISO week for ${zoned.toString()}`);
+  }
+  return { year: zoned.yearOfWeek, week: zoned.weekOfYear };
 }
 
-/** The current ISO week on the schedule clock: the one "this week" every weekly-report path —
- * sends, cycles, stamps, skips and highlights — must share, so they can never disagree across a
- * week boundary. */
 export function currentScheduledIsoWeek(now: Date = new Date()): { year: number; week: number } {
-  return isoWeekOfDate(zonedCalendarDate(now));
+  const zoned = Temporal.Instant.fromEpochMilliseconds(now.getTime()).toZonedDateTimeISO(
+    WEEKLY_REPORT_SCHEDULE_TIME_ZONE,
+  );
+  if (zoned.yearOfWeek === undefined || zoned.weekOfYear === undefined) {
+    throw new Error(`missing ISO week for ${zoned.toString()}`);
+  }
+  return { year: zoned.yearOfWeek, week: zoned.weekOfYear };
 }
 
-/** True when local weekday matches and local clock is at or after sendTime. */
 export function isWeeklyScheduleDue(input: {
   now: Date;
   sendWeekday: number;
@@ -84,10 +49,11 @@ export function isWeeklyScheduleDue(input: {
   timeZone?: string;
 }): boolean {
   if (input.sendWeekday < 1 || input.sendWeekday > 7) return false;
-  if (!/^\d{2}:\d{2}$/.test(input.sendTime)) return false;
-  const { weekday, time } = zonedWeekdayAndTime(
-    input.now,
+  const targetTime = parseScheduleTime(input.sendTime);
+  if (!targetTime) return false;
+  const zoned = Temporal.Instant.fromEpochMilliseconds(input.now.getTime()).toZonedDateTimeISO(
     input.timeZone ?? WEEKLY_REPORT_SCHEDULE_TIME_ZONE,
   );
-  return weekday === input.sendWeekday && time >= input.sendTime;
+  if (zoned.dayOfWeek !== input.sendWeekday) return false;
+  return Temporal.PlainTime.compare(zoned.toPlainTime(), targetTime) >= 0;
 }

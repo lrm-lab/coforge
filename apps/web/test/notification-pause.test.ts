@@ -21,6 +21,7 @@ describe("notification pauses (task #469)", () => {
     expect(customPauseEnd("2028-01-01T09:00", now)).toBeNull();
     expect(customPauseEnd("", now)).toBeNull();
     expect(customPauseEnd("next week", now)).toBeNull();
+    expect(customPauseEnd("2026-02-31T10:00", new Date(2026, 1, 1, 9, 0))).toBeNull();
   });
 
   test("the input's value is the local time to the minute", () => {
@@ -28,5 +29,16 @@ describe("notification pauses (task #469)", () => {
     expect(customPauseEnd(localInputValue(pauseEnd("2h", now)), now)).toEqual(
       new Date(2026, 10, 5, 16, 20),
     );
+  });
+
+  test("honors explicit timeZone across DST transitions", () => {
+    const beforeSpringForward = new Date("2026-03-07T19:00:00.000Z");
+    expect(pauseEnd("tomorrow", beforeSpringForward, "America/New_York").toISOString()).toBe(
+      "2026-03-08T13:00:00.000Z",
+    );
+    expect(localInputValue(beforeSpringForward, "America/New_York")).toBe("2026-03-07T14:00");
+    expect(
+      customPauseEnd("2026-03-08T09:00", beforeSpringForward, "America/New_York")?.toISOString(),
+    ).toBe("2026-03-08T13:00:00.000Z");
   });
 });

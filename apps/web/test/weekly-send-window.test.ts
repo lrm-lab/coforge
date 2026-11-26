@@ -254,3 +254,32 @@ test("isWeeklySendArmed requires applied settings, an open window, and no send y
 test("formatSendWindowCountdown pads hours minutes and seconds", () => {
   expect(formatSendWindowCountdown(1 * 3600_000 + 23 * 60_000 + 56_000)).toBe("01:23:56");
 });
+
+test("weeklySendWindow honors non-Shanghai time zones and rejects invalid times", () => {
+  const nyManual = weeklySendWindow({
+    now: new Date("2026-09-18T19:30:00.000Z"),
+    sendWeekday: 5,
+    sendTime: "15:00",
+    timeZone: "America/New_York",
+  });
+  expect(nyManual?.start.toISOString()).toBe("2026-09-18T19:00:00.000Z");
+  expect(nyManual?.end.toISOString()).toBe("2026-09-19T04:00:00.000Z");
+
+  const utcScheduled = weeklySendWindow({
+    now: new Date("2026-09-18T14:30:00.000Z"),
+    sendWeekday: 5,
+    sendTime: "15:00",
+    scheduleEnabled: true,
+    timeZone: "UTC",
+  });
+  expect(utcScheduled?.start.toISOString()).toBe("2026-09-18T14:00:00.000Z");
+  expect(utcScheduled?.end.toISOString()).toBe("2026-09-18T15:00:00.000Z");
+
+  expect(
+    weeklySendWindow({
+      now: new Date("2026-09-18T14:30:00.000Z"),
+      sendWeekday: 5,
+      sendTime: "25:00",
+    }),
+  ).toBeNull();
+});
