@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Separator } from "react-aria-components";
+import { Separator, Toolbar } from "react-aria-components";
 import { Button } from "#src/components/base/buttons/button";
 import { autoUpdate, computePosition, flip, hide, offset, shift } from "@floating-ui/dom";
 import { posToDOMRect } from "@tiptap/core";
@@ -423,9 +423,9 @@ export function EditorBubbleMenu({ editor }: { editor: Editor }) {
   );
 
   return createPortal(
-    <div
+    <Toolbar
       ref={floatingRef}
-      role="toolbar"
+      aria-label={m.records_editor_text()}
       className={cn(
         "fixed top-0 left-0 z-50 flex max-w-[calc(100vw-1rem)] flex-wrap items-center gap-0.5 rounded-lg bg-primary p-1 shadow-lg ring-1 ring-secondary_alt",
         !visible && "pointer-events-none",
@@ -603,7 +603,7 @@ export function EditorBubbleMenu({ editor }: { editor: Editor }) {
           </MarkButton>
         </>
       )}
-    </div>,
+    </Toolbar>,
     document.body,
   );
 }

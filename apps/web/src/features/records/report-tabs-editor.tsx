@@ -358,7 +358,7 @@ export function ReportTabsEditor({
           color="link-gray"
           data-report-tab={name}
           data-selected={name === activeTab ? "true" : undefined}
-          aria-selected={name === activeTab}
+          aria-current={name === activeTab ? "page" : undefined}
           onFocus={() => selectTab(name)}
           onKeyDown={(event) => onTabKeyDown(event, name)}
           onPressStart={press?.pressStart}
@@ -435,7 +435,7 @@ export function ReportTabsEditor({
               color="link-gray"
               data-report-tab={tab.id}
               data-selected={tab.id === activeTab ? "true" : undefined}
-              aria-selected={tab.id === activeTab}
+              aria-current={tab.id === activeTab ? "page" : undefined}
               onFocus={() => selectTab(tab.id)}
               onKeyDown={(event) => onTabKeyDown(event, tab.id)}
               onPress={() => selectTab(tab.id)}
