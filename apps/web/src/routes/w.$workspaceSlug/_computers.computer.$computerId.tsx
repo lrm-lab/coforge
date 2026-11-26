@@ -7,6 +7,11 @@ import { useCallback, useEffect, useRef } from "react";
 import { ComputerDetail } from "#src/features/computers/computer-detail";
 import { CloudDesktopOriginProvider } from "#src/features/computers/cloud-desktop-origin";
 import { useCreateAgent } from "#src/features/agents/use-create-agent";
+import {
+  batchUpdateAgentRuntimeConfig,
+  listBatchAgentEnvironmentKeys,
+} from "#src/features/agents/agents.functions";
+import { agentModelsQueryKey } from "#src/features/agents/agent-models";
 import { executeAgentControl } from "#src/features/agents/agent-control.functions";
 import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
 import { getComputerRuntimeCatalog } from "#src/features/computers/computers.functions";
@@ -93,6 +98,8 @@ function ComputerDetailPage() {
   const formatDisk = useServerFn(formatCloudComputer);
   const create = useCreateAgent();
   const executeControl = useServerFn(executeAgentControl);
+  const loadBatchEnvKeys = useServerFn(listBatchAgentEnvironmentKeys);
+  const submitBatchRuntimeConfig = useServerFn(batchUpdateAgentRuntimeConfig);
   const loadRuntimeCatalog = useServerFn(getComputerRuntimeCatalog);
   const rescanRuntimes = useRuntimeCatalogRefreshRequest();
 
@@ -208,6 +215,14 @@ function ComputerDetailPage() {
             : undefined
         }
         onExecuteAgentControl={(data) => executeControl({ data })}
+        onLoadBatchEnvironmentKeys={(agentIds) =>
+          loadBatchEnvKeys({ data: { computerId, agentIds } })
+        }
+        onBatchUpdateRuntimeConfig={(data) => submitBatchRuntimeConfig({ data })}
+        onBatchRuntimeConfigSaved={async () => {
+          void queryClient.invalidateQueries({ queryKey: agentModelsQueryKey(workspaceId) });
+          await router.invalidate({ sync: true });
+        }}
         onLoadRuntimeCatalog={(id) => loadRuntimeCatalog({ data: { computerId: id } })}
         onRescanRuntimes={
           // As the reference Computer: its creator, or whoever manages the Workspace's Computers.

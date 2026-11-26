@@ -141,26 +141,32 @@ export class AgentEnvironment {
   }
 
   async #encrypt(agentId: string, envVars: Record<string, string>) {
-    const nonce = crypto.getRandomValues(new Uint8Array(NONCE_BYTES));
-    const ciphertext = await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv: nonce, additionalData: aad(agentId) },
-      await this.#key(["encrypt"]),
-      utf8Encoder.encode(JSON.stringify(envVars)),
-    );
-    return {
-      keyId: KEY_ID,
-      ciphertext: Buffer.from(ciphertext).toString("base64"),
-      nonce: Buffer.from(nonce).toString("base64"),
-    };
+    return encryptAgentEnvironment(agentId, envVars, this.encryptionKey);
   }
 
   async #decrypt(agentId: string, encrypted: EncryptedAgentEnvironment) {
     return decryptAgentEnvironment(agentId, encrypted, this.encryptionKey);
   }
+}
 
-  #key(usages: KeyUsage[]) {
-    return crypto.subtle.importKey("raw", this.encryptionKey, "AES-GCM", false, usages);
-  }
+export async function encryptAgentEnvironment(
+  agentId: string,
+  envVars: Record<string, string>,
+  encryptionKey: Uint8Array<ArrayBuffer>,
+): Promise<EncryptedAgentEnvironment> {
+  if (encryptionKey.byteLength !== 32)
+    throw new Error("Agent environment encryption key must be 32 bytes");
+  const nonce = crypto.getRandomValues(new Uint8Array(NONCE_BYTES));
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: nonce, additionalData: aad(agentId) },
+    await crypto.subtle.importKey("raw", encryptionKey, "AES-GCM", false, ["encrypt"]),
+    utf8Encoder.encode(JSON.stringify(envVars)),
+  );
+  return {
+    keyId: KEY_ID,
+    ciphertext: Buffer.from(ciphertext).toString("base64"),
+    nonce: Buffer.from(nonce).toString("base64"),
+  };
 }
 
 export async function decryptAgentEnvironment(

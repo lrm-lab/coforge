@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Plus } from "@untitledui/icons";
 import { Checkbox as AriaCheckbox } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
+import { useAppToast } from "#src/components/ui/toast";
 import { formatNumber } from "#src/lib/format-number";
 import { m } from "#src/paraglide/messages";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
@@ -16,6 +17,13 @@ import {
   useAgentRuntimeControls,
   type AgentControlExecute,
 } from "#src/features/agents/agent-runtime-controls";
+import {
+  BatchAgentRuntimeConfigDialog,
+  type BatchRuntimeSaveResult,
+} from "#src/features/agents/batch-agent-runtime-config-dialog";
+import type { BatchUpdateAgentRuntimeConfigClientInput } from "#src/features/agents/agent.schemas";
+import type { RuntimeCatalog, RuntimeOptions } from "#src/features/agents/agent-runtime-fields";
+import { runtimeOptionsFromRuntimes } from "#src/features/agents/agent-runtime-options";
 import { agentDisplay } from "#src/features/agents/agent-status-display";
 import { AgentStatusMarker } from "#src/features/agents/agent-status-marker";
 import { cn } from "#src/lib/utils";
@@ -23,31 +31,70 @@ import { DetailGroup } from "./computer-detail-rows";
 import type { ComputerDetailView } from "./computer-detail-view";
 import { useAgentModelName } from "#src/features/agents/use-agent-model-name";
 
+function formatBatchSaveToastDetail(result: BatchRuntimeSaveResult): string {
+  const whenIdle = result.succeeded.filter((item) => item.restart === "when-idle").length;
+  const restarted = result.succeeded.filter((item) => item.restart === "published").length;
+  const deferred = result.succeeded.filter((item) => item.restart === "deferred").length;
+  const parts: string[] = [];
+  if (whenIdle > 0) parts.push(m.agent_batch_runtime_toast_when_idle({ count: whenIdle }));
+  if (restarted > 0) parts.push(m.agent_batch_runtime_toast_restarted({ count: restarted }));
+  if (deferred > 0) parts.push(m.agent_batch_runtime_toast_deferred({ count: deferred }));
+  if (result.skipped.length > 0) {
+    parts.push(m.agent_batch_runtime_toast_skipped({ count: result.skipped.length }));
+  }
+  if (result.failed.length > 0) {
+    parts.push(m.agent_batch_runtime_toast_partial_failed({ count: result.failed.length }));
+  }
+  return parts.join(" · ");
+}
+
 export function ComputerDetailAgentRoster({
+  computerId,
+  runtimes,
   agents,
   onCreateAgent,
   onSelectAgent,
   onExecute,
+  onLoadRuntimeCatalog,
+  onLoadBatchEnvironmentKeys,
+  onBatchUpdateRuntimeConfig,
+  onBatchRuntimeConfigSaved,
   canFullReset,
   computerOnline,
   computerName,
 }: {
+  computerId?: string;
+  runtimes?: ComputerDetailView["runtimes"];
   agents: ComputerDetailView["agents"];
   onCreateAgent?: () => void;
   onSelectAgent?: (agentId: string) => void;
   onExecute?: AgentControlExecute;
+  onLoadRuntimeCatalog?: (computerId: string) => Promise<RuntimeCatalog[]>;
+  onLoadBatchEnvironmentKeys?: (agentIds: string[]) => Promise<Record<string, string[]>>;
+  onBatchUpdateRuntimeConfig?: (
+    input: BatchUpdateAgentRuntimeConfigClientInput,
+  ) => Promise<BatchRuntimeSaveResult>;
+  onBatchRuntimeConfigSaved?: (result: BatchRuntimeSaveResult) => Promise<void> | void;
   canFullReset: boolean;
   computerOnline: boolean;
   computerName: string;
 }) {
+  const toast = useAppToast();
   const [selecting, setSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const [visibleCount, setVisibleCount] = useState(AGENT_ROSTER_PAGE_SIZE);
   const [busy, setBusy] = useState(false);
+  const [batchConfigOpen, setBatchConfigOpen] = useState(false);
   const [failedNames, setFailedNames] = useState<string[]>([]);
   const visibleAgents = agents.slice(0, visibleCount);
   const hiddenCount = Math.max(0, agents.length - visibleAgents.length);
   const selectedAgents = agents.filter((agent) => selectedIds.has(agent.id));
+  const editableSelectedCount = selectedAgents.filter((agent) => agent.ownedByCurrentUser).length;
+  const canBatchConfig = Boolean(computerId && onLoadRuntimeCatalog && onBatchUpdateRuntimeConfig);
+  const baseRuntimeOptions = useMemo(
+    () => (runtimes ? runtimeOptionsFromRuntimes(runtimes) : undefined),
+    [runtimes],
+  );
   const selectionName = selectedAgents.map((agent) => agent.displayName).join(", ");
   const control = useAgentRuntimeControls({
     agentId: selectedAgents[0]?.id ?? "",
@@ -75,7 +122,15 @@ export function ComputerDetailAgentRoster({
       }
     },
   });
-  const locked = busy || control.restartOpen;
+  const locked = busy || control.restartOpen || batchConfigOpen;
+  const loadBatchRuntimeOptions = async (id: string): Promise<RuntimeOptions> => {
+    const catalogs = await onLoadRuntimeCatalog!(id);
+    return {
+      providers: baseRuntimeOptions?.providers ?? [],
+      unusable: baseRuntimeOptions?.unusable ?? [],
+      catalogs,
+    };
+  };
   return (
     <>
       <DetailGroup
@@ -116,7 +171,7 @@ export function ComputerDetailAgentRoster({
               </>
             ) : (
               <>
-                {onExecute && agents.length > 0 && (
+                {(onExecute || canBatchConfig) && agents.length > 0 && (
                   <Button size="sm" color="secondary" onPress={() => setSelecting(true)}>
                     {m.computer_agent_select()}
                   </Button>
@@ -136,25 +191,44 @@ export function ComputerDetailAgentRoster({
             <span className="me-auto text-sm tabular-nums text-tertiary">
               {m.computer_agents_selected({ count: formatNumber(selectedAgents.length) })}
             </span>
-            <Button
-              size="sm"
-              color="secondary"
-              isDisabled={locked}
-              onPress={() => control.submitStart()}
-            >
-              {m.agent_control_start()}
-            </Button>
-            <Button size="sm" color="secondary" isDisabled={locked} onPress={control.submitStop}>
-              {m.agent_control_stop()}
-            </Button>
-            <Button
-              size="sm"
-              color="secondary"
-              isDisabled={locked}
-              onPress={() => control.openRestart()}
-            >
-              {m.agent_control_restart_reset_tooltip()}
-            </Button>
+            {onExecute && (
+              <>
+                <Button
+                  size="sm"
+                  color="secondary"
+                  isDisabled={locked}
+                  onPress={() => control.submitStart()}
+                >
+                  {m.agent_control_start()}
+                </Button>
+                <Button
+                  size="sm"
+                  color="secondary"
+                  isDisabled={locked}
+                  onPress={control.submitStop}
+                >
+                  {m.agent_control_stop()}
+                </Button>
+                <Button
+                  size="sm"
+                  color="secondary"
+                  isDisabled={locked}
+                  onPress={() => control.openRestart()}
+                >
+                  {m.agent_control_restart_reset_tooltip()}
+                </Button>
+              </>
+            )}
+            {canBatchConfig && (
+              <Button
+                size="sm"
+                color="secondary"
+                isDisabled={locked || editableSelectedCount === 0}
+                onPress={() => setBatchConfigOpen(true)}
+              >
+                {m.agent_batch_runtime_button()}
+              </Button>
+            )}
           </div>
         )}
         {failedNames.length > 0 && (
@@ -218,6 +292,44 @@ export function ComputerDetailAgentRoster({
         )}
       </DetailGroup>
       <AgentRestartDialog agentName={selectionName} control={control} />
+      {canBatchConfig && computerId && (
+        <BatchAgentRuntimeConfigDialog
+          open={batchConfigOpen}
+          onOpenChange={setBatchConfigOpen}
+          computerId={computerId}
+          computerOnline={computerOnline}
+          agents={selectedAgents.map((agent) => ({
+            id: agent.id,
+            displayName: agent.displayName,
+            ownedByCurrentUser: agent.ownedByCurrentUser ?? false,
+            stopped: agent.stopped ?? false,
+            hasApiKey: agent.hasApiKey ?? false,
+            provider: agent.provider,
+            runtimeConfig: agent.runtimeConfig,
+            runtimeConfigInvalid: agent.runtimeConfigInvalid,
+          }))}
+          onLoadRuntimeOptions={loadBatchRuntimeOptions}
+          onLoadEnvironmentKeys={onLoadBatchEnvironmentKeys}
+          onSubmitBatch={onBatchUpdateRuntimeConfig!}
+          onSaved={(result) => {
+            if (result.succeeded.length > 0) {
+              const title = m.agent_batch_runtime_toast_saved({ count: result.succeeded.length });
+              const detail = formatBatchSaveToastDetail(result);
+              toast.success(detail ? `${title} · ${detail}` : title);
+            }
+            if (result.failed.length === 0) {
+              setSelecting(false);
+              setSelectedIds(new Set());
+            } else {
+              const succeededIds = new Set(result.succeeded.map((item) => item.agentId));
+              setSelectedIds(
+                (current) => new Set([...current].filter((id) => !succeededIds.has(id))),
+              );
+            }
+            void onBatchRuntimeConfigSaved?.(result);
+          }}
+        />
+      )}
     </>
   );
 }

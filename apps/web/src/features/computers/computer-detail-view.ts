@@ -61,11 +61,19 @@ export type ComputerDetailView = ComputerIdentity & {
     name: string;
     displayName: string;
     avatarUrl: string | null;
-    /** `undefined` for an Agent whose stored config the server could not read; the roster
-     * keeps its row and hides its runtime column value. */
+    ownedByCurrentUser?: boolean;
+    stopped?: boolean;
+    hasApiKey?: boolean;
     provider?: RuntimeProvider;
     runtimeAuthSource?: "shared" | "own" | "unknown";
-    runtimeConfig?: { model?: string; modelProvider?: string };
+    runtimeConfig?: {
+      model?: string;
+      modelProvider?: string;
+      reasoning?: string;
+      fastMode?: boolean;
+      contextWindow?: number;
+      maxOutputTokens?: number;
+    };
     runtimeConfigInvalid?: boolean;
     display?: AgentDisplaySnapshot;
   }[];

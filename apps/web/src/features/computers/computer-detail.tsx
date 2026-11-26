@@ -4,8 +4,12 @@ import { RefreshCw01 as RotateCw } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { AgentCreateDialog } from "#src/features/agents/agent-create-dialog";
 import type { AgentControlExecute } from "#src/features/agents/agent-runtime-controls";
+import type { BatchRuntimeSaveResult } from "#src/features/agents/batch-agent-runtime-config-dialog";
 import type { RuntimeCatalog } from "#src/features/agents/agent-runtime-fields";
-import type { CreateAgentInput } from "#src/features/agents/agent.schemas";
+import type {
+  BatchUpdateAgentRuntimeConfigClientInput,
+  CreateAgentInput,
+} from "#src/features/agents/agent.schemas";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { humanLabel, UNNAMED_PERSON_NAME } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
@@ -64,6 +68,9 @@ export function ComputerDetail({
   onRescanRuntimes,
   onSelectAgent,
   onExecuteAgentControl,
+  onLoadBatchEnvironmentKeys,
+  onBatchUpdateRuntimeConfig,
+  onBatchRuntimeConfigSaved,
 }: {
   computer: ComputerDetailView;
   timeZone?: string | null;
@@ -83,6 +90,11 @@ export function ComputerDetail({
   onRescanRuntimes?: () => Promise<RuntimeCatalogRefreshResult>;
   onSelectAgent?: (agentId: string) => void;
   onExecuteAgentControl?: AgentControlExecute;
+  onLoadBatchEnvironmentKeys?: (agentIds: string[]) => Promise<Record<string, string[]>>;
+  onBatchUpdateRuntimeConfig?: (
+    input: BatchUpdateAgentRuntimeConfigClientInput,
+  ) => Promise<BatchRuntimeSaveResult>;
+  onBatchRuntimeConfigSaved?: (result: BatchRuntimeSaveResult) => Promise<void> | void;
   latestComputerVersion?: string | null;
   restartPollIntervalMs?: number;
   restartMaxPolls?: number;
@@ -331,12 +343,18 @@ export function ComputerDetail({
 
         <div className="border-b border-secondary px-page py-4 last:border-b-0">
           <ComputerDetailAgentRoster
+            computerId={computer.id}
+            runtimes={computer.runtimes}
             agents={computer.agents}
             onCreateAgent={
               onCreateAgent && onLoadRuntimeCatalog ? () => setCreateAgentOpen(true) : undefined
             }
             onSelectAgent={onSelectAgent}
             onExecute={onExecuteAgentControl}
+            onLoadRuntimeCatalog={onLoadRuntimeCatalog}
+            onLoadBatchEnvironmentKeys={onLoadBatchEnvironmentKeys}
+            onBatchUpdateRuntimeConfig={onBatchUpdateRuntimeConfig}
+            onBatchRuntimeConfigSaved={onBatchRuntimeConfigSaved}
             canFullReset={computer.canManageAgents}
             computerOnline={computer.online}
             computerName={label}

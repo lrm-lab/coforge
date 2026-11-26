@@ -1,4 +1,5 @@
 import {
+  batchAgentRuntimeConfig,
   manageAgents,
   runtimeCredentials,
 } from "#src/server/agents/manage-agents-production.server";
@@ -7,6 +8,8 @@ import { z } from "zod";
 import { setResponseHeader } from "@tanstack/react-start/server";
 import {
   agentIdSchema,
+  batchAgentEnvironmentKeysInputSchema,
+  batchUpdateAgentRuntimeConfigInputSchema,
   changeAgentVisibilityInputSchema,
   createAgentInputSchema,
   createExternalAgentInputSchema,
@@ -381,4 +384,29 @@ export const saveAgentEnvironment = createServerFn({ method: "POST" })
       data.agentId,
       data.envVars,
     );
+  });
+
+export const listBatchAgentEnvironmentKeys = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(batchAgentEnvironmentKeysInputSchema)
+  .handler(async ({ data, context: { user, db, workspaceId } }) => {
+    setResponseHeader("cache-control", "no-store");
+    return batchAgentRuntimeConfig(db).listEnvironmentKeys(
+      { workspaceId, userId: user.id },
+      data.computerId,
+      data.agentIds,
+    );
+  });
+
+export const batchUpdateAgentRuntimeConfig = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(batchUpdateAgentRuntimeConfigInputSchema)
+  .handler(async ({ data, context: { user, db, workspaceId } }) => {
+    const result = await batchAgentRuntimeConfig(db).apply({ workspaceId, userId: user.id }, data);
+    await Promise.all(
+      result.succeeded.map(({ agentId }) =>
+        publishAgentDirectoryChanged(workspaceId, agentId, "updated"),
+      ),
+    );
+    return result;
   });

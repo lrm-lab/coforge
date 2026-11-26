@@ -216,6 +216,58 @@ export const saveAgentEnvironmentInputSchema = z.object({
     }),
 });
 
+const batchRuntimeSelectionSchema = z
+  .object({
+    provider: agentInputShape.provider,
+    model: agentInputShape.model,
+    modelProvider: agentInputShape.modelProvider,
+    reasoning: agentInputShape.reasoning,
+    fastMode: agentInputShape.fastMode,
+    contextWindow: agentInputShape.contextWindow,
+    maxOutputTokens: agentInputShape.maxOutputTokens,
+    apiKey: agentInputShape.apiKey,
+  })
+  .superRefine(validateRuntimeKey);
+
+const batchEnvironmentPatchSchema = z.object({
+  set: z
+    .record(
+      z.string().max(AGENT_ENVIRONMENT_MAX_NAME_LENGTH),
+      z.string().max(AGENT_ENVIRONMENT_MAX_INPUT_VALUE_LENGTH),
+    )
+    .refine((vars) => Object.keys(vars).length <= AGENT_ENVIRONMENT_MAX_VARIABLES, {
+      message: `At most ${AGENT_ENVIRONMENT_MAX_VARIABLES} environment variables`,
+    }),
+  remove: z
+    .array(z.string().trim().min(1).max(AGENT_ENVIRONMENT_MAX_NAME_LENGTH))
+    .max(AGENT_ENVIRONMENT_MAX_VARIABLES),
+});
+
+export const batchAgentEnvironmentKeysInputSchema = z.object({
+  computerId: z.string().min(1),
+  agentIds: z.array(agentIdSchema).min(1).max(200),
+});
+
+export const batchUpdateAgentRuntimeConfigInputSchema = z
+  .object({
+    computerId: z.string().min(1),
+    agentIds: z.array(agentIdSchema).min(1).max(200),
+    runtime: batchRuntimeSelectionSchema.optional(),
+    environmentPatch: batchEnvironmentPatchSchema.optional(),
+  })
+  .refine(
+    (data) =>
+      data.runtime !== undefined ||
+      (data.environmentPatch !== undefined &&
+        (Object.keys(data.environmentPatch.set).length > 0 ||
+          data.environmentPatch.remove.length > 0)),
+    { message: "Runtime or environment change is required" },
+  );
+
+export type BatchUpdateAgentRuntimeConfigClientInput = z.infer<
+  typeof batchUpdateAgentRuntimeConfigInputSchema
+>;
+
 // A thin gate ahead of the codec's own strict validation (`agent-workspace-files.ts` rejects
 // control bytes, `..` segments, absolute/Windows paths, etc. on encode) — this just rejects
 // wildly wrong types/sizes before that.

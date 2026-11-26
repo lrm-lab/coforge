@@ -18,6 +18,7 @@
       "./messages/{locale}/agent-activity.json",
       "./messages/{locale}/agent-mascots.json",
       "./messages/{locale}/agent-runtime.json",
+      "./messages/{locale}/agent-batch-runtime.json",
       "./messages/{locale}/agent-turn-interrupt.json",
       "./messages/{locale}/agent-profile.json",
       "./messages/{locale}/agent-usage.json",

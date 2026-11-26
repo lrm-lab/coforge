@@ -2,6 +2,7 @@ import type { PrismaClient as Database } from "#src/generated/prisma/client";
 import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
 import { PrismaAgentRuntimeCredentialRepository } from "#src/server/db/repositories/agent-runtime-credential.repositories.server";
 import { ManageAgents } from "./manage-agents.server";
+import { BatchAgentRuntimeConfig } from "./batch-agent-runtime-config.server";
 import { getAgentRuntimeLock } from "./agent-runtime-lock.server";
 import { userAgentConfigApply, userAgentRuntimeControl } from "./user-agent-control.server";
 import {
@@ -33,6 +34,27 @@ export function manageAgents(db: Database) {
     userAgentConfigApply(db),
   );
   return agentManagement;
+}
+
+export function batchAgentRuntimeConfig(db: Database) {
+  const agents = new PrismaAgentRepository(db);
+  return new BatchAgentRuntimeConfig(
+    agents,
+    {
+      start: (intent, ownerId) => userAgentRuntimeControl(db, agents).start(intent, ownerId),
+      stop: (intent, ownerId) => userAgentRuntimeControl(db, agents).stop(intent, ownerId),
+    },
+    {
+      canRun: (workspaceId, userId, computerId, config) =>
+        computerCanRunAgent(db, { workspaceId, userId }, computerId, config),
+      refusal: (workspaceId, userId, computerId, config) =>
+        computerRuntimeRefusal(db, { workspaceId, userId }, computerId, config),
+    },
+    getAgentRuntimeLock(),
+    () => runtimeCredentials(db, true),
+    () => readAgentRuntimeCredentialEncryptionKey(process.env),
+    userAgentConfigApply(db),
+  );
 }
 
 export async function runtimeCredentials(db: Database, decrypt = false) {
