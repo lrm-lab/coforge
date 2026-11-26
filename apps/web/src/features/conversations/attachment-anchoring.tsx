@@ -1,5 +1,13 @@
-import { useEffect, useState, type ReactNode, type RefObject } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { createPortal } from "react-dom";
+import { computePosition, flip, offset, shift, type VirtualElement } from "@floating-ui/dom";
 import { MessageSquare01 } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
@@ -108,39 +116,69 @@ export function useSelectionComment(
       element.removeEventListener("scroll", drop, true);
     };
   }, [container, toAnchor, anchoring]);
-  // Inside the open dialog: a modal hides the rest of the page and closes on a press outside.
   const host = container.current?.closest<HTMLElement>('[role="dialog"]') ?? null;
   if (!offer || !anchoring || !host) return null;
   return createPortal(
+    <SelectionCommentFloatingButton
+      rect={offer.rect}
+      onComment={() => {
+        const selection = document.getSelection();
+        const quote = selection ? storedText(selection.toString(), ANCHOR_QUOTE_MAX) : "";
+        setOffer(null);
+        selection?.removeAllRanges();
+        anchoring.onComment(
+          quote
+            ? ({
+                ...offer.anchor,
+                data: { ...offer.anchor.data, quote },
+              } as AttachmentCommentAnchor)
+            : offer.anchor,
+        );
+      }}
+    />,
+    host,
+  );
+}
+
+function SelectionCommentFloatingButton({
+  rect,
+  onComment,
+}: {
+  rect: DOMRect;
+  onComment: () => void;
+}) {
+  const floatingRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const floating = floatingRef.current;
+    if (!floating) return;
+    let cancelled = false;
+    const reference: VirtualElement = { getBoundingClientRect: () => rect };
+    void computePosition(reference, floating, {
+      strategy: "fixed",
+      placement: "bottom-start",
+      middleware: [offset(6), flip(), shift({ padding: 8 })],
+    }).then(({ x, y }) => {
+      if (cancelled || !floating.isConnected) return;
+      floating.style.left = `${x}px`;
+      floating.style.top = `${y}px`;
+      floating.style.visibility = "visible";
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [rect]);
+
+  return (
     <div
-      className="fixed z-50"
-      style={{ top: offer.rect.bottom + 6, left: Math.max(8, offer.rect.left) }}
-      // Keep the selection: a mouse press on the button must not collapse it first.
+      ref={floatingRef}
+      className="fixed top-0 left-0 z-50"
+      style={{ visibility: "hidden" }}
       onMouseDown={(event) => event.preventDefault()}
     >
-      <Button
-        size="sm"
-        color="primary"
-        iconLeading={MessageSquare01}
-        onPress={() => {
-          const selection = document.getSelection();
-          const quote = selection ? storedText(selection.toString(), ANCHOR_QUOTE_MAX) : "";
-          setOffer(null);
-          selection?.removeAllRanges();
-          // The quote is read now, once, rather than on every change of the selection.
-          anchoring.onComment(
-            quote
-              ? ({
-                  ...offer.anchor,
-                  data: { ...offer.anchor.data, quote },
-                } as AttachmentCommentAnchor)
-              : offer.anchor,
-          );
-        }}
-      >
+      <Button size="sm" color="primary" iconLeading={MessageSquare01} onPress={onComment}>
         {m.attachment_comments_comment_selection()}
       </Button>
-    </div>,
-    host,
+    </div>
   );
 }

@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
+import { computePosition, flip, offset, shift, type VirtualElement } from "@floating-ui/dom";
+import { Separator, Toolbar } from "react-aria-components";
 import { Code02, Copy01, CornerUpLeft } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { useAppToast } from "#src/components/ui/toast";
 import { m } from "#src/paraglide/messages";
-import { formatSelectionQuote, selectionAffordancePlacement } from "./message-quote";
+import { formatSelectionQuote } from "./message-quote";
 import { copyFragmentMarkdown, copyFragmentStyled, selectionFragmentHtml } from "./selection-copy";
 
 type QuoteOffer = {
@@ -13,22 +15,9 @@ type QuoteOffer = {
   quote: string;
   html: string;
   text: string;
-  top: number;
-  left: number;
+  rect: DOMRect;
+  prefer: "above" | "below";
 };
-
-function visibleBoundary(el: HTMLElement): { top: number; bottom: number } {
-  let node = el.parentElement;
-  while (node) {
-    const overflowY = getComputedStyle(node).overflowY;
-    if (overflowY === "auto" || overflowY === "scroll") {
-      const { top, bottom } = node.getBoundingClientRect();
-      return { top, bottom };
-    }
-    node = node.parentElement;
-  }
-  return { top: 0, bottom: window.innerHeight };
-}
 
 function resolveQuoteBody(history: HTMLElement, node: Node): HTMLElement | null {
   const element = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
@@ -90,18 +79,13 @@ export function PaneQuoteSelection({
       dismiss();
       return;
     }
-    const placement = selectionAffordancePlacement(
-      range.getBoundingClientRect(),
-      body.getBoundingClientRect(),
-      visibleBoundary(body),
-      touchSelectionRef.current ? "below" : "above",
-    );
     setOffer({
       container: body,
       quote,
       html: selectionFragmentHtml(range),
       text: selection.toString(),
-      ...placement,
+      rect: range.getBoundingClientRect(),
+      prefer: touchSelectionRef.current ? "below" : "above",
     });
   }, [onQuote, historyRef, dismiss, setOffer]);
 
@@ -175,10 +159,12 @@ export function PaneQuoteSelection({
     };
   }, [onQuote, historyRef, readQuoteSelection]);
 
-  if (!onQuote || !offer || !offer.container.isConnected) return null;
+  if (!onQuote || !offer || !offer.container.isConnected || typeof document === "undefined") {
+    return null;
+  }
   return createPortal(
     <QuoteSelectionBar offer={offer} barRef={barRef} dismiss={dismiss} onQuote={onQuote} />,
-    offer.container,
+    document.body,
   );
 }
 
@@ -194,11 +180,36 @@ function QuoteSelectionBar({
   onQuote: (quote: string) => void;
 }) {
   const toast = useAppToast();
+
+  useLayoutEffect(() => {
+    const floating = barRef.current;
+    if (!floating) return;
+    let cancelled = false;
+    const reference: VirtualElement = {
+      getBoundingClientRect: () => offer.rect,
+      contextElement: offer.container,
+    };
+    void computePosition(reference, floating, {
+      strategy: "fixed",
+      placement: offer.prefer === "below" ? "bottom" : "top",
+      middleware: [offset(6), flip(), shift({ padding: 8 })],
+    }).then(({ x, y }) => {
+      if (cancelled || !floating.isConnected) return;
+      floating.style.left = `${x}px`;
+      floating.style.top = `${y}px`;
+      floating.style.visibility = "visible";
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [offer, barRef]);
+
   return (
-    <div
+    <Toolbar
       ref={barRef}
-      style={{ top: offer.top, left: offer.left }}
-      className="absolute z-10 flex items-center gap-0.5 rounded-md border border-secondary bg-primary p-0.5 shadow-lg"
+      aria-label={m.conversation_quote_selection()}
+      style={{ visibility: "hidden" }}
+      className="fixed top-0 left-0 z-50 flex items-center gap-0.5 rounded-md border border-secondary bg-primary p-0.5 shadow-lg"
     >
       <ButtonUtility
         size="xs"
@@ -210,7 +221,7 @@ function QuoteSelectionBar({
           dismiss();
         }}
       />
-      <span aria-hidden="true" className="h-4 w-px shrink-0 bg-secondary" />
+      <Separator orientation="vertical" className="h-4 w-px shrink-0 bg-secondary" />
       <ButtonUtility
         size="xs"
         color="tertiary"
@@ -224,7 +235,7 @@ function QuoteSelectionBar({
           dismiss();
         }}
       />
-      <span aria-hidden="true" className="h-4 w-px shrink-0 bg-secondary" />
+      <Separator orientation="vertical" className="h-4 w-px shrink-0 bg-secondary" />
       <ButtonUtility
         size="xs"
         color="tertiary"
@@ -238,6 +249,6 @@ function QuoteSelectionBar({
           dismiss();
         }}
       />
-    </div>
+    </Toolbar>
   );
 }
