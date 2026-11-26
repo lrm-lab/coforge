@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type {
   AccessibleWorkspace,
   Credential,
@@ -7,12 +8,44 @@ import type {
 } from "./login";
 import { CliError, loginError } from "./errors";
 
-type OAuthMetadata = {
-  issuer: string;
-  device_authorization_endpoint: string;
-  token_endpoint: string;
-  coforge_workspaces_endpoint?: string;
-};
+const nonEmptyString = z.string().min(1);
+const positiveNumber = z.number().positive();
+const optionalNonEmptyString = z.union([nonEmptyString, z.undefined()]).catch(undefined);
+const optionalPositiveNumber = z.union([positiveNumber, z.undefined()]).catch(undefined);
+
+const oauthMetadataSchema = z.looseObject({
+  issuer: z.string(),
+  device_authorization_endpoint: z.unknown().optional(),
+  token_endpoint: z.unknown().optional(),
+  coforge_workspaces_endpoint: z.unknown().optional(),
+});
+
+const deviceAuthorizationBodySchema = z.object({
+  verification_uri: nonEmptyString,
+  device_code: nonEmptyString,
+  user_code: nonEmptyString,
+  expires_in: positiveNumber,
+  interval: positiveNumber.catch(5),
+});
+
+const tokenErrorBodySchema = z.object({
+  error: nonEmptyString,
+});
+
+const tokenSuccessBodySchema = z.object({
+  access_token: nonEmptyString,
+  token_type: nonEmptyString,
+  refresh_token: optionalNonEmptyString,
+  expires_in: optionalPositiveNumber,
+});
+
+const workspaceSchema = z.object({
+  id: nonEmptyString,
+  slug: nonEmptyString,
+  name: nonEmptyString,
+});
+
+type OAuthMetadata = z.infer<typeof oauthMetadataSchema>;
 
 type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -42,18 +75,15 @@ export class OAuthDeviceClient implements DeviceAuthorizationClient {
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ client_id: this.#clientId, scope: this.#scope }),
     });
-    const body = await readJson<Record<string, unknown>>(response, "device authorization");
-    const verificationUri = normalizeEndpoint(
-      // Never `verification_uri_complete`: the code is typed on the page, not carried in the link.
-      requiredString(body, "verification_uri"),
-      "verification URI",
-    );
+    const rawBody = await readJson(response, "device authorization");
+    const body = parseRequiredFields(deviceAuthorizationBodySchema, rawBody);
+    const verificationUri = normalizeEndpoint(body.verification_uri, "verification URI");
     return {
-      deviceCode: requiredString(body, "device_code"),
-      userCode: requiredString(body, "user_code"),
+      deviceCode: body.device_code,
+      userCode: body.user_code,
       verificationUri,
-      expiresInSeconds: requiredPositiveNumber(body, "expires_in"),
-      intervalSeconds: optionalPositiveNumber(body, "interval") ?? 5,
+      expiresInSeconds: body.expires_in,
+      intervalSeconds: body.interval,
     };
   }
 
@@ -69,26 +99,26 @@ export class OAuthDeviceClient implements DeviceAuthorizationClient {
       }),
     });
     if (response === null) return { status: "network_timeout" };
-    const body = await readJson<Record<string, unknown>>(response, "token polling", true);
+    const rawBody = await readJson(response, "token polling", true);
     if (!response.ok) {
-      if (body.error === "authorization_pending") return { status: "pending" };
-      if (body.error === "slow_down") return { status: "slow_down" };
-      if (body.error === "access_denied") {
+      const errorBody = parseRequiredFields(tokenErrorBodySchema, rawBody);
+      if (errorBody.error === "authorization_pending") return { status: "pending" };
+      if (errorBody.error === "slow_down") return { status: "slow_down" };
+      if (errorBody.error === "access_denied") {
         throw loginError("AUTH_DEVICE_CODE_CANCELLED", "Device authorization was cancelled.");
       }
-      if (body.error === "expired_token") {
+      if (errorBody.error === "expired_token") {
         throw loginError("AUTH_DEVICE_CODE_EXPIRED", "The device authorization code expired.");
       }
-      throw new Error(`device authorization failed: ${requiredString(body, "error")}`);
+      throw new Error(`device authorization failed: ${errorBody.error}`);
     }
+    const body = parseRequiredFields(tokenSuccessBodySchema, rawBody);
     const credential: Credential = {
-      accessToken: requiredString(body, "access_token"),
-      tokenType: requiredString(body, "token_type"),
+      accessToken: body.access_token,
+      tokenType: body.token_type,
     };
-    const refreshToken = optionalString(body, "refresh_token");
-    const expiresInSeconds = optionalPositiveNumber(body, "expires_in");
-    if (refreshToken) credential.refreshToken = refreshToken;
-    if (expiresInSeconds) credential.expiresInSeconds = expiresInSeconds;
+    if (body.refresh_token) credential.refreshToken = body.refresh_token;
+    if (body.expires_in) credential.expiresInSeconds = body.expires_in;
     return { status: "authorized", credential };
   }
 
@@ -126,9 +156,12 @@ export class OAuthDeviceClient implements DeviceAuthorizationClient {
 
   async #discover(issuer: string): Promise<OAuthMetadata> {
     const discoveryResponse = await this.#request(discoveryUrl(issuer));
-    const metadata = await readJson<OAuthMetadata>(discoveryResponse, "OAuth discovery");
-    if (metadata.issuer !== issuer) throw new Error("OAuth discovery issuer mismatch");
-    return metadata;
+    const parsed = oauthMetadataSchema.safeParse(
+      await readJson(discoveryResponse, "OAuth discovery"),
+    );
+    if (!parsed.success || parsed.data.issuer !== issuer)
+      throw new Error("OAuth discovery issuer mismatch");
+    return parsed.data;
   }
 
   async #request(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
@@ -161,15 +194,10 @@ export class OAuthDeviceClient implements DeviceAuthorizationClient {
 }
 
 function readWorkspace(value: unknown): AccessibleWorkspace {
-  if (typeof value !== "object" || value === null) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw loginError("AUTH_WORKSPACE_LIST_FAILED", "The Workspace list response is invalid.");
   }
-  const body = value as Record<string, unknown>;
-  return {
-    id: requiredString(body, "id"),
-    slug: requiredString(body, "slug"),
-    name: requiredString(body, "name"),
-  };
+  return parseRequiredFields(workspaceSchema, value);
 }
 
 function isSecureOrLoopbackUrl(url: URL): boolean {
@@ -226,30 +254,17 @@ function normalizeEndpoint(value: unknown, name: string): string {
   return url.href;
 }
 
-async function readJson<T>(response: Response, name: string, allowError = false): Promise<T> {
-  const body = (await response.json()) as T;
+async function readJson(response: Response, name: string, allowError = false): Promise<unknown> {
+  const body: unknown = await response.json();
   if (!allowError && !response.ok) throw new Error(`${name} failed with HTTP ${response.status}`);
   return body;
 }
 
-function requiredString(body: Record<string, unknown>, name: string): string {
-  const value = body[name];
-  if (typeof value !== "string" || value.length === 0) throw new Error(`${name} is missing`);
-  return value;
-}
-
-function optionalString(body: Record<string, unknown>, name: string): string | undefined {
-  const value = body[name];
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function requiredPositiveNumber(body: Record<string, unknown>, name: string): number {
-  const value = optionalPositiveNumber(body, name);
-  if (value === undefined) throw new Error(`${name} is missing`);
-  return value;
-}
-
-function optionalPositiveNumber(body: Record<string, unknown>, name: string): number | undefined {
-  const value = body[name];
-  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+function parseRequiredFields<T>(schema: z.ZodType<T>, value: unknown): T {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) {
+    const field = parsed.error.issues[0]?.path[0];
+    throw new Error(`${field !== undefined ? String(field) : "response"} is missing`);
+  }
+  return parsed.data;
 }

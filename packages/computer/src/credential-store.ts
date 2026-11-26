@@ -1,6 +1,7 @@
 import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { homedir } from "node:os";
+import { z } from "zod";
 
 import type { Credential, CredentialRemover, CredentialStore } from "./login";
 import { loginError } from "./errors";
@@ -8,6 +9,11 @@ import {
   computerCredentialFilename,
   resolveComputerCredentialsDirectory,
 } from "@lrm/coforge-sdk/internal/computer-credentials";
+
+const storedCredentialSchema = z.looseObject({
+  accessToken: z.string().min(1),
+  tokenType: z.string().min(1),
+});
 
 /** File-backed credentials rooted by COFORGE_COMPUTER_* environment variables. */
 export class FileCredentialStore implements CredentialStore, CredentialRemover {
@@ -49,16 +55,11 @@ export class FileCredentialStore implements CredentialStore, CredentialRemover {
   async load(serverUrl: string): Promise<Credential | null> {
     try {
       const value = await readFile(this.pathFor(serverUrl), "utf8");
-      const credential = JSON.parse(value) as Partial<Credential>;
-      if (
-        typeof credential.accessToken !== "string" ||
-        !credential.accessToken ||
-        typeof credential.tokenType !== "string" ||
-        !credential.tokenType
-      ) {
+      const parsed = storedCredentialSchema.safeParse(JSON.parse(value));
+      if (!parsed.success) {
         throw new Error("stored credential is invalid");
       }
-      return credential as Credential;
+      return parsed.data as Credential;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw loginError("AUTH_CREDENTIAL_STORE_UNAVAILABLE", "The credential file is unavailable.");

@@ -1,7 +1,18 @@
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { hasErrorCode } from "@lrm/coforge-sdk/internal";
 import { basename, dirname, join } from "node:path";
+import { z } from "zod";
 import { CliError, loginError, setupError } from "./errors";
+
+const currentProfileFileSchema = z.object({
+  server_url: z.string().min(1),
+});
+
+const workspaceRegistrationFileSchema = z.object({
+  workspace_id: z.string(),
+  workspace_slug: z.string(),
+  computer_id: z.string(),
+});
 
 export type CurrentProfile = { serverUrl: string };
 export type WorkspaceSelection = { id: string; slug: string };
@@ -51,11 +62,11 @@ export class FileComputerConfig implements ComputerConfig {
       if (isMissingFile(error)) return null;
       throw error;
     }
-    const value = JSON.parse(raw) as { server_url?: unknown };
-    if (typeof value.server_url !== "string" || value.server_url.length === 0) {
+    const parsed = currentProfileFileSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) {
       throw new Error("current profile is invalid");
     }
-    return { serverUrl: value.server_url };
+    return { serverUrl: parsed.data.server_url };
   }
 
   async saveWorkspace(workspace: WorkspaceSelection): Promise<string> {
@@ -98,17 +109,14 @@ export class FileComputerConfig implements ComputerConfig {
     for (const directory of directories) {
       const path = join(this.directory, "workspaces", directory, "registration.json");
       if (!(await Bun.file(path).exists())) continue;
-      const value = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
-      if (
-        typeof value.workspace_id !== "string" ||
-        typeof value.workspace_slug !== "string" ||
-        typeof value.computer_id !== "string"
-      )
-        throw new Error("invalid Workspace registration");
+      const parsed = workspaceRegistrationFileSchema.safeParse(
+        JSON.parse(await readFile(path, "utf8")),
+      );
+      if (!parsed.success) throw new Error("invalid Workspace registration");
       registrations.push({
-        id: value.workspace_id,
-        slug: value.workspace_slug,
-        computerId: value.computer_id,
+        id: parsed.data.workspace_id,
+        slug: parsed.data.workspace_slug,
+        computerId: parsed.data.computer_id,
       });
     }
     return registrations;

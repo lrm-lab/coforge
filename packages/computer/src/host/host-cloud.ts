@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export type HostJobOperation = "create" | "delete" | "attach" | "update" | "runtime";
 
 export type HostHeartbeatReport = {
@@ -76,32 +78,21 @@ export class HttpHostCloud {
   }
 }
 
-function claimedJob(value: unknown): ClaimedContainerJob {
-  if (!value || typeof value !== "object") throw new Error("invalid claimed job");
-  const job = value as Record<string, unknown>;
-  const operation = job.operation;
-  if (
-    operation !== "create" &&
-    operation !== "delete" &&
-    operation !== "attach" &&
-    operation !== "update" &&
-    operation !== "runtime"
-  ) {
-    throw new Error("invalid claimed job");
-  }
-  return {
-    jobId: requiredString(job.jobId),
-    operation,
-    computerId: requiredString(job.computerId),
-    workspaceId: requiredString(job.workspaceId),
-    workspaceSlug: requiredString(job.workspaceSlug),
-    name: requiredString(job.name),
-    daemonApiKey: job.daemonApiKey == null ? null : requiredString(job.daemonApiKey),
-    replaceCredential: job.replaceCredential === true,
-  };
-}
+const nonEmptyString = z.string().min(1);
 
-function requiredString(value: unknown): string {
-  if (typeof value !== "string" || !value) throw new Error("invalid claimed job");
-  return value;
+const claimedContainerJobSchema = z.object({
+  jobId: nonEmptyString,
+  operation: z.enum(["create", "delete", "attach", "update", "runtime"]),
+  computerId: nonEmptyString,
+  workspaceId: nonEmptyString,
+  workspaceSlug: nonEmptyString,
+  name: nonEmptyString,
+  daemonApiKey: nonEmptyString.nullish().transform((value) => value ?? null),
+  replaceCredential: z.unknown().transform((value) => value === true),
+});
+
+function claimedJob(value: unknown): ClaimedContainerJob {
+  const parsed = claimedContainerJobSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid claimed job");
+  return parsed.data;
 }

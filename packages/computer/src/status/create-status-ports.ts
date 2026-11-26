@@ -31,7 +31,8 @@ import {
 } from "#src/daemon-service/daemon-host";
 import type { FileComputerConfig } from "#src/local-config";
 import { resolveDaemonSocketPath } from "#src/paths";
-import { MACHINE_MUTATION_LOCK_FILE } from "#src/updater";
+import { z } from "zod";
+import { ActiveStateSchema, MACHINE_MUTATION_LOCK_FILE } from "#src/updater";
 import {
   listDarwinLeftoverUpgradeJobs,
   listDarwinWorkspaceAgents,
@@ -339,6 +340,14 @@ async function readSupervisorLockOwner(path: string): Promise<number | null> {
   }
 }
 
+const installerJournalSchema = z.looseObject({
+  schema_version: z.literal(1),
+  request_id: z.string(),
+  from: z.string().nullable(),
+  to: z.string(),
+  supervisor_running: z.boolean(),
+});
+
 async function readActiveInstall(path: string): Promise<ActiveInstallRead> {
   let text: string;
   try {
@@ -353,20 +362,11 @@ async function readActiveInstall(path: string): Promise<ActiveInstallRead> {
   } catch {
     return { kind: "corrupt", error: "active.json is not valid JSON" };
   }
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    (value as { schema_version?: unknown }).schema_version !== 1 ||
-    typeof (value as { current?: unknown }).current !== "string" ||
-    !(
-      (value as { previous?: unknown }).previous === null ||
-      typeof (value as { previous?: unknown }).previous === "string"
-    )
-  ) {
+  const parsed = ActiveStateSchema.safeParse(value);
+  if (!parsed.success) {
     return { kind: "corrupt", error: "active.json has an unexpected shape" };
   }
-  const active = value as { current: string; previous: string | null };
-  return { kind: "present", current: active.current, previous: active.previous };
+  return { kind: "present", current: parsed.data.current, previous: parsed.data.previous };
 }
 
 async function readInstallerJournal(path: string): Promise<UnfinishedInstallerTransaction | null> {
@@ -383,32 +383,16 @@ async function readInstallerJournal(path: string): Promise<UnfinishedInstallerTr
   } catch {
     return { valid: false, error: "installer-transaction.json is not valid JSON" };
   }
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    (value as { schema_version?: unknown }).schema_version !== 1 ||
-    typeof (value as { request_id?: unknown }).request_id !== "string" ||
-    !(
-      (value as { from?: unknown }).from === null ||
-      typeof (value as { from?: unknown }).from === "string"
-    ) ||
-    typeof (value as { to?: unknown }).to !== "string" ||
-    typeof (value as { supervisor_running?: unknown }).supervisor_running !== "boolean"
-  ) {
+  const parsed = installerJournalSchema.safeParse(value);
+  if (!parsed.success) {
     return { valid: false, error: "installer-transaction.json has an unexpected shape" };
   }
-  const record = value as {
-    request_id: string;
-    from: string | null;
-    to: string;
-    supervisor_running: boolean;
-  };
   return {
     valid: true,
-    requestId: record.request_id,
-    from: record.from,
-    to: record.to,
-    supervisorRunning: record.supervisor_running,
+    requestId: parsed.data.request_id,
+    from: parsed.data.from,
+    to: parsed.data.to,
+    supervisorRunning: parsed.data.supervisor_running,
   };
 }
 
