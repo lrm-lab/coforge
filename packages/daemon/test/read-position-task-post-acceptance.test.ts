@@ -111,13 +111,10 @@ async function submitTask({
 }
 
 function expectScopedFirstRequest(request: unknown, expectedRevision: number) {
-  expect(request).toMatchObject({
-    ...command,
-    expectedRevision,
-    consumptionEvidence: [
-      expect.objectContaining({ target: { conversationId }, entry: expect.any(Object) }),
-    ],
-  });
+  expect(request).toMatchObject({ ...command, expectedRevision });
+  expect(request).toHaveProperty("consumptionEvidence", [
+    { target: { conversationId }, entry: { seq: 31, exactSeqs: [34] } },
+  ]);
   expect(request).not.toHaveProperty("seenUpToSeq");
   expect(request).not.toHaveProperty("seenExactSeqs");
 }
