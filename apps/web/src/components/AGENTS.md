@@ -28,6 +28,13 @@ primitives and the lint-exemption policy.
 - Native button, select and `title` leaves live only in the shared adapters that implement
   React Aria render semantics (the `coforge/no-native-*` oxlint rules fail them elsewhere);
   an official Tooltip `title` prop is not a native HTML `title` attribute.
+- Core interactive and motion primitives carry co-located `*.meta.ts` contracts (`ComponentMeta`
+  in `ui/component-meta.ts`, validated by `ui/component-meta.test.ts`), paired with
+  `styles/motion-policy.test.ts` and `docs/design/motion.md`. Oxlint (`scripts/oxlint-plugin.js`)
+  enforces hover rules (`no-custom-hover-delay`, `no-raw-hover-primitives`,
+  `no-hover-input-submenu`), LazyMotion strict imports (`no-sync-motion-import`), distracting
+  animation bans (`no-distracting-animations`), native dialog/toast bans (`no-browser-dialogs`,
+  `no-raw-toast-library`), and the `FileTypeIcon` wrapper (`no-raw-file-type-icon`).
 - English buttons, labels and Tooltip titles use sentence case: only the first word is
   capitalized; product terms (Agent, Computer, Workspace, AI Workbench) and brand names keep
   their own spelling. Change the message source, never CSS.

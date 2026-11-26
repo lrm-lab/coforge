@@ -9,6 +9,14 @@
     "coforge/no-native-title": "error",
     "coforge/one-avatar": "error",
     "coforge/no-handrolled-toolbar": "warn",
-    "coforge/prefer-on-press": "warn"
+    "coforge/prefer-on-press": "warn",
+    "coforge/no-custom-hover-delay": "error",
+    "coforge/no-raw-hover-primitives": "error",
+    "coforge/no-hover-input-submenu": "error",
+    "coforge/no-sync-motion-import": "error",
+    "coforge/no-browser-dialogs": "error",
+    "coforge/no-raw-toast-library": "error",
+    "coforge/no-raw-file-type-icon": "error",
+    "coforge/no-distracting-animations": "error"
   }
 }

@@ -68,3 +68,157 @@ test("prefer-on-press rejects onClick on Button and AriaButton but allows Button
   });
   expect(upstreamVisitor.JSXAttribute).toBeUndefined();
 });
+
+test("no-custom-hover-delay rejects delay/closeDelay on Tooltip and HoverPopover outside primitives", () => {
+  const report = mock(() => {});
+  const visitor = plugin.rules["no-custom-hover-delay"].create({
+    report,
+    filename: "/repo/apps/web/src/features/agents/row.tsx",
+  });
+  const prop = (component, name) => ({
+    name: { type: "JSXIdentifier", name },
+    parent: { name: { type: "JSXIdentifier", name: component } },
+  });
+  visitor.JSXAttribute(prop("Tooltip", "delay"));
+  expect(report).toHaveBeenCalledTimes(1);
+  visitor.JSXAttribute(prop("HoverPopover", "closeDelay"));
+  expect(report).toHaveBeenCalledTimes(2);
+  visitor.JSXAttribute(prop("Tooltip", "placement"));
+  expect(report).toHaveBeenCalledTimes(2);
+
+  const primitiveReport = mock(() => {});
+  const primitiveVisitor = plugin.rules["no-custom-hover-delay"].create({
+    report: primitiveReport,
+    filename: "/repo/apps/web/src/components/ui/hover-popover.tsx",
+  });
+  expect(primitiveVisitor.JSXAttribute).toBeUndefined();
+});
+
+test("no-raw-hover-primitives rejects direct PreviewTrigger and TooltipTrigger imports outside primitives", () => {
+  const report = mock(() => {});
+  const visitor = plugin.rules["no-raw-hover-primitives"].create({
+    report,
+    filename: "/repo/apps/web/src/features/tasks/chip.tsx",
+  });
+  visitor.ImportDeclaration({
+    source: { value: "react-aria-components" },
+    specifiers: [
+      { type: "ImportSpecifier", imported: { name: "PreviewTrigger" } },
+      { type: "ImportSpecifier", imported: { name: "Button" } },
+      { type: "ImportSpecifier", imported: { name: "TooltipTrigger" } },
+    ],
+  });
+  expect(report).toHaveBeenCalledTimes(2);
+});
+
+test("no-hover-input-submenu rejects PickerMenu inside hover-opened Dropdown.SubmenuTrigger unless openOnHover={false}", () => {
+  const report = mock(() => {});
+  const visitor = plugin.rules["no-hover-input-submenu"].create({ report });
+  const makeSubmenu = (attributes) => ({
+    type: "JSXElement",
+    openingElement: {
+      name: {
+        type: "JSXMemberExpression",
+        object: { type: "JSXIdentifier", name: "Dropdown" },
+        property: { type: "JSXIdentifier", name: "SubmenuTrigger" },
+      },
+      attributes,
+    },
+    children: [
+      {
+        type: "JSXElement",
+        openingElement: { name: { type: "JSXIdentifier", name: "PickerMenu" }, attributes: [] },
+        children: [],
+      },
+    ],
+  });
+  visitor.JSXElement(makeSubmenu([]));
+  expect(report).toHaveBeenCalledTimes(1);
+  visitor.JSXElement(
+    makeSubmenu([
+      {
+        type: "JSXAttribute",
+        name: { type: "JSXIdentifier", name: "openOnHover" },
+        value: { type: "JSXExpressionContainer", expression: { type: "Literal", value: false } },
+      },
+    ]),
+  );
+  expect(report).toHaveBeenCalledTimes(1);
+});
+
+test("no-sync-motion-import rejects synchronous motion from motion/react but allows AnimatePresence", () => {
+  const report = mock(() => {});
+  const visitor = plugin.rules["no-sync-motion-import"].create({ report });
+  visitor.ImportDeclaration({
+    source: { value: "motion/react" },
+    specifiers: [
+      { type: "ImportSpecifier", imported: { name: "motion" } },
+      { type: "ImportSpecifier", imported: { name: "AnimatePresence" } },
+    ],
+  });
+  expect(report).toHaveBeenCalledTimes(1);
+});
+
+test("no-browser-dialogs rejects window.confirm/alert/prompt and allows local confirm helpers", () => {
+  const report = mock(() => {});
+  const visitor = plugin.rules["no-browser-dialogs"].create({ report });
+  visitor.CallExpression({
+    callee: {
+      type: "MemberExpression",
+      computed: false,
+      object: { type: "Identifier", name: "window" },
+      property: { type: "Identifier", name: "confirm" },
+    },
+  });
+  visitor.CallExpression({
+    callee: { type: "Identifier", name: "confirm" },
+  });
+  expect(report).toHaveBeenCalledTimes(1);
+});
+
+test("no-raw-toast-library rejects sonner and react-hot-toast imports", () => {
+  const report = mock(() => {});
+  const visitor = plugin.rules["no-raw-toast-library"].create({ report });
+  visitor.ImportDeclaration({ source: { value: "sonner" } });
+  visitor.ImportDeclaration({ source: { value: "#src/components/ui/toast" } });
+  expect(report).toHaveBeenCalledTimes(1);
+});
+
+test("no-raw-file-type-icon rejects direct @untitledui/file-icons outside features/files", () => {
+  const report = mock(() => {});
+  const visitor = plugin.rules["no-raw-file-type-icon"].create({
+    report,
+    filename: "/repo/apps/web/src/features/artifacts/card.tsx",
+  });
+  visitor.ImportDeclaration({ source: { value: "@untitledui/file-icons" } });
+  expect(report).toHaveBeenCalledTimes(1);
+
+  const allowedVisitor = plugin.rules["no-raw-file-type-icon"].create({
+    report: mock(() => {}),
+    filename: "/repo/apps/web/src/features/files/file-type-icon.tsx",
+  });
+  expect(allowedVisitor.ImportDeclaration).toBeUndefined();
+});
+
+test("no-distracting-animations rejects animate-bounce and animate-ping in className", () => {
+  const report = mock(() => {});
+  const visitor = plugin.rules["no-distracting-animations"].create({
+    report,
+    filename: "/repo/apps/web/src/features/tasks/row.tsx",
+  });
+  visitor.JSXAttribute({
+    name: { type: "JSXIdentifier", name: "className" },
+    value: { type: "Literal", value: "size-2 animate-ping rounded-full" },
+  });
+  visitor.JSXAttribute({
+    name: { type: "JSXIdentifier", name: "className" },
+    value: {
+      type: "JSXExpressionContainer",
+      expression: {
+        type: "CallExpression",
+        arguments: [{ type: "Literal", value: "animate-pulse" }],
+      },
+    },
+  });
+  expect(report).toHaveBeenCalledTimes(1);
+});
