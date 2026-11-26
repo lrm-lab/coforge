@@ -9,6 +9,7 @@
     "coforge/no-native-title": "error",
     "coforge/one-avatar": "error",
     "coforge/no-handrolled-toolbar": "error",
+    "coforge/no-handrolled-resize-handle": "error",
     "coforge/prefer-on-press": "warn",
     "coforge/no-custom-hover-delay": "error",
     "coforge/no-raw-hover-primitives": "error",

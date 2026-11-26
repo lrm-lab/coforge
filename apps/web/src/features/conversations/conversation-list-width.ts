@@ -1,3 +1,4 @@
+import { browserLocalStorage } from "#src/features/browser-local-storage";
 import { m } from "#src/paraglide/messages";
 
 export type ListColumn = {
@@ -6,8 +7,8 @@ export type ListColumn = {
   defaultWidth: number;
   min: number;
   max: number;
+  maxPct: number;
   label: () => string;
-  edge?: "left" | "right";
 };
 
 export const CONVERSATION_LIST_COLUMN: ListColumn = {
@@ -16,6 +17,7 @@ export const CONVERSATION_LIST_COLUMN: ListColumn = {
   defaultWidth: 18,
   min: 12.5,
   max: 25,
+  maxPct: 40,
   label: m.conversation_list_resize,
 };
 
@@ -25,6 +27,7 @@ export const LIST_COLUMN: ListColumn = {
   defaultWidth: 23.75,
   min: 18,
   max: 40,
+  maxPct: 50,
   label: m.list_column_resize,
 };
 
@@ -34,12 +37,10 @@ export const ATTACHMENT_COMMENTS_COLUMN: ListColumn = {
   defaultWidth: 20,
   min: 17.5,
   max: 35,
+  maxPct: 50,
   label: m.attachment_comments_resize,
-  edge: "left",
 };
 
-const KEY_STEP = 1;
-const KEY_STEP_LARGE = 4;
 const LEGACY_PX_THRESHOLD = 80;
 const LEGACY_BASE_FONT_PX = 16;
 
@@ -67,49 +68,32 @@ export function parseListWidth(column: ListColumn, raw: string | null): number |
   return clampListWidth(column, rem);
 }
 
-function edgeDirection(column: ListColumn, rtl = false): 1 | -1 {
-  const ltrSign = column.edge === "left" ? -1 : 1;
-  return rtl ? (-ltrSign as 1 | -1) : ltrSign;
+export function rootFontSizePx(): number {
+  const parsed = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : LEGACY_BASE_FONT_PX;
 }
 
-export function dragListWidth(
-  column: ListColumn,
-  startWidth: number,
-  startX: number,
-  x: number,
-  rtl = false,
-): number {
-  const moved = (x - startX) * edgeDirection(column, rtl);
-  return clampListWidth(column, startWidth + moved);
-}
-
-type KeyboardLike = {
-  key: string;
-  shiftKey: boolean;
-  metaKey: boolean;
-  ctrlKey: boolean;
-  altKey: boolean;
-};
-
-export function keyListWidth(
-  column: ListColumn,
-  event: KeyboardLike,
-  width: number,
-  rtl = false,
-): number | undefined {
-  if (event.metaKey || event.ctrlKey || event.altKey) return undefined;
-  const step = event.shiftKey ? KEY_STEP_LARGE : KEY_STEP;
-  const toward = edgeDirection(column, rtl);
-  switch (event.key) {
-    case "ArrowRight":
-      return clampListWidth(column, width + step * toward);
-    case "ArrowLeft":
-      return clampListWidth(column, width - step * toward);
-    case "Home":
-      return column.min;
-    case "End":
-      return column.max;
-    default:
-      return undefined;
+export function readStoredListWidth(column: ListColumn): number {
+  try {
+    return (
+      parseListWidth(column, browserLocalStorage()?.getItem(column.key) ?? null) ??
+      column.defaultWidth
+    );
+  } catch {
+    return column.defaultWidth;
   }
+}
+
+export function applyListWidthProperty(column: ListColumn, widthRem: number): number {
+  const rounded = Math.round(clampListWidth(column, widthRem) * 1000) / 1000;
+  document.documentElement.style.setProperty(column.property, `${rounded}rem`);
+  return rounded;
+}
+
+export function writeStoredListWidth(column: ListColumn, widthRem: number): number {
+  const rounded = applyListWidthProperty(column, widthRem);
+  try {
+    browserLocalStorage()?.setItem(column.key, String(rounded));
+  } catch {}
+  return rounded;
 }

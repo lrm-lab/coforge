@@ -488,6 +488,43 @@ const noHandrolledDateMath = {
   },
 };
 
+const INTERACTIVE_SEPARATOR_PROPS = new Set([
+  "onPointerDown",
+  "onMouseDown",
+  "onKeyDown",
+  "tabIndex",
+  "aria-valuenow",
+]);
+
+const noHandrolledResizeHandle = {
+  create(context) {
+    if (UPSTREAM_OFFICIAL_FILES.test(normalizedFilename(context))) return {};
+    return {
+      JSXOpeningElement(node) {
+        if (node.name?.type !== "JSXIdentifier" || !/^[a-z]/.test(node.name.name)) return;
+        let hasSeparatorRole = false;
+        let hasInteractiveProp = false;
+        for (const attr of node.attributes ?? []) {
+          if (attr.type !== "JSXAttribute" || attr.name?.type !== "JSXIdentifier") continue;
+          const attrName = attr.name.name;
+          if (attrName === "role" && staticStringValue(attr.value) === "separator") {
+            hasSeparatorRole = true;
+          } else if (INTERACTIVE_SEPARATOR_PROPS.has(attrName)) {
+            hasInteractiveProp = true;
+          }
+        }
+        if (hasSeparatorRole && hasInteractiveProp) {
+          context.report({
+            node,
+            message:
+              'Do not hand-roll interactive role="separator" resize handles on native elements; use react-resizable-panels (<Group>, <Panel>, <Separator>).',
+          });
+        }
+      },
+    };
+  },
+};
+
 export default {
   meta: {
     name: "coforge",
@@ -498,6 +535,7 @@ export default {
     "no-native-select": noNativeSelect,
     "no-native-title": noNativeTitle,
     "no-handrolled-toolbar": noHandrolledToolbar,
+    "no-handrolled-resize-handle": noHandrolledResizeHandle,
     "prefer-on-press": preferOnPress,
     "no-custom-hover-delay": noCustomHoverDelay,
     "no-raw-hover-primitives": noRawHoverPrimitives,

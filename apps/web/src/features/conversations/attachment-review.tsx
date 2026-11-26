@@ -22,12 +22,7 @@ import {
 } from "./attachment-preview-kind";
 import { readPreviewText, type PreviewRead } from "./attachment-preview-text";
 import { ImageLightbox } from "./image-lightbox";
-import {
-  ReviewCommentsColumn,
-  ReviewCommentsToggle,
-  reviewFileClass,
-  useReviewComments,
-} from "./review-comments";
+import { ReviewCommentsToggle, ReviewSplitLayout, useReviewComments } from "./review-comments";
 import { PANEL_HEADER_CLASS } from "./review-chrome";
 import { ReviewTitle } from "./review-title";
 
@@ -196,9 +191,12 @@ export function AttachmentReviewDialog({
                     onClick={close}
                   />
                 </div>
-                <div className="flex min-h-0 flex-1">
-                  <div className={cn(reviewFileClass(comments), "overflow-auto")}>
-                    {kind ? (
+                <ReviewSplitLayout
+                  comments={comments}
+                  commentable={commentable}
+                  fileClassName="overflow-auto"
+                  file={
+                    kind ? (
                       <AttachmentPreview
                         fileName={file.fileName}
                         kind={kind}
@@ -215,10 +213,10 @@ export function AttachmentReviewDialog({
                       <Empty>
                         <EmptyTitle>{m.attachment_comments_no_preview()}</EmptyTitle>
                       </Empty>
-                    )}
-                  </div>
-                  {commentable && (
-                    <ReviewCommentsColumn comments={comments}>
+                    )
+                  }
+                  commentsPane={
+                    commentable ? (
                       <AttachmentCommentsPane
                         attachmentId={file.id}
                         fileName={file.fileName}
@@ -234,9 +232,9 @@ export function AttachmentReviewDialog({
                           setJumpTo(anchor);
                         }}
                       />
-                    </ReviewCommentsColumn>
-                  )}
-                </div>
+                    ) : undefined
+                  }
+                />
               </>
             )}
           </Dialog>

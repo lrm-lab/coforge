@@ -28,8 +28,8 @@ import { ChatHeaderBusyAgents } from "./chat-header-busy-agents";
 import { ChatListCrowdContext, useChatListCrowdState } from "./chat-list-crowd";
 import { ConversationFocusContext, useConversationFocusState } from "./conversation-focus";
 import { ConversationListContext } from "./conversation-list-button";
-import { ConversationListResizeHandle } from "./conversation-list-resize-handle";
-import { LIST_COLUMN_CLASS } from "./conversation-list-width";
+import { CONVERSATION_LIST_COLUMN } from "./conversation-list-width";
+import { ResizableColumnSplit } from "./use-resizable-column";
 import { ConversationDirectory } from "./conversation-directory";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
@@ -284,6 +284,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   const scrimOpacity =
     phone && !reduced && !showList ? "calc(0.24 * (1 - var(--edge-swipe-progress, 0)))" : 0;
 
+  const listHidden = Boolean(listCrowded || focus.focused);
   const detailVisible = desktop || !showList;
   useReportChatListOpen(showList);
   const listVisible = desktop || shellShowsList;
@@ -296,6 +297,106 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
       listBesideFrom: "lg" as const,
     }),
     [detailVisible, listVisible],
+  );
+  const listSection = (
+    <section
+      data-chat-list=""
+      data-phone-stack-list={phone && !detailVisible ? "" : undefined}
+      inert={(phone && !showList) || (desktop && listHidden) ? true : undefined}
+      aria-hidden={(phone && !showList) || (desktop && listHidden) ? true : undefined}
+      style={listStyle}
+      className={cx(
+        "relative flex min-h-0 flex-1 flex-col bg-primary",
+        phone
+          ? cx(
+              "max-lg:absolute max-lg:inset-0 max-lg:z-10 max-lg:will-change-transform",
+              !showList && "pointer-events-none",
+            )
+          : listHidden && "hidden",
+      )}
+    >
+      {desktop ? (
+        <PageHeader
+          heading={m.navigation_chat()}
+          meta={
+            <>
+              <ConnectionStatusPill whenConnected={<SavingChangesBadge />} />
+              <ChatHeaderBusyAgents
+                directs={directs}
+                onConversationPage={Boolean(channel || openDm)}
+              />
+            </>
+          }
+          actions={<NewConversationMenu onCreateChannel={() => setCreating(true)} />}
+        />
+      ) : (
+        <>
+          <TabHomeHeader
+            title={m.navigation_chat_short()}
+            meta={<ConnectionStatusPill whenConnected={<SavingChangesBadge />} />}
+            agents={
+              <ChatHeaderBusyAgents
+                directs={directs}
+                onConversationPage={Boolean(channel || openDm)}
+              />
+            }
+            actions={<NewConversationMenu onCreateChannel={() => setCreating(true)} />}
+          />
+          <div className="shrink-0 px-page py-2">
+            <SearchField />
+          </div>
+        </>
+      )}
+      <div
+        data-tab-home-scroll=""
+        className="scroll-fade-y flex min-h-0 flex-1 flex-col overflow-y-auto pt-3 pb-4 scroll-py-6"
+      >
+        <ConversationDirectory
+          channels={visibleChannels}
+          agents={agents}
+          directRows={directs.rows}
+          viewerId={viewerId}
+          selectedChannelId={channel?.channelId}
+          selectedDmId={openDm?.dmId}
+          selectedSaved={pathname === workspacePath(workspaceSlug, "/saved")}
+          selectedDrafts={pathname === workspacePath(workspaceSlug, "/drafts")}
+          onCreateChannel={() => setCreating(true)}
+        />
+      </div>
+      {phone && !reduced && (
+        <div
+          aria-hidden="true"
+          style={{
+            opacity: scrimOpacity,
+            transition:
+              !swipe.dragging && (animatingStack || swipe.settling)
+                ? swipe.settling
+                  ? "opacity calc(var(--duration-md) * 1.5) var(--ease-spring)"
+                  : `opacity ${showList ? "var(--duration-lg-out) var(--ease-in)" : "var(--duration-lg) var(--ease-out)"}`
+                : undefined,
+          }}
+          className="pointer-events-none absolute inset-0 z-30 bg-black"
+        />
+      )}
+    </section>
+  );
+  const detailPane = (
+    <div
+      ref={detailRef}
+      {...swipe.bind}
+      inert={phone && showList ? true : undefined}
+      aria-hidden={phone && showList ? true : undefined}
+      style={detailStyle}
+      className={cx(
+        "flex min-h-0 min-w-0 flex-1 flex-col bg-primary",
+        phone &&
+          "max-lg:absolute max-lg:inset-0 max-lg:z-20 max-lg:[touch-action:pan-y_pinch-zoom] max-lg:will-change-transform max-lg:[&_.overflow-y-auto]:[touch-action:pan-y_pinch-zoom]",
+        phone && (animatingStack || swipe.dragging) && "shadow-2xl",
+        phone && showList && "pointer-events-none",
+      )}
+    >
+      <OpenUnreadHintContext value={sidebarHint}>{children}</OpenUnreadHintContext>
+    </div>
   );
   return (
     <ConversationListContext value={listControls}>
@@ -311,98 +412,14 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
                 data-phone-stack-root={phone && !detailVisible ? "" : undefined}
                 className="group/chat relative flex h-full min-w-0 flex-col overflow-hidden bg-primary lg:flex-row lg:overflow-visible"
               >
-                <section
-                  data-phone-stack-list={phone && !detailVisible ? "" : undefined}
-                  inert={phone && !showList ? true : undefined}
-                  aria-hidden={phone && !showList ? true : undefined}
-                  style={listStyle}
-                  className={cx(
-                    "relative flex min-h-0 flex-1 flex-col bg-primary max-lg:absolute max-lg:inset-0 max-lg:z-10 max-lg:will-change-transform lg:flex lg:flex-none lg:border-e lg:border-secondary",
-                    LIST_COLUMN_CLASS,
-                    phone && !showList && "pointer-events-none",
-                    "lg:group-data-[crowd-list]/chat:hidden",
-                    "lg:group-data-[focus]/chat:hidden",
-                  )}
-                >
-                  {desktop ? (
-                    <PageHeader
-                      heading={m.navigation_chat()}
-                      meta={
-                        <>
-                          <ConnectionStatusPill whenConnected={<SavingChangesBadge />} />
-                          <ChatHeaderBusyAgents
-                            directs={directs}
-                            onConversationPage={Boolean(channel || openDm)}
-                          />
-                        </>
-                      }
-                      actions={<NewConversationMenu onCreateChannel={() => setCreating(true)} />}
-                    />
-                  ) : (
-                    <>
-                      <TabHomeHeader
-                        title={m.navigation_chat_short()}
-                        meta={<ConnectionStatusPill whenConnected={<SavingChangesBadge />} />}
-                        agents={
-                          <ChatHeaderBusyAgents
-                            directs={directs}
-                            onConversationPage={Boolean(channel || openDm)}
-                          />
-                        }
-                        actions={<NewConversationMenu onCreateChannel={() => setCreating(true)} />}
-                      />
-                      <div className="shrink-0 px-page py-2">
-                        <SearchField />
-                      </div>
-                    </>
-                  )}
-                  <div
-                    data-tab-home-scroll=""
-                    className="scroll-fade-y flex min-h-0 flex-1 flex-col overflow-y-auto pt-3 pb-4 scroll-py-6"
-                  >
-                    <ConversationDirectory
-                      channels={visibleChannels}
-                      agents={agents}
-                      directRows={directs.rows}
-                      viewerId={viewerId}
-                      selectedChannelId={channel?.channelId}
-                      selectedDmId={openDm?.dmId}
-                      selectedSaved={pathname === workspacePath(workspaceSlug, "/saved")}
-                      selectedDrafts={pathname === workspacePath(workspaceSlug, "/drafts")}
-                      onCreateChannel={() => setCreating(true)}
-                    />
-                  </div>
-                  <ConversationListResizeHandle />
-                  {phone && !reduced && (
-                    <div
-                      aria-hidden="true"
-                      style={{
-                        opacity: scrimOpacity,
-                        transition:
-                          !swipe.dragging && (animatingStack || swipe.settling)
-                            ? swipe.settling
-                              ? "opacity calc(var(--duration-md) * 1.5) var(--ease-spring)"
-                              : `opacity ${showList ? "var(--duration-lg-out) var(--ease-in)" : "var(--duration-lg) var(--ease-out)"}`
-                            : undefined,
-                      }}
-                      className="pointer-events-none absolute inset-0 z-30 bg-black"
-                    />
-                  )}
-                </section>
-                <div
-                  ref={detailRef}
-                  {...swipe.bind}
-                  inert={phone && showList ? true : undefined}
-                  aria-hidden={phone && showList ? true : undefined}
-                  style={detailStyle}
-                  className={cx(
-                    "flex min-h-0 min-w-0 flex-1 flex-col bg-primary max-lg:absolute max-lg:inset-0 max-lg:z-20 max-lg:[touch-action:pan-y_pinch-zoom] max-lg:will-change-transform max-lg:[&_.overflow-y-auto]:[touch-action:pan-y_pinch-zoom] lg:flex",
-                    phone && (animatingStack || swipe.dragging) && "shadow-2xl",
-                    phone && showList && "pointer-events-none",
-                  )}
-                >
-                  <OpenUnreadHintContext value={sidebarHint}>{children}</OpenUnreadHintContext>
-                </div>
+                <ResizableColumnSplit
+                  id="coforge-conversation-list"
+                  column={CONVERSATION_LIST_COLUMN}
+                  active={desktop}
+                  hidden={listHidden}
+                  columnContent={listSection}
+                  siblingContent={detailPane}
+                />
               </main>
               {creating && (
                 <CreateChannelDialog

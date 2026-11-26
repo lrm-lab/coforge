@@ -29,12 +29,7 @@ import { takesComments } from "./attachment-preview-kind";
 import { AttachmentCommentsPane } from "./attachment-comments";
 import { lightboxStepTarget } from "./image-lightbox-step";
 import { LoadingImage } from "./loading-image";
-import {
-  ReviewCommentsColumn,
-  ReviewCommentsToggle,
-  reviewFileClass,
-  useReviewComments,
-} from "./review-comments";
+import { ReviewCommentsToggle, ReviewSplitLayout, useReviewComments } from "./review-comments";
 import { PANEL_HEADER_CLASS } from "./review-chrome";
 import { ReviewTitle } from "./review-title";
 
@@ -391,115 +386,120 @@ function LightboxContent({
           onClick={close}
         />
       </div>
-      <div className="flex min-h-0 flex-1">
-        <div className={cn(reviewFileClass(comments), comments.shown && "bg-secondary")}>
-          <div
-            ref={stageRef}
-            onPointerDown={onStagePointerDown}
-            onPointerMove={onStagePointerMove}
-            onPointerUp={onStagePointerEnd}
-            onPointerCancel={onStagePointerEnd}
-            className="relative flex min-h-0 flex-1 touch-pan-x items-center justify-center p-4 sm:px-20"
-          >
-            {failed.has(image.id) ? (
-              <Empty className="rounded-xl bg-primary">
-                <EmptyTitle>{m.attachment_comments_no_preview()}</EmptyTitle>
-              </Empty>
-            ) : (
-              <LoadingImage
-                key={image.id}
-                src={image.largeUrl ?? image.previewUrl ?? href}
-                placeholderSrc={image.thumbnailUrl}
-                fallbackSrc={image.largeUrl || image.previewUrl ? href : undefined}
-                onFailed={() => setFailed((ids) => new Set(ids).add(image.id))}
-                alt={image.fileName}
-                className="flex size-full items-center justify-center overflow-visible"
-                imgClassName="max-h-full max-w-full object-contain will-change-transform"
-                skeletonClassName="m-auto size-[min(24rem,100%)]"
-              />
-            )}
-            {paged && (
-              <>
-                <ButtonUtility
-                  icon={ChevronLeft}
-                  size="sm"
-                  tooltip={m.image_lightbox_previous()}
-                  isDisabled={index === 0}
-                  className={cn(
-                    "absolute top-1/2 left-2 -translate-y-1/2 transition-opacity duration-150 sm:left-8",
-                    chromeHidden && "pointer-events-none opacity-0",
-                  )}
-                  onClick={(event: MouseEvent<HTMLElement>) => {
-                    if (index - 1 === 0) keepFocusInside(event.currentTarget);
-                    step(-1);
-                  }}
-                />
-                <ButtonUtility
-                  icon={ChevronRight}
-                  size="sm"
-                  tooltip={m.image_lightbox_next()}
-                  isDisabled={index === images.length - 1}
-                  className={cn(
-                    "absolute top-1/2 right-2 -translate-y-1/2 transition-opacity duration-150 sm:right-8",
-                    chromeHidden && "pointer-events-none opacity-0",
-                  )}
-                  onClick={(event: MouseEvent<HTMLElement>) => {
-                    if (index + 1 === images.length - 1) keepFocusInside(event.currentTarget);
-                    step(1);
-                  }}
-                />
-              </>
-            )}
-          </div>
-          {paged && (
+      <ReviewSplitLayout
+        comments={comments}
+        commentable={commentable}
+        fileClassName={comments.shown ? "bg-secondary" : undefined}
+        file={
+          <>
             <div
-              data-lightbox-thumbnails
-              className={cn(
-                "flex shrink-0 justify-center gap-1.5 overflow-x-auto px-4 pt-1 pb-4 transition-opacity duration-150",
-                chromeHidden && "pointer-events-none opacity-0",
-              )}
+              ref={stageRef}
+              onPointerDown={onStagePointerDown}
+              onPointerMove={onStagePointerMove}
+              onPointerUp={onStagePointerEnd}
+              onPointerCancel={onStagePointerEnd}
+              className="relative flex min-h-0 flex-1 touch-pan-x items-center justify-center p-4 sm:px-20"
             >
-              {images.map((thumbnail, position) => (
-                <Button
-                  key={thumbnail.id}
-                  color="tertiary"
-                  noTextPadding
-                  aria-label={thumbnail.fileName}
-                  aria-current={position === index || undefined}
-                  onClick={() => onIndexChange?.(position)}
-                  className={cn(
-                    "size-12 shrink-0 overflow-hidden rounded-sm border-2 p-0 hover:bg-transparent [&>span]:block [&>span]:size-full",
-                    position === index
-                      ? "border-brand"
-                      : "border-transparent opacity-60 hover:opacity-100",
-                  )}
-                >
-                  <LoadingImage
-                    src={
-                      thumbnail.thumbnailUrl ??
-                      thumbnail.previewUrl ??
-                      `/api/attachments/${thumbnail.id}`
-                    }
-                    alt=""
-                    className="size-full"
-                    imgClassName="block size-full object-cover"
+              {failed.has(image.id) ? (
+                <Empty className="rounded-xl bg-primary">
+                  <EmptyTitle>{m.attachment_comments_no_preview()}</EmptyTitle>
+                </Empty>
+              ) : (
+                <LoadingImage
+                  key={image.id}
+                  src={image.largeUrl ?? image.previewUrl ?? href}
+                  placeholderSrc={image.thumbnailUrl}
+                  fallbackSrc={image.largeUrl || image.previewUrl ? href : undefined}
+                  onFailed={() => setFailed((ids) => new Set(ids).add(image.id))}
+                  alt={image.fileName}
+                  className="flex size-full items-center justify-center overflow-visible"
+                  imgClassName="max-h-full max-w-full object-contain will-change-transform"
+                  skeletonClassName="m-auto size-[min(24rem,100%)]"
+                />
+              )}
+              {paged && (
+                <>
+                  <ButtonUtility
+                    icon={ChevronLeft}
+                    size="sm"
+                    tooltip={m.image_lightbox_previous()}
+                    isDisabled={index === 0}
+                    className={cn(
+                      "absolute top-1/2 left-2 -translate-y-1/2 transition-opacity duration-150 sm:left-8",
+                      chromeHidden && "pointer-events-none opacity-0",
+                    )}
+                    onClick={(event: MouseEvent<HTMLElement>) => {
+                      if (index - 1 === 0) keepFocusInside(event.currentTarget);
+                      step(-1);
+                    }}
                   />
-                </Button>
-              ))}
+                  <ButtonUtility
+                    icon={ChevronRight}
+                    size="sm"
+                    tooltip={m.image_lightbox_next()}
+                    isDisabled={index === images.length - 1}
+                    className={cn(
+                      "absolute top-1/2 right-2 -translate-y-1/2 transition-opacity duration-150 sm:right-8",
+                      chromeHidden && "pointer-events-none opacity-0",
+                    )}
+                    onClick={(event: MouseEvent<HTMLElement>) => {
+                      if (index + 1 === images.length - 1) keepFocusInside(event.currentTarget);
+                      step(1);
+                    }}
+                  />
+                </>
+              )}
             </div>
-          )}
-        </div>
-        {commentable && (
-          <ReviewCommentsColumn comments={comments}>
+            {paged && (
+              <div
+                data-lightbox-thumbnails
+                className={cn(
+                  "flex shrink-0 justify-center gap-1.5 overflow-x-auto px-4 pt-1 pb-4 transition-opacity duration-150",
+                  chromeHidden && "pointer-events-none opacity-0",
+                )}
+              >
+                {images.map((thumbnail, position) => (
+                  <Button
+                    key={thumbnail.id}
+                    color="tertiary"
+                    noTextPadding
+                    aria-label={thumbnail.fileName}
+                    aria-current={position === index || undefined}
+                    onPress={() => onIndexChange?.(position)}
+                    className={cn(
+                      "size-12 shrink-0 overflow-hidden rounded-sm border-2 p-0 hover:bg-transparent [&>span]:block [&>span]:size-full",
+                      position === index
+                        ? "border-brand"
+                        : "border-transparent opacity-60 hover:opacity-100",
+                    )}
+                  >
+                    <LoadingImage
+                      src={
+                        thumbnail.thumbnailUrl ??
+                        thumbnail.previewUrl ??
+                        `/api/attachments/${thumbnail.id}`
+                      }
+                      alt=""
+                      className="size-full"
+                      imgClassName="block size-full object-cover"
+                    />
+                  </Button>
+                ))}
+              </div>
+            )}
+          </>
+        }
+        commentsPane={
+          commentable ? (
             <AttachmentCommentsPane
               key={image.id}
               attachmentId={image.id}
               fileName={image.fileName}
               focusCommentId={focusCommentId}
             />
-          </ReviewCommentsColumn>
-        )}
-      </div>
+          ) : undefined
+        }
+      />
     </>
   );
 }

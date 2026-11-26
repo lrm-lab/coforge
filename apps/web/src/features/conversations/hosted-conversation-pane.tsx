@@ -23,8 +23,7 @@ import { channelNamesQuery, savedMessagesQuery } from "./conversation-queries";
 import { NO_SAVED } from "./saved-messages-collection";
 import { readChatList } from "./chat-lists-reader";
 
-const HOSTED_CONVERSATION_PANE_CLASS =
-  "flex min-h-0 min-w-0 flex-1 flex-col border-l border-secondary bg-primary";
+const HOSTED_CONVERSATION_PANE_CLASS = "flex min-h-0 min-w-0 flex-1 flex-col bg-primary";
 
 export const HostedConversationPane = memo(function HostedConversationPane({
   target,
@@ -33,6 +32,7 @@ export const HostedConversationPane = memo(function HostedConversationPane({
   loadingLabel,
   failedText,
   onJumpMessageConsumed,
+  borderless = false,
   ref,
 }: {
   target: HostedConversationTarget;
@@ -41,6 +41,7 @@ export const HostedConversationPane = memo(function HostedConversationPane({
   loadingLabel: string;
   failedText: string;
   onJumpMessageConsumed?: () => void;
+  borderless?: boolean;
   ref?: Ref<HTMLElement>;
 }) {
   const [failed, setFailed] = useState(false);
@@ -52,7 +53,8 @@ export const HostedConversationPane = memo(function HostedConversationPane({
       aria-label={label}
       className={cx(
         HOSTED_CONVERSATION_PANE_CLASS,
-        list && LIST_BESIDE_CLASSES[list.listBesideFrom].pane,
+        !borderless && "border-l border-secondary",
+        !borderless && list && LIST_BESIDE_CLASSES[list.listBesideFrom].pane,
       )}
     >
       {failed ? (

@@ -153,13 +153,13 @@ test("an unread pin lists once under Unread, moves to Pinned on read and returns
       `[...document.querySelectorAll(${pinnedItems})].some((item) => item.querySelector("a")?.getAttribute("aria-current") === "true" && item.textContent.includes("E2E pinned again"))`,
     );
     await evaluate(
-      `(document.querySelector('[data-activity-list] > [role="separator"]').focus(), true)`,
+      `(document.querySelector('[role="separator"][aria-label="Resize list"]').focus(), true)`,
     );
     await browser("press", "Home");
     await browser(
       "wait",
       "--fn",
-      `(() => { const s = document.querySelector('[data-activity-list] > [role="separator"]'); return s.getAttribute("aria-valuenow") === s.getAttribute("aria-valuemin"); })()`,
+      `(() => { const s = document.querySelector('[role="separator"][aria-label="Resize list"]'); return s.getAttribute("aria-valuenow") === s.getAttribute("aria-valuemin"); })()`,
     );
     const narrowList = await evaluate<{
       overflow: number;

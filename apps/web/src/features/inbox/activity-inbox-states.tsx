@@ -65,7 +65,7 @@ export function ActivityInboxIdlePane({ emptyState }: { emptyState?: ReactNode }
   return (
     <div
       data-activity-idle-pane
-      className="hidden min-h-0 min-w-0 flex-1 flex-col border-s border-secondary bg-primary lg:flex"
+      className="hidden min-h-0 min-w-0 flex-1 flex-col bg-primary lg:flex"
     >
       {emptyState ?? (
         <EmptyState

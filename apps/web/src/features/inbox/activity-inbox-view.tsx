@@ -22,9 +22,8 @@ import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useEdgeSwipeBack } from "#src/hooks/use-edge-swipe-back";
 import { useLeavingItems } from "#src/hooks/use-leaving-items";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
-import { LIST_BESIDE_CLASSES } from "#src/features/conversations/conversation-list-button";
-import { ConversationListResizeHandle } from "#src/features/conversations/conversation-list-resize-handle";
 import { LIST_COLUMN } from "#src/features/conversations/conversation-list-width";
+import { ResizableColumnSplit } from "#src/features/conversations/use-resizable-column";
 import { useActivityFilterPrefetch } from "./use-activity-filter-prefetch";
 import { cn } from "#src/lib/utils";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
@@ -42,7 +41,7 @@ import {
 import { createActivityDoneCoordinator, useActivityDoneProjection } from "./activity-inbox-done";
 import type { ActivityInboxFilter } from "./activity-inbox.schemas";
 import { ActivityInboxEmpty, ActivityInboxLoadError } from "./activity-inbox-states";
-import { ACTIVITY_LIST_BESIDE_FROM, type ActivityPaneFlow } from "./activity-conversation-pane";
+import type { ActivityPaneFlow } from "./activity-conversation-pane";
 import { ActivityInboxDetailPane } from "./activity-inbox-detail-pane";
 import { useActivityFlow } from "./use-activity-flow";
 import { useKeptOpenRow } from "./use-kept-open-row";
@@ -465,15 +464,18 @@ export function ActivityInboxView({
       data-activity-list
       data-phone-stack-list={phone && !pane ? "" : undefined}
       {...headerProps}
-      inert={phone && pane ? true : undefined}
-      aria-hidden={phone && pane ? true : undefined}
+      inert={(phone && pane) || (desktop && isTaskExpanded) ? true : undefined}
+      aria-hidden={(phone && pane) || (desktop && isTaskExpanded) ? true : undefined}
       style={phoneListStyle}
       className={cn(
-        "relative flex min-h-0 flex-col bg-primary max-lg:absolute max-lg:inset-0 max-lg:z-10 lg:relative lg:w-list-column lg:shrink-0",
-        isTaskExpanded && "lg:hidden",
-        phone && (pane || paneExiting) && "will-change-transform",
-        phone && pane && "pointer-events-none",
-        pane && desktop && LIST_BESIDE_CLASSES[ACTIVITY_LIST_BESIDE_FROM].list,
+        "relative flex min-h-0 flex-1 flex-col bg-primary",
+        phone
+          ? cn(
+              "max-lg:absolute max-lg:inset-0 max-lg:z-10",
+              (pane || paneExiting) && "will-change-transform",
+              pane && "pointer-events-none",
+            )
+          : isTaskExpanded && "hidden",
       )}
     >
       <ActivityInboxHeader
@@ -510,12 +512,6 @@ export function ActivityInboxView({
           />
         </div>
       </div>
-      {desktop && (
-        <ConversationListResizeHandle
-          column={LIST_COLUMN}
-          visibleFrom={ACTIVITY_LIST_BESIDE_FROM}
-        />
-      )}
       {phone && !reduced && (
         <div
           aria-hidden="true"
@@ -533,27 +529,36 @@ export function ActivityInboxView({
       )}
     </div>
   );
+  const detailPane = (
+    <ActivityInboxDetailPane
+      desktop={desktop}
+      pane={pane}
+      inlineTask={inlineTask}
+      phoneTask={phoneTask}
+      isTaskExpanded={isTaskExpanded}
+      onToggleTaskExpand={() => setTaskExpanded((current) => !current)}
+      taskNavigation={taskNavigation}
+      paneFlow={paneFlow}
+      emptyState={emptyState}
+      reduced={reduced}
+      swipe={swipe}
+      onOpen={onOpen}
+      onClose={handleClose}
+      onExitComplete={onExitComplete}
+    />
+  );
   return (
     <div
       data-phone-stack-root={phone && !pane ? "" : undefined}
       className="relative flex h-full min-h-0 min-w-0 overflow-hidden lg:overflow-visible"
     >
-      {list}
-      <ActivityInboxDetailPane
-        desktop={desktop}
-        pane={pane}
-        inlineTask={inlineTask}
-        phoneTask={phoneTask}
-        isTaskExpanded={isTaskExpanded}
-        onToggleTaskExpand={() => setTaskExpanded((current) => !current)}
-        taskNavigation={taskNavigation}
-        paneFlow={paneFlow}
-        emptyState={emptyState}
-        reduced={reduced}
-        swipe={swipe}
-        onOpen={onOpen}
-        onClose={handleClose}
-        onExitComplete={onExitComplete}
+      <ResizableColumnSplit
+        id="coforge-activity-list"
+        column={LIST_COLUMN}
+        active={desktop}
+        hidden={isTaskExpanded}
+        columnContent={list}
+        siblingContent={detailPane}
       />
     </div>
   );

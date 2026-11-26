@@ -159,6 +159,7 @@ export function ActivityConversationPane({
                 loadingLabel={m.activity_conversation_loading()}
                 failedText={m.activity_conversation_failed()}
                 onJumpMessageConsumed={onJumpMessageConsumed}
+                borderless
               />
             </StandaloneThreadContext>
           </MountedListControls>

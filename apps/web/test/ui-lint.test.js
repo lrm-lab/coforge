@@ -267,3 +267,47 @@ test("no-handrolled-date-math rejects legacy Date calendar methods and multi-arg
   });
   expect(upstreamVisitor.CallExpression).toBeUndefined();
 });
+
+test("no-handrolled-resize-handle rejects interactive native role='separator' but allows static dividers and Separator component", () => {
+  const report = mock(() => {});
+  const visitor = plugin.rules["no-handrolled-resize-handle"].create({
+    report,
+    filename: "/repo/apps/web/src/features/conversations/handle.tsx",
+  });
+  const el = (name, attrs) => ({
+    name: { type: "JSXIdentifier", name },
+    attributes: attrs.map(([attrName, value]) => ({
+      type: "JSXAttribute",
+      name: { type: "JSXIdentifier", name: attrName },
+      value: value === undefined ? null : { type: "Literal", value },
+    })),
+  });
+  visitor.JSXOpeningElement(
+    el("div", [
+      ["role", "separator"],
+      ["onPointerDown", undefined],
+    ]),
+  );
+  expect(report).toHaveBeenCalledTimes(1);
+  visitor.JSXOpeningElement(
+    el("div", [
+      ["role", "separator"],
+      ["tabIndex", 0],
+    ]),
+  );
+  expect(report).toHaveBeenCalledTimes(2);
+  visitor.JSXOpeningElement(
+    el("div", [
+      ["role", "separator"],
+      ["aria-label", "New messages"],
+    ]),
+  );
+  expect(report).toHaveBeenCalledTimes(2);
+  visitor.JSXOpeningElement(
+    el("Separator", [
+      ["role", "separator"],
+      ["onPointerDown", undefined],
+    ]),
+  );
+  expect(report).toHaveBeenCalledTimes(2);
+});

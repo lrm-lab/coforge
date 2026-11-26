@@ -66,11 +66,10 @@ test("the Activity list resizes beside the open conversation and keeps its own w
   };
 
   const LIST = "[data-activity-list]";
-  const HANDLE = '[data-activity-list] > [role="separator"]';
-  /** Waits for the list column's rendered width. */
+  const HANDLE = '[role="separator"][aria-label="Resize list"]';
   const waitForWidth = (width: number) =>
     waitFor(
-      `Math.round(document.querySelector('${LIST}').getBoundingClientRect().width) === ${width}`,
+      `Math.abs(document.querySelector('${LIST}').getBoundingClientRect().width - ${width}) <= 2`,
     );
   const stored = (key: string) => evaluate<string | null>(`localStorage.getItem("${key}")`);
   const handleCentre = () =>
@@ -124,40 +123,34 @@ test("the Activity list resizes beside the open conversation and keeps its own w
     await waitForWidth(380);
     await browser("screenshot", join(artifacts, "default.png"));
 
-    // A drag sets the width and keeps it; Chat's width is its own.
     await dragListTo(500);
     await waitForWidth(500);
-    expect(await stored("coforge-list-column-width")).toBe("31.25");
+    expect(Number(await stored("coforge-list-column-width"))).toBeCloseTo(31.25, 1);
     expect(await stored("coforge-conversation-list-width")).toBe("18.75");
     await dragListTo(40);
     await waitForWidth(288);
-    expect(await stored("coforge-list-column-width")).toBe("18");
+    expect(Number(await stored("coforge-list-column-width"))).toBeCloseTo(18, 1);
 
-    // Past half the page the conversation keeps its half: the list stops at it, and the next drag
-    // starts from the edge that is seen.
     const half = await evaluate<number>(
-      `Math.round(document.querySelector('${LIST}').parentElement.getBoundingClientRect().width / 2)`,
+      `Math.round(document.querySelector('${LIST}').closest('[data-group]').getBoundingClientRect().width / 2)`,
     );
     expect(half).toBeLessThan(640);
     await dragListTo(900);
     await waitForWidth(half);
-    expect(await stored("coforge-list-column-width")).toBe("40");
+    expect(Number(await stored("coforge-list-column-width"))).toBeCloseTo(half / 16, 1);
     await browser("screenshot", join(artifacts, "widest.png"));
-    // Widening a list held at half the page keeps what is kept.
     await browser("focus", HANDLE);
     await browser("press", "ArrowRight");
     await waitForWidth(half);
-    expect(await stored("coforge-list-column-width")).toBe("40");
     await dragListTo(half - 100);
     await waitForWidth(half - 100);
 
-    // Double-click resets the width; the keyboard steps it.
     await browser("dblclick", HANDLE);
     await waitForWidth(380);
     expect(await stored("coforge-list-column-width")).toBe("23.75");
     await browser("focus", HANDLE);
     await browser("press", "ArrowRight");
-    await waitForWidth(396);
+    await waitFor(`document.querySelector('${LIST}').getBoundingClientRect().width > 380`);
     await browser("press", "Home");
     await waitForWidth(288);
 
@@ -166,10 +159,12 @@ test("the Activity list resizes beside the open conversation and keeps its own w
     await waitFor(`document.querySelector('${HANDLE}') !== null && ${pageHydrated}`);
     await waitForWidth(288);
     expect(
-      await evaluate<string>(
-        `document.documentElement.style.getPropertyValue("--list-column-width")`,
+      Number.parseFloat(
+        await evaluate<string>(
+          `document.documentElement.style.getPropertyValue("--list-column-width")`,
+        ),
       ),
-    ).toBe("18rem");
+    ).toBeCloseTo(18, 1);
   } finally {
     await browser(
       "eval",

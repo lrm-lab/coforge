@@ -1,11 +1,12 @@
 import { useCallback, useState, type ReactNode } from "react";
 import { MessageSquare01 } from "@untitledui/icons";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { ConversationListResizeHandle } from "./conversation-list-resize-handle";
 import { ATTACHMENT_COMMENTS_COLUMN } from "./conversation-list-width";
 import { TOOLBAR_BUTTON_ON_CLASS } from "./review-chrome";
+import { ResizableColumnSplit } from "./use-resizable-column";
 
 export function useReviewComments(open = false) {
   const [expanded, setExpanded] = useState(open);
@@ -50,28 +51,66 @@ export function ReviewCommentsToggle({
   );
 }
 
-export function ReviewCommentsColumn({
+export function ReviewSplitLayout({
   comments,
-  children,
+  commentable,
+  file,
+  fileClassName,
+  commentsPane,
 }: {
   comments: Pick<ReturnType<typeof useReviewComments>, "expanded" | "onPhone">;
-  children: ReactNode;
+  commentable: boolean;
+  file: ReactNode;
+  fileClassName?: string;
+  commentsPane?: ReactNode;
 }) {
+  const desktop = useBreakpoint("lg");
+  const hidden = !comments.expanded;
+
+  if (desktop && commentable) {
+    return (
+      <ResizableColumnSplit
+        id="coforge-attachment-comments"
+        column={ATTACHMENT_COMMENTS_COLUMN}
+        active
+        hidden={hidden}
+        side="end"
+        siblingOverflow="hidden"
+        siblingContent={
+          <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", fileClassName)}>{file}</div>
+        }
+        columnContent={
+          <div
+            inert={hidden || undefined}
+            aria-hidden={hidden || undefined}
+            className={cn("flex min-h-0 min-w-0 flex-1 flex-col", hidden && "hidden")}
+          >
+            {commentsPane}
+          </div>
+        }
+      />
+    );
+  }
+
   return (
-    <div
-      className={cn(
-        "relative min-h-0 min-w-0 flex-1",
-        "lg:w-(--attachment-comments-width,20rem) lg:max-w-1/2 lg:flex-none lg:border-l lg:border-secondary",
-        comments.expanded ? "lg:block" : "lg:hidden",
-        comments.onPhone ? "block" : "hidden",
+    <div className="flex min-h-0 flex-1">
+      <div
+        className={cn(
+          "min-h-0 min-w-0 flex-1 flex-col lg:flex",
+          comments.onPhone ? "hidden" : "flex",
+          fileClassName,
+        )}
+      >
+        {file}
+      </div>
+      {commentable && (
+        <div
+          data-review-comments=""
+          className={cn("relative min-h-0 min-w-0 flex-1", comments.onPhone ? "block" : "hidden")}
+        >
+          {commentsPane}
+        </div>
       )}
-    >
-      <ConversationListResizeHandle column={ATTACHMENT_COMMENTS_COLUMN} />
-      {children}
     </div>
   );
-}
-
-export function reviewFileClass(comments: Pick<ReturnType<typeof useReviewComments>, "onPhone">) {
-  return cn("min-h-0 min-w-0 flex-1 flex-col lg:flex", comments.onPhone ? "hidden" : "flex");
 }
