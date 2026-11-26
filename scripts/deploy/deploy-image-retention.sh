@@ -97,3 +97,41 @@ prune_deploy_images() {
 	fi
 	return 0
 }
+
+# Each Web image pull attempt ends at a deadline, then a forced kill. On 2026-10-13 and 2026-10-16
+# one layer's connection from the production host to ghcr.io fell to well under 1 Mbps without
+# ever failing, and the unbounded pull outlived the 15-minute job. The Engine abandons a pull when
+# its client's connection drops (https://docs.docker.com/reference/cli/docker/image/pull/), so the
+# next attempt starts on fresh connections. The deadline sits above the slowest healthy pull
+# seen: every layer, cold, in 3m06s on 2026-10-12.
+web_pull_attempts=3
+web_pull_deadline=210
+checker_pull_attempts=2
+checker_pull_deadline=120
+
+# Pulls a candidate image by its digest with `docker pull`, which needs none of the Compose secrets.
+pull_digest_image() {
+	local label="$1" target_image="$2" attempts="$3" deadline="$4" attempt status started detail
+	pull_failure=failed
+	for ((attempt = 1; attempt <= attempts; attempt++)); do
+		started=$SECONDS
+		status=0
+		timeout --kill-after=10s "${deadline}s" docker pull --quiet "$target_image" >/dev/null || status=$?
+		case "$status" in
+		0) detail="succeeded in $((SECONDS - started))s" ;;
+		124 | 137)
+			pull_failure="timed out"
+			detail="timed out after ${deadline}s"
+			;;
+		*)
+			pull_failure=failed
+			detail="failed with exit status $status"
+			;;
+		esac
+		printf '%s image pull attempt %d of %d %s\n' "$label" "$attempt" "$attempts" "$detail" >&2
+		if [ "$status" -eq 0 ]; then
+			return 0
+		fi
+	done
+	return 1
+}
