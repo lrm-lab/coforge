@@ -143,6 +143,7 @@ export function threadReadThrough(
 export type WindowThreadsPage = {
   threads?: Readonly<Record<string, ThreadSummary>>;
   threadReadThrough?: Readonly<Record<string, number>>;
+  threadUnreadMarks?: Readonly<Record<string, string>>;
   followedThreadRootIds?: readonly string[];
 };
 
@@ -157,6 +158,7 @@ export function mergeWindowThreads(pages: readonly WindowThreadsPage[]) {
     return {
       threads: only.threads ?? NO_THREADS,
       threadReadThrough: only.threadReadThrough ?? NO_READS,
+      threadUnreadMarks: only.threadUnreadMarks ?? NO_UNREAD_MARKS,
       followedThreadRootIds: only.followedThreadRootIds,
     };
   const followed = pages.flatMap((page) => page.followedThreadRootIds ?? []);
@@ -168,6 +170,10 @@ export function mergeWindowThreads(pages: readonly WindowThreadsPage[]) {
     threadReadThrough: Object.assign({}, ...pages.map((page) => page.threadReadThrough)) as Record<
       string,
       number
+    >,
+    threadUnreadMarks: Object.assign({}, ...pages.map((page) => page.threadUnreadMarks)) as Record<
+      string,
+      string
     >,
     followedThreadRootIds: pages.some((page) => page.followedThreadRootIds) ? followed : undefined,
   };
@@ -191,4 +197,5 @@ export function newestReflectedSequence(page: {
 
 /** No threads: one object, so a window without any keeps its identity. */
 export const NO_THREADS: Readonly<Record<string, ThreadSummary>> = {};
+export const NO_UNREAD_MARKS: Readonly<Record<string, string>> = {};
 const NO_READS: Readonly<Record<string, number>> = {};

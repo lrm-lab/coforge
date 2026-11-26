@@ -34,6 +34,7 @@ export function ConversationMessageList({
   timeZone,
   isOwn,
   openThread,
+  onMarkThreadUnread,
   toggleReaction,
   onToggleSave,
   openAgentProfile,
@@ -61,6 +62,7 @@ export function ConversationMessageList({
   timeZone: Parameters<typeof groupsWithPrevious>[5];
   isOwn: (message: { senderMemberId?: string | null }) => boolean;
   openThread: RowProps["onOpenThread"];
+  onMarkThreadUnread?: RowProps["onMarkThreadUnread"];
   toggleReaction: RowProps["onToggleReaction"];
   onToggleSave: RowProps["onToggleSave"];
   openAgentProfile: RowProps["onOpenAgentProfile"];
@@ -139,6 +141,7 @@ export function ConversationMessageList({
               collapsible={collapsible}
               dateLocale={dateLocale}
               onOpenThread={openThread}
+              onMarkThreadUnread={onMarkThreadUnread}
               showsTask={!root}
               onToggleReaction={toggleReaction}
               onToggleSave={onToggleSave}

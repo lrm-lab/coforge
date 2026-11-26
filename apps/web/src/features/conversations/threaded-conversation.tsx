@@ -43,7 +43,7 @@ import {
 import { ThreadPane } from "./thread-pane";
 import { TaskDiscussionPane } from "./task-discussion-pane";
 import { TaskEarlierDiscussion } from "./task-earlier-discussion";
-import { NO_THREADS } from "./thread-summary-model";
+import { NO_THREADS, NO_UNREAD_MARKS } from "./thread-summary-model";
 import { useThreadTailSequence } from "./thread-queries";
 import { ThreadRootState, type ThreadRootLoad } from "./thread-root-state";
 import { useConversationFocus } from "./conversation-focus";
@@ -70,6 +70,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
   const {
     conversation,
     onReadThread,
+    onMarkThreadUnread,
     header,
     threadHeaderAction,
     threadFollow,
@@ -161,7 +162,12 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
   const threadInView =
     openTaskRoot?.id ??
     (detailVisible && focus?.focused !== "chat" && visibleSlot === "thread" ? selected : undefined);
+  const threadRootOf = (rootId: string) =>
+    conversation.messages.find((message) => message.id === rootId) ??
+    threadRoots.current.get(rootId);
   const threadInViewSequence = useThreadTailSequence(conversation.conversationId, threadInView);
+  const threadInViewRootSequence =
+    openTaskRoot?.sequence ?? (threadInView ? threadRootOf(threadInView)?.sequence : undefined);
   const { visited, windowRead, threadRootFailure, loadThreadRoot } = useConversationSync({
     conversation,
     searchThreadRootId,
@@ -170,6 +176,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     selected,
     threadInView,
     threadInViewSequence,
+    threadInViewRootSequence,
     onLoadMessageAround,
     onReadThread,
     openThreadFromHash,
@@ -307,9 +314,6 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     </>
   );
 
-  const threadRootOf = (rootId: string) =>
-    conversation.messages.find((message) => message.id === rootId) ??
-    threadRoots.current.get(rootId);
   const selectedThreadKnown = selected !== undefined && threadRootOf(selected) !== undefined;
   const attemptedRootLoad = useRef<string | undefined>(undefined);
   useEffect(() => {
@@ -331,9 +335,15 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     () => ({
       conversationId: conversation.conversationId,
       summaries: conversation.threads ?? NO_THREADS,
+      unreadMarks: conversation.threadUnreadMarks ?? NO_UNREAD_MARKS,
       formatBody: formatPreviewBody,
     }),
-    [conversation.conversationId, conversation.threads, formatPreviewBody],
+    [
+      conversation.conversationId,
+      conversation.threads,
+      conversation.threadUnreadMarks,
+      formatPreviewBody,
+    ],
   );
   const threads = useConversationThreadStore(threadState);
   useEffect(() => {
@@ -347,6 +357,13 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
   const threadAlone = standaloneThread !== null;
   const threadClose = standaloneThread?.onClose ?? closeThread;
   const viewInConversation = standaloneThread?.onViewInConversation ?? showThreadRoot;
+  const markThreadUnread =
+    onMarkThreadUnread && conversation.senderMemberId
+      ? async (rootId: string) => {
+          await onMarkThreadUnread(rootId);
+          if (selected === rootId) threadClose();
+        }
+      : undefined;
   if (taskPopup) return taskLayer;
   const conversationMainPane = (
     <ThreadStoreProvider store={threads}>
@@ -364,6 +381,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
         conversation={conversation}
         composerTarget={threadContext}
         onOpenThread={openThread}
+        onMarkThreadUnread={markThreadUnread}
       />
     </ThreadStoreProvider>
   );
@@ -434,6 +452,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
               onClose={threadClose}
               threadContext={threadContext}
               onViewInConversation={() => viewInConversation(rootId)}
+              onMarkThreadUnread={markThreadUnread}
               threadFollow={threadFollow?.(rootId)}
               emptyState={{
                 title: m.conversation_thread_empty_title(),

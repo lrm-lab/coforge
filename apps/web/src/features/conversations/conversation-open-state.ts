@@ -15,7 +15,7 @@ import type { FirstUnread } from "#src/server/conversations/conversation-open.se
  * pane opens at its latest, draws no divider and does not move the read cursor. */
 export type OpenRead =
   | { status: "pending" | "error" }
-  | { status: "success"; firstUnread: FirstUnread | null };
+  | { status: "success"; firstUnread: FirstUnread | null; markedUnreadVersion?: string };
 
 /** The divider and landing an open froze, or that it still waits. */
 export type OpenState =

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  NO_UNREAD_MARKS,
   THREAD_PREVIEW_BODY_MAX,
   mergeWindowThreads,
   newestReflectedSequence,
@@ -175,6 +176,21 @@ describe("mergeWindowThreads", () => {
   test("a direct conversation has no follows, and stays without them", () => {
     const merged = mergeWindowThreads([{ threads: {}, threadReadThrough: {} }]);
     expect(merged.followedThreadRootIds).toBeUndefined();
+    expect(merged.threadUnreadMarks).toBe(NO_UNREAD_MARKS);
+  });
+
+  test("single-page threadUnreadMarks keep their reference and multi-page marks merge in order", () => {
+    const marks = { a: "v1" };
+    const single = mergeWindowThreads([
+      { threads: {}, threadReadThrough: {}, threadUnreadMarks: marks },
+    ]);
+    expect(single.threadUnreadMarks).toBe(marks);
+
+    const multi = mergeWindowThreads([
+      { threads: {}, threadReadThrough: {}, threadUnreadMarks: { a: "v1", shared: "old" } },
+      { threads: {}, threadReadThrough: {}, threadUnreadMarks: { b: "v2", shared: "new" } },
+    ]);
+    expect(multi.threadUnreadMarks).toEqual({ a: "v1", b: "v2", shared: "new" });
   });
 });
 

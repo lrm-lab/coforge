@@ -8,6 +8,7 @@ import {
   DotsHorizontal,
   FaceSmile,
   FlipForward,
+  Mail01,
   MessageSquare01 as MessageSquare,
 } from "@untitledui/icons";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -27,6 +28,7 @@ export type MessageActions = {
   onToggleReaction?: (emoji: string) => void;
   onToggleSave?: () => void;
   saveSaved: boolean;
+  onMarkThreadUnread?: () => void;
   onForward?: () => void;
   onSelect?: () => void;
   onMakeTask?: () => void;
@@ -50,6 +52,7 @@ export function MessageActionToolbar({
   onToggleReaction,
   onToggleSave,
   saveSaved,
+  onMarkThreadUnread,
   onForward,
   onSelect,
   onMakeTask,
@@ -62,7 +65,9 @@ export function MessageActionToolbar({
   onActivate: (activation: ToolbarActivation) => void;
   onStarted: () => void;
 }) {
-  const hasMore = Boolean(onForward || onToggleSave || onMakeTask || seenBy);
+  const hasMore = Boolean(
+    onForward || onSelect || onToggleSave || onMarkThreadUnread || onMakeTask || seenBy,
+  );
   const focusTarget =
     (target: NonNullable<ToolbarActivation["target"]>) => (event: FocusEvent<HTMLElement>) => {
       if (event.currentTarget.matches(":focus-visible")) onActivate({ target, mode: "focus" });
@@ -91,6 +96,7 @@ export function MessageActionToolbar({
             onToggleReaction={onToggleReaction}
             onToggleSave={onToggleSave}
             saveSaved={saveSaved}
+            onMarkThreadUnread={onMarkThreadUnread}
             onForward={onForward}
             onSelect={onSelect}
             onMakeTask={onMakeTask}
@@ -159,6 +165,7 @@ function ActiveMessageActionToolbar({
   onToggleReaction,
   onToggleSave,
   saveSaved,
+  onMarkThreadUnread,
   onForward,
   onSelect,
   onMakeTask,
@@ -212,6 +219,7 @@ function ActiveMessageActionToolbar({
           onMakeTask={onMakeTask}
           onToggleSave={onToggleSave}
           saveSaved={saveSaved}
+          onMarkThreadUnread={onMarkThreadUnread}
           seenBy={seenBy}
           start={active.target === "more" ? active.mode : undefined}
           onStarted={onStarted}
@@ -228,12 +236,20 @@ function MessageMoreMenu({
   onMakeTask,
   onToggleSave,
   saveSaved,
+  onMarkThreadUnread,
   seenBy,
   start,
   onStarted,
 }: Pick<
   MessageActions,
-  "messageId" | "onForward" | "onSelect" | "onMakeTask" | "onToggleSave" | "saveSaved" | "seenBy"
+  | "messageId"
+  | "onForward"
+  | "onSelect"
+  | "onMakeTask"
+  | "onToggleSave"
+  | "saveSaved"
+  | "onMarkThreadUnread"
+  | "seenBy"
 > & {
   start?: "focus" | "open";
   onStarted?: () => void;
@@ -282,10 +298,18 @@ function MessageMoreMenu({
               onAction={onToggleSave}
             />
           )}
+          {onMarkThreadUnread && (
+            <Dropdown.Item
+              icon={Mail01}
+              label={m.conversation_thread_mark_unread()}
+              onAction={onMarkThreadUnread}
+            />
+          )}
           {onMakeTask && (
             <Dropdown.Item icon={CheckSquare} label={m.message_make_task()} onAction={onMakeTask} />
           )}
-          {(onForward || onToggleSave || onMakeTask) && seenBy && <Dropdown.Separator />}
+          {(onForward || onSelect || onToggleSave || onMarkThreadUnread || onMakeTask) &&
+            seenBy && <Dropdown.Separator />}
           {seenBy && (
             <MessageSeenByMenuEntry
               conversationId={seenBy.conversationId}

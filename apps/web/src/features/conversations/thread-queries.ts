@@ -31,5 +31,5 @@ export function useThreadTailSequence(conversationId: string, rootId: string | u
     enabled: rootId !== undefined,
     select: (thread) => thread.replies.at(-1)?.sequence ?? 0,
   });
-  return data ?? 0;
+  return data;
 }

@@ -3,9 +3,14 @@ import { QueryClient, QueryObserver, type InfiniteData } from "@tanstack/react-q
 
 import {
   applyThreadRead,
+  applyThreadUnreadChangeToConversationCaches,
+  applyThreadUnreadMarksCleared,
+  clearThreadUnreadMark,
+  clearThreadUnreadMarksInConversationCaches,
   conversationThreadQueryKey,
   foldThreadReplies,
   setThreadFollowed,
+  setThreadUnreadMark,
   updateLoadedReply,
   type ThreadReplies,
 } from "#src/features/conversations/thread-cache";
@@ -34,6 +39,7 @@ type Page = {
   messages: Message[];
   threads: Record<string, ThreadSummary>;
   threadReadThrough: Record<string, number>;
+  threadUnreadMarks?: Record<string, string>;
   followedThreadRootIds: string[];
 };
 
@@ -326,6 +332,127 @@ describe("reading a thread", () => {
     applyThreadRead(client, { pagesKey: PAGES_KEY, rootId: "evicted", throughSequence: 9 });
 
     expect(pagesOf(client)).toBe(pages);
+  });
+});
+
+describe("thread unread marks", () => {
+  test("setThreadUnreadMark sets or updates the mark only on the page holding the root", () => {
+    const older = pageOf({
+      messages: [message(1)],
+      threads: {},
+      threadReadThrough: {},
+      followedThreadRootIds: [],
+    });
+    const newer = pageOf({
+      messages: [message(20)],
+      threads: {},
+      threadReadThrough: {},
+      followedThreadRootIds: [],
+    });
+    const client = seeded([older, newer]);
+
+    setThreadUnreadMark(client, { pagesKey: PAGES_KEY, rootId: "message-1", version: "v1" });
+    const [olderAfter, newerAfter] = pagesOf(client);
+    expect(olderAfter!.threadUnreadMarks).toEqual({ "message-1": "v1" });
+    expect(newerAfter).toBe(newer);
+
+    const samePages = pagesOf(client);
+    setThreadUnreadMark(client, { pagesKey: PAGES_KEY, rootId: "message-1", version: "v1" });
+    setThreadUnreadMark(client, { pagesKey: PAGES_KEY, rootId: "evicted", version: "v1" });
+    expect(pagesOf(client)).toBe(samePages);
+  });
+
+  test("clearThreadUnreadMark drops only matching versions unless version is omitted", () => {
+    const client = seeded([
+      pageOf({
+        messages: [message(1), message(2)],
+        threadUnreadMarks: { "message-1": "v1", "message-2": "v2" },
+      }),
+    ]);
+
+    const beforeMismatch = pagesOf(client);
+    clearThreadUnreadMark(client, { pagesKey: PAGES_KEY, rootId: "message-1", version: "stale" });
+    expect(pagesOf(client)).toBe(beforeMismatch);
+
+    clearThreadUnreadMark(client, { pagesKey: PAGES_KEY, rootId: "message-1", version: "v1" });
+    expect(pagesOf(client)[0]!.threadUnreadMarks).toEqual({ "message-2": "v2" });
+
+    clearThreadUnreadMark(client, { pagesKey: PAGES_KEY, rootId: "message-2" });
+    expect(pagesOf(client)[0]!.threadUnreadMarks).toEqual({});
+  });
+
+  test("applyThreadRead clears matching mark version and skips cursor advance when advanceCursor is false", () => {
+    const client = seeded([
+      pageOf({
+        messages: [message(1), message(2)],
+        threads: { "message-2": summary({ unread: 1 }) },
+        threadReadThrough: { "message-2": 3 },
+        threadUnreadMarks: { "message-1": "m1", "message-2": "m2" },
+      }),
+    ]);
+
+    applyThreadRead(client, {
+      pagesKey: PAGES_KEY,
+      rootId: "message-1",
+      throughSequence: 1,
+      markedUnreadVersion: "m1",
+      advanceCursor: false,
+    });
+    expect(pagesOf(client)[0]!.threadReadThrough["message-1"]).toBeUndefined();
+    expect(pagesOf(client)[0]!.threadUnreadMarks).toEqual({ "message-2": "m2" });
+
+    applyThreadRead(client, {
+      pagesKey: PAGES_KEY,
+      rootId: "message-2",
+      throughSequence: 5,
+      markedUnreadVersion: "stale-version",
+    });
+    expect(pagesOf(client)[0]!.threads["message-2"]!.unread).toBe(0);
+    expect(pagesOf(client)[0]!.threadReadThrough["message-2"]).toBe(5);
+    expect(pagesOf(client)[0]!.threadUnreadMarks).toEqual({ "message-2": "m2" });
+  });
+
+  test("batch and realtime helpers update channel and direct caches atomically", () => {
+    const client = seeded([
+      pageOf({
+        messages: [message(1), message(2)],
+        threadUnreadMarks: { "message-1": "v1", "message-2": "v2" },
+      }),
+    ]);
+    const directKey = ["conversation", "direct", CONVERSATION] as const;
+    client.setQueryData<InfiniteData<Page, unknown>>(directKey, {
+      pages: [
+        pageOf({
+          messages: [message(3)],
+          threadUnreadMarks: { "message-3": "v3" },
+        }),
+      ],
+      pageParams: [undefined],
+    });
+
+    applyThreadUnreadMarksCleared(client, {
+      pagesKey: PAGES_KEY,
+      marks: [{ rootMessageId: "message-1", version: "v1" }],
+    });
+    expect(pagesOf(client)[0]!.threadUnreadMarks).toEqual({ "message-2": "v2" });
+
+    applyThreadUnreadChangeToConversationCaches(client, {
+      conversationId: CONVERSATION,
+      rootMessageId: "message-3",
+      version: "v3-next",
+      action: "marked",
+    });
+    const directPages = client.getQueryData<InfiniteData<Page, unknown>>(directKey)!.pages;
+    expect(directPages[0]!.threadUnreadMarks).toEqual({ "message-3": "v3-next" });
+
+    clearThreadUnreadMarksInConversationCaches(client, CONVERSATION, [
+      { rootMessageId: "message-2", version: "v2" },
+      { rootMessageId: "message-3", version: "v3-next" },
+    ]);
+    expect(pagesOf(client)[0]!.threadUnreadMarks).toEqual({});
+    expect(
+      client.getQueryData<InfiniteData<Page, unknown>>(directKey)!.pages[0]!.threadUnreadMarks,
+    ).toEqual({});
   });
 });
 

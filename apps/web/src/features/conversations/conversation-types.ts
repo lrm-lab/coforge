@@ -23,6 +23,7 @@ export type DirectConversationView = {
   /** What the viewer's own messages read their ticks from (`ownMessageReadState`). */
   readTicks?: ReadPositions;
   threadReadThrough?: Record<string, number>;
+  threadUnreadMarks?: Readonly<Record<string, string>>;
   /** Each thread of the loaded window as a summary, by its root's id: the messages are top-level
    * only, and a thread's replies are read when its pane opens (`thread-pane.tsx`). */
   threads?: Readonly<Record<string, ThreadSummary>>;
@@ -113,7 +114,12 @@ export type ConversationProps = {
   onLoadMessageAround?: (messageId: string) => Promise<string>;
   onShowLatest?: () => Promise<void>;
   onFollowingLatestChange?: (following: boolean) => void;
-  onReadThread?: (rootMessageId: string, throughSequence: number) => Promise<void>;
+  onReadThread?: (
+    rootMessageId: string,
+    throughSequence: number,
+    markedUnreadVersion?: string,
+  ) => Promise<void>;
+  onMarkThreadUnread?: (rootMessageId: string) => Promise<void>;
   onReadLatest?: (throughSequence: number) => void;
   canSendAsTask?: boolean;
   onToggleReaction?: (messageId: string, emoji: string, active: boolean) => Promise<void>;

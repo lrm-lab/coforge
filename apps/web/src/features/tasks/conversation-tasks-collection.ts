@@ -154,10 +154,11 @@ const MESSAGES_PER_READ = CONVERSATION_WINDOW_PAGE_SIZE;
 /** Task changes to apply: announced ones (`task.changed.v1`), or a command's own result. */
 export type TaskChanges = { tasks: readonly TaskView[]; deleted: readonly string[] };
 
-type HeldConversationTasks = {
+export type HeldConversationTasks = {
   byId: ReadonlyMap<string, ConversationTask>;
   byNumber: ReadonlyMap<number, ConversationTask>;
   bySource: ReadonlyMap<string, readonly ConversationTask[]>;
+  byHostMessage: ReadonlySet<string>;
   missing: ReadonlySet<number>;
 };
 
@@ -175,6 +176,8 @@ function heldAfter(
   const byNumber = new Map(held.byNumber);
   let bySource: Map<string, readonly ConversationTask[]> | undefined;
   const sources = () => (bySource ??= new Map(held.bySource));
+  let byHostMessage: Set<string> | undefined;
+  const hostMessages = () => (byHostMessage ??= new Set(held.byHostMessage));
   let missing = held.missing;
   for (const { type, value } of changes) {
     const known = byId.get(value.id);
@@ -187,10 +190,16 @@ function heldAfter(
       if (rest?.length) sources().set(knownSource, rest);
       else sources().delete(knownSource);
     }
+    if (known?.messageId && (type === "delete" || value.messageId !== known.messageId)) {
+      hostMessages().delete(known.messageId);
+    }
     if (type === "delete") byId.delete(value.id);
     else {
       byId.set(value.id, value);
       byNumber.set(value.number, value);
+      if (value.messageId && !(byHostMessage ?? held.byHostMessage).has(value.messageId)) {
+        hostMessages().add(value.messageId);
+      }
       const source = streamSource(value);
       if (source)
         sources().set(
@@ -203,7 +212,13 @@ function heldAfter(
         missing = new Set([...missing].filter((number) => number !== value.number));
     }
   }
-  return { byId, byNumber, bySource: bySource ?? held.bySource, missing };
+  return {
+    byId,
+    byNumber,
+    bySource: bySource ?? held.bySource,
+    byHostMessage: byHostMessage ?? held.byHostMessage,
+    missing,
+  };
 }
 
 export const DEMAND_GC_TIME_MS = 10_000;
@@ -220,6 +235,7 @@ export function createConversationTasks(
     byId: new Map(),
     byNumber: new Map(),
     bySource: new Map(),
+    byHostMessage: new Set<string>(),
     missing: new Set<number>(),
   });
 

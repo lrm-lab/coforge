@@ -30,6 +30,9 @@ import {
   toggleChannelMessageReactionVersioned,
   toggleDirectMessageReactionVersioned,
 } from "./message-reactions.functions";
+import { ACTIVITY_INBOX_QUERY_PREFIX } from "#src/features/inbox/activity-inbox-queries";
+import { markOpenReadStale } from "./conversation-open-query";
+import { markConversationThreadUnread } from "./thread-unread.functions";
 import { UnreadStoreContext } from "./unread-store";
 import type { DirectConversationView } from "./conversation-types";
 
@@ -72,6 +75,7 @@ export function useChannelConversation(channelId: string) {
   const toggleReaction = useServerFn(toggleChannelMessageReactionVersioned);
   const join = useServerFn(joinPublicChannel);
   const markRead = useServerFn(markPublicChannelThreadRead);
+  const markThreadUnreadFn = useServerFn(markConversationThreadUnread);
   const workspaceId = useCurrentWorkspaceId();
   const unread = useContext(UnreadStoreContext);
   const setThreadFollowed = useServerFn(setPublicChannelThreadFollowed);
@@ -151,10 +155,35 @@ export function useChannelConversation(channelId: string) {
         ]);
       },
       onChanged: refreshChannelAndSidebar,
-      onReadThread: async (threadRootId: string, throughSequence: number) => {
-        await markRead({ data: { channelId, threadRootId, throughSequence } });
+      onReadThread: async (
+        threadRootId: string,
+        throughSequence: number,
+        markedUnreadVersion?: string,
+      ) => {
+        await markRead({
+          data: {
+            channelId,
+            threadRootId,
+            throughSequence,
+            ...(markedUnreadVersion && { markedUnreadVersion }),
+          },
+        });
         unread?.invalidateThreadUnread(workspaceId, channelId);
-        page.applyThreadRead(threadRootId, throughSequence);
+        const rootSequence = conversation.messages.find((msg) => msg.id === threadRootId)?.sequence;
+        const advanceCursor = rootSequence === undefined || throughSequence > rootSequence;
+        page.applyThreadRead(threadRootId, throughSequence, {
+          markedUnreadVersion,
+          advanceCursor,
+        });
+      },
+      onMarkThreadUnread: async (rootMessageId: string) => {
+        const mark = await markThreadUnreadFn({
+          data: { conversationId: channelId, rootMessageId },
+        });
+        page.setThreadUnreadMark(mark.rootMessageId, mark.version);
+        markOpenReadStale(queryClient, channelId, mark.rootMessageId);
+        unread?.invalidateThreadUnread(workspaceId, channelId);
+        void queryClient.invalidateQueries({ queryKey: ACTIVITY_INBOX_QUERY_PREFIX });
       },
       onThreadFollowedChange: async (threadRootId: string, followed: boolean) => {
         await setThreadFollowed({ data: { channelId, threadRootId, followed } });
@@ -176,9 +205,11 @@ export function useChannelConversation(channelId: string) {
  * react, read threads. `conversationProps` goes straight to `DirectConversation`.
  */
 export function useDirectConversation(conversationId: string) {
+  const queryClient = useQueryClient();
   const send = useServerFn(sendDirectConversationMessage);
   const toggleReaction = useServerFn(toggleDirectMessageReactionVersioned);
   const markRead = useServerFn(markDirectThreadRead);
+  const markThreadUnreadFn = useServerFn(markConversationThreadUnread);
   const endReplyIntents = useEndReplyIntentsOnArrival();
   const page = useConversationQuery({
     onArrived: endReplyIntents,
@@ -226,9 +257,33 @@ export function useDirectConversation(conversationId: string) {
         ),
       // The settings panel changed the viewer's preference for this DM: re-read the window.
       onChanged: page.invalidate,
-      onReadThread: async (threadRootId: string, throughSequence: number) => {
-        await markRead({ data: { conversationId, threadRootId, throughSequence } });
-        page.applyThreadRead(threadRootId, throughSequence);
+      onReadThread: async (
+        threadRootId: string,
+        throughSequence: number,
+        markedUnreadVersion?: string,
+      ) => {
+        await markRead({
+          data: {
+            conversationId,
+            threadRootId,
+            throughSequence,
+            ...(markedUnreadVersion && { markedUnreadVersion }),
+          },
+        });
+        const rootSequence = conversation.messages.find((msg) => msg.id === threadRootId)?.sequence;
+        const advanceCursor = rootSequence === undefined || throughSequence > rootSequence;
+        page.applyThreadRead(threadRootId, throughSequence, {
+          markedUnreadVersion,
+          advanceCursor,
+        });
+      },
+      onMarkThreadUnread: async (rootMessageId: string) => {
+        const mark = await markThreadUnreadFn({
+          data: { conversationId, rootMessageId },
+        });
+        page.setThreadUnreadMark(mark.rootMessageId, mark.version);
+        markOpenReadStale(queryClient, conversationId, mark.rootMessageId);
+        void queryClient.invalidateQueries({ queryKey: ACTIVITY_INBOX_QUERY_PREFIX });
       },
       onLoadMessageAround: page.loadMessageAround,
       onShowLatest: page.showLatest,

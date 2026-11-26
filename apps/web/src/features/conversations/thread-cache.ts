@@ -1,6 +1,7 @@
 import type { InfiniteData, QueryClient, QueryKey } from "@tanstack/react-query";
 
 import { mergeMessages } from "./conversation-messages";
+import { channelPageQueryKey } from "./conversation-query-keys";
 import {
   withReply,
   withThreadRead,
@@ -131,27 +132,141 @@ export function foldThreadReplies<
  * The viewer read a thread through `throughSequence`: on the page that holds its root, the summary
  * loses its unread mark once that reaches the newest reply, and the cursor moves (never back).
  */
+function withoutMark(
+  marks: Readonly<Record<string, string>> | undefined,
+  rootId: string,
+  version?: string,
+): Readonly<Record<string, string>> | undefined {
+  const current = marks?.[rootId];
+  if (!current || (version !== undefined && current !== version)) return marks;
+  const next = { ...marks };
+  delete next[rootId];
+  return next;
+}
+
 export function applyThreadRead<P extends WindowPage>(
   queryClient: QueryClient,
   {
     pagesKey,
     rootId,
     throughSequence,
-  }: { pagesKey: QueryKey; rootId: string; throughSequence: number },
+    markedUnreadVersion,
+    advanceCursor = true,
+  }: {
+    pagesKey: QueryKey;
+    rootId: string;
+    throughSequence: number;
+    markedUnreadVersion?: string;
+    advanceCursor?: boolean;
+  },
 ) {
   updatePages<P>(queryClient, pagesKey, (page) => {
     if (!holdsRoot(page, rootId)) return page;
     const summary = page.threads?.[rootId];
-    const read = summary && withThreadRead(summary, throughSequence);
-    const cursor = Math.max(page.threadReadThrough?.[rootId] ?? 0, throughSequence);
-    const cursorMoved = cursor !== page.threadReadThrough?.[rootId];
-    if (read === summary && !cursorMoved) return page;
+    const read = summary && advanceCursor ? withThreadRead(summary, throughSequence) : summary;
+    const cursor = advanceCursor
+      ? Math.max(page.threadReadThrough?.[rootId] ?? 0, throughSequence)
+      : page.threadReadThrough?.[rootId];
+    const cursorMoved = advanceCursor && cursor !== page.threadReadThrough?.[rootId];
+    const marks = markedUnreadVersion
+      ? withoutMark(page.threadUnreadMarks, rootId, markedUnreadVersion)
+      : page.threadUnreadMarks;
+    const markChanged = marks !== page.threadUnreadMarks;
+    if (read === summary && !cursorMoved && !markChanged) return page;
     return {
       ...page,
       ...(read !== summary && { threads: { ...page.threads, [rootId]: read } }),
       ...(cursorMoved && { threadReadThrough: { ...page.threadReadThrough, [rootId]: cursor } }),
+      ...(markChanged && { threadUnreadMarks: marks }),
     };
   });
+}
+
+export function setThreadUnreadMark<P extends WindowPage>(
+  queryClient: QueryClient,
+  { pagesKey, rootId, version }: { pagesKey: QueryKey; rootId: string; version: string },
+) {
+  updatePages<P>(queryClient, pagesKey, (page) => {
+    if (!holdsRoot(page, rootId) || page.threadUnreadMarks?.[rootId] === version) return page;
+    return {
+      ...page,
+      threadUnreadMarks: { ...page.threadUnreadMarks, [rootId]: version },
+    };
+  });
+}
+
+export function clearThreadUnreadMark<P extends WindowPage>(
+  queryClient: QueryClient,
+  { pagesKey, rootId, version }: { pagesKey: QueryKey; rootId: string; version?: string },
+) {
+  updatePages<P>(queryClient, pagesKey, (page) => {
+    if (!holdsRoot(page, rootId)) return page;
+    const marks = withoutMark(page.threadUnreadMarks, rootId, version);
+    if (marks === page.threadUnreadMarks) return page;
+    return { ...page, threadUnreadMarks: marks };
+  });
+}
+
+export function applyThreadUnreadMarksCleared<P extends WindowPage>(
+  queryClient: QueryClient,
+  {
+    pagesKey,
+    marks,
+  }: {
+    pagesKey: QueryKey;
+    marks: readonly { rootMessageId: string; version: string }[];
+  },
+) {
+  if (marks.length === 0) return;
+  const byRoot = new Map(marks.map((mark) => [mark.rootMessageId, mark.version]));
+  updatePages<P>(queryClient, pagesKey, (page) => {
+    let nextMarks = page.threadUnreadMarks;
+    for (const [rootId, version] of byRoot) {
+      if (!holdsRoot(page, rootId)) continue;
+      nextMarks = withoutMark(nextMarks, rootId, version);
+    }
+    if (nextMarks === page.threadUnreadMarks) return page;
+    return { ...page, threadUnreadMarks: nextMarks };
+  });
+}
+
+function conversationPageKeys(conversationId: string): readonly QueryKey[] {
+  return [channelPageQueryKey(conversationId), ["conversation", "direct", conversationId]];
+}
+
+export function applyThreadUnreadChangeToConversationCaches(
+  queryClient: QueryClient,
+  event: {
+    conversationId: string;
+    rootMessageId: string;
+    version: string;
+    action: "marked" | "cleared";
+  },
+) {
+  for (const pagesKey of conversationPageKeys(event.conversationId)) {
+    if (event.action === "marked") {
+      setThreadUnreadMark(queryClient, {
+        pagesKey,
+        rootId: event.rootMessageId,
+        version: event.version,
+      });
+    } else {
+      clearThreadUnreadMark(queryClient, {
+        pagesKey,
+        rootId: event.rootMessageId,
+        version: event.version,
+      });
+    }
+  }
+}
+
+export function clearThreadUnreadMarksInConversationCaches(
+  queryClient: QueryClient,
+  conversationId: string,
+  marks: readonly { rootMessageId: string; version: string }[],
+) {
+  for (const pagesKey of conversationPageKeys(conversationId))
+    applyThreadUnreadMarksCleared(queryClient, { pagesKey, marks });
 }
 
 /**

@@ -9,6 +9,7 @@ import { useIsMessageSaved } from "./conversation-host";
 import { useOpenForward } from "./message-forward-host";
 import { useMessageSelection } from "./message-selection";
 import { useMakeTaskFromMessage } from "./message-task-host";
+import { useIsHostTaskMessage } from "#src/features/tasks/use-conversation-tasks";
 import { canForwardMessage } from "./message-forward-model";
 import type { ReadState } from "./conversation-pane-layout";
 import type { MessageView } from "./message-view";
@@ -21,6 +22,7 @@ export function useMessageRowActions({
   readState,
   seenBy,
   onOpenThread,
+  onMarkThreadUnread,
   onToggleReaction,
   onToggleSave,
   inStream = false,
@@ -32,6 +34,7 @@ export function useMessageRowActions({
   readState?: ReadState;
   seenBy?: boolean;
   onOpenThread?: (rootId: string) => void;
+  onMarkThreadUnread?: (rootId: string) => void;
   onToggleReaction?: (messageId: string, emoji: string, active: boolean) => void;
   onToggleSave?: (messageId: string, saved: boolean) => Promise<void>;
 }) {
@@ -59,6 +62,8 @@ export function useMessageRowActions({
     [sheetActions],
   );
   const copyable = Boolean(message.body.trim());
+  const canMarkThread = Boolean(onMarkThreadUnread && !message.threadRootId);
+  const isHostTask = useIsHostTaskMessage(conversationId, message.id, canMarkThread);
   const actions = {
     messageId: message.id,
     onOpenThread,
@@ -71,6 +76,8 @@ export function useMessageRowActions({
           toast.error(m.conversation_save_failed());
         })),
     saveSaved,
+    onMarkThreadUnread:
+      canMarkThread && !isHostTask ? () => onMarkThreadUnread?.(message.id) : undefined,
     onForward:
       openForward && conversationId && canForwardMessage(message)
         ? () =>
@@ -102,6 +109,7 @@ export function useMessageRowActions({
     onOpenThread ||
     onToggleReaction ||
     onToggleSave ||
+    actions.onMarkThreadUnread ||
     actions.onForward ||
     actions.onMakeTask ||
     copyable ||

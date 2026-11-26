@@ -30,6 +30,7 @@ import {
 import type { ChannelSignal } from "./channel-signals";
 import { UnreadStore } from "./unread-store";
 import { markOpenReadStale } from "./conversation-open-query";
+import { applyThreadUnreadChangeToConversationCaches } from "./thread-cache";
 
 export type UnreadState = {
   store: UnreadStore;
@@ -150,8 +151,10 @@ export function useChannelUnread({
       const event = decodeViewerEvent(data);
       if (event) {
         if (event.type === REALTIME_EVENTS.threadUnreadChanged) {
-          if (event.workspaceId === refs.current.workspaceId)
+          if (event.workspaceId === refs.current.workspaceId) {
+            applyThreadUnreadChangeToConversationCaches(queryClient, event);
             markOpenReadStale(queryClient, event.conversationId, event.rootMessageId);
+          }
           return;
         }
         if (event.type === REALTIME_EVENTS.channelThreadUnreadInvalidated) {

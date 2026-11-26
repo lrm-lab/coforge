@@ -39,6 +39,7 @@ import { ThreadRepliesMarker } from "./thread-replies-marker";
 import { ThreadRootMessage } from "./thread-root-message";
 import { QuestionCardsHost } from "./question-card-host";
 import { PaneQuoteSelection } from "./message-quote-selection";
+import { useIsHostTaskMessage } from "#src/features/tasks/use-conversation-tasks";
 
 export function ConversationPane({
   conversation,
@@ -56,6 +57,7 @@ export function ConversationPane({
   onViewInConversation,
   threadFollow,
   onOpenThread,
+  onMarkThreadUnread,
   threadHeaderAction,
   onLoadOlder,
   onLoadNewer,
@@ -105,6 +107,20 @@ export function ConversationPane({
   const openPersonProfile = useLatestCallback(onOpenPersonProfile);
   const openTaskReference = useLatestCallback(onOpenTask);
   const openThread = useLatestCallback(onOpenThread);
+  const markThreadUnread = useLatestCallback(
+    onMarkThreadUnread && !inTaskPopup
+      ? (rootId: string) => {
+          void onMarkThreadUnread(rootId).catch(() => {
+            toast.error(m.conversation_thread_mark_unread_failed());
+          });
+        }
+      : undefined,
+  );
+  const rootIsHostTask = useIsHostTaskMessage(
+    conversation.conversationId,
+    root?.id ?? "",
+    Boolean(root && markThreadUnread),
+  );
   const savedMessages = useSavedMessages();
   const onToggleSave = useLatestCallback(
     savedMessages && conversation.senderMemberId
@@ -253,6 +269,9 @@ export function ConversationPane({
                 onScrollToTop={() => historyRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
                 onClose={onClose}
                 onViewInConversation={onViewInConversation}
+                onMarkUnread={
+                  markThreadUnread && !rootIsHostTask ? () => markThreadUnread(root.id) : undefined
+                }
                 follow={threadFollow}
                 action={threadHeaderAction}
               />
@@ -283,6 +302,7 @@ export function ConversationPane({
                       dateLocale={dateLocale}
                       onToggleReaction={toggleReaction}
                       onToggleSave={onToggleSave}
+                      onMarkThreadUnread={markThreadUnread}
                       onOpenAgentProfile={openAgentProfile}
                       onOpenPersonProfile={openPersonProfile}
                       viewerId={conversation.viewerId}
@@ -323,6 +343,7 @@ export function ConversationPane({
                       timeZone={timeZone}
                       isOwn={isOwn}
                       openThread={openThread}
+                      onMarkThreadUnread={root ? undefined : markThreadUnread}
                       toggleReaction={toggleReaction}
                       onToggleSave={onToggleSave}
                       openAgentProfile={openAgentProfile}

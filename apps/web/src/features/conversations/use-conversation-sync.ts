@@ -12,7 +12,7 @@ import { markOpenReadStale } from "./conversation-open-query";
 import type { ThreadRootLoad } from "./thread-root-state";
 import type { DirectConversationView } from "./conversation-types";
 import { threadReadThrough } from "./thread-summary-model";
-import { useConversationOpened } from "./use-conversation-open";
+import { useConversationOpenRead } from "./use-conversation-open";
 import { usePageAttended } from "./use-page-attended";
 import { activityItemKey } from "#src/features/inbox/activity-unread-count";
 import { useReportViewingItem } from "#src/features/inbox/viewing-items";
@@ -46,6 +46,7 @@ export function useConversationSync({
   selected,
   threadInView,
   threadInViewSequence,
+  threadInViewRootSequence,
   onLoadMessageAround,
   onReadThread,
   openThreadFromHash,
@@ -58,8 +59,13 @@ export function useConversationSync({
   selected?: string;
   threadInView?: string;
   threadInViewSequence?: number;
+  threadInViewRootSequence?: number;
   onLoadMessageAround?: (messageId: string) => Promise<string>;
-  onReadThread?: (rootMessageId: string, throughSequence: number) => Promise<void>;
+  onReadThread?: (
+    rootMessageId: string,
+    throughSequence: number,
+    markedUnreadVersion?: string,
+  ) => Promise<void>;
   openThreadFromHash: (rootMessageId: string) => void;
   closeThread: () => void;
 }) {
@@ -128,13 +134,15 @@ export function useConversationSync({
   }, [openTaskMessageId, selected, closeThread]);
 
   const reading = useRef(false);
-  // A thread's read waits, like its divider, for this open's read of where its unread starts
-  // (task #378): moving the thread's cursor first would bring that read back with nothing unread.
-  const threadOpened = useConversationOpened(
+  const threadOpenRead = useConversationOpenRead(
     conversation.conversationId,
     threadInView,
     Boolean(threadInView),
   );
+  const threadOpened = threadOpenRead.status === "success";
+  const threadMarkedUnreadVersion =
+    threadOpenRead.status === "success" ? threadOpenRead.markedUnreadVersion : undefined;
+  const [clearedMarks, setClearedMarks] = useState<Record<string, string>>({});
   // Nobody looking (hidden, or the window without focus), nothing is reported; coming back runs
   // this again (task #549), as the conversation's own read does.
   const attended = usePageAttended();
@@ -145,18 +153,41 @@ export function useConversationSync({
       : undefined,
   );
   useEffect(() => {
-    if (!threadInView || !threadInViewSequence || !threadOpened || reading.current || !attended)
+    if (
+      !threadInView ||
+      threadInViewSequence === undefined ||
+      !threadOpened ||
+      reading.current ||
+      !attended
+    )
       return;
     const boundary = threadCursor(threadInView) ?? 0;
-    if (threadInViewSequence <= boundary) return;
+    const pendingMarkVersion =
+      threadMarkedUnreadVersion && clearedMarks[threadInView] !== threadMarkedUnreadVersion
+        ? threadMarkedUnreadVersion
+        : undefined;
+    if (threadInViewSequence <= boundary && !pendingMarkVersion) return;
+    const throughSequence =
+      threadInViewSequence > 0 ? threadInViewSequence : (threadInViewRootSequence ?? 0);
+    if (throughSequence <= 0) return;
+    const targetRootId = threadInView;
+    const targetTailSequence = threadInViewSequence;
     reading.current = true;
-    void (onReadThread?.(threadInView, threadInViewSequence) ?? Promise.resolve())
+    void (onReadThread?.(targetRootId, throughSequence, pendingMarkVersion) ?? Promise.resolve())
       .then(() => {
-        setReadThrough((previous) => ({
-          ...previous,
-          [threadInView]: threadInViewSequence,
-        }));
-        markOpenReadStale(queryClient, conversation.conversationId, threadInView);
+        if (targetTailSequence > 0) {
+          setReadThrough((previous) => ({
+            ...previous,
+            [targetRootId]: targetTailSequence,
+          }));
+        }
+        if (pendingMarkVersion) {
+          setClearedMarks((previous) => ({
+            ...previous,
+            [targetRootId]: pendingMarkVersion,
+          }));
+        }
+        markOpenReadStale(queryClient, conversation.conversationId, targetRootId);
         // Activity's rows too: a thread opened from there is read here, not by its row.
         void queryClient.invalidateQueries({ queryKey: ACTIVITY_INBOX_QUERY_PREFIX });
       })
@@ -169,12 +200,15 @@ export function useConversationSync({
   }, [
     threadInView,
     threadInViewSequence,
+    threadInViewRootSequence,
     threadOpened,
+    threadMarkedUnreadVersion,
     attended,
     conversation,
     queryClient,
     onReadThread,
     readThrough,
+    clearedMarks,
     threadCursor,
   ]);
 

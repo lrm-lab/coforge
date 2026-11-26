@@ -13,6 +13,9 @@ import {
   markDirectThreadRead,
   setDirectConversationUnread,
 } from "#src/features/conversations/conversations.functions";
+import { markOpenReadStale } from "#src/features/conversations/conversation-open-query";
+import { applyThreadUnreadChangeToConversationCaches } from "#src/features/conversations/thread-cache";
+import { markConversationThreadUnread } from "#src/features/conversations/thread-unread.functions";
 import {
   markTaskConversationRead,
   setTaskFollow,
@@ -57,6 +60,7 @@ export function useActivityItemActions({
   const markDirectThread = useServerFn(markDirectThreadRead);
   const setChannelUnread = useServerFn(setPublicConversationUnread);
   const setDirectUnread = useServerFn(setDirectConversationUnread);
+  const markThreadUnread = useServerFn(markConversationThreadUnread);
   const setThreadFollowed = useServerFn(setPublicChannelThreadFollowed);
   const markTaskRead = useServerFn(markTaskConversationRead);
   const setTaskFollowed = useServerFn(setTaskFollow);
@@ -93,13 +97,25 @@ export function useActivityItemActions({
           throughSequence,
           ...(markedUnreadVersion && { markedUnreadVersion }),
         };
-        return place.kind === "channel"
-          ? markChannelThreadRead({
-              data: { channelId: place.conversationId, ...read },
-            })
-          : markDirectThread({
-              data: { conversationId: place.conversationId, ...read },
+        return (
+          place.kind === "channel"
+            ? markChannelThreadRead({
+                data: { channelId: place.conversationId, ...read },
+              })
+            : markDirectThread({
+                data: { conversationId: place.conversationId, ...read },
+              })
+        ).then(() => {
+          markOpenReadStale(queryClient, place.conversationId, thread.root.id);
+          if (markedUnreadVersion) {
+            applyThreadUnreadChangeToConversationCaches(queryClient, {
+              conversationId: place.conversationId,
+              rootMessageId: thread.root.id,
+              version: markedUnreadVersion,
+              action: "cleared",
             });
+          }
+        });
       }
       return place.kind === "channel"
         ? markChannelRead({ data: { channelId: place.conversationId, throughSequence } })
@@ -115,6 +131,17 @@ export function useActivityItemActions({
           await markDone({
             data: doneTarget(item),
           });
+          if (item.kind === "conversation" && item.thread) {
+            markOpenReadStale(queryClient, item.place.conversationId, item.thread.root.id);
+            if (item.markedUnreadVersion) {
+              applyThreadUnreadChangeToConversationCaches(queryClient, {
+                conversationId: item.place.conversationId,
+                rootMessageId: item.thread.root.id,
+                version: item.markedUnreadVersion,
+                action: "cleared",
+              });
+            }
+          }
         },
         () => onFailure({ retry: () => done(item) }),
       );
@@ -134,14 +161,29 @@ export function useActivityItemActions({
             : read(item),
         ),
       unread: (item: ActivityConversationItem) => {
-        const { place, mentionAction } = item;
-        return run(() =>
-          mentionAction
-            ? setMentionRead({ data: { resolutionId: mentionAction.resolutionId, read: false } })
-            : place.kind === "channel"
-              ? setChannelUnread({ data: { channelId: place.conversationId, unread: true } })
-              : setDirectUnread({ data: { conversationId: place.conversationId, unread: true } }),
-        );
+        const { place, mentionAction, thread } = item;
+        return run(async () => {
+          if (mentionAction)
+            return setMentionRead({
+              data: { resolutionId: mentionAction.resolutionId, read: false },
+            });
+          if (thread && !thread.task) {
+            const mark = await markThreadUnread({
+              data: { conversationId: place.conversationId, rootMessageId: thread.root.id },
+            });
+            applyThreadUnreadChangeToConversationCaches(queryClient, {
+              conversationId: place.conversationId,
+              rootMessageId: mark.rootMessageId,
+              version: mark.version,
+              action: "marked",
+            });
+            markOpenReadStale(queryClient, place.conversationId, mark.rootMessageId);
+            return;
+          }
+          if (place.kind === "channel")
+            return setChannelUnread({ data: { channelId: place.conversationId, unread: true } });
+          return setDirectUnread({ data: { conversationId: place.conversationId, unread: true } });
+        });
       },
       unfollow: ({ place, thread, task }: ActivityConversationItem) => {
         if (task) {
@@ -176,6 +218,7 @@ export function useActivityItemActions({
     markDirectThread,
     setChannelUnread,
     setDirectUnread,
+    markThreadUnread,
     setThreadFollowed,
     markTaskRead,
     setTaskFollowed,

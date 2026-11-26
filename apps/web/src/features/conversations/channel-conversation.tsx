@@ -184,6 +184,7 @@ export function ChannelConversation({
   onLoadMessageAround,
   onShowLatest,
   onReadThread,
+  onMarkThreadUnread,
   onReadLatest,
   onThreadFollowedChange,
   canSendAsTask,
@@ -214,7 +215,8 @@ export function ChannelConversation({
   onLoadNewer?: () => Promise<void>;
   onLoadMessageAround?: (messageId: string) => Promise<string>;
   onShowLatest?: () => Promise<void>;
-  onReadThread?: (rootMessageId: string, throughSequence: number) => Promise<void>;
+  onReadThread?: ConversationProps["onReadThread"];
+  onMarkThreadUnread?: ConversationProps["onMarkThreadUnread"];
   onReadLatest?: (throughSequence: number) => void;
   onThreadFollowedChange?: (rootMessageId: string, followed: boolean) => Promise<void>;
   canSendAsTask?: boolean;
@@ -291,6 +293,9 @@ export function ChannelConversation({
       onLoadMessageAround={onLoadMessageAround}
       onShowLatest={onShowLatest}
       onReadThread={onReadThread}
+      onMarkThreadUnread={
+        conversation.senderMemberId && !conversation.archived ? onMarkThreadUnread : undefined
+      }
       onReadLatest={onReadLatest}
       onOpenAgentProfile={onOpenAgentProfile}
       onOpenPersonProfile={onOpenPersonProfile}

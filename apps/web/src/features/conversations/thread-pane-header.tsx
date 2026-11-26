@@ -4,6 +4,7 @@ import {
   Bell01 as Bell,
   BellOff01 as BellOff,
   DotsVertical,
+  Mail01,
   MarkerPin01,
   XClose,
 } from "@untitledui/icons";
@@ -27,6 +28,7 @@ export function ThreadPaneHeader({
   onScrollToTop,
   onClose,
   onViewInConversation,
+  onMarkUnread,
   follow,
   action,
 }: {
@@ -36,6 +38,7 @@ export function ThreadPaneHeader({
   onScrollToTop?: () => void;
   onClose?: () => void;
   onViewInConversation?: () => void;
+  onMarkUnread?: () => void;
   follow?: ThreadFollow;
   /** Shown before the actions menu (the Agents following the thread). */
   action?: React.ReactNode;
@@ -79,7 +82,7 @@ export function ThreadPaneHeader({
       <div className="-mr-1.5 flex shrink-0 items-center gap-1">
         {action}
         <ConversationFocusButton panel="thread" />
-        {(onViewInConversation || follow) && (
+        {(onViewInConversation || onMarkUnread || follow) && (
           <Dropdown.Root>
             <ButtonUtility
               icon={DotsVertical}
@@ -95,6 +98,14 @@ export function ThreadPaneHeader({
                     icon={MarkerPin01}
                     label={m.conversation_thread_view_in_channel()}
                     onAction={onViewInConversation}
+                  />
+                )}
+                {onMarkUnread && (
+                  <Dropdown.Item
+                    id="mark-unread"
+                    icon={Mail01}
+                    label={m.conversation_thread_mark_unread()}
+                    onAction={onMarkUnread}
                   />
                 )}
                 {follow && (

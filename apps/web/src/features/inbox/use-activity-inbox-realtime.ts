@@ -1,11 +1,15 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useContext, useEffect, useRef } from "react";
+import { QueryClientContext } from "@tanstack/react-query";
 
+import { markOpenReadStale } from "#src/features/conversations/conversation-open-query";
 import {
   decodeActivityChangedEvent,
   decodeViewerEvent,
   userConversationChannel,
   type ActivityAttention,
 } from "#src/features/conversations/conversation-realtime";
+import { applyThreadUnreadChangeToConversationCaches } from "#src/features/conversations/thread-cache";
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import {
   decodeConversationActivityEvent,
   type ConversationActivityEvent,
@@ -67,6 +71,7 @@ export function useActivityInboxRealtime({
   useEffect(() => {
     onSubscribedRef.current = onSubscribed;
   }, [onSubscribed]);
+  const queryClient = useContext(QueryClientContext);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
 
@@ -81,6 +86,14 @@ export function useActivityInboxRealtime({
           onMessageRef.current?.(message, publication.position);
         return;
       }
+      const viewerEvent = decodeViewerEvent(publication.data);
+      if (viewerEvent?.type === REALTIME_EVENTS.threadUnreadChanged) {
+        if (viewerEvent.workspaceId === workspaceId && queryClient) {
+          applyThreadUnreadChangeToConversationCaches(queryClient, viewerEvent);
+          markOpenReadStale(queryClient, viewerEvent.conversationId, viewerEvent.rootMessageId);
+        }
+        return;
+      }
       let attention: ActivityAttention | undefined;
       let activityWorkspaceId: string | undefined;
       let isActivityChanged = false;
@@ -93,8 +106,10 @@ export function useActivityInboxRealtime({
         // Neither a message nor an Activity signal (the channels also carry other events): only a
         // pin or mute change the caller asked for refreshes.
         if (!refreshOnPreferences) return;
-        const event = decodeViewerEvent(publication.data);
-        if (event?.type !== "pref.changed.v1" || (event.name !== "pins" && event.name !== "muted"))
+        if (
+          viewerEvent?.type !== "pref.changed.v1" ||
+          (viewerEvent.name !== "pins" && viewerEvent.name !== "muted")
+        )
           return;
       }
       if (isActivityChanged && activityWorkspaceId !== workspaceId) return;
@@ -103,7 +118,7 @@ export function useActivityInboxRealtime({
       clearTimeout(timer.current);
       timer.current = setTimeout(() => onActivityRef.current(), REFRESH_DELAY_MS);
     },
-    [refreshOnPreferences, userId, workspaceId],
+    [queryClient, refreshOnPreferences, userId, workspaceId],
   );
 
   useRealtimeSubscription({

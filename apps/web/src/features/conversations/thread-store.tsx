@@ -15,6 +15,7 @@ import type { ThreadSummary } from "./thread-summary-model";
 export type ThreadState = {
   conversationId: string;
   summaries: Readonly<Record<string, ThreadSummary>>;
+  unreadMarks?: Readonly<Record<string, string>>;
   formatBody: (body: string, mentions?: readonly MentionRef[]) => string;
 };
 
@@ -47,7 +48,9 @@ export function useThreadSummary(rootId: string) {
 /** A root's unread Agent replies, re-rendering only when that count changes. */
 export function useThreadUnread(rootId: string) {
   const { threads } = useStoreContext();
-  return useSelector(threads, (state) => state.summaries[rootId]?.unread ?? 0);
+  return useSelector(threads, (state) =>
+    Math.max(state.summaries[rootId]?.unread ?? 0, state.unreadMarks?.[rootId] ? 1 : 0),
+  );
 }
 
 /** The conversation the threads are of. */

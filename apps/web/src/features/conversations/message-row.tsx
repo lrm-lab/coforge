@@ -75,6 +75,7 @@ export const MessageRow = memo(function MessageRow({
   highlighted: highlightedProp,
   dateLocale,
   onOpenThread,
+  onMarkThreadUnread,
   onToggleReaction,
   onToggleSave,
   onOpenAgentProfile,
@@ -98,6 +99,7 @@ export const MessageRow = memo(function MessageRow({
   highlighted?: boolean;
   dateLocale?: string;
   onOpenThread?: (rootId: string) => void;
+  onMarkThreadUnread?: (rootId: string) => void;
   showsTask?: boolean;
   onToggleReaction?: (messageId: string, emoji: string, active: boolean) => void;
   onToggleSave?: (messageId: string, saved: boolean) => Promise<void>;
@@ -197,6 +199,7 @@ export const MessageRow = memo(function MessageRow({
       readState,
       seenBy,
       onOpenThread,
+      onMarkThreadUnread,
       onToggleReaction,
       onToggleSave,
       inStream: showsTask,

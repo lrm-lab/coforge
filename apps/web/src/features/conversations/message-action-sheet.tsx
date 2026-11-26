@@ -7,6 +7,7 @@ import {
   CheckSquare,
   Copy01,
   FlipForward,
+  Mail01,
 } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -34,6 +35,7 @@ export function MessageActionSheet({
   onToggleReaction,
   onToggleSave,
   saveSaved,
+  onMarkThreadUnread,
   onForward,
   onSelect,
   onMakeTask,
@@ -200,9 +202,10 @@ export function MessageActionSheet({
                     {m.conversation_message_copy_text()}
                   </Button>
                 )}
-                {(onOpenThread || copyable) && (onForward || onToggleSave || onMakeTask) && (
-                  <div aria-hidden="true" className="mx-1 my-1 h-px bg-secondary" />
-                )}
+                {(onOpenThread || copyable) &&
+                  (onForward || onSelect || onToggleSave || onMarkThreadUnread || onMakeTask) && (
+                    <div aria-hidden="true" className="mx-1 my-1 h-px bg-secondary" />
+                  )}
                 {onForward && (
                   <Button
                     color="tertiary"
@@ -248,6 +251,21 @@ export function MessageActionSheet({
                     {saveSaved ? m.conversation_unsave() : m.conversation_save()}
                   </Button>
                 )}
+                {onMarkThreadUnread && (
+                  <Button
+                    color="tertiary"
+                    size={controlSize}
+                    noTextPadding
+                    iconLeading={Mail01}
+                    onPress={() => {
+                      handleOpenChange(false);
+                      onMarkThreadUnread();
+                    }}
+                    className="w-full justify-start rounded-lg py-3 *:data-icon:size-5 [&>[data-text]]:flex-1 [&>[data-text]]:text-left"
+                  >
+                    {m.conversation_thread_mark_unread()}
+                  </Button>
+                )}
                 {onMakeTask && (
                   <Button
                     color="tertiary"
@@ -265,7 +283,13 @@ export function MessageActionSheet({
                 )}
                 {seenBy && (
                   <>
-                    {(onOpenThread || copyable || onForward || onToggleSave || onMakeTask) && (
+                    {(onOpenThread ||
+                      copyable ||
+                      onForward ||
+                      onSelect ||
+                      onToggleSave ||
+                      onMarkThreadUnread ||
+                      onMakeTask) && (
                       <div aria-hidden="true" className="mx-1 my-1 h-px bg-secondary" />
                     )}
                     <MessageSeenBySheetEntry

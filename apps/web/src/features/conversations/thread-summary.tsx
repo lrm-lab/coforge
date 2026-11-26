@@ -71,15 +71,20 @@ export function ThreadPreview({ rootId, onOpen }: ThreadPartProps) {
   const summary = useThreadSummary(rootId);
   const unread = useThreadUnread(rootId);
   const formatBody = useThreadBodyFormat();
-  if (!summary?.replyCount) return null;
-  const label = replyCountLabel(summary.replyCount);
+  const replyCount = summary?.replyCount ?? 0;
+  if (!replyCount && unread === 0) return null;
+  const hasReplies = replyCount > 0;
+  const label = hasReplies ? replyCountLabel(replyCount) : m.conversation_thread();
   return (
     <Button
       color="tertiary"
       size="sm"
       noTextPadding
       onPress={() => onOpen(rootId)}
-      className="mt-1.5 block h-auto w-full overflow-hidden rounded-lg bg-secondary px-4 pt-2 pb-4 text-start font-normal hover:bg-secondary_hover *:data-text:block *:data-text:min-w-0"
+      className={cx(
+        "mt-1.5 block h-auto w-full overflow-hidden rounded-lg bg-secondary px-4 text-start font-normal hover:bg-secondary_hover *:data-text:block *:data-text:min-w-0",
+        hasReplies ? "pt-2 pb-4" : "py-2",
+      )}
       data-thread-preview=""
     >
       <span
@@ -92,32 +97,34 @@ export function ThreadPreview({ rootId, onOpen }: ThreadPartProps) {
         {unread > 0 && <span>{unreadCountLabel(unread)}</span>}
         <ChevronRight aria-hidden="true" className="size-4 shrink-0 rtl:rotate-180" />
       </span>
-      <span className="mt-1 flex flex-col gap-1.5">
-        {summary.latestReplies.map((reply) => (
-          <span key={reply.id} className="flex min-w-0 items-center gap-2">
-            <ActorAvatar
-              presence={false}
-              size="xs"
-              alt={reply.senderName}
-              src={reply.senderAvatarUrl}
-              name={reply.senderName}
-              deleted={reply.senderDeleted}
-              className="shrink-0"
-            />
-            <span className="message-text max-w-[45%] shrink truncate text-md font-medium text-primary">
-              {reply.senderName}
+      {hasReplies && summary && (
+        <span className="mt-1 flex flex-col gap-1.5">
+          {summary.latestReplies.map((reply) => (
+            <span key={reply.id} className="flex min-w-0 items-center gap-2">
+              <ActorAvatar
+                presence={false}
+                size="xs"
+                alt={reply.senderName}
+                src={reply.senderAvatarUrl}
+                name={reply.senderName}
+                deleted={reply.senderDeleted}
+                className="shrink-0"
+              />
+              <span className="message-text max-w-[45%] shrink truncate text-md font-medium text-primary">
+                {reply.senderName}
+              </span>
+              <span className="message-text min-w-0 flex-1 truncate text-md text-secondary">
+                {actionCardPreviewText(reply.card) || formatBody(reply.body, reply.mentions)}
+              </span>
+              <RelativeTime
+                value={reply.createdAt}
+                plain
+                className="message-text shrink-0 text-sm whitespace-nowrap text-tertiary"
+              />
             </span>
-            <span className="message-text min-w-0 flex-1 truncate text-md text-secondary">
-              {actionCardPreviewText(reply.card) || formatBody(reply.body, reply.mentions)}
-            </span>
-            <RelativeTime
-              value={reply.createdAt}
-              plain
-              className="message-text shrink-0 text-sm whitespace-nowrap text-tertiary"
-            />
-          </span>
-        ))}
-      </span>
+          ))}
+        </span>
+      )}
     </Button>
   );
 }

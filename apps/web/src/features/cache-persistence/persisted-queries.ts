@@ -115,6 +115,7 @@ type ConversationWindow = {
     messages?: unknown[];
     threads?: Readonly<Record<string, unknown>>;
     threadReadThrough?: Readonly<Record<string, number>>;
+    threadUnreadMarks?: Readonly<Record<string, string>>;
     followedThreadRootIds?: readonly string[];
   }>;
   pageParams: unknown[];
@@ -141,6 +142,7 @@ function asFirstRead<P extends ConversationWindow["pages"][number]>(newest: P): 
     hasOlder: true,
     ...(newest.threads && { threads: onlyKept(newest.threads) }),
     ...(newest.threadReadThrough && { threadReadThrough: onlyKept(newest.threadReadThrough) }),
+    ...(newest.threadUnreadMarks && { threadUnreadMarks: onlyKept(newest.threadUnreadMarks) }),
     ...(newest.followedThreadRootIds && {
       followedThreadRootIds: newest.followedThreadRootIds.filter((rootId) => keptIds.has(rootId)),
     }),

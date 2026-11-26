@@ -18,6 +18,7 @@ import {
 } from "./pinned-conversations";
 import type { DirectRow } from "./sidebar-rows";
 import { channelSignalApplier } from "./sidebar-channel-signals";
+import { afterConversationAllRead } from "./conversation-mark-all-read";
 import { createSaveRetries } from "./sidebar-save-retries";
 import type { ChatListValue } from "./chat-lists-reader";
 import { chatSectionOrderQuery, chatSectionsQuery, type ChatSectionsApi } from "./chat-sections";
@@ -202,6 +203,9 @@ export function createSidebar(
     },
   });
 
+  const persistMarkRead = async (target: PinRef) =>
+    afterConversationAllRead(queryClient, target, await api.markRead?.(target));
+
   const markReadAtOnce = createOptimisticAction<PinRef>({
     onMutate: (target) =>
       edit(target, (row) => {
@@ -210,7 +214,7 @@ export function createSidebar(
         if (target.kind === "channel") row.mentioned = false;
       }),
     mutationFn: async (target, { transaction }) => {
-      await api.markRead?.(target);
+      await persistMarkRead(target);
       confirm(transaction);
     },
   });
@@ -445,11 +449,7 @@ export function createSidebar(
     markUnread: (target: PinRef) =>
       saved(markUnreadAtOnce(target), () => api.markUnread(target), listOf(target)),
     markRead: (target: PinRef) =>
-      saved(
-        markReadAtOnce(target),
-        () => api.markRead?.(target) ?? Promise.resolve(),
-        listOf(target),
-      ),
+      saved(markReadAtOnce(target), () => persistMarkRead(target), listOf(target)),
     close: (target: PinRef) => setHidden(target, true),
     reopen: (target: PinRef) => setHidden(target, false),
     arrange: (arrangement: Arrangement) =>

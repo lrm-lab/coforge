@@ -1,9 +1,9 @@
 import type { TaskCommandWithout } from "@lrm/coforge-sdk/internal";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { QueryClientContext, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useSelector } from "@tanstack/react-store";
+import { createStore, useSelector } from "@tanstack/react-store";
 import { inArray, useLiveQuery } from "@tanstack/react-db";
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
@@ -20,6 +20,7 @@ import {
   createConversationTasks,
   DEMAND_GC_TIME_MS,
   type ConversationTasks,
+  type HeldConversationTasks,
   type TaskChanges,
 } from "./conversation-tasks-collection";
 import { UNFINISHED_STATUSES } from "./finished-tasks";
@@ -75,9 +76,30 @@ export function useMissingTask(conversationId: string, number: number) {
   return useSelector(store, (held) => held.missing.has(number));
 }
 
+const EMPTY_HOST_MESSAGES = createStore<HeldConversationTasks>({
+  byId: new Map(),
+  byNumber: new Map(),
+  bySource: new Map(),
+  byHostMessage: new Set<string>(),
+  missing: new Set<number>(),
+});
+
 export function useMessageTasks(conversationId: string, messageId: string) {
   const { store } = useConversationTasksCollection(conversationId);
   return useSelector(store, (held) => held.bySource.get(messageId));
+}
+
+export function useIsHostTaskMessage(
+  conversationId: string | undefined,
+  messageId: string,
+  enabled = true,
+) {
+  const queryClient = useContext(QueryClientContext);
+  const store =
+    enabled && !import.meta.env.SSR && queryClient && conversationId
+      ? conversationTasksFor(queryClient, conversationId).store
+      : EMPTY_HOST_MESSAGES;
+  return useSelector(store, (held) => held.byHostMessage.has(messageId));
 }
 
 /**

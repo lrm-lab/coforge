@@ -43,6 +43,7 @@ import {
   foldThreadReplies,
   loadedThreadReplies,
   setThreadFollowed,
+  setThreadUnreadMark,
   updateLoadedReply,
 } from "./thread-cache";
 import { mergeWindowThreads, newestReflectedSequence } from "./thread-summary-model";
@@ -387,8 +388,19 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
     },
     /** The viewer read a thread through a reply: its summary and cursor follow, on whichever page
      * holds its root, without a refetch. */
-    applyThreadRead: (rootId: string, throughSequence: number) =>
-      applyThreadRead<T>(queryClient, { pagesKey: query.queryKey, rootId, throughSequence }),
+    applyThreadRead: (
+      rootId: string,
+      throughSequence: number,
+      options?: { markedUnreadVersion?: string; advanceCursor?: boolean },
+    ) =>
+      applyThreadRead<T>(queryClient, {
+        pagesKey: query.queryKey,
+        rootId,
+        throughSequence,
+        ...options,
+      }),
+    setThreadUnreadMark: (rootId: string, version: string) =>
+      setThreadUnreadMark<T>(queryClient, { pagesKey: query.queryKey, rootId, version }),
     /** The viewer followed or unfollowed a thread, on whichever page holds its root. */
     setThreadFollowed: (rootId: string, followed: boolean) =>
       setThreadFollowed<T>(queryClient, { pagesKey: query.queryKey, rootId, followed }),

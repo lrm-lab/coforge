@@ -36,7 +36,13 @@ export function useConversationOpenRead(
   // task #102) is not this open's until the new one lands: the open goes by the opener's
   // meanwhile, and the read cursor waits. An open already settled keeps what it froze.
   if (read.isSuccess && !(read.isStale && read.isFetching))
-    return { status: "success", firstUnread: read.data.firstUnread };
+    return {
+      status: "success",
+      firstUnread: read.data.firstUnread,
+      ...(read.data.markedUnreadVersion && {
+        markedUnreadVersion: read.data.markedUnreadVersion,
+      }),
+    };
   return { status: read.isError ? "error" : "pending" };
 }
 

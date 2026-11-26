@@ -189,7 +189,7 @@ export async function openConversationForUser(
   );
   const pageRows = windowRows.slice(0, limit);
   const messages = forward ? pageRows : pageRows.reverse();
-  const [{ threads, threadReadThrough }, browserMessages] = await Promise.all([
+  const [{ threads, threadReadThrough, threadUnreadMarks }, browserMessages] = await Promise.all([
     readWindowThreads(ports.db, {
       workspaceId,
       conversationId,
@@ -213,6 +213,7 @@ export async function openConversationForUser(
     ),
     threads,
     threadReadThrough,
+    ...(threadUnreadMarks && { threadUnreadMarks }),
     ...(agent
       ? {
           kind: "agent" as const,

@@ -20,6 +20,7 @@ import { m } from "#src/paraglide/messages";
 import type { ActivityConversationItem } from "#src/server/inbox/activity-inbox.server";
 import type { ActivityInboxFilter } from "./activity-inbox.schemas";
 import { activityChatLink, activityOpenTarget } from "./activity-open-target";
+import { canMarkUnread } from "./activity-item-kind";
 import { activityRowPlace } from "./activity-row-place";
 import {
   ActivityDoneCheck,
@@ -232,7 +233,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
                       shortcut={readShortcut}
                       selectionIndicator="none"
                     />
-                  ) : thread || task ? null : (
+                  ) : !canMarkUnread(item) ? null : (
                     <Dropdown.Item
                       key="unread"
                       id="unread"

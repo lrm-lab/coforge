@@ -5,7 +5,7 @@ import type {
 import type { ActivityItemDone } from "./activity-inbox.schemas";
 
 export const canMarkUnread = (item: ActivityInboxItem): item is ActivityConversationItem =>
-  item.kind === "conversation" && !item.thread && !item.task;
+  item.kind === "conversation" && !item.task && !item.thread?.task;
 
 export function doneTarget(item: ActivityInboxItem): ActivityItemDone {
   if (item.kind === "artifact")
