@@ -71,7 +71,7 @@ export function formatReminderRow(
     : "one-time";
   const overdue =
     reminder.status === "scheduled" && Date.parse(reminder.fireAt) < now ? " [OVERDUE]" : "";
-  return `#${shortId} [${reminder.status}] (${cadence}) next=${formatReminderTime(reminder.fireAt, reminder.timezone, displayTimezone)}${overdue} ${JSON.stringify(foldUntrustedLine(reminder.title))}`;
+  return `#${shortId} [${reminder.status}] (${cadence}) next=${formatReminderTime(reminder.fireAt, displayTimezone, reminder.timezone)}${overdue} ${JSON.stringify(foldUntrustedLine(reminder.title))}`;
 }
 
 function formatLogEvent(event: ReminderLogEvent, displayTimezone?: string): string {

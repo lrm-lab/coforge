@@ -34,7 +34,7 @@ test("a reminder row names its id8, cadence, next fire time and title", () => {
   );
 });
 
-test("the reminder's own zone wins, then the account's, and an unusable zone falls back to the ISO time", () => {
+test("the account's display zone wins while cadence keeps the reminder's zone", () => {
   expect(
     formatReminderRow(
       reminder({ repeat: "daily", timezone: "America/New_York" }),
@@ -43,7 +43,7 @@ test("the reminder's own zone wins, then the account's, and an unusable zone fal
       "Asia/Shanghai",
     ),
   ).toBe(
-    '#abcdef12 [scheduled] (recurring · daily (America/New_York)) next=2026-10-30 05:00 America/New_York (2026-10-30T09:00:00Z) "Check the deploy"',
+    '#abcdef12 [scheduled] (recurring · daily (America/New_York)) next=2026-10-30 17:00 Asia/Shanghai (2026-10-30T09:00:00Z) "Check the deploy"',
   );
   expect(
     formatReminderRow(
@@ -53,6 +53,9 @@ test("the reminder's own zone wins, then the account's, and an unusable zone fal
       "Asia/Shanghai",
     ),
   ).toContain("next=2026-10-30 17:00 Asia/Shanghai (2026-10-30T09:00:00Z)");
+  expect(
+    formatReminderRow(reminder({ timezone: "America/New_York" }), now, undefined, "Not/A_Zone"),
+  ).toContain("next=2026-10-30 05:00 America/New_York (2026-10-30T09:00:00Z)");
   expect(formatReminderRow(reminder(), now, undefined, "Not/A_Zone")).toContain(
     "next=2026-10-30T09:00:00Z (UTC; account time zone unknown)",
   );

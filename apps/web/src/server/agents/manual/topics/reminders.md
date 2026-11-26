@@ -12,14 +12,17 @@ the reminder as one line — `#<id8> [status] (one-time|recurring · rule) next=
 so a schedule, update, snooze or cancel names the reminder it changed, and a list with nothing in
 it says `No reminders.` `log` prints one line per event instead —
 `event=<id> type=<type> time=<iso> next=<YYYY-MM-DD HH:mm IANA> (<iso>)`. The local time uses the
-reminder's own IANA zone, else the account's; an event line, which carries no zone of its own, uses
-the account's alone. The ISO time in parentheses is the authoritative value, and the value contains
-spaces, so do not split it on whitespace. When the account's zone is unknown the line reads
-`next=<iso> (UTC; account time zone unknown)`. `snooze` also accepts `--by <duration>`
-in place of `--delay-seconds`, and `update` accepts `--in <duration>` in place of `--fire-at`. A
+account's IANA zone when known and otherwise the reminder's schedule zone. An event line has
+only the account's zone available. The ISO time in parentheses is authoritative, and the value
+contains spaces, so keep it together. With neither zone, the line reads
+`next=<iso> (UTC; account time zone unknown)`. `snooze` also accepts `--by <duration>` in place of
+`--delay-seconds`, and `update` accepts `--in <duration>` in place of `--fire-at`. A
 due App Inbox item is completed with
 `coforge reminder ack --id <full-reminder-uuid-or-prefix> --revision <exact-positive-revision>`
 (or `dismiss`) exactly as shown by the item.
+
+When you tell a person when a reminder is due, use their known account time zone and name it.
+If the recipient's zone is unknown, give the time in UTC and label it UTC.
 
 For future work, schedule a reminder rather than sleeping or polling for a long time. A reminder
 marked fired means its authoritative due event was accepted, not that the requested work ran or
