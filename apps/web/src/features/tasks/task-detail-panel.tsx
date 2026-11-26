@@ -70,6 +70,7 @@ export type TaskDetailPanelProps = {
   onBeforeOpenPicker?: () => void;
   active?: boolean;
   closeOnEscape?: boolean;
+  escapeEnabled?: boolean;
   overlay?: boolean;
   titleSlot?: string;
 };
@@ -96,6 +97,7 @@ export function useTaskDetailModel({
   onBeforeOpenPicker,
   active = true,
   closeOnEscape = true,
+  escapeEnabled = true,
   overlay = false,
   titleSlot,
 }: TaskDetailPanelProps) {
@@ -159,7 +161,7 @@ export function useTaskDetailModel({
 
   const onKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
-      if (event.key !== "Escape") return;
+      if (!escapeEnabled || event.key !== "Escape") return;
       if (event.defaultPrevented) {
         event.stopPropagation();
         return;
@@ -175,7 +177,7 @@ export function useTaskDetailModel({
         event.stopPropagation();
       }
     },
-    [overlay, closeOnEscape, handleEscape],
+    [escapeEnabled, overlay, closeOnEscape, handleEscape],
   );
 
   useHotkey(
@@ -204,7 +206,7 @@ export function useTaskDetailModel({
       const handled = handleEscape(closeOnEscape);
       if (handled) event.preventDefault();
     },
-    { enabled: active, preventDefault: false, ignoreInputs: false },
+    { enabled: active && escapeEnabled, preventDefault: false, ignoreInputs: false },
   );
 
   const section = (

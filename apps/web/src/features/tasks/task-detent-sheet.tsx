@@ -19,6 +19,8 @@ export type TaskDetentSheetProps = {
   composer?: ReactNode;
   autoExpandOnComposerFocus?: boolean;
   keyboardDismiss?: boolean;
+  inertSheet?: boolean;
+  overlay?: ReactNode;
   dismissRef?: RefObject<(() => void) | null>;
   onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
 };
@@ -35,6 +37,8 @@ export function TaskDetentSheet({
   composer,
   autoExpandOnComposerFocus = true,
   keyboardDismiss = true,
+  inertSheet = false,
+  overlay,
   dismissRef,
   onKeyDown,
 }: TaskDetentSheetProps): ReactNode {
@@ -91,6 +95,8 @@ export function TaskDetentSheet({
           data-detent-sheet=""
           data-detent={effectiveDetent}
           data-dragging="false"
+          inert={inertSheet || undefined}
+          aria-hidden={inertSheet || undefined}
           onKeyDown={onKeyDown}
           style={{ transform: "translate3d(0, 100%, 0)" }}
           className="group/sheet visible pointer-events-auto relative z-10 flex h-full w-full flex-col overflow-visible rounded-t-[1.25rem] bg-primary shadow-2xl ring-1 ring-secondary will-change-transform after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-16 after:bg-primary after:content-['']"
@@ -136,6 +142,7 @@ export function TaskDetentSheet({
             )}
           </Dialog>
         </div>
+        {overlay}
       </Modal>
     </ModalOverlay>
   );

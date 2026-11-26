@@ -101,7 +101,11 @@ These rules apply to `src/features/tasks/`.
   (`>= lg`), conversations host it in `ConversationSplit`'s `"task"` slot,
   `WorkspaceTaskBoard` hosts it in a resizable split pane beside `TaskBoard`,
   and `ActivityInboxView` renders it directly in the right preview pane with
-  `j`/`k`/`E`/`Esc` flow. It offers only the status moves `taskStatusOptions`
+  `j`/`k`/`E`/`Esc` flow. Task panels open Agent and person profiles directly
+  without a `SlideoutOverlay` drawer (`useTaskPopupProfile`): desktop inline/split
+  panels and `DesktopTaskDrawer` host the profile in a right-hand
+  `ConversationSplit` pane, while `MobileTaskSheet` pushes it full-screen from the
+  right edge with swipe-back. It offers only the status moves `taskStatusOptions`
   (`task-move.ts`) allows; board drags keep every move the server allows. Its
   thread comes from the Task's conversation: a conversation page renders it, and
   `OverviewTaskPopup` / `ActivityTaskPopup` render that conversation's own view

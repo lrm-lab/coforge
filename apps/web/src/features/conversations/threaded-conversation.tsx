@@ -257,27 +257,39 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
       currentMemberId={conversation.senderMemberId || null}
       thread={taskThread}
       leadExtra={taskLeadExtra}
+      sidePanel={popupProfile.panel}
+      onCloseSidePanel={popupProfile.close}
     />
   ) : null;
 
   const inlineTaskPanel =
     openTask && taskPopup?.inline ? (
-      <LazyTaskDetailPanel
-        key={openTask.id}
-        task={openTask}
-        mode={taskPopup.inline.mode}
-        expanded={taskPopup.inline.expanded}
-        onToggleExpand={taskPopup.inline.onToggleExpand}
-        navigation={taskPopup.inline.navigation}
-        closeOnEscape={taskPopup.inline.closeOnEscape}
-        onClose={closeTaskReference}
-        onDeleted={taskPopup.onTaskDeleted}
-        onOpenRelated={openRelatedTask}
-        conversationName={conversationName}
-        members={conversation.mentionables}
-        currentMemberId={conversation.senderMemberId || null}
-        thread={taskThread}
-        leadExtra={taskLeadExtra}
+      <ConversationSplit
+        layoutId="coforge-task-profile"
+        reportListCrowd={false}
+        main={
+          <LazyTaskDetailPanel
+            key={openTask.id}
+            task={openTask}
+            mode={taskPopup.inline.mode}
+            expanded={taskPopup.inline.expanded}
+            onToggleExpand={taskPopup.inline.onToggleExpand}
+            navigation={taskPopup.inline.navigation}
+            closeOnEscape={taskPopup.inline.closeOnEscape}
+            escapeEnabled={!popupProfile.open}
+            onClose={closeTaskReference}
+            onDeleted={taskPopup.onTaskDeleted}
+            onOpenRelated={openRelatedTask}
+            conversationName={conversationName}
+            members={conversation.mentionables}
+            currentMemberId={conversation.senderMemberId || null}
+            thread={taskThread}
+            leadExtra={taskLeadExtra}
+          />
+        }
+        side={popupProfile.panel}
+        visibleSlot={popupProfile.open ? "profile" : undefined}
+        threadAlone={false}
       />
     ) : null;
 
@@ -292,7 +304,6 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
         openTaskNumber={openTaskNumber}
       />
       {taskPopup?.inline ? inlineTaskPanel : !taskInSplit ? taskDialog : null}
-      {popupProfile.layer}
     </>
   );
 
@@ -360,23 +371,33 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     <>
       {visibleSlot === "details" && detailsPane}
       {visibleSlot === "task" && openTask && (
-        <LazyTaskDetailPanel
-          key={openTask.id}
-          task={openTask}
-          mode={isTaskExpanded ? "expanded" : "split"}
-          expanded={isTaskExpanded}
-          onToggleExpand={() => setTaskExpanded((current) => !current)}
-          navigation={registeredTaskNav}
-          onClose={() => {
-            setTaskExpanded(false);
-            closeTaskReference();
-          }}
-          onOpenRelated={openRelatedTask}
-          conversationName={conversationName}
-          members={conversation.mentionables}
-          currentMemberId={conversation.senderMemberId || null}
-          thread={taskThread}
-          leadExtra={taskLeadExtra}
+        <ConversationSplit
+          layoutId="coforge-task-profile"
+          reportListCrowd={false}
+          main={
+            <LazyTaskDetailPanel
+              key={openTask.id}
+              task={openTask}
+              mode={isTaskExpanded ? "expanded" : "split"}
+              expanded={isTaskExpanded}
+              onToggleExpand={() => setTaskExpanded((current) => !current)}
+              navigation={registeredTaskNav}
+              escapeEnabled={!popupProfile.open}
+              onClose={() => {
+                setTaskExpanded(false);
+                closeTaskReference();
+              }}
+              onOpenRelated={openRelatedTask}
+              conversationName={conversationName}
+              members={conversation.mentionables}
+              currentMemberId={conversation.senderMemberId || null}
+              thread={taskThread}
+              leadExtra={taskLeadExtra}
+            />
+          }
+          side={popupProfile.panel}
+          visibleSlot={popupProfile.open ? "profile" : undefined}
+          threadAlone={false}
         />
       )}
       {visibleSlot === "profile" && profileAgentId && (

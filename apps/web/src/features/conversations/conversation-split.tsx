@@ -27,21 +27,23 @@ export function useResponsiveSplitLayout({
   active,
   mainMinRem = MAIN_PANE_MIN_REM,
   sideMinRem = SIDE_PANE_MIN_REM,
+  reportListCrowd = true,
 }: {
   active: boolean;
   mainMinRem?: number;
   sideMinRem?: number;
+  reportListCrowd?: boolean;
 }) {
   const wideViewport = useBreakpoint("md");
   const splitRef = useRef<HTMLDivElement>(null);
   const [splitFits, setSplitFits] = useState(true);
   const [listCrowds, setListCrowds] = useState(false);
-  useReportChatListCrowd(active && listCrowds);
+  useReportChatListCrowd(reportListCrowd && active && listCrowds);
   const measureSplit = useCallback(() => {
     const element = splitRef.current;
     if (!element) return;
     const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
-    const cards = element.closest<HTMLElement>("[data-chat-cards]");
+    const cards = reportListCrowd ? element.closest<HTMLElement>("[data-chat-cards]") : null;
     const listBeside = cards !== null && getComputedStyle(cards).flexDirection === "row";
     const layout = splitLayout({
       rem,
@@ -58,7 +60,7 @@ export function useResponsiveSplitLayout({
     });
     setSplitFits(layout.splitFits);
     setListCrowds(layout.listCrowds);
-  }, [mainMinRem, sideMinRem]);
+  }, [mainMinRem, reportListCrowd, sideMinRem]);
   const splitShown = wideViewport && splitFits;
   useLayoutEffect(() => {
     const element = splitRef.current;
@@ -66,10 +68,10 @@ export function useResponsiveSplitLayout({
     measureSplit();
     const observer = new ResizeObserver(measureSplit);
     observer.observe(element);
-    const cards = element.closest("[data-chat-cards]");
+    const cards = reportListCrowd ? element.closest("[data-chat-cards]") : null;
     if (cards) observer.observe(cards);
     return () => observer.disconnect();
-  }, [measureSplit, splitShown]);
+  }, [measureSplit, reportListCrowd, splitShown]);
   return { splitRef, splitShown };
 }
 
@@ -80,6 +82,9 @@ export function ConversationSplit({
   threadAlone,
   focused,
   sideExpanded = false,
+  layoutId = "coforge-conversation",
+  reportListCrowd = true,
+  forceSplit = false,
 }: {
   main: ReactNode;
   side: ReactNode;
@@ -87,121 +92,123 @@ export function ConversationSplit({
   threadAlone: boolean;
   focused?: FocusedPanel;
   sideExpanded?: boolean;
+  layoutId?: string;
+  reportListCrowd?: boolean;
+  forceSplit?: boolean;
 }) {
   const groupRef = useGroupRef();
+  const reduced = usePrefersReducedMotion();
+  const { splitRef, splitShown: responsiveSplitShown } = useResponsiveSplitLayout({
+    active: !forceSplit && Boolean(visibleSlot) && !threadAlone && !sideExpanded,
+    reportListCrowd,
+  });
+  const splitShown = forceSplit || responsiveSplitShown;
+  const splitPanelsVisible = splitShown && !threadAlone && Boolean(visibleSlot);
   const threadLayout = useDefaultLayout({
-    id: "coforge-conversation",
-    panelIds: visibleSlot ? ["main", visibleSlot] : ["main"],
+    id: layoutId,
+    panelIds: splitPanelsVisible && visibleSlot ? ["main", visibleSlot] : ["main"],
     onlySaveAfterUserInteractions: true,
     storage: localLayoutStorage,
   });
-  const reduced = usePrefersReducedMotion();
-  const { splitRef, splitShown } = useResponsiveSplitLayout({
-    active: Boolean(visibleSlot) && !threadAlone && !sideExpanded,
-  });
 
-  if (!splitShown || threadAlone) {
-    return (
-      <div ref={splitRef} className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {!threadAlone && (
-          <div
-            inert={Boolean(visibleSlot && focused !== "chat") || undefined}
-            aria-hidden={Boolean(visibleSlot && focused !== "chat") || undefined}
-            className="isolate flex min-h-0 min-w-0 flex-1 flex-col"
-          >
-            {main}
-          </div>
-        )}
-        <AnimatePresence initial={false}>
-          {visibleSlot && focused !== "chat" && (
-            <motion.div
-              key={visibleSlot}
-              initial={reduced ? { opacity: 0 } : { x: "100%" }}
-              animate={reduced ? { opacity: 1 } : { x: 0 }}
-              exit={
-                reduced
-                  ? { opacity: 0, transition: { duration: DURATION_S.reduced } }
-                  : { x: "100%", transition: { duration: DURATION_S.lgOut, ease: EASE_IN } }
-              }
-              transition={
-                reduced
-                  ? { duration: DURATION_S.reduced }
-                  : { duration: DURATION_S.lg, ease: EASE_OUT }
-              }
-              className="absolute inset-0 z-20 flex min-h-0 min-w-0 flex-col bg-primary shadow-xl"
-            >
-              {side}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    );
-  }
   return (
-    <div ref={splitRef} className="flex min-h-0 min-w-0 flex-1">
-      <Group
-        groupRef={groupRef}
-        id="conversation"
-        orientation="horizontal"
-        defaultLayout={threadLayout.defaultLayout}
-        onLayoutChanged={threadLayout.onLayoutChanged}
-        className="flex min-h-0 min-w-0 flex-1"
-      >
-        <Panel
-          id="main"
-          minSize={`${MAIN_PANE_MIN_REM}rem`}
-          hidden={focused === "thread" || sideExpanded}
-          className="flex min-h-0 min-w-0 flex-col"
+    <div ref={splitRef} className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
+      {!threadAlone && (
+        <Group
+          groupRef={groupRef}
+          orientation="horizontal"
+          disabled={!splitPanelsVisible}
+          defaultLayout={threadLayout.defaultLayout}
+          onLayoutChanged={threadLayout.onLayoutChanged}
+          className={cn(
+            "flex min-h-0 min-w-0 flex-1",
+            !splitPanelsVisible && "[touch-action:auto]!",
+          )}
         >
-          {main}
-        </Panel>
-        {visibleSlot && (
-          <>
-            {!focused && !sideExpanded && (
-              <Separator
-                aria-label={
-                  visibleSlot === "thread"
-                    ? m.conversation_thread()
-                    : visibleSlot === "details"
-                      ? m.channel_settings_resize()
-                      : visibleSlot === "task"
-                        ? m.tasks_panel_resize()
-                        : m.agent_profile_resize()
-                }
-                onDoubleClick={() =>
-                  groupRef.current?.setLayout({
-                    main: 100 - SIDE_PANE_DEFAULT_PCT,
-                    [visibleSlot]: SIDE_PANE_DEFAULT_PCT,
-                  })
-                }
-                className="group/sep relative flex w-px shrink-0 cursor-col-resize items-center justify-center bg-border-secondary outline-focus-ring transition-colors hover:bg-brand-solid focus-visible:bg-brand-solid focus-visible:outline-2 data-[separator=active]:bg-brand-solid after:absolute after:inset-y-0 after:-inset-x-1.5"
-              >
-                <span
-                  aria-hidden="true"
-                  className="pointer-events-none h-7 w-1 rounded-full bg-fg-quaternary/60 opacity-0 transition-opacity group-hover/sep:opacity-100 group-data-[separator=active]/sep:bg-brand-solid group-data-[separator=active]/sep:opacity-100"
-                />
-              </Separator>
-            )}
-            <Panel
-              id={visibleSlot}
-              defaultSize={`${SIDE_PANE_DEFAULT_PCT}`}
-              minSize={`${SIDE_PANE_MIN_REM}rem`}
-              maxSize={sideExpanded ? undefined : "60"}
-              hidden={focused === "chat" && !sideExpanded}
-              className="flex min-h-0 min-w-0 flex-col"
+          <Panel
+            id="main"
+            minSize={splitPanelsVisible ? `${MAIN_PANE_MIN_REM}rem` : undefined}
+            hidden={splitShown && (focused === "thread" || sideExpanded)}
+            className="flex min-h-0 min-w-0 flex-col"
+          >
+            <div
+              inert={Boolean(!splitShown && visibleSlot && focused !== "chat") || undefined}
+              aria-hidden={Boolean(!splitShown && visibleSlot && focused !== "chat") || undefined}
+              className="isolate flex min-h-0 min-w-0 flex-1 flex-col"
             >
-              <div
-                className={cn(
-                  "flex min-h-0 min-w-0 flex-1 flex-col bg-primary",
-                  !sideExpanded && SIDE_PANE_ENTER,
-                )}
+              {main}
+            </div>
+          </Panel>
+          {splitPanelsVisible && visibleSlot && (
+            <>
+              {!focused && !sideExpanded && (
+                <Separator
+                  aria-label={
+                    visibleSlot === "thread"
+                      ? m.conversation_thread()
+                      : visibleSlot === "details"
+                        ? m.channel_settings_resize()
+                        : visibleSlot === "task"
+                          ? m.tasks_panel_resize()
+                          : m.agent_profile_resize()
+                  }
+                  onDoubleClick={() =>
+                    groupRef.current?.setLayout({
+                      main: 100 - SIDE_PANE_DEFAULT_PCT,
+                      [visibleSlot]: SIDE_PANE_DEFAULT_PCT,
+                    })
+                  }
+                  className="group/sep relative flex w-px shrink-0 cursor-col-resize items-center justify-center bg-border-secondary outline-focus-ring transition-colors hover:bg-brand-solid focus-visible:bg-brand-solid focus-visible:outline-2 data-[separator=active]:bg-brand-solid after:absolute after:inset-y-0 after:-inset-x-1.5"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none h-7 w-1 rounded-full bg-fg-quaternary/60 opacity-0 transition-opacity group-hover/sep:opacity-100 group-data-[separator=active]/sep:bg-brand-solid group-data-[separator=active]/sep:opacity-100"
+                  />
+                </Separator>
+              )}
+              <Panel
+                id={visibleSlot}
+                defaultSize={`${SIDE_PANE_DEFAULT_PCT}`}
+                minSize={`${SIDE_PANE_MIN_REM}rem`}
+                maxSize={sideExpanded ? undefined : "60"}
+                hidden={focused === "chat" && !sideExpanded}
+                className="flex min-h-0 min-w-0 flex-col"
               >
-                {side}
-              </div>
-            </Panel>
-          </>
+                <div
+                  className={cn(
+                    "flex min-h-0 min-w-0 flex-1 flex-col bg-primary",
+                    !sideExpanded && SIDE_PANE_ENTER,
+                  )}
+                >
+                  {side}
+                </div>
+              </Panel>
+            </>
+          )}
+        </Group>
+      )}
+      <AnimatePresence initial={false}>
+        {(!splitShown || threadAlone) && visibleSlot && focused !== "chat" && (
+          <motion.div
+            key={visibleSlot}
+            initial={reduced ? { opacity: 0 } : { x: "100%" }}
+            animate={reduced ? { opacity: 1 } : { x: 0 }}
+            exit={
+              reduced
+                ? { opacity: 0, transition: { duration: DURATION_S.reduced } }
+                : { x: "100%", transition: { duration: DURATION_S.lgOut, ease: EASE_IN } }
+            }
+            transition={
+              reduced
+                ? { duration: DURATION_S.reduced }
+                : { duration: DURATION_S.lg, ease: EASE_OUT }
+            }
+            className="absolute inset-0 z-20 flex min-h-0 min-w-0 flex-col bg-primary shadow-xl"
+          >
+            {side}
+          </motion.div>
         )}
-      </Group>
+      </AnimatePresence>
     </div>
   );
 }
