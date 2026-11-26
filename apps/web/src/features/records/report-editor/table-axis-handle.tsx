@@ -82,9 +82,6 @@ export function ColumnHandle({
             setOpenMenu({ type: "column", index: col, tablePos: activeTable.pos });
           }
         }}
-        onClick={(event) => {
-          event.preventDefault();
-        }}
       >
         <AxisHandle axis="column" active={menuOpen || Boolean(dropTarget)} />
       </AriaButton>
@@ -159,9 +156,6 @@ export function RowHandle({
           if (event.pointerType === "keyboard" || event.pointerType === "virtual") {
             setOpenMenu({ type: "row", index: row, tablePos: activeTable.pos });
           }
-        }}
-        onClick={(event) => {
-          event.preventDefault();
         }}
       >
         <AxisHandle axis="row" active={menuOpen || Boolean(dropTarget)} />
