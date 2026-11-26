@@ -317,11 +317,12 @@ export class AgentConsumedAttention {
     entry.readOrder = ++state.lastReadOrder;
     if (state.targets.get(target) === entry) this.#latestThreadReads.record(agentId, target, entry);
   }
-  #persistDelta(agentId: string, delta: AgentConsumedSeqDelta): void {
+  #persistDelta(agentId: string, delta?: AgentConsumedSeqDelta): void {
     const store = this.ports.store();
-    if (store) {
-      if (store.apply) store.apply(agentId, delta);
-      else store.write(agentId, consumedSnapshot(this.#consumedState(agentId)));
+    if (store?.apply) {
+      if (delta) store.apply(agentId, delta);
+    } else if (store) {
+      store.write(agentId, consumedSnapshot(this.#consumedState(agentId)));
     }
     this.ports.onConsumed?.(agentId);
   }
@@ -378,6 +379,15 @@ export class AgentConsumedAttention {
       (threadRootId || !displayConsumptionRoot(target))
         ? [{ target, entry: record, ...(threadRootId ? { threadRootId } : {}) }]
         : undefined;
+    if (
+      !upsertTargets &&
+      !upsertScopedTargets &&
+      !aliasDelta?.upsertAliases.length &&
+      !aliasDelta?.deleteAliases?.length
+    ) {
+      this.#persistDelta(agentId);
+      return;
+    }
     const delta: AgentConsumedSeqDelta = {
       ...(upsertTargets ? { upsertTargets } : {}),
       ...(upsertScopedTargets ? { upsertScopedTargets } : {}),
