@@ -71,6 +71,34 @@ export class StoredArtifactBlobs implements ArtifactBlobStore {
         AND ${NO_OTHER_REFERENCE}`;
   }
 
+  async releaseMany(
+    tx: Prisma.TransactionClient,
+    pairs: readonly { workspaceId: string; sha256: string }[],
+  ) {
+    if (pairs.length === 0) return;
+    const unique = new Map<string, { workspaceId: string; sha256: string }>();
+    for (const pair of pairs) {
+      unique.set(`${pair.workspaceId}:${pair.sha256}`, pair);
+    }
+    const sorted = [...unique.values()].sort(
+      (a, b) => a.workspaceId.localeCompare(b.workspaceId) || a.sha256.localeCompare(b.sha256),
+    );
+    const workspaceIds = sorted.map((entry) => entry.workspaceId);
+    const sha256s = sorted.map((entry) => entry.sha256);
+    await tx.$queryRaw`
+      SELECT 1 FROM "artifact_blobs" b
+      JOIN unnest(${workspaceIds}::uuid[], ${sha256s}::text[]) AS v("workspaceId", "sha256")
+        ON b."workspaceId" = v."workspaceId" AND b."sha256" = v."sha256"
+      ORDER BY b."workspaceId", b."sha256"
+      FOR UPDATE OF b`;
+    await tx.$executeRaw`
+      UPDATE "artifact_blobs" b
+      SET "referenced" = false, "lastUsedAt" = now()
+      FROM unnest(${workspaceIds}::uuid[], ${sha256s}::text[]) AS v("workspaceId", "sha256")
+      WHERE b."workspaceId" = v."workspaceId" AND b."sha256" = v."sha256"
+        AND ${NO_OTHER_REFERENCE}`;
+  }
+
   async upload(input: {
     workspaceId: string;
     bytes: Uint8Array<ArrayBuffer>;

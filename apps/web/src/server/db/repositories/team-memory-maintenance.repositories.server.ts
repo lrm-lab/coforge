@@ -18,11 +18,11 @@ const scope = (projectId: string | null) =>
   projectId ? Prisma.sql`project_id = ${projectId}::uuid` : Prisma.sql`project_id IS NULL`;
 
 async function observePressure(
-  tx: Prisma.TransactionClient,
+  db: DatabaseScope,
   workspaceId: string,
   projectId: string | null,
 ): Promise<NonNullable<TeamMemoryResult["maintenanceHint"]>> {
-  const [observed] = await tx.$queryRaw<
+  const [observed] = await db.$queryRaw<
     { observedEntries: number; observedBytes: number }[]
   >(Prisma.sql`
     SELECT count(*)::integer AS "observedEntries", COALESCE(sum(bytes),0)::integer AS "observedBytes" FROM (
@@ -40,43 +40,44 @@ async function observePressure(
 }
 
 export async function suggestTeamMemoryMaintenance(
-  tx: Prisma.TransactionClient,
+  db: DatabaseScope,
   actor: TeamMemoryActor,
   entry: TeamMemoryHead,
   requestId: string,
 ): Promise<TeamMemoryResult["maintenanceHint"]> {
   if (!actor.agentId || actor.includeMaintenance === false) return;
-  const previous = await tx.teamMemoryMaintenance.findUnique({
+  const previous = await db.teamMemoryMaintenance.findUnique({
     where: { workspaceId: actor.workspaceId },
   });
   const now = new Date();
   if (previous && now.getTime() - previous.suggestedAt.getTime() < DAY_MS) return;
   const projectId = entry.projectId ?? null;
-  const hint = await observePressure(tx, actor.workspaceId, projectId);
+  const hint = await observePressure(db, actor.workspaceId, projectId);
   if (hint.observedEntries < ENTRY_LIMIT && hint.observedBytes < BYTE_LIMIT) return;
-  const data = {
-    agentId: actor.agentId,
-    projectId,
-    suggestedAt: now,
-    token: requestId,
-    expiresAt: null,
-    remaining: 0,
-  };
-  await tx.teamMemoryMaintenance.upsert({
-    where: { workspaceId: actor.workspaceId },
-    create: { workspaceId: actor.workspaceId, ...data },
-    update: data,
-  });
-  return hint;
+  const cutoff = new Date(now.getTime() - DAY_MS);
+  const claimed = await db.$queryRaw<{ workspaceId: string }[]>`
+    INSERT INTO team_memory_maintenance (workspace_id, agent_id, project_id, suggested_at, token, expires_at, remaining)
+    VALUES (${actor.workspaceId}::uuid, ${actor.agentId}::uuid, ${projectId}::uuid, ${now}, ${requestId}::uuid, NULL, 0)
+    ON CONFLICT (workspace_id) DO UPDATE SET
+      agent_id = EXCLUDED.agent_id,
+      project_id = EXCLUDED.project_id,
+      suggested_at = EXCLUDED.suggested_at,
+      token = EXCLUDED.token,
+      expires_at = NULL,
+      remaining = 0
+    WHERE team_memory_maintenance.suggested_at <= ${cutoff}
+      AND (team_memory_maintenance.expires_at IS NULL OR team_memory_maintenance.expires_at <= ${now})
+    RETURNING workspace_id AS "workspaceId"`;
+  return claimed.length ? hint : undefined;
 }
 
 export async function replayTeamMemoryMaintenanceHint(
-  tx: Prisma.TransactionClient,
+  db: DatabaseScope,
   actor: TeamMemoryActor,
   command: TeamMemoryWrite,
 ): Promise<TeamMemoryResult["maintenanceHint"]> {
   if (!actor.agentId || actor.includeMaintenance === false || command.maintenanceToken) return;
-  const pending = await tx.teamMemoryMaintenance.findUnique({
+  const pending = await db.teamMemoryMaintenance.findUnique({
     where: {
       workspaceId: actor.workspaceId,
       agentId: actor.agentId,
@@ -86,7 +87,7 @@ export async function replayTeamMemoryMaintenanceHint(
     },
     select: { projectId: true },
   });
-  if (pending) return observePressure(tx, actor.workspaceId, pending.projectId);
+  if (pending) return observePressure(db, actor.workspaceId, pending.projectId);
 }
 
 export async function beginTeamMemoryMaintenance(

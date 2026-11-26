@@ -15,7 +15,8 @@ import {
 } from "./artifact-comment-draft-rows.server";
 import { attachImages, type CommentImageBlobs } from "./artifact-comment-images.server";
 import { COMMENT_ORDER } from "./artifact-comment-unseen.server";
-import { REVIEW_SELECT, reviewViews } from "./artifact-comment-view.server";
+import { actorNames, actorOf } from "./artifact-actor-names.server";
+import { REVIEW_SELECT } from "./artifact-comment-view.server";
 import {
   insertComments,
   nextStamp,
@@ -208,14 +209,16 @@ export async function submitDrafts(
     select: DRAFT_SELECT,
   });
   if (!sameSet(shown, input.draftIds)) throw draftsChanged();
-  const [mentions, people] = await Promise.all([
+  const [mentions, people, writerNames] = await Promise.all([
     mentionRefusals(notices, input, shown),
     peopleMentionedIn(
       db,
       workspaceId,
       shown.map((draft) => draft.body),
     ),
+    actorNames(db, workspaceId, { userIds: [userId], agentIds: [] }),
   ]);
+  const writerName = actorOf(writerNames, { userId, agentId: null }).name;
   const written = await withCommentLock(db, artifact.id, async (tx) => {
     const raced = await replayOf(tx);
     if (raced) return { kind: "replayed" as const, sent: raced };
@@ -254,16 +257,13 @@ export async function submitDrafts(
     const place = { workspaceId, artifact };
     const readers = await writeMentions(tx, place, commentMentions(inserted, people));
     await startFollowing(tx, artifact.id, [{ userId }]);
-    const views = await reviewViews(tx, workspaceId, review, inserted);
     const { report, staged } = await notices.reviewStaged(tx, {
       workspaceId,
       artifact,
-      writerName: views.review.author.name,
+      writerName,
       reviewId: review.id,
       review: { version: review.version, body: review.body },
-      comments: views.comments.flatMap((comment) =>
-        "deleted" in comment ? [] : [{ path: comment.path, body: comment.body }],
-      ),
+      comments: inserted.map((comment) => ({ path: comment.path, body: comment.body })),
     });
     await tx.artifactCommentDraft.deleteMany({ where: { id: { in: rows.map((row) => row.id) } } });
     return { kind: "written" as const, review, inserted, readers, report, staged };

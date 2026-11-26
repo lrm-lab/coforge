@@ -8,7 +8,7 @@ import { activeMemoryCandidateIds } from "#src/server/db/repositories/team-memor
 import { teamMemoryAccess } from "#src/server/db/repositories/team-memory-access.repositories.server";
 import { readableMemoryEvidence } from "#src/server/db/repositories/team-memory-evidence.server";
 import { head, type Row } from "#src/server/db/repositories/team-memory-projections.server";
-import { teamMemory } from "./composition.server";
+import { PrismaTeamMemoryStore } from "#src/server/db/repositories/team-memory.repositories.server";
 import { TeamMemoryError } from "./memory";
 import { memorySuggestionPreviews } from "./suggestion-previews.server";
 import { memoryEvidenceLinks } from "./evidence-links.server";
@@ -171,12 +171,10 @@ export async function reviewMemorySuggestion(
         await tx.teamMemorySuggestion.update({ where: key, data: { ...decided, status: "stale" } });
         return { status: "stale", entryId: null };
       }
-      const memory = teamMemory(tx);
-      const reviewed = await memory.execute(actor, command);
-      const applied =
-        reviewed.status === "review_required"
-          ? await memory.execute(actor, { ...command, reviewToken: reviewed.reviewToken! })
-          : reviewed;
+      const applied = await new PrismaTeamMemoryStore(tx).write(actor, command, {
+        skipReview: true,
+        skipProjection: true,
+      });
       const entryId = applied.entries[0]?.id ?? null;
       await tx.teamMemorySuggestion.update({
         where: key,
@@ -206,7 +204,6 @@ async function lockTaskSuggestionSource(
 ) {
   const source = (row.payload as unknown as TeamMemoryDraft).evidence?.[0];
   if (!source) return false;
-  // Task writes and Workspace deletion take the Conversation lock first.
   const [task] = await tx.$queryRaw<{ id: string }[]>`
     SELECT t.id FROM tasks t JOIN conversations c
       ON c.id = t."conversationId" AND c."workspaceId" = t."workspaceId"

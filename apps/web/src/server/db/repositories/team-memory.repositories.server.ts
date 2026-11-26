@@ -103,12 +103,27 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
     };
   }
 
-  async write(actor: TeamMemoryActor, command: TeamMemoryWrite): Promise<TeamMemoryResult> {
+  async write(
+    actor: TeamMemoryActor,
+    command: TeamMemoryWrite,
+    options?: { skipReview?: boolean; skipProjection?: boolean },
+  ): Promise<TeamMemoryResult> {
     const hash = fingerprint(command);
+    type WriteOutcome =
+      | { kind: "done"; result: TeamMemoryResult }
+      | { kind: "replay"; entry: TeamMemoryHead }
+      | { kind: "dedup"; entry: TeamMemoryHead }
+      | {
+          kind: "saved";
+          entry: TeamMemoryHead;
+          needsProjection: boolean;
+          checkMaintenance: boolean;
+        };
+    let outcome: WriteOutcome;
     try {
-      return await inTransaction(
+      outcome = await inTransaction(
         this.db,
-        async (tx) => {
+        async (tx): Promise<WriteOutcome> => {
           const admin = await access(tx, actor, true);
           await tx.teamMemoryState.upsert({
             where: { workspaceId: actor.workspaceId },
@@ -119,16 +134,28 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
             { revision: number }[]
           >`SELECT revision FROM team_memory_states WHERE workspace_id = ${actor.workspaceId}::uuid FOR UPDATE`;
           const receipts = memoryReceipts(tx, actor, command.requestId);
+          const saveReceipt = (data: {
+            entryId: string;
+            deleted?: boolean;
+            reviewToken: null;
+            reviewExpiresAt: null;
+          }) => (options?.skipReview ? receipts.record(hash, data) : receipts.update(data));
           const receipt = await receipts.get();
           if (receipt && receipt.fingerprint !== hash) throw new TeamMemoryError("conflict");
-          if (receipt?.entryId)
-            return this.replay(tx, actor, command, receipt.entryId, receipt.deleted);
+          if (receipt?.entryId) {
+            if (receipt.deleted) {
+              return { kind: "done", result: { status: "deleted", entries: [], replayed: true } };
+            }
+            const replayed = await readTarget(tx, actor, receipt.entryId);
+            return { kind: "replay", entry: head(replayed) };
+          }
           if (
-            !receipt ||
-            receipt.reviewToken !== command.reviewToken ||
-            !receipt.reviewExpiresAt ||
-            receipt.reviewExpiresAt.getTime() <= Date.now() ||
-            state?.revision !== receipt.reviewRevision
+            !options?.skipReview &&
+            (!receipt ||
+              receipt.reviewToken !== command.reviewToken ||
+              !receipt.reviewExpiresAt ||
+              receipt.reviewExpiresAt.getTime() <= Date.now() ||
+              state?.revision !== receipt.reviewRevision)
           )
             throw new TeamMemoryError("conflict");
           let target =
@@ -165,11 +192,8 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
           if (target && command.operation === "create") {
             if (command.projectId !== undefined && command.projectId !== (target.projectId ?? null))
               throw new TeamMemoryError("conflict");
-            await receipts.update({ entryId: target.id, reviewToken: null, reviewExpiresAt: null });
-            return {
-              status: "ok",
-              entries: [await projectEvidence(tx, actor.workspaceId, head(target))],
-            };
+            await saveReceipt({ entryId: target.id, reviewToken: null, reviewExpiresAt: null });
+            return { kind: "dedup", entry: head(target) };
           }
           validateTeamMutation(
             actor,
@@ -211,7 +235,7 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
             await tx.teamMemoryVersion.deleteMany({
               where: { workspaceId: actor.workspaceId, entryId: target!.id },
             });
-            await receipts.update({
+            await saveReceipt({
               entryId: target!.id,
               deleted: true,
               reviewToken: null,
@@ -221,7 +245,7 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
               where: { workspaceId: actor.workspaceId },
               data: { revision: { increment: 1 } },
             });
-            return { status: "deleted", entries: [] };
+            return { kind: "done", result: { status: "deleted", entries: [] } };
           }
           let draft: TeamMemoryDraft;
           if (command.operation === "restore") {
@@ -363,23 +387,16 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
               })),
             });
           }
-          await receipts.update({ entryId: target.id, reviewToken: null, reviewExpiresAt: null });
+          await saveReceipt({ entryId: target.id, reviewToken: null, reviewExpiresAt: null });
           await tx.teamMemoryState.update({
             where: { workspaceId: actor.workspaceId },
             data: { revision: { increment: 1 } },
           });
-          const maintenanceHint =
-            !command.maintenanceToken && actor.agentId
-              ? await suggestTeamMemoryMaintenance(tx, actor, saved, command.requestId)
-              : undefined;
           return {
-            status: "ok",
-            entries: [
-              "title" in command && command.evidence !== undefined
-                ? saved
-                : await projectEvidence(tx, actor.workspaceId, saved),
-            ],
-            ...(maintenanceHint ? { maintenanceHint } : {}),
+            kind: "saved",
+            entry: saved,
+            needsProjection: !("title" in command && command.evidence !== undefined),
+            checkMaintenance: !command.maintenanceToken && Boolean(actor.agentId),
           };
         },
         { timeout: 10_000 },
@@ -392,5 +409,45 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
         throw new TeamMemoryError("conflict");
       throw error;
     }
+
+    if (outcome.kind === "done") return outcome.result;
+    if (outcome.kind === "replay") {
+      if (options?.skipProjection) {
+        return { status: "ok", entries: [outcome.entry], replayed: true };
+      }
+      const [entry, maintenanceHint] = await Promise.all([
+        projectEvidence(this.db, actor.workspaceId, outcome.entry),
+        replayTeamMemoryMaintenanceHint(this.db, actor, command),
+      ]);
+      return {
+        status: "ok",
+        entries: [entry],
+        replayed: true,
+        ...(maintenanceHint ? { maintenanceHint } : {}),
+      };
+    }
+    if (outcome.kind === "dedup") {
+      return {
+        status: "ok",
+        entries: [
+          options?.skipProjection
+            ? outcome.entry
+            : await projectEvidence(this.db, actor.workspaceId, outcome.entry),
+        ],
+      };
+    }
+    const [entry, maintenanceHint] = await Promise.all([
+      outcome.needsProjection && !options?.skipProjection
+        ? projectEvidence(this.db, actor.workspaceId, outcome.entry)
+        : Promise.resolve(outcome.entry),
+      outcome.checkMaintenance && !options?.skipProjection
+        ? suggestTeamMemoryMaintenance(this.db, actor, outcome.entry, command.requestId)
+        : Promise.resolve(undefined),
+    ]);
+    return {
+      status: "ok",
+      entries: [entry],
+      ...(maintenanceHint ? { maintenanceHint } : {}),
+    };
   }
 }

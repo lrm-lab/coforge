@@ -7,7 +7,7 @@ const SWEEP_BATCH = 500;
 
 export async function sweepExpiredDrafts(
   db: PrismaClient,
-  blobs: Pick<StoredArtifactBlobs, "release">,
+  blobs: Pick<StoredArtifactBlobs, "release"> & Partial<Pick<StoredArtifactBlobs, "releaseMany">>,
   now: Date = new Date(),
 ): Promise<number> {
   let removed = 0;
@@ -24,15 +24,29 @@ export async function sweepExpiredDrafts(
             LIMIT ${SWEEP_BATCH}
             FOR UPDATE SKIP LOCKED)
           RETURNING a."workspaceId", d."images"`;
-        const byWorkspace = new Map<string, Set<string>>();
-        for (const row of gone)
-          for (const { sha256 } of imagesOf(row))
-            byWorkspace.set(
-              row.workspaceId,
-              (byWorkspace.get(row.workspaceId) ?? new Set()).add(sha256),
-            );
-        for (const [workspaceId, shas] of byWorkspace)
-          await blobs.release(tx, workspaceId, [...shas].sort());
+        const pairs: { workspaceId: string; sha256: string }[] = [];
+        for (const row of gone) {
+          for (const { sha256 } of imagesOf(row)) {
+            pairs.push({ workspaceId: row.workspaceId, sha256 });
+          }
+        }
+        if (pairs.length > 0) {
+          if (blobs.releaseMany) {
+            await blobs.releaseMany(tx, pairs);
+          } else {
+            const byWorkspace = new Map<string, Set<string>>();
+            for (const pair of pairs) {
+              byWorkspace.set(
+                pair.workspaceId,
+                (byWorkspace.get(pair.workspaceId) ?? new Set()).add(pair.sha256),
+              );
+            }
+            for (const [workspaceId, shas] of [...byWorkspace.entries()].sort(([a], [b]) =>
+              a.localeCompare(b),
+            ))
+              await blobs.release(tx, workspaceId, [...shas].sort());
+          }
+        }
         return gone.length;
       },
       { timeout: WRITE_TIMEOUT_MS },
