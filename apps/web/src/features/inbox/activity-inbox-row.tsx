@@ -4,6 +4,7 @@ import { BellOff01, Check, Hash01, Mail01 } from "@untitledui/icons";
 import { Link as AriaLink } from "react-aria-components";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { Fold } from "#src/components/ui/fold";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { ActorName } from "#src/features/avatars/actor-name";
 import { ChannelGlyph, ChannelTitle } from "#src/features/conversations/channel-name";
@@ -55,6 +56,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
   tabStop,
   onOpen,
   clock = false,
+  leaving = false,
   ref,
 }: {
   item: ActivityConversationItem;
@@ -65,6 +67,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
   tabStop: boolean;
   onOpen: (target: HostedConversationTarget) => void;
   clock?: boolean;
+  leaving?: boolean;
   ref?: Ref<HTMLLIElement>;
 }) {
   const router = useRouter();
@@ -122,140 +125,149 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
   }
 
   return (
-    <li
-      ref={ref}
-      data-activity-row={item.key}
-      className={cn(ACTIVITY_ROW_ITEM_CLASS, "select-none [-webkit-touch-callout:none]")}
-    >
-      <Dropdown.Root trigger="contextMenu">
-        <AriaLink
-          href={href}
-          aria-current={current ? "true" : undefined}
-          onPress={(event) => {
-            const readByPane = !current && !item.task && !item.mentionAction && !isModified(event);
-            if (unread && !readByPane) actions.read(item);
-          }}
-          render={(props) =>
-            "href" in props ? (
-              <Link
-                {...props}
-                {...link}
-                tabIndex={tabStop ? 0 : -1}
-                onClick={(event) => {
-                  if (event.button === 0 && !isModified(event)) {
-                    event.preventDefault();
-                    onOpen(target);
-                  }
-                  props.onClick?.(event);
+    <li ref={ref} data-activity-row={leaving ? undefined : item.key}>
+      <Fold open={!leaving} variant="dismiss">
+        <div className="pb-0.5">
+          <div className={cn(ACTIVITY_ROW_ITEM_CLASS, "select-none [-webkit-touch-callout:none]")}>
+            <Dropdown.Root trigger="contextMenu">
+              <AriaLink
+                href={href}
+                aria-current={current ? "true" : undefined}
+                onPress={(event) => {
+                  const readByPane =
+                    !current && !item.task && !item.mentionAction && !isModified(event);
+                  if (unread && !readByPane) actions.read(item);
                 }}
-              />
-            ) : (
-              <span {...props} />
-            )
-          }
-          className={cn(
-            ACTIVITY_ROW_LINK_CLASS,
-            current ? "bg-active" : "group-hover:bg-primary_hover focus-visible:bg-primary_hover",
-          )}
-        >
-          <span className="relative flex shrink-0">
-            <ActivityItemIcon item={item} />
-            {unread && <ActivityUnreadDot current={current} />}
-          </span>
-          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="flex min-w-0 items-center gap-1.5">
-              {taskMeta && (
-                <span className="shrink-0 text-sm text-quaternary tabular-nums">
-                  #{taskMeta.number}
-                  {thread?.task?.ownerName ? (
-                    <span className={cn(NARROW_HIDDEN, "ms-1")}>
-                      <ActorName
-                        inline
-                        actor={{
-                          kind: thread.task.ownerFace?.kind ?? "user",
-                          id: thread.task.ownerFace?.id,
-                          name: thread.task.ownerName,
-                          avatarUrl: thread.task.ownerFace?.avatarUrl,
-                          deleted: thread.task.ownerDeleted,
-                        }}
-                      />
-                    </span>
-                  ) : null}
-                </span>
-              )}
-              <span className="flex min-w-0 flex-1">
-                <ActivityRowTitle unread={unread}>
-                  {task ? (
-                    task.title
-                  ) : thread ? (
-                    <Preview message={thread.root} />
-                  ) : place.kind === "channel" ? (
-                    <ChannelTitle name={title} visibility={place.visibility} hash={false} />
+                render={(props) =>
+                  "href" in props ? (
+                    <Link
+                      {...props}
+                      {...link}
+                      tabIndex={tabStop ? 0 : -1}
+                      onClick={(event) => {
+                        if (event.button === 0 && !isModified(event)) {
+                          event.preventDefault();
+                          onOpen(target);
+                        }
+                        props.onClick?.(event);
+                      }}
+                    />
                   ) : (
-                    title
-                  )}
-                </ActivityRowTitle>
-              </span>
-              {time}
-            </span>
-            <span className="flex min-w-0 items-center gap-2">
-              <span
+                    <span {...props} />
+                  )
+                }
                 className={cn(
-                  "min-w-0 flex-1 truncate text-sm [&_[data-mention-label]]:bg-transparent [&_[data-mention-label]]:px-0 [&_code]:bg-transparent [&_code]:p-0 [&_code]:text-inherit",
-                  unread ? "text-tertiary" : "text-quaternary",
+                  ACTIVITY_ROW_LINK_CLASS,
+                  current
+                    ? "bg-active"
+                    : "group-hover:bg-primary_hover focus-visible:bg-primary_hover",
                 )}
               >
-                {placeLabel && <span className="me-1.5 text-quaternary">{placeLabel}</span>}
-                {sender}: <Preview message={item.latest} />
-              </span>
-              <ActivityRowStatus
-                mention={filter !== "mentions" && item.unreadMention}
-                unreadCount={item.unreadCount}
-                current={current}
-              />
-            </span>
-          </span>
-        </AriaLink>
-        <Dropdown.Popover placement="bottom start">
-          <Dropdown.Menu aria-label={m.activity_inbox_menu_label()} onAction={handleAction}>
-            {unread ? (
-              <Dropdown.Item
-                key="read"
-                id="read"
-                icon={Mail01}
-                label={m.activity_inbox_mark_read()}
-                shortcut={readShortcut}
-                selectionIndicator="none"
-              />
-            ) : thread || task ? null : (
-              <Dropdown.Item
-                key="unread"
-                id="unread"
-                icon={Mail01}
-                label={m.conversation_menu_mark_unread()}
-                shortcut={readShortcut}
-                selectionIndicator="none"
-              />
-            )}
-            <Dropdown.Item
-              id="done"
-              icon={Check}
-              label={m.activity_inbox_menu_done()}
-              shortcut={doneShortcut}
-              selectionIndicator="none"
+                <span className="relative flex shrink-0">
+                  <ActivityItemIcon item={item} />
+                  {unread && <ActivityUnreadDot current={current} />}
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    {taskMeta && (
+                      <span className="shrink-0 text-sm text-quaternary tabular-nums">
+                        #{taskMeta.number}
+                        {thread?.task?.ownerName ? (
+                          <span className={cn(NARROW_HIDDEN, "ms-1")}>
+                            <ActorName
+                              inline
+                              actor={{
+                                kind: thread.task.ownerFace?.kind ?? "user",
+                                id: thread.task.ownerFace?.id,
+                                name: thread.task.ownerName,
+                                avatarUrl: thread.task.ownerFace?.avatarUrl,
+                                deleted: thread.task.ownerDeleted,
+                              }}
+                            />
+                          </span>
+                        ) : null}
+                      </span>
+                    )}
+                    <span className="flex min-w-0 flex-1">
+                      <ActivityRowTitle unread={unread}>
+                        {task ? (
+                          task.title
+                        ) : thread ? (
+                          <Preview message={thread.root} />
+                        ) : place.kind === "channel" ? (
+                          <ChannelTitle name={title} visibility={place.visibility} hash={false} />
+                        ) : (
+                          title
+                        )}
+                      </ActivityRowTitle>
+                    </span>
+                    {time}
+                  </span>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span
+                      className={cn(
+                        "min-w-0 flex-1 truncate text-sm [&_[data-mention-label]]:bg-transparent [&_[data-mention-label]]:px-0 [&_code]:bg-transparent [&_code]:p-0 [&_code]:text-inherit",
+                        unread ? "text-tertiary" : "text-quaternary",
+                      )}
+                    >
+                      {placeLabel && <span className="me-1.5 text-quaternary">{placeLabel}</span>}
+                      {sender}: <Preview message={item.latest} />
+                    </span>
+                    <ActivityRowStatus
+                      mention={filter !== "mentions" && item.unreadMention}
+                      unreadCount={item.unreadCount}
+                      current={current}
+                    />
+                  </span>
+                </span>
+              </AriaLink>
+              <Dropdown.Popover placement="bottom start">
+                <Dropdown.Menu aria-label={m.activity_inbox_menu_label()} onAction={handleAction}>
+                  {unread ? (
+                    <Dropdown.Item
+                      key="read"
+                      id="read"
+                      icon={Mail01}
+                      label={m.activity_inbox_mark_read()}
+                      shortcut={readShortcut}
+                      selectionIndicator="none"
+                    />
+                  ) : thread || task ? null : (
+                    <Dropdown.Item
+                      key="unread"
+                      id="unread"
+                      icon={Mail01}
+                      label={m.conversation_menu_mark_unread()}
+                      shortcut={readShortcut}
+                      selectionIndicator="none"
+                    />
+                  )}
+                  <Dropdown.Item
+                    id="done"
+                    icon={Check}
+                    label={m.activity_inbox_menu_done()}
+                    shortcut={doneShortcut}
+                    selectionIndicator="none"
+                  />
+                  {(task || (thread && place.kind === "channel")) && (
+                    <Dropdown.Item
+                      id="unfollow"
+                      icon={BellOff01}
+                      label={task ? m.tasks_unfollow() : m.conversation_thread_unfollow()}
+                      selectionIndicator="none"
+                    />
+                  )}
+                </Dropdown.Menu>
+              </Dropdown.Popover>
+            </Dropdown.Root>
+            <ActivityDoneCheck
+              tabStop={tabStop}
+              current={current}
+              onDone={() => actions.done(item)}
             />
-            {(task || (thread && place.kind === "channel")) && (
-              <Dropdown.Item
-                id="unfollow"
-                icon={BellOff01}
-                label={task ? m.tasks_unfollow() : m.conversation_thread_unfollow()}
-                selectionIndicator="none"
-              />
-            )}
-          </Dropdown.Menu>
-        </Dropdown.Popover>
-      </Dropdown.Root>
-      <ActivityDoneCheck tabStop={tabStop} current={current} onDone={() => actions.done(item)} />
+          </div>
+        </div>
+      </Fold>
     </li>
   );
 });

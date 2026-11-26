@@ -159,7 +159,9 @@ export function ArtifactMoreMenu({
             label={following ? m.av_unfollow() : m.av_follow()}
           />
           {canDelete && <Dropdown.Separator />}
-          {canDelete && <Dropdown.Item id="delete" icon={Trash01} label={m.doc_delete()} />}
+          {canDelete && (
+            <Dropdown.Item id="delete" icon={Trash01} label={m.doc_delete()} tone="destructive" />
+          )}
         </Dropdown.Menu>
       </Dropdown.Popover>
     </Dropdown.Root>

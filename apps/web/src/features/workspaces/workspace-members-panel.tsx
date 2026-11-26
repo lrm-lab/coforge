@@ -275,6 +275,7 @@ export function WorkspaceMembersPanel(props: {
                                 id="remove"
                                 icon={UserMinus01}
                                 label={m.workspace_members_remove()}
+                                tone="destructive"
                               />
                             </Dropdown.Menu>
                           </Dropdown.Popover>

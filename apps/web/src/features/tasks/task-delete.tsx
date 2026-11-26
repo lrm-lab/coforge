@@ -78,12 +78,5 @@ export function useDeleteTask({
 const UNDO_WINDOW_MS = 10_000;
 
 export function taskDeleteMenuItem() {
-  return (
-    <Dropdown.Item id="delete" textValue={m.tasks_delete()}>
-      <span className="flex items-center text-error-primary">
-        <Trash01 aria-hidden="true" className="me-2 size-4 shrink-0" />
-        {m.tasks_delete()}
-      </span>
-    </Dropdown.Item>
-  );
+  return <Dropdown.Item id="delete" icon={Trash01} label={m.tasks_delete()} tone="destructive" />;
 }

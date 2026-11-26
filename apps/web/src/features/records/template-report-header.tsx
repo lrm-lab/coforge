@@ -128,7 +128,12 @@ export function TemplateReportHeader({
               />
               <Dropdown.Popover placement="bottom end" className="w-44">
                 <Dropdown.Menu onAction={onRequestDeleteOverview}>
-                  <Dropdown.Item id="delete" icon={Trash} label={m.records_week_delete()} />
+                  <Dropdown.Item
+                    id="delete"
+                    icon={Trash}
+                    label={m.records_week_delete()}
+                    tone="destructive"
+                  />
                 </Dropdown.Menu>
               </Dropdown.Popover>
             </Dropdown.Root>
@@ -144,7 +149,12 @@ export function TemplateReportHeader({
             />
             <Dropdown.Popover placement="bottom end" className="w-44">
               <Dropdown.Menu onAction={onResetPage}>
-                <Dropdown.Item id="reset" icon={Trash} label={m.records_report_reset()} />
+                <Dropdown.Item
+                  id="reset"
+                  icon={Trash}
+                  label={m.records_report_reset()}
+                  tone="destructive"
+                />
               </Dropdown.Menu>
             </Dropdown.Popover>
           </Dropdown.Root>

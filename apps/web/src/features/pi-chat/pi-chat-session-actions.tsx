@@ -63,7 +63,13 @@ export function PiChatSessionActions({
             >
               {m.pi_chat_rename()}
             </Dropdown.Item>
-            <Dropdown.Item id="delete" icon={Trash01} onAction={() => setDeleting(true)}>
+            <Dropdown.Separator />
+            <Dropdown.Item
+              id="delete"
+              icon={Trash01}
+              tone="destructive"
+              onAction={() => setDeleting(true)}
+            >
               {running ? m.pi_chat_stop_delete() : m.pi_chat_delete()}
             </Dropdown.Item>
           </Dropdown.Menu>

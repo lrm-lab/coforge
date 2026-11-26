@@ -238,16 +238,20 @@ function CredentialMenu({
             onAction={(key) => setConfirming(key === "replace" ? "replace" : "revoke")}
           >
             {replaceable ? (
-              <Dropdown.Item
-                id="replace"
-                icon={RefreshCw01}
-                label={m.external_agent_credential_replace()}
-              />
+              <>
+                <Dropdown.Item
+                  id="replace"
+                  icon={RefreshCw01}
+                  label={m.external_agent_credential_replace()}
+                />
+                <Dropdown.Separator />
+              </>
             ) : null}
             <Dropdown.Item
               id="revoke"
               icon={Trash01}
               label={m.external_agent_credential_revoke()}
+              tone="destructive"
             />
           </Dropdown.Menu>
         </Dropdown.Popover>

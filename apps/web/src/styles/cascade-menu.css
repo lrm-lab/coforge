@@ -6,6 +6,11 @@
   --cascade-menu-row-hover: var(--color-bg-tertiary);
   --cascade-menu-quiet: var(--color-text-tertiary);
   --cascade-menu-chevron: var(--color-fg-quaternary);
+  --cascade-menu-destructive-ink: var(--color-text-error-primary);
+  --cascade-menu-destructive-ink-hover: var(--color-text-error-primary_hover);
+  --cascade-menu-destructive-icon: var(--color-fg-error-secondary);
+  --cascade-menu-destructive-icon-hover: var(--color-fg-error-primary);
+  --cascade-menu-destructive-row-hover: var(--color-bg-error-primary);
   --cascade-menu-shadow:
     0 1px 1px rgb(16 19 25 / 0.04), 0 3px 5px rgb(16 19 25 / 0.04),
     0 8px 14px -2px rgb(16 19 25 / 0.05), 0 16px 24px -6px rgb(16 19 25 / 0.05);
@@ -219,6 +224,25 @@
 
 .cascade-menu-row[data-cascade-state="skipped"] {
   background-color: transparent;
+}
+
+.cascade-menu-row[data-tone="destructive"] {
+  color: var(--cascade-menu-destructive-ink);
+}
+
+.cascade-menu-row[data-tone="destructive"] .cascade-menu-icon {
+  color: var(--cascade-menu-destructive-icon);
+}
+
+.cascade-menu-row[data-tone="destructive"][data-cascade-state="hovered"],
+.cascade-menu-row[data-tone="destructive"][data-cascade-state="active"] {
+  background-color: var(--cascade-menu-destructive-row-hover);
+  color: var(--cascade-menu-destructive-ink-hover);
+}
+
+.cascade-menu-row[data-tone="destructive"][data-cascade-state="hovered"] .cascade-menu-icon,
+.cascade-menu-row[data-tone="destructive"][data-cascade-state="active"] .cascade-menu-icon {
+  color: var(--cascade-menu-destructive-icon-hover);
 }
 
 .cascade-menu-icon {

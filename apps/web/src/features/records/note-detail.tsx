@@ -192,7 +192,13 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
                   }}
                 >
                   <Dropdown.Item id="clear" icon={Trash} label={m.records_report_clear()} />
-                  <Dropdown.Item id="delete" icon={Trash} label={m.records_note_delete()} />
+                  <Dropdown.Separator />
+                  <Dropdown.Item
+                    id="delete"
+                    icon={Trash}
+                    label={m.records_note_delete()}
+                    tone="destructive"
+                  />
                 </Dropdown.Menu>
               </Dropdown.Popover>
             </Dropdown.Root>

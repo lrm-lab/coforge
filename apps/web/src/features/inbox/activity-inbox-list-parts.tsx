@@ -39,7 +39,7 @@ export function ActivityInboxSections({ sections }: { sections: ActivitySection[
           <ol
             aria-label={section.label}
             data-undated={section.dated === false ? "" : undefined}
-            className="relative flex flex-col gap-0.5 px-1.5"
+            className="relative -mb-0.5 flex flex-col px-1.5"
           >
             {section.rows}
           </ol>

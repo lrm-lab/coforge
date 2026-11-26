@@ -157,7 +157,15 @@ export function ReportDetailHeader({
                 >
                   <Dropdown.Item id="export" icon={Download} label={m.records_report_export()} />
                   {editable ? (
-                    <Dropdown.Item id="delete" icon={Trash} label={m.records_report_delete()} />
+                    <>
+                      <Dropdown.Separator />
+                      <Dropdown.Item
+                        id="delete"
+                        icon={Trash}
+                        label={m.records_report_delete()}
+                        tone="destructive"
+                      />
+                    </>
                   ) : null}
                 </Dropdown.Menu>
               </Dropdown.Popover>

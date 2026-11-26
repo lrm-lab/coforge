@@ -349,10 +349,14 @@ export function useTaskDetailModel({
             <Dropdown.Section className="border-t border-secondary pt-1">
               <Dropdown.Item id="history" label={m.tasks_full_history()} />
             </Dropdown.Section>
-            {(follow || canDelete) && (
-              <Dropdown.Section className="border-t border-secondary pt-1">
-                {follow && taskFollowMenuItem(follow)}
-                {canDelete && taskDeleteMenuItem()}
+            {follow && (
+              <Dropdown.Section className="mt-1 border-t border-secondary pt-1">
+                {taskFollowMenuItem(follow)}
+              </Dropdown.Section>
+            )}
+            {canDelete && (
+              <Dropdown.Section className="mt-1 border-t border-secondary pt-1">
+                {taskDeleteMenuItem()}
               </Dropdown.Section>
             )}
           </Dropdown.Menu>

@@ -23,7 +23,8 @@ export const foldMeta: ComponentMeta = {
   motion: {
     enterMs: DURATION_MS.md,
     exitMs: DURATION_MS.mdOut,
-    transform: "grid-template-rows 0fr <-> 1fr + opacity",
+    transform:
+      "grid-template-rows 0fr <-> 1fr + opacity (dismiss variant leads with translate-x + scale-0.98 fade)",
     reducedMotion: "instant",
   },
   accessibility: [

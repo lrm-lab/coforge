@@ -159,10 +159,12 @@ export const MemberRow = memo(function MemberRow({
                       onAction={() => onToggleRole(member)}
                     />
                   )}
+                  {canChangeRole && canRemove && <Dropdown.Separator />}
                   {canRemove && (
                     <Dropdown.Item
                       id="remove"
                       label={m.channel_members_remove_action()}
+                      tone="destructive"
                       onAction={() => onRemove(member)}
                     />
                   )}

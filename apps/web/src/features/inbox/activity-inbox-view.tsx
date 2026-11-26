@@ -20,6 +20,7 @@ import { MessageQuestionCircle, Pin01 } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useEdgeSwipeBack } from "#src/hooks/use-edge-swipe-back";
+import { useLeavingItems } from "#src/hooks/use-leaving-items";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { LIST_BESIDE_CLASSES } from "#src/features/conversations/conversation-list-button";
 import { ConversationListResizeHandle } from "#src/features/conversations/conversation-list-resize-handle";
@@ -209,7 +210,43 @@ export function ActivityInboxView({
     run();
   }, [markAllRead, loadedAt, refresh]);
 
-  const { unread, days, rows } = useActivityInboxGroups(filter, items, pinned);
+  const { rows } = useActivityInboxGroups(filter, items, pinned);
+  const visibleItemRows = useLeavingItems(items, {
+    getKey: (item) => item.key,
+    resetKey: filter,
+  });
+  const visiblePinnedRows = useLeavingItems(pinned, {
+    getKey: (item) => item.key,
+    resetKey: filter,
+  });
+  const activeItemKeys = useMemo(
+    () => new Set([...items.map((item) => item.key), ...pinned.map((item) => item.key)]),
+    [items, pinned],
+  );
+  const displayItems = useMemo(
+    () =>
+      visibleItemRows
+        .filter((entry) => !entry.leaving || !activeItemKeys.has(entry.item.key))
+        .map((entry) => entry.item),
+    [visibleItemRows, activeItemKeys],
+  );
+  const displayPinned = useMemo(
+    () =>
+      visiblePinnedRows
+        .filter((entry) => !entry.leaving || !activeItemKeys.has(entry.item.key))
+        .map((entry) => entry.item),
+    [visiblePinnedRows, activeItemKeys],
+  );
+  const leavingKeys = useMemo(
+    () =>
+      new Set(
+        [...visibleItemRows, ...visiblePinnedRows]
+          .filter((entry) => entry.leaving && !activeItemKeys.has(entry.item.key))
+          .map((entry) => entry.item.key),
+      ),
+    [visibleItemRows, visiblePinnedRows, activeItemKeys],
+  );
+  const { unread, days } = useActivityInboxGroups(filter, displayItems, displayPinned);
   const { doneAll } = useActivityBulkActions({
     workspaceId,
     onChanged: refresh,
@@ -218,6 +255,10 @@ export function ActivityInboxView({
     onDoneSettled: settleDone,
   });
   const shownWaiting = expandedWaiting ? waiting : waiting.slice(0, WAITING_SHOWN);
+  const visibleWaitingRows = useLeavingItems(shownWaiting, {
+    getKey: (card) => card.messageId,
+    resetKey: filter,
+  });
   const rowKeys = [
     ...shownWaiting.map((card) => waitingRowKey(card.messageId)),
     ...rows.map((item) => item.key),
@@ -255,19 +296,21 @@ export function ActivityInboxView({
     [flowing, selectedDone, actOnSelected, paneProps.onKeyDown, focusSelected],
   );
   const empty =
-    items.length === 0 &&
-    pinned.length === 0 &&
-    waiting.length === 0 &&
+    displayItems.length === 0 &&
+    displayPinned.length === 0 &&
+    visibleWaitingRows.length === 0 &&
     !(filter === "all" && waitingQuery.isPending);
-  const row = (item: ActivityInboxItem, clock = false) =>
-    item.kind === "artifact" ? (
+  const row = (item: ActivityInboxItem, clock = false) => {
+    const leaving = leavingKeys.has(item.key);
+    return item.kind === "artifact" ? (
       <ActivityArtifactRow
         key={item.key}
         item={item}
         filter={filter}
         actions={actions}
-        tabStop={item.key === tabStopKey}
+        tabStop={!leaving && item.key === tabStopKey}
         clock={clock}
+        leaving={leaving}
       />
     ) : (
       <ActivityInboxRow
@@ -276,25 +319,28 @@ export function ActivityInboxView({
         filter={filter}
         actions={actions}
         viewerId={user.id}
-        current={item.key === currentKey}
-        tabStop={item.key === tabStopKey}
+        current={!leaving && item.key === currentKey}
+        tabStop={!leaving && item.key === tabStopKey}
         onOpen={onOpen}
         clock={clock}
+        leaving={leaving}
       />
     );
+  };
   const sections: ActivitySection[] = [
     {
       key: "waiting",
       label: m.activity_inbox_waiting(),
       icon: MessageQuestionCircle,
       count: waiting.length,
-      rows: shownWaiting.map((card) => (
+      rows: visibleWaitingRows.map(({ item: card, leaving }) => (
         <WaitingChoiceRow
           key={card.messageId}
           card={card}
-          tabStop={waitingRowKey(card.messageId) === tabStopKey}
+          tabStop={!leaving && waitingRowKey(card.messageId) === tabStopKey}
           onOpen={onOpen}
           onDeclined={refreshWaiting}
+          leaving={leaving}
         />
       )),
       footer: waiting.length > WAITING_SHOWN && (
@@ -322,7 +368,7 @@ export function ActivityInboxView({
       key: "pinned",
       label: m.conversation_pinned_section(),
       icon: Pin01,
-      rows: pinned.map((item) => row(item)),
+      rows: displayPinned.map((item) => row(item)),
     },
     ...days.map((day, index) => ({
       key: daySectionKey(index, day.key),

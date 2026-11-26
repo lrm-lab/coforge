@@ -246,7 +246,7 @@ function CodeBlockToolbar({
             <Dropdown.Item
               id="delete"
               label={t(($) => $.code_block.delete)}
-              className="text-error-primary"
+              tone="destructive"
               onAction={onDelete}
             />
           </Dropdown.Menu>

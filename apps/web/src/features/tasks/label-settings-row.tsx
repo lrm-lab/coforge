@@ -272,7 +272,13 @@ export function LabelSettingsRow({
                         id="restore"
                         label={m.labels_settings_restore()}
                       />,
-                      <Dropdown.Item key="delete" id="delete" label={m.labels_settings_delete()} />,
+                      <Dropdown.Separator key="delete-separator" />,
+                      <Dropdown.Item
+                        key="delete"
+                        id="delete"
+                        label={m.labels_settings_delete()}
+                        tone="destructive"
+                      />,
                     ]
                   : [
                       <Dropdown.Item

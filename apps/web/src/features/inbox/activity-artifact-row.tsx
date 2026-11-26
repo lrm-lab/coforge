@@ -4,6 +4,7 @@ import { Check, Mail01 } from "@untitledui/icons";
 import { Link as AriaLink } from "react-aria-components";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { Fold } from "#src/components/ui/fold";
 import { ActorName } from "#src/features/avatars/actor-name";
 import { ArtifactIcon } from "#src/features/artifacts/artifact-parts";
 import { artifactPageRoute } from "#src/features/artifacts/artifact-search";
@@ -30,6 +31,7 @@ export const ActivityArtifactRow = memo(function ActivityArtifactRow({
   actions,
   tabStop,
   clock = false,
+  leaving = false,
   ref,
 }: {
   item: ActivityArtifactItem;
@@ -37,6 +39,7 @@ export const ActivityArtifactRow = memo(function ActivityArtifactRow({
   actions: ActivityItemActions;
   tabStop: boolean;
   clock?: boolean;
+  leaving?: boolean;
   ref?: Ref<HTMLLIElement>;
 }) {
   const workspaceSlug = useWorkspaceSlug();
@@ -54,74 +57,83 @@ export const ActivityArtifactRow = memo(function ActivityArtifactRow({
   return (
     <li
       ref={ref}
-      data-activity-row={item.key}
-      data-activity-artifact={item.artifact.id}
-      className={cn(ACTIVITY_ROW_ITEM_CLASS, "select-none [-webkit-touch-callout:none]")}
+      data-activity-row={leaving ? undefined : item.key}
+      data-activity-artifact={leaving ? undefined : item.artifact.id}
     >
-      <Dropdown.Root trigger="contextMenu">
-        <AriaLink
-          href={href}
-          render={(props) =>
-            "href" in props ? (
-              <Link {...props} {...link} search={search} tabIndex={tabStop ? 0 : -1} />
-            ) : (
-              <span {...props} />
-            )
-          }
-          className={cn(
-            ACTIVITY_ROW_LINK_CLASS,
-            "group-hover:bg-primary_hover focus-visible:bg-primary_hover",
-          )}
-        >
-          <span className="relative flex shrink-0">
-            <ArtifactIcon entryPath={item.artifact.entryPath} />
-            {unread && <ActivityUnreadDot />}
-          </span>
-          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="flex min-w-0 items-center gap-1.5">
-              <span className="flex min-w-0 flex-1">
-                <ActivityRowTitle unread={unread}>{item.artifact.title}</ActivityRowTitle>
-              </span>
-              <ActivityRowTime value={item.at} clock={clock} current={false} />
-            </span>
-            <span className="flex min-w-0 items-center gap-2">
-              <span
+      <Fold open={!leaving} variant="dismiss">
+        <div className="pb-0.5">
+          <div className={cn(ACTIVITY_ROW_ITEM_CLASS, "select-none [-webkit-touch-callout:none]")}>
+            <Dropdown.Root trigger="contextMenu">
+              <AriaLink
+                href={href}
+                render={(props) =>
+                  "href" in props ? (
+                    <Link {...props} {...link} search={search} tabIndex={tabStop ? 0 : -1} />
+                  ) : (
+                    <span {...props} />
+                  )
+                }
                 className={cn(
-                  "min-w-0 flex-1 truncate text-sm",
-                  unread ? "text-tertiary" : "text-quaternary",
+                  ACTIVITY_ROW_LINK_CLASS,
+                  "group-hover:bg-primary_hover focus-visible:bg-primary_hover",
                 )}
               >
-                <ActorName inline actor={event.actor} /> {artifactEventLine(item)}
-              </span>
-              <ActivityRowStatus mention={showMention} unreadCount={item.unreadCount} />
-            </span>
-          </span>
-        </AriaLink>
-        <Dropdown.Popover placement="bottom start">
-          <Dropdown.Menu
-            aria-label={m.activity_inbox_menu_label()}
-            onAction={(key) => (key === "read" ? actions.read(item) : actions.done(item))}
-          >
-            {unread && (
-              <Dropdown.Item
-                id="read"
-                icon={Mail01}
-                label={m.activity_inbox_mark_read()}
-                shortcut={readShortcut}
-                selectionIndicator="none"
-              />
-            )}
-            <Dropdown.Item
-              id="done"
-              icon={Check}
-              label={m.activity_inbox_menu_done()}
-              shortcut={doneShortcut}
-              selectionIndicator="none"
+                <span className="relative flex shrink-0">
+                  <ArtifactIcon entryPath={item.artifact.entryPath} />
+                  {unread && <ActivityUnreadDot />}
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="flex min-w-0 flex-1">
+                      <ActivityRowTitle unread={unread}>{item.artifact.title}</ActivityRowTitle>
+                    </span>
+                    <ActivityRowTime value={item.at} clock={clock} current={false} />
+                  </span>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span
+                      className={cn(
+                        "min-w-0 flex-1 truncate text-sm",
+                        unread ? "text-tertiary" : "text-quaternary",
+                      )}
+                    >
+                      <ActorName inline actor={event.actor} /> {artifactEventLine(item)}
+                    </span>
+                    <ActivityRowStatus mention={showMention} unreadCount={item.unreadCount} />
+                  </span>
+                </span>
+              </AriaLink>
+              <Dropdown.Popover placement="bottom start">
+                <Dropdown.Menu
+                  aria-label={m.activity_inbox_menu_label()}
+                  onAction={(key) => (key === "read" ? actions.read(item) : actions.done(item))}
+                >
+                  {unread && (
+                    <Dropdown.Item
+                      id="read"
+                      icon={Mail01}
+                      label={m.activity_inbox_mark_read()}
+                      shortcut={readShortcut}
+                      selectionIndicator="none"
+                    />
+                  )}
+                  <Dropdown.Item
+                    id="done"
+                    icon={Check}
+                    label={m.activity_inbox_menu_done()}
+                    shortcut={doneShortcut}
+                    selectionIndicator="none"
+                  />
+                </Dropdown.Menu>
+              </Dropdown.Popover>
+            </Dropdown.Root>
+            <ActivityDoneCheck
+              tabStop={tabStop}
+              current={false}
+              onDone={() => actions.done(item)}
             />
-          </Dropdown.Menu>
-        </Dropdown.Popover>
-      </Dropdown.Root>
-      <ActivityDoneCheck tabStop={tabStop} current={false} onDone={() => actions.done(item)} />
+          </div>
+        </div>
+      </Fold>
     </li>
   );
 });

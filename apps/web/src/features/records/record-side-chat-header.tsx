@@ -130,7 +130,13 @@ export function RecordSideChatHeader({
               }}
             >
               <Dropdown.Item id="rename" icon={Edit} label={m.records_side_chat_rename()} />
-              <Dropdown.Item id="delete" icon={Trash} label={m.records_side_chat_delete()} />
+              <Dropdown.Separator />
+              <Dropdown.Item
+                id="delete"
+                icon={Trash}
+                label={m.records_side_chat_delete()}
+                tone="destructive"
+              />
             </Dropdown.Menu>
           </Dropdown.Popover>
         </Dropdown.Root>

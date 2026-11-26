@@ -25,8 +25,8 @@ import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { POPOVER_MOTION } from "#src/utils/popover-motion";
 
+import { useLeavingItems } from "#src/hooks/use-leaving-items";
 import { useSystemNotifications } from "./system-notifications-provider";
-import { useLeavingItems } from "./use-leaving-items";
 import type { UsageLimitNotice } from "./usage-limit-notices";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
@@ -135,7 +135,7 @@ function NoticeList({
         <ul className="scroll-fade-y -mb-px min-h-0 flex-1 overflow-y-auto scroll-py-6 [scrollbar-width:thin]">
           {rows.map(({ item, leaving }) => (
             <li key={item.id}>
-              <Fold open={!leaving}>
+              <Fold open={!leaving} variant="dismiss">
                 <UsageLimitCard
                   notice={item}
                   unseen={shownUnseen.has(item.id)}

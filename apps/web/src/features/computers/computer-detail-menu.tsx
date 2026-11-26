@@ -44,17 +44,25 @@ export function ComputerDetailMenu({
               else if (key === "remove" || key === "delete") setConfirming(key);
             }}
           >
-            {onFormat && (
-              <Dropdown.Item id="format" icon={Eraser} label={m.computer_format_action()} />
-            )}
-            {/* Wiping the disk first, then leaving this Workspace, then deleting the Computer
-                everywhere: least to most final. */}
-            {onFormat && (onRemove || onDelete) && <Dropdown.Separator />}
             {onRemove && (
               <Dropdown.Item id="remove" icon={LogOut01} label={m.computer_remove_action()} />
             )}
+            {onRemove && (onFormat || onDelete) && <Dropdown.Separator />}
+            {onFormat && (
+              <Dropdown.Item
+                id="format"
+                icon={Eraser}
+                label={m.computer_format_action()}
+                tone="destructive"
+              />
+            )}
             {onDelete && (
-              <Dropdown.Item id="delete" icon={Trash01} label={m.computer_delete_action()} />
+              <Dropdown.Item
+                id="delete"
+                icon={Trash01}
+                label={m.computer_delete_action()}
+                tone="destructive"
+              />
             )}
           </Dropdown.Menu>
         </Dropdown.Popover>

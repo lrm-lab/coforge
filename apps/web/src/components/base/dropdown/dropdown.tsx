@@ -132,6 +132,7 @@ interface DropdownItemProps extends AriaMenuItemProps {
   monochromeIcon?: boolean;
   avatarUrl?: string;
   leading?: ReactNode;
+  tone?: "default" | "destructive";
   selectionIndicator?: "checkmark" | "checkbox" | "radio" | "toggle" | "none";
   ref?: Ref<HTMLDivElement>;
 }
@@ -147,6 +148,7 @@ const DropdownItem = ({
   monochromeIcon,
   avatarUrl,
   leading,
+  tone = "default",
   unstyled,
   selectionIndicator = "checkmark",
   ref,
@@ -380,6 +382,7 @@ const DropdownItem = ({
           <>
             <div
               data-cascade-state={effectiveState}
+              data-tone={tone === "destructive" ? "destructive" : undefined}
               onPointerEnter={handlePointerEnter}
               onPointerLeave={handlePointerLeave}
               onDragEnter={handleDragEnter}
@@ -546,7 +549,7 @@ const DropdownPopover = ({ title, children, ...props }: DropdownPopoverProps) =>
 };
 
 const DropdownSeparator = (props: AriaSeparatorProps) => {
-  return <AriaSeparator {...props} className={cx("my-1 h-px w-full bg-[var(--cascade-menu-border)]", props.className)} />;
+  return <AriaSeparator {...props} className={cx("my-1.5 h-px w-full bg-[var(--cascade-menu-border)]", props.className)} />;
 };
 
 const DropdownDotsButton = (props: AriaButtonProps & RefAttributes<HTMLButtonElement>) => {

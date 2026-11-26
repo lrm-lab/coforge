@@ -40,7 +40,6 @@ export function ConnectionChecks({ checks }: { checks: readonly ConnectionCheck[
       <ProgressSteps
         spinner
         items={checks.map((check) => ({ title: checkTitle(check), status: check.status }))}
-        className="gap-2.5"
       />
       {current && stalled === current && (
         <p className="mt-2.5 text-sm text-tertiary">

@@ -112,7 +112,7 @@ export function ColumnHandle({
           <Dropdown.Item
             label={t(($) => $.table_controls.delete_column)}
             icon={Trash2}
-            className="text-error-primary"
+            tone="destructive"
             onAction={() => {
               runMenuAction(() => deleteColumnAt(editor, menuTablePos, col));
             }}
@@ -190,7 +190,7 @@ export function RowHandle({
           <Dropdown.Item
             label={t(($) => $.table_controls.delete_row)}
             icon={Trash2}
-            className="text-error-primary"
+            tone="destructive"
             onAction={() => {
               runMenuAction(() => deleteRowAt(editor, menuTablePos, row));
             }}

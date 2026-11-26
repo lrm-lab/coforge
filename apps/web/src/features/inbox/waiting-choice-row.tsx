@@ -8,6 +8,7 @@ import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
+import { Fold } from "#src/components/ui/fold";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { cancelActionCard } from "#src/features/conversations/action-cards.functions";
 import { choiceNumber } from "#src/features/conversations/choice-number";
@@ -29,12 +30,14 @@ export const WaitingChoiceRow = memo(function WaitingChoiceRow({
   tabStop,
   onOpen,
   onDeclined,
+  leaving = false,
   ref,
 }: {
   card: WaitingChoiceCard;
   tabStop: boolean;
   onOpen: (target: HostedConversationTarget) => void;
   onDeclined: () => void;
+  leaving?: boolean;
   ref?: Ref<HTMLLIElement>;
 }) {
   const router = useRouter();
@@ -65,121 +68,125 @@ export const WaitingChoiceRow = memo(function WaitingChoiceRow({
   }
 
   return (
-    <li
-      ref={ref}
-      data-activity-row={waitingRowKey(card.messageId)}
-      className={cn(ACTIVITY_ROW_ITEM_CLASS, "select-none [-webkit-touch-callout:none]")}
-    >
-      <Dropdown.Root trigger="contextMenu">
-        <AriaLink
-          href={href}
-          render={(props) =>
-            "href" in props ? (
-              <Link
-                {...props}
-                {...link}
-                tabIndex={tabStop ? 0 : -1}
-                onClick={(event) => {
-                  if (followInternalLinkClick(event)) {
-                    event.preventDefault();
-                    onOpen(target);
-                  }
-                  props.onClick?.(event);
-                }}
-              />
-            ) : (
-              <span {...props} />
-            )
-          }
-          className={cn(
-            ACTIVITY_ROW_LINK_CLASS,
-            "group-hover:bg-primary_hover focus-visible:bg-primary_hover",
-          )}
-        >
-          <ActorAvatar
-            size="sm"
-            presence={false}
-            agentId={card.preparedBy.agentId}
-            name={card.preparedBy.name}
-            src={card.preparedBy.avatarUrl}
-          />
-          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="flex min-w-0 items-center gap-2">
-              <span className="min-w-0 truncate text-md font-semibold text-primary">
-                {card.prompt}
-              </span>
-              <RelativeTime
-                value={card.createdAt}
-                plain
-                className="ms-auto shrink-0 ps-2 text-xs text-quaternary tabular-nums transition-opacity not-any-pointer-coarse:group-hover:opacity-0 not-any-pointer-coarse:group-focus-within:opacity-0"
-              />
-            </span>
-            <span className="flex min-w-0 items-center gap-1.5 text-sm text-tertiary">
-              {place}
-              <span className="min-w-0 flex-1 truncate">
-                <span className="font-medium text-secondary">
-                  {card.options.length > 0 ? `${card.preparedBy.name}: ` : card.preparedBy.name}
-                </span>
-                {card.options.map((option, index) => (
-                  <span key={index} className="me-2 last:me-0">
-                    {choiceNumber(index)}. {option.label}
+    <li ref={ref} data-activity-row={leaving ? undefined : waitingRowKey(card.messageId)}>
+      <Fold open={!leaving} variant="dismiss">
+        <div className="pb-0.5">
+          <div className={cn(ACTIVITY_ROW_ITEM_CLASS, "select-none [-webkit-touch-callout:none]")}>
+            <Dropdown.Root trigger="contextMenu">
+              <AriaLink
+                href={href}
+                render={(props) =>
+                  "href" in props ? (
+                    <Link
+                      {...props}
+                      {...link}
+                      tabIndex={tabStop ? 0 : -1}
+                      onClick={(event) => {
+                        if (followInternalLinkClick(event)) {
+                          event.preventDefault();
+                          onOpen(target);
+                        }
+                        props.onClick?.(event);
+                      }}
+                    />
+                  ) : (
+                    <span {...props} />
+                  )
+                }
+                className={cn(
+                  ACTIVITY_ROW_LINK_CLASS,
+                  "group-hover:bg-primary_hover focus-visible:bg-primary_hover",
+                )}
+              >
+                <ActorAvatar
+                  size="sm"
+                  presence={false}
+                  agentId={card.preparedBy.agentId}
+                  name={card.preparedBy.name}
+                  src={card.preparedBy.avatarUrl}
+                />
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="min-w-0 truncate text-md font-semibold text-primary">
+                      {card.prompt}
+                    </span>
+                    <RelativeTime
+                      value={card.createdAt}
+                      plain
+                      className="ms-auto shrink-0 ps-2 text-xs text-quaternary tabular-nums transition-opacity not-any-pointer-coarse:group-hover:opacity-0 not-any-pointer-coarse:group-focus-within:opacity-0"
+                    />
                   </span>
-                ))}
-              </span>
-            </span>
-          </span>
-        </AriaLink>
-        <Dropdown.Popover placement="bottom start">
-          <Dropdown.Menu
-            aria-label={m.activity_inbox_menu_label()}
-            onAction={(key) => {
-              if (key === "decline") setConfirmingDecline(true);
-            }}
-          >
-            <Dropdown.Item
-              id="decline"
-              icon={XClose}
-              label={m.question_card_decline()}
-              selectionIndicator="none"
+                  <span className="flex min-w-0 items-center gap-1.5 text-sm text-tertiary">
+                    {place}
+                    <span className="min-w-0 flex-1 truncate">
+                      <span className="font-medium text-secondary">
+                        {card.options.length > 0
+                          ? `${card.preparedBy.name}: `
+                          : card.preparedBy.name}
+                      </span>
+                      {card.options.map((option, index) => (
+                        <span key={index} className="me-2 last:me-0">
+                          {choiceNumber(index)}. {option.label}
+                        </span>
+                      ))}
+                    </span>
+                  </span>
+                </span>
+              </AriaLink>
+              <Dropdown.Popover placement="bottom start">
+                <Dropdown.Menu
+                  aria-label={m.activity_inbox_menu_label()}
+                  onAction={(key) => {
+                    if (key === "decline") setConfirmingDecline(true);
+                  }}
+                >
+                  <Dropdown.Item
+                    id="decline"
+                    icon={XClose}
+                    label={m.question_card_decline()}
+                    selectionIndicator="none"
+                  />
+                </Dropdown.Menu>
+              </Dropdown.Popover>
+            </Dropdown.Root>
+            <DeclineQuestion
+              asker={card.preparedBy.name}
+              questions={card.questions?.length ?? 1}
+              placement="bottom end"
+              onDecline={decline}
+            >
+              <Button
+                data-decline=""
+                size="sm"
+                color="link-gray"
+                aria-label={m.action_card_ignore_row({ prompt: card.prompt })}
+                className="absolute top-1/2 end-2.5 -translate-y-1/2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 aria-expanded:opacity-100 any-pointer-coarse:hidden"
+              >
+                {m.question_card_decline()}
+              </Button>
+            </DeclineQuestion>
+            <ConfirmDialog
+              open={confirmingDecline}
+              onOpenChange={setConfirmingDecline}
+              title={
+                (card.questions?.length ?? 1) > 1
+                  ? m.question_card_decline_title_many({ count: card.questions?.length ?? 1 })
+                  : m.question_card_decline_title_one()
+              }
+              description={m.question_card_decline_body({ name: card.preparedBy.name })}
+              cancelLabel={m.question_card_keep_answering()}
+              confirmLabel={m.question_card_decline()}
+              pendingLabel={m.question_card_sending()}
+              errorMessage={m.question_card_send_failed()}
+              tone="default"
+              onConfirm={async () => {
+                await decline();
+                setConfirmingDecline(false);
+              }}
             />
-          </Dropdown.Menu>
-        </Dropdown.Popover>
-      </Dropdown.Root>
-      <DeclineQuestion
-        asker={card.preparedBy.name}
-        questions={card.questions?.length ?? 1}
-        placement="bottom end"
-        onDecline={decline}
-      >
-        <Button
-          data-decline=""
-          size="sm"
-          color="link-gray"
-          aria-label={m.action_card_ignore_row({ prompt: card.prompt })}
-          className="absolute top-1/2 end-2.5 -translate-y-1/2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 aria-expanded:opacity-100 any-pointer-coarse:hidden"
-        >
-          {m.question_card_decline()}
-        </Button>
-      </DeclineQuestion>
-      <ConfirmDialog
-        open={confirmingDecline}
-        onOpenChange={setConfirmingDecline}
-        title={
-          (card.questions?.length ?? 1) > 1
-            ? m.question_card_decline_title_many({ count: card.questions?.length ?? 1 })
-            : m.question_card_decline_title_one()
-        }
-        description={m.question_card_decline_body({ name: card.preparedBy.name })}
-        cancelLabel={m.question_card_keep_answering()}
-        confirmLabel={m.question_card_decline()}
-        pendingLabel={m.question_card_sending()}
-        errorMessage={m.question_card_send_failed()}
-        tone="default"
-        onConfirm={async () => {
-          await decline();
-          setConfirmingDecline(false);
-        }}
-      />
+          </div>
+        </div>
+      </Fold>
     </li>
   );
 });

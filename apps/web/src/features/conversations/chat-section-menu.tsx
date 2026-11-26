@@ -253,6 +253,7 @@ function ChatSectionMenuPopover<Mode extends ChatSectionSortMode>({
               id="delete"
               icon={Trash01}
               label={m.chat_section_delete()}
+              tone="destructive"
               selectionIndicator="none"
             />
           </>
