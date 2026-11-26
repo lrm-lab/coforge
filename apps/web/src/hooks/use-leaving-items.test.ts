@@ -59,11 +59,13 @@ describe("reconcileLeavingItems", () => {
       label: `Item ${index}`,
     }));
     const next: Item[] = [previous[0]!];
+    const emptyLeaving: LeavingEntry<Item>[] = [];
 
-    const result = reconcileLeavingItems(previous, next, [], byId);
+    const result = reconcileLeavingItems(previous, next, emptyLeaving, byId);
 
     expect(result.addedKeys).toEqual([]);
     expect(result.leaving).toEqual([]);
+    expect(result.leaving).toBe(emptyLeaving);
   });
 
   test("preserves the activeLeaving reference when leaving entries do not change", () => {

@@ -9,6 +9,7 @@ import {
   browserSession,
   devBrowserWorkspace,
   elementAtRest,
+  hydratedElement,
   localBrowserE2e,
   pageHydrated,
 } from "./helpers/browser-e2e";
@@ -42,6 +43,8 @@ const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/activity-inbox"
 const tabBar = `document.querySelector('nav[aria-label="Primary navigation"]')`;
 /** The tab the bar marks current, by its visible label. */
 const currentTab = `${tabBar}?.querySelector('a[aria-current="page"] span.truncate')?.textContent ?? null`;
+const filterTabs = `document.querySelectorAll('[data-activity-list] [role="tablist"] [role="tab"]')`;
+const pageLoadError = `(() => { const text = document.body.innerText; return text.includes("Couldn't load this page") || text.includes("无法加载此页面"); })()`;
 
 test("on a phone a row opens its conversation in place of the Activity list", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
@@ -93,13 +96,14 @@ test("on a phone a row opens its conversation in place of the Activity list", as
     );
   };
   try {
+    const internalProjectsHref = `/w/${workspace.slug}/projects`;
     const { channelId, rootId, replyId, newestId } = await seedChannel(db, {
       workspaceId,
       key: "e2e-activity-inbox:phone-",
       channelName: "e2e-activity-phone",
       root: "E2E phone root",
       reply: `<@human:${DEV_BROWSER_USER.id}> E2E phone reply`,
-      newest: { key: "unread", body: "E2E phone unread" },
+      newest: { key: "unread", body: `E2E phone unread\n\n[Projects](${internalProjectsHref})` },
       mention: "reply",
     });
     await mkdir(artifacts, { recursive: true });
@@ -118,6 +122,9 @@ test("on a phone a row opens its conversation in place of the Activity list", as
         `document.querySelector('[role="tablist"]').getBoundingClientRect().top >= document.querySelector("h1").getBoundingClientRect().bottom`,
       ),
     ).toBe(true);
+    await settled();
+    expect(await evaluate<boolean>(pageLoadError)).toBe(false);
+    expect(await evaluate<number>(`${filterTabs}.length`)).toBe(5);
     await browser("screenshot", join(artifacts, "phone.png"));
     // A row opens its conversation in place of the list, still on Activity. Opening it is a step
     // in history: the header's back arrow returns to the list by going back to it (past a thread
@@ -157,11 +164,19 @@ test("on a phone a row opens its conversation in place of the Activity list", as
     await browser("find", "text", "E2E phone unread", "click");
     await browser("wait", "--fn", `${shownInPane(newestId)} && ${listHidden} === true`);
     const tasksPath = JSON.stringify(`${workspacePath}/projects`);
-    // The sidebar's link is hidden on a phone; its click still navigates in the app.
-    await evaluate(`document.querySelector('a[href=${tasksPath}]').click() ?? true`);
+    const projectsLinkSelector = `section[aria-label="Selected conversation"] [id="message-${newestId}"] a[href=${JSON.stringify(internalProjectsHref)}]`;
+    await browser(
+      "wait",
+      "--fn",
+      elementAtRest(`document.querySelector(${JSON.stringify(projectsLinkSelector)})`),
+    );
+    const spaTimeOrigin = await evaluate<number>("performance.timeOrigin");
+    await browser("click", projectsLinkSelector);
     await browser("wait", "--fn", `location.pathname === ${tasksPath}`);
+    expect(await evaluate<number>("performance.timeOrigin")).toBe(spaTimeOrigin);
     await browser("back");
     await browser("wait", "--fn", `${shownInPane(newestId)} && ${listHidden} === true`);
+    expect(await evaluate<number>("performance.timeOrigin")).toBe(spaTimeOrigin);
     await clickBack("Back to activity");
     await browser("wait", "--fn", listAlone);
     expect(await evaluate<number>("navigation.currentEntry.index")).toBe(listEntry);
@@ -251,6 +266,27 @@ test("on a phone a row opens its conversation in place of the Activity list", as
     await browser("wait", "--fn", pageHydrated);
     await settled();
     expect(await evaluate<boolean>(`${tabBar} === null`)).toBe(true);
+    await browser("set", "viewport", "1920", "898");
+    await browser("open", `${origin}${workspacePath}/activity`);
+    await browser(
+      "wait",
+      "--fn",
+      `${seededRows}.length === 2 && ${pageHydrated} && document.querySelector('[data-activity-list]') !== null`,
+    );
+    expect(await evaluate<boolean>(pageLoadError)).toBe(false);
+    await browser("set", "viewport", "390", "844");
+    await browser("wait", "--fn", `${seededRows}.length === 2 && ${filterTabs}.length === 5`);
+    await settled();
+    expect(await evaluate<boolean>(pageLoadError)).toBe(false);
+    const unreadTab = `[...${filterTabs}].find((tab) => tab.textContent?.trim().startsWith("Unread"))`;
+    await browser("wait", "--fn", `${unreadTab} !== undefined && ${hydratedElement(unreadTab)}`);
+    await evaluate(`${unreadTab}.click() ?? true`);
+    await browser(
+      "wait",
+      "--fn",
+      `location.search.includes("filter=unread") && (${unreadTab})?.getAttribute("aria-selected") === "true" && ${seededRows}.length >= 1`,
+    );
+    expect(await evaluate<boolean>(pageLoadError)).toBe(false);
   } finally {
     await browser("close").catch(() => undefined);
     await db.agent.deleteMany({ where: { id: agent.id } }).catch(() => undefined);
