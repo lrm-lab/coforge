@@ -38,8 +38,7 @@ import {
   setAgentLaunchTag,
   sweepAgentLaunchTagStrays,
 } from "./agent-launch-tags";
-import { restoreSupersededAgentApiKey } from "./agent-api-key-revoke";
-import { restoreSupersededProxyToken } from "./agent-launch-revocation";
+import { restoreFailedLaunchAuthorization } from "./agent-launch-revocation";
 import { wakeReusedAgent } from "./agent-wake-control";
 import { logAgentApiKeyRevokeFailed } from "./agent-failure-logs";
 import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
@@ -470,18 +469,15 @@ export async function launchAgentProcess(
     ports.desktops.end(agentId);
     launch.startup?.dispose();
     if (launchTagToken) clearAgentLaunchTag(agentId, launchTagToken);
-    if (issuedProxyToken) {
-      restoreSupersededProxyToken(ports.agentProxyTokens, agentId, proxyToken, priorProxyToken);
-      if (localContext !== undefined) ports.revokeLocalLaunch(agentId, localContext, proxyToken);
-    }
-    if (agentApiKey) {
-      restoreSupersededAgentApiKey(ports.agentApiKeys, agentId, agentApiKey, priorAgentApiKey);
-      try {
-        await ports.revokeAgentApiKey(agentId, agentApiKey);
-      } catch (revokeError) {
-        logAgentApiKeyRevokeFailed(agentId, revokeError);
-      }
-    }
+    const restoring = restoreFailedLaunchAuthorization(ports, agentId, {
+      issuedProxyToken,
+      localContext,
+      proxyToken,
+      priorProxyToken,
+      agentApiKey,
+      priorAgentApiKey,
+    });
+    if (restoring) await restoring;
     reportLaunchFailure(ports, agentId, launch, config, error, { managed: control !== undefined });
     if (ports.currentActivityLaunches.get(agentId) === launch) {
       ports.activityPublisher.forgetBusy(agentId);

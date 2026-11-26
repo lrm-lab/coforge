@@ -1,6 +1,8 @@
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import type { PublishedActivityLaunch } from "./agent-activity-publisher";
 import type { AgentProxy } from "./runtime-launch-types";
+import { restoreSupersededAgentApiKey } from "./agent-api-key-revoke";
+import { logAgentApiKeyRevokeFailed } from "./agent-failure-logs";
 
 /** Drops the Agent's issued local context and proxy token, only when the maps still hold exactly
  * the pair being revoked — a relaunched Agent's newer pair is never touched. With no pair the
@@ -40,6 +42,52 @@ export function restoreSupersededProxyToken(
   if (supersededToken === undefined || proxyTokens.get(agentId) !== supersededToken) return;
   if (restoredToken === undefined) proxyTokens.delete(agentId);
   else proxyTokens.set(agentId, restoredToken);
+}
+
+export function restoreFailedLaunchAuthorization(
+  ports: {
+    agentProxyTokens: Map<string, string>;
+    agentApiKeys: Map<string, string>;
+    revokeLocalLaunch(agentId: string, context?: string, token?: string): void;
+    revokeAgentApiKey(agentId: string, key: string | undefined): Promise<void>;
+  },
+  agentId: string,
+  {
+    issuedProxyToken,
+    localContext,
+    proxyToken,
+    priorProxyToken,
+    agentApiKey,
+    priorAgentApiKey,
+  }: {
+    issuedProxyToken: boolean;
+    localContext?: string;
+    proxyToken?: string;
+    priorProxyToken?: string;
+    agentApiKey?: string;
+    priorAgentApiKey?: string;
+  },
+): Promise<void> | undefined {
+  if (issuedProxyToken) {
+    restoreSupersededProxyToken(ports.agentProxyTokens, agentId, proxyToken, priorProxyToken);
+    if (localContext !== undefined) ports.revokeLocalLaunch(agentId, localContext, proxyToken);
+  }
+  if (agentApiKey) {
+    restoreSupersededAgentApiKey(ports.agentApiKeys, agentId, agentApiKey, priorAgentApiKey);
+    return revokeFailedLaunchKey(ports, agentId, agentApiKey);
+  }
+}
+
+async function revokeFailedLaunchKey(
+  ports: { revokeAgentApiKey(agentId: string, key: string): Promise<void> },
+  agentId: string,
+  agentApiKey: string,
+): Promise<void> {
+  try {
+    await ports.revokeAgentApiKey(agentId, agentApiKey);
+  } catch (revokeError) {
+    logAgentApiKeyRevokeFailed(agentId, revokeError);
+  }
 }
 
 type LaunchDisposables = {
