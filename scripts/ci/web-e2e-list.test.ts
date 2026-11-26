@@ -53,8 +53,8 @@ test("no listed browser e2e drives ego-browser", async () => {
   }
 });
 
-test("the runner splits the list into four balanced shards that together hold every file once", async () => {
-  const shardCount = 4;
+test("the runner splits the list into six balanced shards that together hold every file once", async () => {
+  const shardCount = 6;
   const shard = async (n: number) => {
     const child = Bun.spawn(
       ["bash", "scripts/e2e/run-web-e2e-ci.sh", String(n), String(shardCount), "--list"],
@@ -88,7 +88,7 @@ test("the runner splits the list into four balanced shards that together hold ev
 });
 
 test("E2E_FILE soaks one file on shard 1, E2E_REPEAT times, and leaves the other shards empty", async () => {
-  const shardCount = 4;
+  const shardCount = 6;
   const list = async (n: number, env: Record<string, string>) => {
     const child = Bun.spawn(
       ["bash", "scripts/e2e/run-web-e2e-ci.sh", String(n), String(shardCount), "--list"],
@@ -109,7 +109,7 @@ test("E2E_FILE soaks one file on shard 1, E2E_REPEAT times, and leaves the other
   const soak = await list(1, { E2E_FILE: file, E2E_REPEAT: "10" });
   expect(soak.code).toBe(0);
   expect(soak.lines).toEqual(Array.from({ length: 10 }, () => file));
-  for (const n of [2, 3, 4]) {
+  for (const n of [2, 3, 4, 5, 6]) {
     const other = await list(n, { E2E_FILE: file, E2E_REPEAT: "10" });
     expect(other.code, `shard ${n}`).toBe(0);
     expect(other.lines, `shard ${n}`).toEqual([]);
@@ -126,12 +126,13 @@ test("E2E_FILE soaks one file on shard 1, E2E_REPEAT times, and leaves the other
   }
 });
 
-test("web-e2e.yml runs 4 non-blocking shards with Bun and pinned Chrome caches", async () => {
+test("web-e2e.yml runs 6 non-blocking shards with Bun and pinned Chrome caches", async () => {
   type WorkflowStep = {
     id?: string;
     name?: string;
     uses?: string;
     if?: string;
+    env?: Record<string, string>;
     run?: string;
     with?: Record<string, unknown>;
   };
@@ -157,9 +158,9 @@ test("web-e2e.yml runs 4 non-blocking shards with Bun and pinned Chrome caches",
   expect(ciWorkflow.jobs["ci-passed"]?.needs ?? []).not.toContain("web-e2e");
 
   const job = workflow.jobs.e2e;
-  expect(job.name).toContain("of 4");
+  expect(job.name).toContain("of 6");
   expect(job.strategy["fail-fast"]).toBe(false);
-  expect(job.strategy.matrix.shard).toContain("[1, 2, 3, 4]");
+  expect(job.strategy.matrix.shard).toContain("[1, 2, 3, 4, 5, 6]");
   expect(job.strategy.matrix.shard).toContain("[1]");
 
   const steps = job.steps;
@@ -191,10 +192,11 @@ test("web-e2e.yml runs 4 non-blocking shards with Bun and pinned Chrome caches",
 
   const runShard = steps.find((step) => step.name === "Run the shard");
   expect(runShard?.id).toBe("run-shard");
-  expect(runShard?.run).toContain('run-web-e2e-ci.sh "${{ matrix.shard }}" 4');
+  expect(runShard?.run).toContain('run-web-e2e-ci.sh "${{ matrix.shard }}" 6');
 
   const summarize = steps.find((step) => step.name === "Summarize the shard");
   expect(summarize?.if).toBe("always()");
+  expect(summarize?.env?.SHARDS).toBe("6");
   expect(summarize?.run).toContain("scripts/ci/web-e2e-summary.ts");
   expect(summarize?.run).toContain("summary.json");
 
@@ -202,7 +204,7 @@ test("web-e2e.yml runs 4 non-blocking shards with Bun and pinned Chrome caches",
   expect(summaryUpload?.if).toBe("always()");
   expect(summaryUpload?.uses).toStartWith("actions/upload-artifact@");
   expect(String(summaryUpload?.with?.name ?? "")).toBe(
-    "web-e2e-shard-${{ matrix.shard }}-of-4-summary",
+    "web-e2e-shard-${{ matrix.shard }}-of-6-summary",
   );
   const summaryPaths = String(summaryUpload?.with?.path ?? "")
     .split("\n")
@@ -218,7 +220,7 @@ test("web-e2e.yml runs 4 non-blocking shards with Bun and pinned Chrome caches",
 
   const upload = steps.find((step) => step.name === "Keep the output of a failed shard");
   expect(upload?.if).toBe("failure()");
-  expect(String(upload?.with?.name ?? "")).toBe("web-e2e-shard-${{ matrix.shard }}-of-4");
+  expect(String(upload?.with?.name ?? "")).toBe("web-e2e-shard-${{ matrix.shard }}-of-6");
   const failedPaths = String(upload?.with?.path ?? "");
   expect(failedPaths).toContain("${{ env.E2E_OUTPUT }}/logs");
   expect(failedPaths).toContain("${{ env.E2E_OUTPUT }}/screenshots");

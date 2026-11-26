@@ -5,7 +5,7 @@ The scheduled browser e2e workflow (`.github/workflows/web-e2e.yml`) runs the br
 demand. It blocks nothing and publishes nothing. Any listed file that fails turns the run red;
 there are no retries.
 
-Each of the four shards runs `scripts/e2e/run-web-e2e-ci.sh <shard> 4`: it builds the Web, runs
+Each of the six shards runs `scripts/e2e/run-web-e2e-ci.sh <shard> 6`: it builds the Web, runs
 the migrations, both dev seeds (`seed-dev-data.ts`, then the full `seed-dev.ts`, which many files
 depend on), starts a Centrifugo container on the host network so its proxies reach the Web, serves
 the Web on `127.0.0.1:8788` behind a front door on `127.0.0.1:8790`
@@ -17,9 +17,9 @@ digest (`scripts/ci/web-integration-images.test.ts`).
 
 The shards are balanced by the seconds recorded beside each file in the list (seeding shard 1 with
 `ui-sweep` time). The run page's summary has a table per shard (file, result, seconds). Every
-shard—passing or failing—always uploads the compact `web-e2e-shard-<n>-of-4-summary` artifact
+shard—passing or failing—always uploads the compact `web-e2e-shard-<n>-of-6-summary` artifact
 (`summary.md` and `summary.json`) for a week so per-file timings stay downloadable from green and
-near-green runs. A failed shard additionally uploads `web-e2e-shard-<n>-of-4` for a week: each
+near-green runs. A failed shard additionally uploads `web-e2e-shard-<n>-of-6` for a week: each
 file's output, the Web's, Centrifugo's and the front door's logs, and the screenshots the tests
 wrote under `.artifacts/e2e/`.
 
@@ -87,7 +87,7 @@ Run one shard locally, against a PostgreSQL and Redis on the default ports, with
 `CENTRIFUGO_IMAGE` set and agent-browser installed:
 
 ```sh
-CENTRIFUGO_IMAGE=centrifugo/centrifugo:v6.9.2 scripts/e2e/run-web-e2e-ci.sh 1 4
+CENTRIFUGO_IMAGE=centrifugo/centrifugo:v6.9.2 scripts/e2e/run-web-e2e-ci.sh 1 6
 ```
 
-`scripts/e2e/run-web-e2e-ci.sh 1 4 --list` prints a shard's files without starting anything.
+`scripts/e2e/run-web-e2e-ci.sh 1 6 --list` prints a shard's files without starting anything.

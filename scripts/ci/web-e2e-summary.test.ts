@@ -72,7 +72,7 @@ test("parseSummaryMarkdown and buildShardSummary compute exact per-file, ui-swee
   });
 });
 
-test("CLI summary artifacts across all 4 shards partition the CI list once and align measured seconds", async () => {
+test("CLI summary artifacts across all 6 shards partition the CI list once and align measured seconds", async () => {
   const listText = await Bun.file("scripts/e2e/web-e2e-ci.txt").text();
   const listEntries = listText
     .split("\n")
@@ -86,9 +86,9 @@ test("CLI summary artifacts across all 4 shards partition the CI list once and a
   const dir = await mkdtemp(join(tmpdir(), "coforge-web-e2e-summary-"));
   try {
     const summaries: ShardSummary[] = [];
-    for (let shard = 1; shard <= 4; shard++) {
+    for (let shard = 1; shard <= 6; shard++) {
       const listProc = Bun.spawn(
-        ["bash", "scripts/e2e/run-web-e2e-ci.sh", String(shard), "4", "--list"],
+        ["bash", "scripts/e2e/run-web-e2e-ci.sh", String(shard), "6", "--list"],
         { stdout: "pipe", stderr: "pipe" },
       );
       const [stdout, listCode] = await Promise.all([
@@ -106,7 +106,7 @@ test("CLI summary artifacts across all 4 shards partition the CI list once and a
       await Bun.write(
         mdPath,
         [
-          `### Browser e2e shard ${shard} of 4`,
+          `### Browser e2e shard ${shard} of 6`,
           "",
           "| File | Result | Seconds |",
           "| --- | --- | --- |",
@@ -131,7 +131,7 @@ test("CLI summary artifacts across all 4 shards partition the CI list once and a
           "--shard",
           String(shard),
           "--shards",
-          "4",
+          "6",
           "--outcome",
           "success",
           "--started-at-file",

@@ -2,7 +2,7 @@ name: Web browser e2e
 
 # The browser e2es (apps/web/test/*.e2e.ts) need a built Web, PostgreSQL, Redis, Centrifugo and a
 # headless Chrome, which CI's jobs do not have. This runs the ones listed in
-# scripts/e2e/web-e2e-ci.txt once a day and on demand, in four shards; any failing file turns the
+# scripts/e2e/web-e2e-ci.txt once a day and on demand, in six shards; any failing file turns the
 # run red. It blocks nothing and publishes nothing; docs/release/web-e2e.md.
 on:
   schedule:
@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   e2e:
-    name: Browser e2e (shard ${{ matrix.shard }} of 4)
+    name: Browser e2e (shard ${{ matrix.shard }} of 6)
     runs-on: ubuntu-latest
     # Setup (images, install, build, services) once took ~24 of the 30 minutes on a slow runner,
     # leaving the shard's files no room; the per-file `timeout 360` still bounds each test.
@@ -39,8 +39,8 @@ jobs:
       # One shard's failure does not hide the others'.
       fail-fast: false
       matrix:
-        # One file soaked on one runner, or the whole list in four shards.
-        shard: ${{ fromJSON(inputs.file && '[1]' || '[1, 2, 3, 4]') }}
+        # One file soaked on one runner, or the whole list in six shards.
+        shard: ${{ fromJSON(inputs.file && '[1]' || '[1, 2, 3, 4, 5, 6]') }}
 
     # The images staging runs, by digest; scripts/ci/web-integration-images.test.ts fails when
     # they drift apart. Centrifugo is started by the runner, not as a service: its proxies call the
@@ -152,14 +152,14 @@ jobs:
           E2E_REPEAT: ${{ inputs.repeat }}
         run: |
           date -u +%s > "${RUNNER_TEMP}/web-e2e-shard-started-at.epoch"
-          ./scripts/e2e/run-web-e2e-ci.sh "${{ matrix.shard }}" 4
+          ./scripts/e2e/run-web-e2e-ci.sh "${{ matrix.shard }}" 6
 
       - name: Summarize the shard
         if: always()
         shell: bash
         env:
           SHARD: ${{ matrix.shard }}
-          SHARDS: "4"
+          SHARDS: "6"
           E2E_FILE: ${{ inputs.file }}
           E2E_REPEAT: ${{ inputs.repeat }}
           SHARD_OUTCOME: ${{ steps.run-shard.outcome }}
@@ -191,7 +191,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: web-e2e-shard-${{ matrix.shard }}-of-4-summary
+          name: web-e2e-shard-${{ matrix.shard }}-of-6-summary
           path: |
             ${{ env.E2E_OUTPUT }}/summary.md
             ${{ env.E2E_OUTPUT }}/summary.json
@@ -203,7 +203,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: web-e2e-shard-${{ matrix.shard }}-of-4
+          name: web-e2e-shard-${{ matrix.shard }}-of-6
           path: |
             ${{ env.E2E_OUTPUT }}/logs
             ${{ env.E2E_OUTPUT }}/screenshots
