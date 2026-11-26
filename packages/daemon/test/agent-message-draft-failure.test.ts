@@ -24,13 +24,12 @@ test.each([
     // The store fails the same way a damaged table would: `DROP TABLE` makes every draft
     // operation throw. Recreating it is the repair the "ordinary send" path relies on.
     const db = AgentStateDb.open(root, "agent");
+    const draftSchema = db.database
+      .query<{ sql: string }, []>("SELECT sql FROM sqlite_schema WHERE name = 'drafts'")
+      .get();
+    if (!draftSchema) throw new Error("missing draft schema");
     const breakDrafts = () => db.database.exec("DROP TABLE drafts");
-    const repairDrafts = () =>
-      db.database.exec(`CREATE TABLE IF NOT EXISTS drafts (
-        target TEXT PRIMARY KEY, content TEXT NOT NULL, attachment_ids TEXT,
-        idempotency_key TEXT NOT NULL, mentions TEXT, saved_at INTEGER NOT NULL,
-        rehold_count INTEGER NOT NULL DEFAULT 0, seen_up_to_seq INTEGER, seen_exact_seqs TEXT
-      )`);
+    const repairDrafts = () => db.database.exec(draftSchema.sql);
     const reading = scenario.endsWith("lookup");
     const afterTransport =
       scenario === "accepted send cleanup" || scenario === "held draft refresh";
