@@ -42,7 +42,7 @@ Read [module design](docs/agents/module-design.md) when adding a feature or modu
 
 Details and the incidents behind these rules are in [delivery](docs/agents/delivery.md).
 
-- Follow branch-based GitHub Flow; a maintainer or an Agent may push directly to `main` after the local checks, `simplify` and an independent review; everyone else reaches `main` through a CR.
+- Follow branch-based GitHub Flow; a maintainer or an Agent may push directly to `main` after the local checks and an independent review; everyone else reaches `main` through a CR.
 - Use the MVP fast lane ([defined in delivery](docs/agents/delivery.md)) for ordinary changes; the decision gates still need Frank.
 - Rebase before review; never force-push another contributor's branch; keep `main` linear.
 - Read code from `origin/main` or a fresh worktree, never a long-lived checkout.
@@ -52,7 +52,7 @@ Details and the incidents behind these rules are in [delivery](docs/agents/deliv
 - A CR or direct-push commit message records scope, decisions, sources, checks, risks, follow-ups and the Agent session. Read [the commit message rules](docs/agents/git-hooks/hard-rules.md) when splitting commits or touching a high-risk path ([the list](scripts/ci/high-risk-paths.txt)).
 - Keep required CI short; a task is complete only after the checks pass and the change is on `main`.
 - Remove an export or mechanism completely: implementation, tests and every assertion that pins it.
-- Run `simplify` and an independent review (including the performance pass and official-docs pass) before pushing.
+- Run an independent review (including the performance pass and official-docs pass) before pushing.
 
 ## Testing
 

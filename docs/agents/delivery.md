@@ -15,7 +15,7 @@ A maintainer (the Maintain or Admin repository role) may push directly to `main`
 relevant local checks (`mise run test`, `mise run check`, `mise run build`). CI validates every push to
 `main` on GitHub only afterwards: it blocks nothing, so the local checks still come first, and a red run
 on `main` is fixed before anything else is pushed. An Agent working in this repository commits under the
-identity rule below and pushes directly to `main` the same way, after the local checks, `simplify` and
+identity rule below and pushes directly to `main` the same way, after the local checks and
 an independent code review (which covers performance, below); it does not open a PR. Everyone else, and
 any change that needs review, reaches `main` through a CR/PR with the required "CI passed" check; no
 approval is required. Nobody may delete `main`.
@@ -137,8 +137,8 @@ pass; #1081's first run failed on exactly that.
 ## Review
 
 Keep refactoring in the independent review stage rather than expanding a red-green implementation
-slice. Once the slice is green, run the `simplify` skill (built into Claude Code) on the branch diff,
-re-run the relevant checks, then request an independent code review.
+slice. Once the slice is green, request an independent code review. Re-run the relevant checks after
+making review changes.
 
 The independent review includes a performance pass over the same diff: read the changed code, plus the
 files the area checklist's "Read first" names, against the

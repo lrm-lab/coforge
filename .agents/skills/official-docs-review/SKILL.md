@@ -6,7 +6,7 @@ when_to_use: "pre-push review, check official docs best practices, audit diff ag
 
 # Official docs review
 
-Run this pass on every change before pushing, alongside `simplify` and `perf-scan` ([`REVIEW.md`](../../../REVIEW.md), [`docs/agents/delivery.md`](../../../docs/agents/delivery.md)). It checks only the changed code against current official documentation and installed version-pinned skills—never stale memory.
+Run this pass on every change before pushing, alongside `perf-scan` ([`REVIEW.md`](../../../REVIEW.md), [`docs/agents/delivery.md`](../../../docs/agents/delivery.md)). It checks only the changed code against current official documentation and installed version-pinned skills—never stale memory.
 
 ## Procedure
 
