@@ -55,7 +55,12 @@ function writeLegacy(db: Database, spelling: string, conversationId: string, seq
   );
 }
 
-test("old → new → old → new retains A/31, B/7, drafts and continuations", async () => {
+test.each(["#board:#7", "@peer:#7", "@peer~agent:#7", "@peer~human:#7", "dm:@peer:#7"])(
+  "old → new → old → new retains A/31, B/7, drafts and continuations for %s",
+  expectRollback,
+);
+
+async function expectRollback(target: string): Promise<void> {
   const root = await stateDirectory();
   const draft = { content: "draft", idempotencyKey: "held-send", reholdCount: 0 };
   const continuation = {
@@ -140,7 +145,7 @@ test("old → new → old → new retains A/31, B/7, drafts and continuations", 
       reopened.close();
     }
   }
-});
+}
 
 test("a fault after the first migration insert rolls back all inserts and permits retry", async () => {
   const root = await stateDirectory();

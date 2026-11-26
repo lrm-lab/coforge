@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import {
+  isTaskConversationTarget,
   mergeSeenExactSeqs,
   normalizeSeenExactSeqs,
   threadRootTarget,
@@ -12,7 +13,6 @@ import type {
 
 const positiveInteger = z.int().positive().optional().catch(undefined);
 const identity = z.string().min(1);
-const taskDiscussionTarget = z.string().regex(/^#[^:]+:#[1-9][0-9]*$/);
 const scopedTargetSchema = z.object({
   target: identity,
   threadRootId: identity.optional(),
@@ -60,9 +60,7 @@ const UPSERT_SCOPED = `INSERT INTO scoped_consumed_seqs
 
 function legacyThreadSuffix(target: string): string | undefined {
   const suffix = threadRootTarget(target);
-  return suffix !== undefined && !taskDiscussionTarget.safeParse(target).success
-    ? suffix
-    : undefined;
+  return suffix !== undefined && !isTaskConversationTarget(target) ? suffix : undefined;
 }
 
 export function legacyConsumedSeqProjection(
