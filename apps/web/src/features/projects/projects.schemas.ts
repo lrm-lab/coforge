@@ -1,7 +1,8 @@
+import { PROJECT_SLUG_MAX_LENGTH } from "@lrm/coforge-sdk/internal/project-slug";
 import { z } from "zod";
 
 export const PROJECT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-export const PROJECT_SLUG_MAX_LENGTH = 100;
+export { PROJECT_SLUG_MAX_LENGTH };
 
 export function isValidProjectSlug(slug: string): boolean {
   return PROJECT_SLUG_PATTERN.test(slug) && slug.length <= PROJECT_SLUG_MAX_LENGTH;

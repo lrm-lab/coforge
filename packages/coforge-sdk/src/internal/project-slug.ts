@@ -1,0 +1,1 @@
+export const PROJECT_SLUG_MAX_LENGTH = 100;
