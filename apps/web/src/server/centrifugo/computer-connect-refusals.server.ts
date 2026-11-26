@@ -1,4 +1,5 @@
 import type { DaemonConnectRejectionReason } from "@lrm/coforge-sdk/internal";
+import { z } from "zod";
 
 import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
@@ -35,6 +36,11 @@ function refusalKey(scope: { workspaceId: string; computerId: string }) {
   });
 }
 
+const computerConnectRefusalSchema = z.object({
+  reason: z.string(),
+  at: z.string(),
+});
+
 export class RedisComputerConnectRefusals implements ComputerConnectRefusals {
   constructor(
     private readonly redis: {
@@ -64,17 +70,9 @@ export class RedisComputerConnectRefusals implements ComputerConnectRefusals {
     return values.map((value) => {
       if (!value) return null;
       try {
-        const parsed: unknown = JSON.parse(value);
-        if (
-          typeof parsed === "object" &&
-          parsed !== null &&
-          typeof (parsed as ComputerConnectRefusal).reason === "string" &&
-          typeof (parsed as ComputerConnectRefusal).at === "string"
-        )
-          return parsed as ComputerConnectRefusal;
-      } catch {
-        // A malformed record reads as none; the next refusal rewrites it.
-      }
+        const parsed = computerConnectRefusalSchema.safeParse(JSON.parse(value));
+        if (parsed.success) return parsed.data as ComputerConnectRefusal;
+      } catch {}
       return null;
     });
   }

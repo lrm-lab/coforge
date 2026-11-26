@@ -1,5 +1,6 @@
-import { openRedisClient } from "#src/server/redis-client.server";
 import { DAEMON_SHUTDOWN_REASONS, type DaemonShutdownReason } from "@lrm/coforge-sdk/internal";
+import { z } from "zod";
+import { openRedisClient } from "#src/server/redis-client.server";
 
 import { redisUrlFor } from "#src/server/redis-url.server";
 import { workspaceRedisKey } from "#src/server/redis-keys.server";
@@ -67,19 +68,21 @@ export class RedisComputerLifecycleMemory implements ComputerLifecycleMemory {
   }
 }
 
+const lifecycleInstanceSchema = z
+  .object({
+    workerInstanceId: z.string(),
+    computerVersion: z.string().optional().catch(undefined),
+  })
+  .transform(({ workerInstanceId, computerVersion }) => ({
+    workerInstanceId,
+    ...(computerVersion !== undefined ? { computerVersion } : {}),
+  }));
+
 function parseInstance(value: unknown) {
   if (typeof value !== "string") return undefined;
   try {
-    const parsed: unknown = JSON.parse(value);
-    if (typeof parsed !== "object" || parsed === null) return undefined;
-    const workerInstanceId = Reflect.get(parsed, "workerInstanceId");
-    const computerVersion = Reflect.get(parsed, "computerVersion");
-    return typeof workerInstanceId === "string"
-      ? {
-          workerInstanceId,
-          ...(typeof computerVersion === "string" ? { computerVersion } : {}),
-        }
-      : undefined;
+    const parsed = lifecycleInstanceSchema.safeParse(JSON.parse(value));
+    return parsed.success ? parsed.data : undefined;
   } catch {
     return undefined;
   }

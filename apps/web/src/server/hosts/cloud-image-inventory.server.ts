@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   cloudComputerImage,
   imageLayerId,
@@ -19,27 +20,49 @@ export type CloudImageUpdate = {
 const KEY = "coforge:cloud-image:v1";
 const TTL_SECONDS = 90;
 
+const nonEmptyTrimmedText = z.string().trim().min(1);
+
+const hostImageComputerSchema = z.object({
+  computerId: nonEmptyTrimmedText,
+  imageId: nonEmptyTrimmedText,
+});
+
+const hostImageReportSchema = z.object({
+  image: z.object({
+    id: nonEmptyTrimmedText,
+    version: z.string().trim().optional().catch(undefined),
+  }),
+  computers: z.array(z.unknown()).optional().catch(undefined),
+});
+
+const storedCloudImageSnapshotSchema = z.object({
+  image: z.object({
+    id: nonEmptyTrimmedText,
+    version: z.string().trim().optional().catch(undefined),
+  }),
+  computers: z.array(
+    z.object({
+      computerId: z.string(),
+      imageId: z.string(),
+    }),
+  ),
+});
+
 /** Reads the optional image report on a host heartbeat. Missing or malformed fields are ignored. */
 export function parseHostImageReport(
   body: Record<string, unknown>,
 ): CloudImageSnapshot | undefined {
-  const image = body.image;
-  if (!image || typeof image !== "object" || Array.isArray(image)) return undefined;
-  const id = text((image as Record<string, unknown>).id);
-  if (!id) return undefined;
-  const version = text((image as Record<string, unknown>).version) ?? "";
+  const parsed = hostImageReportSchema.safeParse(body);
+  if (!parsed.success) return undefined;
   const computers: CloudImageSnapshot["computers"] = [];
-  if (Array.isArray(body.computers)) {
-    for (const item of body.computers) {
-      if (!item || typeof item !== "object" || Array.isArray(item)) continue;
-      const row = item as Record<string, unknown>;
-      const computerId = text(row.computerId);
-      const imageId = text(row.imageId);
-      if (!computerId || !imageId) continue;
-      computers.push({ computerId, imageId });
-    }
+  for (const item of parsed.data.computers ?? []) {
+    const row = hostImageComputerSchema.safeParse(item);
+    if (row.success) computers.push(row.data);
   }
-  return { image: { id, version }, computers };
+  return {
+    image: { id: parsed.data.image.id, version: parsed.data.image.version ?? "" },
+    computers,
+  };
 }
 
 export function cloudImageUpdateFor(
@@ -72,11 +95,11 @@ export class CloudImageInventory {
     const raw = await this.redis.get(KEY);
     if (!raw) return undefined;
     try {
-      const value = JSON.parse(raw) as CloudImageSnapshot;
-      if (!text(value?.image?.id) || !Array.isArray(value.computers)) return undefined;
+      const parsed = storedCloudImageSnapshotSchema.safeParse(JSON.parse(raw));
+      if (!parsed.success) return undefined;
       return {
-        image: { id: value.image.id.trim(), version: value.image.version?.trim() ?? "" },
-        computers: value.computers.map(({ computerId, imageId }) => ({
+        image: { id: parsed.data.image.id, version: parsed.data.image.version ?? "" },
+        computers: parsed.data.computers.map(({ computerId, imageId }) => ({
           computerId,
           imageId,
           ...(this.updatesPaused || this.retainedImages.has(imageLayerId(imageId) ?? imageId)
@@ -129,10 +152,6 @@ export function readCloudImageUpdatesPaused(value: string | undefined): boolean 
   if (!setting || setting === "false") return false;
   if (setting === "true") return true;
   throw new Error("COFORGE_CLOUD_IMAGE_UPDATES_PAUSED must be true or false");
-}
-
-function text(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 let singleton: CloudImageInventory | undefined;

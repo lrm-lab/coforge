@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { z } from "zod";
 
 import { publicationData } from "#src/features/realtime/publication-data";
 import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
@@ -42,9 +43,21 @@ export type AgentControlRealtimeEvent = {
 const MAX_ID_CHARS = 128;
 const MAX_TEXT_CHARS = 512;
 
-function boundedString(value: unknown, max: number): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= max;
-}
+const boundedIdSchema = z.string().min(1).max(MAX_ID_CHARS);
+
+const agentControlEventSchema = z.object({
+  type: z.literal(REALTIME_EVENTS.agentControl),
+  agentId: boundedIdSchema,
+  requestId: boundedIdSchema,
+  action: z.enum(AGENT_CONTROL_ACTIONS),
+  phase: z.enum(AGENT_CONTROL_PHASES),
+  errorCode: boundedIdSchema.optional(),
+  detail: z
+    .string()
+    .refine((value) => [...value].length <= MAX_TEXT_CHARS)
+    .optional(),
+  occurredAtMs: z.int().min(1),
+});
 
 export function isAgentControlEvent(value: unknown): value is AgentControlRealtimeEvent {
   return (
@@ -56,36 +69,9 @@ export function isAgentControlEvent(value: unknown): value is AgentControlRealti
 }
 
 export function decodeAgentControlEvent(data: unknown): AgentControlRealtimeEvent {
-  const value = publicationData(data);
-  if (!isAgentControlEvent(value)) throw new Error("invalid Agent control event");
-  const agentId = Reflect.get(value, "agentId");
-  const requestId = Reflect.get(value, "requestId");
-  const action = Reflect.get(value, "action");
-  const phase = Reflect.get(value, "phase");
-  const errorCode = Reflect.get(value, "errorCode");
-  const detail = Reflect.get(value, "detail");
-  const occurredAtMs = Reflect.get(value, "occurredAtMs");
-  if (
-    !boundedString(agentId, MAX_ID_CHARS) ||
-    !boundedString(requestId, MAX_ID_CHARS) ||
-    !(AGENT_CONTROL_ACTIONS as readonly string[]).includes(action as string) ||
-    !(AGENT_CONTROL_PHASES as readonly string[]).includes(phase as string) ||
-    (errorCode !== undefined && !boundedString(errorCode, MAX_ID_CHARS)) ||
-    (detail !== undefined && (typeof detail !== "string" || [...detail].length > MAX_TEXT_CHARS)) ||
-    !Number.isSafeInteger(occurredAtMs) ||
-    (occurredAtMs as number) < 1
-  )
-    throw new Error("invalid Agent control event");
-  return {
-    type: REALTIME_EVENTS.agentControl,
-    agentId: agentId as string,
-    requestId: requestId as string,
-    action: action as AgentControlActionName,
-    phase: phase as AgentControlPhaseName,
-    ...(errorCode !== undefined ? { errorCode: errorCode as string } : {}),
-    ...(detail !== undefined ? { detail: detail as string } : {}),
-    occurredAtMs: occurredAtMs as number,
-  };
+  const parsed = agentControlEventSchema.safeParse(publicationData(data));
+  if (!parsed.success) throw new Error("invalid Agent control event");
+  return parsed.data;
 }
 
 /** What the store keeps per Agent: the newest event, with a phase-only event never erasing the

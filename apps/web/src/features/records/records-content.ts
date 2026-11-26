@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   parseAssignmentMeta,
   parseScheduleMeta,
@@ -399,21 +400,24 @@ function withReceivedBody(
   return { ...content, received };
 }
 
+const bodyRestoreSchema = z.object({
+  sourceMessageId: z.string().min(1),
+  revision: z.int().min(1),
+  showing: z.enum(["latest", "previous"]),
+  previous: z.unknown(),
+  latest: z.unknown(),
+});
+
 function parseBodyRestore(value: unknown): ReportBodyRestore | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const row = value as Partial<ReportBodyRestore>;
-  const previous = parseBodySnapshot(row.previous, true);
-  const latest = parseBodySnapshot(row.latest, true);
+  const parsed = bodyRestoreSchema.safeParse(value);
+  if (!parsed.success) return undefined;
+  const previous = parseBodySnapshot(parsed.data.previous, true);
+  const latest = parseBodySnapshot(parsed.data.latest, true);
   if (!previous || !latest) return undefined;
-  if (row.showing !== "latest" && row.showing !== "previous") return undefined;
-  if (typeof row.sourceMessageId !== "string" || row.sourceMessageId.length === 0) return undefined;
-  if (typeof row.revision !== "number" || !Number.isInteger(row.revision) || row.revision < 1) {
-    return undefined;
-  }
   return {
-    sourceMessageId: row.sourceMessageId,
-    revision: row.revision,
-    showing: row.showing,
+    sourceMessageId: parsed.data.sourceMessageId,
+    revision: parsed.data.revision,
+    showing: parsed.data.showing,
     previous,
     latest,
   };

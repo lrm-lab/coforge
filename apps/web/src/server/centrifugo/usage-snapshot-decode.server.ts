@@ -1,10 +1,161 @@
-import {
-  RESET_CREDITS_MAX,
-  isRecord,
-  utf8Decoder,
-  type RuntimeMetadata,
-} from "@lrm/coforge-sdk/internal";
+import { RESET_CREDITS_MAX, utf8Decoder, type RuntimeMetadata } from "@lrm/coforge-sdk/internal";
+import { z } from "zod";
 import type { UsageSnapshot } from "./usage-cache.server";
+
+function hasNoControlChars(value: string): boolean {
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i);
+    if (code <= 0x1f || code === 0x7f) return false;
+  }
+  return true;
+}
+
+const parseableInstant = (minLength = 0) =>
+  z
+    .string()
+    .min(minLength)
+    .max(100)
+    .refine((value) => !Number.isNaN(Date.parse(value)));
+
+const officialText = (max: number) =>
+  z
+    .string()
+    .transform((value) => value.trim())
+    .refine((value) => value.length <= max)
+    .transform((value) => (value.length > 0 ? value : undefined))
+    .optional();
+
+const bucketStatusSchema = z
+  .enum(["ok", "available", "limit_reached", "rate-limited", "parse_unavailable"])
+  .transform((status): "ok" | "limit_reached" | "parse_unavailable" =>
+    status === "available" ? "ok" : status === "rate-limited" ? "limit_reached" : status,
+  );
+
+const quotaLevelSchema = z.enum(["ok", "warning", "near_exhausted", "exhausted"]);
+
+const usageWindowSchema = z
+  .object({
+    windowDurationMinutes: z.number().positive(),
+    resetsAt: parseableInstant().optional(),
+    usedPercent: z.number().min(0).max(100).optional(),
+    id: z.string().min(1).max(100).optional().catch(undefined),
+    status: bucketStatusSchema.optional(),
+    quotaLevel: quotaLevelSchema.optional().catch(undefined),
+  })
+  .transform(({ windowDurationMinutes, resetsAt, usedPercent, id, status, quotaLevel }) => ({
+    windowDurationMinutes,
+    ...(resetsAt !== undefined ? { resetsAt } : {}),
+    ...(usedPercent !== undefined ? { usedPercent } : {}),
+    ...(id !== undefined ? { id } : {}),
+    ...(status !== undefined ? { status } : {}),
+    ...(quotaLevel !== undefined ? { quotaLevel } : {}),
+  }));
+
+const officialBucketSchema = z
+  .object({
+    id: officialText(100),
+    name: officialText(200),
+    description: officialText(2_000),
+    window: officialText(40),
+    remainingFraction: z.number().min(0).max(1).optional(),
+    usedPercent: z.number().min(0).max(100).optional(),
+    status: bucketStatusSchema.optional(),
+    windowDurationMinutes: z.number().positive().optional(),
+    resetsAt: parseableInstant(1).optional(),
+  })
+  .transform(
+    ({
+      id,
+      name,
+      description,
+      window,
+      remainingFraction,
+      usedPercent,
+      status,
+      windowDurationMinutes,
+      resetsAt,
+    }) => ({
+      ...(id !== undefined ? { id } : {}),
+      ...(name !== undefined ? { name } : {}),
+      ...(description !== undefined ? { description } : {}),
+      ...(window !== undefined ? { window } : {}),
+      ...(remainingFraction !== undefined ? { remainingFraction } : {}),
+      ...(usedPercent !== undefined ? { usedPercent } : {}),
+      ...(status !== undefined ? { status } : {}),
+      ...(windowDurationMinutes !== undefined ? { windowDurationMinutes } : {}),
+      ...(resetsAt !== undefined ? { resetsAt } : {}),
+    }),
+  );
+
+const officialGroupSchema = z
+  .object({
+    name: officialText(200),
+    description: officialText(2_000),
+    buckets: z.array(officialBucketSchema).min(1).max(12),
+  })
+  .transform(({ name, description, buckets }) => ({
+    ...(name !== undefined ? { name } : {}),
+    ...(description !== undefined ? { description } : {}),
+    buckets,
+  }));
+
+const creditBalanceSchema = z
+  .union([
+    z.null().transform(() => undefined),
+    z
+      .string()
+      .transform((value) => value.trim())
+      .refine((value) => value.length > 0 && value.length <= 40),
+  ])
+  .optional();
+
+const creditsSchema = z
+  .object({
+    hasCredits: z.boolean(),
+    unlimited: z.boolean(),
+    balance: creditBalanceSchema,
+  })
+  .transform(({ hasCredits, unlimited, balance }) => ({
+    hasCredits,
+    unlimited,
+    ...(balance !== undefined ? { balance } : {}),
+  }));
+
+const creditUsageSchema = z
+  .object({
+    used: z.number().min(0),
+    limit: z.number().positive(),
+    overage: z.number().min(0),
+  })
+  .refine(({ used, limit }) => used <= limit);
+
+const accountLabelSchema = z
+  .string()
+  .min(1)
+  .max(80)
+  .refine((value) => value.includes("*") && hasNoControlChars(value));
+
+const healthSchema = z.enum(["ok", "rate_limited", "reauth_required", "unsupported", "error"]);
+
+const usageSnapshotSchema = z
+  .object({
+    provider: z.string(),
+    planType: z.string().max(100).optional(),
+    primary: usageWindowSchema.optional(),
+    secondary: usageWindowSchema.optional(),
+    officialGroups: z.array(officialGroupSchema).min(1).max(12).optional(),
+    officialDescription: officialText(2_000),
+    credits: creditsSchema.optional(),
+    creditUsage: creditUsageSchema.optional(),
+    resetCreditsAvailable: z.int().min(0).max(RESET_CREDITS_MAX).optional().catch(undefined),
+    collectedAt: z
+      .string()
+      .refine((value) => !Number.isNaN(Date.parse(value)))
+      .optional(),
+    accountLabel: accountLabelSchema.optional(),
+    health: healthSchema.optional(),
+  })
+  .refine((snapshot) => snapshot.creditUsage === undefined || snapshot.primary !== undefined);
 
 /** A usage snapshot as a Computer reports it: checked field by field, so one malformed field
  * rejects the whole reading instead of reaching the cache. */
@@ -19,289 +170,33 @@ export function decodeUsageSnapshot(
   } catch {
     return undefined;
   }
-  const snapshot = record(value);
-  if (!snapshot || snapshot.provider !== expectedProvider) return undefined;
-  const planType = snapshot.planType;
-  if (planType !== undefined && (typeof planType !== "string" || planType.length > 100))
-    return undefined;
-  const primary = usageWindow(snapshot.primary);
-  const secondary = usageWindow(snapshot.secondary);
-  const officialGroups = usageOfficialGroups(snapshot.officialGroups);
-  if (snapshot.officialGroups !== undefined && !officialGroups) return undefined;
-  const officialDescription = officialText(snapshot.officialDescription, 2_000);
-  if (officialDescription === null) return undefined;
-  if (
-    (snapshot.primary !== undefined && !primary) ||
-    (snapshot.secondary !== undefined && !secondary)
-  )
-    return undefined;
-  const credits = record(snapshot.credits);
-  const balance = credits ? creditBalance(credits.balance) : undefined;
-  const parsedCredits =
-    credits && typeof credits.hasCredits === "boolean" && typeof credits.unlimited === "boolean"
-      ? {
-          hasCredits: credits.hasCredits,
-          unlimited: credits.unlimited,
-          ...(balance ? { balance } : {}),
-        }
-      : undefined;
-  if (snapshot.credits !== undefined && !parsedCredits) return undefined;
-  if (balance === null) return undefined;
-  const amounts = record(snapshot.creditUsage);
-  const creditUsage =
-    amounts &&
-    typeof amounts.used === "number" &&
-    Number.isFinite(amounts.used) &&
-    amounts.used >= 0 &&
-    typeof amounts.limit === "number" &&
-    Number.isFinite(amounts.limit) &&
-    amounts.limit > 0 &&
-    amounts.used <= amounts.limit &&
-    typeof amounts.overage === "number" &&
-    Number.isFinite(amounts.overage) &&
-    amounts.overage >= 0
-      ? { used: amounts.used, limit: amounts.limit, overage: amounts.overage }
-      : undefined;
-  if (snapshot.creditUsage !== undefined && (!creditUsage || !primary)) return undefined;
-  // Only a plausible count is shown; anything else is left out, and the reading stays.
-  const resetCredits = snapshot.resetCreditsAvailable;
-  const resetCreditsAvailable =
-    typeof resetCredits === "number" &&
-    Number.isInteger(resetCredits) &&
-    resetCredits >= 0 &&
-    resetCredits <= RESET_CREDITS_MAX
-      ? resetCredits
-      : undefined;
-  const collectedAt = snapshot.collectedAt;
-  if (
-    collectedAt !== undefined &&
-    (typeof collectedAt !== "string" || Number.isNaN(Date.parse(collectedAt)))
-  )
-    return undefined;
-  const accountLabel = snapshot.accountLabel;
-  if (accountLabel !== undefined && !isValidAccountLabel(accountLabel)) return undefined;
-  const health = snapshot.health;
-  if (
-    health !== undefined &&
-    (typeof health !== "string" ||
-      (health !== "ok" &&
-        health !== "rate_limited" &&
-        health !== "reauth_required" &&
-        health !== "unsupported" &&
-        health !== "error"))
-  )
-    return undefined;
+  const parsed = usageSnapshotSchema.safeParse(value);
+  if (!parsed.success || parsed.data.provider !== expectedProvider) return undefined;
+  const {
+    planType,
+    primary,
+    secondary,
+    officialGroups,
+    officialDescription,
+    credits,
+    creditUsage,
+    resetCreditsAvailable,
+    collectedAt,
+    accountLabel,
+    health,
+  } = parsed.data;
   return {
     provider: expectedProvider,
-    ...(typeof planType === "string" ? { planType } : {}),
-    ...(primary ? { primary } : {}),
-    ...(secondary ? { secondary } : {}),
-    ...(officialGroups ? { officialGroups } : {}),
-    ...(officialDescription ? { officialDescription } : {}),
-    ...(parsedCredits ? { credits: parsedCredits } : {}),
-    ...(creditUsage ? { creditUsage } : {}),
+    ...(planType !== undefined ? { planType } : {}),
+    ...(primary !== undefined ? { primary } : {}),
+    ...(secondary !== undefined ? { secondary } : {}),
+    ...(officialGroups !== undefined ? { officialGroups } : {}),
+    ...(officialDescription !== undefined ? { officialDescription } : {}),
+    ...(credits !== undefined ? { credits } : {}),
+    ...(creditUsage !== undefined ? { creditUsage } : {}),
     ...(resetCreditsAvailable !== undefined ? { resetCreditsAvailable } : {}),
-    ...(typeof collectedAt === "string" ? { collectedAt } : {}),
-    ...(typeof accountLabel === "string" ? { accountLabel } : {}),
-    ...(typeof health === "string" ? { health } : {}),
+    ...(collectedAt !== undefined ? { collectedAt } : {}),
+    ...(accountLabel !== undefined ? { accountLabel } : {}),
+    ...(health !== undefined ? { health } : {}),
   };
-}
-
-/** Codex `credits.balance` when this schema version sends it. `undefined` when absent or null.
- * `null` when present but not a short string, so the snapshot is rejected instead of dropping it. */
-function creditBalance(value: unknown): string | undefined | null {
-  if (value === undefined || value === null) return undefined;
-  if (typeof value !== "string") return null;
-  const balance = value.trim();
-  if (balance.length === 0 || balance.length > 40) return null;
-  return balance;
-}
-
-/** A masked account email: at most 80 characters, no control characters, and containing at
- * least one `*` — a raw, unmasked address never passes this check. */
-function isValidAccountLabel(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= 80 &&
-    value.includes("*") &&
-    // oxlint-disable-next-line no-control-regex -- Reject control bytes in a masked address.
-    !/[\x00-\x1f\x7f]/u.test(value)
-  );
-}
-
-function usageOfficialGroups(value: unknown): UsageSnapshot["officialGroups"] | undefined {
-  if (!Array.isArray(value) || value.length === 0 || value.length > 12) return undefined;
-  const groups = [];
-  for (const raw of value) {
-    const group = record(raw);
-    if (
-      !group ||
-      !Array.isArray(group.buckets) ||
-      group.buckets.length === 0 ||
-      group.buckets.length > 12
-    )
-      return undefined;
-    const name = officialText(group.name, 200);
-    const description = officialText(group.description, 2_000);
-    if (name === null || description === null) return undefined;
-    const buckets = [];
-    for (const rawBucket of group.buckets) {
-      const bucket = record(rawBucket);
-      if (!bucket) return undefined;
-      const id = officialText(bucket.id, 100);
-      const bucketName = officialText(bucket.name, 200);
-      const bucketDescription = officialText(bucket.description, 2_000);
-      const windowKey = officialText(bucket.window, 40);
-      if (id === null || bucketName === null || bucketDescription === null || windowKey === null) {
-        return undefined;
-      }
-      const remaining = officialUnit(bucket.remainingFraction);
-      const usedPercent = officialPercent(bucket.usedPercent);
-      const status = officialBucketStatus(bucket.status);
-      const minutes = officialMinutes(bucket.windowDurationMinutes);
-      const resetsAt = officialInstant(bucket.resetsAt);
-      // A present field that cannot be read rejects the snapshot. Dropping it would show a
-      // bucket whose official number or reset had been thrown away.
-      if (
-        remaining === null ||
-        usedPercent === null ||
-        status === null ||
-        minutes === null ||
-        resetsAt === null
-      )
-        return undefined;
-      buckets.push({
-        ...(id ? { id } : {}),
-        ...(bucketName ? { name: bucketName } : {}),
-        ...(bucketDescription ? { description: bucketDescription } : {}),
-        ...(windowKey ? { window: windowKey } : {}),
-        ...(typeof remaining === "number" ? { remainingFraction: remaining } : {}),
-        ...(typeof usedPercent === "number" ? { usedPercent } : {}),
-        ...(status ? { status } : {}),
-        ...(typeof minutes === "number" ? { windowDurationMinutes: minutes } : {}),
-        ...(resetsAt ? { resetsAt } : {}),
-      });
-    }
-    groups.push({
-      ...(name ? { name } : {}),
-      ...(description ? { description } : {}),
-      buckets,
-    });
-  }
-  return groups;
-}
-
-/** `undefined` when absent. `null` when present but not a finite share from 0 to 1. */
-function officialUnit(value: unknown): number | undefined | null {
-  if (value === undefined) return undefined;
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) return null;
-  return value;
-}
-
-/** `undefined` when absent. `null` when present but not a finite percent from 0 to 100. */
-function officialPercent(value: unknown): number | undefined | null {
-  if (value === undefined) return undefined;
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 100) return null;
-  return value;
-}
-
-/** `undefined` when absent. `null` when present but not a positive finite number of minutes. */
-function officialMinutes(value: unknown): number | undefined | null {
-  if (value === undefined) return undefined;
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
-  return value;
-}
-
-/** `undefined` when absent. `null` for an unknown status, including a non-string. */
-function officialBucketStatus(
-  value: unknown,
-): "ok" | "limit_reached" | "parse_unavailable" | undefined | null {
-  if (value === undefined) return undefined;
-  if (value === "ok" || value === "available") return "ok";
-  if (value === "limit_reached" || value === "rate-limited") return "limit_reached";
-  if (value === "parse_unavailable") return "parse_unavailable";
-  return null;
-}
-
-/** `undefined` when absent. `null` when present but not a short parseable instant. */
-function officialInstant(value: unknown): string | undefined | null {
-  if (value === undefined) return undefined;
-  if (
-    typeof value !== "string" ||
-    value.length === 0 ||
-    value.length > 100 ||
-    Number.isNaN(Date.parse(value))
-  )
-    return null;
-  return value;
-}
-
-/** `undefined` when the field is absent or blank. `null` when it is present but unusable. */
-function officialText(value: unknown, max: number): string | undefined | null {
-  if (value === undefined) return undefined;
-  if (typeof value !== "string") return null;
-  const text = value.trim();
-  if (text.length > max) return null;
-  return text.length > 0 ? text : undefined;
-}
-
-function usageWindow(value: unknown): UsageSnapshot["primary"] | undefined {
-  const window = record(value);
-  if (!window) return undefined;
-  if (
-    typeof window.windowDurationMinutes !== "number" ||
-    !Number.isFinite(window.windowDurationMinutes) ||
-    window.windowDurationMinutes <= 0 ||
-    (window.resetsAt !== undefined &&
-      (typeof window.resetsAt !== "string" ||
-        window.resetsAt.length > 100 ||
-        Number.isNaN(Date.parse(window.resetsAt)))) ||
-    (window.usedPercent !== undefined &&
-      (typeof window.usedPercent !== "number" ||
-        !Number.isFinite(window.usedPercent) ||
-        window.usedPercent < 0 ||
-        window.usedPercent > 100)) ||
-    (window.status !== undefined &&
-      // `available` / `rate-limited` are the older vocabulary an un-upgraded Computer still
-      // sends; they normalize to `ok` / `limit_reached` below so those snapshots keep ingesting
-      // during the Web-first deploy window.
-      window.status !== "ok" &&
-      window.status !== "limit_reached" &&
-      window.status !== "parse_unavailable" &&
-      window.status !== "available" &&
-      window.status !== "rate-limited")
-  )
-    return undefined;
-  const status =
-    window.status === "ok" ||
-    window.status === "limit_reached" ||
-    window.status === "parse_unavailable"
-      ? window.status
-      : window.status === "rate-limited"
-        ? "limit_reached"
-        : window.status === "available"
-          ? "ok"
-          : undefined;
-  const quotaLevel =
-    window.quotaLevel === "ok" ||
-    window.quotaLevel === "warning" ||
-    window.quotaLevel === "near_exhausted" ||
-    window.quotaLevel === "exhausted"
-      ? window.quotaLevel
-      : undefined;
-  return {
-    windowDurationMinutes: window.windowDurationMinutes,
-    ...(typeof window.resetsAt === "string" ? { resetsAt: window.resetsAt } : {}),
-    ...(typeof window.usedPercent === "number" ? { usedPercent: window.usedPercent } : {}),
-    ...(typeof window.id === "string" && window.id.length > 0 && window.id.length <= 100
-      ? { id: window.id }
-      : {}),
-    ...(status ? { status } : {}),
-    ...(quotaLevel ? { quotaLevel } : {}),
-  };
-}
-
-function record(value: unknown): Record<string, unknown> | undefined {
-  return isRecord(value) ? value : undefined;
 }

@@ -66,48 +66,25 @@ export type MessageAvailableEvent = {
   senderUserId?: string;
 };
 
+const nonEmptyString = z.string().min(1);
+
+const messageAvailableEvent = z.object({
+  type: z.literal("message.available.v1"),
+  conversationId: nonEmptyString,
+  messageId: nonEmptyString,
+  sequence: z.int().min(1),
+  workspaceId: nonEmptyString.optional(),
+  threadRootId: nonEmptyString.optional(),
+  agentId: nonEmptyString.optional(),
+  peerUserId: nonEmptyString.optional(),
+  idempotencyKey: nonEmptyString.optional(),
+  senderUserId: nonEmptyString.optional(),
+});
+
 export function decodeMessageAvailableEvent(input: unknown): MessageAvailableEvent {
-  const value = publicationData(input);
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("invalid conversation event");
-  const type = Reflect.get(value, "type");
-  const conversationId = Reflect.get(value, "conversationId");
-  const messageId = Reflect.get(value, "messageId");
-  const sequence = Reflect.get(value, "sequence");
-  const workspaceId = Reflect.get(value, "workspaceId");
-  const threadRootId = Reflect.get(value, "threadRootId");
-  const agentId = Reflect.get(value, "agentId");
-  const peerUserId = Reflect.get(value, "peerUserId");
-  const idempotencyKey = Reflect.get(value, "idempotencyKey");
-  const senderUserId = Reflect.get(value, "senderUserId");
-  if (
-    type !== "message.available.v1" ||
-    typeof conversationId !== "string" ||
-    !conversationId ||
-    typeof messageId !== "string" ||
-    !messageId ||
-    !Number.isSafeInteger(sequence) ||
-    sequence < 1 ||
-    (workspaceId !== undefined && (typeof workspaceId !== "string" || !workspaceId)) ||
-    (threadRootId !== undefined && (typeof threadRootId !== "string" || !threadRootId)) ||
-    (agentId !== undefined && (typeof agentId !== "string" || !agentId)) ||
-    (peerUserId !== undefined && (typeof peerUserId !== "string" || !peerUserId)) ||
-    (idempotencyKey !== undefined && (typeof idempotencyKey !== "string" || !idempotencyKey)) ||
-    (senderUserId !== undefined && (typeof senderUserId !== "string" || !senderUserId))
-  )
-    throw new Error("invalid conversation event");
-  return {
-    type,
-    conversationId,
-    messageId,
-    sequence,
-    ...(workspaceId ? { workspaceId } : {}),
-    ...(threadRootId ? { threadRootId } : {}),
-    ...(agentId ? { agentId } : {}),
-    ...(peerUserId ? { peerUserId } : {}),
-    ...(idempotencyKey ? { idempotencyKey } : {}),
-    ...(senderUserId ? { senderUserId } : {}),
-  };
+  const event = messageAvailableEvent.safeParse(publicationData(input));
+  if (!event.success) throw new Error("invalid conversation event");
+  return event.data;
 }
 
 /** A member's top-level read position moved forward in this conversation (a person or an Agent),
@@ -134,37 +111,21 @@ export type NotificationAvailableEvent = {
   legacyPush: string[];
 };
 
-function isFingerprintList(value: unknown): value is string[] {
-  return (
-    Array.isArray(value) &&
-    value.every((entry) => typeof entry === "string" && /^[a-f0-9]{64}$/.test(entry))
-  );
-}
+const fingerprintList = z.array(z.string().regex(/^[a-f0-9]{64}$/));
+
+const notificationAvailableEvent = z.object({
+  type: z.literal("notification.available.v2"),
+  messageId: nonEmptyString,
+  workspaceId: nonEmptyString,
+  at: z.int().positive(),
+  pushInstallations: fingerprintList,
+  legacyPush: fingerprintList,
+});
 
 export function decodeNotificationAvailableEvent(input: unknown): NotificationAvailableEvent {
-  const value = publicationData(input);
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("invalid notification event");
-  const type = Reflect.get(value, "type");
-  const messageId = Reflect.get(value, "messageId");
-  const workspaceId = Reflect.get(value, "workspaceId");
-  const at = Reflect.get(value, "at");
-  const pushInstallations = Reflect.get(value, "pushInstallations");
-  const legacyPush = Reflect.get(value, "legacyPush");
-  if (
-    type !== "notification.available.v2" ||
-    typeof messageId !== "string" ||
-    !messageId ||
-    typeof workspaceId !== "string" ||
-    !workspaceId ||
-    typeof at !== "number" ||
-    !Number.isSafeInteger(at) ||
-    at <= 0 ||
-    !isFingerprintList(pushInstallations) ||
-    !isFingerprintList(legacyPush)
-  )
-    throw new Error("invalid notification event");
-  return { type, messageId, workspaceId, at, pushInstallations, legacyPush };
+  const event = notificationAvailableEvent.safeParse(publicationData(input));
+  if (!event.success) throw new Error("invalid notification event");
+  return event.data;
 }
 
 /**
@@ -179,21 +140,16 @@ export type MemberChangedEvent = {
   workspaceId?: string;
 };
 
+const memberChangedEvent = z.object({
+  type: z.literal("member.changed.v1"),
+  conversationId: nonEmptyString,
+  workspaceId: nonEmptyString.optional(),
+});
+
 export function decodeMemberChangedEvent(input: unknown): MemberChangedEvent {
-  const value = publicationData(input);
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("invalid conversation event");
-  const type = Reflect.get(value, "type");
-  const conversationId = Reflect.get(value, "conversationId");
-  const workspaceId = Reflect.get(value, "workspaceId");
-  if (
-    type !== "member.changed.v1" ||
-    typeof conversationId !== "string" ||
-    !conversationId ||
-    (workspaceId !== undefined && (typeof workspaceId !== "string" || !workspaceId))
-  )
-    throw new Error("invalid conversation event");
-  return { type, conversationId, ...(workspaceId ? { workspaceId } : {}) };
+  const event = memberChangedEvent.safeParse(publicationData(input));
+  if (!event.success) throw new Error("invalid conversation event");
+  return event.data;
 }
 
 /**

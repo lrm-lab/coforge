@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { dateTimeFormat } from "#src/lib/dates";
 import { WEEKLY_REPORT_SCHEDULE_TIME_ZONE } from "./weekly-report-schedule-due";
 
@@ -11,31 +12,30 @@ export type ReportScheduleMeta = {
   dismissSend?: boolean;
 };
 
+const assignmentMetaSchema = z.object({
+  unread: z.boolean(),
+});
+
+const scheduleMetaSchema = z
+  .object({
+    cancelledYear: z.int(),
+    cancelledWeek: z.int(),
+    dismissSend: z.unknown().optional(),
+  })
+  .transform(({ cancelledYear, cancelledWeek, dismissSend }): ReportScheduleMeta => ({
+    cancelledYear,
+    cancelledWeek,
+    ...(dismissSend === true ? { dismissSend: true } : {}),
+  }));
+
 export function parseAssignmentMeta(value: unknown): ReportAssignmentMeta | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const unread = (value as { unread?: unknown }).unread;
-  if (typeof unread !== "boolean") return undefined;
-  return { unread };
+  const parsed = assignmentMetaSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
 
 export function parseScheduleMeta(value: unknown): ReportScheduleMeta | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const row = value as {
-    cancelledYear?: unknown;
-    cancelledWeek?: unknown;
-    dismissSend?: unknown;
-  };
-  if (typeof row.cancelledYear !== "number" || typeof row.cancelledWeek !== "number") {
-    return undefined;
-  }
-  if (!Number.isInteger(row.cancelledYear) || !Number.isInteger(row.cancelledWeek)) {
-    return undefined;
-  }
-  return {
-    cancelledYear: row.cancelledYear,
-    cancelledWeek: row.cancelledWeek,
-    ...(row.dismissSend === true ? { dismissSend: true } : {}),
-  };
+  const parsed = scheduleMetaSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
 
 const RTL_SCRIPT_RE = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/;

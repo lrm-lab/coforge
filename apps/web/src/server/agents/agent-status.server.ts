@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 import type { AgentStatus } from "@lrm/coforge-sdk/internal";
@@ -211,23 +212,8 @@ export class RedisAgentStatusCache implements AgentStatusCache {
   private parse(value: string | null): OrderedAgentStatus | undefined {
     if (!value) return undefined;
     try {
-      const parsed: unknown = JSON.parse(value);
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
-      const status = Reflect.get(parsed, "status");
-      const daemonInstanceId = Reflect.get(parsed, "daemonInstanceId");
-      const clientSeq = Reflect.get(parsed, "clientSeq");
-      const observedAtMs = Reflect.get(parsed, "observedAtMs");
-      if (
-        (status !== "active" && status !== "inactive") ||
-        typeof daemonInstanceId !== "string" ||
-        !daemonInstanceId ||
-        !Number.isSafeInteger(clientSeq) ||
-        clientSeq < 1 ||
-        !Number.isSafeInteger(observedAtMs) ||
-        observedAtMs < 1
-      )
-        return undefined;
-      return { status, daemonInstanceId, clientSeq, observedAtMs };
+      const parsed = orderedAgentStatusSchema.safeParse(JSON.parse(value));
+      return parsed.success ? parsed.data : undefined;
     } catch {
       return undefined;
     }
@@ -243,6 +229,13 @@ export class RedisAgentStatusCache implements AgentStatusCache {
     });
   }
 }
+
+const orderedAgentStatusSchema = z.object({
+  status: z.enum(["active", "inactive"]),
+  daemonInstanceId: z.string().min(1),
+  clientSeq: z.int().min(1),
+  observedAtMs: z.int().min(1),
+});
 
 let singleton: RedisAgentStatusCache | undefined;
 

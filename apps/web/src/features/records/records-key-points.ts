@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export type KeyPointPromptHistoryEntry = {
   text: string;
   updatedAt: string;
@@ -62,29 +64,44 @@ export const DEFAULT_PERSONAL_KEY_POINT_PROMPT = [
   "6、只输出提炼后的 Markdown 正文，不要解释你的思考过程。",
 ].join("\n");
 
+const keyPointPromptHistoryEntrySchema = z.object({
+  text: z.string(),
+  updatedAt: z.string(),
+});
+
+const keyPointPromptStateSchema = z
+  .object({
+    text: z.string().catch(""),
+    updatedAt: z.string().min(1).optional().catch(undefined),
+    history: z
+      .array(z.unknown())
+      .transform((entries) =>
+        entries.flatMap((entry) => {
+          const parsed = keyPointPromptHistoryEntrySchema.safeParse(entry);
+          return parsed.success ? [parsed.data] : [];
+        }),
+      )
+      .catch([]),
+  })
+  .transform(({ text, updatedAt, history }): KeyPointPromptState =>
+    updatedAt ? { text, updatedAt, history } : { text, history },
+  );
+
 function parseKeyPointPromptState(value: unknown): KeyPointPromptState | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const row = value as { text?: unknown; updatedAt?: unknown; history?: unknown };
-  const text = typeof row.text === "string" ? row.text : "";
-  const updatedAt = typeof row.updatedAt === "string" ? row.updatedAt : undefined;
-  const history = Array.isArray(row.history)
-    ? row.history
-        .map((entry) => {
-          if (!entry || typeof entry !== "object") return null;
-          const item = entry as { text?: unknown; updatedAt?: unknown };
-          if (typeof item.text !== "string" || typeof item.updatedAt !== "string") return null;
-          return { text: item.text, updatedAt: item.updatedAt };
-        })
-        .filter((entry): entry is KeyPointPromptHistoryEntry => entry !== null)
-    : [];
-  return updatedAt ? { text, updatedAt, history } : { text, history };
+  const parsed = keyPointPromptStateSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
 
+const keyPointPromptsEnvelopeSchema = z.object({
+  team: z.unknown().optional(),
+  personal: z.unknown().optional(),
+});
+
 export function parseKeyPointPrompts(value: unknown): KeyPointPromptsMeta | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const row = value as { team?: unknown; personal?: unknown };
-  const team = parseKeyPointPromptState(row.team);
-  const personal = parseKeyPointPromptState(row.personal);
+  const parsed = keyPointPromptsEnvelopeSchema.safeParse(value);
+  if (!parsed.success) return undefined;
+  const team = parseKeyPointPromptState(parsed.data.team);
+  const personal = parseKeyPointPromptState(parsed.data.personal);
   if (!team && !personal) return undefined;
   return {
     team: team ?? emptyKeyPointPrompt(DEFAULT_TEAM_KEY_POINT_PROMPT),
@@ -92,40 +109,42 @@ export function parseKeyPointPrompts(value: unknown): KeyPointPromptsMeta | unde
   };
 }
 
-const EXTRACTION_STATUSES = new Set<string>([
-  "generating",
-  "ready",
-  "failed",
-  "pending_setup",
-  "awaiting_confirm",
-]);
+const keyPointExtractionSchema = z
+  .object({
+    status: z.enum(["generating", "ready", "failed", "pending_setup", "awaiting_confirm"]),
+    promptSnapshot: z.string(),
+    markdown: z.string().optional().catch(undefined),
+    pendingMarkdown: z.string().optional().catch(undefined),
+    generatedAt: z.string().optional().catch(undefined),
+    error: z.string().optional().catch(undefined),
+    delivery: z.literal("side-chat-confirm").optional().catch(undefined),
+    confirmSessionId: z.string().trim().min(1).optional().catch(undefined),
+  })
+  .transform(
+    ({
+      status,
+      promptSnapshot,
+      markdown,
+      pendingMarkdown,
+      generatedAt,
+      error,
+      delivery,
+      confirmSessionId,
+    }): KeyPointExtractionMeta => ({
+      status,
+      promptSnapshot,
+      ...(markdown !== undefined ? { markdown } : {}),
+      ...(pendingMarkdown !== undefined ? { pendingMarkdown } : {}),
+      ...(generatedAt !== undefined ? { generatedAt } : {}),
+      ...(error !== undefined ? { error } : {}),
+      ...(delivery !== undefined ? { delivery } : {}),
+      ...(confirmSessionId !== undefined ? { confirmSessionId } : {}),
+    }),
+  );
 
 export function parseKeyPointExtraction(value: unknown): KeyPointExtractionMeta | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const row = value as {
-    status?: unknown;
-    promptSnapshot?: unknown;
-    markdown?: unknown;
-    pendingMarkdown?: unknown;
-    generatedAt?: unknown;
-    error?: unknown;
-    delivery?: unknown;
-    confirmSessionId?: unknown;
-  };
-  if (typeof row.status !== "string" || !EXTRACTION_STATUSES.has(row.status)) return undefined;
-  if (typeof row.promptSnapshot !== "string") return undefined;
-  return {
-    status: row.status as KeyPointExtractionStatus,
-    promptSnapshot: row.promptSnapshot,
-    ...(typeof row.markdown === "string" ? { markdown: row.markdown } : {}),
-    ...(typeof row.pendingMarkdown === "string" ? { pendingMarkdown: row.pendingMarkdown } : {}),
-    ...(typeof row.generatedAt === "string" ? { generatedAt: row.generatedAt } : {}),
-    ...(typeof row.error === "string" ? { error: row.error } : {}),
-    ...(row.delivery === "side-chat-confirm" ? { delivery: "side-chat-confirm" as const } : {}),
-    ...(typeof row.confirmSessionId === "string" && row.confirmSessionId.trim()
-      ? { confirmSessionId: row.confirmSessionId.trim() }
-      : {}),
-  };
+  const parsed = keyPointExtractionSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
 
 export function emptyKeyPointPrompt(text = ""): KeyPointPromptState {

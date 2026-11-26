@@ -1,8 +1,9 @@
 import {
-  parseRuntimeProvider,
   RUNTIME_PROVIDER,
+  RUNTIME_PROVIDER_VALUES,
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
+import { z } from "zod";
 import { modelSizesApply } from "#src/features/agents/agent-model-sizes";
 import { runtimeProviderSelectionRefusal } from "#src/features/agents/runtime-provider-selection";
 import { AppError } from "#src/lib/app-error";
@@ -114,38 +115,69 @@ export function agentRuntimeConfig(
   };
 }
 
+const positiveIntSchema = z.int().positive();
+
+const encryptedAgentEnvironmentSchema = z.object({
+  keyId: z.string(),
+  ciphertext: z.string(),
+  nonce: z.string(),
+});
+
+const encryptedRuntimeApiKeySchema = z.object({
+  keyId: z.string(),
+  ciphertext: z.string(),
+  nonce: z.string(),
+  hint: z.string(),
+});
+
+const providerConfigSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("default") }),
+  z.object({
+    kind: z.literal("coforge"),
+    providerId: z.string().min(1),
+    apiKey: encryptedRuntimeApiKeySchema.optional(),
+  }),
+]);
+
+const storedAgentRuntimeConfigSchema = z.object({
+  runtime: z.enum(RUNTIME_PROVIDER_VALUES),
+  provider: providerConfigSchema.optional(),
+  model: z.string(),
+  modelProvider: z.string().optional(),
+  reasoning: z.string(),
+  fastMode: z.boolean().optional(),
+  contextWindow: positiveIntSchema.optional(),
+  maxOutputTokens: positiveIntSchema.optional(),
+  environment: encryptedAgentEnvironmentSchema.optional(),
+});
+
 export function parseAgentRuntimeConfig(value: unknown, agentId?: string): AgentRuntimeConfig {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("invalid runtime config");
-  const runtime = parseRuntimeProvider(Reflect.get(value, "runtime"));
-  const model = Reflect.get(value, "model");
-  const modelProvider = Reflect.get(value, "modelProvider");
-  const reasoning = Reflect.get(value, "reasoning");
-  const fastMode = Reflect.get(value, "fastMode");
-  const contextWindow = parseModelSize(Reflect.get(value, "contextWindow"));
-  const maxOutputTokens = parseModelSize(Reflect.get(value, "maxOutputTokens"));
-  const environment = parseEncryptedEnvironment(Reflect.get(value, "environment"));
-  if (
-    !runtime ||
-    typeof model !== "string" ||
-    (modelProvider !== undefined && typeof modelProvider !== "string") ||
-    typeof reasoning !== "string" ||
-    (fastMode !== undefined && typeof fastMode !== "boolean") ||
-    (contextWindow === undefined && Reflect.get(value, "contextWindow") !== undefined) ||
-    (maxOutputTokens === undefined && Reflect.get(value, "maxOutputTokens") !== undefined)
-  )
-    throw new Error("invalid runtime config");
-  const legacy = reasoning === "" ? legacyAntigravitySplit(runtime, model) : undefined;
+  const parsed = storedAgentRuntimeConfigSchema.parse(value);
+  let provider: AgentRuntimeProviderConfig;
+  if (parsed.provider === undefined) {
+    console.debug("agent_runtime_provider_default", { agentId, path: "provider" });
+    provider = { kind: "default" };
+  } else if (parsed.provider.kind === "coforge") {
+    provider = {
+      kind: "coforge",
+      providerId: parsed.provider.providerId,
+      ...(parsed.provider.apiKey ? { apiKey: parsed.provider.apiKey } : {}),
+    };
+  } else {
+    provider = parsed.provider;
+  }
+  const legacy =
+    parsed.reasoning === "" ? legacyAntigravitySplit(parsed.runtime, parsed.model) : undefined;
   return {
-    runtime,
-    provider: parseProviderConfig(Reflect.get(value, "provider"), agentId),
-    model: legacy?.model ?? model,
-    modelProvider: modelProvider ?? "",
-    reasoning: legacy?.reasoning ?? reasoning,
-    ...(fastMode === true ? { fastMode: true } : {}),
-    ...(contextWindow === undefined ? {} : { contextWindow }),
-    ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
-    ...(environment ? { environment } : {}),
+    runtime: parsed.runtime,
+    provider,
+    model: legacy?.model ?? parsed.model,
+    modelProvider: parsed.modelProvider ?? "",
+    reasoning: legacy?.reasoning ?? parsed.reasoning,
+    ...(parsed.fastMode === true ? { fastMode: true } : {}),
+    ...(parsed.contextWindow === undefined ? {} : { contextWindow: parsed.contextWindow }),
+    ...(parsed.maxOutputTokens === undefined ? {} : { maxOutputTokens: parsed.maxOutputTokens }),
+    ...(parsed.environment ? { environment: parsed.environment } : {}),
   };
 }
 
@@ -164,59 +196,6 @@ export function publicAgentRuntimeConfig(
           }
         : config.provider,
   };
-}
-
-/** A stored size, or undefined for a zero, a fraction, or anything else no model has. */
-function parseModelSize(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
-}
-
-function parseEncryptedEnvironment(value: unknown): EncryptedAgentEnvironment | undefined {
-  if (value === undefined) return undefined;
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("invalid encrypted Agent environment");
-  const keyId = Reflect.get(value, "keyId");
-  const ciphertext = Reflect.get(value, "ciphertext");
-  const nonce = Reflect.get(value, "nonce");
-  if (typeof keyId !== "string" || typeof ciphertext !== "string" || typeof nonce !== "string")
-    throw new Error("invalid encrypted Agent environment");
-  return { keyId, ciphertext, nonce };
-}
-
-function parseProviderConfig(value: unknown, agentId?: string): AgentRuntimeProviderConfig {
-  // task #319: a stored config with no `provider` predates the field — it launches on the
-  // daemon's own defaults instead of failing. Every read parses it, so the note stays debug.
-  if (value === undefined) {
-    console.debug("agent_runtime_provider_default", { agentId, path: "provider" });
-    return { kind: "default" };
-  }
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("invalid runtime provider config");
-  const kind = Reflect.get(value, "kind");
-  if (kind === "default") return { kind };
-  const providerId = Reflect.get(value, "providerId");
-  if (kind !== "coforge" || typeof providerId !== "string" || !providerId)
-    throw new Error("invalid runtime provider config");
-  const apiKey = parseEncryptedApiKey(Reflect.get(value, "apiKey"));
-  return { kind, providerId, ...(apiKey ? { apiKey } : {}) };
-}
-
-function parseEncryptedApiKey(value: unknown): EncryptedRuntimeApiKey | undefined {
-  if (value === undefined) return undefined;
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("invalid encrypted runtime API key");
-  const keyId = Reflect.get(value, "keyId");
-  const ciphertext = Reflect.get(value, "ciphertext");
-  const nonce = Reflect.get(value, "nonce");
-  const hint = Reflect.get(value, "hint");
-  if (
-    typeof keyId !== "string" ||
-    typeof ciphertext !== "string" ||
-    typeof nonce !== "string" ||
-    typeof hint !== "string"
-  )
-    throw new Error("invalid encrypted runtime API key");
-  return { keyId, ciphertext, nonce, hint };
 }
 
 /** A stored Agent's runtime config where the caller cannot proceed without one — a write or

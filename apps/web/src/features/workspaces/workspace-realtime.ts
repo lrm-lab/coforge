@@ -43,12 +43,7 @@ export function decodeWorkspaceFeaturesChangedEvent(
   value: unknown,
 ): WorkspaceFeaturesChangedEvent | undefined {
   const data = publicationDataOrUndefined(value);
-  if (
-    !data ||
-    typeof data !== "object" ||
-    Reflect.get(data, "type") !== "workspace.features.changed.v1"
-  )
-    return undefined;
+  if (publicationType(data) !== "workspace.features.changed.v1") return undefined;
   const parsed = workspaceFeaturesChangedEvent.safeParse(data);
   return parsed.success ? parsed.data : undefined;
 }

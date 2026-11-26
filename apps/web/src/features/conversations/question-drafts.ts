@@ -9,8 +9,9 @@
  * heard of through `subscribeQuestionDrafts`, which another tab's write reaches too.
  */
 
+import { z } from "zod";
 import { browserLocalStorage } from "#src/features/browser-local-storage";
-import type { Draft, Drafts } from "./question-card-model";
+import type { Drafts } from "./question-card-model";
 
 const KEY_PREFIX = "coforge.question-draft:";
 
@@ -30,25 +31,21 @@ function storageKey(messageId: string) {
   return `${KEY_PREFIX}${messageId}`;
 }
 
-function isDraft(value: unknown): value is Draft {
-  if (!value || typeof value !== "object") return false;
-  const { selection, text } = value as Partial<Draft>;
-  return (
-    Array.isArray(selection) &&
-    selection.every((id) => typeof id === "string") &&
-    typeof text === "string"
-  );
-}
+const draftSchema = z.object({
+  selection: z.array(z.string()),
+  text: z.string(),
+});
+
+const storedQuestionDraftsSchema = z.object({
+  at: z.number(),
+  drafts: z.record(z.string(), draftSchema),
+});
 
 function parse(raw: string | null): { at: number; drafts: Drafts } | undefined {
   if (!raw) return undefined;
   try {
-    const entry = JSON.parse(raw) as { at?: unknown; drafts?: unknown };
-    if (typeof entry.at !== "number" || !entry.drafts || typeof entry.drafts !== "object")
-      return undefined;
-    const drafts = Object.entries(entry.drafts as Record<string, unknown>);
-    if (!drafts.every(([, draft]) => isDraft(draft))) return undefined;
-    return { at: entry.at, drafts: Object.fromEntries(drafts) as Drafts };
+    const parsed = storedQuestionDraftsSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : undefined;
   } catch {
     return undefined;
   }

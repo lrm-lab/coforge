@@ -1,4 +1,5 @@
 import { UUID_LIKE_PATTERN } from "@lrm/coforge-sdk/internal";
+import { z } from "zod";
 import type { ReportContent } from "#src/features/records/records-content";
 import type { TemplateOutlineSection } from "#src/features/records/template-outline-sections";
 
@@ -120,96 +121,76 @@ function extractLeadingJsonObject(text: string): string | null {
   return null;
 }
 
+const uuidSchema = z.string().regex(UUID_RE);
+const nonEmptyTrimmedString = z
+  .string()
+  .transform((value) => value.trim())
+  .refine((value) => value.length > 0);
+
+const templateOutlineSectionSchema = z.object({
+  title: z.string(),
+  children: z.array(z.string()),
+});
+
+const suggestionSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("collect-plan"),
+    reportId: uuidSchema,
+    year: z.int().min(1).max(9999),
+    week: z.int().min(1).max(53),
+  }),
+  z.object({
+    type: z.literal("send-prompt"),
+    reportId: uuidSchema,
+  }),
+  z.object({
+    type: z.literal("template-create"),
+    summary: nonEmptyTrimmedString,
+    name: z.string().transform((value) => value.trim()),
+    sendTime: z.string(),
+    sendWeekday: z.number(),
+    scheduleEnabled: z.boolean(),
+    allMembers: z.boolean(),
+    recipientUserIds: z.array(z.unknown()),
+    sections: z.array(templateOutlineSectionSchema).min(1),
+  }),
+  z.object({
+    type: z.literal("key-point-edit"),
+    reportId: uuidSchema,
+    summary: nonEmptyTrimmedString,
+    markdown: z.string().refine((value) => value.trim().length > 0),
+  }),
+  z.object({
+    type: z.literal("body-edit"),
+    reportId: uuidSchema,
+    summary: nonEmptyTrimmedString,
+    baseUpdatedAt: z.union([z.string().min(1), z.null()]).optional(),
+    content: z.unknown(),
+  }),
+]);
+
 function normalizeSuggestion(value: unknown): WeeklyReportAssistantSuggestion | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const row = value as Record<string, unknown>;
-  if (row.type === "collect-plan") {
-    if (typeof row.reportId !== "string" || !UUID_RE.test(row.reportId)) return null;
-    if (
-      typeof row.year !== "number" ||
-      !Number.isInteger(row.year) ||
-      row.year < 1 ||
-      row.year > 9999
-    )
-      return null;
-    if (
-      typeof row.week !== "number" ||
-      !Number.isInteger(row.week) ||
-      row.week < 1 ||
-      row.week > 53
-    )
-      return null;
-    return { type: "collect-plan", reportId: row.reportId, year: row.year, week: row.week };
-  }
-  if (row.type === "send-prompt") {
-    return typeof row.reportId === "string" && UUID_RE.test(row.reportId)
-      ? { type: "send-prompt", reportId: row.reportId }
-      : null;
-  }
-  if (row.type === "template-create") {
-    if (typeof row.summary !== "string" || row.summary.trim().length === 0) return null;
-    if (typeof row.name !== "string" || typeof row.sendTime !== "string") return null;
-    if (typeof row.sendWeekday !== "number" || typeof row.scheduleEnabled !== "boolean")
-      return null;
-    if (typeof row.allMembers !== "boolean" || !Array.isArray(row.recipientUserIds)) return null;
-    if (!Array.isArray(row.sections) || row.sections.length === 0) return null;
-    const sections = (row.sections as unknown[]).filter(isTemplateOutlineSection);
-    if (sections.length !== row.sections.length) return null;
+  const parsed = suggestionSchema.safeParse(value);
+  if (!parsed.success) return null;
+  const data = parsed.data;
+  if (data.type === "template-create") {
     return {
-      type: "template-create",
-      summary: row.summary.trim(),
-      name: row.name.trim(),
-      sendTime: row.sendTime,
-      sendWeekday: row.sendWeekday,
-      scheduleEnabled: row.scheduleEnabled,
-      allMembers: row.allMembers,
-      recipientUserIds: row.recipientUserIds.filter((id): id is string => typeof id === "string"),
-      sections,
+      ...data,
+      recipientUserIds: data.recipientUserIds.filter((id): id is string => typeof id === "string"),
     };
   }
-  if (row.type === "key-point-edit") {
-    if (typeof row.reportId !== "string" || !UUID_RE.test(row.reportId)) return null;
-    if (typeof row.summary !== "string" || row.summary.trim().length === 0) return null;
-    if (typeof row.markdown !== "string" || row.markdown.trim().length === 0) return null;
-    return {
-      type: "key-point-edit",
-      reportId: row.reportId,
-      summary: row.summary.trim(),
-      markdown: row.markdown,
-    };
-  }
-  if (row.type === "body-edit") {
-    if (typeof row.reportId !== "string" || !UUID_RE.test(row.reportId)) return null;
-    if (typeof row.summary !== "string" || row.summary.trim().length === 0) return null;
-    if (
-      row.baseUpdatedAt !== undefined &&
-      row.baseUpdatedAt !== null &&
-      (typeof row.baseUpdatedAt !== "string" || row.baseUpdatedAt.length === 0)
-    )
-      return null;
-    const content = parseStoredReportContent(row.content);
+  if (data.type === "body-edit") {
+    const content = parseStoredReportContent(data.content);
     if (!content) return null;
     return {
       type: "body-edit",
-      reportId: row.reportId,
-      summary: row.summary.trim(),
+      reportId: data.reportId,
+      summary: data.summary,
       content,
-      ...(typeof row.baseUpdatedAt === "string" && row.baseUpdatedAt.length > 0
-        ? { baseUpdatedAt: row.baseUpdatedAt }
-        : {}),
+      ...(typeof data.baseUpdatedAt === "string" ? { baseUpdatedAt: data.baseUpdatedAt } : {}),
     };
   }
-  return null;
-}
-
-function isTemplateOutlineSection(section: unknown): section is TemplateOutlineSection {
-  if (!section || typeof section !== "object") return false;
-  const row = section as { title?: unknown; children?: unknown };
-  return (
-    typeof row.title === "string" &&
-    Array.isArray(row.children) &&
-    row.children.every((child) => typeof child === "string")
-  );
+  return data;
 }
 
 function withParsedTabOrder(

@@ -14,6 +14,8 @@
  * bridge parses it once, inertly, strips what could navigate or load, and adopts the nodes.
  */
 
+import { z } from "zod";
+
 /** Tags every message either way, so neither side mistakes another script's messages for ours. */
 export const BRIDGE = "coforge-html";
 
@@ -81,12 +83,47 @@ export function bridgeSrcDoc({ nonce, epoch }: BridgeSession): string {
   return `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="${policy}"><script nonce="${nonce}">${script.replace(/<\//g, "<\\/")}</script></head><body></body></html>`;
 }
 
-const finite = (value: unknown): value is number =>
-  typeof value === "number" && Number.isFinite(value);
-const isBox = (value: unknown): value is DocumentBox => {
-  const box = value as DocumentBox | null;
-  return !!box && finite(box.x) && finite(box.y) && finite(box.w) && finite(box.h);
-};
+const documentBoxSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  w: z.number(),
+  h: z.number(),
+});
+
+const frameLinkSchema = documentBoxSchema.extend({
+  href: z.string(),
+});
+
+const frameLinksSchema = z.preprocess(
+  (value) => (Array.isArray(value) ? value.slice(0, LINKS_MAX) : []),
+  z.array(frameLinkSchema),
+);
+
+const frameMessageSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("ready") }),
+  z.object({
+    type: z.literal("state"),
+    links: frameLinksSchema,
+    scrollX: z.number(),
+    scrollY: z.number(),
+    viewportWidth: z.number(),
+    viewportHeight: z.number(),
+    documentWidth: z.number(),
+    documentHeight: z.number(),
+  }),
+  z.object({ type: z.literal("quote"), id: z.number(), quote: z.string() }),
+  z.object({
+    type: z.literal("located"),
+    id: z.number(),
+    box: documentBoxSchema.nullable(),
+  }),
+]);
+
+const bridgeEnvelopeSchema = z.object({
+  bridge: z.literal(BRIDGE),
+  nonce: z.string(),
+  epoch: z.number(),
+});
 
 /**
  * A message from the frame this page rendered, in its current session, or `null` for anything
@@ -99,47 +136,15 @@ export function acceptBridgeMessage(
   session: BridgeSession,
 ): FrameMessage | null {
   if (!frame || event.source !== frame) return null;
-  const data = event.data as Record<string, unknown> | null;
-  if (!data || typeof data !== "object") return null;
-  if (data.bridge !== BRIDGE || data.nonce !== session.nonce || data.epoch !== session.epoch)
+  const envelope = bridgeEnvelopeSchema.safeParse(event.data);
+  if (
+    !envelope.success ||
+    envelope.data.nonce !== session.nonce ||
+    envelope.data.epoch !== session.epoch
+  )
     return null;
-  switch (data.type) {
-    case "ready":
-      return { type: "ready" };
-    case "state": {
-      const { scrollX, scrollY, viewportWidth, viewportHeight, documentWidth, documentHeight } =
-        data;
-      if (
-        ![scrollX, scrollY, viewportWidth, viewportHeight, documentWidth, documentHeight].every(
-          finite,
-        )
-      )
-        return null;
-      const links = Array.isArray(data.links) ? data.links.slice(0, LINKS_MAX) : [];
-      if (!links.every((link) => isBox(link) && typeof (link as FrameLink).href === "string"))
-        return null;
-      return {
-        links: links.map(({ href, x, y, w, h }: FrameLink) => ({ href, x, y, w, h })),
-        type: "state",
-        scrollX,
-        scrollY,
-        viewportWidth,
-        viewportHeight,
-        documentWidth,
-        documentHeight,
-      } as FrameMessage;
-    }
-    case "quote":
-      return finite(data.id) && typeof data.quote === "string"
-        ? { type: "quote", id: data.id, quote: data.quote }
-        : null;
-    case "located":
-      return finite(data.id) && (data.box === null || isBox(data.box))
-        ? { type: "located", id: data.id, box: data.box }
-        : null;
-    default:
-      return null;
-  }
+  const message = frameMessageSchema.safeParse(event.data);
+  return message.success ? message.data : null;
 }
 
 /** The page's message to the bridge, tagged with the session the bridge checks. */

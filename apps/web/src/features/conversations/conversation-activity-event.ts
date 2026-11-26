@@ -1,4 +1,4 @@
-import { isRecord } from "@lrm/coforge-sdk/internal";
+import { z } from "zod";
 import { publicationDataOrUndefined } from "#src/features/realtime/publication-data";
 import type { PreviewCard } from "./action-card-preview";
 import type { PreviewNotice } from "./preview-line";
@@ -45,103 +45,52 @@ export type ConversationActivityEvent = {
   threadMentioned?: true;
 };
 
+const nonEmptyString = z.string().min(1);
+
+const previewNoticeSchema = z
+  .object({
+    kind: nonEmptyString,
+    params: z.unknown(),
+  })
+  .transform((value) => value as PreviewNotice);
+
+const previewCardSchema = z
+  .object({
+    kind: nonEmptyString,
+    params: z.record(z.string(), z.unknown()),
+    hint: z.string().optional(),
+  })
+  .transform((value) => value as PreviewCard);
+
+const conversationActivityEventSchema = z.object({
+  type: z.literal("conversation.activity.v1"),
+  workspaceId: nonEmptyString,
+  conversationId: nonEmptyString,
+  messageId: nonEmptyString,
+  sequence: z.int().min(1),
+  kind: z.enum(["channel", "direct"]),
+  createdAt: nonEmptyString,
+  preview: z.string(),
+  notice: previewNoticeSchema.optional(),
+  card: previewCardSchema.optional(),
+  sender: z.object({
+    kind: z.enum(["user", "agent", "system"]),
+    name: nonEmptyString,
+  }),
+  senderUserId: nonEmptyString.optional(),
+  senderAgentId: nonEmptyString.optional(),
+  threadRootId: nonEmptyString.optional(),
+  muted: z.literal(true).optional(),
+  mentioned: z.literal(true).optional(),
+  unreadThreadCount: z.int().nonnegative().optional(),
+  threadMentioned: z.literal(true).optional(),
+});
+
 /** Undefined for anything else on the channel, binary publications included: `chat:user:` also
  * carries an Agent's reply intent in a direct conversation and Pi chat frames. */
 export function decodeConversationActivityEvent(
   input: unknown,
 ): ConversationActivityEvent | undefined {
-  const value = publicationDataOrUndefined(input);
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-  const type = Reflect.get(value, "type");
-  const workspaceId = Reflect.get(value, "workspaceId");
-  const conversationId = Reflect.get(value, "conversationId");
-  const messageId = Reflect.get(value, "messageId");
-  const sequence = Reflect.get(value, "sequence");
-  const kind = Reflect.get(value, "kind");
-  const createdAt = Reflect.get(value, "createdAt");
-  const preview = Reflect.get(value, "preview");
-  const notice = Reflect.get(value, "notice");
-  const card = Reflect.get(value, "card");
-  const sender = Reflect.get(value, "sender");
-  const senderUserId = Reflect.get(value, "senderUserId");
-  const senderAgentId = Reflect.get(value, "senderAgentId");
-  const threadRootId = Reflect.get(value, "threadRootId");
-  const muted = Reflect.get(value, "muted");
-  const mentioned = Reflect.get(value, "mentioned");
-  const unreadThreadCount = Reflect.get(value, "unreadThreadCount");
-  const threadMentioned = Reflect.get(value, "threadMentioned");
-  if (
-    type !== "conversation.activity.v1" ||
-    typeof workspaceId !== "string" ||
-    !workspaceId ||
-    typeof conversationId !== "string" ||
-    !conversationId ||
-    typeof messageId !== "string" ||
-    !messageId ||
-    !Number.isSafeInteger(sequence) ||
-    sequence < 1 ||
-    (kind !== "channel" && kind !== "direct") ||
-    typeof createdAt !== "string" ||
-    !createdAt ||
-    typeof preview !== "string" ||
-    (notice !== undefined && !isPreviewNotice(notice)) ||
-    (card !== undefined && !isPreviewCard(card)) ||
-    !isActivitySender(sender) ||
-    (senderUserId !== undefined && (typeof senderUserId !== "string" || !senderUserId)) ||
-    (senderAgentId !== undefined && (typeof senderAgentId !== "string" || !senderAgentId)) ||
-    (threadRootId !== undefined && (typeof threadRootId !== "string" || !threadRootId)) ||
-    (muted !== undefined && muted !== true) ||
-    (mentioned !== undefined && mentioned !== true) ||
-    (unreadThreadCount !== undefined &&
-      (!Number.isSafeInteger(unreadThreadCount) || (unreadThreadCount as number) < 0)) ||
-    (threadMentioned !== undefined && threadMentioned !== true)
-  )
-    return undefined;
-  return {
-    type,
-    workspaceId,
-    conversationId,
-    messageId,
-    sequence,
-    kind,
-    createdAt,
-    preview,
-    ...(notice ? { notice } : {}),
-    ...(card ? { card } : {}),
-    sender,
-    ...(senderUserId ? { senderUserId } : {}),
-    ...(senderAgentId ? { senderAgentId } : {}),
-    ...(threadRootId ? { threadRootId } : {}),
-    ...(muted ? { muted } : {}),
-    ...(mentioned ? { mentioned } : {}),
-    ...(unreadThreadCount !== undefined ? { unreadThreadCount: unreadThreadCount as number } : {}),
-    ...(threadMentioned ? { threadMentioned } : {}),
-  };
-}
-
-function isPreviewNotice(value: unknown): value is PreviewNotice {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const kind = Reflect.get(value, "kind");
-  return typeof kind === "string" && kind.length > 0 && "params" in value;
-}
-
-function isPreviewCard(value: unknown): value is PreviewCard {
-  return (
-    isRecord(value) &&
-    typeof value.kind === "string" &&
-    value.kind.length > 0 &&
-    isRecord(value.params) &&
-    (value.hint === undefined || typeof value.hint === "string")
-  );
-}
-
-function isActivitySender(value: unknown): value is ConversationActivityEvent["sender"] {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const kind = Reflect.get(value, "kind");
-  const name = Reflect.get(value, "name");
-  return (
-    (kind === "user" || kind === "agent" || kind === "system") &&
-    typeof name === "string" &&
-    name.length > 0
-  );
+  const parsed = conversationActivityEventSchema.safeParse(publicationDataOrUndefined(input));
+  return parsed.success ? parsed.data : undefined;
 }

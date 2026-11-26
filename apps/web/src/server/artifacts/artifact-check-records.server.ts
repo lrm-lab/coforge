@@ -10,6 +10,7 @@ import {
   type ArtifactCheckRecord,
   type ArtifactCheckShot,
 } from "@lrm/coforge-sdk/agent";
+import { z } from "zod";
 import type { Prisma } from "#src/generated/prisma/client";
 import type { StoredArtifactBlobs } from "./artifact-blobs.server";
 import type { ArtifactCheckLogger } from "./artifact-check-log.server";
@@ -97,27 +98,19 @@ export function sanitizeFindings(raw: ArtifactCheckFindings): ArtifactCheckFindi
   };
 }
 
+const storedScreenshotSchema = z.object({
+  shot: z.custom<ArtifactCheckShot>(isArtifactCheckShot),
+  sha256: z.string(),
+  contentType: z.string(),
+  sizeBytes: z.number(),
+});
+
 export function parseStoredScreenshots(value: unknown): StoredScreenshot[] {
   if (!Array.isArray(value)) return [];
-  const parsed: StoredScreenshot[] = [];
-  for (const item of value) {
-    if (!item || typeof item !== "object") continue;
-    const record = item as Record<string, unknown>;
-    if (
-      !isArtifactCheckShot(record.shot) ||
-      typeof record.sha256 !== "string" ||
-      typeof record.contentType !== "string" ||
-      typeof record.sizeBytes !== "number"
-    )
-      continue;
-    parsed.push({
-      shot: record.shot,
-      sha256: record.sha256,
-      contentType: record.contentType,
-      sizeBytes: record.sizeBytes,
-    });
-  }
-  return parsed;
+  return value.flatMap((item) => {
+    const parsed = storedScreenshotSchema.safeParse(item);
+    return parsed.success ? [parsed.data] : [];
+  });
 }
 
 export function toCheckRecord(row: {

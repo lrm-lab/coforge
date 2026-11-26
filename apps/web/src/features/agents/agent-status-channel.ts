@@ -1,5 +1,6 @@
 import { utf8Encoder } from "@lrm/coforge-sdk/internal";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
+import { z } from "zod";
 import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 
 import { publicationData } from "#src/features/realtime/publication-data";
@@ -98,17 +99,14 @@ export type AgentDirectoryChangedEvent = {
   kind: "created" | "updated" | "deleted";
 };
 
+const agentDirectoryChangedEventSchema = z.object({
+  type: z.literal(REALTIME_EVENTS.agentChanged),
+  agentId: z.string(),
+  kind: z.enum(["created", "updated", "deleted"]),
+});
+
 export function isAgentDirectoryChangedEvent(value: unknown): value is AgentDirectoryChangedEvent {
-  return (
-    Boolean(value) &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    Reflect.get(value as object, "type") === REALTIME_EVENTS.agentChanged &&
-    typeof Reflect.get(value as object, "agentId") === "string" &&
-    (Reflect.get(value as object, "kind") === "created" ||
-      Reflect.get(value as object, "kind") === "updated" ||
-      Reflect.get(value as object, "kind") === "deleted")
-  );
+  return agentDirectoryChangedEventSchema.safeParse(value).success;
 }
 
 export type AgentTokenUsageRecordedEvent = {
@@ -116,64 +114,54 @@ export type AgentTokenUsageRecordedEvent = {
   agentId: string;
 };
 
+const agentTokenUsageRecordedEventSchema = z.object({
+  type: z.literal(REALTIME_EVENTS.agentTokenUsageRecorded),
+  agentId: z.string().min(1),
+});
+
 export function isAgentTokenUsageRecordedEvent(
   value: unknown,
 ): value is AgentTokenUsageRecordedEvent {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const agentId = Reflect.get(value, "agentId");
-  return (
-    Reflect.get(value, "type") === REALTIME_EVENTS.agentTokenUsageRecorded &&
-    typeof agentId === "string" &&
-    agentId.length > 0
-  );
+  return agentTokenUsageRecordedEventSchema.safeParse(value).success;
 }
+
+const agentVisibilityChangedEventSchema = z.object({
+  type: z.literal("agent:visibility_changed"),
+  agentId: z.string(),
+});
 
 export function isAgentVisibilityChangedEvent(
   value: unknown,
 ): value is AgentVisibilityChangedEvent {
-  return (
-    Boolean(value) &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    Reflect.get(value as object, "type") === "agent:visibility_changed" &&
-    typeof Reflect.get(value as object, "agentId") === "string"
-  );
+  return agentVisibilityChangedEventSchema.safeParse(value).success;
 }
 
 export function encodeAgentStatusEvent(event: AgentStatusEvent): Uint8Array {
   return utf8Encoder.encode(JSON.stringify(event));
 }
 
+const agentStatusBase = {
+  agentId: z.string(),
+  daemonInstanceId: z.string().min(1),
+  clientSeq: z.int().min(1),
+  observedAtMs: z.int().min(1),
+};
+
+const agentStatusEventSchema = z.discriminatedUnion("status", [
+  z.object({
+    ...agentStatusBase,
+    status: z.literal("active"),
+    expiresAt: z.number(),
+  }),
+  z.object({
+    ...agentStatusBase,
+    status: z.literal("inactive"),
+    expiresAt: z.null(),
+  }),
+]);
+
 export function decodeAgentStatusEvent(data: unknown): AgentStatusEvent {
-  const value = publicationData(data);
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("invalid Agent status event");
-  const agentId = Reflect.get(value, "agentId");
-  const status = Reflect.get(value, "status");
-  const expiresAt = Reflect.get(value, "expiresAt");
-  const daemonInstanceId = Reflect.get(value, "daemonInstanceId");
-  const clientSeq = Reflect.get(value, "clientSeq");
-  const observedAtMs = Reflect.get(value, "observedAtMs");
-  if (
-    typeof agentId !== "string" ||
-    (status !== "active" && status !== "inactive") ||
-    (expiresAt !== null && typeof expiresAt !== "number") ||
-    (status === "active" && expiresAt === null) ||
-    (status === "inactive" && expiresAt !== null) ||
-    typeof daemonInstanceId !== "string" ||
-    !daemonInstanceId ||
-    !Number.isSafeInteger(clientSeq) ||
-    clientSeq < 1 ||
-    !Number.isSafeInteger(observedAtMs) ||
-    observedAtMs < 1
-  )
-    throw new Error("invalid Agent status event");
-  return {
-    agentId,
-    status,
-    expiresAt,
-    daemonInstanceId,
-    clientSeq,
-    observedAtMs,
-  };
+  const parsed = agentStatusEventSchema.safeParse(publicationData(data));
+  if (!parsed.success) throw new Error("invalid Agent status event");
+  return parsed.data;
 }

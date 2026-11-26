@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { currentPersonPictureUrl, isPersonPicture } from "#src/lib/person-picture";
 
 export type RecordAssistantPayload =
@@ -37,97 +38,90 @@ function isRetiredPortrait(url: string): boolean {
   return url.startsWith("/avatars/portrait-");
 }
 
+const optionalTrimmedString = z.string().trim().min(1).optional().catch(undefined);
+
+const offerSendRecipientSchema = z
+  .object({
+    displayName: z.string().trim().min(1),
+    userId: z.string().min(1).optional().catch(undefined),
+    avatarUrl: z.string().optional().catch(undefined),
+  })
+  .transform(({ displayName, userId, avatarUrl }) => ({
+    displayName,
+    ...(userId ? { userId } : {}),
+    avatarUrl:
+      avatarUrl !== undefined && !isRetiredPortrait(avatarUrl)
+        ? (currentPersonPictureUrl(avatarUrl) ?? (isPersonPicture(avatarUrl) ? null : avatarUrl))
+        : null,
+  }));
+
+const recordAssistantPayloadSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("offer-help-generate") }),
+  z.object({ kind: z.literal("intent-declined") }),
+  z.object({
+    kind: z.literal("collect-plan"),
+    reportId: z.string(),
+    year: z.number(),
+    week: z.number(),
+  }),
+  z.object({
+    kind: z.literal("collect-run"),
+    runId: z.string(),
+  }),
+  z.object({
+    kind: z.literal("confirm-intent"),
+    intent: z.enum(["collect-again", "synthesize"]),
+    reportId: z.string(),
+    year: z.number(),
+    week: z.number(),
+    userGuidance: optionalTrimmedString,
+  }),
+  z.object({
+    kind: z.literal("offer-send"),
+    year: z.number().optional().catch(undefined),
+    week: z.number().optional().catch(undefined),
+    weekTitle: optionalTrimmedString,
+    updatedAt: optionalTrimmedString,
+    recipients: z
+      .array(z.unknown())
+      .transform((entries) =>
+        entries.flatMap((entry) => {
+          const parsed = offerSendRecipientSchema.safeParse(entry);
+          return parsed.success ? [parsed.data] : [];
+        }),
+      )
+      .optional()
+      .catch(undefined),
+    recipientTotal: z.int().optional().catch(undefined),
+  }),
+]);
+
 export function parseRecordAssistantPayload(value: unknown): RecordAssistantPayload | null {
-  if (!value || typeof value !== "object") return null;
-  const row = value as {
-    kind?: unknown;
-    reportId?: unknown;
-    runId?: unknown;
-    year?: unknown;
-    week?: unknown;
-    intent?: unknown;
-    userGuidance?: unknown;
-    weekTitle?: unknown;
-    updatedAt?: unknown;
-    recipients?: unknown;
-    recipientTotal?: unknown;
-  };
-  if (row.kind === "offer-send") {
-    const recipients = Array.isArray(row.recipients)
-      ? row.recipients.flatMap((entry) => {
-          if (!entry || typeof entry !== "object") return [];
-          const person = entry as { displayName?: unknown; userId?: unknown; avatarUrl?: unknown };
-          if (typeof person.displayName !== "string" || !person.displayName.trim()) return [];
-          return [
-            {
-              displayName: person.displayName.trim(),
-              ...(typeof person.userId === "string" && person.userId
-                ? { userId: person.userId }
-                : {}),
-              // A payload is stored as written: a cartoon person is re-resolved from its id (a
-              // version bump cannot strand it), a retired stock portrait no longer exists.
-              avatarUrl:
-                typeof person.avatarUrl === "string" && !isRetiredPortrait(person.avatarUrl)
-                  ? (currentPersonPictureUrl(person.avatarUrl) ??
-                    (isPersonPicture(person.avatarUrl) ? null : person.avatarUrl))
-                  : null,
-            },
-          ];
-        })
-      : undefined;
+  const parsed = recordAssistantPayloadSchema.safeParse(value);
+  if (!parsed.success) return null;
+  const data = parsed.data;
+  if (data.kind === "confirm-intent") {
+    return {
+      kind: data.kind,
+      intent: data.intent,
+      reportId: data.reportId,
+      year: data.year,
+      week: data.week,
+      ...(data.userGuidance ? { userGuidance: data.userGuidance } : {}),
+    };
+  }
+  if (data.kind === "offer-send") {
     return {
       kind: "offer-send",
-      ...(typeof row.year === "number" ? { year: row.year } : {}),
-      ...(typeof row.week === "number" ? { week: row.week } : {}),
-      ...(typeof row.weekTitle === "string" && row.weekTitle.trim()
-        ? { weekTitle: row.weekTitle.trim() }
-        : {}),
-      ...(typeof row.updatedAt === "string" && row.updatedAt.trim()
-        ? { updatedAt: row.updatedAt.trim() }
-        : {}),
-      ...(recipients && recipients.length > 0 ? { recipients } : {}),
-      ...(typeof row.recipientTotal === "number" && Number.isInteger(row.recipientTotal)
-        ? { recipientTotal: row.recipientTotal }
-        : {}),
+      ...(data.year !== undefined ? { year: data.year } : {}),
+      ...(data.week !== undefined ? { week: data.week } : {}),
+      ...(data.weekTitle ? { weekTitle: data.weekTitle } : {}),
+      ...(data.updatedAt ? { updatedAt: data.updatedAt } : {}),
+      ...(data.recipients && data.recipients.length > 0 ? { recipients: data.recipients } : {}),
+      ...(data.recipientTotal !== undefined ? { recipientTotal: data.recipientTotal } : {}),
     };
   }
-  if (row.kind === "offer-help-generate") return { kind: "offer-help-generate" };
-  if (row.kind === "intent-declined") return { kind: "intent-declined" };
-  if (
-    row.kind === "confirm-intent" &&
-    (row.intent === "collect-again" || row.intent === "synthesize") &&
-    typeof row.reportId === "string" &&
-    typeof row.year === "number" &&
-    typeof row.week === "number"
-  ) {
-    return {
-      kind: "confirm-intent",
-      intent: row.intent,
-      reportId: row.reportId,
-      year: row.year,
-      week: row.week,
-      ...(typeof row.userGuidance === "string" && row.userGuidance.trim()
-        ? { userGuidance: row.userGuidance.trim() }
-        : {}),
-    };
-  }
-  if (
-    row.kind === "collect-plan" &&
-    typeof row.reportId === "string" &&
-    typeof row.year === "number" &&
-    typeof row.week === "number"
-  ) {
-    return {
-      kind: "collect-plan",
-      reportId: row.reportId,
-      year: row.year,
-      week: row.week,
-    };
-  }
-  if (row.kind === "collect-run" && typeof row.runId === "string") {
-    return { kind: "collect-run", runId: row.runId };
-  }
-  return null;
+  return data;
 }
 
 /** Member accepts the assignee-side “help me generate” offer (E1 → E2). */

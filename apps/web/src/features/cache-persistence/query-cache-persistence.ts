@@ -5,6 +5,7 @@ import {
   type PersistedQuery,
 } from "@tanstack/query-persist-client-core";
 import { hashKey, type Query, type QueryClient, type QueryKey } from "@tanstack/react-query";
+import { z } from "zod";
 
 import { isAppError } from "#src/lib/app-error";
 import { nextTask } from "#src/lib/next-task";
@@ -33,16 +34,19 @@ type StoredQuery = {
   state: { data: unknown; dataUpdatedAt: number };
 };
 
+const storedQuerySchema = z.object({
+  buster: z.string(),
+  queryHash: z.string(),
+  queryKey: z.array(z.unknown()),
+  state: z.object({
+    data: z.unknown().optional(),
+    dataUpdatedAt: z.number(),
+  }),
+});
+
 function isReadableRow(stored: unknown): stored is StoredQuery {
-  if (typeof stored !== "object" || stored === null) return false;
-  const { buster, queryHash, queryKey, state } = stored as Partial<StoredQuery>;
-  return (
-    typeof buster === "string" &&
-    typeof queryHash === "string" &&
-    Array.isArray(queryKey) &&
-    typeof state?.dataUpdatedAt === "number" &&
-    isStoredData(queryKey, state.data)
-  );
+  const parsed = storedQuerySchema.safeParse(stored);
+  return parsed.success && isStoredData(parsed.data.queryKey, parsed.data.state.data);
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
