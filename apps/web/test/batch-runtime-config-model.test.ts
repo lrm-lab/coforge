@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import {
   buildInitialBatchRuntimeSelection,
-  collectCommonEnvKeys,
+  hasHeterogeneousBatchRuntime,
   parseBatchEnvPatch,
   planBatchRuntimePreview,
   type BatchRuntimePreviewAgent,
@@ -149,17 +149,18 @@ describe("batch-runtime-config-model", () => {
     expect(keepPlan.changedCount).toBe(1);
   });
 
-  test("collectCommonEnvKeys sorts keys by frequency then alphabetically", () => {
+  test("hasHeterogeneousBatchRuntime detects when selected owned Agents differ from initial selection", () => {
+    const identical = [previewAgent({ id: "a1" }), previewAgent({ id: "a2" })];
     expect(
-      collectCommonEnvKeys({
-        a1: ["Z_KEY", "A_KEY", "SHARED"],
-        a2: ["SHARED", "A_KEY"],
-        a3: ["SHARED"],
-      }),
-    ).toEqual([
-      { key: "SHARED", count: 3 },
-      { key: "A_KEY", count: 2 },
-      { key: "Z_KEY", count: 1 },
-    ]);
+      hasHeterogeneousBatchRuntime(identical, buildInitialBatchRuntimeSelection(identical)),
+    ).toBe(false);
+
+    const mixed = [
+      previewAgent({ id: "a1" }),
+      previewAgent({ id: "a2", provider: RUNTIME_PROVIDER.CODEX }),
+    ];
+    expect(hasHeterogeneousBatchRuntime(mixed, buildInitialBatchRuntimeSelection(mixed))).toBe(
+      true,
+    );
   });
 });

@@ -145,16 +145,13 @@ export function parseBatchEnvPatch(
   };
 }
 
-export function collectCommonEnvKeys(
-  envKeysByAgent: Readonly<Record<string, readonly string[]>>,
-): Array<{ key: string; count: number }> {
-  const counts = new Map<string, number>();
-  for (const keys of Object.values(envKeysByAgent)) {
-    for (const key of keys) counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .map(([key, count]) => ({ key, count }))
-    .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+export function hasHeterogeneousBatchRuntime(
+  agents: readonly BatchRuntimePreviewAgent[],
+  selection: RuntimeSelection,
+): boolean {
+  return agents
+    .filter((agent) => agent.ownedByCurrentUser)
+    .some((agent) => runtimeSelectionDiffers(agent, selection, ""));
 }
 
 function selectionRequiresKey(selection: RuntimeSelection | undefined): boolean {

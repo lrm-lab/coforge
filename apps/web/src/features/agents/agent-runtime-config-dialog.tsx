@@ -60,6 +60,7 @@ export function AgentRuntimeConfigForm({
   computers,
   computerLocked = false,
   credentialConfigured = false,
+  allowUnchangedSubmit = false,
   initial,
   onLoad,
   environment,
@@ -73,6 +74,7 @@ export function AgentRuntimeConfigForm({
   computers?: ReadonlyArray<AgentRuntimeComputerOption>;
   computerLocked?: boolean;
   credentialConfigured?: boolean;
+  allowUnchangedSubmit?: boolean;
   initial: RuntimeSelection;
   onLoad: (computerId: string) => Promise<RuntimeOptions>;
   environment?: AgentEnvironmentState;
@@ -105,13 +107,14 @@ export function AgentRuntimeConfigForm({
   const envKeyErrors = envRows.map((row) => agentEnvironmentNameError(row.key));
   const computerDirty = Boolean(computers) && selectedComputerId !== (computerId || "");
   const dirty = runtimeDirty || envDirty || computerDirty;
+  const canSubmit = dirty || allowUnchangedSubmit;
   useReportDirty(dirty, onDirtyChange);
   const showComputerPicker = Boolean(computers && computers.length > 0);
 
   return (
     <form
       ref={formRef}
-      className="flex min-h-0 flex-1 flex-col overflow-hidden max-sm:min-h-full"
+      className="flex min-h-0 flex-1 flex-col overflow-hidden max-sm:min-h-full max-sm:overflow-visible"
       onSubmit={(event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         onSave(new FormData(event.currentTarget), {
@@ -124,7 +127,9 @@ export function AgentRuntimeConfigForm({
         heading={m.agent_profile_edit_runtime_config()}
         submitLabel={m.controls_save()}
         pending={saving}
-        submitDisabled={!dirty || envPending || envKeyErrors.some(Boolean) || !selectedComputerId}
+        submitDisabled={
+          !canSubmit || envPending || envKeyErrors.some(Boolean) || !selectedComputerId
+        }
         onCancel={onClose}
         onSubmit={() => formRef.current?.requestSubmit()}
       />
@@ -133,7 +138,7 @@ export function AgentRuntimeConfigForm({
         title={m.agent_profile_edit_runtime_config()}
         onClose={onClose}
       />
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 pt-6 pb-2 max-sm:px-4 max-sm:pt-2 max-sm:pb-6">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-6 pt-6 pb-2 max-sm:overflow-visible max-sm:px-4 max-sm:pt-2 max-sm:pb-6">
         {showComputerPicker ? (
           <Select
             name="computerId"
@@ -247,7 +252,7 @@ export function AgentRuntimeConfigForm({
                             setEnvRows(envRows.map((r, i) => (i === index ? { ...r, value } : r)))
                           }
                         />
-                        <div className="flex h-9 items-center">
+                        <div className="-me-1.5 flex h-9 items-center">
                           <ButtonUtility
                             type="button"
                             size="xs"
@@ -288,7 +293,7 @@ export function AgentRuntimeConfigForm({
         <DialogAction
           type="submit"
           isDisabled={
-            saving || !dirty || envPending || envKeyErrors.some(Boolean) || !selectedComputerId
+            saving || !canSubmit || envPending || envKeyErrors.some(Boolean) || !selectedComputerId
           }
         >
           {saving ? m.agent_profile_saving() : m.agent_profile_save_runtime_config()}
@@ -305,6 +310,7 @@ export function AgentRuntimeConfigDialog({
   computers,
   computerLocked,
   credentialConfigured,
+  allowUnchangedSubmit,
   initial,
   onLoad,
   environment,
@@ -318,6 +324,7 @@ export function AgentRuntimeConfigDialog({
   computers?: ReadonlyArray<AgentRuntimeComputerOption>;
   computerLocked?: boolean;
   credentialConfigured?: boolean;
+  allowUnchangedSubmit?: boolean;
   initial: RuntimeSelection;
   onLoad: (computerId: string) => Promise<RuntimeOptions>;
   environment?: AgentEnvironmentState;
@@ -338,13 +345,14 @@ export function AgentRuntimeConfigDialog({
         }}
       >
         <Modal className="w-[calc(100vw-2rem)] max-w-xl overflow-hidden">
-          <Dialog className="flex flex-col overflow-hidden max-sm:h-full">
+          <Dialog className="flex flex-col overflow-hidden max-sm:h-auto max-sm:min-h-full max-sm:overflow-visible">
             {({ close }) => (
               <AgentRuntimeConfigForm
                 computerId={computerId}
                 computers={computers}
                 computerLocked={computerLocked}
                 credentialConfigured={credentialConfigured}
+                allowUnchangedSubmit={allowUnchangedSubmit}
                 initial={initial}
                 onLoad={onLoad}
                 environment={environment}
