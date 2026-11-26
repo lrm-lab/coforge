@@ -6,6 +6,7 @@ import {
 } from "@lrm/coforge-sdk/agent";
 import { foldUntrustedLine, frameUntrustedText } from "@lrm/coforge-sdk/internal";
 import { CliError } from "#src/cli-error";
+import { parseCliFlags } from "./cli-flags";
 
 /** The longest `query` the marketplace route accepts, after trimming. */
 export const MARKETPLACE_QUERY_MAX_CHARS = AGENT_APP_MARKETPLACE_QUERY_MAX;
@@ -24,15 +25,52 @@ export type AppMarketplaceInvocation = {
 export const APP_MARKETPLACE_USAGE =
   "Usage: coforge app marketplace [<query>] [--limit <1-50>] [--json]";
 
-/**
- * Parses `coforge app marketplace`: one optional positional query (the same text `--query` may
- * carry), a bounded limit, and `--json`. The route's own limits are enforced here first, so a bad
- * call never leaves the Computer.
- */
 export function parseAppMarketplaceArgs(args: readonly string[]): AppMarketplaceInvocation {
-  let query: string | undefined;
+  const { values, positionals } = parseCliFlags({
+    args,
+    options: {
+      json: { type: "boolean" },
+      limit: { type: "string", allowFlagValue: true },
+      query: { type: "string" },
+    },
+    maxPositionals: 1,
+    rejectFlagValues: true,
+    onError(error) {
+      if (error.kind === "missing-value" && error.flag === "--limit")
+        throw new CliError({
+          code: "INVALID_ARG",
+          message: `--limit takes a whole number from ${MARKETPLACE_LIMIT_MIN} to ${MARKETPLACE_LIMIT_MAX}.`,
+          retryable: false,
+        });
+      if (error.kind === "missing-value" && error.flag === "--query")
+        throw new CliError({
+          code: "INVALID_ARG",
+          message: `--query needs a value. ${APP_MARKETPLACE_USAGE}`,
+          retryable: false,
+        });
+      throw new CliError({
+        code: "INVALID_ARG",
+        message: APP_MARKETPLACE_USAGE,
+        retryable: false,
+      });
+    },
+  });
   let limit = MARKETPLACE_LIMIT_DEFAULT;
-  let json = false;
+  if (values.limit !== undefined) {
+    const parsed = Number(values.limit);
+    if (
+      !Number.isInteger(parsed) ||
+      parsed < MARKETPLACE_LIMIT_MIN ||
+      parsed > MARKETPLACE_LIMIT_MAX
+    )
+      throw new CliError({
+        code: "INVALID_ARG",
+        message: `--limit takes a whole number from ${MARKETPLACE_LIMIT_MIN} to ${MARKETPLACE_LIMIT_MAX}.`,
+        retryable: false,
+      });
+    limit = parsed;
+  }
+  let query: string | undefined;
   const setQuery = (value: string) => {
     const trimmed = value.trim();
     if (trimmed.length > MARKETPLACE_QUERY_MAX_CHARS)
@@ -43,48 +81,22 @@ export function parseAppMarketplaceArgs(args: readonly string[]): AppMarketplace
       });
     query = trimmed || undefined;
   };
-  for (let index = 0; index < args.length; index++) {
-    const argument = args[index]!;
-    if (argument === "--json") {
-      json = true;
-      continue;
-    }
-    if (argument === "--limit") {
-      const value = args[++index];
-      const parsed = value === undefined ? Number.NaN : Number(value);
-      if (
-        !Number.isInteger(parsed) ||
-        parsed < MARKETPLACE_LIMIT_MIN ||
-        parsed > MARKETPLACE_LIMIT_MAX
-      )
-        throw new CliError({
-          code: "INVALID_ARG",
-          message: `--limit takes a whole number from ${MARKETPLACE_LIMIT_MIN} to ${MARKETPLACE_LIMIT_MAX}.`,
-          retryable: false,
-        });
-      limit = parsed;
-      continue;
-    }
-    if (argument === "--query") {
-      const value = args[++index];
-      if (value === undefined || value.startsWith("--"))
-        throw new CliError({
-          code: "INVALID_ARG",
-          message: `--query needs a value. ${APP_MARKETPLACE_USAGE}`,
-          retryable: false,
-        });
-      setQuery(value);
-      continue;
-    }
-    if (argument.startsWith("--") || query !== undefined)
+  if (values.query !== undefined) setQuery(values.query);
+  if (positionals[0] !== undefined) {
+    if (query !== undefined)
       throw new CliError({
         code: "INVALID_ARG",
         message: APP_MARKETPLACE_USAGE,
         retryable: false,
       });
-    setQuery(argument);
+    setQuery(positionals[0]);
   }
-  return { command: "app-marketplace", ...(query === undefined ? {} : { query }), limit, json };
+  return {
+    command: "app-marketplace",
+    ...(query === undefined ? {} : { query }),
+    limit,
+    json: values.json === true,
+  };
 }
 
 /** Every failure the marketplace command reports, whatever its cause: one code, as #100 defines. */

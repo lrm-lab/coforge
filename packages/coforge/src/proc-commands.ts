@@ -12,6 +12,7 @@ import {
 } from "@lrm/coforge-sdk/agent";
 import { invalidArgument, unknownCommandError } from "#src/command-help/index";
 import { CliError, withOutputMode } from "#src/cli-error";
+import { cliFlagBadToken, parseCliFlags } from "./cli-flags";
 import type { MessageTransport } from "#src/message-transport";
 import { formatProcList, formatProcLogs, formatProcStart, formatProcStop } from "./proc-format";
 
@@ -133,51 +134,57 @@ function parseStartArgs(args: readonly string[]): ProcInvocation {
 
 function parseListArgs(args: readonly string[]): ProcInvocation {
   const json = args.includes("--json");
-  for (const arg of args) {
-    if (arg !== "--json")
+  const { values } = parseCliFlags({
+    args,
+    options: { json: { type: "boolean" } },
+    onError(error) {
       throw withOutputMode(
-        invalidArgument("proc list", `Unknown argument "${arg}".`),
+        invalidArgument("proc list", `Unknown argument "${cliFlagBadToken(error)}".`),
         json ? "json" : "text",
       );
-  }
-  return { command: "proc", operation: "list", ...(json ? { json: true as const } : {}) };
+    },
+  });
+  return { command: "proc", operation: "list", ...(values.json ? { json: true as const } : {}) };
 }
 
 function parseLogsArgs(args: readonly string[]): ProcInvocation {
   const json = args.includes("--json");
-  let name: string | undefined;
-  let tail: number | undefined;
-  let follow = false;
-  for (let index = 0; index < args.length; index++) {
-    const arg = args[index]!;
-    if (arg === "--json") continue;
-    else if (arg === "--follow") follow = true;
-    else if (arg === "--tail") {
-      const raw = requireFlagValue(args, index++, "proc logs", "--tail", json);
-      const parsed = Number(raw);
-      if (!/^\d+$/.test(raw) || !Number.isSafeInteger(parsed) || parsed > PROC_LOGS_MAX_TAIL)
+  const { values, positionals } = parseCliFlags({
+    args,
+    options: {
+      json: { type: "boolean" },
+      follow: { type: "boolean" },
+      tail: { type: "string" },
+    },
+    maxPositionals: 1,
+    onError(error) {
+      if (error.kind === "missing-value")
         throw withOutputMode(
-          invalidArgument(
-            "proc logs",
-            `--tail must be an integer from 0 to ${PROC_LOGS_MAX_TAIL}.`,
-          ),
+          invalidArgument("proc logs", `${error.flag} needs a value.`),
           json ? "json" : "text",
         );
-      tail = parsed;
-    } else if (arg.startsWith("-")) {
+      if (error.kind === "unexpected-positional")
+        throw withOutputMode(
+          invalidArgument("proc logs", `Unexpected argument "${error.value}".`),
+          json ? "json" : "text",
+        );
       throw withOutputMode(
-        invalidArgument("proc logs", `Unknown argument "${arg}".`),
+        invalidArgument("proc logs", `Unknown argument "${cliFlagBadToken(error)}".`),
         json ? "json" : "text",
       );
-    } else if (name === undefined) {
-      name = arg;
-    } else {
+    },
+  });
+  let tail: number | undefined;
+  if (values.tail !== undefined) {
+    const parsed = Number(values.tail);
+    if (!/^\d+$/.test(values.tail) || !Number.isSafeInteger(parsed) || parsed > PROC_LOGS_MAX_TAIL)
       throw withOutputMode(
-        invalidArgument("proc logs", `Unexpected argument "${arg}".`),
+        invalidArgument("proc logs", `--tail must be an integer from 0 to ${PROC_LOGS_MAX_TAIL}.`),
         json ? "json" : "text",
       );
-    }
+    tail = parsed;
   }
+  const name = positionals[0];
   if (!name || !PROC_NAME_PATTERN.test(name))
     throw withOutputMode(
       invalidArgument("proc logs", "A valid job <name> is required."),
@@ -188,34 +195,35 @@ function parseLogsArgs(args: readonly string[]): ProcInvocation {
     operation: "logs",
     name,
     ...(tail !== undefined ? { tail } : {}),
-    ...(follow ? { follow: true as const } : {}),
-    ...(json ? { json: true as const } : {}),
+    ...(values.follow ? { follow: true as const } : {}),
+    ...(values.json ? { json: true as const } : {}),
   };
 }
 
 function parseStopArgs(args: readonly string[]): ProcInvocation {
   const json = args.includes("--json");
-  let name: string | undefined;
-  let all = false;
-  let force = false;
-  for (const arg of args) {
-    if (arg === "--all") all = true;
-    else if (arg === "--force") force = true;
-    else if (arg === "--json") continue;
-    else if (arg.startsWith("-")) {
+  const { values, positionals } = parseCliFlags({
+    args,
+    options: {
+      json: { type: "boolean" },
+      all: { type: "boolean" },
+      force: { type: "boolean" },
+    },
+    maxPositionals: 1,
+    onError(error) {
+      if (error.kind === "unexpected-positional")
+        throw withOutputMode(
+          invalidArgument("proc stop", `Unexpected argument "${error.value}".`),
+          json ? "json" : "text",
+        );
       throw withOutputMode(
-        invalidArgument("proc stop", `Unknown argument "${arg}".`),
+        invalidArgument("proc stop", `Unknown argument "${cliFlagBadToken(error)}".`),
         json ? "json" : "text",
       );
-    } else if (name === undefined) {
-      name = arg;
-    } else {
-      throw withOutputMode(
-        invalidArgument("proc stop", `Unexpected argument "${arg}".`),
-        json ? "json" : "text",
-      );
-    }
-  }
+    },
+  });
+  const name = positionals[0];
+  const all = values.all === true;
   if ((name !== undefined && all) || (name === undefined && !all))
     throw withOutputMode(
       invalidArgument("proc stop", "Specify either a job <name> or --all, not both."),
@@ -228,8 +236,8 @@ function parseStopArgs(args: readonly string[]): ProcInvocation {
     operation: "stop",
     ...(name !== undefined ? { name } : {}),
     ...(all ? { all: true as const } : {}),
-    ...(force ? { force: true as const } : {}),
-    ...(json ? { json: true as const } : {}),
+    ...(values.force ? { force: true as const } : {}),
+    ...(values.json ? { json: true as const } : {}),
   };
 }
 

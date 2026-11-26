@@ -4,8 +4,8 @@ import type {
   AgentLabelWriteRequest,
   AgentLabelWriteResponse,
 } from "@lrm/coforge-sdk/agent";
+import { parseCliFlags, type CliFlagOptions } from "./cli-flags";
 
-/** `label list` carries no request; every write carries the one label write it sends. */
 export type LabelInvocation = {
   command: "label";
   request?: AgentLabelWriteRequest;
@@ -15,7 +15,6 @@ export type LabelInvocation = {
 const LABEL_USAGE =
   "Usage: coforge label list [--json] | coforge label create <name> --description <text> [--color <color>] [--json] | coforge label rename <name> --to <new name> [--json] | coforge label update <name> --color <color> [--json] | coforge label delete|restore <name> [--json]";
 
-/** Each write subcommand's flags; every one but `list` names its label first. */
 const WRITE_FLAGS: Record<string, readonly string[]> = {
   create: ["--description", "--color"],
   rename: ["--to"],
@@ -24,30 +23,44 @@ const WRITE_FLAGS: Record<string, readonly string[]> = {
   restore: [],
 };
 
-/** `label list|create|rename|update|delete|restore`. */
 export function parseLabelArgs(args: readonly string[]): LabelInvocation {
   const [subcommand, ...rest] = args;
-  const json = rest.includes("--json");
-  const options = json ? { json: true } : {};
-  const remaining = rest.filter((arg) => arg !== "--json");
   if (subcommand === "list") {
-    if (remaining.length) throw new Error(LABEL_USAGE);
-    return { command: "label", ...options };
+    const { values } = parseCliFlags({
+      args: rest,
+      options: { json: { type: "boolean" } },
+      onError() {
+        throw new Error(LABEL_USAGE);
+      },
+    });
+    return { command: "label", ...(values.json ? { json: true } : {}) };
   }
   const flags = subcommand === undefined ? undefined : WRITE_FLAGS[subcommand];
-  const [name, ...pairs] = remaining;
-  if (!flags || !name?.trim() || name.startsWith("--") || pairs.length % 2)
-    throw new Error(LABEL_USAGE);
+  if (!flags) throw new Error(LABEL_USAGE);
+  const flagOptions: CliFlagOptions = { json: { type: "boolean" } };
+  for (const flag of flags) flagOptions[flag.slice(2)] = { type: "string" };
+  const { values: parsed, positionals } = parseCliFlags({
+    args: rest,
+    options: flagOptions,
+    maxPositionals: 1,
+    duplicates: "error-strings",
+    onError() {
+      throw new Error(LABEL_USAGE);
+    },
+  });
+  const name = positionals[0];
+  if (!name?.trim()) throw new Error(LABEL_USAGE);
   const values: Record<string, string> = {};
-  for (let index = 0; index < pairs.length; index += 2) {
-    const flag = pairs[index]!;
-    const value = pairs[index + 1]!;
-    if (!flags.includes(flag) || flag in values || !value.trim()) throw new Error(LABEL_USAGE);
-    values[flag] = value;
+  for (const flag of flags) {
+    const value = parsed[flag.slice(2)];
+    if (typeof value === "string") {
+      if (!value.trim()) throw new Error(LABEL_USAGE);
+      values[flag] = value;
+    }
   }
   const request = writeRequest(subcommand!, name, values);
   if (!request) throw new Error(LABEL_USAGE);
-  return { command: "label", request, ...options };
+  return { command: "label", request, ...(parsed.json ? { json: true } : {}) };
 }
 
 function writeRequest(

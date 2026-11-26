@@ -1,23 +1,27 @@
 import type { AgentProfileShowResponse } from "@lrm/coforge-sdk/agent";
 import { CliError } from "#src/cli-error";
+import { parseCliFlags } from "./cli-flags";
 
 export type WhoamiInvocation = { command: "whoami"; json?: boolean; prompt?: boolean };
 
 const WHOAMI_USAGE = "Usage: coforge whoami [--json | --prompt]";
 
 export function parseWhoamiArgs(args: readonly string[]): WhoamiInvocation {
-  let json = false;
-  let prompt = false;
-  for (const arg of args) {
-    if (arg === "--json") json = true;
-    else if (arg === "--prompt") prompt = true;
-    else throw new Error(WHOAMI_USAGE);
-  }
-  if (json && prompt) throw new Error(WHOAMI_USAGE);
+  const { values } = parseCliFlags({
+    args,
+    options: {
+      json: { type: "boolean" },
+      prompt: { type: "boolean" },
+    },
+    onError() {
+      throw new Error(WHOAMI_USAGE);
+    },
+  });
+  if (values.json && values.prompt) throw new Error(WHOAMI_USAGE);
   return {
     command: "whoami",
-    ...(json ? { json: true } : {}),
-    ...(prompt ? { prompt: true } : {}),
+    ...(values.json ? { json: true } : {}),
+    ...(values.prompt ? { prompt: true } : {}),
   };
 }
 

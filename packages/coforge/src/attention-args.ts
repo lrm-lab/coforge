@@ -1,5 +1,6 @@
 import { isAgentInboxView, AGENT_INBOX_VIEWS, type AgentInboxView } from "@lrm/coforge-sdk/agent";
 import { CliError } from "#src/cli-error";
+import { parseCliFlags } from "./cli-flags";
 import {
   parseInboxDismissArgs,
   parseInboxReadArgs,
@@ -32,20 +33,18 @@ const THREAD_TARGET = new RegExp(
   "i",
 );
 
-/** The channel a mute names, as a positional or `--target`; both must agree. A DM, a thread or
- * anything else that is not `#channel` is `INVALID_TARGET`. */
 function parseMuteTarget(args: readonly string[], command: string): string {
-  let positional: string | undefined;
-  let flagged: string | undefined;
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === "--target" && flagged === undefined && args[index + 1] !== undefined) {
-      flagged = args[index + 1]!.trim();
-      index += 1;
-    } else if (arg !== undefined && !arg.startsWith("--") && positional === undefined)
-      positional = arg.trim();
-    else throw new Error(`Usage: coforge channel ${command} [<target>] [--target <target>]`);
-  }
+  const { values, positionals } = parseCliFlags({
+    args,
+    options: { target: { type: "string" } },
+    maxPositionals: 1,
+    duplicates: "error-strings",
+    onError() {
+      throw new Error(`Usage: coforge channel ${command} [<target>] [--target <target>]`);
+    },
+  });
+  const positional = positionals[0]?.trim();
+  const flagged = values.target?.trim();
   if (positional && flagged && positional !== flagged)
     throw new CliError({
       code: "INVALID_ARG",
@@ -67,19 +66,18 @@ function parseMuteTarget(args: readonly string[], command: string): string {
 const FOLLOW_USAGE = "Usage: coforge thread follow [<thread>] [--target <thread>]";
 const UNFOLLOW_USAGE = "Usage: coforge thread unfollow --target <thread> [--reason <text>]";
 
-/** `thread follow [<#channel:message-id>] [--target <#channel:message-id>]`. */
 function parseFollowArgs(args: readonly string[]): ThreadInvocation {
-  let positional: string | undefined;
-  let flagged: string | undefined;
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === "--target" && flagged === undefined && args[index + 1] !== undefined) {
-      flagged = args[index + 1]!.trim();
-      index += 1;
-    } else if (arg !== undefined && !arg.startsWith("--") && positional === undefined)
-      positional = arg.trim();
-    else throw new Error(FOLLOW_USAGE);
-  }
+  const { values, positionals } = parseCliFlags({
+    args,
+    options: { target: { type: "string" } },
+    maxPositionals: 1,
+    duplicates: "error-strings",
+    onError() {
+      throw new Error(FOLLOW_USAGE);
+    },
+  });
+  const positional = positionals[0]?.trim();
+  const flagged = values.target?.trim();
   if (positional && flagged && positional !== flagged)
     throw new CliError({
       code: "INVALID_ARG",
@@ -98,17 +96,20 @@ function parseFollowArgs(args: readonly string[]): ThreadInvocation {
   return { command: "thread-follow", target };
 }
 
-/** `thread unfollow --target <#channel:message-id> [--reason <text>]`. */
 function parseUnfollowArgs(args: readonly string[]): ThreadInvocation {
-  let target: string | undefined;
-  let reason: string | undefined;
-  for (let index = 0; index < args.length; index += 2) {
-    const value = args[index + 1];
-    if (value === undefined) throw new Error(UNFOLLOW_USAGE);
-    if (args[index] === "--target" && target === undefined) target = value.trim();
-    else if (args[index] === "--reason" && reason === undefined) reason = value.trim();
-    else throw new Error(UNFOLLOW_USAGE);
-  }
+  const { values } = parseCliFlags({
+    args,
+    options: {
+      target: { type: "string" },
+      reason: { type: "string" },
+    },
+    duplicates: "error-strings",
+    onError() {
+      throw new Error(UNFOLLOW_USAGE);
+    },
+  });
+  const target = values.target?.trim();
+  const reason = values.reason?.trim();
   if (target === undefined) throw new Error(UNFOLLOW_USAGE);
   if (!THREAD_TARGET.test(target))
     throw new CliError({
@@ -121,20 +122,22 @@ function parseUnfollowArgs(args: readonly string[]): ThreadInvocation {
 
 const INBOX_USAGE = "Usage: coforge inbox check [--view unread|mentions] [--before <n>] [--json]";
 
-/** `inbox check [--view unread|mentions] [--before <n>] [--json]`. */
 function parseInboxCheckArgs(args: readonly string[]): InboxInvocation {
-  let view: string | undefined;
-  let before: string | undefined;
-  let json = false;
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === "--json") json = true;
-    else if (arg === "--view" && view === undefined && args[index + 1] !== undefined)
-      view = args[++index]!.trim();
-    else if (arg === "--before" && before === undefined && args[index + 1] !== undefined)
-      before = args[++index]!.trim();
-    else throw new Error(INBOX_USAGE);
-  }
+  const { values } = parseCliFlags({
+    args,
+    options: {
+      json: { type: "boolean" },
+      view: { type: "string" },
+      before: { type: "string" },
+    },
+    duplicates: "error-strings",
+    onError() {
+      throw new Error(INBOX_USAGE);
+    },
+  });
+  const json = values.json === true;
+  const view = values.view?.trim();
+  const before = values.before?.trim();
   const refuse = (message: string) =>
     new CliError({
       code: "INVALID_ARG",

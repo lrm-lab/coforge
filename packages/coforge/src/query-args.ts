@@ -1,4 +1,5 @@
 import { CliError } from "#src/cli-error";
+import { parseCliFlags } from "./cli-flags";
 import type { ActionPrepareInvocation } from "../index";
 import type { ManualInvocation } from "../index";
 import type { ProfileShowInvocation } from "../index";
@@ -57,24 +58,21 @@ export function validateManualIntentReasonArgs(
 
 export function parseManualArgs(args: readonly string[]): ManualInvocation {
   const sub = args[0];
-  let value: string | undefined;
-  let intent: string | undefined;
-  let reason: string | undefined;
-  // The positional may come before or after the flags; Agents write both orders.
-  for (let index = 1; index < args.length; index += 1) {
-    const name = args[index]!;
-    if (name === "--intent" || name === "--reason") {
-      const flagValue = args[index + 1];
-      if (flagValue === undefined) throw new Error(MANUAL_USAGE);
-      if (name === "--intent") intent = flagValue;
-      else reason = flagValue;
-      index += 1;
-    } else if (name.startsWith("--") || value !== undefined) throw new Error(MANUAL_USAGE);
-    else value = name;
-  }
+  const { values, positionals } = parseCliFlags({
+    args: args.slice(1),
+    options: {
+      intent: { type: "string" },
+      reason: { type: "string" },
+    },
+    maxPositionals: 1,
+    onError() {
+      throw new Error(MANUAL_USAGE);
+    },
+  });
+  const value = positionals[0];
   if (!value?.trim()) throw new Error(MANUAL_USAGE);
-  validateManualIntentReasonArgs(intent, reason);
-  const context = { intent: intent?.trim() ?? "", reason: reason?.trim() ?? "" };
+  validateManualIntentReasonArgs(values.intent, values.reason);
+  const context = { intent: values.intent?.trim() ?? "", reason: values.reason?.trim() ?? "" };
   return sub === "get"
     ? { command: "manual-get", topic: value.trim(), ...context }
     : { command: "manual-search", query: value.trim(), ...context };
@@ -87,34 +85,36 @@ export function stripHandlePrefix(value: string): string {
 const PROFILE_SHOW_USAGE = "Usage: coforge profile show [<target>] [--json]";
 
 export function parseProfileShowArgs(args: readonly string[]): ProfileShowInvocation {
-  let target: string | undefined;
-  let json = false;
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === "--json") json = true;
-    else if (arg !== undefined && !arg.startsWith("--") && target === undefined) target = arg;
-    else throw new Error(PROFILE_SHOW_USAGE);
-  }
-  const trimmed = target?.trim();
+  const { values, positionals } = parseCliFlags({
+    args,
+    options: { json: { type: "boolean" } },
+    maxPositionals: 1,
+    onError() {
+      throw new Error(PROFILE_SHOW_USAGE);
+    },
+  });
+  const trimmed = positionals[0]?.trim();
   return {
     command: "profile-show",
     ...(trimmed ? { target: stripHandlePrefix(trimmed) } : {}),
-    ...(json ? { json: true } : {}),
+    ...(values.json ? { json: true } : {}),
   };
 }
 
 export function parseActionPrepareArgs(args: readonly string[]): ActionPrepareInvocation {
-  let target: string | undefined;
-  for (let index = 0; index < args.length; index++) {
-    if (args[index] === "--target" && args[index + 1]) target = args[++index];
-    else
+  const { values } = parseCliFlags({
+    args,
+    options: { target: { type: "string" } },
+    allowEmptyValues: false,
+    onError() {
       throw new CliError({
         code: "INVALID_ARG",
         message: "Usage: coforge action prepare --target <target>",
         retryable: false,
       });
-  }
-  if (!target?.trim())
+    },
+  });
+  if (!values.target?.trim())
     throw new CliError({ code: "INVALID_ARG", message: "--target is required", retryable: false });
-  return { command: "action-prepare", target };
+  return { command: "action-prepare", target: values.target };
 }

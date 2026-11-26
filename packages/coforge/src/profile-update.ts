@@ -1,4 +1,5 @@
 import { AGENT_PROFILE_DESCRIPTION_MAX_LENGTH } from "@lrm/coforge-sdk/internal/agent-launch-apps";
+import { parseCliFlags } from "./cli-flags";
 
 export type ProfileUpdateInvocation = {
   command: "profile-update";
@@ -7,8 +8,6 @@ export type ProfileUpdateInvocation = {
   json?: boolean;
 };
 
-// The server's own limits (`AGENT_DISPLAY_NAME_MAX_LENGTH`, `AGENT_PROFILE_DESCRIPTION_MAX_LENGTH`),
-// checked here so a too-long value fails before any request.
 const DISPLAY_NAME_MAX_LENGTH = 80;
 const DESCRIPTION_MAX_LENGTH = AGENT_PROFILE_DESCRIPTION_MAX_LENGTH;
 
@@ -16,25 +15,19 @@ const PROFILE_UPDATE_USAGE =
   'Usage: coforge profile update [--display-name "<text>"] [--description "<text>"] [--json]';
 
 export function parseProfileUpdateArgs(args: readonly string[]): ProfileUpdateInvocation {
-  let displayName: string | undefined;
-  let description: string | undefined;
-  let json = false;
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === "--json") {
-      json = true;
-      continue;
-    }
-    if (arg === "--display-name" || arg === "--description") {
-      const value = args[index + 1];
-      if (value === undefined) throw new Error(PROFILE_UPDATE_USAGE);
-      if (arg === "--display-name") displayName = value;
-      else description = value;
-      index += 1;
-      continue;
-    }
-    throw new Error(PROFILE_UPDATE_USAGE);
-  }
+  const { values } = parseCliFlags({
+    args,
+    options: {
+      json: { type: "boolean" },
+      "display-name": { type: "string" },
+      description: { type: "string" },
+    },
+    onError() {
+      throw new Error(PROFILE_UPDATE_USAGE);
+    },
+  });
+  const displayName = values["display-name"];
+  const description = values.description;
   if (displayName === undefined && description === undefined)
     throw new Error(
       `Provide at least one of --display-name or --description\n${PROFILE_UPDATE_USAGE}`,
@@ -51,6 +44,6 @@ export function parseProfileUpdateArgs(args: readonly string[]): ProfileUpdateIn
     command: "profile-update",
     ...(displayName !== undefined ? { displayName } : {}),
     ...(description !== undefined ? { description } : {}),
-    ...(json ? { json: true } : {}),
+    ...(values.json ? { json: true } : {}),
   };
 }

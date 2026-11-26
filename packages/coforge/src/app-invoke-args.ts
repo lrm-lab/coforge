@@ -1,22 +1,6 @@
 import type { AppInvokeInvocation } from "./app-actions";
+import { cliFlagBadToken, parseCliFlags } from "./cli-flags";
 
-/** Options of `app invoke` that take a value. */
-const VALUE_OPTIONS = [
-  "--action",
-  "--target",
-  "--timeout",
-  "--param",
-  "--data-json",
-  "--data-file",
-  "--idempotency-key",
-] as const;
-
-/**
- * `coforge app invoke <app-key> [<action>] [options]`, without the leading `app invoke`. The
- * action is positional (or `--action`); `--list-actions` shows what an app offers instead.
- * `invalid` throws the command's usage error; `parseTimeout` is the `--timeout` rule shared with
- * `app token`.
- */
 export function parseInvokeArgs(
   rest: readonly string[],
   invalid: (message: string) => never,
@@ -24,27 +8,44 @@ export function parseInvokeArgs(
 ): AppInvokeInvocation {
   const [appKey, ...options] = rest;
   if (!appKey || appKey.startsWith("--")) invalid("coforge app invoke needs an app key");
-  const invocation: AppInvokeInvocation = { command: "app-invoke", appKey };
-  let positional: string | undefined;
-  for (let index = 0; index < options.length; index++) {
-    const option = options[index]!;
-    if (option === "--list-actions") invocation.listActions = true;
-    else if (option === "--json") invocation.json = true;
-    else if (option === "--preflight") invocation.preflight = true;
-    else if ((VALUE_OPTIONS as readonly string[]).includes(option)) {
-      const value = options[++index];
-      if (value === undefined || (value.startsWith("--") && option !== "--param"))
-        invalid(`${option} needs a value`);
-      if (option === "--action") invocation.action = value;
-      else if (option === "--target") invocation.target = value;
-      else if (option === "--timeout") invocation.timeoutSeconds = parseTimeout(value);
-      else if (option === "--param") (invocation.params ??= []).push(value);
-      else if (option === "--data-json") invocation.dataJson = value;
-      else if (option === "--data-file") invocation.dataFile = value;
-      else invocation.idempotencyKey = value;
-    } else if (!option.startsWith("--") && positional === undefined) positional = option;
-    else invalid(`Unexpected argument ${option}`);
-  }
+  const { values, positionals } = parseCliFlags({
+    args: options,
+    options: {
+      "list-actions": { type: "boolean" },
+      json: { type: "boolean" },
+      preflight: { type: "boolean" },
+      action: { type: "string" },
+      target: { type: "string" },
+      timeout: { type: "string" },
+      param: { type: "string", multiple: true, allowFlagValue: true },
+      "data-json": { type: "string" },
+      "data-file": { type: "string" },
+      "idempotency-key": { type: "string" },
+    },
+    maxPositionals: 1,
+    rejectFlagValues: true,
+    onError(error) {
+      if (error.kind === "missing-value") invalid(`${error.flag} needs a value`);
+      invalid(`Unexpected argument ${cliFlagBadToken(error)}`);
+    },
+  });
+  const positional = positionals[0];
+  const invocation: AppInvokeInvocation = {
+    command: "app-invoke",
+    appKey,
+    ...(values["list-actions"] ? { listActions: true as const } : {}),
+    ...(values.json ? { json: true as const } : {}),
+    ...(values.preflight ? { preflight: true as const } : {}),
+    ...(values.action !== undefined ? { action: values.action } : {}),
+    ...(values.target !== undefined ? { target: values.target } : {}),
+    ...(values.timeout !== undefined ? { timeoutSeconds: parseTimeout(values.timeout) } : {}),
+    ...(values.param?.length ? { params: values.param } : {}),
+    ...(values["data-json"] !== undefined ? { dataJson: values["data-json"] } : {}),
+    ...(values["data-file"] !== undefined ? { dataFile: values["data-file"] } : {}),
+    ...(values["idempotency-key"] !== undefined
+      ? { idempotencyKey: values["idempotency-key"] }
+      : {}),
+  };
   if (positional !== undefined) {
     if (invocation.action !== undefined) invalid("Name the action once: positionally or --action");
     invocation.action = positional;

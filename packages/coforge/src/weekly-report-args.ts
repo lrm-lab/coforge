@@ -4,6 +4,26 @@ import { type WeeklyReportCollectInvocation } from "#src/weekly-report-collect";
 import type { WeeklyReportInvocation } from "../index";
 import type { WeeklyReportKeyPointsInvocation } from "../index";
 import type { WeeklyReportMemoryInvocation } from "../index";
+import { parseCliFlags, type CliFlagOptions } from "./cli-flags";
+
+function parseStrictFlags<const Keys extends readonly string[]>(
+  args: readonly string[],
+  keys: Keys,
+): Partial<Record<Keys[number], string>> {
+  const options: CliFlagOptions = {};
+  for (const key of keys) options[key] = { type: "string" };
+  const { values } = parseCliFlags({
+    args,
+    options,
+    allowEmptyValues: false,
+    rejectFlagValues: true,
+    duplicates: "error-strings",
+    onError() {
+      throw new Error("Usage:");
+    },
+  });
+  return values as Partial<Record<Keys[number], string>>;
+}
 
 export function parseWeeklyReportCollectArgs(
   args: readonly string[],
@@ -11,16 +31,15 @@ export function parseWeeklyReportCollectArgs(
   const operation = args[0];
   if (operation !== "submit-pack" && operation !== "submit-empty" && operation !== "submit-failure")
     throw unknownCommandError(["weekly-report-collect", ...args]);
-  const values = new Map<string, string>();
-  for (let index = 1; index < args.length; index++) {
-    const name = args[index];
-    const value = args[++index];
-    if (!name?.startsWith("--") || !value || value.startsWith("--") || values.has(name))
-      throw new Error("Usage:");
-    values.set(name, value);
-  }
-  const runId = values.get("--run-id");
-  const idempotencyKey = values.get("--idempotency-key");
+  const allowed =
+    operation === "submit-pack"
+      ? (["run-id", "idempotency-key", "markdown"] as const)
+      : operation === "submit-empty"
+        ? (["run-id", "idempotency-key"] as const)
+        : (["run-id", "idempotency-key", "reason"] as const);
+  const values = parseStrictFlags(args.slice(1), allowed);
+  const runId = values["run-id"];
+  const idempotencyKey = values["idempotency-key"];
   if (
     !runId ||
     !RFC_UUID_PATTERN.test(runId) ||
@@ -29,8 +48,8 @@ export function parseWeeklyReportCollectArgs(
   )
     throw new Error("Usage:");
   if (operation === "submit-pack") {
-    const markdownPath = values.get("--markdown");
-    if (!markdownPath || values.size !== 3) throw new Error("Usage:");
+    const markdownPath = values.markdown;
+    if (!markdownPath) throw new Error("Usage:");
     return {
       command: "weekly-report-collect",
       markdownPath,
@@ -42,14 +61,13 @@ export function parseWeeklyReportCollectArgs(
     };
   }
   if (operation === "submit-empty") {
-    if (values.size !== 2) throw new Error("Usage:");
     return {
       command: "weekly-report-collect",
       collect: { idempotencyKey, runId, outcome: "empty" },
     };
   }
-  const reason = values.get("--reason");
-  if (!reason || values.size !== 3) throw new Error("Usage:");
+  const reason = values.reason;
+  if (!reason) throw new Error("Usage:");
   return {
     command: "weekly-report-collect",
     collect: { idempotencyKey, runId, outcome: "failed", failureReason: reason },
@@ -60,24 +78,20 @@ export function parseWeeklyReportKeyPointsArgs(
   args: readonly string[],
 ): WeeklyReportKeyPointsInvocation {
   if (args[0] !== "submit") throw unknownCommandError(["weekly-report-key-points", ...args]);
-  const values = new Map<string, string>();
-  for (let index = 1; index < args.length; index++) {
-    const name = args[index];
-    const value = args[++index];
-    if (!name?.startsWith("--") || !value || value.startsWith("--") || values.has(name))
-      throw new Error("Usage:");
-    values.set(name, value);
-  }
-  const reportId = values.get("--report-id");
-  const idempotencyKey = values.get("--idempotency-key");
-  const markdownPath = values.get("--markdown");
+  const values = parseStrictFlags(args.slice(1), [
+    "report-id",
+    "idempotency-key",
+    "markdown",
+  ] as const);
+  const reportId = values["report-id"];
+  const idempotencyKey = values["idempotency-key"];
+  const markdownPath = values.markdown;
   if (
     !reportId ||
     !RFC_UUID_PATTERN.test(reportId) ||
     !idempotencyKey ||
     !RFC_UUID_PATTERN.test(idempotencyKey) ||
-    !markdownPath ||
-    values.size !== 3
+    !markdownPath
   )
     throw new Error("Usage:");
   return {
@@ -89,24 +103,16 @@ export function parseWeeklyReportKeyPointsArgs(
 
 export function parseWeeklyReportMemoryArgs(args: readonly string[]): WeeklyReportMemoryInvocation {
   if (args[0] !== "submit") throw unknownCommandError(["weekly-report-memory", ...args]);
-  const values = new Map<string, string>();
-  for (let index = 1; index < args.length; index++) {
-    const name = args[index];
-    const value = args[++index];
-    if (!name?.startsWith("--") || !value || value.startsWith("--") || values.has(name))
-      throw new Error("Usage:");
-    values.set(name, value);
-  }
-  const reportId = values.get("--report-id");
-  const idempotencyKey = values.get("--idempotency-key");
-  const filePath = values.get("--file");
+  const values = parseStrictFlags(args.slice(1), ["report-id", "idempotency-key", "file"] as const);
+  const reportId = values["report-id"];
+  const idempotencyKey = values["idempotency-key"];
+  const filePath = values.file;
   if (
     !reportId ||
     !RFC_UUID_PATTERN.test(reportId) ||
     !idempotencyKey ||
     !RFC_UUID_PATTERN.test(idempotencyKey) ||
-    !filePath ||
-    values.size !== 3
+    !filePath
   )
     throw new Error("Usage:");
   return {
@@ -126,25 +132,15 @@ export function parseWeeklyReportArgs(args: readonly string[]): WeeklyReportInvo
     };
   }
   if (operation === "workflow") {
-    if (args.length !== 3 || args[1] !== "--input" || !args[2] || args[2].startsWith("--"))
-      throw new Error("Usage:");
-    return { command: "weekly-report", inputPath: args[2] };
-  }
-  if (operation !== "context" && operation !== "list" && operation !== "read")
-    throw unknownCommandError(["weekly-report", ...args]);
-  const values = new Map<string, string>();
-  for (let index = 1; index < args.length; index++) {
-    const name = args[index];
-    const value = args[++index];
-    if (!name?.startsWith("--") || !value || value.startsWith("--") || values.has(name))
-      throw new Error("Usage:");
-    values.set(name, value);
+    const values = parseStrictFlags(args.slice(1), ["input"] as const);
+    if (!values.input) throw new Error("Usage:");
+    return { command: "weekly-report", inputPath: values.input };
   }
   if (operation === "context") {
-    const subjectType = values.get("--subject-type");
-    const subjectId = values.get("--subject-id");
+    const values = parseStrictFlags(args.slice(1), ["subject-type", "subject-id"] as const);
+    const subjectType = values["subject-type"];
+    const subjectId = values["subject-id"];
     if (
-      values.size !== 2 ||
       !WEEKLY_REPORT_SUBJECT_TYPES.includes(
         subjectType as (typeof WEEKLY_REPORT_SUBJECT_TYPES)[number],
       ) ||
@@ -162,13 +158,10 @@ export function parseWeeklyReportArgs(args: readonly string[]): WeeklyReportInvo
     };
   }
   if (operation === "list") {
-    const cycleId = values.get("--cycle-id");
-    const cursor = values.get("--cursor");
-    const limitValue = values.get("--limit");
-    for (const name of values.keys()) {
-      if (name !== "--cycle-id" && name !== "--cursor" && name !== "--limit")
-        throw new Error("Usage:");
-    }
+    const values = parseStrictFlags(args.slice(1), ["cycle-id", "cursor", "limit"] as const);
+    const cycleId = values["cycle-id"];
+    const cursor = values.cursor;
+    const limitValue = values.limit;
     if (cycleId && !RFC_UUID_PATTERN.test(cycleId)) throw new Error("Usage:");
     if (cursor && !RFC_UUID_PATTERN.test(cursor)) throw new Error("Usage:");
     let limit: number | undefined;
@@ -186,13 +179,15 @@ export function parseWeeklyReportArgs(args: readonly string[]): WeeklyReportInvo
       },
     };
   }
-  const reportId = values.get("--report-id");
-  const section = values.get("--section");
-  const maxCharactersValue = values.get("--max-characters");
-  for (const name of values.keys()) {
-    if (name !== "--report-id" && name !== "--section" && name !== "--max-characters")
-      throw new Error("Usage:");
-  }
+  if (operation !== "read") throw unknownCommandError(["weekly-report", ...args]);
+  const values = parseStrictFlags(args.slice(1), [
+    "report-id",
+    "section",
+    "max-characters",
+  ] as const);
+  const reportId = values["report-id"];
+  const section = values.section;
+  const maxCharactersValue = values["max-characters"];
   if (!reportId || !RFC_UUID_PATTERN.test(reportId) || !section) throw new Error("Usage:");
   let maxCharacters: number | undefined;
   if (maxCharactersValue) {

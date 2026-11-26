@@ -1,4 +1,5 @@
 import { CliError } from "../cli-error";
+import { parseCliFlags, type CliFlagOptions } from "#src/cli-flags";
 import { isExternalCredential } from "../agent-credential";
 import { probeContext } from "./agent-context";
 import {
@@ -62,13 +63,22 @@ export function normalizeServerUrl(value: string): string {
 }
 
 function parseValues(args: readonly string[], allowed: readonly string[]): Map<string, string> {
+  const options: CliFlagOptions = {};
+  for (const flag of allowed) options[flag.slice(2)] = { type: "string" };
+  const { values: parsed } = parseCliFlags({
+    args,
+    options,
+    allowEmptyValues: false,
+    rejectFlagValues: true,
+    duplicates: "error-strings",
+    onError() {
+      throw usage();
+    },
+  });
   const values = new Map<string, string>();
-  for (let index = 0; index < args.length; index++) {
-    const arg = args[index]!;
-    if (!allowed.includes(arg)) throw usage();
-    const value = args[++index];
-    if (!value || value.startsWith("--") || values.has(arg)) throw usage();
-    values.set(arg, value);
+  for (const flag of allowed) {
+    const value = parsed[flag.slice(2)];
+    if (typeof value === "string") values.set(flag, value);
   }
   return values;
 }

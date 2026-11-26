@@ -1,5 +1,6 @@
 import { APP_SCOPES } from "@lrm/coforge-sdk/internal/app-scopes";
 import type { AppRegisterAction } from "@lrm/coforge-sdk/agent";
+import { cliFlagBadToken, parseCliFlags, type CliFlagOptions } from "./cli-flags";
 
 export type AppRegistrationInvocation =
   | { command: "app-prepare-register"; target: string; action: AppRegisterAction }
@@ -7,7 +8,6 @@ export type AppRegistrationInvocation =
   | { command: "app-list-owned"; json: boolean }
   | { command: "app-rotate-secret"; client: string; output: string; json: boolean };
 
-/** Whether an `app` invocation is one of the register commands rather than a use of an app. */
 export function isAppRegistrationInvocation(invocation: {
   command: string;
 }): invocation is AppRegistrationInvocation {
@@ -16,33 +16,48 @@ export function isAppRegistrationInvocation(invocation: {
   );
 }
 
-/** Fails a usage mistake: the message, then the usage line. */
 export type Invalid = (message: string) => never;
 
-/** Reads `--flag value` pairs and bare flags: each named flag at most once unless repeatable. */
+const stripFlagPrefix = (flag: string) => (flag.startsWith("--") ? flag.slice(2) : flag);
+
 export function readOptions(
   args: readonly string[],
   spec: { values: readonly string[]; repeatable?: readonly string[]; bare?: readonly string[] },
   invalid: Invalid,
 ) {
-  const values = new Map<string, string[]>();
-  const bare = new Set<string>();
-  for (let index = 0; index < args.length; index++) {
-    const option = args[index]!;
-    if (spec.bare?.includes(option)) bare.add(option);
-    else if (spec.values.includes(option)) {
-      const value = args[++index];
-      if (value === undefined || value === "") invalid(`${option} needs a value`);
-      const seen = values.get(option) ?? [];
-      if (seen.length > 0 && !spec.repeatable?.includes(option))
-        invalid(`${option} is given twice`);
-      values.set(option, [...seen, value]);
-    } else invalid(`Unexpected argument ${option}`);
-  }
+  const options: CliFlagOptions = {};
+  for (const flag of spec.bare ?? []) options[stripFlagPrefix(flag)] = { type: "boolean" };
+  for (const flag of spec.values)
+    options[stripFlagPrefix(flag)] = {
+      type: "string",
+      multiple: spec.repeatable?.includes(flag) === true,
+    };
+
+  const { values } = parseCliFlags({
+    args,
+    options,
+    allowEmptyValues: false,
+    duplicates: "error-strings",
+    onError(error) {
+      if (error.kind === "missing-value") invalid(`${error.flag} needs a value`);
+      if (error.kind === "duplicate") invalid(`${error.flag} is given twice`);
+      invalid(`Unexpected argument ${cliFlagBadToken(error)}`);
+    },
+  });
+
   return {
-    one: (option: string) => values.get(option)?.[0],
-    all: (option: string) => values.get(option) ?? [],
-    has: (option: string) => bare.has(option),
+    one: (option: string) => {
+      const value = values[stripFlagPrefix(option)];
+      return Array.isArray(value)
+        ? (value[0] as string | undefined)
+        : (value as string | undefined);
+    },
+    all: (option: string) => {
+      const value = values[stripFlagPrefix(option)];
+      if (Array.isArray(value)) return value as string[];
+      return typeof value === "string" ? [value] : [];
+    },
+    has: (option: string) => values[stripFlagPrefix(option)] === true,
   };
 }
 

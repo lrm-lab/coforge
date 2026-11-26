@@ -3,6 +3,7 @@ import type {
   AgentContextReadRequest,
   AgentContextSearchRequest,
 } from "@lrm/coforge-sdk/agent";
+import { parseCliFlags, type CliFlagOptions } from "./cli-flags";
 
 export type ContextInvocation =
   | {
@@ -33,29 +34,41 @@ export type ContextTransport = Readonly<{
 
 export function parseContextArgs(args: readonly string[]): ContextInvocation {
   const sub = args[0];
-  const values = new Map<string, string>();
-  const allowed =
+  const options: CliFlagOptions =
     sub === "search"
-      ? new Set(["message-id", "session-id", "query", "limit", "offset"])
-      : new Set(["message-id", "session-id", "around", "limit", "page"]);
-  let json = false;
-  for (let index = 1; index < args.length; index += 1) {
-    const name = args[index]!;
-    if (name === "--json") {
-      json = true;
-      continue;
-    }
-    if (!name.startsWith("--") || args[index + 1] === undefined)
+      ? {
+          json: { type: "boolean" },
+          "message-id": { type: "string" },
+          "session-id": { type: "string" },
+          query: { type: "string" },
+          limit: { type: "string" },
+          offset: { type: "string" },
+        }
+      : {
+          json: { type: "boolean" },
+          "message-id": { type: "string" },
+          "session-id": { type: "string" },
+          around: { type: "string" },
+          limit: { type: "string" },
+          page: { type: "string" },
+        };
+  const { values } = parseCliFlags({
+    args: args.slice(1),
+    options,
+    duplicates: "error-strings",
+    onError(error) {
+      if (error.kind === "duplicate") throw new Error(`unknown or repeated flag: ${error.flag}`);
+      if (error.kind === "unknown" && error.raw.startsWith("--"))
+        throw new Error(`unknown or repeated flag: ${error.raw}`);
       throw new Error("Usage: coforge context search|read --message-id <id> --session-id <id> ...");
-    const key = name.slice(2);
-    if (!allowed.has(key) || values.has(key)) throw new Error(`unknown or repeated flag: ${name}`);
-    values.set(key, args[++index]!);
-  }
-  const messageId = values.get("message-id");
-  const sessionId = values.get("session-id");
+    },
+  });
+  const json = values.json === true;
+  const messageId = values["message-id"] as string | undefined;
+  const sessionId = values["session-id"] as string | undefined;
   if (!messageId || !sessionId) throw new Error("--message-id and --session-id are required");
   const number = (name: string) => {
-    const value = values.get(name);
+    const value = values[name] as string | undefined;
     if (value === undefined) return undefined;
     const parsed = Number(value);
     if (!Number.isSafeInteger(parsed) || parsed < 0)
@@ -63,7 +76,7 @@ export function parseContextArgs(args: readonly string[]): ContextInvocation {
     return parsed;
   };
   if (sub === "search") {
-    const query = values.get("query");
+    const query = values.query as string | undefined;
     if (!query) throw new Error("--query is required");
     return {
       command: "context-search",
@@ -75,7 +88,7 @@ export function parseContextArgs(args: readonly string[]): ContextInvocation {
       ...(json ? { json: true } : {}),
     };
   }
-  const around = values.get("around");
+  const around = values.around as string | undefined;
   if (!around) throw new Error("--around is required");
   return {
     command: "context-read",

@@ -5,6 +5,7 @@ import type {
 } from "@lrm/coforge-sdk/agent";
 import type { AppConfigValues } from "@lrm/coforge-sdk/internal";
 import { CliError, withOutputMode } from "#src/cli-error";
+import { cliFlagBadToken, parseCliFlags } from "./cli-flags";
 
 /** `coforge app config`: read one of the Agent's own Apps' config, or change it when any `--set`
  * or `--unset` is given. */
@@ -37,28 +38,24 @@ function parseValue(key: string, raw: string): boolean | number {
   return value;
 }
 
-/** Every `--unset` is checked before any `--set`, so a key named by both is caught at the
- * `--set`, whichever came first on the command line. */
 export function parseAppConfigArgs(args: readonly string[]): AppConfigInvocation {
-  let appId: string | undefined;
-  let json = false;
-  const sets: string[] = [];
-  const unset: string[] = [];
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === "--json") {
-      json = true;
-      continue;
-    }
-    const value = args[index + 1];
-    if (value === undefined || !["--app", "--set", "--unset"].includes(arg ?? ""))
-      invalid(`Unexpected argument ${arg}`);
-    if (arg === "--app") appId = value;
-    else (arg === "--set" ? sets : unset).push(value);
-    index += 1;
-  }
-  appId = appId?.trim();
+  const { values } = parseCliFlags({
+    args,
+    options: {
+      app: { type: "string" },
+      set: { type: "string", multiple: true },
+      unset: { type: "string", multiple: true },
+      json: { type: "boolean" },
+    },
+    onError(error) {
+      invalid(`Unexpected argument ${cliFlagBadToken(error)}`);
+    },
+  });
+  const appId = values.app?.trim();
   if (!appId) invalid("--app is required");
+  const json = values.json === true;
+  const sets = values.set ?? [];
+  const unset = values.unset ?? [];
   const changed = new Set<string>();
   for (const key of unset) {
     if (!KEY.test(key)) invalid(`--unset ${key} is not a config key (lowercase snake_case)`);

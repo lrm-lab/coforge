@@ -5,6 +5,7 @@ import {
   type WakeHint,
 } from "@lrm/coforge-sdk/agent";
 import { CliError } from "../cli-error";
+import { cliFlagBadToken, parseCliFlags } from "#src/cli-flags";
 import {
   ACTIVITY_DRAIN_INTERVAL_MS,
   ActivityPump,
@@ -84,35 +85,40 @@ export function parseBridgeArgs(
   args: readonly string[],
   env: Record<string, string | undefined>,
 ): BridgeOptions {
+  const { values } = parseCliFlags({
+    args,
+    options: {
+      json: { type: "boolean" },
+      once: { type: "boolean" },
+      "expected-agent": { type: "string" },
+      "wake-endpoint": { type: "string" },
+      "activity-endpoint": { type: "string" },
+      "poll-interval-ms": { type: "string" },
+      "activity-drain-limit": { type: "string" },
+    },
+    allowEmptyValues: false,
+    onError(error) {
+      if (error.kind === "missing-value") throw invalidArg(`${error.flag} needs a value. ${USAGE}`);
+      throw invalidArg(`Unknown option ${cliFlagBadToken(error)}. ${USAGE}`);
+    },
+  });
   const options: BridgeOptions = {
-    json: false,
-    once: false,
-    pollIntervalMs: DEFAULT_POLL_INTERVAL_MS,
-    activityDrainLimit: DEFAULT_ACTIVITY_DRAIN_LIMIT,
+    json: values.json === true,
+    once: values.once === true,
+    pollIntervalMs:
+      values["poll-interval-ms"] !== undefined
+        ? positiveInteger("--poll-interval-ms", values["poll-interval-ms"])
+        : DEFAULT_POLL_INTERVAL_MS,
+    activityDrainLimit:
+      values["activity-drain-limit"] !== undefined
+        ? positiveInteger("--activity-drain-limit", values["activity-drain-limit"])
+        : DEFAULT_ACTIVITY_DRAIN_LIMIT,
   };
-  let expected = env.COFORGE_EXPECTED_AGENT_ID?.trim() || undefined;
-  for (let index = 0; index < args.length; index++) {
-    const arg = args[index]!;
-    const [flag, inline] =
-      arg.startsWith("--") && arg.includes("=")
-        ? [arg.slice(0, arg.indexOf("=")), arg.slice(arg.indexOf("=") + 1)]
-        : [arg, undefined];
-    const value = () => {
-      const next = inline ?? args[++index];
-      if (!next) throw invalidArg(`${flag} needs a value. ${USAGE}`);
-      return next;
-    };
-    if (flag === "--json") options.json = true;
-    else if (flag === "--once") options.once = true;
-    else if (flag === "--expected-agent") expected = value();
-    else if (flag === "--wake-endpoint") options.wakeEndpoint = parseLoopbackUrl(flag, value());
-    else if (flag === "--activity-endpoint")
-      options.activityEndpoint = parseLoopbackUrl(flag, value());
-    else if (flag === "--poll-interval-ms") options.pollIntervalMs = positiveInteger(flag, value());
-    else if (flag === "--activity-drain-limit")
-      options.activityDrainLimit = positiveInteger(flag, value());
-    else throw invalidArg(`Unknown option ${arg}. ${USAGE}`);
-  }
+  if (values["wake-endpoint"] !== undefined)
+    options.wakeEndpoint = parseLoopbackUrl("--wake-endpoint", values["wake-endpoint"]);
+  if (values["activity-endpoint"] !== undefined)
+    options.activityEndpoint = parseLoopbackUrl("--activity-endpoint", values["activity-endpoint"]);
+  const expected = values["expected-agent"] ?? (env.COFORGE_EXPECTED_AGENT_ID?.trim() || undefined);
   if (expected) options.expectedAgent = expected;
   if (!options.activityEndpoint && options.wakeEndpoint)
     options.activityEndpoint = activityDrainBeside(options.wakeEndpoint);

@@ -1,5 +1,6 @@
 import { CliError } from "./cli-error";
 import { invalidArgument } from "./command-help";
+import { cliFlagBadToken, parseCliFlags, type CliFlagOptions } from "./cli-flags";
 import type { ChannelCommand } from "@lrm/coforge-sdk/internal";
 
 export type ChannelManagementInvocation = {
@@ -34,62 +35,65 @@ function requireRegularChannelTarget(target: string): string {
   return target;
 }
 
-/** Generic `--flag value` / `--boolean-flag` parser shared by the `channel` subcommands below. */
 function parseChannelFlags(
   args: readonly string[],
   allowed: readonly string[],
   command = "channel",
 ): Map<string, string> {
-  const values = new Map<string, string>();
-  for (let index = 0; index < args.length; index++) {
-    const name = args[index];
-    if (!name || !allowed.includes(name))
+  const options: CliFlagOptions = {};
+  for (const flag of allowed) {
+    options[flag.slice(2)] = {
+      type: CHANNEL_MANAGEMENT_BOOLEAN_FLAGS.has(flag) ? "boolean" : "string",
+    };
+  }
+  const { values: parsed } = parseCliFlags({
+    args,
+    options,
+    allowEmptyValues: false,
+    duplicates: "error",
+    onError(error) {
+      if (error.kind === "missing-value")
+        throw invalidArgument(command, `"${error.flag}" needs a value.`);
+      if (error.kind === "duplicate")
+        throw invalidArgument(command, `"${error.flag}" is given more than once.`);
       throw invalidArgument(
         command,
-        `Unknown argument "${name}". Accepted: ${allowed.join(", ")}.`,
+        `Unknown argument "${cliFlagBadToken(error)}". Accepted: ${allowed.join(", ")}.`,
       );
-    if (values.has(name)) throw invalidArgument(command, `"${name}" is given more than once.`);
-    if (CHANNEL_MANAGEMENT_BOOLEAN_FLAGS.has(name)) {
-      values.set(name, "true");
-      continue;
-    }
-    const value = args[++index];
-    if (!value) throw invalidArgument(command, `"${name}" needs a value.`);
-    values.set(name, value);
+    },
+  });
+  const values = new Map<string, string>();
+  for (const flag of allowed) {
+    const value = parsed[flag.slice(2)];
+    if (value === true) values.set(flag, "true");
+    else if (typeof value === "string") values.set(flag, value);
   }
   return values;
 }
 
-/**
- * `channel info|members|join|leave|create|update|lifecycle archive|unarchive|add-member|
- * remove-member`. `mute`/`unmute` are parsed separately, above, and unchanged.
- */
 export function parseChannelManagementArgs(args: readonly string[]): ChannelManagementInvocation {
   const sub = args[0];
   if (sub === "info" || sub === "members") {
-    // The target is accepted positionally or as `--target`, in either order, as Raft does.
-    let positional: string | undefined;
-    let named: string | undefined;
-    let json = false;
-    const rest = args.slice(1);
-    for (let index = 0; index < rest.length; index++) {
-      const arg = rest[index]!;
-      if (arg === "--json") json = true;
-      else if (arg === "--target") {
-        const value = rest[++index];
-        if (!value) throw invalidArgument(`channel ${sub}`, "--target needs a value.");
-        named = value;
-      } else if (arg.startsWith("-"))
-        throw invalidArgument(`channel ${sub}`, `Unknown argument "${arg}".`);
-      else if (positional === undefined) positional = arg;
-      else throw invalidArgument(`channel ${sub}`, `Unknown argument "${arg}".`);
-    }
-    const target = named ?? positional;
+    const { values, positionals } = parseCliFlags({
+      args: args.slice(1),
+      options: {
+        json: { type: "boolean" },
+        target: { type: "string" },
+      },
+      maxPositionals: 1,
+      allowEmptyValues: false,
+      onError(error) {
+        if (error.kind === "missing-value")
+          throw invalidArgument(`channel ${sub}`, "--target needs a value.");
+        throw invalidArgument(`channel ${sub}`, `Unknown argument "${cliFlagBadToken(error)}".`);
+      },
+    });
+    const target = values.target ?? positionals[0];
     if (!target) throw invalidArgument(`channel ${sub}`, "--target is required.");
     return {
       command: "channel-manage",
       channel: { operation: sub, target },
-      ...(json ? { json } : {}),
+      ...(values.json ? { json: true } : {}),
     };
   }
   if (sub === "archive" || sub === "unarchive") {

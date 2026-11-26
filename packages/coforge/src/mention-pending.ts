@@ -3,6 +3,7 @@ import {
   type AgentMentionPendingResponse,
 } from "@lrm/coforge-sdk/agent";
 import { CliError, withOutputMode } from "./cli-error";
+import { parseCliFlags } from "./cli-flags";
 import { formatPendingMentionActions } from "./mention-format";
 
 export type MentionPendingInvocation = {
@@ -22,17 +23,20 @@ function invalidLimit(message: string, json: boolean): CliError {
   });
 }
 
-/** `mention pending [--limit <n>] [--json]`: `--limit` is a whole number from 1 to the server's
- * largest page. */
 export function parseMentionPendingArgs(args: readonly string[]): MentionPendingInvocation {
-  let json = false;
-  let rawLimit: string | undefined;
-  for (let index = 0; index < args.length; index += 1) {
-    if (args[index] === "--json") json = true;
-    else if (args[index] === "--limit" && rawLimit === undefined && args[index + 1] !== undefined)
-      rawLimit = args[++index];
-    else throw new Error(USAGE);
-  }
+  const { values } = parseCliFlags({
+    args,
+    options: {
+      json: { type: "boolean" },
+      limit: { type: "string" },
+    },
+    duplicates: "error-strings",
+    onError() {
+      throw new Error(USAGE);
+    },
+  });
+  const json = values.json === true;
+  const rawLimit = values.limit;
   let limit: number | undefined;
   if (rawLimit !== undefined) {
     limit = Number(rawLimit);

@@ -1,3 +1,4 @@
+import { parseArgs as nodeParseArgs } from "node:util";
 import type { WorkspaceInfoResponse } from "@lrm/coforge-sdk/internal";
 
 export type WorkspaceInfoOptions = {
@@ -39,34 +40,54 @@ function nonNegativeInt(raw: string | undefined, name: string, fallback: number)
   return Number(raw);
 }
 
-/** `workspace info`, with Raft's sections, paging and refusals; the rows it pages are the ones
- * the server returned in one response, so `--limit`/`--offset` page them here. */
+const WORKSPACE_INFO_OPTIONS = {
+  channels: { type: "boolean" },
+  agents: { type: "boolean" },
+  humans: { type: "boolean" },
+  projects: { type: "boolean" },
+  computers: { type: "boolean" },
+  full: { type: "boolean" },
+  joined: { type: "boolean" },
+  json: { type: "boolean" },
+  query: { type: "string" },
+  limit: { type: "string" },
+  offset: { type: "string" },
+} as const;
+
 export function parseWorkspaceInfoArgs(args: readonly string[]): WorkspaceInfoInvocation {
+  const parsed = nodeParseArgs({
+    args: [...args],
+    options: WORKSPACE_INFO_OPTIONS,
+    strict: false,
+    allowPositionals: true,
+    tokens: true,
+  });
   const options: WorkspaceInfoOptions = {};
   let limit: string | undefined;
   let offset: string | undefined;
-  for (let i = 0; i < args.length; i++) {
-    const flag = args[i];
-    if (flag === "--query" || flag === "--limit" || flag === "--offset") {
-      const value = args[++i];
-      if (value === undefined) throw new Error(WORKSPACE_INFO_USAGE);
-      if (flag === "--query") options.query = value;
-      else if (flag === "--limit") limit = value;
-      else offset = value;
-    } else if (
-      flag !== undefined &&
-      [
-        "--full",
-        "--joined",
-        "--json",
-        ...WORKSPACE_INFO_SECTIONS.map((name) => `--${name}`),
-      ].includes(flag)
-    ) {
-      options[flag.slice(2) as "full"] = true;
-      // `--projects <slug>`: one Project's full description and open-Task count.
-      if (flag === "--projects" && args[i + 1] !== undefined && !args[i + 1]!.startsWith("--"))
-        options.project = args[++i];
-    } else throw new Error(WORKSPACE_INFO_USAGE);
+  let previousWasProjects = false;
+  for (const token of parsed.tokens) {
+    if (token.kind === "option-terminator") throw new Error(WORKSPACE_INFO_USAGE);
+    if (token.kind === "positional") {
+      if (!previousWasProjects || options.project !== undefined)
+        throw new Error(WORKSPACE_INFO_USAGE);
+      options.project = token.value;
+      previousWasProjects = false;
+      continue;
+    }
+    previousWasProjects = false;
+    if (!Object.hasOwn(WORKSPACE_INFO_OPTIONS, token.name)) throw new Error(WORKSPACE_INFO_USAGE);
+    const spec = WORKSPACE_INFO_OPTIONS[token.name as keyof typeof WORKSPACE_INFO_OPTIONS];
+    if (spec.type === "boolean") {
+      if (token.inlineValue) throw new Error(WORKSPACE_INFO_USAGE);
+      options[token.name as "full"] = true;
+      previousWasProjects = token.name === "projects";
+    } else {
+      if (token.value === undefined) throw new Error(WORKSPACE_INFO_USAGE);
+      if (token.name === "query") options.query = token.value;
+      else if (token.name === "limit") limit = token.value;
+      else offset = token.value;
+    }
   }
   const sections = WORKSPACE_INFO_SECTIONS.filter((section) => options[section]);
   const listModifier =

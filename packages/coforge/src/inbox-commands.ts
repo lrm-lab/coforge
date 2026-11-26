@@ -10,6 +10,7 @@ import {
   type AgentInboxReadResponse,
 } from "@lrm/coforge-sdk/agent";
 import { CliError } from "#src/cli-error";
+import { parseCliFlags } from "./cli-flags";
 import { proxyHttpFailure } from "#src/local-proxy-failure";
 import type { MessageTransport } from "#src/message-transport";
 import { readProxyErrorBody, requireProxySetup } from "#src/proxy-request";
@@ -54,24 +55,26 @@ function invalidArg(message: string, json: boolean): CliError {
 }
 
 export function parseInboxReadArgs(args: readonly string[]): InboxReadInvocation {
-  let target: string | undefined;
-  let positional: string | undefined;
-  let rawLimit: string | undefined;
-  let cursor: string | undefined;
-  let json = false;
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === "--json") json = true;
-    else if (arg === "--target" && target === undefined && args[index + 1] !== undefined)
-      target = args[++index]!.trim();
-    else if (arg === "--limit" && rawLimit === undefined && args[index + 1] !== undefined)
-      rawLimit = args[++index]!.trim();
-    else if (arg === "--cursor" && cursor === undefined && args[index + 1] !== undefined)
-      cursor = args[++index]!.trim();
-    else if (arg !== undefined && !arg.startsWith("--") && positional === undefined)
-      positional = arg.trim();
-    else throw invalidArg(INBOX_READ_USAGE, json);
-  }
+  const jsonHint = args.includes("--json");
+  const { values, positionals } = parseCliFlags({
+    args,
+    options: {
+      json: { type: "boolean" },
+      target: { type: "string" },
+      limit: { type: "string" },
+      cursor: { type: "string" },
+    },
+    maxPositionals: 1,
+    duplicates: "error-strings",
+    onError() {
+      throw invalidArg(INBOX_READ_USAGE, jsonHint);
+    },
+  });
+  const json = values.json === true;
+  const target = values.target?.trim();
+  const positional = positionals[0]?.trim();
+  const rawLimit = values.limit?.trim();
+  const cursor = values.cursor?.trim();
   if (target && positional && target !== positional)
     throw invalidArg("Positional target and --target must agree when both are provided.", json);
   const resolvedTarget = target ?? positional;
@@ -94,18 +97,22 @@ export function parseInboxReadArgs(args: readonly string[]): InboxReadInvocation
 }
 
 export function parseInboxDismissArgs(args: readonly string[]): InboxDismissInvocation {
-  let target: string | undefined;
-  let before: string | undefined;
-  let json = false;
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === "--json") json = true;
-    else if (arg === "--target" && target === undefined && args[index + 1] !== undefined)
-      target = args[++index]!.trim();
-    else if (arg === "--before" && before === undefined && args[index + 1] !== undefined)
-      before = args[++index]!.trim();
-    else throw invalidArg(INBOX_DISMISS_USAGE, json);
-  }
+  const jsonHint = args.includes("--json");
+  const { values } = parseCliFlags({
+    args,
+    options: {
+      json: { type: "boolean" },
+      target: { type: "string" },
+      before: { type: "string" },
+    },
+    duplicates: "error-strings",
+    onError() {
+      throw invalidArg(INBOX_DISMISS_USAGE, jsonHint);
+    },
+  });
+  const json = values.json === true;
+  const target = values.target?.trim();
+  const before = values.before?.trim();
   if ((target ? 1 : 0) + (before ? 1 : 0) !== 1)
     throw invalidArg("Specify exactly one of --target <item> or --before <iso>.", json);
   if (before !== undefined) {
@@ -118,22 +125,25 @@ export function parseInboxDismissArgs(args: readonly string[]): InboxDismissInvo
 }
 
 export function parseActionWithdrawArgs(args: readonly string[]): ActionWithdrawInvocation {
-  let messageId: string | undefined;
-  let positional: string | undefined;
-  let json = false;
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === "--json") json = true;
-    else if (
-      (arg === "--message" || arg === "--message-id") &&
-      messageId === undefined &&
-      args[index + 1] !== undefined
-    )
-      messageId = args[++index]!.trim();
-    else if (arg !== undefined && !arg.startsWith("--") && positional === undefined)
-      positional = arg.trim();
-    else throw invalidArg(ACTION_WITHDRAW_USAGE, json);
-  }
+  const jsonHint = args.includes("--json");
+  const { values, positionals } = parseCliFlags({
+    args,
+    options: {
+      json: { type: "boolean" },
+      message: { type: "string" },
+      "message-id": { type: "string" },
+    },
+    maxPositionals: 1,
+    duplicates: "error-strings",
+    onError() {
+      throw invalidArg(ACTION_WITHDRAW_USAGE, jsonHint);
+    },
+  });
+  const json = values.json === true;
+  if (values.message !== undefined && values["message-id"] !== undefined)
+    throw invalidArg(ACTION_WITHDRAW_USAGE, json);
+  const messageId = (values.message ?? values["message-id"])?.trim();
+  const positional = positionals[0]?.trim();
   if (messageId && positional && messageId !== positional)
     throw invalidArg(
       "Positional message id and --message must agree when both are provided.",

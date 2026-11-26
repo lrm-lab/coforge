@@ -3,13 +3,12 @@ import { CliError } from "#src/cli-error";
 import { MENTION_DELIVERY_MESSAGE_ID_HINT } from "#src/mention-format";
 import { parseMentionPendingArgs } from "#src/mention-pending";
 import { unknownCommandError } from "./command-help";
+import { parseCliFlags } from "./cli-flags";
 import type { MentionInvocation } from "../index";
 
 const MENTION_USAGE =
   "Usage: coforge mention pending [--limit <n>] [--json] | coforge mention notify <resolution-id>... [--json] | coforge mention add <resolution-id>... [--json] | coforge mention delivery --message <message-id> [--json]";
 
-/** The message-id short forms (twelve hex, dashed, or eight hex) or a full UUID; the server stores
- * ids lowercase. */
 const MESSAGE_ANCHOR_PATTERN = new RegExp(
   `^(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE})$`,
   "i",
@@ -19,10 +18,16 @@ export function parseMentionArgs(args: readonly string[]): MentionInvocation {
   const [sub, ...rest] = args;
   if (sub === "delivery") return parseMentionDeliveryArgs(rest);
   if (sub === "pending") return parseMentionPendingArgs(rest);
-  const json = rest.includes("--json");
-  const positionals = rest.filter((arg) => arg !== "--json");
-  if (positionals.some((arg) => arg.startsWith("--"))) throw new Error(MENTION_USAGE);
   if (sub === "notify" || sub === "add") {
+    const { values, positionals } = parseCliFlags({
+      args: rest,
+      options: { json: { type: "boolean" } },
+      allowPositionals: true,
+      onError() {
+        throw new Error(MENTION_USAGE);
+      },
+    });
+    const json = values.json === true;
     const resolutionIds = [...new Set(positionals.map((id) => id.trim()).filter(Boolean))];
     if (!resolutionIds.length)
       throw new CliError({
@@ -41,18 +46,20 @@ export function parseMentionArgs(args: readonly string[]): MentionInvocation {
   throw unknownCommandError(["mention", ...args]);
 }
 
-/** `coforge mention delivery --message <id> [--json]`: the message by its full id or the
- * eight-hex prefix `message read` shows, as `message resolve` and `message react` take it. */
 function parseMentionDeliveryArgs(args: readonly string[]): MentionInvocation {
-  const json = args.includes("--json");
+  const { values } = parseCliFlags({
+    args,
+    options: {
+      json: { type: "boolean" },
+      message: { type: "string" },
+    },
+    onError() {
+      throw new Error(MENTION_USAGE);
+    },
+  });
+  const json = values.json === true;
   const outputMode = json ? "json" : "text";
-  let messageId: string | undefined;
-  for (let index = 0; index < args.length; index++) {
-    if (args[index] === "--json") continue;
-    if (args[index] === "--message" && args[index + 1] !== undefined)
-      messageId = args[++index]!.trim();
-    else throw new Error(MENTION_USAGE);
-  }
+  const messageId = values.message?.trim();
   if (!messageId)
     throw new CliError({
       code: "INVALID_ARG",

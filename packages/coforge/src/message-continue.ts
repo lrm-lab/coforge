@@ -1,5 +1,6 @@
 import type { AgentMessageRecord } from "@lrm/coforge-sdk/internal";
 import { invalidArgument } from "./command-help";
+import { cliFlagBadToken, parseCliFlags } from "./cli-flags";
 import { withOutputMode } from "./cli-error";
 import { readPipedSendContent, refuseForeignStdinFile } from "./send-stdin";
 import {
@@ -28,8 +29,6 @@ type ContinuedSendResult = Omit<HeldSendResult, "state"> & {
   unresolvedMentionHandles?: string[];
 };
 
-/** `coforge message continue <continuation-id> <a|b|c|d>`: the held send's answer; `b` reads its
- * replacement body from stdin at run time. */
 export function parseMessageContinueArgs(args: readonly string[]): {
   continuationId: string;
   continuationChoice: "a" | "b" | "c" | "d";
@@ -37,18 +36,20 @@ export function parseMessageContinueArgs(args: readonly string[]): {
 } {
   const continuationId = args[2];
   const choice = args[3];
-  let json = false;
-  for (let index = 4; index < args.length; index++) {
-    if (args[index] === "--json") json = true;
-    else throw invalidArgument("message continue", `Unknown argument "${args[index] ?? ""}".`);
-  }
+  const { values } = parseCliFlags({
+    args: args.slice(4),
+    options: { json: { type: "boolean" } },
+    onError(error) {
+      throw invalidArgument("message continue", `Unknown argument "${cliFlagBadToken(error)}".`);
+    },
+  });
   if (!continuationId) throw invalidArgument("message continue", "a continuation id is required.");
   if (choice !== "a" && choice !== "b" && choice !== "c" && choice !== "d")
     throw invalidArgument("message continue", "choice must be one of a, b, c, d.");
   return {
     continuationId,
     continuationChoice: choice,
-    ...(json ? { json: true as const } : {}),
+    ...(values.json ? { json: true as const } : {}),
   };
 }
 

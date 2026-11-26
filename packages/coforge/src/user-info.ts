@@ -1,6 +1,7 @@
 import type { AgentUserInfoResponse } from "@lrm/coforge-sdk/agent";
 import { CliError } from "#src/cli-error";
 import { formatUserInfo } from "#src/user-format";
+import { parseCliFlags } from "./cli-flags";
 
 export type UserInfoInvocation = {
   command: "user-info";
@@ -17,24 +18,22 @@ function integer(raw: string, flag: string): number {
   return Number(raw);
 }
 
-/** `user info <name>`: the memberships it lists are paged here, 50 at a time by default. */
 export function parseUserInfoArgs(args: readonly string[]): UserInfoInvocation {
-  let name: string | undefined;
-  let json = false;
-  let limit: number | undefined;
-  let offset: number | undefined;
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === "--json") json = true;
-    else if (arg === "--limit" || arg === "--offset") {
-      const raw = args[++index];
-      if (raw === undefined) throw new Error(USER_INFO_USAGE);
-      if (arg === "--limit") limit = integer(raw, arg);
-      else offset = integer(raw, arg);
-    } else if (arg !== undefined && !arg.startsWith("--") && name === undefined) name = arg;
-    else throw new Error(USER_INFO_USAGE);
-  }
-  const trimmed = name?.trim();
+  const { values, positionals } = parseCliFlags({
+    args,
+    options: {
+      json: { type: "boolean" },
+      limit: { type: "string" },
+      offset: { type: "string" },
+    },
+    maxPositionals: 1,
+    onError() {
+      throw new Error(USER_INFO_USAGE);
+    },
+  });
+  const limit = values.limit !== undefined ? integer(values.limit, "--limit") : undefined;
+  const offset = values.offset !== undefined ? integer(values.offset, "--offset") : undefined;
+  const trimmed = positionals[0]?.trim();
   if (!trimmed) throw new Error(USER_INFO_USAGE);
   const handle = trimmed.startsWith("@") ? trimmed.slice(1) : trimmed;
   if (!handle) throw new Error("user name is required");
@@ -43,7 +42,7 @@ export function parseUserInfoArgs(args: readonly string[]): UserInfoInvocation {
   return {
     command: "user-info",
     name: handle,
-    ...(json ? { json: true } : {}),
+    ...(values.json ? { json: true } : {}),
     ...(limit !== undefined ? { limit } : {}),
     ...(offset !== undefined ? { offset } : {}),
   };

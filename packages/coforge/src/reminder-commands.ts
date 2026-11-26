@@ -11,6 +11,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { CliError } from "#src/cli-error";
 import { unknownCommandError } from "./command-help";
+import { cliFlagBadToken, parseCliFlags } from "./cli-flags";
 import { parseDurationSeconds } from "#src/reminder-duration";
 import {
   formatReminderResponse as formatAgentReminderResponse,
@@ -80,72 +81,101 @@ export function parseReminderArgs(args: readonly string[]): ReminderInvocation {
     ].includes(operation)
   )
     throw unknownCommandError(["reminder", ...args]);
-  const names: Record<string, keyof ReminderTransportRequest> = {
-    "--id": "reminderId",
-    "--title": "title",
-    "--target": "target",
-    "--channel": "target",
-    "--message-id": "messageId",
-    "--msg-id": "messageId",
-    "--delay-seconds": "delaySeconds",
-    "--fire-at": "fireAt",
-    "--repeat": "repeat",
-    "--cadence": "repeat",
-    "--tz": "timezone",
-    "--status": "status",
-    "--revision": "revision",
-    "--owner": "owner",
-    "--until": "until",
-  };
+  const { values } = parseCliFlags({
+    args: args.slice(1),
+    options: {
+      id: { type: "string" },
+      title: { type: "string" },
+      target: { type: "string" },
+      channel: { type: "string" },
+      "message-id": { type: "string" },
+      "msg-id": { type: "string" },
+      "delay-seconds": { type: "string" },
+      by: { type: "string" },
+      in: { type: "string" },
+      "fire-at": { type: "string" },
+      repeat: { type: "string" },
+      cadence: { type: "string" },
+      tz: { type: "string" },
+      status: { type: "string" },
+      revision: { type: "string" },
+      owner: { type: "string" },
+      until: { type: "string" },
+      all: { type: "boolean" },
+      "all-pending": { type: "boolean" },
+    },
+    duplicates: "error",
+    rejectFlagValues: true,
+    onError(error) {
+      if (error.kind === "duplicate")
+        throw new Error(`Duplicate reminder flag: ${error.flag}\n${REMINDER_USAGE}`);
+      throw new Error(
+        `Unknown or incomplete reminder flag: ${cliFlagBadToken(error)}\n${REMINDER_USAGE}`,
+      );
+    },
+  });
   const request: Record<string, unknown> = { command: "reminder", operation };
-  const seen = new Set<string>();
-  const flagForField = new Map<string, string>();
-  const claimField = (field: string, flag: string) => {
-    const existing = flagForField.get(field);
-    if (existing !== undefined && existing !== flag)
-      throw new Error(`Cannot combine ${flag} with ${existing}.\n${REMINDER_USAGE}`);
-    flagForField.set(field, flag);
+  if (values.all) request.all = true;
+  if (values["all-pending"]) request.allPending = true;
+  const pickExclusive = (
+    entries: ReadonlyArray<readonly [flag: string, value: string | undefined]>,
+  ): readonly [flag: string, value: string] | undefined => {
+    const present = entries
+      .filter((entry): entry is readonly [string, string] => entry[1] !== undefined)
+      .sort(([first], [second]) => args.indexOf(first) - args.indexOf(second));
+    if (present.length > 1)
+      throw new Error(
+        `Cannot combine ${present[1]![0]} with ${present[0]![0]}.\n${REMINDER_USAGE}`,
+      );
+    return present[0];
   };
-  for (let index = 1; index < args.length; index++) {
-    const flag = args[index]!;
-    if (seen.has(flag)) throw new Error(`Duplicate reminder flag: ${flag}\n${REMINDER_USAGE}`);
-    seen.add(flag);
-    if (flag === "--all") {
-      request.all = true;
-      continue;
-    }
-    if (flag === "--all-pending") {
-      request.allPending = true;
-      continue;
-    }
+  if (values.id !== undefined) request.reminderId = values.id;
+  if (values.title !== undefined) request.title = values.title;
+  const target = pickExclusive([
+    ["--target", values.target],
+    ["--channel", values.channel],
+  ]);
+  if (target) request.target = target[1];
+  const messageId = pickExclusive([
+    ["--message-id", values["message-id"]],
+    ["--msg-id", values["msg-id"]],
+  ]);
+  if (messageId) request.messageId = messageId[1];
+  const delay = pickExclusive([
+    ["--delay-seconds", values["delay-seconds"]],
+    ["--by", values.by],
+    ["--in", values.in],
+  ]);
+  if (delay) {
+    const [flag, value] = delay;
     if (flag === "--by" || flag === "--in") {
-      const value = args[++index];
-      if (value === undefined || value.startsWith("--"))
-        throw new Error(`Unknown or incomplete reminder flag: ${flag}\n${REMINDER_USAGE}`);
       const seconds = parseDurationSeconds(value);
       if (seconds === null)
         throw new Error(`Invalid duration for ${flag}: '${value}'.\n${REMINDER_USAGE}`);
-      claimField("delaySeconds", flag);
       request.delaySeconds = seconds;
-      continue;
-    }
-    const field = names[flag];
-    const value = args[++index];
-    if (!field || value === undefined || value.startsWith("--"))
-      throw new Error(`Unknown or incomplete reminder flag: ${flag}\n${REMINDER_USAGE}`);
-    claimField(field, flag);
-    if (field === "delaySeconds") {
+    } else {
       const integer = Number(value);
       const seconds =
         Number.isSafeInteger(integer) && integer >= 1 ? integer : parseDurationSeconds(value);
       if (seconds === null) throw new Error(REMINDER_USAGE);
-      request[field] = seconds;
-    } else if (field === "revision") {
-      const number = Number(value);
-      if (!Number.isSafeInteger(number) || number < 1) throw new Error(REMINDER_USAGE);
-      request[field] = number;
-    } else request[field] = value;
+      request.delaySeconds = seconds;
+    }
   }
+  if (values["fire-at"] !== undefined) request.fireAt = values["fire-at"];
+  const repeat = pickExclusive([
+    ["--repeat", values.repeat],
+    ["--cadence", values.cadence],
+  ]);
+  if (repeat) request.repeat = repeat[1];
+  if (values.tz !== undefined) request.timezone = values.tz;
+  if (values.status !== undefined) request.status = values.status;
+  if (values.revision !== undefined) {
+    const number = Number(values.revision);
+    if (!Number.isSafeInteger(number) || number < 1) throw new Error(REMINDER_USAGE);
+    request.revision = number;
+  }
+  if (values.owner !== undefined) request.owner = values.owner;
+  if (values.until !== undefined) request.until = values.until;
   validateReminderShape(request as ReminderInvocation);
   const rawId = request.reminderId as string | undefined;
   const needsIdProbe = rawId !== undefined && !isReminderId(rawId);

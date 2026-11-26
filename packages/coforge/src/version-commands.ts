@@ -1,16 +1,19 @@
 import { COFORGE_CLI_VERSION } from "./version";
 import type { MessageTransport } from "./message-transport";
 import type { VersionInvocation } from "../index";
+import { parseCliFlags } from "./cli-flags";
 
 const VERSION_USAGE = "Usage: coforge version [--json]";
 
 export function parseVersionArgs(args: readonly string[]): VersionInvocation {
-  let json = false;
-  for (const arg of args) {
-    if (arg === "--json") json = true;
-    else throw new Error(VERSION_USAGE);
-  }
-  return { command: "version", ...(json ? { json: true } : {}) };
+  const { values } = parseCliFlags({
+    args,
+    options: { json: { type: "boolean" } },
+    onError() {
+      throw new Error(VERSION_USAGE);
+    },
+  });
+  return { command: "version", ...(values.json ? { json: true } : {}) };
 }
 
 type VersionInfo = { cli: string; daemon?: string; computer?: string };

@@ -8,6 +8,7 @@ import {
 } from "@lrm/coforge-sdk/agent";
 import { renderMessageSender, UUID_LIKE_PATTERN } from "@lrm/coforge-sdk/internal";
 import { CliError } from "#src/cli-error";
+import { parseCliFlags } from "./cli-flags";
 import { fenceMessageBody } from "#src/message-body-format";
 import { formatUtcTimestamp } from "#src/message-format";
 import { shortId } from "#src/short-id";
@@ -30,30 +31,39 @@ function wholeNumber(raw: string | undefined, flag: string, maximum: number): nu
   return value;
 }
 
-/**
- * `attachment comments [<attachmentId> | --id <attachmentId>] [--limit <n>] [--before <seq>]
- * [--json]`. The id is the whole UUID the server looks the attachment up by, so every id this
- * command prints can be passed back to it.
- */
 export function parseAttachmentCommentsArgs(args: readonly string[]): AttachmentCommentsInvocation {
-  let positionalId: string | undefined;
-  let explicitId: string | undefined;
-  let limit: number | undefined;
-  let before: number | undefined;
-  let json = false;
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index]!;
-    if (arg === "--json") json = true;
-    else if (arg === "--id") explicitId = args[++index];
-    else if (arg === "--limit")
-      limit = wholeNumber(args[++index], arg, AGENT_ATTACHMENT_COMMENTS_MAX_LIMIT);
-    else if (arg === "--before") before = wholeNumber(args[++index], arg, Number.MAX_SAFE_INTEGER);
-    else if (!arg.startsWith("--") && positionalId === undefined) positionalId = arg;
-    else
+  const { values, positionals } = parseCliFlags({
+    args,
+    options: {
+      json: { type: "boolean" },
+      id: { type: "string" },
+      limit: { type: "string" },
+      before: { type: "string" },
+    },
+    maxPositionals: 1,
+    onError(error) {
+      if (error.kind === "missing-value") {
+        if (error.flag === "--limit")
+          wholeNumber(undefined, "--limit", AGENT_ATTACHMENT_COMMENTS_MAX_LIMIT);
+        if (error.flag === "--before") wholeNumber(undefined, "--before", Number.MAX_SAFE_INTEGER);
+        if (error.flag === "--id")
+          throw invalid("attachment id is required (pass <attachmentId> or --id)");
+      }
       throw new Error(
         "Usage: coforge attachment comments [--id] <attachmentId> [--limit <n>] [--before <sequence>] [--json]",
       );
-  }
+    },
+  });
+  const positionalId = positionals[0];
+  const explicitId = values.id;
+  const limit =
+    values.limit === undefined
+      ? undefined
+      : wholeNumber(values.limit, "--limit", AGENT_ATTACHMENT_COMMENTS_MAX_LIMIT);
+  const before =
+    values.before === undefined
+      ? undefined
+      : wholeNumber(values.before, "--before", Number.MAX_SAFE_INTEGER);
   if (positionalId && explicitId)
     throw invalid("pass the attachment id either positionally or with --id, not both");
   const attachmentId = positionalId || explicitId;
@@ -64,7 +74,7 @@ export function parseAttachmentCommentsArgs(args: readonly string[]): Attachment
     attachmentId,
     ...(limit === undefined ? {} : { limit }),
     ...(before === undefined ? {} : { before }),
-    ...(json ? { json: true } : {}),
+    ...(values.json ? { json: true } : {}),
   };
 }
 

@@ -8,6 +8,7 @@ import {
   type TaskCommandWithout,
 } from "@lrm/coforge-sdk/internal";
 import { unknownCommandError } from "./command-help";
+import { parseCliFlags, type CliFlagOptions } from "./cli-flags";
 import { parseTaskListStatus } from "./task-list-status-args";
 import { reviewerIsolationFromEnvironment } from "#src/reviewer-isolation";
 import { parseAssignReason, parseStatusReason } from "#src/task-assign-reason-arg";
@@ -70,30 +71,33 @@ export function parseTaskArgs(
   const allowed = TASK_FLAGS[operation];
   const repeatable = TASK_REPEATABLE_FLAGS[operation] ?? [];
   const acceptsPositionalRef = TASK_REF_OPERATIONS.has(operation);
-  const positionalRefs: string[] = [];
+  const options: CliFlagOptions = {};
+  for (const flag of allowed) {
+    options[flag.slice(2)] = {
+      type: TASK_SWITCHES.has(flag) ? "boolean" : "string",
+      multiple: repeatable.includes(flag),
+    };
+  }
+  const { values: parsed, positionals: positionalRefs } = parseCliFlags({
+    args: args.slice(1),
+    options,
+    allowPositionals: operation === "claim",
+    ...(operation === "assign"
+      ? { maxPositionals: 2 }
+      : operation === "claim"
+        ? {}
+        : { maxPositionals: acceptsPositionalRef ? 1 : 0 }),
+    duplicates: "error",
+    onError() {
+      throw new Error("Usage:");
+    },
+  });
   const values = new Map<string, string[]>();
-  for (let index = 1; index < args.length; index += 1) {
-    const name = args[index]!;
-    if (!name.startsWith("--") && acceptsPositionalRef) {
-      if (operation === "assign") {
-        if (positionalRefs.length >= 2) throw new Error("Usage:");
-        positionalRefs.push(name);
-        continue;
-      }
-      if (positionalRefs.length > 0 && operation !== "claim") throw new Error("Usage:");
-      positionalRefs.push(name);
-      continue;
-    }
-    if (!allowed.includes(name)) throw new Error("Usage:");
-    if (values.has(name) && !repeatable.includes(name)) throw new Error("Usage:");
-    if (TASK_SWITCHES.has(name)) {
-      values.set(name, ["true"]);
-      continue;
-    }
-    const value = args[index + 1];
-    if (value === undefined) throw new Error("Usage:");
-    values.set(name, [...(values.get(name) ?? []), value]);
-    index += 1;
+  for (const flag of allowed) {
+    const raw = parsed[flag.slice(2)];
+    if (raw === true) values.set(flag, ["true"]);
+    else if (typeof raw === "string") values.set(flag, [raw]);
+    else if (Array.isArray(raw)) values.set(flag, raw.map(String));
   }
   const one = (flag: string) => values.get(flag)?.[0];
 

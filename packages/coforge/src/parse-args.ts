@@ -1,4 +1,5 @@
 import { parseVersionArgs } from "#src/version-commands";
+import { cliFlagBadToken, parseCliFlags } from "./cli-flags";
 import { parseMemoryArgs, type MemoryInvocation } from "./memory-commands";
 import { parseProcArgs, type ProcInvocation } from "./proc-commands";
 import { invalidArgument, unknownCommandError } from "#src/command-help/index";
@@ -137,40 +138,43 @@ export function parseArgs(
   if (args[0] === "attachment" && args[1] === "comments")
     return parseAttachmentCommentsArgs(args.slice(2));
   if (args[0] === "attachment" && args[1] === "upload") {
-    let path: string | undefined;
-    let target: string | undefined;
-    // Legacy alias for --target; giving both is a usage error.
-    let channelAlias: string | undefined;
-    let mimeType: string | undefined;
-    let json = false;
-    for (let index = 2; index < args.length; index++) {
-      if (args[index] === "--path" && args[index + 1]) path = args[++index];
-      else if (args[index] === "--target" && args[index + 1]) target = args[++index];
-      else if (args[index] === "--channel" && args[index + 1]) channelAlias = args[++index];
-      else if (args[index] === "--mime-type" && args[index + 1]) mimeType = args[++index];
-      else if (args[index] === "--json") json = true;
-      else throw new Error("Usage:");
-    }
-    if (target !== undefined && channelAlias !== undefined) throw new Error("Usage:");
+    const { values } = parseCliFlags({
+      args: args.slice(2),
+      options: {
+        path: { type: "string" },
+        target: { type: "string" },
+        channel: { type: "string" },
+        "mime-type": { type: "string" },
+        json: { type: "boolean" },
+      },
+      allowEmptyValues: false,
+      onError() {
+        throw new Error("Usage:");
+      },
+    });
+    if (values.target !== undefined && values.channel !== undefined) throw new Error("Usage:");
     return {
       command: "attachment.upload",
-      path,
-      target: target ?? channelAlias,
-      mimeType,
-      ...(json ? { json: true as const } : {}),
+      path: values.path,
+      target: values.target ?? values.channel,
+      mimeType: values["mime-type"],
+      ...(values.json ? { json: true as const } : {}),
     };
   }
   if (args[0] === "message" && isMessageCommand(args[1])) {
     if (args[1] === "check") {
-      if (args.length === 2) return { command: "check" };
-      if (args[2] === "--target") {
-        const target = args[3];
-        if (!target) throw invalidArgument("message check", "--target needs a value.");
-        if (args.length !== 4)
-          throw invalidArgument("message check", `Unknown argument "${args[4] ?? ""}".`);
-        return { command: "check", target };
-      }
-      throw invalidArgument("message check", `Unknown argument "${args[2] ?? ""}".`);
+      const { values } = parseCliFlags({
+        args: args.slice(2),
+        options: { target: { type: "string" } },
+        allowEmptyValues: false,
+        duplicates: "error",
+        onError(error) {
+          if (error.kind === "missing-value")
+            throw invalidArgument("message check", "--target needs a value.");
+          throw invalidArgument("message check", `Unknown argument "${cliFlagBadToken(error)}".`);
+        },
+      });
+      return values.target ? { command: "check", target: values.target } : { command: "check" };
     }
     if (args[1] === "resolve") {
       const messageId = args[2];
@@ -179,15 +183,20 @@ export function parseArgs(
       throw new Error("Usage:");
     }
     if (args[1] === "react") {
-      let messageId: string | undefined;
-      let emoji: string | undefined;
-      let remove = false;
-      for (let index = 2; index < args.length; index++) {
-        if (args[index] === "--message-id" && args[index + 1]) messageId = args[++index];
-        else if (args[index] === "--emoji" && args[index + 1]) emoji = args[++index];
-        else if (args[index] === "--remove") remove = true;
-        else throw new Error("Usage:");
-      }
+      const { values } = parseCliFlags({
+        args: args.slice(2),
+        options: {
+          "message-id": { type: "string" },
+          emoji: { type: "string" },
+          remove: { type: "boolean" },
+        },
+        allowEmptyValues: false,
+        onError() {
+          throw new Error("Usage:");
+        },
+      });
+      const messageId = values["message-id"];
+      const emoji = values.emoji;
       if (
         !messageId ||
         !emoji ||
@@ -199,7 +208,7 @@ export function parseArgs(
         command: "react",
         messageId: messageId.toLowerCase(),
         emoji,
-        ...(remove ? { remove: true as const } : {}),
+        ...(values.remove ? { remove: true as const } : {}),
       };
     }
     if (args[1] === "continue") return { command: "continue", ...parseMessageContinueArgs(args) };

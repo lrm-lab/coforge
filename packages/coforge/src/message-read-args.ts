@@ -1,8 +1,7 @@
 import { refuseTaskRef } from "./task-target-refusal";
 import { invalidArgument } from "./command-help";
+import { cliFlagBadToken, parseCliFlags } from "./cli-flags";
 
-/** What `message read` asks for: a history window (at most one anchor, and a page size), or the
- * messages after the Agent's read position (`unread`), which no anchor combines with. */
 export type MessageReadOptions = {
   before?: string;
   after?: string;
@@ -11,36 +10,43 @@ export type MessageReadOptions = {
   unread?: boolean;
 };
 
-const READ_VALUE_FLAGS = ["--target", "--before", "--after", "--around", "--limit"];
-const READ_BOOLEAN_FLAGS = ["--unread"];
-/** The server's largest page; a bigger `--limit` is refused rather than silently capped. */
 export const MESSAGE_READ_MAX_LIMIT = 100;
 
-/** The target and window of `message read`, from the arguments after `message`; undefined when the
- * target is missing or the window is not well formed. Flags may come in any order. */
 export function parseMessageReadArgs(
   args: readonly string[],
 ): ({ target: string } & MessageReadOptions) | undefined {
+  const { values: parsed } = parseCliFlags({
+    args: args.slice(2),
+    options: {
+      target: { type: "string" },
+      before: { type: "string" },
+      after: { type: "string" },
+      around: { type: "string" },
+      limit: { type: "string" },
+      unread: { type: "boolean" },
+    },
+    allowEmptyValues: false,
+    duplicates: "error",
+    onError(error) {
+      if (error.kind === "missing-value")
+        throw invalidArgument("message read", `"${error.flag}" needs a value.`);
+      if (error.kind === "duplicate")
+        throw invalidArgument("message read", `"${error.flag}" is given more than once.`);
+      throw invalidArgument("message read", `Unknown argument "${cliFlagBadToken(error)}".`);
+    },
+  });
   const values = new Map<string, string>();
-  const booleans = new Set<string>();
-  for (let index = 2; index < args.length; index++) {
-    const name = args[index]!;
-    if (READ_BOOLEAN_FLAGS.includes(name)) {
-      if (booleans.has(name))
-        throw invalidArgument("message read", `"${name}" is given more than once.`);
-      booleans.add(name);
-      continue;
-    }
-    if (!READ_VALUE_FLAGS.includes(name))
-      throw invalidArgument("message read", `Unknown argument "${name}".`);
-    if (values.has(name))
-      throw invalidArgument("message read", `"${name}" is given more than once.`);
-    const value = args[++index];
-    if (!value) throw invalidArgument("message read", `"${name}" needs a value.`);
-    values.set(name, value);
+  for (const [name, flag] of [
+    ["before", "--before"],
+    ["after", "--after"],
+    ["around", "--around"],
+    ["limit", "--limit"],
+  ] as const) {
+    const value = parsed[name];
+    if (value !== undefined) values.set(flag, value);
   }
-  const target = values.get("--target");
-  const options = readWindowOptions("message read", values, booleans.has("--unread"));
+  const target = parsed.target;
+  const options = readWindowOptions("message read", values, parsed.unread === true);
   if (!target)
     throw invalidArgument(
       "message read",

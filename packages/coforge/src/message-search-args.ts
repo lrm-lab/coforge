@@ -1,3 +1,5 @@
+import { parseCliFlags } from "./cli-flags";
+
 export type MessageSearchOptions = {
   query?: string;
   target?: string;
@@ -7,51 +9,54 @@ export type MessageSearchOptions = {
   after?: string;
   limit?: number;
   offset?: number;
-  /** A previous page's `nextCursor`; continues a `recent` search with a query. */
   cursor?: string;
 };
 
-/** The options of `message search`, from the arguments after `message search`. */
 export function parseMessageSearchArgs(args: readonly string[]): MessageSearchOptions {
-  const options: MessageSearchOptions = {};
-  for (let i = 2; i < args.length; i += 2) {
-    const name = args[i];
-    const value = args[i + 1];
-    if (
-      !name ||
-      ![
-        "--query",
-        "--target",
-        "--channel",
-        "--sender",
-        "--sort",
-        "--before",
-        "--after",
-        "--limit",
-        "--offset",
-        "--cursor",
-      ].includes(name) ||
-      !value
-    )
+  const { values } = parseCliFlags({
+    args: args.slice(2),
+    options: {
+      query: { type: "string" },
+      target: { type: "string", multiple: true },
+      channel: { type: "string", multiple: true },
+      sender: { type: "string" },
+      sort: { type: "string" },
+      before: { type: "string" },
+      after: { type: "string" },
+      limit: { type: "string" },
+      offset: { type: "string" },
+      cursor: { type: "string" },
+    },
+    allowEmptyValues: false,
+    onError() {
       throw new Error("Usage:");
-    if (name === "--limit" || name === "--offset") {
-      const number = Number(value);
-      if (!Number.isInteger(number) || number < (name === "--limit" ? 1 : 0))
-        throw new Error("Usage:");
-      if (name === "--limit") options.limit = number;
-      else options.offset = number;
-    } else if (name === "--cursor") options.cursor = value;
-    else if (name === "--sort") {
-      if (value !== "relevance" && value !== "recent") throw new Error("Usage:");
-      options.sort = value;
-    } else if (name === "--query") options.query = value.trim() || undefined;
-    else if (name === "--target" || name === "--channel") {
-      if (options.target && options.target !== value) throw new Error("Usage:");
-      options.target = value;
-    } else if (name === "--sender") options.sender = value.startsWith("@") ? value : `@${value}`;
-    else if (name === "--before") options.before = value;
-    else options.after = value;
+    },
+  });
+  const options: MessageSearchOptions = {};
+  if (values.limit !== undefined) {
+    const number = Number(values.limit);
+    if (!Number.isInteger(number) || number < 1) throw new Error("Usage:");
+    options.limit = number;
   }
+  if (values.offset !== undefined) {
+    const number = Number(values.offset);
+    if (!Number.isInteger(number) || number < 0) throw new Error("Usage:");
+    options.offset = number;
+  }
+  if (values.cursor !== undefined) options.cursor = values.cursor;
+  if (values.sort !== undefined) {
+    if (values.sort !== "relevance" && values.sort !== "recent") throw new Error("Usage:");
+    options.sort = values.sort;
+  }
+  if (values.query !== undefined) options.query = values.query.trim() || undefined;
+  for (const value of [...(values.target ?? []), ...(values.channel ?? [])]) {
+    if (options.target && options.target !== value) throw new Error("Usage:");
+    options.target = value;
+  }
+  if (values.sender !== undefined)
+    options.sender = values.sender.startsWith("@") ? values.sender : `@${values.sender}`;
+  if (values.before !== undefined) options.before = values.before;
+  if (values.after !== undefined) options.after = values.after;
   if (!options.query && !options.target && !options.sender && !options.before && !options.after)
     throw new Error("Usage:");
   if (!options.query && options.sort === "relevance") throw new Error("Usage:");

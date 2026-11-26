@@ -1,5 +1,6 @@
 import { parseMentionSelector, type MentionSelectorInput } from "@lrm/coforge-sdk/internal";
 import { invalidArgument } from "./command-help";
+import { cliFlagBadToken, parseCliFlags, type CliFlagOptions } from "./cli-flags";
 import { CliError } from "./cli-error";
 import { readWindowOptions, type MessageReadOptions } from "./message-read-args";
 import { resolveTaskRef, type TaskRef } from "./task-ref";
@@ -38,45 +39,55 @@ function invalidArg(message: string): CliError {
   return new CliError({ code: "INVALID_ARG", message, retryable: false });
 }
 
-/** The arguments of a conversation command: the one positional ref, and each flag once. */
 function collect(op: TaskConversationOp, args: readonly string[]) {
   const command = `task ${op}`;
   const { values: valueFlags, switches } = FLAGS[op];
-  const values = new Map<string, string>();
-  const mentions: string[] = [];
-  const attachmentIds: string[] = [];
-  const given = new Set<string>();
-  let positional: string | undefined;
-  for (let index = 0; index < args.length; index++) {
-    const name = args[index]!;
-    if (!name.startsWith("--")) {
-      if (positional !== undefined)
-        throw invalidArgument(command, "Give one task ref, not several.");
-      positional = name;
-      continue;
-    }
-    const known = ["--target", "--number", ...valueFlags, ...switches].includes(name);
-    if (!known) throw invalidArgument(command, `Unknown argument "${name}".`);
-    if (name === "--attachment-id") {
-      const list = args[++index];
-      if (list === undefined) throw invalidArgument(command, `"${name}" needs a value.`);
-      attachmentIds.push(...list.split(/[\s,]+/).filter(Boolean));
-      continue;
-    }
-    if (name === "--mention") {
-      const mention = args[++index];
-      if (mention === undefined) throw invalidArgument(command, `"${name}" needs a value.`);
-      mentions.push(mention);
-      continue;
-    }
-    if (given.has(name)) throw invalidArgument(command, `"${name}" is given more than once.`);
-    given.add(name);
-    if (switches.includes(name)) continue;
-    const value = args[++index];
-    if (value === undefined) throw invalidArgument(command, `"${name}" needs a value.`);
-    values.set(name, value);
+  const options: CliFlagOptions = {
+    target: { type: "string" },
+    number: { type: "string" },
+  };
+  for (const flag of valueFlags) {
+    options[flag.slice(2)] = {
+      type: "string",
+      multiple: flag === "--mention" || flag === "--attachment-id",
+    };
   }
-  return { positional, values, given, mentions, attachmentIds };
+  for (const flag of switches) options[flag.slice(2)] = { type: "boolean" };
+
+  const { values: parsed, positionals } = parseCliFlags({
+    args,
+    options,
+    maxPositionals: 1,
+    duplicates: "error",
+    onError(error) {
+      if (error.kind === "unexpected-positional")
+        throw invalidArgument(command, "Give one task ref, not several.");
+      if (error.kind === "missing-value")
+        throw invalidArgument(command, `"${error.flag}" needs a value.`);
+      if (error.kind === "duplicate")
+        throw invalidArgument(command, `"${error.flag}" is given more than once.`);
+      throw invalidArgument(command, `Unknown argument "${cliFlagBadToken(error)}".`);
+    },
+  });
+
+  const values = new Map<string, string>();
+  const given = new Set<string>();
+  for (const flag of ["--target", "--number", ...valueFlags]) {
+    if (flag === "--mention" || flag === "--attachment-id") continue;
+    const value = parsed[flag.slice(2)];
+    if (typeof value === "string") {
+      values.set(flag, value);
+      given.add(flag);
+    }
+  }
+  for (const flag of switches) {
+    if (parsed[flag.slice(2)] === true) given.add(flag);
+  }
+  const mentions = (parsed.mention as string[] | undefined) ?? [];
+  const attachmentIds = ((parsed["attachment-id"] as string[] | undefined) ?? []).flatMap((list) =>
+    list.split(/[\s,]+/).filter(Boolean),
+  );
+  return { positional: positionals[0], values, given, mentions, attachmentIds };
 }
 
 function mentionSelector(value: string): MentionSelectorInput {

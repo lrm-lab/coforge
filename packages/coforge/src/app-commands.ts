@@ -26,6 +26,7 @@ import {
 } from "./app-management-args";
 import { shortId } from "./short-id";
 import { unknownCommandError } from "./command-help";
+import { cliFlagBadToken, parseCliFlags } from "./cli-flags";
 import {
   isAppRegistrationInvocation,
   parseAppRegistrationArgs,
@@ -81,14 +82,23 @@ export function parseAppArgs(
   const programArgs = separator === -1 ? [] : rest.slice(separator + 1);
   if (subcommand === "marketplace") return parseAppMarketplaceArgs(rest);
   if (subcommand === "list") {
-    const invocation: AppListInvocation = { command: "app-list" };
-    let owned = false;
-    for (const option of rest)
-      if (option === "--all") invocation.all = true;
-      else if (option === "--json") invocation.json = true;
-      else if (option === "--owned") owned = true;
-      else invalid(`Unexpected argument ${option}`);
-    if (!owned) return invocation;
+    const { values } = parseCliFlags({
+      args: rest,
+      options: {
+        all: { type: "boolean" },
+        json: { type: "boolean" },
+        owned: { type: "boolean" },
+      },
+      onError(error) {
+        invalid(`Unexpected argument ${cliFlagBadToken(error)}`);
+      },
+    });
+    const invocation: AppListInvocation = {
+      command: "app-list",
+      ...(values.all ? { all: true as const } : {}),
+      ...(values.json ? { json: true as const } : {}),
+    };
+    if (!values.owned) return invocation;
     if (invocation.all) invalid("--owned and --all cannot be combined");
     return { command: "app-list-owned", json: invocation.json === true };
   }
@@ -100,32 +110,41 @@ export function parseAppArgs(
     return parseAppRegistrationArgs(subcommand, rest, invalid);
   if (subcommand === "invoke") return parseInvokeArgs(rest, invalid, parseTimeout);
   if (subcommand !== "token") throw unknownCommandError(["app", ...args]);
-  const values: Record<string, string> = {};
+  const { values } = parseCliFlags({
+    args: options,
+    options: {
+      app: { type: "string" },
+      target: { type: "string" },
+      timeout: { type: "string" },
+      exec: { type: "string" },
+      scope: { type: "string", multiple: true },
+    },
+    allowEmptyValues: false,
+    onError(error) {
+      if (error.kind === "missing-value") invalid(`${error.flag} needs a value`);
+      invalid(`Unexpected argument ${cliFlagBadToken(error)}`);
+    },
+  });
   const scopes: string[] = [];
-  for (let index = 0; index < options.length; index += 2) {
-    const [option, value] = [options[index]!, options[index + 1]];
-    if (!["--app", "--target", "--timeout", "--exec", "--scope"].includes(option))
-      invalid(`Unexpected argument ${option}`);
-    if (value === undefined || value === "") invalid(`${option} needs a value`);
-    if (option !== "--scope") values[option] = value;
-    else if (!(APP_SCOPES as readonly string[]).includes(value))
+  for (const value of values.scope ?? []) {
+    if (!(APP_SCOPES as readonly string[]).includes(value))
       invalid(`--scope takes one of ${APP_SCOPES.join(", ")}, not "${value}"`);
-    else if (scopes.includes(value)) invalid(`--scope ${value} is given twice`);
-    else scopes.push(value);
+    if (scopes.includes(value)) invalid(`--scope ${value} is given twice`);
+    scopes.push(value);
   }
-  const appKey = values["--app"]?.trim();
+  const appKey = values.app?.trim();
   if (!appKey) invalid("--app is required");
-  const program = values["--exec"];
+  const program = values.exec;
   if (!program) invalid("--exec is required: the program to run with the token");
   return {
     command: "app-token",
     appKey,
-    ...(values["--target"] ? { target: values["--target"] } : {}),
+    ...(values.target ? { target: values.target } : {}),
     ...(scopes.length > 0 ? { scopes } : {}),
     program,
     args: programArgs,
-    timeoutSeconds: values["--timeout"]
-      ? parseTimeout(values["--timeout"])
+    timeoutSeconds: values.timeout
+      ? parseTimeout(values.timeout)
       : DEFAULT_APP_TOKEN_TIMEOUT_SECONDS,
   };
 }
