@@ -40,6 +40,11 @@ test("decodeAgentUserInfoResponse accepts a well-formed human response", () => {
   expect(decodeAgentUserInfoResponse(HUMAN_VALUE)).toEqual(HUMAN_VALUE);
 });
 
+test("decodeAgentUserInfoResponse preserves a human's optional time zone", () => {
+  const withZone = { ...HUMAN_VALUE, user: { ...HUMAN_VALUE.user, timeZone: "Europe/Paris" } };
+  expect(decodeAgentUserInfoResponse(withZone)).toEqual(withZone);
+});
+
 test("decodeAgentUserInfoResponse accepts a well-formed Agent response", () => {
   expect(decodeAgentUserInfoResponse(AGENT_VALUE)).toEqual(AGENT_VALUE);
 });
@@ -47,6 +52,9 @@ test("decodeAgentUserInfoResponse accepts a well-formed Agent response", () => {
 test("decodeAgentUserInfoResponse rejects a malformed response", () => {
   expect(() => decodeAgentUserInfoResponse(null)).toThrow();
   expect(() => decodeAgentUserInfoResponse({ ok: true })).toThrow();
+  expect(() =>
+    decodeAgentUserInfoResponse({ ...HUMAN_VALUE, user: { ...HUMAN_VALUE.user, timeZone: 1 } }),
+  ).toThrow("malformed user");
   expect(() =>
     decodeAgentUserInfoResponse({
       ok: true,

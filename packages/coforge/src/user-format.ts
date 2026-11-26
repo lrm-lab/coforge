@@ -16,6 +16,8 @@ export function formatUserInfo(
   if (user.role && user.role !== "member") lines.push(`Role: ${user.role}`);
   if (user.description) lines.push(`Description: ${frameUntrustedText(user.description)}`);
   lines.push(`Display name: ${foldUntrustedLine(user.displayName)}`);
+  if (user.kind === "human" && user.timeZone)
+    lines.push(`Time zone: ${foldUntrustedLine(user.timeZone)}`);
   if (user.kind === "agent") {
     if (user.computerName) lines.push(`Computer: ${foldUntrustedLine(user.computerName)}`);
     if (user.availability) lines.push(`Availability: ${foldUntrustedLine(user.availability)}`);

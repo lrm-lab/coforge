@@ -1,6 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { humanLabel } from "#src/lib/human-label";
 import {
+  accountTimeZoneSelection,
+  resolveAccountTimeZone,
+} from "#src/server/db/repositories/user-preferences.repositories.server";
+import {
   externalPresenceOf,
   resolveAgentStatuses,
 } from "#src/server/agents/agent-user-info.server";
@@ -40,7 +44,14 @@ export const Route = createFileRoute("/api/agent/v1/workspace")({
               select: {
                 userId: true,
                 role: true,
-                user: { select: { username: true, displayName: true, description: true } },
+                user: {
+                  select: {
+                    username: true,
+                    displayName: true,
+                    description: true,
+                    preferences: accountTimeZoneSelection,
+                  },
+                },
               },
               orderBy: { user: { username: "asc" } },
             }),
@@ -121,6 +132,7 @@ export const Route = createFileRoute("/api/agent/v1/workspace")({
             displayName: humanLabel(human.user),
             description: human.user.description,
             role: human.role,
+            timeZone: resolveAccountTimeZone(human.user.preferences),
           })),
           agents: agentStatuses.map(({ agent, status, availability }) => ({
             name: agent.name,

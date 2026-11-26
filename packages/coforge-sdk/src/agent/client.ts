@@ -163,8 +163,9 @@ export function decodeGitHubCommitTrailersResponse(value: unknown): GitHubCommit
 
 export { agentApiRoutes, workspaceInfoRoute } from "./routes";
 
-export type WorkspaceInfoHuman = { id: string; name: string; displayName: string; role: string };
-export type WorkspaceInfoAgent = WorkspaceInfoHuman & {
+type WorkspaceInfoPerson = { id: string; name: string; displayName: string; role: string };
+export type WorkspaceInfoHuman = WorkspaceInfoPerson & { timeZone?: string };
+export type WorkspaceInfoAgent = WorkspaceInfoPerson & {
   status: string;
   activity: string;
   activityDetail: string;

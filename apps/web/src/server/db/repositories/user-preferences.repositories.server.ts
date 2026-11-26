@@ -1,6 +1,6 @@
 import type { Prisma } from "#src/generated/prisma/client";
 
-import { validateTimeZone } from "#src/lib/dates";
+import { isValidTimeZone, validateTimeZone } from "#src/lib/dates";
 import { AppError } from "#src/lib/app-error";
 import { isTimeFormat } from "#src/lib/time-format";
 import { isPersonRole, type PersonRole } from "#src/features/onboarding/person-role";
@@ -13,6 +13,18 @@ export type StoredUserPreferences = {
   timeFormat: string | null;
   language: string | null;
 };
+
+export const accountTimeZoneSelection = {
+  select: { timeZone: true, observedTimeZone: true },
+} as const;
+
+export function resolveAccountTimeZone(
+  preferences: Pick<StoredUserPreferences, "timeZone" | "observedTimeZone"> | null | undefined,
+): string | undefined {
+  return [preferences?.timeZone, preferences?.observedTimeZone].find(
+    (candidate): candidate is string => !!candidate && isValidTimeZone(candidate),
+  );
+}
 
 /** The interface languages the server renders outbound text in. */
 export const USER_LANGUAGES = ["en", "zh-CN"] as const;

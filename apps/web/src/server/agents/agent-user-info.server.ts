@@ -10,6 +10,10 @@ import type {
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { humanLabel } from "#src/lib/human-label";
+import {
+  accountTimeZoneSelection,
+  resolveAccountTimeZone,
+} from "#src/server/db/repositories/user-preferences.repositories.server";
 import { agentDisplay } from "#src/features/agents/agent-status-display";
 import { getAgentDisplay } from "./agent-display.server";
 import { externalSetups, type ExternalSetup } from "./external-agent-presence.server";
@@ -123,6 +127,7 @@ function statusFromDisplay(
 export type ResolvedWorkspaceUser =
   | {
       kind: "human";
+      timeZone?: string;
       id: string;
       name: string;
       displayName: string;
@@ -148,6 +153,7 @@ export async function findWorkspaceUser(
   workspaceId: string,
   name: string,
   viewer: AgentVisibilityViewer,
+  options?: { includeTimeZone: boolean },
 ): Promise<ResolvedWorkspaceUser | typeof AGENT_NOT_VISIBLE | undefined> {
   const agent = await db.agent.findFirst({
     where: { workspaceId, name, ...ACTIVE_AGENT_WHERE },
@@ -188,7 +194,13 @@ export async function findWorkspaceUser(
     select: {
       role: true,
       user: {
-        select: { id: true, username: true, displayName: true, description: true },
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          description: true,
+          preferences: options?.includeTimeZone ? accountTimeZoneSelection : false,
+        },
       },
     },
   });
@@ -200,6 +212,7 @@ export async function findWorkspaceUser(
     displayName: humanLabel(membership.user),
     description: membership.user.description,
     role: membership.role,
+    timeZone: resolveAccountTimeZone(membership.user.preferences),
   };
 }
 
@@ -250,7 +263,9 @@ export async function resolveAgentUserInfo(
     agentVisibilityViewerForActor(db, principal.workspaceId, { agentId: principal.agentId }),
     agentChannelReader(db, principal.workspaceId, principal.agentId),
   ]);
-  const target = await findWorkspaceUser(db, principal.workspaceId, name, viewer);
+  const target = await findWorkspaceUser(db, principal.workspaceId, name, viewer, {
+    includeTimeZone: true,
+  });
   if (target === AGENT_NOT_VISIBLE)
     return {
       status: 404,
@@ -283,6 +298,7 @@ export async function resolveAgentUserInfo(
       description: target.description,
       role: target.role,
       isSelf: false,
+      timeZone: target.timeZone,
     };
     return { status: 200, body: { ok: true, user, memberships } };
   }

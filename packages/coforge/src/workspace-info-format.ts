@@ -139,7 +139,10 @@ const agentRow = (agent: Agent) =>
     agent.description,
   );
 const humanRow = (human: Human) =>
-  withDescription(`@${human.name}${roleLabel(human.role)}`, human.description);
+  withDescription(
+    `@${human.name}${roleLabel(human.role)}${human.timeZone ? ` [time zone=${foldUntrustedLine(human.timeZone)}]` : ""}`,
+    human.description,
+  );
 const projectRow = (project: Project) =>
   withDescription(
     `${foldUntrustedLine(project.name)} (${foldUntrustedLine(project.slug)})${project.githubFullName ? ` github=${foldUntrustedLine(project.githubFullName)}` : ""}${project.openTaskCount !== undefined ? ` tasks=${project.openTaskCount}` : ""}`,
