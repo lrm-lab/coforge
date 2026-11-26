@@ -15,7 +15,7 @@ function enrollGeneral(db: PrismaClient, workspaceId: string) {
   return db.$transaction((tx) => enrollGeneralChannel(tx, workspaceId));
 }
 
-test("a body's thread references are read in one query per channel, and only the first MAX_THREAD_REFERENCES of them", async () => {
+test("a body's first MAX_THREAD_REFERENCES thread references are read in one batch", async () => {
   const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
   if (!connectionString) throw new Error("CHANNEL_TEST_DATABASE_URL is required");
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
@@ -88,8 +88,6 @@ test("a body's thread references are read in one query per channel, and only the
         return { body: stored.body, reads: reads.length };
       });
 
-    // References into two channels take one read each, however many there are; a prefix two
-    // messages share, read in the same batch, still names nothing.
     const [first] = productRoots;
     const mixed = await store(
       [
@@ -111,7 +109,7 @@ test("a body's thread references are read in one query per channel, and only the
         "#nope:abcdef12",
       ].join(" "),
     );
-    expect(mixed.reads).toBe(2);
+    expect(mixed.reads).toBe(1);
 
     // Twenty-four distinct references: the first MAX_THREAD_REFERENCES resolve, the rest stay text.
     const spellings = productRoots.flatMap((root) => [
