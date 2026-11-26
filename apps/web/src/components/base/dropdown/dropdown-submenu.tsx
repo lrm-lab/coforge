@@ -14,6 +14,8 @@ import {
 import { createPortal } from "react-dom";
 import { MenuContext } from "react-aria-components";
 import {
+  type CascadeMenuContextValue,
+  type CascadeSubmenuItemContextValue,
   CascadeDepthProvider,
   CascadeSubmenuItemProvider,
   CascadeSubmenuPopoverProvider,
@@ -34,6 +36,37 @@ const SUBMENU_TITLE_OFFSET_PX = 22;
 
 export function isVerticalMenuNavKey(key: string): boolean {
   return key === "ArrowDown" || key === "ArrowUp" || key === "Home" || key === "End";
+}
+
+export type SubmenuPressPointerType = "mouse" | "pen" | "touch" | "keyboard" | "virtual";
+
+export interface SubmenuPressEventLike {
+  readonly pointerType: SubmenuPressPointerType;
+}
+
+export function shouldFocusFirstSubmenuItem(pointerType: SubmenuPressPointerType): boolean {
+  return pointerType === "keyboard" || pointerType === "virtual";
+}
+
+export function handleSubmenuItemPress<E extends SubmenuPressEventLike>(
+  event: E,
+  options: {
+    readonly isDisabled?: boolean;
+    readonly cascade: CascadeMenuContextValue | null;
+    readonly submenuItem: CascadeSubmenuItemContextValue | null;
+    readonly onPress?: (event: E) => void;
+  },
+): boolean {
+  if (options.submenuItem) {
+    if (!options.isDisabled) {
+      options.cascade?.markSuppressRootClose();
+      options.submenuItem.openSubmenuNow(shouldFocusFirstSubmenuItem(event.pointerType));
+    }
+    options.onPress?.(event);
+    return !options.isDisabled;
+  }
+  options.onPress?.(event);
+  return false;
 }
 
 interface DropdownSubmenuTriggerProps {

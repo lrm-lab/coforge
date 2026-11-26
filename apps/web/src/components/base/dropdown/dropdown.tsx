@@ -39,6 +39,7 @@ import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
 import {
   DropdownSubmenuPopover,
   DropdownSubmenuTrigger,
+  handleSubmenuItemPress,
   isVerticalMenuNavKey,
 } from "./dropdown-submenu";
 import { RadioButtonBase } from "#src/components/base/radio-buttons/radio-buttons";
@@ -150,6 +151,7 @@ const DropdownItem = ({
   selectionIndicator = "checkmark",
   ref,
   onAction,
+  onPress,
   ...props
 }: DropdownItemProps) => {
   const keyShortcuts = useHotkeyAria(shortcut);
@@ -257,12 +259,26 @@ const DropdownItem = ({
 
   const handleAction = useCallback(() => {
     if (submenuItem) {
-      cascade?.markSuppressRootClose();
-      submenuItem.openSubmenuNow(false);
+      if (!props.isDisabled) {
+        cascade?.markSuppressRootClose();
+        submenuItem.openSubmenuNow(false);
+      }
       return;
     }
     onAction?.();
-  }, [cascade, onAction, submenuItem]);
+  }, [cascade, onAction, props.isDisabled, submenuItem]);
+
+  const handlePress = useCallback(
+    (event: Parameters<NonNullable<AriaMenuItemProps["onPress"]>>[0]) => {
+      handleSubmenuItemPress(event, {
+        isDisabled: props.isDisabled,
+        cascade,
+        submenuItem,
+        onPress,
+      });
+    },
+    [cascade, onPress, props.isDisabled, submenuItem],
+  );
 
   const SelectionIndicator = useCallback(
     (state: MenuItemRenderProps & { className?: string }) => {
@@ -299,9 +315,25 @@ const DropdownItem = ({
     [selectionIndicator],
   );
 
+  const submenuAriaHasPopup = hasSubmenu ? "menu" : undefined;
+  const submenuAriaExpanded = hasSubmenu
+    ? submenuItem?.isSubmenuOpen
+      ? "true"
+      : "false"
+    : undefined;
+
   if (unstyled) {
     return (
-      <AriaMenuItem ref={setItemRef} id={label} textValue={label} onAction={handleAction} {...props}>
+      <AriaMenuItem
+        {...props}
+        ref={setItemRef}
+        id={props.id ?? label}
+        textValue={props.textValue ?? label}
+        onAction={handleAction}
+        onPress={handlePress}
+        aria-haspopup={submenuAriaHasPopup}
+        aria-expanded={submenuAriaExpanded}
+      >
         {(state) => (
           <>
             {typeof children === "function" ? children(state) : children}
@@ -320,8 +352,9 @@ const DropdownItem = ({
       {...props}
       ref={setItemRef}
       onAction={handleAction}
-      aria-haspopup={hasSubmenu ? "menu" : undefined}
-      aria-expanded={hasSubmenu ? submenuItem?.isSubmenuOpen : undefined}
+      onPress={handlePress}
+      aria-haspopup={submenuAriaHasPopup}
+      aria-expanded={submenuAriaExpanded}
       data-cascade-state={rowState}
       className={(state) =>
         cx(

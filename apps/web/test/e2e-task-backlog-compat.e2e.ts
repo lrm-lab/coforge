@@ -13,6 +13,7 @@ import {
   localBrowserE2e,
   pageHydrated,
 } from "./helpers/browser-e2e";
+import { taskDetailChildSelector } from "./helpers/task-detail-e2e";
 
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/task-backlog-compat");
@@ -35,10 +36,46 @@ test("Backlog column shows by default, accepts writes, and retired In Review is 
   const board = new TaskBoard(db);
   const backlogColumn = 'section[aria-label="Backlog"]';
   const inReviewColumn = 'section[aria-label="In review"]';
+  const backlogStatusButton = taskDetailChildSelector(
+    'button[aria-label="Change status: Backlog"]',
+  );
+  const todoStatusButton = taskDetailChildSelector('button[aria-label="Change status: To do"]');
+  const statusTrigger =
+    '[...document.querySelectorAll(\'[role="menu"][aria-label="Filter"] [role="menuitem"]\')].find((el) => el.textContent.trim() === "Status")';
+  const statusMenu = 'document.querySelector(\'[role="menu"][aria-label="Status"]\')';
   const filter = async () => {
     await browser("find", "role", "button", "click", "--name", "Filter", "--exact");
+    await waitFor(`${statusTrigger} !== undefined`);
+    expect(await evaluate(`${statusTrigger}?.getAttribute("aria-haspopup")`)).toBe("menu");
+    expect(await evaluate(`${statusTrigger}?.getAttribute("aria-expanded")`)).toBe("false");
     await clickText('[role="menuitem"]', "Status");
-    await waitFor('document.querySelector(\'[role="menu"][aria-label="Status"]\') !== null');
+    await waitFor(
+      `${statusMenu} !== null && ${statusTrigger}?.getAttribute("aria-expanded") === "true" && ${statusMenu}.contains(document.activeElement)`,
+    );
+    expect(
+      await evaluate('document.querySelector(\'[role="menu"][aria-label="Filter"]\') !== null'),
+    ).toBe(true);
+    await browser("press", "ArrowLeft");
+    await waitFor(
+      `${statusTrigger}?.getAttribute("aria-expanded") === "false" && document.querySelector('[role="menu"][aria-label="Filter"]') !== null`,
+    );
+    await browser("press", "ArrowRight");
+    await waitFor(
+      `${statusMenu} !== null && ${statusTrigger}?.getAttribute("aria-expanded") === "true" && ${statusMenu}.contains(document.activeElement)`,
+    );
+    await browser("press", "ArrowLeft");
+    await waitFor(
+      `${statusTrigger}?.getAttribute("aria-expanded") === "false" && document.querySelector('[role="menu"][aria-label="Filter"]') !== null`,
+    );
+    await waitFor(elementAtRest(statusTrigger));
+    await browser("find", "role", "menuitem", "click", "--name", "Status");
+    await waitFor(
+      `${statusMenu} !== null && ${statusTrigger}?.getAttribute("aria-expanded") === "true" && !${statusMenu}.contains(document.activeElement)`,
+    );
+    expect(
+      await evaluate('document.querySelector(\'[role="menu"][aria-label="Filter"]\') !== null'),
+    ).toBe(true);
+    await shoot("filter-status-submenu");
   };
   const shoot = async (name: string) => {
     await waitFor(animationsSettled());
@@ -111,15 +148,17 @@ test("Backlog column shows by default, accepts writes, and retired In Review is 
       `${origin}/en/w/${workspace.slug}/channel/${channel.id}?task=${parked.number}`,
     );
     await waitFor(
-      `${pageHydrated} && document.querySelector('[role="dialog"] button[aria-label="Change status: Backlog"]') !== null`,
+      `${pageHydrated} && document.querySelector(${JSON.stringify(backlogStatusButton)}) !== null`,
     );
-    await openMenu(
-      '[role="dialog"] button[aria-label="Change status: Backlog"]',
-      "backlog-status-menu",
-    );
+    await openMenu(backlogStatusButton, "backlog-status-menu");
     expect(
       await evaluate(
-        'Array.from(document.querySelectorAll(\'[role="menuitem"]\')).some((row) => row.textContent.trim() === "In review")',
+        'Array.from(document.querySelectorAll(\'[role="menuitemradio"]\')).some((row) => row.textContent.trim() === "Backlog")',
+      ),
+    ).toBe(true);
+    expect(
+      await evaluate(
+        'Array.from(document.querySelectorAll(\'[role="menuitemradio"]\')).some((row) => row.textContent.trim() === "In review")',
       ),
     ).toBe(false);
     await shoot("backlog-status-menu");
@@ -128,17 +167,17 @@ test("Backlog column shows by default, accepts writes, and retired In Review is 
       `${origin}/en/w/${workspace.slug}/channel/${channel.id}?task=${ready.number}`,
     );
     await waitFor(
-      `${pageHydrated} && document.querySelector('[role="dialog"] button[aria-label="Change status: To do"]') !== null`,
+      `${pageHydrated} && document.querySelector(${JSON.stringify(todoStatusButton)}) !== null`,
     );
-    await openMenu('[role="dialog"] button[aria-label="Change status: To do"]', "todo-status-menu");
+    await openMenu(todoStatusButton, "todo-status-menu");
     expect(
       await evaluate(
-        'Array.from(document.querySelectorAll(\'[role="menuitem"]\')).some((row) => row.textContent.trim() === "Backlog")',
+        'Array.from(document.querySelectorAll(\'[role="menuitemradio"]\')).some((row) => row.textContent.trim() === "Backlog")',
       ),
     ).toBe(true);
     expect(
       await evaluate(
-        'Array.from(document.querySelectorAll(\'[role="menuitem"]\')).some((row) => row.textContent.trim() === "In review")',
+        'Array.from(document.querySelectorAll(\'[role="menuitemradio"]\')).some((row) => row.textContent.trim() === "In review")',
       ),
     ).toBe(false);
   } finally {
