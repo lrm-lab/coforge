@@ -11,7 +11,6 @@ import {
   useSyncExternalStore,
   type FocusEvent as ReactFocusEvent,
   type ForwardedRef,
-  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent,
   type ReactNode,
   type RefObject,
@@ -441,7 +440,8 @@ function GroupedHoverPopoverTrigger({
     (event: ReactFocusEvent<Element>) => {
       if (
         event.currentTarget instanceof HTMLElement &&
-        event.currentTarget.matches(":focus-visible")
+        event.currentTarget.matches(":focus-visible") &&
+        !event.currentTarget.hasAttribute("data-skip-focus-preview")
       ) {
         group.focusTrigger(id);
       }
@@ -452,16 +452,6 @@ function GroupedHoverPopoverTrigger({
   const handleBlur = useCallback(() => {
     group.blurTrigger(id);
   }, [group, id]);
-
-  const handleKeyDown = useCallback(
-    (event: ReactKeyboardEvent<HTMLElement>) => {
-      if (event.key === "Enter" && !onPress) {
-        event.preventDefault();
-        group.openImmediate(id);
-      }
-    },
-    [group, id, onPress],
-  );
 
   const handlePress = useCallback(() => {
     if (longPressedRef.current) {
@@ -493,10 +483,6 @@ function GroupedHoverPopoverTrigger({
         onFocus={handleFocus}
         onBlur={handleBlur}
         {...control}
-        onKeyDown={(event) => {
-          handleKeyDown(event);
-          control?.onKeyDown?.(event);
-        }}
       >
         {trigger}
       </span>
@@ -519,7 +505,6 @@ function GroupedHoverPopoverTrigger({
       onPointerCancel={handlePointerUpOrCancel}
       onFocus={handleFocus}
       onBlur={handleBlur}
-      onKeyDown={handleKeyDown}
     >
       {trigger}
     </Button>

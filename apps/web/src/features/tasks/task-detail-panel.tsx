@@ -235,7 +235,9 @@ export function useTaskDetailModel({
           ref={setTitleElement}
           slot={titleSlot}
           level={2}
-          className="text-xl font-semibold break-words text-primary"
+          tabIndex={-1}
+          data-task-detail-heading=""
+          className="text-xl font-semibold break-words text-primary outline-hidden"
         >
           {task.title}
         </Heading>
@@ -413,6 +415,7 @@ export function TaskDetailPanel(props: TaskDetailPanelProps) {
   return (
     <section
       ref={rootRef}
+      data-task-detail=""
       aria-label={m.tasks_details_title({ number: String(props.task.number) })}
       onKeyDown={onKeyDown}
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-primary"

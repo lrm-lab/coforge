@@ -9,6 +9,7 @@ import { CentrifugoConversationRealtime } from "#src/server/conversations/conver
 import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { TaskConversations } from "#src/server/tasks/task-conversations.server";
+import { CARD_OPEN_DELAY_MS } from "#src/lib/hover-intent";
 import {
   animationsSettled,
   browserSession,
@@ -26,10 +27,11 @@ import {
 } from "./helpers/task-detail-e2e";
 
 /**
- * A profile opened from inside a Task popup opens over it, not under it in the channel's side slot
- * (Frank, 11-04, task #519): it takes presses, and Escape or a press outside closes it before the
- * popup. Opt-in like the other browser E2Es; the channel, Agent and Task are seeded per run and
- * removed after it. Screenshots go under `.artifacts/e2e/task-popup-profile/`.
+ * A profile opened from inside a Task opens in an inline split pane beside the task on desktop
+ * and as a full-screen overlay dialog on a phone: it takes presses, Escape or its Close button
+ * dismisses it before the task detail, and focus returns to the triggering control. Opt-in like
+ * the other browser E2Es; the channel, Agent and Task are seeded per run and removed after it.
+ * Screenshots go under `.artifacts/e2e/task-popup-profile/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/task-popup-profile");
@@ -91,32 +93,40 @@ test("a profile opened in a Task popup opens over the popup", async () => {
     await mkdir(artifacts, { recursive: true });
     const dialog = taskDetail;
     const profileDialogs = nonTaskDialogs(true);
+    const desktopProfile = '[data-split-slot="profile"]';
+    const profileEl = (phone: boolean) =>
+      phone
+        ? `${profileDialogs}.at(-1)`
+        : `document.querySelector(${JSON.stringify(desktopProfile)})`;
     const profileButton = taskDetailChildSelector(
       `button[aria-label=${JSON.stringify(`Open Task Agent ${tail}'s profile`)}]`,
     );
+    const onAvatar = `document.activeElement === document.querySelector(${JSON.stringify(profileButton)})`;
     const settled = `${taskDetailSheetEntered} && ${animationsSettled()}`;
-    const openProfile = async () => {
+    const openProfile = async (phone = false) => {
       await browser(
         "wait",
         "--fn",
         `${elementAtRest(`document.querySelector(${JSON.stringify(profileButton)})`)} && ${settled}`,
       );
       await browser("click", profileButton);
-      // The profile is the overlay dialog over the task detail.
       await browser(
         "wait",
         "--fn",
-        `${taskDetailPanels}.length === 1 && ${profileDialogs}.length === 1 && (${profileDialogs}.at(-1).textContent ?? "").includes("Task Agent ${tail}")`,
+        `${taskDetailPanels}.length === 1 && (${profileEl(phone)}) != null && ((${profileEl(phone)}).textContent ?? "").includes("Task Agent ${tail}")${phone ? ` && ${profileDialogs}.length === 1` : ""}`,
       );
       await browser("wait", "500");
     };
-    // Nothing covers the profile: what a press lands on, across its whole width, is the profile.
-    const profileOnTop = `(() => { const panel = ${profileDialogs}.at(-1); const r = panel.getBoundingClientRect(); return [0.1, 0.5, 0.9].every((x) => panel.contains(document.elementFromPoint(r.left + r.width * x, r.top + r.height / 2))); })()`;
-    // A press inside it works: its tabs switch.
-    const pressProfileTab = async () => {
-      await evaluate(
-        `(${profileDialogs}.at(-1).querySelectorAll('[role="tab"]')[1].setAttribute("data-e2e-profile-tab", ""), true)`,
+    const profileOnTop = (phone = false) =>
+      `(() => { const panel = ${profileEl(phone)}; if (!panel) return false; const r = panel.getBoundingClientRect(); return [0.1, 0.5, 0.9].every((x) => panel.contains(document.elementFromPoint(r.left + r.width * x, r.top + r.height / 2))); })()`;
+    const pressProfileTab = async (phone = false) => {
+      const secondTab = `(${profileEl(phone)})?.querySelectorAll('[role="tab"]')[1]`;
+      await browser(
+        "wait",
+        "--fn",
+        `${secondTab} != null && ${elementAtRest(secondTab)} && ${animationsSettled()}`,
       );
+      await evaluate(`(${secondTab}.setAttribute("data-e2e-profile-tab", ""), true)`);
       await browser("click", "[data-e2e-profile-tab]");
       await browser(
         "wait",
@@ -137,36 +147,38 @@ test("a profile opened in a Task popup opens over the popup", async () => {
     await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}?task=${number}`);
     await browser("wait", "--fn", `${pageHydrated} && ${popupShowsReply}`);
     await browser("mouse", "move", "10", "10");
-    await openProfile();
-    expect(await evaluate<boolean>(profileOnTop)).toBe(true);
+    await openProfile(false);
+    expect(await evaluate<boolean>(profileOnTop(false))).toBe(true);
     await shoot("desktop");
-    await pressProfileTab();
+    await pressProfileTab(false);
 
-    // Escape closes the profile first, the task detail second.
     await browser("press", "Escape");
-    await browser("wait", "--fn", `${profileDialogs}.length === 0`);
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector(${JSON.stringify(desktopProfile)}) === null`,
+    );
     expect(await evaluate<boolean>(popupShowsReply)).toBe(true);
-    // Focus is back in the task detail, which takes the next Escape.
-    expect(await evaluate<boolean>(`${dialog}.contains(document.activeElement)`)).toBe(true);
+    expect(await evaluate<boolean>(onAvatar)).toBe(true);
     await browser("press", "Escape");
     await browser("wait", "--fn", `${dialog} === null`);
 
-    // A press outside the profile closes only the profile.
     await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}?task=${number}`);
     await browser("wait", "--fn", `${pageHydrated} && ${popupShowsReply}`);
     await browser("mouse", "move", "10", "10");
-    await openProfile();
-    await browser("mouse", "move", "40", "450");
-    await browser("mouse", "down");
-    await browser("mouse", "up");
-    await browser("wait", "--fn", `${profileDialogs}.length === 0`);
+    await openProfile(false);
+    await browser("click", `${desktopProfile} button[aria-label="Close"]`);
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector(${JSON.stringify(desktopProfile)}) === null`,
+    );
     expect(await evaluate<boolean>(popupShowsReply)).toBe(true);
+    expect(await evaluate<boolean>(onAvatar)).toBe(true);
 
-    // Tabbed onto the avatar, its peek opens; Escape closes the peek alone, and the next one, with
-    // no peek left to close, the task detail (task #520).
     await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}?task=${number}`);
     await browser("wait", "--fn", `${pageHydrated} && ${popupShowsReply}`);
-    const onAvatar = `document.activeElement === document.querySelector(${JSON.stringify(profileButton)})`;
+    await evaluate(`(${dialog}?.querySelector("[data-task-detail-heading]")?.focus(), true)`);
     for (let tabs = 0; tabs < 60 && !(await evaluate<boolean>(onAvatar)); tabs++)
       await browser("press", "Tab");
     expect(await evaluate<boolean>(onAvatar)).toBe(true);
@@ -176,10 +188,39 @@ test("a profile opened in a Task popup opens over the popup", async () => {
     await browser(
       "wait",
       "--fn",
-      `!(${peekOpen}) && ${profileDialogs}.length === 0 && ${dialog} != null`,
+      `!(${peekOpen}) && document.querySelector(${JSON.stringify(desktopProfile)}) === null && ${dialog} != null`,
     );
     expect(await evaluate<boolean>(popupShowsReply)).toBe(true);
     expect(await evaluate<boolean>(onAvatar)).toBe(true);
+    await browser("press", "Enter");
+    await browser(
+      "wait",
+      "--fn",
+      `${taskDetailPanels}.length === 1 && (${profileEl(false)}) != null && ((${profileEl(false)}).textContent ?? "").includes("Task Agent ${tail}")`,
+    );
+    await pressProfileTab(false);
+    expect(await evaluate<boolean>(onAvatar)).toBe(false);
+    expect(await evaluate<boolean>(`${profileEl(false)}.contains(document.activeElement)`)).toBe(
+      true,
+    );
+    await browser("press", "Escape");
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector(${JSON.stringify(desktopProfile)}) === null`,
+    );
+    expect(await evaluate<boolean>(popupShowsReply)).toBe(true);
+    expect(await evaluate<boolean>(onAvatar)).toBe(true);
+    await browser("wait", String(CARD_OPEN_DELAY_MS + 150));
+    expect(await evaluate<boolean>(onAvatar)).toBe(true);
+    expect(
+      await evaluate<string | null>(
+        `document.querySelector(${JSON.stringify(profileButton)})?.getAttribute("aria-expanded")`,
+      ),
+    ).toBe("false");
+    expect(
+      await evaluate<boolean>(`document.querySelector(${JSON.stringify(desktopProfile)}) === null`),
+    ).toBe(true);
     await browser("press", "Escape");
     await browser("wait", "--fn", `${dialog} === null`);
 
@@ -187,9 +228,13 @@ test("a profile opened in a Task popup opens over the popup", async () => {
     await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}?task=${number}`);
     await browser("wait", "--fn", `${pageHydrated} && ${popupShowsReply}`);
     await browser("mouse", "move", "10", "10");
-    await openProfile();
-    expect(await evaluate<boolean>(profileOnTop)).toBe(true);
+    await openProfile(true);
+    expect(await evaluate<boolean>(profileOnTop(true))).toBe(true);
     await shoot("phone");
+    await browser("press", "Escape");
+    await browser("wait", "--fn", `${profileDialogs}.length === 0`);
+    expect(await evaluate<boolean>(popupShowsReply)).toBe(true);
+    expect(await evaluate<boolean>(onAvatar)).toBe(true);
   } finally {
     await browser("close").catch(() => undefined);
     await db.message

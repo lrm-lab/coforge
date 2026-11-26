@@ -175,6 +175,7 @@ export function ConversationSplit({
                 className="flex min-h-0 min-w-0 flex-col"
               >
                 <div
+                  data-split-slot={visibleSlot}
                   className={cn(
                     "flex min-h-0 min-w-0 flex-1 flex-col bg-primary",
                     !sideExpanded && SIDE_PANE_ENTER,
@@ -191,6 +192,7 @@ export function ConversationSplit({
         {(!splitShown || threadAlone) && visibleSlot && focused !== "chat" && (
           <motion.div
             key={visibleSlot}
+            data-split-slot={visibleSlot}
             initial={reduced ? { opacity: 0 } : { x: "100%" }}
             animate={reduced ? { opacity: 1 } : { x: 0 }}
             exit={
