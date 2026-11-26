@@ -68,10 +68,13 @@ const OTHER_AGENT = {
 
 let lastRosterQuery: unknown;
 
-function baseDb(selfAgent: unknown, rosterOverride?: unknown[]) {
+function baseDb(selfAgent: unknown, rosterOverride?: unknown[], humans: unknown[] = []) {
   return {
     workspace: { findUnique: async () => WORKSPACE },
-    workspaceMembership: { findMany: async () => [] },
+    workspaceMembership: {
+      findMany: async (query: { where: { workspaceId: string } }) =>
+        query.where.workspaceId === WORKSPACE.id ? humans : [],
+    },
     agent: {
       findMany: async (query: unknown) => {
         lastRosterQuery = query;
@@ -107,9 +110,10 @@ function request(
   principal: { workspaceId: string; agentId: string },
   selfAgent: unknown,
   rosterOverride?: unknown[],
+  humans?: unknown[],
 ) {
   return get({
-    context: { principal, db: baseDb(selfAgent, rosterOverride) },
+    context: { principal, db: baseDb(selfAgent, rosterOverride, humans) },
   } as unknown as Parameters<typeof get>[0]);
 }
 
@@ -321,4 +325,45 @@ test("workspace info lists the channels and Computers with the calling Agent's r
   });
   expect(body.computers[0]).not.toHaveProperty("osVersion");
   expect(["online", "offline", "unknown"]).toContain(body.computers[0].status);
+});
+
+test("workspace info exposes each human's effective zone, including non-owner members", async () => {
+  const person = (
+    username: string,
+    role: string,
+    preferences: { timeZone: string | null; observedTimeZone: string | null } | null,
+  ) => ({
+    role,
+    user: { username, displayName: username, description: "", preferences },
+  });
+  const response = (await request(
+    PRINCIPAL,
+    null,
+    [],
+    [
+      person("owner", "owner", { timeZone: "Asia/Shanghai", observedTimeZone: "Europe/London" }),
+      person("alice", "member", { timeZone: null, observedTimeZone: "America/Los_Angeles" }),
+      person("bob", "member", { timeZone: null, observedTimeZone: "Invalid/Zone" }),
+      person("carol", "member", null),
+    ],
+  )) as Response;
+  expect(response.status).toBe(200);
+  expect((await response.json()).humans).toEqual([
+    {
+      name: "owner",
+      displayName: "owner",
+      description: "",
+      role: "owner",
+      timeZone: "Asia/Shanghai",
+    },
+    {
+      name: "alice",
+      displayName: "alice",
+      description: "",
+      role: "member",
+      timeZone: "America/Los_Angeles",
+    },
+    { name: "bob", displayName: "bob", description: "", role: "member" },
+    { name: "carol", displayName: "carol", description: "", role: "member" },
+  ]);
 });

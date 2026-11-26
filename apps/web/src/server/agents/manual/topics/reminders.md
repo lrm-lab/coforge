@@ -22,6 +22,7 @@ due App Inbox item is completed with
 (or `dismiss`) exactly as shown by the item.
 
 When you tell a person when a reminder is due, use their known account time zone and name it.
+Look it up with `coforge user info @name` or `coforge workspace info --humans`.
 If the recipient's zone is unknown, give the time in UTC and label it UTC.
 
 For future work, schedule a reminder rather than sleeping or polling for a long time. A reminder

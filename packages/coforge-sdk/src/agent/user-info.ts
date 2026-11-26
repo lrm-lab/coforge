@@ -23,6 +23,8 @@ export type AgentUserInfo = {
    * `null` in practice today (both default to `"member"`), but typed nullable defensively. */
   role: string | null;
   isSelf: boolean;
+  /** Effective account time zone for a human, when known. */
+  timeZone?: string;
   /** Agent-only fields below; absent for a human. */
   computerName?: string;
   status?: AgentUserStatus;
@@ -104,7 +106,8 @@ export function decodeAgentUserInfoResponse(value: unknown): AgentUserInfoRespon
     typeof u.displayName !== "string" ||
     typeof u.description !== "string" ||
     (u.role !== null && typeof u.role !== "string") ||
-    typeof u.isSelf !== "boolean"
+    typeof u.isSelf !== "boolean" ||
+    (u.timeZone !== undefined && typeof u.timeZone !== "string")
   )
     throw new Error("invalid Agent user info response: malformed user");
   if (!Array.isArray(candidate.memberships) || !candidate.memberships.every(isUserInfoMembership))

@@ -347,3 +347,13 @@ test("--projects <slug> shows one Project's full description and open-Task count
   expect(text).toContain("The shared backend. Everything else depends on it.");
   expect(() => info(["--projects", "nope"])).toThrow("No project named nope is visible");
 });
+
+test("shows known human time zones in the paged directory, full view and JSON", () => {
+  const directory = {
+    ...BASE,
+    humans: [{ ...human("alice"), timeZone: "Europe/Paris" }, human("bob")],
+  };
+  expect(info(["--humans"], directory)).toContain("@alice [time zone=Europe/Paris]\n@bob\n");
+  expect(info(["--full"], directory)).toContain("  - @alice [time zone=Europe/Paris]\n  - @bob\n");
+  expect(JSON.parse(info(["--json"], directory)).humans).toEqual(directory.humans);
+});

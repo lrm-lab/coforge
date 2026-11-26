@@ -137,3 +137,12 @@ test("an unknown user gets the next step to find them", async () => {
     "Run `coforge workspace info --agents --query <name>` or `coforge workspace info --humans --query <name>` to inspect visible users.",
   );
 });
+
+test("shows a human's effective time zone in text and JSON and omits it when unknown", async () => {
+  const legacy = human([]);
+  const response = { ...legacy, user: { ...legacy.user, timeZone: "Pacific/Kiritimati" } };
+  expect(await userInfo(["alice"], response)).toContain("Time zone: Pacific/Kiritimati");
+  expect(await userInfo(["alice", "--json"], response)).toEqual(response);
+  expect(await userInfo(["alice"], legacy)).not.toContain("Time zone:");
+  expect(await userInfo(["alice", "--json"], legacy)).toEqual(legacy);
+});

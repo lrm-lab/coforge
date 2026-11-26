@@ -4,7 +4,14 @@ export type WorkspaceInfoRequest = { idempotencyKey: string };
 export type WorkspaceInfoResponse = {
   idempotencyKey: string;
   workspace: Workspace;
-  humans: { id: string; name: string; displayName: string; role: string; description?: string }[];
+  humans: {
+    id: string;
+    name: string;
+    displayName: string;
+    role: string;
+    description?: string;
+    timeZone?: string;
+  }[];
   agents: {
     id: string;
     name: string;
