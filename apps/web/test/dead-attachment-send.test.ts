@@ -126,6 +126,17 @@ describe("sendChannel dead attachment contract", () => {
     const linkedAttachments: { id: string; messageId: string; position: number }[] = [];
 
     const tx = {
+      $executeRaw: async (
+        _sql: TemplateStringsArray,
+        messageId: string,
+        ids: string[],
+        positions: number[],
+      ) => {
+        linkedAttachments.push(
+          ...ids.map((id, index) => ({ id, messageId, position: positions[index]! })),
+        );
+        return ids.length;
+      },
       $queryRaw: async () => [{ id: "ch-1" }],
       conversation: {
         findFirst: async () => null,
@@ -134,21 +145,6 @@ describe("sendChannel dead attachment contract", () => {
       attachment: {
         findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
           where.id.in.filter((id) => availableIds.has(id)).map((id) => ({ id })),
-        update: async ({
-          where,
-          data,
-        }: {
-          where: { id: string };
-          data: { messageId: string; position: number };
-        }) => {
-          linkedAttachments.push({ id: where.id, ...data });
-          return {
-            id: where.id,
-            fileName: `${where.id}.txt`,
-            contentType: "text/plain",
-            sizeBytes: 10,
-          };
-        },
       },
       conversationMember: {
         findMany: async () => [],
@@ -214,12 +210,14 @@ describe("sendChannel dead attachment contract", () => {
             user: { id: "user-1", username: "dev", displayName: "Dev User", avatarUrl: null },
             agent: null,
           },
-          attachments: linkedAttachments.map((item) => ({
-            id: item.id,
-            fileName: `${item.id}.txt`,
-            contentType: "text/plain",
-            sizeBytes: 10,
-          })),
+          attachments: [...linkedAttachments]
+            .sort((left, right) => left.position - right.position)
+            .map((item) => ({
+              id: item.id,
+              fileName: `${item.id}.txt`,
+              contentType: "text/plain",
+              sizeBytes: 10,
+            })),
           deliveries: [],
         }),
       },
@@ -272,7 +270,10 @@ describe("sendChannel dead attachment contract", () => {
     });
     expect(sent.id).toBe("msg-1");
     expect(createdMessages).toEqual(["msg-1"]);
-    expect(linkedAttachments.map((item) => item.id)).toEqual(["replacement-2", "valid-1"]);
+    expect(linkedAttachments).toEqual([
+      { id: "replacement-2", messageId: "msg-1", position: 0 },
+      { id: "valid-1", messageId: "msg-1", position: 1 },
+    ]);
 
     const retried = await sendChannel(ports, {
       workspaceId: "ws-1",
@@ -284,6 +285,7 @@ describe("sendChannel dead attachment contract", () => {
     });
     expect(retried.id).toBe("msg-1");
     expect(createdMessages).toEqual(["msg-1"]);
+    expect(linkedAttachments).toHaveLength(2);
   });
 });
 

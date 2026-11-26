@@ -1,10 +1,13 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 
 describe("PrismaDirectConversationRepository sending", () => {
   test("sendAgentMessage links two attachments in send order and rejects one the Agent did not upload", async () => {
-    const updates: { where: unknown; data: unknown }[] = [];
+    const executeRaw = mock(
+      async (_sql: TemplateStringsArray, _messageId: string, ids: string[], _positions: number[]) =>
+        ids.length,
+    );
     let attachmentQueries = 0;
     const attachmentsById: Record<
       string,
@@ -39,6 +42,7 @@ describe("PrismaDirectConversationRepository sending", () => {
       },
     };
     const tx = {
+      $executeRaw: executeRaw,
       $queryRaw: async () => [{ first: 1 }],
       message: {
         findFirst: async () => null,
@@ -70,10 +74,6 @@ describe("PrismaDirectConversationRepository sending", () => {
               },
             ];
           });
-        },
-        update: async ({ where, data }: { where: unknown; data: unknown }) => {
-          updates.push({ where, data });
-          return {};
         },
       },
       conversationMember: { findMany: async () => [] },
@@ -111,19 +111,16 @@ describe("PrismaDirectConversationRepository sending", () => {
       "attach-a",
     ]);
 
-    // Order matches send order (B, then A), not any other reordering.
     expect(result.attachments.map((a) => a.id)).toEqual(["attach-b", "attach-a"]);
     expect(attachmentQueries).toBe(1);
-    expect(updates).toEqual([
-      { where: { id: "attach-b" }, data: { messageId: "message-new", position: 0 } },
-      { where: { id: "attach-a" }, data: { messageId: "message-new", position: 1 } },
+    expect(executeRaw.mock.calls).toEqual([
+      [expect.any(Array), "message-new", ["attach-a", "attach-b"], [1, 0]],
     ]);
 
-    // The uploaderAgentId gap: a different Agent's unlinked attachment is rejected, which
-    // closes that gap.
     await expect(
       repository.sendAgentMessage("conversation-1", "agent-1", "not mine", ["attach-foreign"]),
     ).rejects.toThrow("attachment is not available for this message");
+    expect(executeRaw).toHaveBeenCalledTimes(1);
   });
 
   test("sendAgentMessage stores a resolvable task reference as a token and leaves an unknown number alone", async () => {
@@ -184,12 +181,14 @@ describe("PrismaDirectConversationRepository sending", () => {
       [],
     );
 
-    // Only the number that names a real task of this conversation becomes a structured reference.
     expect(created[0]!.data.body).toBe("follow <@task:68>, not task #999");
   });
 
   test("sendMessage links two human-uploaded attachments in send order", async () => {
-    const updates: { where: unknown; data: unknown }[] = [];
+    const executeRaw = mock(
+      async (_sql: TemplateStringsArray, _messageId: string, ids: string[], _positions: number[]) =>
+        ids.length,
+    );
     let attachmentQueries = 0;
     const attachmentsById: Record<
       string,
@@ -211,6 +210,7 @@ describe("PrismaDirectConversationRepository sending", () => {
       },
     };
     const tx = {
+      $executeRaw: executeRaw,
       $queryRaw: async () => [{ first: 1 }],
       message: {
         findFirst: async () => null,
@@ -230,10 +230,6 @@ describe("PrismaDirectConversationRepository sending", () => {
             if (!row || where.uploaderId !== "user-1") return [];
             return [row];
           });
-        },
-        update: async ({ where, data }: { where: unknown; data: unknown }) => {
-          updates.push({ where, data });
-          return {};
         },
       },
     };
@@ -267,9 +263,8 @@ describe("PrismaDirectConversationRepository sending", () => {
 
     expect(result.attachments.map((a) => a.id)).toEqual(["attach-b", "attach-a"]);
     expect(attachmentQueries).toBe(1);
-    expect(updates).toEqual([
-      { where: { id: "attach-b" }, data: { messageId: "message-new", position: 0 } },
-      { where: { id: "attach-a" }, data: { messageId: "message-new", position: 1 } },
+    expect(executeRaw.mock.calls).toEqual([
+      [expect.any(Array), "message-new", ["attach-a", "attach-b"], [1, 0]],
     ]);
   });
 

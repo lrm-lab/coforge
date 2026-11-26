@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { sendChannel } from "#src/server/conversations/channel-send.server";
@@ -100,10 +100,13 @@ describe("sendChannel error precedence and attachment deduplication", () => {
   });
 
   test("deduplicates duplicate attachmentIds in sendChannel fast path", async () => {
-    const updatedPositions: Array<{ id: string; position: number }> = [];
+    const executeRaw = mock(
+      async (_sql: TemplateStringsArray, _messageId: string, ids: string[], _positions: number[]) =>
+        ids.length,
+    );
     const createdAt = new Date("2026-11-25T10:00:00.000Z");
     const tx = {
-      $executeRaw: async () => 1,
+      $executeRaw: executeRaw,
       $queryRaw: async () => [{ next: 15 }],
       conversation: { findFirst: async () => null },
       conversationMember: { findMany: async () => [] },
@@ -130,9 +133,6 @@ describe("sendChannel error precedence and attachment deduplication", () => {
             forwardPosition: null,
           },
         ],
-        update: async (args: { where: { id: string }; data: { position: number } }) => {
-          updatedPositions.push({ id: args.where.id, position: args.data.position });
-        },
       },
       message: {
         create: async () => ({
@@ -200,9 +200,8 @@ describe("sendChannel error precedence and attachment deduplication", () => {
       },
     );
 
-    expect(updatedPositions).toEqual([
-      { id: "att-1", position: 0 },
-      { id: "att-2", position: 1 },
+    expect(executeRaw.mock.calls).toEqual([
+      [expect.any(Array), "msg-15", ["att-1", "att-2"], [0, 1]],
     ]);
     expect(sent.attachments.map((att) => att.id)).toEqual(["att-1", "att-2"]);
   });
