@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { AlertCircle, ChevronDown, ChevronUp } from "@untitledui/icons";
 
@@ -39,20 +40,30 @@ export function WeeklyReportCollectRunCard(props: {
   onCollectAdvanced?: (status: string) => void;
 }) {
   const load = useServerFn(loadWeeklyReportCollectRun);
-  const [run, setRun] = useState<Awaited<ReturnType<typeof loadWeeklyReportCollectRun>> | null>(
-    null,
-  );
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [retrying, setRetrying] = useState(false);
   const [openIds, setOpenIds] = useState<string[]>([]);
   const onAdvancedRef = useRef(props.onCollectAdvanced);
   onAdvancedRef.current = props.onCollectAdvanced;
   const leftCollectingNotified = useRef(false);
 
-  const fetchRun = useCallback(async () => {
-    const next = await load({ data: { runId: props.runId } });
-    setRun(next);
-    setLoadFailed(false);
+  const query = useQuery({
+    queryKey: ["weekly-report-collect-run", props.runId],
+    queryFn: () => load({ data: { runId: props.runId } }),
+    refetchInterval: (current) => {
+      const data = current.state.data;
+      if (!data) return false;
+      const inFlight = data.status === "collecting" || data.status === "synthesizing";
+      return inFlight && !data.allTerminal ? 4_000 : false;
+    },
+    retry: false,
+  });
+
+  useEffect(() => {
+    leftCollectingNotified.current = false;
+  }, [props.runId]);
+
+  useEffect(() => {
+    const next = query.data;
+    if (!next) return;
     const notify = onAdvancedRef.current;
     if (next.status === "synthesizing") {
       notify?.(next.status);
@@ -60,36 +71,12 @@ export function WeeklyReportCollectRunCard(props: {
       leftCollectingNotified.current = true;
       notify?.(next.status);
     }
-    return next;
-  }, [load, props.runId]);
+  }, [query.data, query.dataUpdatedAt]);
 
-  useEffect(() => {
-    leftCollectingNotified.current = false;
-    let cancelled = false;
-    let timer: ReturnType<typeof setInterval> | undefined;
-    async function refresh() {
-      try {
-        const next = await fetchRun();
-        if (cancelled) return;
-        const inFlight = next.status === "collecting" || next.status === "synthesizing";
-        if ((!inFlight || next.allTerminal) && timer) {
-          clearInterval(timer);
-          timer = undefined;
-        }
-      } catch {
-        if (!cancelled) setLoadFailed(true);
-      }
-    }
-    void refresh();
-    timer = setInterval(() => void refresh(), 4000);
-    return () => {
-      cancelled = true;
-      if (timer) clearInterval(timer);
-    };
-  }, [fetchRun]);
+  const run = query.data ?? null;
 
   if (!run) {
-    if (loadFailed) {
+    if (query.isError) {
       return (
         <EmptyState
           size="card"
@@ -99,12 +86,9 @@ export function WeeklyReportCollectRunCard(props: {
           primaryAction={
             <RetryButton
               size="card"
-              isRetrying={retrying}
+              isRetrying={query.isRefetching}
               onPress={() => {
-                setRetrying(true);
-                void fetchRun()
-                  .catch(() => setLoadFailed(true))
-                  .finally(() => setRetrying(false));
+                void query.refetch();
               }}
             />
           }

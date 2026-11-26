@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ComponentType, type SVGProps } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { ChevronRight, FolderLock, GitBranch01, Share04 } from "@untitledui/icons";
@@ -32,8 +33,6 @@ import {
 } from "#src/components/ui/dialog-actions";
 
 type Source = "scratch" | "github";
-type GitHubConnection = Awaited<ReturnType<typeof getGitHubConnection>>;
-type AccessibleRepository = Awaited<ReturnType<typeof listAccessibleGitHubRepositories>>[number];
 
 export function CreateProjectDialog({
   open,
@@ -51,21 +50,40 @@ export function CreateProjectDialog({
   const create = useServerFn(createProject);
   const [step, setStep] = useState<"choose" | "form">("choose");
   const [source, setSource] = useState<Source>("scratch");
-  const [connection, setConnection] = useState<GitHubConnection | null>(null);
-  const [items, setItems] = useState<AccessibleRepository[]>([]);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [repositoryQuery, setRepositoryQuery] = useState("");
   const [repositoryId, setRepositoryId] = useState(0);
-  const [error, setError] = useState("");
+  const [submitError, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const slugTouched = useRef(false);
   const nameTouched = useRef(false);
 
+  const githubFormActive = open && step === "form" && source === "github";
+  const connectionQuery = useQuery({
+    queryKey: ["github", "connection"],
+    queryFn: () => githubConnection(),
+    enabled: githubFormActive,
+    retry: false,
+  });
+  const connection = connectionQuery.data ?? null;
+  const githubConnected = connection?.status === "connected";
+  const repositoriesQuery = useQuery({
+    queryKey: ["github", "repositories"],
+    queryFn: () => repositories(),
+    enabled: githubFormActive && githubConnected,
+    retry: false,
+  });
+  const items = repositoriesQuery.data ?? [];
+  const error =
+    submitError ||
+    (githubFormActive && (connectionQuery.isError || repositoriesQuery.isError)
+      ? m.project_repository_unavailable()
+      : "");
+
   const slugError = slug.length > 0 && !isValidProjectSlug(slug) ? m.project_slug_invalid() : "";
   const needsRepository = source === "github";
-  const githubConnected = connection?.status === "connected";
   const selectedRepository = items.find((item) => item.id === repositoryId);
   const parsedRepository = parseGitHubRepositoryInput(repositoryQuery);
   const canSubmit =
@@ -79,8 +97,6 @@ export function CreateProjectDialog({
     setStep("choose");
     setSource("scratch");
     setError("");
-    setConnection(null);
-    setItems([]);
     setName("");
     setSlug("");
     setRepositoryQuery("");
@@ -90,36 +106,8 @@ export function CreateProjectDialog({
     slugTouched.current = false;
   }, [open]);
 
-  useEffect(() => {
-    if (!open || step !== "form" || source !== "github") return;
-    let cancelled = false;
-    setError("");
-    setConnection(null);
-    setItems([]);
-    githubConnection()
-      .then(async (next) => {
-        if (cancelled) return;
-        setConnection(next);
-        if (next.status !== "connected") return;
-        try {
-          const available = await repositories();
-          if (!cancelled) setItems(available);
-        } catch {
-          if (!cancelled) setError(m.project_repository_unavailable());
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setError(m.project_repository_unavailable());
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [githubConnection, open, repositories, source, step]);
-
   function resetForm() {
     setError("");
-    setConnection(null);
-    setItems([]);
     setName("");
     setSlug("");
     setRepositoryQuery("");

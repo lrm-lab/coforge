@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft } from "@untitledui/icons";
@@ -36,31 +37,18 @@ export function ProjectSettingsPage({
   const [imageMessage, setImageMessage] = useState("");
   const [saved, setSaved] = useState(false);
   const [selection, setSelection] = useState("keep");
-  const [items, setItems] = useState<Awaited<ReturnType<typeof listAccessibleGitHubRepositories>>>(
-    [],
-  );
-  const [loading, setLoading] = useState(true);
-  const [repositoryError, setRepositoryError] = useState(false);
+  const repositoriesQuery = useQuery({
+    queryKey: ["github", "repositories"],
+    queryFn: () => repositories(),
+    retry: false,
+  });
+  const items = repositoriesQuery.data ?? [];
+  const loading = repositoriesQuery.isPending;
+  const repositoryError = repositoriesQuery.isError;
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmation, setConfirmation] = useState("");
-  useEffect(() => {
-    let cancelled = false;
-    repositories()
-      .then((available) => {
-        if (!cancelled) setItems(available);
-      })
-      .catch(() => {
-        if (!cancelled) setRepositoryError(true);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [repositories]);
 
   async function changeImage(file: File) {
     if (busy) return;

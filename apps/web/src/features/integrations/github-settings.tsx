@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { InfoCircle } from "@untitledui/icons";
 import { Popover as AriaPopover } from "react-aria-components";
@@ -26,45 +27,43 @@ const callbackFailureMessage = {
 } satisfies Record<GitHubCallbackFailure, () => string>;
 
 export function GitHubSettings({ callbackFailure }: { callbackFailure?: GitHubCallbackFailure }) {
-  const [connection, setConnection] = useState<Awaited<ReturnType<typeof getGitHubConnection>>>();
-  const [revision, setRevision] = useState(0);
+  const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
+  const [actionError, setActionError] = useState(false);
   const load = useServerFn(getGitHubConnection);
   const refresh = useServerFn(refreshGitHubConnection);
   const connect = useServerFn(startGitHubConnection);
   const install = useServerFn(startGitHubInstallation);
   const reauthorize = useServerFn(startGitHubReauthorization);
   const disconnect = useServerFn(disconnectGitHub);
+  const connectionQuery = useQuery({
+    queryKey: ["github", "connection"],
+    queryFn: () => load(),
+    retry: false,
+  });
+  const connection = connectionQuery.data;
+  const error = actionError || connectionQuery.isError;
+
   useEffect(() => {
-    let cancelled = false;
-    setConnection(undefined);
-    setError(false);
-    load()
-      .then((value) => {
-        if (cancelled) return;
-        setConnection(value);
-        refresh()
-          .then((next) => {
-            if (!cancelled) setConnection(next);
-          })
-          .catch(() => {});
+    if (!connectionQuery.isSuccess) return;
+    let active = true;
+    refresh()
+      .then((next) => {
+        if (active) queryClient.setQueryData(["github", "connection"], next);
       })
-      .catch(() => {
-        if (!cancelled) setError(true);
-      });
+      .catch(() => {});
     return () => {
-      cancelled = true;
+      active = false;
     };
-  }, [load, refresh, revision]);
+  }, [connectionQuery.isSuccess, queryClient, refresh]);
 
   async function authorize() {
     setBusy(true);
-    setError(false);
+    setActionError(false);
     try {
       window.location.assign((await connect()).url);
     } catch {
-      setError(true);
+      setActionError(true);
     } finally {
       setBusy(false);
     }
@@ -72,11 +71,11 @@ export function GitHubSettings({ callbackFailure }: { callbackFailure?: GitHubCa
 
   async function restoreAuthorization() {
     setBusy(true);
-    setError(false);
+    setActionError(false);
     try {
       window.location.assign((await reauthorize()).url);
     } catch {
-      setError(true);
+      setActionError(true);
     } finally {
       setBusy(false);
     }
@@ -84,22 +83,22 @@ export function GitHubSettings({ callbackFailure }: { callbackFailure?: GitHubCa
 
   async function configureInstallation() {
     setBusy(true);
-    setError(false);
+    setActionError(false);
     try {
       window.location.assign((await install()).url);
     } catch {
-      setError(true);
+      setActionError(true);
       setBusy(false);
     }
   }
 
   async function retryRefresh() {
     setBusy(true);
-    setError(false);
+    setActionError(false);
     try {
-      setConnection(await refresh());
+      queryClient.setQueryData(["github", "connection"], await refresh());
     } catch {
-      setError(true);
+      setActionError(true);
     } finally {
       setBusy(false);
     }
@@ -205,7 +204,7 @@ export function GitHubSettings({ callbackFailure }: { callbackFailure?: GitHubCa
                 isDisabled={busy}
                 onConfirm={async () => {
                   await disconnect();
-                  setRevision((value) => value + 1);
+                  await queryClient.invalidateQueries({ queryKey: ["github"] });
                 }}
               >
                 <Button size="sm" color="secondary" isDisabled={busy}>
