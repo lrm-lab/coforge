@@ -10,6 +10,7 @@ export * from "./stream-events";
 export * from "./message-events";
 export * from "./observations";
 export * from "./rate-limit";
+export type { ClaudeQuotaObservation } from "./quota-observation";
 export * from "./usage-plan";
 export * from "./subagent-lineage";
 export * from "./task-lifecycle";

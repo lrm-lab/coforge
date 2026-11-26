@@ -9,6 +9,12 @@ import { assertClaudeStartupPromptWithinBudget } from "./startup-guard";
 import { readClaudeRecycleBriefing } from "./recycle-briefing";
 import { readClaudeSessionResumeFacts } from "./session-transcript";
 import { ClaudeCodeAgentSession } from "./session";
+import { ClaudeQuotaObserver, type ClaudeQuotaObservation } from "./quota-observation";
+
+export type ClaudeQuotaObservationOptIn = Readonly<{
+  runtimeId: string;
+  observe: (observation: ClaudeQuotaObservation) => void;
+}>;
 
 export class ClaudeCodeProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.CLAUDE_CODE;
@@ -18,7 +24,14 @@ export class ClaudeCodeProvider implements CodeAgentProvider {
   readonly #host: ClaudeRuntimeHost;
   readonly #command: readonly string[];
 
-  constructor(options: { host: ClaudeRuntimeHost; command?: readonly string[] }) {
+  #quotaObservation: ClaudeQuotaObservationOptIn | undefined;
+
+  constructor(options: {
+    host: ClaudeRuntimeHost;
+    command?: readonly string[];
+    quotaObservation?: ClaudeQuotaObservationOptIn;
+  }) {
+    this.#quotaObservation = options.quotaObservation;
     this.#host = options.host;
     this.#command = options.command ?? [
       "claude",
@@ -51,6 +64,9 @@ export class ClaudeCodeProvider implements CodeAgentProvider {
   async createAgentSession(options: AgentSessionOptions): Promise<AgentSession> {
     if (options.sessionId !== undefined && !options.sessionId.trim())
       throw new Error("Invalid session ID");
+    const observation =
+      this.#quotaObservation?.runtimeId === options.runtimeId ? this.#quotaObservation : undefined;
+    if (observation) this.#quotaObservation = undefined;
     const prompt = await this.#host.createPromptFile(options.instructions);
     let process: JsonlProcess | undefined;
     try {
@@ -89,6 +105,7 @@ export class ClaudeCodeProvider implements CodeAgentProvider {
         initialFreshSessionId,
         options.runtime?.model,
         autoCompactWindow,
+        observation ? new ClaudeQuotaObserver(observation.observe) : undefined,
       );
       await session.ready();
       return session;

@@ -37,6 +37,7 @@ import { ClaudeSessionObservations } from "./observations";
 import { CLAUDE_PROCESS_EXITED, observeClaudeProcess } from "./process-observation";
 import { relayTaskLifecycle, taskProgressEvent, type TrackedTask } from "./task-lifecycle";
 import { SessionExit } from "#src/session-exit";
+import type { ClaudeQuotaObserver } from "./quota-observation";
 
 export class ClaudeCodeAgentSession implements AgentSession {
   readonly steersBusyTurn = true;
@@ -52,8 +53,6 @@ export class ClaudeCodeAgentSession implements AgentSession {
   #nativeTurnQueued = false;
   #turnRefused = false;
   #turnErrorReported = false;
-  /** Whether a top-level `result` has been seen. Set once and never reset: the fresh relau
-   * (`#startFresh`) runs only before any progress, and a result is progress. */
   #resultObserved = false;
   #initialized = false;
   #nativeIdentityObserved = false;
@@ -61,11 +60,9 @@ export class ClaudeCodeAgentSession implements AgentSession {
   #sessionId: string | undefined;
   #sessionReports = Promise.resolve();
   #identity: AgentSessionIdentity | undefined;
-  // A fresh Claude session becomes ready at its first result.
   #sessionReadyForNotices = false;
   #compacting = false;
   #deferredCompactionError: ClaudeFailureEvent | undefined;
-  /** Live non-ambient tasks by id: tool call and lifecycle kind; types in `#subagentLineage`. */
   readonly #tasks = new Map<string, TrackedTask>();
   readonly #subagentLineage = new ClaudeSubagentLineage();
   #nextSubagentStop = 0;
@@ -87,6 +84,7 @@ export class ClaudeCodeAgentSession implements AgentSession {
     initialFreshSessionId?: string,
     configuredModel?: string,
     autoCompactWindow?: number,
+    private readonly quotaObserver?: ClaudeQuotaObserver,
   ) {
     this.#streamEvents = new ClaudeStreamEvents(turnHost);
     this.#process = process;
@@ -307,6 +305,7 @@ export class ClaudeCodeAgentSession implements AgentSession {
       this.#firstInput = undefined;
     }
     const currentMainSession = isClaudeMainSessionRecord(record, this.#sessionId);
+    if (currentMainSession) this.quotaObserver?.accept(record, this.#sessionId);
     if (record.type === "system" && record.parent_tool_use_id == null) {
       if (currentMainSession && record.subtype === "status" && record.status === "compacting") {
         this.#compacting = true;
@@ -351,11 +350,12 @@ export class ClaudeCodeAgentSession implements AgentSession {
     }
     if (record.type === "rate_limit_event") {
       const rateLimitSession = record.session_id === this.#sessionId ? this.#sessionId : undefined;
+      const exactMainSession = currentMainSession && rateLimitSession !== undefined;
       const snapshot = this.#rateLimits.observe(record, rateLimitSession ?? this.#sessionId, {
-        modelScope: currentMainSession && rateLimitSession !== undefined,
+        modelScope: exactMainSession,
       });
       if (snapshot) this.#emit({ type: AGENT_RUNTIME_EVENT_TYPE.USAGE, snapshot });
-      if (currentMainSession && record.session_id === this.#sessionId && this.#sessionId) {
+      if (exactMainSession) {
         const available = claudeModelWindowAvailable(record);
         if (available) this.#emit(available);
       }

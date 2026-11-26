@@ -33,7 +33,7 @@ export function claudeModelWindowAvailable(
   const info = asRecord(record.rate_limit_info);
   if (info?.status !== "allowed" && info?.status !== "allowed_warning") return;
   const modelWindow = claudeModelWindow(info.rateLimitType);
-  const reset = resetTime(info.resetsAt);
+  const reset = claudeQuotaResetTime(info.resetsAt);
   const observed = record.timestamp;
   if (
     !modelWindow ||
@@ -93,7 +93,7 @@ export class ClaudeRateLimitState {
     options: { modelScope: boolean } = { modelScope: true },
   ): UsageSnapshot | undefined {
     const info = asRecord(record.rate_limit_info);
-    const resetsAt = resetTime(info?.resetsAt);
+    const resetsAt = claudeQuotaResetTime(info?.resetsAt);
     if (typeof info?.status === "string" && info.status)
       this.#rejected =
         info.status === "rejected"
@@ -151,7 +151,7 @@ export class ClaudeRateLimitState {
 }
 
 /** A `resetsAt` in epoch seconds (as documented) or milliseconds. */
-function resetTime(value: unknown): Date | undefined {
+export function claudeQuotaResetTime(value: unknown): Date | undefined {
   if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
   const reset = new Date(value >= 1e12 ? value : value * 1_000);
   return Number.isNaN(reset.getTime()) ? undefined : reset;

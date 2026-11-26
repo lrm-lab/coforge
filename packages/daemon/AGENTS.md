@@ -78,6 +78,7 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 
 | Path                                             | Single responsibility                                                                                                                                                             |
 | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dev/claude-quota-observation.ts`                | Private, bounded quota capture for a single explicitly approved non-production launch                                                                                             |
 | `src/daemon-startup-options.ts`, `index.ts`      | Private daemon invocation options, default state directory; process entrypoint and package exports (dependency assembly only)                                                     |
 | `src/daemon-host/`                               | Login-session startup through launchd, systemd user, and Windows tasks                                                                                                            |
 | `src/supervisor/`                                | Machine Coordinator: Workspace binding registry and per-Workspace process lifecycle                                                                                               |

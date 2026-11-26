@@ -23,6 +23,8 @@
 - Auth retains the native version floor, trusted HTTPS hosts, pasted-code handling,
   cancellation, redaction and status classification. Never discover another CLI
   or launch a local browser behind the host's back.
+- The launch-scoped quota observer accepts only the current top-level session
+  and projects a fixed set of local diagnostic fields before quota normalization.
 - Native history layout and control records include observed internals. Keep their
   versioned comments and bounds; do not treat them as documented stable APIs.
   History reads are bounded and read-only. Secured workspace rereads stay behind
