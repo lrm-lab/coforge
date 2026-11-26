@@ -35,7 +35,6 @@ function endsThinking(event: AgentRuntimeEvent): boolean {
 /** How long a text or thinking run stays quiet before its pending text is flushed as a row. */
 export const TRAJECTORY_QUIET_WINDOW_MS = 350;
 
-/** One instance per launch. Never retains tool arguments/output or hidden reasoning. */
 export class ActivityTrajectory {
   #pending?: {
     kind: "text" | "thinking";
@@ -44,13 +43,8 @@ export class ActivityTrajectory {
     truncated: boolean;
   };
   #timer?: ReturnType<typeof setTimeout>;
+  #flushAtMs = 0;
   #disposed = false;
-  /**
-   * The detail kind of the last activity actually forwarded downstream, excluding
-   * `runtime_progress` (a content-free liveness filler that must not affect either
-   * open-thinking or re-announcement bookkeeping). Drives both when a thinking run
-   * closes (`accept()`) and when a fresh run re-announces its kind (`#startRun()`).
-   */
   #lastAnnounced?: AgentActivityDetailKind;
   constructor(private readonly emit: (event: AgentRuntimeEvent) => void) {}
 
@@ -85,13 +79,9 @@ export class ActivityTrajectory {
         subagent: event.subagent,
         truncated: false,
       };
-      // A truncated prefix cannot grow, except when a later low surrogate completes its
-      // final high surrogate. Keep that boundary behavior, without rescanning a full prefix
-      // for every discarded tail. Deltas still reset the quiet window below.
       const last = pending.truncated ? pending.text.charCodeAt(pending.text.length - 1) : 0;
       if (!pending.truncated || (last >= 0xd800 && last <= 0xdbff)) {
         const text = pending.text + event.text;
-        // UTF-16 code units bound the code-point count, avoiding two arrays while in budget.
         if (text.length <= 8000) {
           pending.text = text;
         } else {
@@ -100,16 +90,10 @@ export class ActivityTrajectory {
         }
       }
       this.#pending = pending;
-      clearTimeout(this.#timer);
-      this.#timer = setTimeout(() => this.flush(), TRAJECTORY_QUIET_WINDOW_MS);
+      this.#flushAtMs = Date.now() + TRAJECTORY_QUIET_WINDOW_MS;
+      if (this.#timer === undefined) this.#armTimer(TRAJECTORY_QUIET_WINDOW_MS);
       return;
     }
-    // Phase boundaries (compaction, review) flush pending text first, like a tool call or a
-    // turn ending.
-    // A bare "progress" ping never flushes.
-    // "error" flushing here (rather than in the runtime-error-activity conversion itself) is
-    // also what lets a separate in-flight change treat `error` as a thinking-end trigger: by the
-    // time that trajectory entry exists, any pending thinking/text is already flushed ahead of it.
     if (
       event.type === "tool-start" ||
       event.type === "activity" ||
@@ -123,12 +107,23 @@ export class ActivityTrajectory {
     this.#forward(event);
   }
 
-  /**
-   * Announces a fresh run's kind immediately, with no entries, so the Agent's status
-   * flips to thinking/working at once instead of waiting for the quiet-window flush (which
-   * carries the entries, as before). Skipped when the kind is already the last
-   * announced one — an idle-timer split continuing the same run re-announces nothing.
-   */
+  #armTimer(delayMs: number) {
+    const timer = setTimeout(() => this.#onTimer(), delayMs);
+    timer?.unref?.();
+    this.#timer = timer;
+  }
+
+  #onTimer() {
+    this.#timer = undefined;
+    if (this.#disposed || !this.#pending) return;
+    const remaining = this.#flushAtMs - Date.now();
+    if (remaining > 0) {
+      this.#armTimer(Math.min(remaining, TRAJECTORY_QUIET_WINDOW_MS));
+      return;
+    }
+    this.flush();
+  }
+
   #startRun(kind: "text" | "thinking") {
     const detailKind =
       kind === "thinking"
@@ -144,8 +139,6 @@ export class ActivityTrajectory {
       event.activity.detailKind !== AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_PROGRESS
     )
       this.#lastAnnounced = event.activity.detailKind;
-    // The daemon core turns a tool-start into its Activity downstream; count it as announced
-    // here so the run that follows the tool call announces itself again.
     if (event.type === "tool-start") this.#lastAnnounced = AGENT_ACTIVITY_DETAIL_KIND.TOOL_STARTED;
     if (event.type === "reconnecting")
       this.#lastAnnounced = AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_RECONNECTING;
@@ -153,19 +146,17 @@ export class ActivityTrajectory {
   }
 
   flush() {
-    clearTimeout(this.#timer);
+    if (this.#timer !== undefined) clearTimeout(this.#timer);
     this.#timer = undefined;
+    this.#flushAtMs = 0;
     const pending = this.#pending;
     this.#pending = undefined;
     if (!pending) return;
-    const chars = [...redactTrajectoryText(pending.text)];
+    const redacted = redactTrajectoryText(pending.text);
     const text =
-      chars.length > 2000 || pending.truncated
-        ? chars.slice(0, 1999).join("") + "…"
-        : chars.join("");
-    // A segment that is only whitespace is no output: providers stream the separators between
-    // tool calls as their own chunk (`"\n\n"`), and each one must not become its own row. Text
-    // that carries words keeps its newlines exactly as they arrived.
+      pending.truncated || (redacted.length > 2000 && codePointLength(redacted) > 2000)
+        ? `${truncateCodePoints(redacted, 1999)}…`
+        : redacted;
     if (!text.trim()) return;
     this.#forward({
       type: "activity",

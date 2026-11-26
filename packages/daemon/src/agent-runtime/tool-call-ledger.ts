@@ -59,6 +59,9 @@ type ToolCallLedgerOptions = {
 export class ToolCallLedger {
   readonly #calls = new Map<string, ToolCall>();
   readonly #identity: ToolCallLogIdentity | undefined;
+  #openCount = 0;
+  #oldestOpen: ToolCall | undefined;
+  #oldestOpenId: string | undefined;
   #loggedCalls = 0;
   #reportedTruncation = false;
 
@@ -73,23 +76,29 @@ export class ToolCallLedger {
 
   observe(event: AgentRuntimeEvent): void {
     if (event.type === "tool-start") {
-      const known = this.#calls.has(event.id);
-      if (!known && this.#calls.size >= TOOL_CALL_LEDGER_MAX) return;
-      // A repeated start for a known id re-starts that call: it takes fresh clocks and is open
-      // again, as before this ledger logged anything. Its line is written once, when the turn
-      // ends or the call finishes.
-      this.#calls.set(event.id, {
+      const previous = this.#calls.get(event.id);
+      if (!previous && this.#calls.size >= TOOL_CALL_LEDGER_MAX) return;
+      const call: ToolCall = {
         name: event.name,
         startedAtMs: this.clock(),
         startedAtWallMs: this.wallClock(),
         startedAtProcessClockMs: this.processClock(),
-      });
+      };
+      if (previous === undefined || previous.endedAtMs !== undefined) this.#openCount += 1;
+      this.#calls.set(event.id, call);
+      if (this.#oldestOpenId === event.id) this.#recomputeOldestOpen();
+      else if (this.#oldestOpen === undefined || call.startedAtMs < this.#oldestOpen.startedAtMs) {
+        this.#oldestOpen = call;
+        this.#oldestOpenId = event.id;
+      }
     } else if (event.type === "tool-end") {
       const call = this.#calls.get(event.id);
-      if (call && call.endedAtMs === undefined) call.endedAtMs = this.clock();
+      if (call && call.endedAtMs === undefined) {
+        call.endedAtMs = this.clock();
+        this.#openCount -= 1;
+        if (this.#oldestOpenId === event.id) this.#recomputeOldestOpen();
+      }
     } else if (event.type === "completed") {
-      // The turn is over, so no call left in the ledger will reach `finish()`: write the line for
-      // each one now, in start order, saying whether its end was ever seen.
       for (const [id, call] of this.#calls)
         this.#logCall(
           id,
@@ -98,18 +107,16 @@ export class ToolCallLedger {
             ? "agent_runtime:tool_unfinished"
             : "agent_runtime:tool_finished",
         );
-      this.#calls.clear();
+      this.#clearCalls();
     }
   }
 
   get hasOpenToolCall(): boolean {
-    for (const call of this.#calls.values()) if (call.endedAtMs === undefined) return true;
-    return false;
+    return this.#openCount > 0;
   }
 
-  /** The oldest open tool, for a turn interrupt result or stalled Activity. */
   oldestOpenTool(): { name: string; silentForMs: number } | undefined {
-    const oldest = this.#oldestOpenTool();
+    const oldest = this.#oldestOpen;
     return oldest
       ? {
           name: oldest.name,
@@ -118,57 +125,56 @@ export class ToolCallLedger {
       : undefined;
   }
 
-  /** The start of the oldest open call, for the stalled-turn silence clock. */
   oldestOpenToolStartedAtMs(): number | undefined {
-    return this.#oldestOpenTool()?.startedAtWallMs;
+    return this.#oldestOpen?.startedAtWallMs;
   }
 
-  /** The start of the oldest open call on the host process clock, for the turn-scoped kill. */
   oldestOpenToolStartedProcessClockMs(): number | undefined {
-    return this.#oldestOpenTool()?.startedAtProcessClockMs;
+    return this.#oldestOpen?.startedAtProcessClockMs;
   }
 
-  /** Writes the line for every call this launch was still holding when its process ended — the
-   * turn-scoped kill, a shutdown, an unexpected exit — and forgets them. Such a call never
-   * reaches `finish()` and its turn never completes, so without this the one thing worth knowing
-   * about an Agent that went silent mid-command would be the only thing missing from the log. */
   logAbandoned(): void {
     for (const [id, call] of this.#calls) this.#logCall(id, call, "agent_runtime:tool_unfinished");
+    this.#clearCalls();
+  }
+
+  #clearCalls(): void {
     this.#calls.clear();
+    this.#openCount = 0;
+    this.#oldestOpen = undefined;
+    this.#oldestOpenId = undefined;
   }
 
-  #oldestOpenTool(): ToolCall | undefined {
-    return this.#oldestOpenToolEntry()?.[1];
-  }
-
-  #oldestOpenToolEntry(): [string, ToolCall] | undefined {
-    let oldest: [string, ToolCall] | undefined;
+  #recomputeOldestOpen(): void {
+    let oldestId: string | undefined;
+    let oldestCall: ToolCall | undefined;
     for (const [id, call] of this.#calls) {
       if (call.endedAtMs !== undefined) continue;
-      if (!oldest || call.startedAtMs < oldest[1].startedAtMs) oldest = [id, call];
+      if (!oldestCall || call.startedAtMs < oldestCall.startedAtMs) {
+        oldestId = id;
+        oldestCall = call;
+      }
     }
-    return oldest;
+    this.#oldestOpenId = oldestId;
+    this.#oldestOpen = oldestCall;
   }
 
-  /** Forgets the ended call and returns its outcome, or `undefined` when its id cannot go on
-   * the wire. */
   finish(end: ToolEnd): ActivityToolOutcome | undefined {
     const call = this.#calls.get(end.id);
     this.#calls.delete(end.id);
+    if (call && call.endedAtMs === undefined) {
+      this.#openCount -= 1;
+      if (this.#oldestOpenId === end.id) this.#recomputeOldestOpen();
+    }
     const measured = call && (call.endedAtMs ?? this.clock()) - call.startedAtMs;
     const durationMs = wholeMs(end.durationMs ?? measured);
     const exitCode = isActivityExitCode(end.exitCode) ? end.exitCode : undefined;
     const outcome = {
       callId: end.id,
-      // As in the reference client 1.0.50, a known exit code means the call ran: `ok` whatever
-      // the code, which is reported beside it. Only a call with no exit code is judged by its
-      // error flag.
       ok: exitCode !== undefined || !end.isError,
       ...(durationMs !== undefined ? { durationMs } : {}),
       ...(exitCode !== undefined ? { exitCode } : {}),
     };
-    // The line carries the call id the outcome does, so the two can be read together. An id the
-    // activity wire rejects still names a real call, so it is logged even when not published.
     const published = isActivityToolOutcome(outcome) ? outcome : undefined;
     this.#logCall(end.id, call, "agent_runtime:tool_finished", published);
     return published;

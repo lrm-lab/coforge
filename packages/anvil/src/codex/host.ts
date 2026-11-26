@@ -24,17 +24,19 @@ export interface CodexDirectoryEntry {
   isSymbolicLink(): boolean;
 }
 
-/**
- * Rollout reads stay in the Codex driver. The host performs the file IO and supplies
- * `CODEX_HOME` / `HOME` without the driver reading the process environment itself.
- */
+export interface CodexFileInfo {
+  readonly mtimeMs: number;
+  readonly size: number;
+  isFile(): boolean;
+}
+
 export interface CodexHistoryHost {
   readHostEnvironment(name: "CODEX_HOME" | "HOME" | "USERPROFILE"): string | undefined;
   homeDirectory(): string;
   readDirectoryEntries(path: string): Promise<readonly CodexDirectoryEntry[]>;
   resolveDirectoryWithoutSymlinks(path: string): Promise<string | null>;
+  lstat?(path: string): Promise<CodexFileInfo>;
   readFileTail(path: string, tailBytes: number): Promise<{ text: string; startOffset: number }>;
-  /** Byte windows used to reconstruct an overlap before the single UTF-8 decode. */
   readFileHeadBytes(root: string, path: string, headBytes: number): Promise<{ bytes: Uint8Array }>;
   readFileTailBytes(
     root: string,

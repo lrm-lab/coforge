@@ -1,38 +1,54 @@
-import type { ClaudeHistoryHost } from "./host";
+import type { ClaudeFileInfo, ClaudeHistoryHost } from "./host";
 import { isAbsolute, join } from "node:path";
 import { type PromptCacheTier, type SessionResumeFacts } from "#src/contract";
 import { asRecord } from "#src/json-record";
 import { claudeUsageContextTokens } from "./observations";
 import { readTailLines } from "#src/transcript-tail";
 
-/**
- * Claude Code's own session transcript, read for the idle-recycle decision and briefing.
- *
- * `CLAUDE_CONFIG_DIR` holding the session history is documented
- * (https://code.claude.com/docs/en/settings); the transcript layout below is NOT.
- * UNDOCUMENTED, observed with Claude Code 2.1.309 on 2026-10-23 (re-check when raising the Claude
- * Code version gate): `<configDir>/projects/<encoded cwd>/<sessionId>.jsonl` is one JSON object per
- * line; every record has an ISO `timestamp`; an `assistant` record carries `message.usage`
- * (`input_tokens`, `cache_read_input_tokens`, `cache_creation_input_tokens`) and one content block
- * (`thinking`, `text`, `tool_use`), so a reply spans several records with the same usage; sidechain
- * records say `isSidechain: true`; `<sessionId>/` beside the file holds `subagents/` and
- * `tool-results/`, which change while a session works without touching the transcript.
- */
-
-/** The tail of the transcript read for facts: enough for the last few model requests. */
 const FACTS_TAIL_BYTES = 512 * 1024;
-/** Project directories probed for one session; the search stops here rather than walk a huge store. */
 const MAX_PROJECT_DIRECTORIES = 5_000;
-/** The sidecar directory is walked this many levels below the session directory. */
 const SIDECAR_MAX_DEPTH = 2;
+const MAX_CACHED_TRANSCRIPTS = 512;
 
 type Environment = Readonly<Record<string, string>> | undefined;
 
-/**
- * The Claude config directory the Agent's `claude` uses: `CLAUDE_CONFIG_DIR` from the Agent's
- * `envVars` (which win) or the Daemon's environment, else `~/.claude`. A relative value is
- * undecidable here (it depends on the child's working directory), so it resolves to `undefined`.
- */
+type ParsedTranscriptFacts = Readonly<{
+  transcriptLastActivityAtMs: number | undefined;
+  lastContextTokens: number | undefined;
+  cacheTier: PromptCacheTier | undefined;
+}>;
+
+type CachedClaudeTranscript = ParsedTranscriptFacts &
+  Readonly<{
+    path: string;
+    mtimeMs: number;
+    size: number;
+  }>;
+
+const transcriptFactsCache = new WeakMap<ClaudeHistoryHost, Map<string, CachedClaudeTranscript>>();
+
+function hostCache(host: ClaudeHistoryHost): Map<string, CachedClaudeTranscript> {
+  let cache = transcriptFactsCache.get(host);
+  if (!cache) {
+    cache = new Map();
+    transcriptFactsCache.set(host, cache);
+  }
+  return cache;
+}
+
+function rememberTranscript(
+  cache: Map<string, CachedClaudeTranscript>,
+  key: string,
+  entry: CachedClaudeTranscript,
+): void {
+  cache.delete(key);
+  cache.set(key, entry);
+  if (cache.size > MAX_CACHED_TRANSCRIPTS) {
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) cache.delete(oldest);
+  }
+}
+
 function claudeConfigDirectory(envVars: Environment, host: ClaudeHistoryHost): string | undefined {
   const configured = (
     envVars?.CLAUDE_CONFIG_DIR ?? host.readHostEnvironment("CLAUDE_CONFIG_DIR")
@@ -44,18 +60,11 @@ function claudeConfigDirectory(envVars: Environment, host: ClaudeHistoryHost): s
   );
 }
 
-/**
- * `<configDir>/projects/<project>/<sessionId>.jsonl`, or `undefined` when the session has no
- * regular transcript there. Probes each project directory for the exact name instead of listing
- * its (possibly thousands of) sessions; a symlink is never followed.
- */
-export async function findClaudeSessionTranscript(
+async function findClaudeSessionTranscriptWithStat(
+  configDir: string,
   sessionId: string,
-  envVars: Environment,
   host: ClaudeHistoryHost,
-): Promise<string | undefined> {
-  const configDir = claudeConfigDirectory(envVars, host);
-  if (!configDir || !sessionId || /[\\/]/.test(sessionId) || sessionId.includes("..")) return;
+): Promise<{ path: string; info: ClaudeFileInfo } | undefined> {
   const projects = join(configDir, "projects");
   let entries;
   try {
@@ -70,14 +79,24 @@ export async function findClaudeSessionTranscript(
     if (++probed > MAX_PROJECT_DIRECTORIES) return;
     const candidate = join(projects, entry.name, filename);
     try {
-      if ((await host.lstat(candidate)).isFile()) return candidate;
+      const info = await host.lstat(candidate);
+      if (info.isFile()) return { path: candidate, info };
     } catch {
-      // Not in this project directory.
+      continue;
     }
   }
 }
 
-/** Every parsed JSON object line of a transcript tail; malformed and non-object lines are skipped. */
+export async function findClaudeSessionTranscript(
+  sessionId: string,
+  envVars: Environment,
+  host: ClaudeHistoryHost,
+): Promise<string | undefined> {
+  const configDir = claudeConfigDirectory(envVars, host);
+  if (!configDir || !sessionId || /[\\/]/.test(sessionId) || sessionId.includes("..")) return;
+  return (await findClaudeSessionTranscriptWithStat(configDir, sessionId, host))?.path;
+}
+
 export function* transcriptRecords(lines: readonly string[]): Generator<Record<string, unknown>> {
   for (const line of lines) {
     if (!line) continue;
@@ -92,7 +111,6 @@ export function* transcriptRecords(lines: readonly string[]): Generator<Record<s
   }
 }
 
-/** Input + cache read + cache creation tokens of a `usage` object: the context one request carried. */
 function contextTokens(usage: unknown): number | undefined {
   const record = asRecord(usage);
   if (!record) return;
@@ -112,7 +130,6 @@ function usageCacheTier(usage: unknown): PromptCacheTier | undefined {
   return undefined;
 }
 
-/** The latest modification time of `path` and what lies under it (down to `depth` levels). */
 async function latestMtimeUnder(
   path: string,
   host: ClaudeHistoryHost,
@@ -137,29 +154,15 @@ async function latestMtimeUnder(
   return latest;
 }
 
-/**
- * What the transcript says about the session: its last activity (the newest record `timestamp`, or
- * a newer change under the session's sidecar directory) and the context its last request carried.
- * `undefined` when the transcript is absent or unreadable.
- */
-export async function readClaudeSessionResumeFacts(
-  options: {
-    sessionId: string;
-    envVars?: Environment;
-  },
-  host: ClaudeHistoryHost,
-): Promise<SessionResumeFacts | undefined> {
-  const path = await findClaudeSessionTranscript(options.sessionId, options.envVars, host);
-  if (!path) return;
-  const lines = await readTailLines(path, FACTS_TAIL_BYTES, host);
-  if (!lines) return;
-  let lastActivityAtMs: number | undefined;
+function parseTranscriptFacts(lines: readonly string[]): ParsedTranscriptFacts {
+  let transcriptLastActivityAtMs: number | undefined;
   let lastContextTokens: number | undefined;
   let cacheTier: PromptCacheTier | undefined;
   for (const record of transcriptRecords(lines)) {
     if (typeof record.timestamp === "string") {
       const parsed = Date.parse(record.timestamp);
-      if (Number.isFinite(parsed)) lastActivityAtMs = Math.max(lastActivityAtMs ?? 0, parsed);
+      if (Number.isFinite(parsed))
+        transcriptLastActivityAtMs = Math.max(transcriptLastActivityAtMs ?? 0, parsed);
     }
     if (record.type === "assistant" && record.isSidechain !== true) {
       const usage = asRecord(record.message)?.usage;
@@ -167,11 +170,74 @@ export async function readClaudeSessionResumeFacts(
       cacheTier = usageCacheTier(usage) ?? cacheTier;
     }
   }
-  const sidecar = await latestMtimeUnder(path.replace(/\.jsonl$/, ""), host);
-  if (sidecar !== undefined) lastActivityAtMs = Math.max(lastActivityAtMs ?? 0, sidecar);
+  return { transcriptLastActivityAtMs, lastContextTokens, cacheTier };
+}
+
+function finalizeResumeFacts(
+  parsed: ParsedTranscriptFacts,
+  sidecarMtimeMs: number | undefined,
+): SessionResumeFacts {
+  const lastActivityAtMs =
+    sidecarMtimeMs === undefined
+      ? parsed.transcriptLastActivityAtMs
+      : Math.max(parsed.transcriptLastActivityAtMs ?? 0, sidecarMtimeMs);
   return {
     ...(lastActivityAtMs !== undefined ? { lastActivityAtMs } : {}),
-    ...(lastContextTokens !== undefined ? { lastContextTokens } : {}),
-    ...(cacheTier !== undefined ? { cacheTier } : {}),
+    ...(parsed.lastContextTokens !== undefined
+      ? { lastContextTokens: parsed.lastContextTokens }
+      : {}),
+    ...(parsed.cacheTier !== undefined ? { cacheTier: parsed.cacheTier } : {}),
   };
+}
+
+export async function readClaudeSessionResumeFacts(
+  options: {
+    sessionId: string;
+    envVars?: Environment;
+  },
+  host: ClaudeHistoryHost,
+): Promise<SessionResumeFacts | undefined> {
+  const configDir = claudeConfigDirectory(options.envVars, host);
+  if (
+    !configDir ||
+    !options.sessionId ||
+    /[\\/]/.test(options.sessionId) ||
+    options.sessionId.includes("..")
+  )
+    return;
+  const cache = hostCache(host);
+  const cacheKey = `${configDir}\0${options.sessionId}`;
+  const cached = cache.get(cacheKey);
+  let target: { path: string; info: ClaudeFileInfo } | undefined;
+  if (cached) {
+    let info: ClaudeFileInfo | undefined;
+    try {
+      info = await host.lstat(cached.path);
+    } catch {
+      info = undefined;
+    }
+    if (info?.isFile()) {
+      if (info.mtimeMs === cached.mtimeMs && info.size === cached.size) {
+        rememberTranscript(cache, cacheKey, cached);
+        const sidecar = await latestMtimeUnder(cached.path.replace(/\.jsonl$/, ""), host);
+        return finalizeResumeFacts(cached, sidecar);
+      }
+      target = { path: cached.path, info };
+    } else {
+      cache.delete(cacheKey);
+    }
+  }
+  target ??= await findClaudeSessionTranscriptWithStat(configDir, options.sessionId, host);
+  if (!target) return;
+  const lines = await readTailLines(target.path, FACTS_TAIL_BYTES, host);
+  if (!lines) return;
+  const parsed = parseTranscriptFacts(lines);
+  rememberTranscript(cache, cacheKey, {
+    path: target.path,
+    mtimeMs: target.info.mtimeMs,
+    size: target.info.size,
+    ...parsed,
+  });
+  const sidecar = await latestMtimeUnder(target.path.replace(/\.jsonl$/, ""), host);
+  return finalizeResumeFacts(parsed, sidecar);
 }

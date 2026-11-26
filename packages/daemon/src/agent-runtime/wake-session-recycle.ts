@@ -260,11 +260,22 @@ type ColdIdleSelectionOptions = Readonly<{
   onSkip?(agentId: string, reason: string): void;
 }>;
 
+const COLD_IDLE_READ_CONCURRENCY = 4;
+
+type ColdIdleCandidate = Readonly<{
+  view: ColdIdleSweepView;
+  sessionId: string;
+  lastEventAtMs: number;
+  isCodex: boolean;
+  config: WakeRecycleConfig;
+  warm: WarmRecycleConfig | undefined;
+}>;
+
 export async function selectColdIdleStops(
   views: readonly ColdIdleSweepView[],
   options: ColdIdleSelectionOptions,
 ): Promise<ColdIdleStop[]> {
-  const stops: ColdIdleStop[] = [];
+  const candidates: ColdIdleCandidate[] = [];
   for (const view of views) {
     const skip = (reason: string) => options.onSkip?.(view.agentId, reason);
     const isCodex = view.provider === RUNTIME_PROVIDER.CODEX;
@@ -307,60 +318,91 @@ export async function selectColdIdleStops(
     else if (!view.sessionId || view.lastEventAtMs === undefined || eventIdleMs === undefined)
       skip("no_session");
     else if (!warmImmediate && !warmQuiet && eventIdleMs <= preReadColdGapMs) skip("recent_event");
-    else {
-      const facts = await options.readFacts(view, view.sessionId).catch(() => undefined);
-      const lastActiveAtMs =
-        facts?.lastActivityAtMs === undefined
-          ? undefined
-          : Math.max(facts.lastActivityAtMs, view.lastEventAtMs);
-      const contextTokens = isCodex
-        ? facts?.lastContextTokens
-        : facts && (view.lastContextTokens ?? facts.lastContextTokens);
-      if (warm && lastActiveAtMs !== undefined && contextTokens !== undefined) {
-        const idleMs = options.nowMs - lastActiveAtMs;
-        if (
-          (idleMs >= 0 && contextTokens > warm.immediateContextTokens) ||
-          (idleMs > warm.warmQuietMs && contextTokens > warm.warmMinContextTokens)
-        ) {
-          stops.push({
-            agentId: view.agentId,
-            sessionId: view.sessionId,
-            idleMs,
-            priorContextTokens: contextTokens,
-          });
-          continue;
-        }
-      }
-      const verdict = judgeColdAndLarge(
+    else
+      candidates.push({
+        view,
+        sessionId: view.sessionId,
+        lastEventAtMs: view.lastEventAtMs,
+        isCodex,
         config,
-        options.nowMs,
-        lastActiveAtMs,
-        contextTokens,
-        facts?.cacheTier ?? view.lastCacheTier,
-      );
-      if (typeof verdict !== "string") {
-        stops.push({
-          agentId: view.agentId,
-          sessionId: view.sessionId,
-          idleMs: verdict.idleMs,
-          priorContextTokens: verdict.contextTokens,
-        });
-      } else if (
-        verdict === "context_below_threshold" &&
-        isCodex &&
-        lastActiveAtMs !== undefined &&
-        contextTokens !== undefined
+        warm,
+      });
+  }
+  const factsByCandidate = new Map<number, SessionResumeFacts | undefined>();
+  if (candidates.length > 0) {
+    let nextIndex = 0;
+    const workerCount = Math.min(COLD_IDLE_READ_CONCURRENCY, candidates.length);
+    await Promise.all(
+      Array.from({ length: workerCount }, async () => {
+        while (nextIndex < candidates.length) {
+          const index = nextIndex++;
+          const candidate = candidates[index]!;
+          const facts = await options
+            .readFacts(candidate.view, candidate.sessionId)
+            .catch(() => undefined);
+          factsByCandidate.set(index, facts);
+        }
+      }),
+    );
+  }
+  const stops: ColdIdleStop[] = [];
+  for (let index = 0; index < candidates.length; index += 1) {
+    const { view, sessionId, lastEventAtMs, isCodex, config, warm } = candidates[index]!;
+    const facts = factsByCandidate.get(index);
+    const lastActiveAtMs =
+      facts?.lastActivityAtMs === undefined
+        ? undefined
+        : Math.max(facts.lastActivityAtMs, lastEventAtMs);
+    const contextTokens = isCodex
+      ? facts?.lastContextTokens
+      : facts && (view.lastContextTokens ?? facts.lastContextTokens);
+    if (warm && lastActiveAtMs !== undefined && contextTokens !== undefined) {
+      const idleMs = options.nowMs - lastActiveAtMs;
+      if (
+        (idleMs >= 0 && contextTokens > warm.immediateContextTokens) ||
+        (idleMs > warm.warmQuietMs && contextTokens > warm.warmMinContextTokens)
       ) {
         stops.push({
           agentId: view.agentId,
-          sessionId: view.sessionId,
-          idleMs: options.nowMs - lastActiveAtMs,
+          sessionId,
+          idleMs,
           priorContextTokens: contextTokens,
-          reason: "idle_process",
         });
-      } else {
-        skip(verdict === "cache_possibly_warm" ? "recent_activity" : verdict);
+        continue;
       }
+    }
+    const verdict = judgeColdAndLarge(
+      config,
+      options.nowMs,
+      lastActiveAtMs,
+      contextTokens,
+      facts?.cacheTier ?? view.lastCacheTier,
+    );
+    if (typeof verdict !== "string") {
+      stops.push({
+        agentId: view.agentId,
+        sessionId,
+        idleMs: verdict.idleMs,
+        priorContextTokens: verdict.contextTokens,
+      });
+    } else if (
+      verdict === "context_below_threshold" &&
+      isCodex &&
+      lastActiveAtMs !== undefined &&
+      contextTokens !== undefined
+    ) {
+      stops.push({
+        agentId: view.agentId,
+        sessionId,
+        idleMs: options.nowMs - lastActiveAtMs,
+        priorContextTokens: contextTokens,
+        reason: "idle_process",
+      });
+    } else {
+      options.onSkip?.(
+        view.agentId,
+        verdict === "cache_possibly_warm" ? "recent_activity" : verdict,
+      );
     }
   }
   return stops;

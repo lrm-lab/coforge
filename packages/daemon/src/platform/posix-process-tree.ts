@@ -1,3 +1,4 @@
+import { readdir } from "node:fs/promises";
 import type {
   OwnedProcessIdentity,
   OwnedProcessTreeKillReport,
@@ -18,6 +19,7 @@ import {
 import { getLogger } from "@logtape/logtape";
 
 const logger = getLogger(["coforge", "daemon", "posix-process-tree"]);
+const PROC_SCAN_CONCURRENCY = 32;
 
 const emptyKillReport = (): OwnedProcessTreeKillReport => ({ killed: [], leftAlone: [] });
 
@@ -233,17 +235,24 @@ export class PosixProcessOwner implements ProcessTreeSpawner {
   }
   async #treeExists(pid: number): Promise<boolean> {
     if (this.platform === "linux") {
-      for await (const entry of new Bun.Glob("[0-9]*").scan({
-        cwd: "/proc",
-        onlyFiles: false,
-      })) {
-        if (!/^\d+$/.test(entry)) continue;
-        try {
-          const stat = parseProcStat(await Bun.file(`/proc/${entry}/stat`).text());
-          if (stat?.pgid === pid && !isExitedProcState(stat.state)) return true;
-        } catch (error) {
-          if ((error as { code?: string }).code !== "ENOENT") throw error;
-        }
+      try {
+        globalThis.process.kill(-pid, 0);
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        if (code === "ESRCH") return false;
+        if (code !== "EPERM") throw error;
+      }
+      const pidText = String(pid);
+      if (await this.#linuxProcInLiveGroup(pidText, pid)) return true;
+      const entries = (await readdir("/proc")).filter(
+        (entry) => entry !== pidText && /^\d+$/.test(entry),
+      );
+      for (let start = 0; start < entries.length; start += PROC_SCAN_CONCURRENCY) {
+        const chunk = entries.slice(start, start + PROC_SCAN_CONCURRENCY);
+        const results = await Promise.all(
+          chunk.map((entry) => this.#linuxProcInLiveGroup(entry, pid)),
+        );
+        if (results.some(Boolean)) return true;
       }
       return false;
     }
@@ -252,6 +261,17 @@ export class PosixProcessOwner implements ProcessTreeSpawner {
       return true;
     } catch (error) {
       if (this.#groupIsGone(error)) return false;
+      throw error;
+    }
+  }
+
+  async #linuxProcInLiveGroup(entry: string, pgid: number): Promise<boolean> {
+    try {
+      const stat = parseProcStat(await Bun.file(`/proc/${entry}/stat`).text());
+      return stat?.pgid === pgid && !isExitedProcState(stat.state);
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      if (code === "ENOENT" || code === "ESRCH") return false;
       throw error;
     }
   }

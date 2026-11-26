@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { lstat, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import type { CodexHistoryHost } from "@lrm/coforge-anvil/codex";
 import {
@@ -12,12 +12,12 @@ import {
   resolveRealWorkspaceRoot,
 } from "#src/code-agent/workspace-file-reread";
 
-/** File IO for Codex rollout reads. `node:fs/promises` `readdir` supplies the directory types. */
 export const codexHistoryHost: CodexHistoryHost = {
   readHostEnvironment: (name) => Bun.env[name],
   homeDirectory: homedir,
   readDirectoryEntries: (path) => readdir(path, { withFileTypes: true }),
   resolveDirectoryWithoutSymlinks,
+  lstat,
   readFileTail: readHistoryFileTail,
   readFileHeadBytes: readHistoryFileHeadBytes,
   readFileTailBytes: readHistoryFileTailBytes,

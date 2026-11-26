@@ -1,7 +1,7 @@
 import { isAbsolute, join } from "node:path";
 import { asRecord } from "#src/json-record";
 import type { SessionResumeFacts } from "#src/contract";
-import type { CodexDirectoryEntry, CodexHistoryHost } from "./host";
+import type { CodexDirectoryEntry, CodexFileInfo, CodexHistoryHost } from "./host";
 import { readTailLines } from "#src/transcript-tail";
 
 export const CODEX_IDLE_RECYCLE_MIN_COLD_GAP_MS = 60 * 60_000;
@@ -11,8 +11,39 @@ export const CODEX_BRIEFING_TAIL_BYTES = 4 * 1024 * 1024;
 const MAX_DIRECTORIES = 5_000;
 const MAX_DEPTH = 8;
 const TIMESTAMP_PREFIX_LENGTH = 19;
+const MAX_CACHED_ROLLOUTS = 512;
 
 type Environment = Readonly<Record<string, string>> | undefined;
+
+type CachedCodexRollout = Readonly<{
+  mtimeMs: number;
+  size: number;
+  facts: SessionResumeFacts | undefined;
+}>;
+
+const rolloutFactsCache = new WeakMap<CodexHistoryHost, Map<string, CachedCodexRollout>>();
+
+function hostRolloutCache(host: CodexHistoryHost): Map<string, CachedCodexRollout> {
+  let cache = rolloutFactsCache.get(host);
+  if (!cache) {
+    cache = new Map();
+    rolloutFactsCache.set(host, cache);
+  }
+  return cache;
+}
+
+function rememberRollout(
+  cache: Map<string, CachedCodexRollout>,
+  key: string,
+  entry: CachedCodexRollout,
+): void {
+  cache.delete(key);
+  cache.set(key, entry);
+  if (cache.size > MAX_CACHED_ROLLOUTS) {
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) cache.delete(oldest);
+  }
+}
 
 export type CodexRolloutRecord = {
   timestampMs: number;
@@ -66,8 +97,9 @@ export async function findCodexRollout(
   ];
   let best: { path: string; stamp: string; name: string } | undefined;
   let seen = 0;
-  while (queue.length > 0) {
-    const current = queue.shift();
+  let head = 0;
+  while (head < queue.length) {
+    const current = queue[head++];
     if (!current || ++seen > MAX_DIRECTORIES) break;
     let entries: readonly CodexDirectoryEntry[];
     try {
@@ -131,14 +163,7 @@ function contextUpdate(payload: Record<string, unknown> | undefined): number | n
   if (totalInput === 0 && window > 0) return window;
 }
 
-export async function readCodexSessionResumeFacts(
-  options: { sessionId: string; envVars?: Environment },
-  host: CodexHistoryHost,
-): Promise<SessionResumeFacts | undefined> {
-  const path = await findCodexRollout(options.sessionId, options.envVars, host);
-  if (!path) return;
-  const lines = await readTailLines(path, FACTS_TAIL_BYTES, host);
-  if (!lines) return;
+function parseCodexResumeFacts(lines: readonly string[]): SessionResumeFacts | undefined {
   const records = rolloutRecords(lines);
   const last = records.at(-1);
   if (!last) return;
@@ -156,4 +181,40 @@ export async function readCodexSessionResumeFacts(
     ...(lastContextTokens !== undefined ? { lastContextTokens } : {}),
     ...(lastContextMissingAtMs !== undefined ? { lastContextMissingAtMs } : {}),
   };
+}
+
+export async function readCodexSessionResumeFacts(
+  options: { sessionId: string; envVars?: Environment },
+  host: CodexHistoryHost,
+): Promise<SessionResumeFacts | undefined> {
+  const path = await findCodexRollout(options.sessionId, options.envVars, host);
+  if (!path) return;
+  let statInfo: CodexFileInfo | undefined;
+  let cache: Map<string, CachedCodexRollout> | undefined;
+  if (host.lstat) {
+    try {
+      statInfo = await host.lstat(path);
+    } catch {
+      statInfo = undefined;
+    }
+    if (statInfo && !statInfo.isFile()) return;
+    if (statInfo?.isFile()) {
+      cache = hostRolloutCache(host);
+      const cached = cache.get(path);
+      if (cached && cached.mtimeMs === statInfo.mtimeMs && cached.size === statInfo.size) {
+        rememberRollout(cache, path, cached);
+        return cached.facts ? { ...cached.facts } : undefined;
+      }
+    }
+  }
+  const lines = await readTailLines(path, FACTS_TAIL_BYTES, host);
+  if (!lines) return;
+  const facts = parseCodexResumeFacts(lines);
+  if (cache && statInfo?.isFile())
+    rememberRollout(cache, path, {
+      mtimeMs: statInfo.mtimeMs,
+      size: statInfo.size,
+      facts,
+    });
+  return facts ? { ...facts } : undefined;
 }

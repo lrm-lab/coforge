@@ -79,18 +79,16 @@ type StalledTurnState = {
   startAtMs: number;
   thresholdMs: number;
   window: "tool" | "model";
+  deadlineAtMs: number;
+  scheduledForMs: number | undefined;
   watchdog: ReturnType<typeof setTimeout> | undefined;
   warned: boolean;
-  /** How many times this turn's clock moved after it was first armed. */
   rearms: number;
-  /** When it last moved; undefined while the first clock still stands. */
   lastRearmAtMs: number | undefined;
 };
 
-/** The launch's provider clock, as both the silence clock and the notice's line read it. */
 type LaunchProgress = Readonly<{ lastEventAtMs: number; lastWorkAtMs?: number }>;
 
-/** The slice of a launch the silence clock reads. */
 export type StalledTurnLaunch = Readonly<{
   progress?: LaunchProgress;
   toolCalls?: {
@@ -99,7 +97,6 @@ export type StalledTurnLaunch = Readonly<{
   };
 }>;
 
-/** What the launch shows now: a busy turn, its last work and its open tools. */
 export function stalledTurnObservation(launch: StalledTurnLaunch): StalledTurnObservation {
   return {
     turnBusy: true,
@@ -118,11 +115,6 @@ const TURN_ENDING_DETAIL_KINDS: ReadonlySet<string> = new Set([
   AGENT_ACTIVITY_DETAIL_KIND.FRESHNESS_HOLD,
 ]);
 
-/**
- * Events that are themselves evidence the turn is running: model output, a call starting, the model
- * streaming a call's arguments. A session's own `hasLiveTurn` can lag these by a moment — Codex
- * emits a command's `item/started` before it accepts the turn — and that lag is not the turn's end.
- */
 export function showsTurnWork(event: AgentRuntimeEvent): boolean {
   switch (event.type) {
     case "text-delta":
@@ -150,27 +142,20 @@ export function isTurnNeutralEvent(event: Readonly<{ type: string }>): boolean {
   }
 }
 
-/** Whether this provider event, or a session that no longer holds a live turn, ends the turn. Work
- * under way is never read as an end, however stale the session's own answer is: only an explicit
- * ending ends a turn (task #41). */
 export function endsStalledTurn(event: AgentRuntimeEvent, hasLiveTurn: boolean | undefined) {
   if (event.type === "completed") return true;
   if (event.type === "activity") {
     const { detailKind } = event.activity;
     if (TURN_ENDING_DETAIL_KINDS.has(detailKind)) return true;
-    // A frame that shows the Agent working is the turn's own evidence: a turn's model output and
-    // tool activity reach the observation as these coalesced frames.
     if (isBusyActivityDetailKind(detailKind)) return false;
   } else if (showsTurnWork(event) || isTurnNeutralEvent(event)) return false;
   return hasLiveTurn === false;
 }
 
-/** The silence clock starts at the newer of provider progress and the oldest open tool start. */
 export function stalledTurnSilenceStartAtMs(observation: StalledTurnObservation): number {
   return Math.max(observation.lastEventAtMs, observation.oldestToolStartedAtMs ?? 0);
 }
 
-/** Tracks one visible stalled notice per live turn. */
 export class StalledTurnTracker {
   readonly #states = new Map<string, StalledTurnState>();
 
@@ -181,14 +166,11 @@ export class StalledTurnTracker {
     private readonly modelSilenceMs = STALLED_TURN_MODEL_SILENCE_MS,
   ) {}
 
-  /** Starts or resets the current turn's silence clock after a raw provider event. */
   observe(agentId: string, observation: StalledTurnObservation): void {
     if (!observation.turnBusy) {
       this.finish(agentId, "turn_not_busy");
       return;
     }
-    // A tool still open is judged on the tool window; a turn with none is the model's own silence,
-    // judged on the longer one — the state a person otherwise cannot tell from a healthy turn.
     const window = observation.hasOpenToolCall ? "tool" : "model";
     const thresholdMs = this.#thresholdMs(window);
     if (thresholdMs <= 0) {
@@ -201,12 +183,8 @@ export class StalledTurnTracker {
     this.#arm(agentId, startAtMs, thresholdMs, window);
   }
 
-  /** Starts a fresh turn, including one whose first provider event has not arrived yet. */
   start(agentId: string, observation: StalledTurnObservation): void {
     this.finish(agentId, "new_turn");
-    // A window switched off in configuration leaves nothing to arm and nothing to fire, which on a
-    // real machine reads exactly like a turn that was never watched (task #41). Say so, once per
-    // turn, instead of returning quietly.
     const window = observation.hasOpenToolCall ? "tool" : "model";
     const thresholdMs = this.#thresholdMs(window);
     if (thresholdMs > 0) this.observe(agentId, observation);
@@ -220,10 +198,6 @@ export class StalledTurnTracker {
       });
   }
 
-  /** Ends the current turn and cancels its watchdog, saying why: a clock that never fired and one
-   * that was cancelled read the same without this line (task #41). Info like the arming line: the
-   * next real-machine run has to show it without a debug setting. `rearms` is what tells a clock
-   * that stood still from one a stream of events kept pushing back. */
   finish(agentId: string, reason = "unspecified"): void {
     const state = this.#states.get(agentId);
     if (!state) return;
@@ -257,9 +231,7 @@ export class StalledTurnTracker {
 
   #arm(agentId: string, startAtMs: number, thresholdMs: number, window: "tool" | "model"): void {
     const current = this.#states.get(agentId);
-    // The same clock asked again is not news: an event that moved nothing (the same provider
-    // timestamp, a repeat of the frame that armed it) only counts, and the count is reported when
-    // the turn ends. Writing a line per event is what would bury a 25-minute command's log.
+    const now = this.now();
     if (
       current !== undefined &&
       !current.warned &&
@@ -268,59 +240,90 @@ export class StalledTurnTracker {
       current.thresholdMs === thresholdMs
     ) {
       current.rearms += 1;
-      current.lastRearmAtMs = this.now();
+      current.lastRearmAtMs = now;
+      return;
+    }
+    const deadlineAtMs = startAtMs + thresholdMs;
+    const delayMs = Math.max(0, deadlineAtMs - now);
+    if (current !== undefined && !current.warned) {
+      const previousStartedAt = current.startAtMs;
+      const previousWindow = current.window;
+      current.startAtMs = startAtMs;
+      current.thresholdMs = thresholdMs;
+      current.window = window;
+      current.deadlineAtMs = deadlineAtMs;
+      current.rearms += 1;
+      current.lastRearmAtMs = now;
+      if (
+        current.watchdog === undefined ||
+        current.scheduledForMs === undefined ||
+        deadlineAtMs < current.scheduledForMs
+      ) {
+        if (current.watchdog !== undefined) clearTimeout(current.watchdog);
+        this.#scheduleWatchdog(agentId, current, now, delayMs);
+      }
+      if (logger.isEnabledFor("debug"))
+        logger.debug("Agent runtime turn silence clock moved", {
+          event: "agent_runtime:turn_stalled_rearmed",
+          agent_id: agentId,
+          stalled_window: window,
+          threshold_ms: thresholdMs,
+          silence_started_at: startAtMs,
+          fires_in_ms: delayMs,
+          previous_started_at: previousStartedAt,
+          previous_window: previousWindow,
+          window_changed: previousWindow !== window,
+          rearms: current.rearms,
+          outcome: "rearmed",
+        });
       return;
     }
     if (current?.watchdog !== undefined) clearTimeout(current.watchdog);
-    const delayMs = Math.max(0, startAtMs + thresholdMs - this.now());
     const state: StalledTurnState = {
       startAtMs,
       thresholdMs,
       window,
+      deadlineAtMs,
+      scheduledForMs: undefined,
       warned: false,
       watchdog: undefined,
       rearms: current === undefined ? 0 : current.rearms + 1,
-      lastRearmAtMs: current === undefined ? undefined : this.now(),
+      lastRearmAtMs: current === undefined ? undefined : now,
     };
-    state.watchdog = setTimeout(() => this.#markStalled(agentId, startAtMs), delayMs);
+    this.#scheduleWatchdog(agentId, state, now, delayMs);
     this.#states.set(agentId, state);
-    // A watchdog that never fires leaves no trace of itself, so a turn that was never watched and
-    // a turn that was watched and never passed its window read the same in a real machine's log
-    // (task #41). One info line when a clock begins; each move after it is debug, because every
-    // event of a busy turn moves it (hundreds of lines a turn filled 92% of the log, task #54).
-    // A turn's whole trail is `rearms` and `last_rearm_at` on its `finished` line.
-    const clock = {
+    logger.info("Agent runtime turn silence clock armed", {
+      event: "agent_runtime:turn_stalled_armed",
       agent_id: agentId,
       stalled_window: window,
       threshold_ms: thresholdMs,
       silence_started_at: startAtMs,
       fires_in_ms: delayMs,
-    };
-    if (current === undefined || current.warned)
-      logger.info("Agent runtime turn silence clock armed", {
-        event: "agent_runtime:turn_stalled_armed",
-        ...clock,
-        outcome: "armed",
-      });
-    else
-      logger.debug("Agent runtime turn silence clock moved", {
-        event: "agent_runtime:turn_stalled_rearmed",
-        ...clock,
-        previous_started_at: current.startAtMs,
-        previous_window: current.window,
-        window_changed: current.window !== window,
-        rearms: state.rearms,
-        outcome: "rearmed",
-      });
+      outcome: "armed",
+    });
   }
 
-  #markStalled(agentId: string, startAtMs: number): void {
+  #scheduleWatchdog(agentId: string, state: StalledTurnState, now: number, delayMs: number): void {
+    state.scheduledForMs = now + delayMs;
+    const timer = setTimeout(() => this.#onWatchdog(agentId), delayMs);
+    timer?.unref?.();
+    state.watchdog = timer;
+  }
+
+  #onWatchdog(agentId: string): void {
     const state = this.#states.get(agentId);
-    if (!state || state.startAtMs !== startAtMs || state.warned) return;
+    if (!state || state.warned) return;
+    const now = this.now();
+    const remaining = state.deadlineAtMs - now;
+    if (remaining > 0) {
+      this.#scheduleWatchdog(agentId, state, now, Math.min(remaining, state.thresholdMs));
+      return;
+    }
     state.watchdog = undefined;
+    state.scheduledForMs = undefined;
     state.warned = true;
     this.onStalled(agentId, {
-      silentForMs: Math.max(0, this.now() - startAtMs),
+      silentForMs: Math.max(0, now - state.startAtMs),
       thresholdMs: state.thresholdMs,
       window: state.window,
     });
