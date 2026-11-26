@@ -233,6 +233,23 @@ record_checker_release() {
 	fi
 }
 
+# Reproducible builds stamp every image CreatedAt at the epoch, so retention
+# cannot order generations by creation date. Tag the live images with the
+# deploy time instead; an untagged live-or-previous image would be pruned as a
+# zombie at the end of this very deployment, forcing a full re-pull on the
+# next rollback. The candidate is tagged after its pull below.
+tag_deploy_image() {
+	local target="$1" stamp="$2" repo
+	[ -n "$target" ] || return 0
+	repo="${target%%@*}"
+	[ "$repo" != "$target" ] || return 0
+	docker tag "$target" "${repo}:deploy-${stamp}" >/dev/null 2>&1 || true
+}
+
+deploy_tag_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+tag_deploy_image "$last_healthy" "$deploy_tag_stamp"
+tag_deploy_image "$last_healthy_checker" "$deploy_tag_stamp"
+
 if [ -n "$current_image" ] && [ "$current_image" = "$image" ] && [ "$current_checker_image" = "$checker_image" ] &&
 	{ [ -n "$checker_image" ] || { surviving_checker_containers="$(checker_containers)" && [ -z "$surviving_checker_containers" ]; }; }; then
 	prune_deploy_images
@@ -433,11 +450,15 @@ if ! pull_digest_image "Web" "$image" "$web_pull_attempts" "$web_pull_deadline";
 	exit 0
 fi
 
+tag_deploy_image "$image" "$deploy_tag_stamp"
+
 if [ -n "$checker_image" ] && ! pull_digest_image "Artifact Checker" "$checker_image" "$checker_pull_attempts" "$checker_pull_deadline"; then
 	discard_candidate_configuration
 	report "$current_image" "failed: Artifact Checker image pull $pull_failure" "failed" ""
 	exit 0
 fi
+
+tag_deploy_image "$checker_image" "$deploy_tag_stamp"
 
 if ! run_migrations; then
 	report "$last_healthy" "failed: $migration_failure" "failed" ""

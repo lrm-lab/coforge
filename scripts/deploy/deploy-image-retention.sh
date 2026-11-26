@@ -18,7 +18,7 @@ deploy_image_retention=5
 # matches any org prefix so pre-rename lrm-teams copies are covered as well.
 deploy_repo_images() {
 	local pattern="$1"
-	docker images --no-trunc --digests --format '{{.ID}}|{{.Repository}}|{{.CreatedAt}}' |
+	docker images --no-trunc --digests --format '{{.ID}}|{{.Repository}}|{{.Tag}}|{{.CreatedAt}}' |
 		awk -F'|' -v pat="$pattern" '$2 ~ pat'
 }
 
@@ -48,20 +48,42 @@ container_image_ids() {
 
 # Prints the IDs of in-scope web and checker images to remove: everything older than the
 # newest $deploy_image_retention unique image IDs per repository, minus container references.
+# Ordering comes from the deploy-<UTC> tag written at pull time, not
+# CreatedAt: reproducible builds stamp every image at the epoch, so sorting by
+# creation date ranks a freshly pulled image as the oldest and pruned it
+# within the hour (the 2026-11-26 rollback re-pulled 700MB for exactly this
+# reason). An image with no deploy tag is always a candidate: pre-mechanism
+# leftovers otherwise occupy retention slots forever.
+deploy_generation_candidates() {
+	awk -F'|' -v retain="$deploy_image_retention" '
+		$3 ~ /^deploy-/ {
+			if (!($1 in best) || $3 > best[$1]) best[$1] = $3
+			next
+		}
+		{ untagged[$1] = 1 }
+		END {
+			n = 0
+			for (id in best) tagged[n++] = best[id] "|" id
+			for (i = 0; i < n; i++) {
+				for (j = i + 1; j < n; j++) {
+					if (tagged[j] > tagged[i]) { t = tagged[i]; tagged[i] = tagged[j]; tagged[j] = t }
+				}
+			}
+			for (i = retain; i < n; i++) {
+				split(tagged[i], parts, "|")
+				print parts[2]
+			}
+			for (id in untagged) if (!(id in best)) print id
+		}
+	'
+}
+
 deploy_images_to_remove() {
 	local protected
 	protected="$(container_image_ids)" || return 1
 	{
-		deploy_web_images |
-			sort -t'|' -k3,3 -r |
-			awk -F'|' '!seen[$1]++' |
-			tail -n "+$((deploy_image_retention + 1))" |
-			cut -d'|' -f1
-		deploy_checker_images |
-			sort -t'|' -k3,3 -r |
-			awk -F'|' '!seen[$1]++' |
-			tail -n "+$((deploy_image_retention + 1))" |
-			cut -d'|' -f1
+		deploy_web_images | deploy_generation_candidates
+		deploy_checker_images | deploy_generation_candidates
 	} | sort -u | grep -vxF -f <(printf '%s\n' "$protected") || true
 }
 
