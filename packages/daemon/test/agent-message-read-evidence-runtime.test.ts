@@ -288,4 +288,69 @@ describe("the Agent read boundary (exact seen sequences)", () => {
       await harness.runtime.stop();
     }
   });
+  test("recentUnread from a bypassed hold is returned and advances modelSeen for future sends", async () => {
+    const sends: AgentMessageRequest[] = [];
+    const harness = await messageHarness(async (request) => {
+      if (request.operation !== "send")
+        return {
+          protocolMajor: 1,
+          idempotencyKey: request.idempotencyKey,
+          accepted: true,
+          attentionCount: 0,
+          messages: [],
+        };
+      sends.push(request);
+      if (sends.length === 1)
+        return {
+          protocolMajor: 1,
+          idempotencyKey: request.idempotencyKey,
+          accepted: true,
+          attentionCount: 0,
+          messageId: "sent-1",
+          messages: [],
+          state: "sent",
+          decision: "bypass",
+          recentUnread: [messageRecord(11, "@bea", "@ada")],
+        };
+      return {
+        protocolMajor: 1,
+        idempotencyKey: request.idempotencyKey,
+        accepted: true,
+        attentionCount: 0,
+        messageId: "sent-2",
+        messages: [],
+        state: "sent",
+        decision: "forward",
+      };
+    });
+    try {
+      const result = await harness.runtime.agentMessage(
+        harness.context,
+        {
+          idempotencyKey: "anyway-send",
+          context: harness.context,
+          operation: "send",
+          target: "@ada",
+          content: "reply",
+          continueAnyway: true,
+        },
+        harness.apiKey,
+      );
+      expect(result.recentUnread?.map((m) => m.id)).toEqual(["message-11"]);
+      await harness.runtime.agentMessage(
+        harness.context,
+        {
+          idempotencyKey: "follow-up-send",
+          context: harness.context,
+          operation: "send",
+          target: "@ada",
+          content: "follow up",
+        },
+        harness.apiKey,
+      );
+      expect(sends[1]).toMatchObject({ seenUpToSeq: 11 });
+    } finally {
+      await harness.runtime.stop();
+    }
+  });
 });
