@@ -1,6 +1,7 @@
+import { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-attention-index";
 import { afterEach, expect, test } from "bun:test";
 import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
-import { delivery } from "./fixtures/attention-delivery";
+import { delivery, session } from "./fixtures/attention-delivery";
 import {
   bindTargets,
   clearAttentionStateDirectories,
@@ -51,4 +52,58 @@ test("an alias of an alias names the canonical target directly", () => {
   for (const spelling of ["a", "b", "z"])
     expect(index.resolveTarget("agent-1", spelling)).toBe("c");
   expect(store.read("agent-1").aliases).toEqual({ a: "c", b: "c", z: "c" });
+});
+
+test("clearing through a read boundary preserves concurrently newer attention", async () => {
+  const index = new AgentMessageAttentionIndex(
+    "workspace-1",
+    { session: () => session(() => undefined) },
+    async () => undefined,
+  );
+  await index.receive({ ...delivery("old"), sequence: 7 });
+  await index.receive({ ...delivery("new"), deliveryId: "delivery-new", sequence: 8 });
+  index.clearThrough("agent-1", "@alice", 7);
+  expect(index.check("agent-1")).toMatchObject([{ latestSequence: 8 }]);
+});
+
+test("a history read records its alias, frontier, exact sequences and read order in one write", () => {
+  const writes: unknown[] = [];
+  const store = new AgentConsumedSeqStore(temporaryStateDirectory());
+  const counting = {
+    read: (agentId: string) => store.read(agentId),
+    write: (agentId: string, state: Parameters<AgentConsumedSeqStore["write"]>[1]) => {
+      writes.push(state);
+      store.write(agentId, state);
+    },
+  };
+  const index = new AgentMessageAttentionIndex(
+    "workspace-1",
+    { session: () => session() },
+    async () => {},
+    () => {},
+    { shouldHold: () => false, enqueue: () => {}, busy: () => {}, consumedSeqs: counting },
+  );
+  bindTargets(index, "@agent");
+  writes.length = 0;
+  index.recordHistoryRead("agent-1", {
+    spelling: "@Agent",
+    target: "@agent",
+    shown: [3, 4, 6, 9],
+    through: 4,
+    review: { sequence: 9 },
+  });
+  expect(writes).toHaveLength(1);
+  expect(store.read("agent-1")).toEqual({
+    targets: {
+      "@agent": {
+        conversationId: "conversation-1",
+        seq: 4,
+        readOrder: 1,
+        reviewedSeq: 9,
+        exactSeqs: [6, 9],
+      },
+    },
+    aliases: { "@Agent": "@agent" },
+    nextReadOrder: 2,
+  });
 });

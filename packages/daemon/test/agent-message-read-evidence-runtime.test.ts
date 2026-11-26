@@ -353,4 +353,59 @@ describe("the Agent read boundary (exact seen sequences)", () => {
       await harness.runtime.stop();
     }
   });
+  test("uses the full target and short-read position when sending to a short thread target", async () => {
+    const rootId = "12345678-1234-4234-8234-123456789abc";
+    const fullTarget = `@ada:${rootId}`;
+    const requests: AgentMessageRequest[] = [];
+    const harness = await messageHarness(async (request) => {
+      requests.push(request);
+      if (request.target === "@ada")
+        return {
+          protocolMajor: 1,
+          idempotencyKey: request.idempotencyKey,
+          accepted: true,
+          attentionCount: 0,
+          messages: [messageRecord(1, "@ada", "@ada", rootId)],
+        };
+      return {
+        protocolMajor: 1,
+        idempotencyKey: request.idempotencyKey,
+        accepted: true,
+        attentionCount: 0,
+        messageId: request.operation === "send" ? "sent" : undefined,
+        messages: request.operation === "read" ? [messageRecord(7, "@ada", fullTarget)] : [],
+        ...(request.operation === "read" ? { modelSeenUpToSeq: 7 } : {}),
+      };
+    });
+    try {
+      await harness.runtime.agentMessage(
+        harness.context,
+        {
+          idempotencyKey: "read-short",
+          context: harness.context,
+          operation: "read",
+          target: "@ada:12345678",
+        },
+        harness.apiKey,
+      );
+      await harness.runtime.agentMessage(
+        harness.context,
+        {
+          idempotencyKey: "send-short",
+          context: harness.context,
+          operation: "send",
+          target: "@ada:12345678",
+          content: "reply",
+        },
+        harness.apiKey,
+      );
+      expect(requests.at(-1)).toMatchObject({
+        operation: "send",
+        target: fullTarget,
+        seenUpToSeq: 7,
+      });
+    } finally {
+      await harness.runtime.stop();
+    }
+  });
 });
