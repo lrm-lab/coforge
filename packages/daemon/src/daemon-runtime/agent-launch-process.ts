@@ -196,6 +196,14 @@ export async function launchAgentProcess(
         runtimeId: launch.launchId,
         startupSignal: launch.startupAbort?.signal,
         effectiveConfigRevision: launchConfig.runtimeConfigRevision,
+        onSessionReady: (session) => {
+          if (current())
+            ports.runtimeErrorHold.bindClaudeModelQuota(
+              agentId,
+              launch,
+              session.claudeQuotaAccountDigest,
+            );
+        },
         onCreateSessionError: recycled
           ? (error) => {
               if (

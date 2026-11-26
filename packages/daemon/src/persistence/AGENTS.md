@@ -27,3 +27,7 @@ Rules for durable local state in `src/persistence/`. They extend
 - `memory-review-ledger.ts` keeps personal review watermarks, active batch and pending key/revision
   pairs in the existing `meta` table. It stores no memory bodies or chat text. Deletion and
   migration use the existing Agent-state removal, with no separate storage cleanup path.
+
+- `claude-model-quota-ledger.ts` owns the Workspace Daemon's private
+  `claude-model-quota.json` facts by trusted account digest and weekly model.
+  The delivery hold owns session bindings, waiting Agents and input admission.

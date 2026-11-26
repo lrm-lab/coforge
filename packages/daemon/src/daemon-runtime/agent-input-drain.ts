@@ -21,6 +21,13 @@ const logger = getLogger(["coforge", "daemon", "runtime"]);
 export type AgentInputDrainPorts = Readonly<{
   runnerHeld(): boolean;
   sessionFor(agentId: string): AgentSession | undefined;
+  credentialHeld?(agentId: string): boolean;
+  resumeModelQuota?(
+    agentId: string,
+    launch: ActivityLaunch,
+    held: readonly AgentMessageDelivery[],
+    drain: () => Promise<void>,
+  ): Promise<void>;
   launchFor(agentId: string): ActivityLaunch | undefined;
   hasQueuedDeliveries(agentId: string): boolean;
   isLaunching(agentId: string): boolean;
@@ -202,17 +209,37 @@ export class AgentInputDrain {
     return this.ports.tellCarried(agentId, held);
   }
 
+  modelQuotaHeld(agentId: string): boolean {
+    const launch = this.ports.launchFor(agentId);
+    return (
+      launch?.modelQuotaInputHeld === true ||
+      (launch?.resumeModelQuotaInput !== undefined && this.ports.credentialHeld?.(agentId) === true)
+    );
+  }
+
   ensure(agentId: string): void {
-    if (this.ports.runnerHeld() || !this.ports.sessionFor(agentId)) return;
+    const session = this.ports.sessionFor(agentId);
+    if (this.ports.runnerHeld() || !session) return;
+    const launch = this.ports.launchFor(agentId);
+    const resume = this.ports.resumeModelQuota;
+    if (launch && resume && session.claudeQuotaAccountDigest && !launch.resumeModelQuotaInput) {
+      launch.resumeModelQuotaInput = (held) => {
+        void resume(agentId, launch, held, async () => {
+          this.ensure(agentId);
+          await this.get(agentId)?.drain;
+        }).catch(() => {});
+      };
+    }
     // Behind the launch's own input: what an earlier process left for this one. The launch's
     // recovery pass tells them too when it runs first, and this finds nothing left to tell.
     if (
+      !this.modelQuotaHeld(agentId) &&
       this.ports.hasCarried(agentId) &&
       !this.get(agentId)?.items.some((i) => i.kind === "carried")
     )
       void this.enqueue(agentId, (completion) => ({ kind: "carried", completion })).catch(() => {});
     const queue = this.get(agentId);
-    if (!queue || queue.closed || queue.drain) return;
+    if (!queue || queue.closed || queue.drain || this.#nextInput(agentId, queue) < 0) return;
     queue.drain = this.#drain(agentId, queue).finally(() => {
       queue.drain = undefined;
       if (queue.closed || !queue.items.length) {
@@ -223,9 +250,17 @@ export class AgentInputDrain {
     });
   }
 
+  #nextInput(agentId: string, queue: AgentInputQueue): number {
+    return this.modelQuotaHeld(agentId)
+      ? queue.items.findIndex(({ kind }) => kind === "delivery")
+      : 0;
+  }
+
   async #drain(agentId: string, queue: AgentInputQueue): Promise<void> {
     while (!queue.closed) {
-      const item = queue.items.shift();
+      const next = this.#nextInput(agentId, queue);
+      if (next < 0) return;
+      const item = next > 0 ? queue.items.splice(next, 1)[0] : queue.items.shift();
       if (!item) return;
       const responses = this.ports.launchFor(agentId)?.startup?.responses ?? 0;
       let watchedDelivery: { launchId: string; generation: object; deliveryId: string } | undefined;

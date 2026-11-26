@@ -16,8 +16,11 @@ import type { ReplyIntentTracker } from "./reply-intent-tracker";
 import type { ProviderProgress } from "./stalled-recovery";
 import type { StalledTurnTracker } from "./stalled-turn-indicator";
 import type { LaunchPhaseTiming } from "./launch-phase-timing";
+import type { ClaudeModelQuotaLaunch } from "./claude-model-quota-holds";
 
 export type ActivityLaunch = PublishedActivityLaunch & {
+  modelQuotaInputHeld?: true;
+  resumeModelQuotaInput?: ClaudeModelQuotaLaunch["resumeModelQuotaInput"];
   model?: string;
   flushTokenUsage?: (conversationId?: string) => boolean;
   startup?: AgentStartup;

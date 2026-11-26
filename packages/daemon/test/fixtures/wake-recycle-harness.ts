@@ -71,6 +71,8 @@ export type HarnessOptions = {
   facts?: SessionResumeFacts | undefined;
   briefing?: "fails" | "none";
   launchEnvVars?: Record<string, string>;
+  claudeQuotaAccountDigests?: Readonly<Record<string, string>>;
+  stateDirectory?: string;
   /** `false`: an empty Agent directory; `"long"`: one past the briefing's budget. */
   memory?: boolean | "long";
   activeContext?: string;
@@ -166,7 +168,10 @@ export async function harness(options: HarnessOptions = {}) {
       // a fresh launch mints an id. A resume that reported a different id would be a replaced
       // session, which these tests do not model.
       await sessionOptions.onSessionId?.(sessionOptions.sessionId ?? `native-${sessions.length}`);
+      const claudeQuotaAccountDigest =
+        sessionOptions.agentId && options.claudeQuotaAccountDigests?.[sessionOptions.agentId];
       return {
+        ...(claudeQuotaAccountDigest ? { claudeQuotaAccountDigest } : {}),
         async sendMessage(text: string) {
           record.inputs.push(text);
           emit({ type: "completed", status: "completed" });
@@ -254,7 +259,7 @@ export async function harness(options: HarnessOptions = {}) {
     emptyCodeAgentDiscovery,
     // App Inbox and conversation state land under the Workspace root, which the suite removes;
     // each harness gets its own, so a message one test delivered is not already read in the next.
-    join(connection.workspaceRoot, `state-${crypto.randomUUID()}`),
+    options.stateDirectory ?? join(connection.workspaceRoot, `state-${crypto.randomUUID()}`),
   );
   await runtime.start(connection);
   const intent = (overrides: Partial<AgentStartIntent> = {}): AgentStartIntent => ({
@@ -292,7 +297,7 @@ export async function harness(options: HarnessOptions = {}) {
       return arrived.promise;
     },
     details: (kind: string) => activities.filter((a) => a.detailKind === kind).map((a) => a.detail),
-    deliver: (sequence: number) =>
+    deliver: (sequence: number, agentId = "agent-a") =>
       runtime.handleAgentMessage({
         protocolMajor: 1,
         requestId: `request-${sequence}`,
@@ -301,7 +306,7 @@ export async function harness(options: HarnessOptions = {}) {
         sequence,
         workspaceId: connection.workspaceId,
         conversationId: "conversation-a",
-        agentId: "agent-a",
+        agentId,
         body: `body-${sequence}`,
         method: "agent:v1:message:deliver",
         target: "#general",

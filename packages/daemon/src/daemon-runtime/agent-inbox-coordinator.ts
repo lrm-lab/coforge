@@ -407,6 +407,7 @@ export class AgentInboxCoordinator {
    * losing it.
    */
   releaseFallbackNotices(agentId: string): void {
+    if (this.ports.currentActivityLaunch(agentId)?.modelQuotaInputHeld) return;
     const notices = this.ports.deliveryGate.releaseFallbackNotices(agentId);
     if (!notices.length) return;
     const session = this.ports.processManager.session(agentId);

@@ -109,6 +109,25 @@ export class AgentLaunchCustody {
     this.ports.releaseFallbackNotices(agentId);
   }
 
+  async resumeModelQuota(
+    agentId: string,
+    launch: ActivityLaunch,
+    held: readonly AgentMessageDelivery[],
+    drain: () => Promise<void>,
+  ): Promise<void> {
+    for (const message of held) this.ports.deliveryGate.enqueue(agentId, message);
+    await drain();
+    if (
+      this.ports.currentActivityLaunches.get(agentId) !== launch ||
+      launch.stopping ||
+      launch.modelQuotaInputHeld
+    )
+      return;
+    await this.flushSurvivingDeliveries(agentId);
+    this.ports.releaseHeldAppItems(agentId);
+    this.ports.releaseFallbackNotices(agentId);
+  }
+
   /** Flushes whatever `AgentDeliveryGate` held for `agentId` across an unexpected
    * exit, treating the fresh session as idle — used when nothing else has told the Agent about
    * it. A turn already open (a notice just written, or the provider says so) is not ended by
@@ -117,6 +136,9 @@ export class AgentLaunchCustody {
    * launch's starting inbox. */
   flushSurvivingDeliveries(agentId: string): Promise<void> {
     const { deliveryGate: gate } = this.ports;
+    const launch = this.ports.currentActivityLaunches.get(agentId);
+    if (launch?.resumeModelQuotaInput && !this.ports.inputDrain.modelQuotaHeld(agentId))
+      this.ensureInput(agentId);
     // The provider's own word wins over the daemon's busy mark, as event observation treats it.
     const live = this.ports.agentProcessManager.session(agentId)?.hasLiveTurn;
     const turnOpen = live ?? gate.isBusy(agentId);

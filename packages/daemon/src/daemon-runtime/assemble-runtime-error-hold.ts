@@ -4,6 +4,7 @@ import {
   RuntimeErrorDeliveryHold,
   type RuntimeErrorDeliveryHoldPorts,
 } from "./runtime-error-delivery-hold";
+import { ClaudeModelQuotaLedger } from "#src/persistence/claude-model-quota-ledger";
 import { AgentRuntimeBackoffStore } from "#src/persistence/agent-runtime-backoff-store";
 
 /**
@@ -25,11 +26,14 @@ export function assembleRuntimeErrorDeliveryHold(input: {
   credential?: RuntimeErrorDeliveryHoldPorts["credential"];
 }): RuntimeErrorDeliveryHold {
   const store = new AgentRuntimeBackoffStore(input.stateDirectory);
+  let claudeQuotaLedger: ClaudeModelQuotaLedger | undefined;
   const hold = new RuntimeErrorDeliveryHold({
     deliveryGate: input.deliveryGate,
     flush: input.flush,
     backoffEnded: input.backoffEnded,
     store,
+    claudeQuotaLedger: () =>
+      (claudeQuotaLedger ??= new ClaudeModelQuotaLedger(input.stateDirectory())),
     ...(input.credential ? { credential: input.credential } : {}),
   });
   // The runtime's state directory is assigned after its field initializers, so the restore runs

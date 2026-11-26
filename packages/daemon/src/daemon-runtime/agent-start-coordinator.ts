@@ -144,7 +144,7 @@ export function startAgent(
     void inputCompletion.catch(() => {});
     const extendedLaunch = existingLaunch
       .then(async (runtime) => {
-        await inputCompletion;
+        if (!ports.inputDrain.modelQuotaHeld(agentId)) await inputCompletion;
         return runtime;
       })
       .finally(() => {
@@ -164,7 +164,10 @@ export function startAgent(
     );
     if (!inputs.length) return Promise.resolve(activeRuntime);
     ports.inputDrain.ensure(agentId);
-    return Promise.all(inputs).then(() => activeRuntime);
+    const inputCompletion = Promise.all(inputs);
+    if (!ports.inputDrain.modelQuotaHeld(agentId)) return inputCompletion.then(() => activeRuntime);
+    void inputCompletion.catch(() => {});
+    return Promise.resolve(activeRuntime);
   }
 
   ports.messageAttention.clearAgent(agentId);
@@ -204,15 +207,21 @@ export function startAgent(
         // Any successful launch, a managed Start included, ends a wake cooldown.
         ports.wakeLaunchFailures.reset(agentId);
         ports.inputDrain.ensure(agentId);
-        if (recoveryCompletion) await recoveryCompletion;
-        if (!recoveryCompletion) ports.releaseSurvivingHolds(agentId);
-        if (startupCompletion) await startupCompletion;
-        if (!recoveryCompletion) owed?.paid();
-        else
-          void recoveryOutcome.promise.then((told) => {
-            if (told) owed?.paid();
-            else ports.releaseSurvivingHolds(agentId);
-          });
+        const modelQuotaHeld = ports.inputDrain.modelQuotaHeld(agentId);
+        const settleInputs = async () => {
+          if (modelQuotaHeld) await Promise.all(inputs);
+          if (recoveryCompletion) await recoveryCompletion;
+          if (!recoveryCompletion && !modelQuotaHeld) ports.releaseSurvivingHolds(agentId);
+          if (startupCompletion) await startupCompletion;
+          if (!recoveryCompletion) owed?.paid();
+          else
+            void recoveryOutcome.promise.then((told) => {
+              if (told) owed?.paid();
+              else ports.releaseSurvivingHolds(agentId);
+            });
+        };
+        if (modelQuotaHeld) void settleInputs().catch(() => {});
+        else await settleInputs();
         return runtime;
       },
       (error: unknown) => {

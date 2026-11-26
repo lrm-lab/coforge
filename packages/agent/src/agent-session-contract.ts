@@ -42,6 +42,7 @@ export function prepareAgentNotice(
 }
 
 export interface AgentSession {
+  readonly claudeQuotaAccountDigest?: string;
   readonly contextViewRequestLogPath?: string;
   /** OS PID of the runtime's owned child process, when backed by one; absent once exited or embedded. */
   readonly processId?: number;

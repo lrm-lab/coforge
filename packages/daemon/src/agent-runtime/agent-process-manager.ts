@@ -98,6 +98,7 @@ export type ServerLaunchIdentity = Readonly<{
  * the server-minted scope it was authorized under. */
 export type AgentProcessStartOptions = Omit<AgentLaunchInput, "agentId" | "config"> & {
   effectiveConfigRevision?: number;
+  onSessionReady?(session: AgentSession): void;
   /** The already-authorized launch identity to remember only if the runtime starts. */
   serverLaunch?: ServerLaunchIdentity;
 };
@@ -197,6 +198,7 @@ export class AgentProcessManager {
       sessionId,
       ...(serverLaunch ? { serverLaunch } : {}),
     });
+    options.onSessionReady?.(session);
     this.#stateFor(agentId).transition("runtime_ready");
     this.#runtimes.set(agentId, runtime);
     session.onExit((exit) => {

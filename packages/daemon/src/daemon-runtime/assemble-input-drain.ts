@@ -45,7 +45,10 @@ export function assembleInputDrain(ports: InputDrainCollaborators): AgentInputDr
   return new AgentInputDrain(
     {
       runnerHeld: ports.runnerHeld,
+      resumeModelQuota: (agentId, launch, held, drain) =>
+        ports.launchCustody().resumeModelQuota(agentId, launch, held, drain),
       sessionFor: (agentId) => ports.processManager().session(agentId),
+      credentialHeld: (agentId) => ports.deliveryGate().credentialHeld(agentId),
       launchFor: (agentId) => ports.launches().get(agentId),
       hasQueuedDeliveries: (agentId) => ports.deliveryGate().hasQueued(agentId),
       isLaunching: (agentId) => ports.agentLaunches().has(agentId),
@@ -59,6 +62,10 @@ export function assembleInputDrain(ports: InputDrainCollaborators): AgentInputDr
         deliverContextViewMessage(ports.contextView(), agentId, message, () => {
           const gate = ports.deliveryGate();
           const tracked = isTrackedMention(message);
+          if (ports.launches().get(agentId)?.modelQuotaInputHeld)
+            return tracked
+              ? ports.mentionDeliveries().deliver(message)
+              : ports.messageAttention().receive(message);
           const wakeKey = deliveryWakeKey([message]);
           const attention = ports.messageAttention();
           const willProcess = tracked
@@ -137,7 +144,9 @@ export function assembleInputDrain(ports: InputDrainCollaborators): AgentInputDr
         // Nothing is told under a runner hold: the kept mentions wait for the restart. Nor to a
         // process whose credential is known invalid: they wait for its next launch.
         const taken =
-          ports.runnerHeld() || ports.deliveryGate().credentialHeld(agentId)
+          ports.runnerHeld() ||
+          ports.launches().get(agentId)?.modelQuotaInputHeld ||
+          ports.deliveryGate().credentialHeld(agentId)
             ? []
             : ports.mentionDeliveries().carry.takeCarried(agentId);
         return taken.length

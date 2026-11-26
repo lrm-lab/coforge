@@ -30,6 +30,12 @@ import type {
 } from "#src/persistence/agent-runtime-backoff-store";
 import type { AgentDeliveryGate } from "./agent-delivery-gate";
 import type { CredentialInvalidHolds } from "./credential-invalid-holds";
+import type { ClaudeModelQuotaLedger } from "#src/persistence/claude-model-quota-ledger";
+import {
+  claudeQuotaModel,
+  ClaudeModelQuotaHolds,
+  type ClaudeModelQuotaLaunch,
+} from "./claude-model-quota-holds";
 
 const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 const MAX_MODEL_WINDOW_MS = 8 * 24 * 60 * 60_000;
@@ -54,13 +60,7 @@ function matchingModelWindow(
     limit?.kind !== "window_limit" ||
     limit.modelWindow?.window !== "weekly" ||
     !model ||
-    !launch.model
-  )
-    return;
-  if (model !== "fable" && model !== "opus" && model !== "sonnet") return;
-  if (
-    model !== launch.model &&
-    !new RegExp(`^claude-${model}-[0-9]+(?:-[0-9]+)*(?:\\[1m\\])?$`).test(launch.model)
+    model !== claudeQuotaModel(launch.model)
   )
     return;
   const untilMs = Date.parse(limit.resetsAt ?? "");
@@ -83,6 +83,7 @@ export type RuntimeErrorDeliveryHoldPorts = Readonly<{
   flush(agentId: string, held: AgentMessageDelivery[]): void;
   backoffEnded?(agentId: string): void;
   store?: RuntimeErrorBackoffPersistence;
+  claudeQuotaLedger?: () => ClaudeModelQuotaLedger;
   credential?: Pick<CredentialInvalidHolds, "modelOutput" | "forget" | "dispose">;
 }>;
 
@@ -95,12 +96,33 @@ export class RuntimeErrorDeliveryHold {
   readonly #zeroEvidence = new RuntimeErrorFingerprintFence(ZERO_EVIDENCE_CRASH_STREAK_CAP);
   readonly #turnProgress = new Set<string>();
   readonly #modelWaits = new Map<string, ModelWait>();
+  readonly #claudeQuota: ClaudeModelQuotaHolds | undefined;
 
   readonly #releaseTimers = new Map<string, ScheduledWait>();
   readonly #accountTimers = new Map<string, ScheduledWait>();
 
   constructor(ports: RuntimeErrorDeliveryHoldPorts) {
     this.#ports = ports;
+    if (ports.claudeQuotaLedger) {
+      this.#claudeQuota = new ClaudeModelQuotaHolds(ports.claudeQuotaLedger, (agentId, held) => {
+        if (held) {
+          if (!this.#isFenced(agentId) && !this.#ports.deliveryGate.credentialHeld(agentId))
+            this.#projectWait(agentId);
+        } else this.#finishWaitTransition(agentId, true);
+      });
+    }
+  }
+
+  bindClaudeModelQuota(
+    agentId: string,
+    launch: ClaudeModelQuotaLaunch,
+    accountDigest: string | undefined,
+  ): void {
+    this.#claudeQuota?.bind(agentId, launch, accountDigest);
+  }
+
+  modelQuotaHeld(agentId: string): boolean {
+    return this.#claudeQuota?.holding(agentId) ?? false;
   }
 
   noteFailure(
@@ -164,6 +186,7 @@ export class RuntimeErrorDeliveryHold {
     this.#clearModelWait(agentId);
     this.#backoff.reset(agentId);
     this.#ports.store?.clear(agentId);
+    this.#claudeQuota?.unbind(agentId);
     this.#ports.deliveryGate.hold(agentId, "credential_invalid");
     return true;
   }
@@ -219,9 +242,18 @@ export class RuntimeErrorDeliveryHold {
       !this.#isFenced(agentId) &&
       !this.#ports.deliveryGate.credentialHeld(agentId)
     ) {
-      if (modelWait)
-        this.#holdModelWindow(agentId, launch, modelWait.modelWindow, modelWait.untilMs);
-      else
+      if (modelWait) {
+        if (
+          !this.#claudeQuota?.noteRejected(
+            agentId,
+            launch,
+            modelWait.modelWindow,
+            modelWait.untilMs,
+            now,
+          )
+        )
+          this.#holdModelWindow(agentId, launch, modelWait.modelWindow, modelWait.untilMs);
+      } else
         this.#holdAccountWindow(
           agentId,
           Math.min(accountUntilMs, now + QUOTA_RESET_BACKOFF_MAX_MS),
@@ -307,6 +339,7 @@ export class RuntimeErrorDeliveryHold {
 
   forget(agentId: string): void {
     this.#ports.credential?.forget(agentId);
+    this.#claudeQuota?.unbind(agentId);
     this.#clearModelWait(agentId);
     this.#clearTimer(this.#releaseTimers, agentId);
     this.#clearTimer(this.#accountTimers, agentId);
@@ -320,6 +353,7 @@ export class RuntimeErrorDeliveryHold {
     this.#ports.credential?.dispose();
     const waiting = new Set([
       ...this.#modelWaits.keys(),
+      ...(this.#claudeQuota?.dispose() ?? []),
       ...this.#releaseTimers.keys(),
       ...this.#accountTimers.keys(),
     ]);
@@ -347,7 +381,10 @@ export class RuntimeErrorDeliveryHold {
 
   #projectWait(agentId: string): boolean {
     const regular = this.#releaseTimers.get(agentId);
-    const hasQuotaWait = this.#accountTimers.has(agentId) || this.#modelWaits.has(agentId);
+    const hasQuotaWait =
+      this.#accountTimers.has(agentId) ||
+      this.#modelWaits.has(agentId) ||
+      this.modelQuotaHeld(agentId);
     const reason = regular?.reason ?? (hasQuotaWait ? "rate_limit_backoff" : undefined);
     if (!reason) return false;
     this.#ports.deliveryGate.hold(agentId, reason);
@@ -357,8 +394,16 @@ export class RuntimeErrorDeliveryHold {
   #finishWaitTransition(agentId: string, flush: boolean, notify = true): void {
     if (this.#isFenced(agentId) || this.#ports.deliveryGate.credentialHeld(agentId)) return;
     if (this.#projectWait(agentId)) return;
-    if (flush) this.#releaseHeld(agentId);
-    else this.#ports.deliveryGate.endHoldForNextLaunch(agentId);
+    if (flush) {
+      const launch = this.#claudeQuota?.launchFor(agentId);
+      if (launch?.modelQuotaInputHeld && launch.resumeModelQuotaInput) {
+        delete launch.modelQuotaInputHeld;
+        launch.resumeModelQuotaInput(this.#ports.deliveryGate.release(agentId));
+      } else {
+        if (launch) delete launch.modelQuotaInputHeld;
+        this.#releaseHeld(agentId);
+      }
+    } else this.#ports.deliveryGate.endHoldForNextLaunch(agentId);
     if (notify) this.#ports.backoffEnded?.(agentId);
   }
 
@@ -439,9 +484,10 @@ export class RuntimeErrorDeliveryHold {
 
   noteModelWindowAvailable(
     agentId: string,
-    launch: object,
+    launch: { provider?: string; model?: string },
     event: RuntimeModelWindowAvailable,
   ): boolean {
+    if (this.#claudeQuota?.noteAvailable(agentId, launch, event)) return true;
     const wait = this.#modelWaits.get(agentId);
     const observedAtMs = Date.parse(event.occurredAt);
     if (
@@ -457,8 +503,10 @@ export class RuntimeErrorDeliveryHold {
     return true;
   }
 
-  endLaunchModelWait(agentId: string, launch: object): void {
+  endLaunchModelWait(agentId: string, launch: { provider?: string; model?: string }): void {
+    const accountWait = this.#claudeQuota?.unbind(agentId, launch);
     if (this.#modelWaits.get(agentId)?.launch === launch) this.#endModelWait(agentId, false);
+    else if (accountWait) this.#finishWaitTransition(agentId, false, false);
   }
 
   #endModelWait(agentId: string, flush: boolean): void {
