@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { codePointLength } from "./truncate";
 
 /** The longest subagent type a lineage carries, in code points. */
@@ -18,64 +19,85 @@ export type ActivityTrajectoryEntry = (
   | { kind: "system"; title: string; text: string }
 ) & { subagent?: ActivitySubagent };
 
-// Eight entries permit bounded batching (at most ~64KiB of UTF-8 text).
+const singleLineSchema = (maxCodePoints: number) =>
+  z.string().refine((value) => validLine(value, maxCodePoints));
+
+const activityTextSchema = z.string().refine((value) => codePointLength(value) <= 2000);
+const toolInputSchema = z.string().refine((value) => validToolInput(value));
+
+const activitySubagentSchema = z.object({
+  parentToolUseId: singleLineSchema(128),
+  subagentType: singleLineSchema(ACTIVITY_SUBAGENT_TYPE_MAX).optional(),
+});
+
+const activityEntryRecordSchema = z.looseObject({
+  subagent: z.unknown().optional(),
+});
+
+const activityEntryPayloadSchema = z.union([
+  z.object({
+    kind: z.literal("tool_start"),
+    toolName: singleLineSchema(128),
+    toolInput: toolInputSchema.optional(),
+    callId: singleLineSchema(128).optional(),
+    text: z.undefined().optional(),
+    title: z.undefined().optional(),
+  }),
+  z.object({
+    kind: z.enum(["text", "thinking"]),
+    text: activityTextSchema,
+    toolName: z.undefined().optional(),
+    toolInput: z.undefined().optional(),
+    callId: z.undefined().optional(),
+    title: z.undefined().optional(),
+  }),
+  z.object({
+    kind: z.literal("system"),
+    title: singleLineSchema(120),
+    text: activityTextSchema,
+    toolName: z.undefined().optional(),
+    toolInput: z.undefined().optional(),
+    callId: z.undefined().optional(),
+  }),
+]);
+
 export function parseActivityEntries(value: unknown): ActivityTrajectoryEntry[] {
   if (!Array.isArray(value) || value.length > 8) throw new Error("invalid activity entries");
-  return value.map((entry: unknown) => {
-    if (!entry || typeof entry !== "object") throw new Error("invalid activity entry");
-    const item = entry as Record<string, unknown>;
+  return value.map((entry: unknown): ActivityTrajectoryEntry => {
+    const raw = activityEntryRecordSchema.safeParse(entry);
+    if (!raw.success) throw new Error("invalid activity entry");
     let subagent: ActivitySubagent | undefined;
-    if (item.subagent !== undefined) {
-      const lineage = item.subagent as Record<string, unknown> | null;
-      if (
-        !lineage ||
-        !validLine(lineage.parentToolUseId, 128) ||
-        (lineage.subagentType !== undefined &&
-          !validLine(lineage.subagentType, ACTIVITY_SUBAGENT_TYPE_MAX))
-      )
-        throw new Error("invalid activity lineage");
+    if (raw.data.subagent !== undefined) {
+      const lineage = activitySubagentSchema.safeParse(raw.data.subagent);
+      if (!lineage.success) throw new Error("invalid activity lineage");
       subagent = {
-        parentToolUseId: lineage.parentToolUseId,
-        ...(lineage.subagentType !== undefined ? { subagentType: lineage.subagentType } : {}),
+        parentToolUseId: lineage.data.parentToolUseId,
+        ...(lineage.data.subagentType !== undefined
+          ? { subagentType: lineage.data.subagentType }
+          : {}),
       };
     }
+    const payload = activityEntryPayloadSchema.safeParse(entry);
+    if (!payload.success) throw new Error("invalid activity entry payload");
     const scope = subagent ? { subagent } : {};
-    if (
-      item.kind === "tool_start" &&
-      validLine(item.toolName, 128) &&
-      item.text === undefined &&
-      item.title === undefined &&
-      (item.toolInput === undefined || validToolInput(item.toolInput)) &&
-      (item.callId === undefined || isActivityCallId(item.callId))
-    )
+    if (payload.data.kind === "tool_start") {
       return {
         kind: "tool_start",
-        toolName: item.toolName,
-        ...(item.toolInput !== undefined ? { toolInput: item.toolInput as string } : {}),
-        ...(item.callId !== undefined ? { callId: item.callId as string } : {}),
+        toolName: payload.data.toolName,
+        ...(payload.data.toolInput !== undefined ? { toolInput: payload.data.toolInput } : {}),
+        ...(payload.data.callId !== undefined ? { callId: payload.data.callId } : {}),
         ...scope,
       };
-    if (
-      (item.kind === "text" || item.kind === "thinking") &&
-      typeof item.text === "string" &&
-      codePointLength(item.text) <= 2000 &&
-      item.toolName === undefined &&
-      item.toolInput === undefined &&
-      item.callId === undefined &&
-      item.title === undefined
-    )
-      return { kind: item.kind, text: item.text, ...scope };
-    if (
-      item.kind === "system" &&
-      validLine(item.title, 120) &&
-      typeof item.text === "string" &&
-      codePointLength(item.text) <= 2000 &&
-      item.toolName === undefined &&
-      item.toolInput === undefined &&
-      item.callId === undefined
-    )
-      return { kind: "system", title: item.title, text: item.text, ...scope };
-    throw new Error("invalid activity entry payload");
+    }
+    if (payload.data.kind === "system") {
+      return {
+        kind: "system",
+        title: payload.data.title,
+        text: payload.data.text,
+        ...scope,
+      };
+    }
+    return { kind: payload.data.kind, text: payload.data.text, ...scope };
   });
 }
 

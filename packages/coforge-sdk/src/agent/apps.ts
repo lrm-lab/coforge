@@ -5,8 +5,8 @@
  * envelope as `app config`.
  */
 
+import { z } from "zod";
 import { APP_IDENTITY_SCOPES as APP_SCOPES } from "#src/internal/app-scopes";
-import { isRecord } from "#src/internal/json-record";
 import type { AgentAppMarketplaceQuery } from "./app-marketplace";
 import type { AgentAppRegistrationRequest } from "./app-registration";
 
@@ -110,127 +110,111 @@ export const AGENT_APP_ERROR_CODES = [
 export type AgentAppErrorCode = (typeof AGENT_APP_ERROR_CODES)[number];
 export type AgentAppErrorResponse = { ok: false; errorCode: AgentAppErrorCode; error: string };
 
-const isText = (value: unknown): value is string => typeof value === "string";
-const isFilled = (value: unknown): value is string => isText(value) && value.length > 0;
+const filledStringSchema = z.string().min(1);
 
-function decodeApp(value: unknown): AgentAppView {
-  if (
-    !isRecord(value) ||
-    !isFilled(value.key) ||
-    !isText(value.name) ||
-    !isText(value.description) ||
-    !isText(value.whenToUse) ||
-    !(value.homepageUrl === null || isText(value.homepageUrl)) ||
-    typeof value.builtIn !== "boolean" ||
-    !(
-      value.access === undefined ||
-      (AGENT_APP_ACCESS_STATES as readonly unknown[]).includes(value.access)
-    ) ||
-    !(
-      value.agentManifestUrl === undefined ||
-      value.agentManifestUrl === null ||
-      isText(value.agentManifestUrl)
-    ) ||
-    !(
-      value.agentManifestUrlSource === undefined ||
-      value.agentManifestUrlSource === null ||
-      (AGENT_MANIFEST_URL_SOURCES as readonly unknown[]).includes(value.agentManifestUrlSource)
-    )
-  )
-    throw new Error("invalid Agent app list response");
-  const app: AgentAppView = {
-    key: value.key,
-    name: value.name,
-    description: value.description,
-    whenToUse: value.whenToUse,
-    homepageUrl: value.homepageUrl,
-    builtIn: value.builtIn,
-  };
-  if (value.access !== undefined) app.access = value.access as AgentAppAccessState;
-  if (value.agentManifestUrl !== undefined) {
-    app.agentManifestUrl = value.agentManifestUrl as string | null;
-    app.agentManifestUrlSource = (value.agentManifestUrlSource ??
-      null) as AgentManifestUrlSource | null;
-  }
-  return app;
-}
+const agentAppViewSchema = z
+  .object({
+    key: filledStringSchema,
+    name: z.string(),
+    description: z.string(),
+    whenToUse: z.string(),
+    homepageUrl: z.string().nullable(),
+    builtIn: z.boolean(),
+    access: z.enum(AGENT_APP_ACCESS_STATES).optional(),
+    agentManifestUrl: z.string().nullable().optional(),
+    agentManifestUrlSource: z.enum(AGENT_MANIFEST_URL_SOURCES).nullable().optional(),
+  })
+  .transform((value): AgentAppView => {
+    const app: AgentAppView = {
+      key: value.key,
+      name: value.name,
+      description: value.description,
+      whenToUse: value.whenToUse,
+      homepageUrl: value.homepageUrl,
+      builtIn: value.builtIn,
+    };
+    if (value.access !== undefined) app.access = value.access;
+    if (value.agentManifestUrl !== undefined) {
+      app.agentManifestUrl = value.agentManifestUrl;
+      app.agentManifestUrlSource = value.agentManifestUrlSource ?? null;
+    }
+    return app;
+  });
+
+const agentAppListResponseSchema = z.object({
+  ok: z.literal(true),
+  apps: z.array(agentAppViewSchema),
+});
+
+const agentAppTokenResponseSchema = z.discriminatedUnion("status", [
+  z.object({
+    ok: z.literal(true),
+    status: z.literal("issued"),
+    access_token: filledStringSchema,
+    token_type: z.literal("Bearer"),
+    expires_in: z.number(),
+    audience: filledStringSchema,
+    scope: z.string(),
+  }),
+  z
+    .object({
+      ok: z.literal(true),
+      status: z.literal("approval_required"),
+      requestId: filledStringSchema,
+      actionCardMessageId: filledStringSchema.optional(),
+      scopes: z.array(filledStringSchema).optional().catch(undefined),
+    })
+    .transform((value): AgentAppApprovalRequired => ({
+      ok: true,
+      status: "approval_required",
+      requestId: value.requestId,
+      ...(value.actionCardMessageId ? { actionCardMessageId: value.actionCardMessageId } : {}),
+      ...(value.scopes !== undefined ? { scopes: value.scopes } : {}),
+    })),
+  z.object({
+    ok: z.literal(true),
+    status: z.literal("not_installed"),
+  }),
+]);
+
+const agentAppTokenBodySchema = z.strictObject({
+  target: z.string().min(1).max(200).optional(),
+  scopes: z
+    .array(z.enum(APP_SCOPES))
+    .max(APP_SCOPES.length)
+    .refine((scopes) => new Set(scopes).size === scopes.length)
+    .optional(),
+});
+
+const agentAppErrorResponseSchema = z.object({
+  ok: z.literal(false),
+  errorCode: z.enum(AGENT_APP_ERROR_CODES),
+  error: z.string(),
+});
 
 export function decodeAgentAppListResponse(value: unknown): AgentAppListResponse {
-  if (!isRecord(value) || value.ok !== true || !Array.isArray(value.apps))
-    throw new Error("invalid Agent app list response");
-  return { ok: true, apps: value.apps.map(decodeApp) };
+  const parsed = agentAppListResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid Agent app list response");
+  return parsed.data;
 }
 
 export function decodeAgentAppTokenResponse(value: unknown): AgentAppTokenResponse {
-  if (isRecord(value) && value.ok === true) {
-    if (
-      value.status === "issued" &&
-      isFilled(value.access_token) &&
-      value.token_type === "Bearer" &&
-      typeof value.expires_in === "number" &&
-      isFilled(value.audience) &&
-      isText(value.scope)
-    )
-      return {
-        ok: true,
-        status: "issued",
-        access_token: value.access_token,
-        token_type: "Bearer",
-        expires_in: value.expires_in,
-        audience: value.audience,
-        scope: value.scope,
-      };
-    if (
-      value.status === "approval_required" &&
-      isFilled(value.requestId) &&
-      (value.actionCardMessageId === undefined || isFilled(value.actionCardMessageId))
-    )
-      return {
-        ok: true,
-        status: "approval_required",
-        requestId: value.requestId,
-        ...(value.actionCardMessageId ? { actionCardMessageId: value.actionCardMessageId } : {}),
-        ...(Array.isArray(value.scopes) && value.scopes.every(isFilled)
-          ? { scopes: value.scopes as string[] }
-          : {}),
-      };
-    if (value.status === "not_installed") return { ok: true, status: "not_installed" };
-  }
-  throw new Error("invalid Agent app token response");
+  const parsed = agentAppTokenResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid Agent app token response");
+  return parsed.data;
 }
 
-/** The token request body, refusing anything outside the contract. */
 export function decodeAgentAppTokenBody(value: unknown): AgentAppTokenBody | undefined {
-  if (!isRecord(value)) return undefined;
-  const { target, scopes, ...rest } = value;
-  if (
-    Object.keys(rest).length > 0 ||
-    !(target === undefined || (isFilled(target) && target.length <= 200))
-  )
-    return undefined;
-  if (
-    scopes !== undefined &&
-    !(
-      Array.isArray(scopes) &&
-      scopes.length <= APP_SCOPES.length &&
-      new Set(scopes).size === scopes.length &&
-      scopes.every((scope) => (APP_SCOPES as readonly unknown[]).includes(scope))
-    )
-  )
-    return undefined;
+  const parsed = agentAppTokenBodySchema.safeParse(value);
+  if (!parsed.success) return undefined;
+  const { target, scopes } = parsed.data;
   return {
     ...(target === undefined ? {} : { target }),
-    ...(scopes === undefined ? {} : { scopes: scopes as string[] }),
+    ...(scopes === undefined ? {} : { scopes }),
   };
 }
 
 export function decodeAgentAppErrorResponse(value: unknown): AgentAppErrorResponse | undefined {
-  if (
-    !isRecord(value) ||
-    value.ok !== false ||
-    !(AGENT_APP_ERROR_CODES as readonly unknown[]).includes(value.errorCode) ||
-    !isText(value.error)
-  )
-    return undefined;
-  return { ok: false, errorCode: value.errorCode as AgentAppErrorCode, error: value.error };
+  const parsed = agentAppErrorResponseSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }

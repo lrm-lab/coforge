@@ -1,4 +1,4 @@
-import { isRecord } from "#src/internal/json-record";
+import { z } from "zod";
 
 export const ARTIFACT_ANCHOR_TYPES = ["file", "lines", "element", "text", "page"] as const;
 
@@ -23,37 +23,29 @@ export type AgentReviewComment = {
   images?: string[];
 };
 
-export function isAnchorShape(value: unknown): value is AgentArtifactAnchor {
-  if (!isRecord(value)) return false;
-  const keys = Object.keys(value);
-  return (
-    keys.length === 2 &&
-    keys.includes("type") &&
-    keys.includes("data") &&
-    (ARTIFACT_ANCHOR_TYPES as readonly unknown[]).includes(value.type) &&
-    isRecord(value.data)
+const anchorSchema = z.strictObject({
+  type: z.enum(ARTIFACT_ANCHOR_TYPES),
+  data: z.record(z.string(), z.unknown()),
+});
+
+const reviewCommentSchema = z
+  .strictObject({
+    body: z.string().optional(),
+    path: z.string().optional(),
+    anchor: anchorSchema.optional(),
+    replyTo: z.string().optional(),
+    images: z.array(z.string()).max(ARTIFACT_COMMENT_IMAGES_MAX).optional(),
+  })
+  .refine(
+    (value) =>
+      (value.body !== undefined && value.body.length > 0) ||
+      (value.images !== undefined && value.images.length > 0),
   );
+
+export function isAnchorShape(value: unknown): value is AgentArtifactAnchor {
+  return anchorSchema.safeParse(value).success;
 }
 
-const REVIEW_COMMENT_KEYS = ["body", "path", "anchor", "replyTo", "images"];
-
 export function isReviewCommentShape(value: unknown): value is AgentReviewComment {
-  if (!isRecord(value)) return false;
-  if (!Object.keys(value).every((key) => REVIEW_COMMENT_KEYS.includes(key))) return false;
-  if (value.body !== undefined && typeof value.body !== "string") return false;
-  if (value.path !== undefined && typeof value.path !== "string") return false;
-  if (value.replyTo !== undefined && typeof value.replyTo !== "string") return false;
-  if (
-    value.images !== undefined &&
-    !(
-      Array.isArray(value.images) &&
-      value.images.length <= ARTIFACT_COMMENT_IMAGES_MAX &&
-      value.images.every((image) => typeof image === "string")
-    )
-  )
-    return false;
-  const hasBody = typeof value.body === "string" && value.body.length > 0;
-  const hasImages = Array.isArray(value.images) && value.images.length > 0;
-  if (!hasBody && !hasImages) return false;
-  return value.anchor === undefined || isAnchorShape(value.anchor);
+  return reviewCommentSchema.safeParse(value).success;
 }

@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export const AGENT_CONTEXT_ENTRY_SEARCH_MAX_QUERY_CHARS = 200;
 export const AGENT_CONTEXT_ENTRY_SEARCH_DEFAULT_LIMIT = 20;
 export const AGENT_CONTEXT_ENTRY_SEARCH_MAX_LIMIT = 50;
@@ -61,75 +63,63 @@ export type AgentContextReadResponse = Readonly<{
 
 export type AgentContextQueryResponse = AgentContextSearchResponse | AgentContextReadResponse;
 
-function isEntryKind(value: unknown): value is AgentContextEntryKind {
-  return value === "system" || value === "tool" || value === "message";
-}
+const nonNegativeSafeInt = z.int().min(0);
+const entryKindSchema = z.enum(["system", "tool", "message"]);
 
-function isEntry(value: unknown): value is AgentContextEntry {
-  if (!value || typeof value !== "object") return false;
-  const entry = value as Record<string, unknown>;
-  return (
-    typeof entry.id === "string" &&
-    isEntryKind(entry.kind) &&
-    typeof entry.text === "string" &&
-    (entry.role === undefined || typeof entry.role === "string")
-  );
-}
+const contextEntrySchema = z.looseObject({
+  id: z.string(),
+  kind: entryKindSchema,
+  role: z.string().optional(),
+  text: z.string(),
+});
 
-function isSearchResult(value: unknown): boolean {
-  if (!value || typeof value !== "object") return false;
-  const entry = value as Record<string, unknown>;
-  return (
-    typeof entry.id === "string" &&
-    isEntryKind(entry.kind) &&
-    typeof entry.snippet === "string" &&
-    entry.snippet.length <= 400 &&
-    (entry.role === undefined || typeof entry.role === "string")
-  );
-}
+const contextSearchResultSchema = z.looseObject({
+  id: z.string(),
+  kind: entryKindSchema,
+  role: z.string().optional(),
+  snippet: z.string().max(400),
+});
+
+const contextQueryHeaderSchema = z.looseObject({
+  ok: z.literal(true),
+  mode: z.string(),
+  messageId: z.string(),
+  sessionId: z.string(),
+});
+
+const contextSearchResponseSchema = z.looseObject({
+  ok: z.literal(true),
+  mode: z.literal("search"),
+  messageId: z.string(),
+  sessionId: z.string(),
+  query: z.string(),
+  total: nonNegativeSafeInt,
+  offset: nonNegativeSafeInt,
+  limit: nonNegativeSafeInt,
+  results: z.array(contextSearchResultSchema),
+});
+
+const contextReadResponseSchema = z.looseObject({
+  ok: z.literal(true),
+  mode: z.literal("read"),
+  messageId: z.string(),
+  sessionId: z.string(),
+  around: z.string(),
+  page: nonNegativeSafeInt,
+  limit: nonNegativeSafeInt,
+  entries: z.array(contextEntrySchema),
+  hasMore: z.boolean(),
+});
 
 export function decodeAgentContextQueryResponse(value: unknown): AgentContextQueryResponse {
-  if (!value || typeof value !== "object" || (value as { ok?: unknown }).ok !== true)
-    throw new Error("invalid Agent context query response");
-  const record = value as Record<string, unknown>;
-  if (
-    typeof record.mode !== "string" ||
-    typeof record.messageId !== "string" ||
-    typeof record.sessionId !== "string"
-  )
-    throw new Error("invalid Agent context query response");
-  if (record.mode === "search") {
-    if (
-      typeof record.query !== "string" ||
-      typeof record.total !== "number" ||
-      !Number.isSafeInteger(record.total) ||
-      record.total < 0 ||
-      typeof record.offset !== "number" ||
-      !Number.isSafeInteger(record.offset) ||
-      record.offset < 0 ||
-      typeof record.limit !== "number" ||
-      !Number.isSafeInteger(record.limit) ||
-      record.limit < 0 ||
-      !Array.isArray(record.results)
-    )
-      throw new Error("invalid Agent context search response");
-    if (record.results.some((result) => !isSearchResult(result)))
-      throw new Error("invalid Agent context search response");
-    return record as unknown as AgentContextSearchResponse;
+  const header = contextQueryHeaderSchema.safeParse(value);
+  if (!header.success) throw new Error("invalid Agent context query response");
+  if (header.data.mode === "search") {
+    const parsed = contextSearchResponseSchema.safeParse(value);
+    if (!parsed.success) throw new Error("invalid Agent context search response");
+    return parsed.data;
   }
-  if (
-    record.mode === "read" &&
-    typeof record.around === "string" &&
-    typeof record.page === "number" &&
-    Number.isSafeInteger(record.page) &&
-    record.page >= 0 &&
-    typeof record.limit === "number" &&
-    Number.isSafeInteger(record.limit) &&
-    record.limit >= 0 &&
-    Array.isArray(record.entries) &&
-    record.entries.every((entry) => isEntry(entry)) &&
-    typeof record.hasMore === "boolean"
-  )
-    return record as unknown as AgentContextReadResponse;
-  throw new Error("invalid Agent context query response");
+  const parsed = contextReadResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid Agent context query response");
+  return parsed.data;
 }

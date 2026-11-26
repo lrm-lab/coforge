@@ -1,5 +1,7 @@
 /** Channel lifecycle/roster response shapes for `agentApiRoutes.cloud.channels`. */
 
+import { z } from "zod";
+
 /** Computed, never stored: `server_role` when the actor's Workspace/Agent server role is
  * owner/admin; otherwise `channel_role` when its own membership's stored `channelRole` is
  * `admin`; otherwise absent. `server_role` wins when both apply. */
@@ -162,27 +164,15 @@ export type AgentChannelErrorResponse = {
   error: string;
 };
 
-function isChannelErrorCode(value: unknown): value is AgentChannelErrorCode {
-  return (
-    typeof value === "string" && (AGENT_CHANNEL_ERROR_CODES as readonly string[]).includes(value)
-  );
-}
+const channelErrorResponseSchema = z.object({
+  ok: z.literal(false),
+  errorCode: z.enum(AGENT_CHANNEL_ERROR_CODES),
+  error: z.string(),
+});
 
-/** Decodes the one JSON-enveloped channel error body; every other channel command failure stays
- * plain text (an HTTP status plus a message), so this returns `undefined` for those. */
 export function decodeAgentChannelErrorResponse(
   value: unknown,
 ): AgentChannelErrorResponse | undefined {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    !("ok" in value) ||
-    value.ok !== false ||
-    !("errorCode" in value) ||
-    !isChannelErrorCode(value.errorCode) ||
-    !("error" in value) ||
-    typeof value.error !== "string"
-  )
-    return undefined;
-  return { ok: false, errorCode: value.errorCode, error: value.error };
+  const parsed = channelErrorResponseSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }

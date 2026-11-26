@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { isRecord } from "#src/internal/json-record";
 import { MEMORY_KINDS, type MemoryKind } from "./local-memory";
 
@@ -387,115 +388,106 @@ export function teamMemoryTerms(query: string): string[] {
   return [...terms].slice(0, 24);
 }
 
+const uuidStringSchema = z.string().regex(UUID);
+const isoDateStringSchema = z.string().refine((value) => Number.isFinite(Date.parse(value)));
+const nullableUuidSchema = uuidStringSchema.nullable();
+
+const teamMemoryEntryHeaderSchema = z
+  .looseObject({
+    id: uuidStringSchema,
+    authorAgentId: nullableUuidSchema,
+    authorUserId: nullableUuidSchema.optional(),
+    revision: z.int().min(1),
+    status: z.enum(["active", "archived"]),
+    updatedAt: isoDateStringSchema,
+  })
+  .refine(
+    (entry) =>
+      (typeof entry.authorAgentId === "string" &&
+        (entry.authorUserId === undefined || entry.authorUserId === null)) ||
+      (entry.authorAgentId === null && typeof entry.authorUserId === "string"),
+  );
+
+const teamMemoryProjectSchema = z.looseObject({
+  id: uuidStringSchema,
+  name: z.string().max(100),
+  slug: z.string().max(100),
+  description: z.string().max(2000),
+});
+
+const teamMemoryProjectsSchema = z.array(teamMemoryProjectSchema).max(20);
+
+const teamMemoryMaintenanceHintSchema = z.looseObject({
+  projectId: nullableUuidSchema,
+  observedEntries: z.int().min(0).max(65),
+  observedBytes: z
+    .int()
+    .min(0)
+    .max(8 * 1024 * 1024),
+  incomplete: z.boolean(),
+  nextCommand: z.string().max(200),
+  guidance: z.string().max(600),
+});
+
+const teamMemoryMaintenanceSchema = z.looseObject({
+  token: uuidStringSchema,
+  expiresAt: isoDateStringSchema,
+  remaining: z.int().min(0).max(5),
+  projectId: nullableUuidSchema,
+});
+
+const teamMemoryResultEnvelopeSchema = z
+  .looseObject({
+    status: z.enum(["ok", "review_required", "deleted"]),
+    entries: z.array(z.unknown()).max(10),
+    projects: z.unknown().optional(),
+    maintenanceHint: z.unknown().optional(),
+    maintenance: z.unknown().optional(),
+    reviewRevision: z.int().min(0).optional(),
+    reviewToken: uuidStringSchema.optional(),
+    nextOffset: z.int().min(0).optional(),
+    replayed: z.boolean().optional(),
+  })
+  .refine(
+    (result) =>
+      result.status !== "review_required" ||
+      (result.reviewRevision !== undefined && result.reviewToken !== undefined),
+  );
+
 export function decodeTeamMemoryResult(value: unknown): TeamMemoryResult {
-  if (
-    !isRecord(value) ||
-    !["ok", "review_required", "deleted"].includes(String(value.status)) ||
-    !Array.isArray(value.entries) ||
-    value.entries.length > 10
-  )
-    throw new Error("invalid_memory_response");
-  for (const entry of value.entries) {
-    if (
-      !isRecord(entry) ||
-      typeof entry.id !== "string" ||
-      !UUID.test(entry.id) ||
-      !(
-        (typeof entry.authorAgentId === "string" &&
-          UUID.test(entry.authorAgentId) &&
-          (entry.authorUserId === undefined || entry.authorUserId === null)) ||
-        (entry.authorAgentId === null &&
-          typeof entry.authorUserId === "string" &&
-          UUID.test(entry.authorUserId))
-      ) ||
-      !Number.isSafeInteger(entry.revision) ||
-      Number(entry.revision) < 1 ||
-      !["active", "archived"].includes(String(entry.status)) ||
-      typeof entry.updatedAt !== "string" ||
-      !Number.isFinite(Date.parse(entry.updatedAt))
-    )
-      throw new Error("invalid_memory_entry");
+  const envelope = teamMemoryResultEnvelopeSchema.safeParse(value);
+  if (!envelope.success) throw new Error("invalid_memory_response");
+  for (const entry of envelope.data.entries) {
+    const header = teamMemoryEntryHeaderSchema.safeParse(entry);
+    if (!header.success) throw new Error("invalid_memory_entry");
     decodeTeamMemoryCommand({
       operation: "prepare",
-      title: entry.title,
-      content: entry.content,
-      source: entry.source,
-      kind: entry.kind,
-      applicability: entry.applicability,
-      projectId: entry.projectId,
-      pinned: entry.pinned,
-      evidence: entry.evidence,
-      relations: entry.relations,
-      effectiveAt: entry.effectiveAt,
+      title: header.data.title,
+      content: header.data.content,
+      source: header.data.source,
+      kind: header.data.kind,
+      applicability: header.data.applicability,
+      projectId: header.data.projectId,
+      pinned: header.data.pinned,
+      evidence: header.data.evidence,
+      relations: header.data.relations,
+      effectiveAt: header.data.effectiveAt,
     });
   }
   if (
-    value.projects !== undefined &&
-    (!Array.isArray(value.projects) ||
-      value.projects.length > 20 ||
-      value.projects.some(
-        (p) =>
-          !isRecord(p) ||
-          typeof p.id !== "string" ||
-          !UUID.test(p.id) ||
-          typeof p.name !== "string" ||
-          p.name.length > 100 ||
-          typeof p.slug !== "string" ||
-          p.slug.length > 100 ||
-          typeof p.description !== "string" ||
-          p.description.length > 2000,
-      ))
+    envelope.data.projects !== undefined &&
+    !teamMemoryProjectsSchema.safeParse(envelope.data.projects).success
   )
     throw new Error("invalid_memory_projects");
-  const validProject = (id: unknown) => id === null || (typeof id === "string" && UUID.test(id));
-  if (value.maintenanceHint !== undefined) {
-    const hint = value.maintenanceHint;
-    if (
-      !isRecord(hint) ||
-      !validProject(hint.projectId) ||
-      !Number.isSafeInteger(hint.observedEntries) ||
-      Number(hint.observedEntries) < 0 ||
-      Number(hint.observedEntries) > 65 ||
-      !Number.isSafeInteger(hint.observedBytes) ||
-      Number(hint.observedBytes) < 0 ||
-      Number(hint.observedBytes) > 8 * 1024 * 1024 ||
-      typeof hint.incomplete !== "boolean" ||
-      typeof hint.nextCommand !== "string" ||
-      hint.nextCommand.length > 200 ||
-      typeof hint.guidance !== "string" ||
-      hint.guidance.length > 600
-    )
-      throw new Error("invalid_memory_maintenance_hint");
-  }
-  if (value.maintenance !== undefined) {
-    const batch = value.maintenance;
-    if (
-      !isRecord(batch) ||
-      typeof batch.token !== "string" ||
-      !UUID.test(batch.token) ||
-      typeof batch.expiresAt !== "string" ||
-      !Number.isFinite(Date.parse(batch.expiresAt)) ||
-      !Number.isSafeInteger(batch.remaining) ||
-      Number(batch.remaining) < 0 ||
-      Number(batch.remaining) > 5 ||
-      !validProject(batch.projectId)
-    )
-      throw new Error("invalid_memory_maintenance");
-  }
-  for (const key of ["reviewRevision", "nextOffset"])
-    if (value[key] !== undefined && (!Number.isSafeInteger(value[key]) || Number(value[key]) < 0))
-      throw new Error("invalid_memory_response");
   if (
-    value.status === "review_required" &&
-    (value.reviewRevision === undefined || value.reviewToken === undefined)
+    envelope.data.maintenanceHint !== undefined &&
+    !teamMemoryMaintenanceHintSchema.safeParse(envelope.data.maintenanceHint).success
   )
-    throw new Error("invalid_memory_response");
+    throw new Error("invalid_memory_maintenance_hint");
   if (
-    value.reviewToken !== undefined &&
-    (typeof value.reviewToken !== "string" || !UUID.test(value.reviewToken))
+    envelope.data.maintenance !== undefined &&
+    !teamMemoryMaintenanceSchema.safeParse(envelope.data.maintenance).success
   )
-    throw new Error("invalid_memory_response");
-  if (value.replayed !== undefined && typeof value.replayed !== "boolean")
-    throw new Error("invalid_memory_response");
-  return value as unknown as TeamMemoryResult;
+    throw new Error("invalid_memory_maintenance");
+  return envelope.data as unknown as TeamMemoryResult;
 }

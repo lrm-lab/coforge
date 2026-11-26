@@ -4,14 +4,20 @@
  * `POST /api/agent/v1/actions/prepare` with an `app:register` action. Same
  * `{ ok: false, errorCode, error }` error envelope as `app token`.
  */
-import { isRecord } from "#src/internal/json-record";
+import { z } from "zod";
 import { decodeAgentAppManagementRequest, type AgentAppManagementRequest } from "./app-management";
-
-const isText = (value: unknown): value is string => typeof value === "string";
-const isFilled = (value: unknown): value is string => isText(value) && value.length > 0;
 
 /** The longest card id or client key a status or rotation names. */
 export const APP_REGISTRATION_ID_MAX_LENGTH = 64;
+
+const filledStringSchema = z.string().min(1);
+const registrationIdSchema = z.string().min(1).max(APP_REGISTRATION_ID_MAX_LENGTH);
+
+const registrationRequestSchema = z.union([
+  z.strictObject({ operation: z.literal("owned_list") }),
+  z.strictObject({ operation: z.literal("register_status"), card: registrationIdSchema }),
+  z.strictObject({ operation: z.literal("register_status"), client: registrationIdSchema }),
+]);
 
 /** One request as the daemon's local proxy hands it on to the cloud. */
 export type AgentAppRegistrationRequest =
@@ -19,26 +25,15 @@ export type AgentAppRegistrationRequest =
   | { operation: "owned_list" }
   | AgentAppManagementRequest;
 
-/** Exactly the fields the operation takes, or `undefined` for anything else. `register_status`
- * names a card (`card`) or an app (`client`), never both. The operation names are the request's
- * own, from the CLI through the daemon to this decoder. */
 export function decodeAgentAppRegistrationRequest(
   value: unknown,
 ): AgentAppRegistrationRequest | undefined {
-  if (!isRecord(value)) return undefined;
-  const { operation, ...rest } = value;
-  const keys = Object.keys(rest);
-  const only = (...allowed: string[]) => keys.every((key) => allowed.includes(key));
-  const id = (field: unknown): field is string =>
-    isFilled(field) && field.length <= APP_REGISTRATION_ID_MAX_LENGTH;
-  if (operation === "owned_list") return keys.length === 0 ? { operation } : undefined;
-  if (operation !== "register_status")
-    return decodeAgentAppManagementRequest(value, (field): field is string => id(field));
-  if (!only("card", "client")) return undefined;
-  const { card, client } = rest;
-  if (id(card) && client === undefined) return { operation, card };
-  if (id(client) && card === undefined) return { operation, client };
-  return undefined;
+  const parsed = registrationRequestSchema.safeParse(value);
+  if (parsed.success) return parsed.data;
+  return decodeAgentAppManagementRequest(
+    value,
+    (field): field is string => registrationIdSchema.safeParse(field).success,
+  );
 }
 
 /** `card_pending`: the card waits for an owner or admin. `committed`: the app exists. `cancelled`:
@@ -65,63 +60,59 @@ export type AppOwnedListResponse = {
 /** The new secret, in this answer and nowhere else. */
 export type AppSecretRotationResponse = { ok: true; clientKey: string; clientSecret: string };
 
+const appRegistrationStatusResponseSchema = z.object({
+  ok: z.literal(true),
+  status: z.enum(APP_REGISTRATION_STATES),
+  cardMessageId: filledStringSchema.optional(),
+  clientKey: filledStringSchema.optional(),
+  committedBy: filledStringSchema.optional(),
+});
+
+const appOwnedListResponseSchema = z.object({
+  ok: z.literal(true),
+  pending: z.array(
+    z.object({
+      cardMessageId: filledStringSchema,
+      name: z.string(),
+      clientKey: filledStringSchema.nullable(),
+    }),
+  ),
+  apps: z.array(
+    z.object({
+      clientKey: filledStringSchema,
+      name: z.string(),
+      role: z.enum(["owner", "admin"]),
+    }),
+  ),
+});
+
+const appSecretRotationResponseSchema = z.object({
+  ok: z.literal(true),
+  clientKey: filledStringSchema,
+  clientSecret: filledStringSchema,
+});
+
 export function decodeAppRegistrationStatusResponse(value: unknown): AppRegistrationStatusResponse {
-  if (
-    !isRecord(value) ||
-    value.ok !== true ||
-    !(APP_REGISTRATION_STATES as readonly unknown[]).includes(value.status)
-  )
-    throw new Error("invalid app registration status response");
-  const out: AppRegistrationStatusResponse = {
-    ok: true,
-    status: value.status as AppRegistrationState,
+  const parsed = appRegistrationStatusResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid app registration status response");
+  const { ok, status, cardMessageId, clientKey, committedBy } = parsed.data;
+  return {
+    ok,
+    status,
+    ...(cardMessageId !== undefined ? { cardMessageId } : {}),
+    ...(clientKey !== undefined ? { clientKey } : {}),
+    ...(committedBy !== undefined ? { committedBy } : {}),
   };
-  for (const field of ["cardMessageId", "clientKey", "committedBy"] as const) {
-    if (value[field] === undefined) continue;
-    if (!isFilled(value[field])) throw new Error("invalid app registration status response");
-    out[field] = value[field];
-  }
-  return out;
 }
 
 export function decodeAppOwnedListResponse(value: unknown): AppOwnedListResponse {
-  if (
-    !isRecord(value) ||
-    value.ok !== true ||
-    !Array.isArray(value.pending) ||
-    !Array.isArray(value.apps)
-  )
-    throw new Error("invalid owned app list response");
-  const pending = value.pending.map((row: unknown) => {
-    if (
-      !isRecord(row) ||
-      !isFilled(row.cardMessageId) ||
-      !isText(row.name) ||
-      !(row.clientKey === null || isFilled(row.clientKey))
-    )
-      throw new Error("invalid owned app list response");
-    return { cardMessageId: row.cardMessageId, name: row.name, clientKey: row.clientKey };
-  });
-  const apps = value.apps.map((row: unknown): AppOwnedListResponse["apps"][number] => {
-    if (
-      !isRecord(row) ||
-      !isFilled(row.clientKey) ||
-      !isText(row.name) ||
-      (row.role !== "owner" && row.role !== "admin")
-    )
-      throw new Error("invalid owned app list response");
-    return { clientKey: row.clientKey, name: row.name, role: row.role };
-  });
-  return { ok: true, pending, apps };
+  const parsed = appOwnedListResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid owned app list response");
+  return parsed.data;
 }
 
 export function decodeAppSecretRotationResponse(value: unknown): AppSecretRotationResponse {
-  if (
-    !isRecord(value) ||
-    value.ok !== true ||
-    !isFilled(value.clientKey) ||
-    !isFilled(value.clientSecret)
-  )
-    throw new Error("invalid app secret rotation response");
-  return { ok: true, clientKey: value.clientKey, clientSecret: value.clientSecret };
+  const parsed = appSecretRotationResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid app secret rotation response");
+  return parsed.data;
 }

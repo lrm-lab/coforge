@@ -1,4 +1,4 @@
-import { isRecord } from "#src/internal/json-record";
+import { z } from "zod";
 import { isArtifactCheckShot, type ArtifactCheckShot } from "./artifact-checks";
 import {
   ARTIFACT_COMMENT_IMAGES_MAX,
@@ -82,147 +82,158 @@ export type AgentArtifactRequest =
   | { operation: "follow"; artifact: string }
   | { operation: "unfollow"; artifact: string };
 
-type FieldKind =
-  | "string"
-  | "sha256s"
-  | "number"
-  | "boolean"
-  | "strings"
-  | "files"
-  | "anchor"
-  | "reviewComments"
-  | "checkShot";
+export const ARTIFACT_SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
-const FIELD_CHECKS: Record<FieldKind, (value: unknown) => boolean> = {
-  string: (value) => typeof value === "string",
-  sha256s: (value) =>
-    Array.isArray(value) &&
-    value.length <= ARTIFACT_COMMENT_IMAGES_MAX &&
-    value.every((item) => typeof item === "string" && ARTIFACT_SHA256_PATTERN.test(item)),
-  number: (value) => Number.isSafeInteger(value) && (value as number) >= 0,
-  boolean: (value) => typeof value === "boolean",
-  strings: (value) => Array.isArray(value) && value.every((item) => typeof item === "string"),
-  files: (value) => Array.isArray(value) && value.every(isManifestFile),
-  anchor: isAnchorShape,
-  reviewComments: (value) => Array.isArray(value) && value.every(isReviewCommentShape),
-  checkShot: isArtifactCheckShot,
-};
+const nonNegativeSafeInt = z.int().min(0);
+const sha256Schema = z.string().regex(ARTIFACT_SHA256_PATTERN);
+const sha256ListSchema = z.array(sha256Schema).max(ARTIFACT_COMMENT_IMAGES_MAX);
+const manifestFileSchema = z.strictObject({
+  path: z.string(),
+  sha256: sha256Schema,
+});
+const anchorFieldSchema = z.custom<AgentArtifactAnchor>(isAnchorShape);
+const reviewCommentFieldSchema = z.custom<AgentReviewComment>(isReviewCommentShape);
+const checkShotFieldSchema = z.custom<ArtifactCheckShot>(isArtifactCheckShot);
 
-type OperationShape = {
-  fields: Record<string, FieldKind>;
-  required: readonly string[];
+const agentArtifactRequestSchema = z.union([
+  z.strictObject({
+    operation: z.literal("list"),
+    target: z.string().exactOptional(),
+    query: z.string().exactOptional(),
+    after: z.string().exactOptional(),
+    limit: nonNegativeSafeInt.exactOptional(),
+  }),
+  z.strictObject({
+    operation: z.literal("read"),
+    artifact: z.string(),
+    version: nonNegativeSafeInt.exactOptional(),
+  }),
+  z.strictObject({
+    operation: z.literal("check"),
+    artifact: z.string(),
+    version: nonNegativeSafeInt.exactOptional(),
+  }),
+  z.strictObject({
+    operation: z.literal("check-shot"),
+    artifact: z.string(),
+    version: nonNegativeSafeInt.exactOptional(),
+    shot: checkShotFieldSchema,
+  }),
+  z.strictObject({
+    operation: z.literal("push"),
+    artifact: z.string(),
+    baseVersion: nonNegativeSafeInt,
+    idempotencyKey: z.string(),
+    title: z.string().exactOptional(),
+    description: z.string().exactOptional(),
+    note: z.string().exactOptional(),
+    label: z.string().exactOptional(),
+    files: z.array(manifestFileSchema).exactOptional(),
+    delete: z.array(z.string()).exactOptional(),
+    entry: z.string().exactOptional(),
+  }),
+  z.strictObject({
+    operation: z.literal("push"),
+    target: z.string().exactOptional(),
+    title: z.string(),
+    description: z.string().exactOptional(),
+    idempotencyKey: z.string(),
+    files: z.array(manifestFileSchema),
+    entry: z.string().exactOptional(),
+  }),
+  z.strictObject({
+    operation: z.literal("move"),
+    artifact: z.string(),
+    to: z.string(),
+  }),
+  z.strictObject({
+    operation: z.literal("delete"),
+    artifact: z.string(),
+  }),
+  z.strictObject({
+    operation: z.literal("comments"),
+    artifact: z.string(),
+    path: z.string().exactOptional(),
+    review: z.string().exactOptional(),
+    after: z.string().exactOptional(),
+    all: z.boolean().exactOptional(),
+  }),
+  z.strictObject({
+    operation: z.literal("comment"),
+    artifact: z.string(),
+    body: z.string().exactOptional(),
+    path: z.string().exactOptional(),
+    replyTo: z.string().exactOptional(),
+    idempotencyKey: z.string(),
+    version: nonNegativeSafeInt.exactOptional(),
+    anchor: anchorFieldSchema.exactOptional(),
+    images: sha256ListSchema.exactOptional(),
+  }),
+  z.strictObject({
+    operation: z.literal("review"),
+    artifact: z.string(),
+    body: z.string().exactOptional(),
+    idempotencyKey: z.string(),
+    version: nonNegativeSafeInt.exactOptional(),
+    comments: z.array(reviewCommentFieldSchema),
+  }),
+  z.strictObject({
+    operation: z.literal("resolve"),
+    artifact: z.string(),
+    comment: z.string(),
+    note: z.string().exactOptional(),
+  }),
+  z.strictObject({
+    operation: z.literal("reopen"),
+    artifact: z.string(),
+    comment: z.string(),
+  }),
+  z.strictObject({
+    operation: z.literal("save"),
+    attachment: z.string(),
+  }),
+  z.strictObject({
+    operation: z.literal("image"),
+    artifact: z.string(),
+    image: z.string(),
+  }),
+  z.strictObject({
+    operation: z.literal("follow"),
+    artifact: z.string(),
+  }),
+  z.strictObject({
+    operation: z.literal("unfollow"),
+    artifact: z.string(),
+  }),
+]);
+
+type OperationTraits = {
   repeatable?: true;
   gatedByComments?: true;
   commentWrite?: true;
 };
 
-const OPERATIONS = {
-  list: {
-    fields: { target: "string", query: "string", after: "string", limit: "number" },
-    required: [],
-    repeatable: true,
-  },
-  read: {
-    fields: { artifact: "string", version: "number" },
-    required: ["artifact"],
-    repeatable: true,
-  },
-  check: {
-    fields: { artifact: "string", version: "number" },
-    required: ["artifact"],
-    repeatable: true,
-  },
-  "check-shot": {
-    fields: { artifact: "string", version: "number", shot: "checkShot" },
-    required: ["artifact", "shot"],
-    repeatable: true,
-  },
-  push: {
-    fields: {
-      artifact: "string",
-      target: "string",
-      idempotencyKey: "string",
-      title: "string",
-      description: "string",
-      note: "string",
-      label: "string",
-      baseVersion: "number",
-      files: "files",
-      delete: "strings",
-      entry: "string",
-    },
-    required: ["idempotencyKey"],
-    gatedByComments: true,
-  },
-  move: {
-    fields: { artifact: "string", to: "string" },
-    required: ["artifact", "to"],
-  },
-  delete: {
-    fields: { artifact: "string" },
-    required: ["artifact"],
-  },
-  comments: {
-    fields: {
-      artifact: "string",
-      path: "string",
-      review: "string",
-      after: "string",
-      all: "boolean",
-    },
-    required: ["artifact"],
-    repeatable: true,
-  },
-  comment: {
-    fields: {
-      artifact: "string",
-      body: "string",
-      path: "string",
-      replyTo: "string",
-      idempotencyKey: "string",
-      version: "number",
-      anchor: "anchor",
-      images: "sha256s",
-    },
-    required: ["artifact", "idempotencyKey"],
-    gatedByComments: true,
-    commentWrite: true,
-  },
-  review: {
-    fields: {
-      artifact: "string",
-      body: "string",
-      idempotencyKey: "string",
-      version: "number",
-      comments: "reviewComments",
-    },
-    required: ["artifact", "comments", "idempotencyKey"],
-    gatedByComments: true,
-    commentWrite: true,
-  },
-  resolve: {
-    fields: { artifact: "string", comment: "string", note: "string" },
-    required: ["artifact", "comment"],
-    gatedByComments: true,
-    commentWrite: true,
-  },
-  reopen: {
-    fields: { artifact: "string", comment: "string" },
-    required: ["artifact", "comment"],
-    commentWrite: true,
-  },
-  save: { fields: { attachment: "string" }, required: ["attachment"] },
-  image: {
-    fields: { artifact: "string", image: "string" },
-    required: ["artifact", "image"],
-    repeatable: true,
-  },
-  follow: { fields: { artifact: "string" }, required: ["artifact"], repeatable: true },
-  unfollow: { fields: { artifact: "string" }, required: ["artifact"], repeatable: true },
-} as const satisfies Record<AgentArtifactRequest["operation"], OperationShape>;
+const OPERATION_TRAITS: Record<AgentArtifactRequest["operation"], OperationTraits> = {
+  list: { repeatable: true },
+  read: { repeatable: true },
+  check: { repeatable: true },
+  "check-shot": { repeatable: true },
+  push: { gatedByComments: true },
+  move: {},
+  delete: {},
+  comments: { repeatable: true },
+  comment: { gatedByComments: true, commentWrite: true },
+  review: { gatedByComments: true, commentWrite: true },
+  resolve: { gatedByComments: true, commentWrite: true },
+  reopen: { commentWrite: true },
+  save: {},
+  image: { repeatable: true },
+  follow: { repeatable: true },
+  unfollow: { repeatable: true },
+};
 
 export function artifactOperationTraits(operation: AgentArtifactRequest["operation"]) {
-  const shape: OperationShape = OPERATIONS[operation];
+  const shape = OPERATION_TRAITS[operation];
   return {
     repeatable: shape.repeatable === true,
     gatedByComments: shape.gatedByComments === true,
@@ -230,34 +241,10 @@ export function artifactOperationTraits(operation: AgentArtifactRequest["operati
   };
 }
 
-const PUSH_OVER_ONLY = ["baseVersion", "note", "label", "delete"] as const;
-
 export function decodeAgentArtifactRequest(value: unknown): AgentArtifactRequest | null {
-  if (!isRecord(value)) return null;
-  const operation = value.operation;
-  if (typeof operation !== "string" || !Object.hasOwn(OPERATIONS, operation)) return null;
-  const known: OperationShape = OPERATIONS[operation as keyof typeof OPERATIONS];
-  const request: Record<string, unknown> = { operation };
-  for (const [key, field] of Object.entries(value)) {
-    if (key === "operation") continue;
-    if (!Object.hasOwn(known.fields, key) || !FIELD_CHECKS[known.fields[key]!](field)) return null;
-    request[key] = field;
-  }
-  if (known.required.some((key) => request[key] === undefined)) return null;
-  if (operation === "push") {
-    if (request.artifact !== undefined) {
-      if (request.baseVersion === undefined || request.target !== undefined) return null;
-    } else if (
-      request.title === undefined ||
-      request.files === undefined ||
-      PUSH_OVER_ONLY.some((key) => request[key] !== undefined)
-    )
-      return null;
-  }
-  return request as AgentArtifactRequest;
+  const parsed = agentArtifactRequestSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }
-
-export const ARTIFACT_SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
 const FORBIDDEN_PATH_CHARS = /[\\:%?#\p{Cc}\p{Cf}]/u;
 const GIT_SHORT_NAME = /^git~\d+$/i;
@@ -279,14 +266,4 @@ export function artifactPathValid(path: string): boolean {
         !FORBIDDEN_PATH_CHARS.test(segment) &&
         !isGitDirectorySegment(segment),
     );
-}
-
-function isManifestFile(value: unknown): value is AgentArtifactFile {
-  if (!isRecord(value)) return false;
-  return (
-    Object.keys(value).length === 2 &&
-    typeof value.path === "string" &&
-    typeof value.sha256 === "string" &&
-    ARTIFACT_SHA256_PATTERN.test(value.sha256)
-  );
 }

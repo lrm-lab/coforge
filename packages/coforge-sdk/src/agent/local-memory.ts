@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { isRecord } from "#src/internal/json-record";
 
 export const LOCAL_MEMORY_ROUTE = { method: "POST", path: "/api/agent/v1/local-memory" } as const;
@@ -37,43 +38,37 @@ export type LocalMemoryResult = {
   incomplete?: boolean;
 };
 
+const localMemoryEntrySchema = z.looseObject({
+  key: z.string(),
+  title: z.string(),
+  content: z.string(),
+  source: z.string(),
+  kind: z.enum(MEMORY_KINDS),
+  applicability: z.string(),
+  status: z.enum(["active", "archived"]),
+  updatedAt: z.string(),
+  revision: z.string(),
+  path: z.string(),
+});
+
+const localMemoryResultEnvelopeSchema = z.object({
+  entries: z.array(z.unknown()).max(100),
+  nextOffset: z.int().min(0).optional(),
+  incomplete: z.boolean().optional(),
+});
+
 export function decodeLocalMemoryResult(value: unknown): LocalMemoryResult {
-  if (!isRecord(value) || !Array.isArray(value.entries) || value.entries.length > 100)
-    throw new Error("invalid_memory_result");
-  const entries = value.entries.map((entry) => {
-    if (
-      !isRecord(entry) ||
-      [
-        "key",
-        "title",
-        "content",
-        "source",
-        "kind",
-        "applicability",
-        "status",
-        "updatedAt",
-        "revision",
-        "path",
-      ].some((key) => typeof entry[key] !== "string") ||
-      !MEMORY_KINDS.includes(entry.kind as MemoryKind) ||
-      !["active", "archived"].includes(String(entry.status))
-    )
-      throw new Error("invalid_memory_entry");
-    return entry as LocalMemoryEntry;
+  const envelope = localMemoryResultEnvelopeSchema.safeParse(value);
+  if (!envelope.success) throw new Error("invalid_memory_result");
+  const entries = envelope.data.entries.map((entry) => {
+    const parsed = localMemoryEntrySchema.safeParse(entry);
+    if (!parsed.success) throw new Error("invalid_memory_entry");
+    return parsed.data;
   });
-  if (
-    value.nextOffset !== undefined &&
-    (typeof value.nextOffset !== "number" ||
-      !Number.isSafeInteger(value.nextOffset) ||
-      value.nextOffset < 0)
-  )
-    throw new Error("invalid_memory_result");
-  if (value.incomplete !== undefined && typeof value.incomplete !== "boolean")
-    throw new Error("invalid_memory_result");
   return {
     entries,
-    ...(value.nextOffset === undefined ? {} : { nextOffset: value.nextOffset }),
-    ...(value.incomplete === undefined ? {} : { incomplete: value.incomplete }),
+    ...(envelope.data.nextOffset === undefined ? {} : { nextOffset: envelope.data.nextOffset }),
+    ...(envelope.data.incomplete === undefined ? {} : { incomplete: envelope.data.incomplete }),
   };
 }
 

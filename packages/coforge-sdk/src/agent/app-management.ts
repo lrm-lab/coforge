@@ -6,7 +6,7 @@
  * error }` envelope as `app token`. The owner-recovery card is `app:recover_owner`
  * (`app-recover-owner-card.ts`).
  */
-import { isRecord } from "#src/internal/json-record";
+import { z } from "zod";
 
 /** The longest an Agent-given share link lives is a year; the shortest a day (Raft's range). */
 export const APP_SHARE_LINK_MIN_DAYS = 1;
@@ -44,83 +44,73 @@ export type AgentAppManagementRequest =
   | { operation: "request_publish"; clientKey: string }
   | { operation: "request_unpublish"; clientKey: string };
 
-const isText = (value: unknown): value is string => typeof value === "string";
-const isFilled = (value: unknown): value is string => isText(value) && value.length > 0;
-const isTextList = (value: unknown): value is string[] =>
-  Array.isArray(value) && value.every(isText);
-const isUrlOrNull = (value: unknown) => value === null || isText(value);
+const filledStringSchema = z.string().min(1);
+const textListSchema = z.array(z.string());
+const urlOrNullSchema = z.string().nullable();
 
-/** Each field `app update` takes, with the shape it must have. */
-const CHANGE_SHAPES: Record<keyof AppUpdateChanges, (value: unknown) => boolean> = {
-  name: isText,
-  description: isText,
-  whenToUse: isText,
-  category: isText,
-  homepageUrl: isUrlOrNull,
-  redirectUrls: isTextList,
-  addRedirectUrls: isTextList,
-  agentManifestUrl: isUrlOrNull,
-  scopes: isTextList,
-};
+const appUpdateChangesSchema = z
+  .strictObject({
+    name: z.string().exactOptional(),
+    description: z.string().exactOptional(),
+    whenToUse: z.string().exactOptional(),
+    category: z.string().exactOptional(),
+    homepageUrl: urlOrNullSchema.exactOptional(),
+    redirectUrls: textListSchema.exactOptional(),
+    addRedirectUrls: textListSchema.exactOptional(),
+    agentManifestUrl: urlOrNullSchema.exactOptional(),
+    scopes: textListSchema.exactOptional(),
+  })
+  .refine(
+    (changes) =>
+      Object.values(changes).some((entry) => entry !== undefined) &&
+      !(changes.redirectUrls !== undefined && changes.addRedirectUrls !== undefined),
+  );
 
-function decodeChanges(value: unknown): AppUpdateChanges | undefined {
-  if (!isRecord(value)) return undefined;
-  const entries = Object.entries(value);
-  if (entries.length === 0 || entries.length > Object.keys(CHANGE_SHAPES).length) return undefined;
-  for (const [field, entry] of entries)
-    if (
-      !Object.hasOwn(CHANGE_SHAPES, field) ||
-      !CHANGE_SHAPES[field as keyof AppUpdateChanges](entry)
-    )
-      return undefined;
-  if (value.redirectUrls !== undefined && value.addRedirectUrls !== undefined) return undefined;
-  return value as AppUpdateChanges;
-}
+const SIMPLE_MANAGEMENT_OPERATIONS = [
+  "rotate_secret",
+  "logo_clear",
+  "delete",
+  "share_link_status",
+  "share_link_revoke",
+  "request_publish",
+  "request_unpublish",
+] as const;
 
-/** Exactly the fields the operation takes, or `undefined` for anything else (including an
- * operation of the registration vocabulary, which `decodeAgentAppRegistrationRequest` takes). */
+const appManagementRequestSchema = z.union([
+  z.strictObject({
+    operation: z.literal("update"),
+    clientKey: z.string(),
+    changes: appUpdateChangesSchema,
+  }),
+  z.strictObject({
+    operation: z.literal("logo_set"),
+    clientKey: z.string(),
+    contentType: filledStringSchema,
+    dataBase64: filledStringSchema,
+  }),
+  z.strictObject({
+    operation: z.literal("transfer_owner"),
+    clientKey: z.string(),
+    toAgent: z.string().min(1).max(120),
+  }),
+  z.strictObject({
+    operation: z.literal("share_link_create"),
+    clientKey: z.string(),
+    expiresDays: z.int().min(APP_SHARE_LINK_MIN_DAYS).max(APP_SHARE_LINK_MAX_DAYS),
+  }),
+  z.strictObject({
+    operation: z.enum(SIMPLE_MANAGEMENT_OPERATIONS),
+    clientKey: z.string(),
+  }),
+]);
+
 export function decodeAgentAppManagementRequest(
   value: unknown,
   isId: (field: unknown) => field is string,
 ): AgentAppManagementRequest | undefined {
-  if (!isRecord(value) || !isId(value.clientKey)) return undefined;
-  const { operation, clientKey, ...rest } = value;
-  const keys = Object.keys(rest);
-  const only = (...allowed: string[]) =>
-    keys.length === allowed.length && allowed.every((key) => keys.includes(key));
-  switch (operation) {
-    case "update": {
-      const changes = decodeChanges(rest.changes);
-      return only("changes") && changes ? { operation, clientKey, changes } : undefined;
-    }
-    case "logo_set":
-      return only("contentType", "dataBase64") &&
-        isFilled(rest.contentType) &&
-        isFilled(rest.dataBase64)
-        ? { operation, clientKey, contentType: rest.contentType, dataBase64: rest.dataBase64 }
-        : undefined;
-    case "transfer_owner":
-      return only("toAgent") && isFilled(rest.toAgent) && rest.toAgent.length <= 120
-        ? { operation, clientKey, toAgent: rest.toAgent }
-        : undefined;
-    case "share_link_create":
-      return only("expiresDays") &&
-        Number.isInteger(rest.expiresDays) &&
-        (rest.expiresDays as number) >= APP_SHARE_LINK_MIN_DAYS &&
-        (rest.expiresDays as number) <= APP_SHARE_LINK_MAX_DAYS
-        ? { operation, clientKey, expiresDays: rest.expiresDays as number }
-        : undefined;
-    case "rotate_secret":
-    case "logo_clear":
-    case "delete":
-    case "share_link_status":
-    case "share_link_revoke":
-    case "request_publish":
-    case "request_unpublish":
-      return keys.length === 0 ? { operation, clientKey } : undefined;
-    default:
-      return undefined;
-  }
+  const parsed = appManagementRequestSchema.safeParse(value);
+  if (!parsed.success || !isId(parsed.data.clientKey)) return undefined;
+  return parsed.data;
 }
 
 /** An app as `app update` and the logo commands answer it. */
@@ -168,84 +158,91 @@ export type AppShareLinkStatusResponse = {
 export type AppShareLinkRevokedResponse = { ok: true; clientKey: string; revoked: true };
 export type AppPublishRequestResponse = { ok: true; clientKey: string; publishStatus: string };
 
-type Shape = Record<string, (value: unknown) => boolean>;
-const text = isText;
-const optionalText = (value: unknown) => value === undefined || isText(value);
-const flag = (value: unknown) => typeof value === "boolean";
-
-function decodeShape<T>(value: unknown, shape: Shape, what: string): T {
-  if (!isRecord(value) || value.ok !== true) throw new Error(`invalid ${what} response`);
-  for (const [field, valid] of Object.entries(shape))
-    if (!valid(value[field])) throw new Error(`invalid ${what} response`);
-  return value as T;
+function decodeResponse<T>(value: unknown, schema: z.ZodType<T>, what: string): T {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) throw new Error(`invalid ${what} response`);
+  return parsed.data;
 }
 
-export const decodeAppManagedResponse = (value: unknown): AppManagedResponse => {
-  const decoded = decodeShape<AppManagedResponse>(value, { app: isRecord }, "app");
-  decodeShape<AppManagedSummary>(
-    { ok: true, ...decoded.app },
-    {
-      clientKey: isFilled,
-      name: text,
-      description: text,
-      whenToUse: text,
-      category: text,
-      homepageUrl: isUrlOrNull,
-      redirectUrls: isTextList,
-      agentManifestUrl: isUrlOrNull,
-      scopes: isTextList,
-      hasLogo: flag,
-      publishStatus: text,
-    },
-    "app",
-  );
-  return decoded;
-};
+const appManagedSummarySchema = z.looseObject({
+  clientKey: filledStringSchema,
+  name: z.string(),
+  description: z.string(),
+  whenToUse: z.string(),
+  category: z.string(),
+  homepageUrl: urlOrNullSchema,
+  redirectUrls: textListSchema,
+  agentManifestUrl: urlOrNullSchema,
+  scopes: textListSchema,
+  hasLogo: z.boolean(),
+  publishStatus: z.string(),
+});
 
-export const decodeAppOwnerTransferResponse = (value: unknown) =>
-  decodeShape<AppOwnerTransferResponse>(
-    value,
-    {
-      clientKey: isFilled,
-      changed: flag,
-      ownerAgent: text,
-      previousOwnerAgent: isUrlOrNull,
-      at: text,
-    },
-    "owner transfer",
-  );
+const appManagedResponseSchema = z.looseObject({
+  ok: z.literal(true),
+  app: appManagedSummarySchema,
+});
 
-export const decodeAppDeletedResponse = (value: unknown) =>
-  decodeShape<AppDeletedResponse>(
-    value,
-    { clientKey: isFilled, deleted: (field) => field === true },
-    "app deletion",
-  );
+const appOwnerTransferResponseSchema = z.looseObject({
+  ok: z.literal(true),
+  clientKey: filledStringSchema,
+  changed: z.boolean(),
+  ownerAgent: z.string(),
+  previousOwnerAgent: urlOrNullSchema,
+  at: z.string(),
+});
 
-export const decodeAppShareLinkCreatedResponse = (value: unknown) =>
-  decodeShape<AppShareLinkCreatedResponse>(
-    value,
-    { clientKey: isFilled, url: isFilled, createdAt: text, expiresAt: text },
-    "share link",
-  );
+const appDeletedResponseSchema = z.looseObject({
+  ok: z.literal(true),
+  clientKey: filledStringSchema,
+  deleted: z.literal(true),
+});
 
-export const decodeAppShareLinkStatusResponse = (value: unknown) =>
-  decodeShape<AppShareLinkStatusResponse>(
-    value,
-    { clientKey: isFilled, active: flag, createdAt: optionalText, expiresAt: optionalText },
-    "share link status",
-  );
+const appShareLinkCreatedResponseSchema = z.looseObject({
+  ok: z.literal(true),
+  clientKey: filledStringSchema,
+  url: filledStringSchema,
+  createdAt: z.string(),
+  expiresAt: z.string(),
+});
 
-export const decodeAppShareLinkRevokedResponse = (value: unknown) =>
-  decodeShape<AppShareLinkRevokedResponse>(
-    value,
-    { clientKey: isFilled, revoked: (field) => field === true },
-    "share link revocation",
-  );
+const appShareLinkStatusResponseSchema = z.looseObject({
+  ok: z.literal(true),
+  clientKey: filledStringSchema,
+  active: z.boolean(),
+  createdAt: z.string().optional(),
+  expiresAt: z.string().optional(),
+});
 
-export const decodeAppPublishRequestResponse = (value: unknown) =>
-  decodeShape<AppPublishRequestResponse>(
-    value,
-    { clientKey: isFilled, publishStatus: isFilled },
-    "publish request",
-  );
+const appShareLinkRevokedResponseSchema = z.looseObject({
+  ok: z.literal(true),
+  clientKey: filledStringSchema,
+  revoked: z.literal(true),
+});
+
+const appPublishRequestResponseSchema = z.looseObject({
+  ok: z.literal(true),
+  clientKey: filledStringSchema,
+  publishStatus: filledStringSchema,
+});
+
+export const decodeAppManagedResponse = (value: unknown): AppManagedResponse =>
+  decodeResponse(value, appManagedResponseSchema, "app");
+
+export const decodeAppOwnerTransferResponse = (value: unknown): AppOwnerTransferResponse =>
+  decodeResponse(value, appOwnerTransferResponseSchema, "owner transfer");
+
+export const decodeAppDeletedResponse = (value: unknown): AppDeletedResponse =>
+  decodeResponse(value, appDeletedResponseSchema, "app deletion");
+
+export const decodeAppShareLinkCreatedResponse = (value: unknown): AppShareLinkCreatedResponse =>
+  decodeResponse(value, appShareLinkCreatedResponseSchema, "share link");
+
+export const decodeAppShareLinkStatusResponse = (value: unknown): AppShareLinkStatusResponse =>
+  decodeResponse(value, appShareLinkStatusResponseSchema, "share link status");
+
+export const decodeAppShareLinkRevokedResponse = (value: unknown): AppShareLinkRevokedResponse =>
+  decodeResponse(value, appShareLinkRevokedResponseSchema, "share link revocation");
+
+export const decodeAppPublishRequestResponse = (value: unknown): AppPublishRequestResponse =>
+  decodeResponse(value, appPublishRequestResponseSchema, "publish request");

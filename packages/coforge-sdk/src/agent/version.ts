@@ -5,6 +5,8 @@
  * ("what is the live Daemon actually running", not a cloud-recorded fact).
  */
 
+import { z } from "zod";
+
 /** Response for `GET /api/agent/v1/version`, answered entirely by the local Daemon's Agent proxy. */
 export type AgentVersionResponse = {
   ok: true;
@@ -20,24 +22,23 @@ export type AgentVersionResponse = {
   startedAt?: number;
 };
 
+const agentVersionResponseSchema = z.object({
+  ok: z.literal(true),
+  daemonVersion: z.string(),
+  computerVersion: z.string().optional(),
+  daemonPid: z.number().optional(),
+  startedAt: z.number().optional(),
+});
+
 export function decodeAgentVersionResponse(value: unknown): AgentVersionResponse {
-  if (!value || typeof value !== "object") throw new Error("invalid Agent version response");
-  const record = value as Record<string, unknown>;
-  if (record.ok !== true || typeof record.daemonVersion !== "string")
-    throw new Error("invalid Agent version response");
-  if (record.computerVersion !== undefined && typeof record.computerVersion !== "string")
-    throw new Error("invalid Agent version response");
-  if (record.daemonPid !== undefined && typeof record.daemonPid !== "number")
-    throw new Error("invalid Agent version response");
-  if (record.startedAt !== undefined && typeof record.startedAt !== "number")
-    throw new Error("invalid Agent version response");
+  const parsed = agentVersionResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid Agent version response");
+  const { ok, daemonVersion, computerVersion, daemonPid, startedAt } = parsed.data;
   return {
-    ok: true,
-    daemonVersion: record.daemonVersion,
-    ...(typeof record.computerVersion === "string"
-      ? { computerVersion: record.computerVersion }
-      : {}),
-    ...(typeof record.daemonPid === "number" ? { daemonPid: record.daemonPid } : {}),
-    ...(typeof record.startedAt === "number" ? { startedAt: record.startedAt } : {}),
+    ok,
+    daemonVersion,
+    ...(computerVersion !== undefined ? { computerVersion } : {}),
+    ...(daemonPid !== undefined ? { daemonPid } : {}),
+    ...(startedAt !== undefined ? { startedAt } : {}),
   };
 }

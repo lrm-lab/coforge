@@ -5,13 +5,13 @@
  * description of it serves both.
  */
 
-import {
-  isRecord,
-  type TaskHistoryEvent,
-  type TaskPriority,
-  type TaskProjectRef,
-  type TaskResult,
-  type TaskStatus,
+import { z } from "zod";
+import type {
+  TaskHistoryEvent,
+  TaskPriority,
+  TaskProjectRef,
+  TaskResult,
+  TaskStatus,
 } from "../internal";
 import type { agentApiRoutes } from "./routes";
 
@@ -121,116 +121,113 @@ export type AgentFollowedTask = {
 /** Response for `GET /api/agent/v1/tasks/following`. */
 export type AgentTaskFollowingResponse = { tasks: AgentFollowedTask[] };
 
-const isString = (value: unknown): value is string => typeof value === "string";
+const viewMessageSchema = z.looseObject({
+  id: z.string(),
+  sequence: z.number(),
+  body: z.string(),
+  createdAt: z.string(),
+  sender: z.string().nullable(),
+});
 
-function isViewMessage(value: unknown): value is AgentTaskViewMessage {
-  return (
-    isRecord(value) &&
-    isString(value.id) &&
-    typeof value.sequence === "number" &&
-    isString(value.body) &&
-    isString(value.createdAt) &&
-    (value.sender === null || isString(value.sender))
-  );
-}
+const historyEventSchema = z.looseObject({
+  seq: z.number(),
+  createdAt: z.string(),
+  eventType: z.string(),
+  payload: z.record(z.string(), z.unknown()),
+});
 
-function isHistoryEvent(value: unknown): value is TaskHistoryEvent {
-  return (
-    isRecord(value) &&
-    typeof value.seq === "number" &&
-    isString(value.createdAt) &&
-    isString(value.eventType) &&
-    isRecord(value.payload)
-  );
-}
+const historyEventListSchema = z.array(historyEventSchema);
+
+const earlierDiscussionSchema = z.looseObject({
+  target: z.string(),
+  replyCount: z.int().min(0),
+});
+
+const taskViewResponseSchema = z.looseObject({
+  taskRef: z.string(),
+  task: z.looseObject({
+    title: z.string(),
+    status: z.string(),
+  }),
+  following: z.boolean(),
+  followReason: z.string().nullable(),
+  conversation: z.looseObject({
+    exists: z.boolean(),
+    replyCount: z.number(),
+  }),
+  earlierDiscussion: earlierDiscussionSchema.nullish(),
+  recentMessages: z.array(viewMessageSchema),
+  recentEvents: historyEventListSchema.optional(),
+  hasOlder: z.boolean(),
+});
+
+const taskReplyResponseSchema = z.looseObject({
+  messageId: z.string(),
+  sequence: z.number(),
+});
+
+const taskReplyReconcileResponseSchema = z.discriminatedUnion("state", [
+  z.looseObject({ state: z.literal("not_found") }),
+  z.looseObject({
+    state: z.literal("committed"),
+    messageId: z.string(),
+    sequence: z.number(),
+  }),
+]);
+
+const taskFollowResponseSchema = z.looseObject({
+  ok: z.literal(true),
+  taskRef: z.string(),
+  following: z.boolean(),
+  changed: z.boolean(),
+});
+
+const followedTaskSchema = z.looseObject({
+  taskRef: z.string(),
+  title: z.string(),
+  status: z.string(),
+  unread: z.number(),
+  reason: z.string(),
+});
+
+const taskFollowingResponseSchema = z.looseObject({
+  tasks: z.array(followedTaskSchema),
+});
 
 export function isHistoryEventList(value: unknown): value is TaskHistoryEvent[] {
-  return Array.isArray(value) && value.every(isHistoryEvent);
-}
-
-function isEarlierDiscussion(value: unknown): value is { target: string; replyCount: number } {
-  return (
-    isRecord(value) &&
-    isString(value.target) &&
-    typeof value.replyCount === "number" &&
-    Number.isInteger(value.replyCount) &&
-    value.replyCount >= 0
-  );
+  return historyEventListSchema.safeParse(value).success;
 }
 
 export function decodeAgentTaskViewResponse(value: unknown): AgentTaskViewResponse {
-  if (
-    !isRecord(value) ||
-    !isString(value.taskRef) ||
-    !isRecord(value.task) ||
-    !isString(value.task.title) ||
-    !isString(value.task.status) ||
-    typeof value.following !== "boolean" ||
-    !(value.followReason === null || isString(value.followReason)) ||
-    !isRecord(value.conversation) ||
-    typeof value.conversation.exists !== "boolean" ||
-    typeof value.conversation.replyCount !== "number" ||
-    !(
-      value.earlierDiscussion === undefined ||
-      value.earlierDiscussion === null ||
-      isEarlierDiscussion(value.earlierDiscussion)
-    ) ||
-    !Array.isArray(value.recentMessages) ||
-    !value.recentMessages.every(isViewMessage) ||
-    !(value.recentEvents === undefined || isHistoryEventList(value.recentEvents)) ||
-    typeof value.hasOlder !== "boolean"
-  )
-    throw new Error("invalid Agent task view response");
-  return value as AgentTaskViewResponse;
+  const parsed = taskViewResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid Agent task view response");
+  return parsed.data as AgentTaskViewResponse;
 }
 
 export function decodeAgentTaskReplyResponse(value: unknown): AgentTaskReplyResponse {
-  if (!isRecord(value) || !isString(value.messageId) || typeof value.sequence !== "number")
-    throw new Error("invalid Agent task reply response");
-  return value as AgentTaskReplyResponse;
+  const parsed = taskReplyResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid Agent task reply response");
+  return parsed.data as AgentTaskReplyResponse;
 }
 
 export function decodeAgentTaskReplyReconcileResponse(
   value: unknown,
 ): AgentTaskReplyReconcileResponse {
-  if (!isRecord(value)) throw new Error("invalid Agent task reply reconcile response");
-  if (value.state === "not_found") return value as AgentTaskReplyReconcileResponse;
-  if (
-    value.state === "committed" &&
-    isString(value.messageId) &&
-    typeof value.sequence === "number"
-  )
-    return value as AgentTaskReplyReconcileResponse;
-  throw new Error("invalid Agent task reply reconcile response");
+  const parsed = taskReplyReconcileResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid Agent task reply reconcile response");
+  return parsed.data as AgentTaskReplyReconcileResponse;
 }
 
 export function decodeAgentTaskFollowResponse(value: unknown): AgentTaskFollowResponse {
-  if (
-    !isRecord(value) ||
-    value.ok !== true ||
-    !isString(value.taskRef) ||
-    typeof value.following !== "boolean" ||
-    typeof value.changed !== "boolean"
-  )
-    throw new Error("invalid Agent task follow response");
-  return value as AgentTaskFollowResponse;
-}
-
-function isFollowedTask(value: unknown): value is AgentFollowedTask {
-  return (
-    isRecord(value) &&
-    isString(value.taskRef) &&
-    isString(value.title) &&
-    isString(value.status) &&
-    typeof value.unread === "number" &&
-    isString(value.reason)
-  );
+  const parsed = taskFollowResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid Agent task follow response");
+  return parsed.data;
 }
 
 export function decodeAgentTaskFollowingResponse(value: unknown): AgentTaskFollowingResponse {
-  if (!isRecord(value) || !Array.isArray(value.tasks) || !value.tasks.every(isFollowedTask))
-    throw new Error("invalid Agent followed tasks response");
-  return value as AgentTaskFollowingResponse;
+  const parsed = taskFollowingResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid Agent followed tasks response");
+  return parsed.data;
 }
 
 export type AgentTaskIdleNudgeRequest = {
@@ -260,71 +257,34 @@ export type AgentTaskIdleNudgeResponse = {
   text: string;
 };
 
-const IDLE_REASONS: ReadonlySet<string> = new Set<AgentTaskIdleReason>([
-  "new_session",
-  "newly_assigned",
-  "others_acted",
-  "stale",
-]);
-const IDLE_SKIP_REASONS: ReadonlySet<string> = new Set<AgentTaskIdleSkipReason>([
-  "disabled",
-  "no_open_tasks",
-  "no_change",
-  "hourly_cap",
-]);
-const TASK_STATUS_VALUES: ReadonlySet<string> = new Set<TaskStatus>([
-  "backlog",
-  "todo",
-  "in_progress",
-  "in_review",
-  "done",
-  "closed",
-]);
-const TASK_PRIORITY_VALUES: ReadonlySet<string> = new Set<TaskPriority>([
-  "urgent",
-  "high",
-  "medium",
-  "low",
-  "none",
-]);
+const idleItemSchema = z.looseObject({
+  ref: z.string(),
+  taskNumber: z.number(),
+  channel: z.string(),
+  title: z.string(),
+  status: z.enum(["backlog", "todo", "in_progress", "in_review", "done", "closed"]),
+  priority: z.enum(["urgent", "high", "medium", "low", "none"]),
+  reason: z.enum(["new_session", "newly_assigned", "others_acted", "stale"]),
+  why: z.string(),
+  queuePosition: z.int().min(1).optional(),
+});
 
-function isIdleItem(value: unknown): value is AgentTaskIdleItem {
-  return (
-    isRecord(value) &&
-    isString(value.ref) &&
-    typeof value.taskNumber === "number" &&
-    isString(value.channel) &&
-    isString(value.title) &&
-    isString(value.status) &&
-    TASK_STATUS_VALUES.has(value.status) &&
-    isString(value.priority) &&
-    TASK_PRIORITY_VALUES.has(value.priority) &&
-    isString(value.reason) &&
-    IDLE_REASONS.has(value.reason) &&
-    isString(value.why) &&
-    (value.queuePosition === undefined ||
-      (typeof value.queuePosition === "number" &&
-        Number.isInteger(value.queuePosition) &&
-        value.queuePosition >= 1))
-  );
-}
+const idleBacklogItemSchema = z.looseObject({
+  ref: z.string(),
+  title: z.string(),
+});
 
-function isIdleBacklogItem(value: unknown): value is { ref: string; title: string } {
-  return isRecord(value) && isString(value.ref) && isString(value.title);
-}
+const taskIdleNudgeResponseSchema = z.looseObject({
+  send: z.boolean(),
+  reason: z.enum(["disabled", "no_open_tasks", "no_change", "hourly_cap"]).optional(),
+  rules: z.boolean().optional(),
+  items: z.array(idleItemSchema),
+  backlog: z.array(idleBacklogItemSchema),
+  text: z.string(),
+});
 
 export function decodeAgentTaskIdleNudgeResponse(value: unknown): AgentTaskIdleNudgeResponse {
-  if (
-    !isRecord(value) ||
-    typeof value.send !== "boolean" ||
-    !Array.isArray(value.items) ||
-    !value.items.every(isIdleItem) ||
-    !Array.isArray(value.backlog) ||
-    !value.backlog.every(isIdleBacklogItem) ||
-    !isString(value.text) ||
-    (value.rules !== undefined && typeof value.rules !== "boolean") ||
-    (value.reason !== undefined && !(isString(value.reason) && IDLE_SKIP_REASONS.has(value.reason)))
-  )
-    throw new Error("invalid Agent task idle-nudge response");
-  return value as AgentTaskIdleNudgeResponse;
+  const parsed = taskIdleNudgeResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid Agent task idle-nudge response");
+  return parsed.data;
 }

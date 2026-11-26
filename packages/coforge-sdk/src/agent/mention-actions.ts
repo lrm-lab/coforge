@@ -6,7 +6,7 @@
  * the `profile` and `user info` routes.
  */
 
-import { isRecord } from "../internal";
+import { z } from "zod";
 import type { AgentPendingMentionAction } from "#src/internal/local-daemon";
 
 /** One of the sender's still-pending mentions, with the channel it was sent in (by name). */
@@ -79,86 +79,70 @@ export type AgentMentionActionErrorResponse = {
   error: string;
 };
 
-function isOptionalString(value: unknown): boolean {
-  return value === undefined || typeof value === "string";
-}
+const targetTypeSchema = z.enum(["user", "agent"]);
 
-function isPendingAction(value: unknown): value is AgentMentionPendingAction {
-  return (
-    isRecord(value) &&
-    typeof value.resolutionId === "string" &&
-    typeof value.messageId === "string" &&
-    (value.targetType === "user" || value.targetType === "agent") &&
-    typeof value.targetHandle === "string" &&
-    (value.targetAvatarUrl === null || typeof value.targetAvatarUrl === "string") &&
-    value.reason === "not_member" &&
-    Array.isArray(value.availableActions) &&
-    value.availableActions.every((action) => typeof action === "string") &&
-    typeof value.expiresAt === "string" &&
-    typeof value.channelName === "string"
-  );
-}
+const pendingActionSchema = z.looseObject({
+  resolutionId: z.string(),
+  messageId: z.string(),
+  targetType: targetTypeSchema,
+  targetHandle: z.string(),
+  targetAvatarUrl: z.string().nullable(),
+  reason: z.literal("not_member"),
+  availableActions: z.array(z.string()),
+  expiresAt: z.string(),
+  channelName: z.string(),
+});
 
-function isActionResult(value: unknown): value is AgentMentionActionResult {
-  return (
-    isRecord(value) &&
-    typeof value.resolutionId === "string" &&
-    typeof value.status === "string" &&
-    isOptionalString(value.action) &&
-    isOptionalString(value.reason) &&
-    isOptionalString(value.messageId) &&
-    isOptionalString(value.channelId) &&
-    (value.targetType === undefined ||
-      value.targetType === "user" ||
-      value.targetType === "agent") &&
-    isOptionalString(value.targetId)
-  );
-}
+const actionResultSchema = z.looseObject({
+  resolutionId: z.string(),
+  status: z.string(),
+  action: z.string().optional(),
+  reason: z.string().optional(),
+  messageId: z.string().optional(),
+  channelId: z.string().optional(),
+  targetType: targetTypeSchema.optional(),
+  targetId: z.string().optional(),
+});
+
+const mentionPendingResponseSchema = z.object({
+  ok: z.literal(true),
+  pendingMentionActions: z.array(pendingActionSchema),
+  hasMore: z.boolean().optional().catch(undefined),
+  noLongerActionable: z.int().min(0).optional().catch(undefined),
+});
+
+const mentionExecuteResponseSchema = z.object({
+  ok: z.literal(true),
+  action: z.enum(AGENT_MENTION_ACTION_KINDS),
+  results: z.array(actionResultSchema),
+});
+
+const mentionActionErrorResponseSchema = z.object({
+  ok: z.literal(false),
+  errorCode: z.enum(AGENT_MENTION_ACTION_ERROR_CODES),
+  error: z.string(),
+});
 
 export function decodeAgentMentionPendingResponse(value: unknown): AgentMentionPendingResponse {
-  if (
-    !isRecord(value) ||
-    value.ok !== true ||
-    !Array.isArray(value.pendingMentionActions) ||
-    !value.pendingMentionActions.every(isPendingAction)
-  )
-    throw new Error("invalid Agent mention pending response");
+  const parsed = mentionPendingResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid Agent mention pending response");
+  const { hasMore, noLongerActionable, ...rest } = parsed.data;
   return {
-    ok: true,
-    pendingMentionActions: value.pendingMentionActions,
-    ...(typeof value.hasMore === "boolean" ? { hasMore: value.hasMore } : {}),
-    ...(Number.isInteger(value.noLongerActionable) && (value.noLongerActionable as number) >= 0
-      ? { noLongerActionable: value.noLongerActionable as number }
-      : {}),
+    ...rest,
+    ...(hasMore !== undefined ? { hasMore } : {}),
+    ...(noLongerActionable !== undefined ? { noLongerActionable } : {}),
   };
 }
 
 export function decodeAgentMentionExecuteResponse(value: unknown): AgentMentionExecuteResponse {
-  if (
-    !isRecord(value) ||
-    value.ok !== true ||
-    !isAgentMentionActionKind(value.action) ||
-    !Array.isArray(value.results) ||
-    !value.results.every(isActionResult)
-  )
-    throw new Error("invalid Agent mention action response");
-  return { ok: true, action: value.action, results: value.results };
+  const parsed = mentionExecuteResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid Agent mention action response");
+  return parsed.data;
 }
 
 export function decodeAgentMentionActionErrorResponse(
   value: unknown,
 ): AgentMentionActionErrorResponse | undefined {
-  if (
-    !isRecord(value) ||
-    value.ok !== false ||
-    typeof value.errorCode !== "string" ||
-    !(AGENT_MENTION_ACTION_ERROR_CODES as readonly string[]).includes(value.errorCode) ||
-    typeof value.error !== "string"
-  )
-    return undefined;
-  return {
-    ok: false,
-    errorCode: value.errorCode as AgentMentionActionErrorCode,
-    error: value.error,
-  };
+  const parsed = mentionActionErrorResponseSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }

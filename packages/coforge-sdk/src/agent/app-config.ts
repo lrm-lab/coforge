@@ -4,8 +4,8 @@
  * errorCode, error }` error envelope as the `profile` and `user info` routes.
  */
 
+import { z } from "zod";
 import type { AppConfigField, AppConfigValues } from "#src/internal/app-config";
-import { isRecord } from "#src/internal/json-record";
 
 /** One App's config as its owner Agent sees it. `overrides` holds exactly the keys the Agent set
  * (a value equal to the default is still an override); `effective` is `defaults` with
@@ -56,81 +56,67 @@ export type AgentAppConfigErrorResponse = {
   error: string;
 };
 
-const isValue = (value: unknown) =>
-  typeof value === "boolean" || (typeof value === "number" && Number.isSafeInteger(value));
+const appConfigValueSchema = z.union([z.boolean(), z.int()]);
+const appConfigValuesSchema = z.record(z.string(), appConfigValueSchema);
 
-const isValues = (value: unknown): value is AppConfigValues =>
-  isRecord(value) && Object.values(value).every(isValue);
+const appConfigFieldSchema = z.discriminatedUnion("type", [
+  z.looseObject({ type: z.literal("boolean") }),
+  z.looseObject({
+    type: z.literal("integer"),
+    minimum: z.int(),
+    maximum: z.int(),
+  }),
+]);
 
-const isField = (value: unknown): value is AppConfigField =>
-  isRecord(value) &&
-  (value.type === "boolean" ||
-    (value.type === "integer" &&
-      Number.isSafeInteger(value.minimum) &&
-      Number.isSafeInteger(value.maximum)));
+const appConfigPatchSchema = z.strictObject({
+  expectedRevision: z.int().min(0),
+  set: z.record(z.string(), z.unknown()).default({}),
+  unset: z
+    .array(
+      z
+        .string()
+        .refine((key) => key.trim().length > 0)
+        .transform((key) => key.trim()),
+    )
+    .default([]),
+  idempotencyKey: z.string().optional(),
+});
 
-/** Parses a body the request named its fields in, refusing anything outside the contract. */
+const appConfigResponseSchema = z.object({
+  ok: z.literal(true),
+  appId: z.string(),
+  revision: z.int().min(0),
+  schema: z.record(z.string(), appConfigFieldSchema),
+  defaults: appConfigValuesSchema,
+  overrides: appConfigValuesSchema,
+  effective: appConfigValuesSchema,
+});
+
+const appConfigErrorResponseSchema = z.object({
+  ok: z.literal(false),
+  errorCode: z.enum(AGENT_APP_CONFIG_ERROR_CODES),
+  error: z.string(),
+});
+
 export function decodeAgentAppConfigPatch(value: unknown): AgentAppConfigPatch | undefined {
-  if (!isRecord(value)) return undefined;
-  const { expectedRevision, set = {}, unset = [], idempotencyKey, ...rest } = value;
-  if (
-    Object.keys(rest).length > 0 ||
-    typeof expectedRevision !== "number" ||
-    !Number.isSafeInteger(expectedRevision) ||
-    expectedRevision < 0 ||
-    !isRecord(set) ||
-    !Array.isArray(unset) ||
-    !unset.every((key) => typeof key === "string" && key.trim().length > 0) ||
-    (idempotencyKey !== undefined && typeof idempotencyKey !== "string")
-  )
-    return undefined;
+  const parsed = appConfigPatchSchema.safeParse(value);
+  if (!parsed.success) return undefined;
   return {
-    expectedRevision,
-    set: set as AppConfigValues,
-    unset: (unset as string[]).map((key) => key.trim()),
+    expectedRevision: parsed.data.expectedRevision,
+    set: parsed.data.set as AppConfigValues,
+    unset: parsed.data.unset,
   };
 }
 
 export function decodeAgentAppConfigResponse(value: unknown): AgentAppConfigResponse {
-  if (
-    !isRecord(value) ||
-    value.ok !== true ||
-    typeof value.appId !== "string" ||
-    typeof value.revision !== "number" ||
-    !Number.isSafeInteger(value.revision) ||
-    value.revision < 0 ||
-    !isRecord(value.schema) ||
-    !Object.values(value.schema).every(isField) ||
-    !isValues(value.defaults) ||
-    !isValues(value.overrides) ||
-    !isValues(value.effective)
-  )
-    throw new Error("invalid Agent app config response");
-  return {
-    ok: true,
-    appId: value.appId,
-    revision: value.revision,
-    schema: value.schema as Record<string, AppConfigField>,
-    defaults: value.defaults,
-    overrides: value.overrides,
-    effective: value.effective,
-  };
+  const parsed = appConfigResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid Agent app config response");
+  return parsed.data;
 }
 
 export function decodeAgentAppConfigErrorResponse(
   value: unknown,
 ): AgentAppConfigErrorResponse | undefined {
-  if (
-    !isRecord(value) ||
-    value.ok !== false ||
-    typeof value.errorCode !== "string" ||
-    !(AGENT_APP_CONFIG_ERROR_CODES as readonly string[]).includes(value.errorCode) ||
-    typeof value.error !== "string"
-  )
-    return undefined;
-  return {
-    ok: false,
-    errorCode: value.errorCode as AgentAppConfigErrorCode,
-    error: value.error,
-  };
+  const parsed = appConfigErrorResponseSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }

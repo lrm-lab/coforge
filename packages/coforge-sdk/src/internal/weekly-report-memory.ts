@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { RFC_UUID_PATTERN } from "./uuid";
 
 const MAX_ITEMS = 20;
@@ -22,69 +23,42 @@ export type WeeklyReportMemoryResult = {
   status: string;
 };
 
-function trimmedItems(value: unknown, maxChars: number): string[] | null {
-  if (!Array.isArray(value) || value.length > MAX_ITEMS) return null;
-  const items: string[] = [];
-  for (const item of value) {
-    if (typeof item !== "string") return null;
-    const text = item.trim().replace(/\s+/g, " ");
-    if (text.length === 0 || text.length > maxChars) return null;
-    items.push(text);
-  }
-  return items;
-}
+const normalizedText = (maxChars: number) =>
+  z
+    .string()
+    .transform((value) => value.trim().replace(/\s+/g, " "))
+    .pipe(z.string().min(1).max(maxChars));
 
-/** Validates the Agent HTTPS / proxy memory body before it is stored. */
+const uuidSchema = z.string().regex(RFC_UUID_PATTERN);
+
+const weeklyReportMemoryCommandSchema = z.object({
+  idempotencyKey: uuidSchema,
+  reportId: uuidSchema,
+  year: z.int().min(2000).max(2100),
+  week: z.int().min(1).max(53),
+  preferences: z.array(normalizedText(MAX_STATEMENT_CHARS)).max(MAX_ITEMS),
+  explicitRules: z
+    .array(
+      z.object({
+        statement: normalizedText(MAX_STATEMENT_CHARS),
+        effect: z.enum(["adopt", "retire"]),
+      }),
+    )
+    .max(MAX_ITEMS),
+  factCorrections: z.array(normalizedText(MAX_STATEMENT_CHARS)).max(MAX_ITEMS),
+  threads: z
+    .array(
+      z.object({
+        title: normalizedText(MAX_TITLE_CHARS),
+        status: z.enum(["open", "done"]),
+      }),
+    )
+    .max(MAX_ITEMS),
+});
+
 export function validateWeeklyReportMemoryCommand(
   payload: Record<string, unknown>,
 ): WeeklyReportMemoryCommand | null {
-  if (typeof payload.idempotencyKey !== "string" || !RFC_UUID_PATTERN.test(payload.idempotencyKey))
-    return null;
-  if (typeof payload.reportId !== "string" || !RFC_UUID_PATTERN.test(payload.reportId)) return null;
-  if (
-    typeof payload.year !== "number" ||
-    !Number.isInteger(payload.year) ||
-    payload.year < 2000 ||
-    payload.year > 2100
-  )
-    return null;
-  if (
-    typeof payload.week !== "number" ||
-    !Number.isInteger(payload.week) ||
-    payload.week < 1 ||
-    payload.week > 53
-  )
-    return null;
-  const preferences = trimmedItems(payload.preferences, MAX_STATEMENT_CHARS);
-  const factCorrections = trimmedItems(payload.factCorrections, MAX_STATEMENT_CHARS);
-  if (!preferences || !factCorrections) return null;
-  if (!Array.isArray(payload.explicitRules) || payload.explicitRules.length > MAX_ITEMS)
-    return null;
-  const explicitRules: WeeklyReportMemoryCommand["explicitRules"] = [];
-  for (const rule of payload.explicitRules) {
-    if (!rule || typeof rule !== "object" || Array.isArray(rule)) return null;
-    const record = rule as Record<string, unknown>;
-    const statement = trimmedItems([record.statement], MAX_STATEMENT_CHARS);
-    if (!statement || (record.effect !== "adopt" && record.effect !== "retire")) return null;
-    explicitRules.push({ statement: statement[0]!, effect: record.effect });
-  }
-  if (!Array.isArray(payload.threads) || payload.threads.length > MAX_ITEMS) return null;
-  const threads: WeeklyReportMemoryCommand["threads"] = [];
-  for (const thread of payload.threads) {
-    if (!thread || typeof thread !== "object" || Array.isArray(thread)) return null;
-    const record = thread as Record<string, unknown>;
-    const title = trimmedItems([record.title], MAX_TITLE_CHARS);
-    if (!title || (record.status !== "open" && record.status !== "done")) return null;
-    threads.push({ title: title[0]!, status: record.status });
-  }
-  return {
-    idempotencyKey: payload.idempotencyKey,
-    reportId: payload.reportId,
-    year: payload.year,
-    week: payload.week,
-    preferences,
-    explicitRules,
-    factCorrections,
-    threads,
-  };
+  const parsed = weeklyReportMemoryCommandSchema.safeParse(payload);
+  return parsed.success ? parsed.data : null;
 }

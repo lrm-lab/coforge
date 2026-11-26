@@ -1,4 +1,4 @@
-import { isRecord } from "../internal";
+import { z } from "zod";
 
 export const WAKE_HINT_FLAGS = ["mention", "non_member_mention", "dm", "thread", "task"] as const;
 export type WakeHintFlag = (typeof WAKE_HINT_FLAGS)[number];
@@ -24,42 +24,31 @@ export type WakeHint = {
 
 export type WakeHintsResponse = { hints: WakeHint[] };
 
-const isOneOf = <T extends string>(values: readonly T[], value: unknown): value is T =>
-  typeof value === "string" && (values as readonly string[]).includes(value);
+const wakeHintSchema = z.object({
+  target: z.string().nullable(),
+  channelId: z.string(),
+  channelType: z.enum(WAKE_HINT_CHANNEL_TYPES),
+  pendingCount: z.int().min(0),
+  firstPendingMsgId: z.string(),
+  latestMsgId: z.string(),
+  latestSeq: z.string(),
+  latestSenderName: z.string().nullable(),
+  latestSenderType: z.enum(WAKE_HINT_SENDER_TYPES),
+  flags: z.array(z.enum(WAKE_HINT_FLAGS)),
+});
+
+const wakeHintsEnvelopeSchema = z.object({
+  hints: z.array(z.unknown()),
+});
 
 export function decodeWakeHint(value: unknown): WakeHint {
-  if (
-    !isRecord(value) ||
-    !(value.target === null || typeof value.target === "string") ||
-    typeof value.channelId !== "string" ||
-    !isOneOf(WAKE_HINT_CHANNEL_TYPES, value.channelType) ||
-    typeof value.pendingCount !== "number" ||
-    !Number.isInteger(value.pendingCount) ||
-    value.pendingCount < 0 ||
-    typeof value.firstPendingMsgId !== "string" ||
-    typeof value.latestMsgId !== "string" ||
-    typeof value.latestSeq !== "string" ||
-    !(value.latestSenderName === null || typeof value.latestSenderName === "string") ||
-    !isOneOf(WAKE_HINT_SENDER_TYPES, value.latestSenderType) ||
-    !Array.isArray(value.flags) ||
-    !value.flags.every((flag) => isOneOf(WAKE_HINT_FLAGS, flag))
-  )
-    throw new Error("invalid wake hint");
-  return {
-    target: value.target,
-    channelId: value.channelId,
-    channelType: value.channelType,
-    pendingCount: value.pendingCount,
-    firstPendingMsgId: value.firstPendingMsgId,
-    latestMsgId: value.latestMsgId,
-    latestSeq: value.latestSeq,
-    latestSenderName: value.latestSenderName,
-    latestSenderType: value.latestSenderType,
-    flags: value.flags as WakeHintFlag[],
-  };
+  const parsed = wakeHintSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid wake hint");
+  return parsed.data;
 }
 
 export function decodeWakeHints(value: unknown): WakeHint[] {
-  if (!isRecord(value) || !Array.isArray(value.hints)) throw new Error("invalid wake hints");
-  return value.hints.map(decodeWakeHint);
+  const parsed = wakeHintsEnvelopeSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid wake hints");
+  return parsed.data.hints.map(decodeWakeHint);
 }

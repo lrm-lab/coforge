@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   weeklyReportWorkflowSchema,
   type WeeklyReportWorkflowAction,
@@ -43,85 +44,89 @@ export type WeeklyReportResponse = {
   result: unknown;
 };
 
-const SUBJECT_TYPES = new Set<string>(WEEKLY_REPORT_SUBJECT_TYPES);
+const nonblankStringSchema = z.string().refine((value) => value.trim().length > 0);
+const uuidStringSchema = z.string().regex(RFC_UUID_PATTERN);
 
-function isNonblank(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
+const weeklyReportIdentityShape = {
+  idempotencyKey: nonblankStringSchema,
+  workspaceId: nonblankStringSchema,
+  agentId: nonblankStringSchema,
+};
 
-function isUuid(value: unknown): value is string {
-  return typeof value === "string" && RFC_UUID_PATTERN.test(value);
-}
+const weeklyReportIdentitySchema = z.object(weeklyReportIdentityShape);
+
+const weeklyReportWorkflowRequestSchema = z.object({
+  ...weeklyReportIdentityShape,
+  operation: z.literal("workflow"),
+  action: weeklyReportWorkflowSchema,
+});
+
+const weeklyReportNonWorkflowRequestSchema = z.discriminatedUnion("operation", [
+  z.object({
+    ...weeklyReportIdentityShape,
+    operation: z.literal("context"),
+    subjectType: z.enum(WEEKLY_REPORT_SUBJECT_TYPES),
+    subjectId: uuidStringSchema,
+  }),
+  z.object({
+    ...weeklyReportIdentityShape,
+    operation: z.literal("list"),
+    cycleId: uuidStringSchema.optional(),
+    cursor: uuidStringSchema.optional(),
+    limit: z.int().min(1).max(50).optional(),
+  }),
+  z.object({
+    ...weeklyReportIdentityShape,
+    operation: z.literal("read"),
+    reportId: uuidStringSchema,
+    section: nonblankStringSchema.max(100).transform((value) => value.trim()),
+    maxCharacters: z.int().min(1).max(12_000).optional(),
+  }),
+]);
+
+const weeklyReportResponseSchema = z.object({
+  idempotencyKey: nonblankStringSchema,
+  operation: z.enum(["context", "list", "read", "workflow"]),
+  result: z.unknown().optional(),
+});
 
 export function validateWeeklyReportRequest(value: unknown): WeeklyReportRequest {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("invalid weekly-report request");
-  const row = value as Record<string, unknown>;
-  if (!isNonblank(row.idempotencyKey) || !isNonblank(row.workspaceId) || !isNonblank(row.agentId))
-    throw new Error("invalid weekly-report request");
-  const operation = row.operation;
-  if (operation === "workflow") {
-    return {
-      idempotencyKey: row.idempotencyKey,
-      workspaceId: row.workspaceId,
-      agentId: row.agentId,
-      operation,
-      action: weeklyReportWorkflowSchema.parse(row.action),
-    };
+  if (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (value as { operation?: unknown }).operation === "workflow"
+  ) {
+    const header = weeklyReportIdentitySchema.safeParse(value);
+    if (!header.success) throw new Error("invalid weekly-report request");
+    return weeklyReportWorkflowRequestSchema.parse(value);
   }
-  if (operation === "context") {
-    if (!SUBJECT_TYPES.has(String(row.subjectType)) || !isUuid(row.subjectId))
-      throw new Error("invalid weekly-report request");
+  const parsed = weeklyReportNonWorkflowRequestSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid weekly-report request");
+  const request = parsed.data;
+  if (request.operation === "list") {
     return {
-      idempotencyKey: row.idempotencyKey,
-      workspaceId: row.workspaceId,
-      agentId: row.agentId,
-      operation: "context",
-      subjectType: row.subjectType as WeeklyReportSubjectType,
-      subjectId: row.subjectId,
-    };
-  }
-  if (operation === "list") {
-    if (row.cycleId !== undefined && !isUuid(row.cycleId))
-      throw new Error("invalid weekly-report request");
-    if (row.cursor !== undefined && !isUuid(row.cursor))
-      throw new Error("invalid weekly-report request");
-    if (
-      row.limit !== undefined &&
-      (!Number.isInteger(row.limit) || Number(row.limit) < 1 || Number(row.limit) > 50)
-    )
-      throw new Error("invalid weekly-report request");
-    return {
-      idempotencyKey: row.idempotencyKey,
-      workspaceId: row.workspaceId,
-      agentId: row.agentId,
+      idempotencyKey: request.idempotencyKey,
+      workspaceId: request.workspaceId,
+      agentId: request.agentId,
       operation: "list",
-      ...(row.cycleId ? { cycleId: row.cycleId as string } : {}),
-      ...(row.cursor ? { cursor: row.cursor as string } : {}),
-      ...(row.limit !== undefined ? { limit: row.limit as number } : {}),
+      ...(request.cycleId ? { cycleId: request.cycleId } : {}),
+      ...(request.cursor ? { cursor: request.cursor } : {}),
+      ...(request.limit !== undefined ? { limit: request.limit } : {}),
     };
   }
-  if (operation === "read") {
-    if (!isUuid(row.reportId) || !isNonblank(row.section) || String(row.section).length > 100)
-      throw new Error("invalid weekly-report request");
-    if (
-      row.maxCharacters !== undefined &&
-      (!Number.isInteger(row.maxCharacters) ||
-        Number(row.maxCharacters) < 1 ||
-        Number(row.maxCharacters) > 12_000)
-    )
-      throw new Error("invalid weekly-report request");
+  if (request.operation === "read") {
     return {
-      idempotencyKey: row.idempotencyKey,
-      workspaceId: row.workspaceId,
-      agentId: row.agentId,
+      idempotencyKey: request.idempotencyKey,
+      workspaceId: request.workspaceId,
+      agentId: request.agentId,
       operation: "read",
-      reportId: row.reportId,
-      section: String(row.section).trim(),
-      ...(row.maxCharacters !== undefined ? { maxCharacters: row.maxCharacters as number } : {}),
+      reportId: request.reportId,
+      section: request.section,
+      ...(request.maxCharacters !== undefined ? { maxCharacters: request.maxCharacters } : {}),
     };
   }
-  throw new Error("invalid weekly-report request");
+  return request;
 }
 
 export function encodeWeeklyReportRequest(request: WeeklyReportRequest): Uint8Array {
@@ -137,16 +142,13 @@ export function decodeWeeklyReportRequest(bytes: Uint8Array): WeeklyReportReques
 }
 
 export function encodeWeeklyReportResponse(response: WeeklyReportResponse): Uint8Array {
-  if (
-    !isNonblank(response.idempotencyKey) ||
-    !["context", "list", "read", "workflow"].includes(response.operation)
-  )
-    throw new Error("invalid weekly-report response");
+  const parsed = weeklyReportResponseSchema.safeParse(response);
+  if (!parsed.success) throw new Error("invalid weekly-report response");
   return utf8Encoder.encode(
     JSON.stringify({
-      idempotencyKey: response.idempotencyKey,
-      operation: response.operation,
-      result: response.result ?? null,
+      idempotencyKey: parsed.data.idempotencyKey,
+      operation: parsed.data.operation,
+      result: parsed.data.result ?? null,
     }),
   );
 }
@@ -158,17 +160,11 @@ export function decodeWeeklyReportResponse(bytes: Uint8Array): WeeklyReportRespo
   } catch {
     throw new Error("invalid weekly-report response");
   }
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("invalid weekly-report response");
-  const row = value as Record<string, unknown>;
-  if (
-    !isNonblank(row.idempotencyKey) ||
-    !["context", "list", "read", "workflow"].includes(String(row.operation))
-  )
-    throw new Error("invalid weekly-report response");
+  const parsed = weeklyReportResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid weekly-report response");
   return {
-    idempotencyKey: row.idempotencyKey,
-    operation: row.operation as WeeklyReportCommand["operation"],
-    result: row.result ?? null,
+    idempotencyKey: parsed.data.idempotencyKey,
+    operation: parsed.data.operation,
+    result: parsed.data.result ?? null,
   };
 }

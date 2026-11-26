@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { parseActivityEntries, type ActivityTrajectoryEntry } from "./activity-entries";
 import { AGENT_SERVICE_TIER_OBSERVED, type AgentServiceTierObserved } from "./service-tier";
 
@@ -61,50 +62,72 @@ export type AgentDisplaySnapshot = {
   lastSeenAtMs?: number | null;
 };
 
-const activityKinds = new Set<AgentActivityKind>([
-  "online",
-  "working",
-  "thinking",
-  "error",
-  "offline",
-]);
+const boundedCodePoints = (maximum: number) =>
+  z.string().refine((value) => [...value].length <= maximum);
 
-/** Parses the cloud-authored browser display protocol at its public boundary. */
+const positiveSafeIntSchema = z.int().min(1);
+
+const contextUsageSchema = z.object({
+  usedTokens: z.int().min(0),
+  windowTokens: positiveSafeIntSchema,
+  observedAtMs: positiveSafeIntSchema,
+});
+
+const serviceTierValues = Object.values(AGENT_SERVICE_TIER_OBSERVED) as [
+  AgentServiceTierObserved,
+  ...AgentServiceTierObserved[],
+];
+
+const fastModeSchema = z.object({
+  requested: z.boolean(),
+  observed: z.enum(serviceTierValues),
+  observedAtMs: positiveSafeIntSchema,
+});
+
+const agentDisplaySnapshotSchema = z
+  .object({
+    protocolMajor: z.literal(1),
+    workspaceId: z.string().min(1),
+    computerId: z.string(),
+    agentId: z.string().min(1),
+    revision: positiveSafeIntSchema,
+    activityKind: z.enum(["online", "working", "thinking", "error", "offline"]),
+    detailKind: boundedCodePoints(128),
+    detail: boundedCodePoints(512),
+    entries: z.unknown(),
+    expiresAt: z.number().positive().nullable(),
+    contextUsage: contextUsageSchema.nullish(),
+    fastMode: fastModeSchema.nullish(),
+    stopReason: boundedCodePoints(128).nullish(),
+    stopDetail: z.string().nullish(),
+    stopMessage: z.string().nullish(),
+    statusOnly: z.literal(true).optional(),
+    lastSeenAtMs: positiveSafeIntSchema.nullish(),
+  })
+  .refine((item) =>
+    item.activityKind === "offline" ? item.expiresAt === null : item.expiresAt !== null,
+  )
+  .refine(
+    (item) =>
+      item.statusOnly === undefined ||
+      (item.detailKind === "" &&
+        item.detail === "" &&
+        Array.isArray(item.entries) &&
+        item.entries.length === 0 &&
+        item.contextUsage === undefined &&
+        item.fastMode === undefined &&
+        item.stopDetail === undefined &&
+        item.stopMessage === undefined),
+  );
+
 export function parseAgentDisplaySnapshot(data: unknown): AgentDisplaySnapshot {
   const value =
     data instanceof Uint8Array ? (JSON.parse(utf8Decoder.decode(data)) as unknown) : data;
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("invalid Agent display snapshot");
-  const item = value as Record<string, unknown>;
-  const nonempty = (field: unknown) => typeof field === "string" && field.length > 0;
-  const bounded = (field: unknown, maximum: number) =>
-    typeof field === "string" && [...field].length <= maximum;
-  if (
-    item.protocolMajor !== 1 ||
-    !nonempty(item.workspaceId) ||
-    typeof item.computerId !== "string" ||
-    !nonempty(item.agentId) ||
-    !Number.isSafeInteger(item.revision) ||
-    (item.revision as number) < 1 ||
-    !activityKinds.has(item.activityKind as AgentActivityKind) ||
-    !bounded(item.detailKind, 128) ||
-    !bounded(item.detail, 512) ||
-    (item.expiresAt !== null &&
-      (typeof item.expiresAt !== "number" ||
-        !Number.isFinite(item.expiresAt) ||
-        item.expiresAt <= 0)) ||
-    (item.activityKind === "offline" ? item.expiresAt !== null : item.expiresAt === null)
-  )
-    throw new Error("invalid Agent display snapshot");
-  const contextUsage = parseContextUsage(item.contextUsage);
-  const fastMode = parseFastMode(item.fastMode);
-  const stopReason = parseStopReason(item.stopReason);
-  const stopDetail = parseStopDetail(item.stopDetail);
-  const stopMessage = parseStopDetail(item.stopMessage);
-  const statusOnly = parseStatusOnly(item);
-  const lastSeenAtMs = parseLastSeenAtMs(item.lastSeenAtMs);
+  const parsed = agentDisplaySnapshotSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid Agent display snapshot");
+  const item = parsed.data;
   return {
-    protocolMajor: 1,
+    protocolMajor: item.protocolMajor,
     workspaceId: item.workspaceId,
     computerId: item.computerId,
     agentId: item.agentId,
@@ -114,101 +137,12 @@ export function parseAgentDisplaySnapshot(data: unknown): AgentDisplaySnapshot {
     detail: item.detail,
     entries: parseActivityEntries(item.entries),
     expiresAt: item.expiresAt,
-    ...(contextUsage !== undefined ? { contextUsage } : {}),
-    ...(fastMode !== undefined ? { fastMode } : {}),
-    ...(stopReason !== undefined ? { stopReason } : {}),
-    ...(stopDetail !== undefined ? { stopDetail } : {}),
-    ...(stopMessage !== undefined ? { stopMessage } : {}),
-    ...(statusOnly ? { statusOnly } : {}),
-    ...(lastSeenAtMs !== undefined ? { lastSeenAtMs } : {}),
-  } as AgentDisplaySnapshot;
-}
-
-function parseLastSeenAtMs(value: unknown): AgentDisplaySnapshot["lastSeenAtMs"] {
-  if (value === undefined || value === null) return value;
-  if (!Number.isSafeInteger(value) || (value as number) < 1)
-    throw new Error("invalid Agent display snapshot");
-  return value as number;
-}
-
-/** The status floor may carry the kind and its deadline, never Activity content: a `statusOnly`
- * snapshot with words in it is a bug, rejected at the boundary like any other invalid value. */
-function parseStatusOnly(item: Record<string, unknown>): true | undefined {
-  if (item.statusOnly === undefined) return undefined;
-  if (
-    item.statusOnly !== true ||
-    item.detailKind !== "" ||
-    item.detail !== "" ||
-    !Array.isArray(item.entries) ||
-    item.entries.length !== 0 ||
-    item.contextUsage !== undefined ||
-    item.fastMode !== undefined ||
-    item.stopDetail !== undefined ||
-    item.stopMessage !== undefined
-  )
-    throw new Error("invalid Agent display snapshot");
-  return true;
-}
-
-/** Same tolerance as `parseContextUsage`: absent (older server) returns `undefined`, `null`
- * (written, nothing to show) passes through, present values are validated. */
-function parseStopReason(value: unknown): AgentDisplaySnapshot["stopReason"] {
-  if (value === undefined) return undefined;
-  if (value === null) return null;
-  if (typeof value !== "string" || [...value].length > 128)
-    throw new Error("invalid Agent display snapshot");
-  return value;
-}
-
-/** As `parseStopReason`; the Daemon bounds these words. */
-function parseStopDetail(value: unknown): AgentDisplaySnapshot["stopDetail"] {
-  if (value === undefined || value === null) return value;
-  if (typeof value !== "string") throw new Error("invalid Agent display snapshot");
-  return value;
-}
-
-/** Tolerates a missing field (older server) by returning `undefined` — never a thrown error —
- * and validates numbers when present. `null` (written but nothing to show) passes through. */
-function parseContextUsage(value: unknown): AgentDisplaySnapshot["contextUsage"] {
-  if (value === undefined) return undefined;
-  if (value === null) return null;
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("invalid Agent display snapshot");
-  const item = value as Record<string, unknown>;
-  const positiveInteger = (field: unknown) => Number.isSafeInteger(field) && (field as number) >= 0;
-  if (
-    !positiveInteger(item.usedTokens) ||
-    !Number.isSafeInteger(item.windowTokens) ||
-    (item.windowTokens as number) < 1 ||
-    !Number.isSafeInteger(item.observedAtMs) ||
-    (item.observedAtMs as number) < 1
-  )
-    throw new Error("invalid Agent display snapshot");
-  return {
-    usedTokens: item.usedTokens as number,
-    windowTokens: item.windowTokens as number,
-    observedAtMs: item.observedAtMs as number,
-  };
-}
-
-/** Same tolerance as `parseContextUsage`: absent (older server) returns `undefined`, `null`
- * (written, nothing current) passes through, present values are validated. */
-function parseFastMode(value: unknown): AgentDisplaySnapshot["fastMode"] {
-  if (value === undefined) return undefined;
-  if (value === null) return null;
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("invalid Agent display snapshot");
-  const item = value as Record<string, unknown>;
-  if (
-    typeof item.requested !== "boolean" ||
-    !Object.values(AGENT_SERVICE_TIER_OBSERVED).includes(item.observed as never) ||
-    !Number.isSafeInteger(item.observedAtMs) ||
-    (item.observedAtMs as number) < 1
-  )
-    throw new Error("invalid Agent display snapshot");
-  return {
-    requested: item.requested,
-    observed: item.observed as AgentServiceTierObserved,
-    observedAtMs: item.observedAtMs as number,
+    ...(item.contextUsage !== undefined ? { contextUsage: item.contextUsage } : {}),
+    ...(item.fastMode !== undefined ? { fastMode: item.fastMode } : {}),
+    ...(item.stopReason !== undefined ? { stopReason: item.stopReason } : {}),
+    ...(item.stopDetail !== undefined ? { stopDetail: item.stopDetail } : {}),
+    ...(item.stopMessage !== undefined ? { stopMessage: item.stopMessage } : {}),
+    ...(item.statusOnly ? { statusOnly: item.statusOnly } : {}),
+    ...(item.lastSeenAtMs !== undefined ? { lastSeenAtMs: item.lastSeenAtMs } : {}),
   };
 }

@@ -4,7 +4,7 @@
  * thread and the time it began.
  */
 
-import { isRecord } from "../internal";
+import { z } from "zod";
 
 /** One followed channel thread: the target `message read` and `thread unfollow` take. */
 export type AgentFollowedThread = {
@@ -20,19 +20,20 @@ export type AgentThreadListResponse = {
   threads: AgentFollowedThread[];
 };
 
-function isFollowedThread(value: unknown): value is AgentFollowedThread {
-  return (
-    isRecord(value) &&
-    typeof value.target === "string" &&
-    typeof value.parentChannel === "string" &&
-    typeof value.rootMessageId === "string" &&
-    typeof value.followedAt === "string"
-  );
-}
+const followedThreadSchema = z.looseObject({
+  target: z.string(),
+  parentChannel: z.string(),
+  rootMessageId: z.string(),
+  followedAt: z.string(),
+});
+
+const threadListResponseSchema = z.object({
+  ok: z.literal(true),
+  threads: z.array(followedThreadSchema),
+});
 
 export function decodeAgentThreadListResponse(value: unknown): AgentThreadListResponse {
-  if (!isRecord(value) || value.ok !== true || !Array.isArray(value.threads))
-    throw new Error("invalid Agent thread list response");
-  if (!value.threads.every(isFollowedThread)) throw new Error("invalid Agent thread list response");
-  return { ok: true, threads: value.threads };
+  const parsed = threadListResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid Agent thread list response");
+  return parsed.data;
 }

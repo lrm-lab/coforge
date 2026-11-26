@@ -5,7 +5,7 @@
  * answers `message_not_found`, exactly like one that does not exist.
  */
 
-import { isRecord } from "#src/internal/json-record";
+import { z } from "zod";
 
 /** `pending` has not settled; `unknown` means delivery tracking could not see the result, and
  * may still become `delivered`. `delivered` and `lost` are final. */
@@ -55,50 +55,45 @@ export type AgentMentionDeliveryErrorResponse = {
   error: string;
 };
 
-function isDelivery(value: unknown): value is AgentMentionDelivery {
-  if (
-    !isRecord(value) ||
-    typeof value.targetHandle !== "string" ||
-    !value.targetHandle.startsWith("@") ||
-    (value.targetDeleted !== undefined && value.targetDeleted !== true)
-  )
-    return false;
-  if (value.outcome === "lost")
-    return (AGENT_MENTION_DELIVERY_REASON_CATEGORIES as readonly unknown[]).includes(
-      value.reasonCategory,
-    );
-  return (
-    (AGENT_MENTION_DELIVERY_OUTCOMES as readonly unknown[]).includes(value.outcome) &&
-    value.reasonCategory === undefined
-  );
-}
+const deliveryBaseShape = {
+  targetHandle: z.string().startsWith("@"),
+  targetDeleted: z.literal(true).optional(),
+};
+
+const deliverySchema = z.union([
+  z.looseObject({
+    ...deliveryBaseShape,
+    outcome: z.literal("lost"),
+    reasonCategory: z.enum(AGENT_MENTION_DELIVERY_REASON_CATEGORIES),
+  }),
+  z.looseObject({
+    ...deliveryBaseShape,
+    outcome: z.enum(["pending", "delivered", "unknown"]),
+    reasonCategory: z.undefined().optional(),
+  }),
+]);
+
+const mentionDeliveryResponseSchema = z.object({
+  ok: z.literal(true),
+  messageId: z.string(),
+  deliveries: z.array(deliverySchema),
+});
+
+const mentionDeliveryErrorResponseSchema = z.object({
+  ok: z.literal(false),
+  errorCode: z.enum(AGENT_MENTION_DELIVERY_ERROR_CODES),
+  error: z.string(),
+});
 
 export function decodeAgentMentionDeliveryResponse(value: unknown): AgentMentionDeliveryResponse {
-  if (
-    !isRecord(value) ||
-    value.ok !== true ||
-    typeof value.messageId !== "string" ||
-    !Array.isArray(value.deliveries) ||
-    !value.deliveries.every(isDelivery)
-  )
-    throw new Error("invalid Agent mention delivery response");
-  return { ok: true, messageId: value.messageId, deliveries: value.deliveries };
+  const parsed = mentionDeliveryResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid Agent mention delivery response");
+  return parsed.data as AgentMentionDeliveryResponse;
 }
 
 export function decodeAgentMentionDeliveryErrorResponse(
   value: unknown,
 ): AgentMentionDeliveryErrorResponse | undefined {
-  if (
-    !isRecord(value) ||
-    value.ok !== false ||
-    typeof value.errorCode !== "string" ||
-    !(AGENT_MENTION_DELIVERY_ERROR_CODES as readonly string[]).includes(value.errorCode) ||
-    typeof value.error !== "string"
-  )
-    return undefined;
-  return {
-    ok: false,
-    errorCode: value.errorCode as AgentMentionDeliveryErrorCode,
-    error: value.error,
-  };
+  const parsed = mentionDeliveryErrorResponseSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }

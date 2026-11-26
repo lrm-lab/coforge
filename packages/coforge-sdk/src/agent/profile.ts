@@ -11,6 +11,7 @@
  * human-committed only).
  */
 
+import { z } from "zod";
 import type { AgentUserStatus } from "./user-info";
 
 export type AgentProfileShowRequest = { target?: string };
@@ -85,80 +86,64 @@ export type AgentProfileErrorResponse = {
   error: string;
 };
 
-function isProfileErrorCode(value: unknown): value is AgentProfileErrorCode {
-  return (
-    typeof value === "string" && (AGENT_PROFILE_ERROR_CODES as readonly string[]).includes(value)
-  );
-}
+const profileErrorResponseSchema = z.object({
+  ok: z.literal(false),
+  errorCode: z.enum(AGENT_PROFILE_ERROR_CODES),
+  error: z.string(),
+});
+
+const userStatusSchema = z.enum(["online", "offline", "unknown"]);
+
+const createdAgentSchema = z.looseObject({
+  name: z.string(),
+  displayName: z.string(),
+  status: userStatusSchema,
+});
+
+const creatorSchema = z.looseObject({
+  name: z.string(),
+  displayName: z.string(),
+});
+
+const profileBaseShape = {
+  id: z.string(),
+  name: z.string(),
+  displayName: z.string(),
+  description: z.string(),
+  role: z.string().nullable(),
+  isSelf: z.boolean(),
+};
+
+const profileViewSchema = z.discriminatedUnion("kind", [
+  z.looseObject({
+    ...profileBaseShape,
+    kind: z.literal("human"),
+    createdAgents: z.array(createdAgentSchema),
+  }),
+  z.looseObject({
+    ...profileBaseShape,
+    kind: z.literal("agent"),
+    status: userStatusSchema,
+    creator: creatorSchema.nullable(),
+  }),
+]);
+
+const profileShowResponseSchema = z.object({
+  ok: z.literal(true),
+  profile: profileViewSchema,
+});
 
 export function decodeAgentProfileErrorResponse(
   value: unknown,
 ): AgentProfileErrorResponse | undefined {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    !("ok" in value) ||
-    value.ok !== false ||
-    !("errorCode" in value) ||
-    !isProfileErrorCode(value.errorCode) ||
-    !("error" in value) ||
-    typeof value.error !== "string"
-  )
-    return undefined;
-  return { ok: false, errorCode: value.errorCode, error: value.error };
-}
-
-function isCreatedAgent(value: unknown): value is AgentProfileCreatedAgent {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Record<string, unknown>;
-  return (
-    typeof candidate.name === "string" &&
-    typeof candidate.displayName === "string" &&
-    (candidate.status === "online" ||
-      candidate.status === "offline" ||
-      candidate.status === "unknown")
-  );
-}
-
-function isProfileView(value: unknown): value is AgentProfileView {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Record<string, unknown>;
-  if (
-    typeof candidate.id !== "string" ||
-    typeof candidate.name !== "string" ||
-    typeof candidate.displayName !== "string" ||
-    typeof candidate.description !== "string" ||
-    (candidate.role !== null && typeof candidate.role !== "string") ||
-    typeof candidate.isSelf !== "boolean"
-  )
-    return false;
-  if (candidate.kind === "human")
-    return Array.isArray(candidate.createdAgents) && candidate.createdAgents.every(isCreatedAgent);
-  if (candidate.kind === "agent")
-    return (
-      (candidate.status === "online" ||
-        candidate.status === "offline" ||
-        candidate.status === "unknown") &&
-      (candidate.creator === null ||
-        (typeof candidate.creator === "object" &&
-          candidate.creator !== null &&
-          typeof (candidate.creator as Record<string, unknown>).name === "string" &&
-          typeof (candidate.creator as Record<string, unknown>).displayName === "string"))
-    );
-  return false;
+  const parsed = profileErrorResponseSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
 
 export function decodeAgentProfileShowResponse(value: unknown): AgentProfileShowResponse {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    !("ok" in value) ||
-    value.ok !== true ||
-    !("profile" in value) ||
-    !isProfileView((value as { profile: unknown }).profile)
-  )
-    throw new Error("invalid Agent profile show response");
-  return { ok: true, profile: (value as { profile: AgentProfileView }).profile };
+  const parsed = profileShowResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid Agent profile show response");
+  return parsed.data as AgentProfileShowResponse;
 }
 
 export function decodeAgentProfileUpdateResponse(value: unknown): AgentProfileUpdateResponse {

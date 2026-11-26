@@ -4,7 +4,8 @@
  * comments on one attachment, oldest first. Read-only: no target addresses the discussion yet.
  */
 
-import { isMessageSenderKind, isRecord, type MessageSenderKind } from "../internal";
+import { z } from "zod";
+import { isMessageSenderKind, type MessageSenderKind } from "../internal";
 
 /** The most one page holds; a larger `limit` is refused. */
 export const AGENT_ATTACHMENT_COMMENTS_MAX_LIMIT = 100;
@@ -67,79 +68,65 @@ export type AgentAttachmentCommentsResponse = {
   hasOlder: boolean;
 };
 
-const isCount = (value: unknown): value is number =>
-  typeof value === "number" && Number.isInteger(value) && value >= 0;
+const countSchema = z.int().min(0);
 
-function isResolveAction(
-  value: unknown,
-): value is NonNullable<AgentAttachmentCommentsResponse["viewer"]["resolveAction"]> {
-  return isRecord(value) && value.type === "reaction" && value.emoji === "✅";
-}
+const resolveActionSchema = z.looseObject({
+  type: z.literal("reaction"),
+  emoji: z.literal("✅"),
+});
+
+const attachmentCommentAnchorSchema = z.looseObject({
+  type: z.string(),
+  data: z.record(z.string(), z.unknown()),
+});
+
+const attachmentCommentSchema = z.looseObject({
+  id: z.string(),
+  sequence: countSchema,
+  senderKind: z.custom<MessageSenderKind>((value) => isMessageSenderKind(value)),
+  senderName: z.string(),
+  senderHandle: z.string().optional(),
+  body: z.string(),
+  createdAt: z.string(),
+  reactions: z.array(
+    z.looseObject({
+      emoji: z.string(),
+      count: countSchema,
+    }),
+  ),
+  anchor: attachmentCommentAnchorSchema.nullable(),
+  resolved: z.boolean(),
+});
+
+const attachmentCommentsViewerSchema = z
+  .object({
+    canComment: z.boolean(),
+    canResolve: z.boolean(),
+    resolveAction: resolveActionSchema.optional(),
+    reason: z.enum(AGENT_ATTACHMENT_COMMENT_DISABLED_REASONS).optional(),
+  })
+  .refine((viewer) =>
+    viewer.canResolve ? viewer.resolveAction !== undefined : viewer.resolveAction === undefined,
+  );
+
+const attachmentCommentsResponseSchema = z.object({
+  ok: z.literal(true),
+  attachmentId: z.string(),
+  viewer: attachmentCommentsViewerSchema,
+  comments: z.array(attachmentCommentSchema),
+  hasOlder: z.boolean(),
+});
 
 export function isAttachmentCommentAnchor(value: unknown): value is AgentAttachmentCommentAnchor {
-  return isRecord(value) && typeof value.type === "string" && isRecord(value.data);
-}
-
-function isComment(value: unknown): value is AgentAttachmentComment {
-  return (
-    isRecord(value) &&
-    typeof value.id === "string" &&
-    isCount(value.sequence) &&
-    isMessageSenderKind(value.senderKind) &&
-    typeof value.senderName === "string" &&
-    (value.senderHandle === undefined || typeof value.senderHandle === "string") &&
-    typeof value.body === "string" &&
-    typeof value.createdAt === "string" &&
-    Array.isArray(value.reactions) &&
-    value.reactions.every(
-      (reaction) =>
-        isRecord(reaction) && typeof reaction.emoji === "string" && isCount(reaction.count),
-    ) &&
-    (value.anchor === null || isAttachmentCommentAnchor(value.anchor)) &&
-    typeof value.resolved === "boolean"
-  );
+  return attachmentCommentAnchorSchema.safeParse(value).success;
 }
 
 export function decodeAgentAttachmentCommentsResponse(
   value: unknown,
 ): AgentAttachmentCommentsResponse {
-  if (
-    !isRecord(value) ||
-    value.ok !== true ||
-    typeof value.attachmentId !== "string" ||
-    !isRecord(value.viewer) ||
-    typeof value.viewer.canComment !== "boolean" ||
-    typeof value.viewer.canResolve !== "boolean" ||
-    (value.viewer.canResolve
-      ? !isResolveAction(value.viewer.resolveAction)
-      : value.viewer.resolveAction !== undefined) ||
-    !(
-      value.viewer.reason === undefined ||
-      (AGENT_ATTACHMENT_COMMENT_DISABLED_REASONS as readonly unknown[]).includes(
-        value.viewer.reason,
-      )
-    ) ||
-    !Array.isArray(value.comments) ||
-    !value.comments.every(isComment) ||
-    typeof value.hasOlder !== "boolean"
-  )
-    throw new Error("invalid Agent attachment comments response");
-  return {
-    ok: true,
-    attachmentId: value.attachmentId,
-    viewer: {
-      canComment: value.viewer.canComment,
-      canResolve: value.viewer.canResolve,
-      ...(isResolveAction(value.viewer.resolveAction)
-        ? { resolveAction: value.viewer.resolveAction }
-        : {}),
-      ...(value.viewer.reason === undefined
-        ? {}
-        : { reason: value.viewer.reason as AgentAttachmentCommentDisabledReason }),
-    },
-    comments: value.comments,
-    hasOlder: value.hasOlder,
-  };
+  const parsed = attachmentCommentsResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid Agent attachment comments response");
+  return parsed.data as AgentAttachmentCommentsResponse;
 }
 
 /** The refusals of the route, answered as `{ ok: false, errorCode, error }` like Manual and mention
@@ -148,19 +135,15 @@ export const AGENT_ATTACHMENT_COMMENTS_ERROR_CODES = ["INVALID_INPUT", "NOT_FOUN
 export type AgentAttachmentCommentsErrorCode =
   (typeof AGENT_ATTACHMENT_COMMENTS_ERROR_CODES)[number];
 
+const attachmentCommentsErrorResponseSchema = z.object({
+  ok: z.literal(false),
+  errorCode: z.enum(AGENT_ATTACHMENT_COMMENTS_ERROR_CODES),
+  error: z.string(),
+});
+
 export function decodeAgentAttachmentCommentsErrorResponse(
   value: unknown,
 ): { ok: false; errorCode: AgentAttachmentCommentsErrorCode; error: string } | undefined {
-  if (
-    !isRecord(value) ||
-    value.ok !== false ||
-    !(AGENT_ATTACHMENT_COMMENTS_ERROR_CODES as readonly unknown[]).includes(value.errorCode) ||
-    typeof value.error !== "string"
-  )
-    return undefined;
-  return {
-    ok: false,
-    errorCode: value.errorCode as AgentAttachmentCommentsErrorCode,
-    error: value.error,
-  };
+  const parsed = attachmentCommentsErrorResponseSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }

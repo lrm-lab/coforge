@@ -4,7 +4,7 @@
  * items are a separate local answer; the CLI merges the two.
  */
 
-import { isRecord } from "../internal";
+import { z } from "zod";
 
 export const AGENT_INBOX_VIEWS = ["unread", "mentions"] as const;
 export type AgentInboxView = (typeof AGENT_INBOX_VIEWS)[number];
@@ -62,49 +62,35 @@ export type AgentInboxListResponse = {
   muteHint?: string;
 };
 
-const isCount = (value: unknown): value is number =>
-  typeof value === "number" && Number.isInteger(value) && value >= 0;
+const countSchema = z.int().min(0);
 
-function isInboxItem(value: unknown): value is AgentInboxItem {
-  return (
-    isRecord(value) &&
-    (AGENT_INBOX_ITEM_KINDS as readonly unknown[]).includes(value.kind) &&
-    typeof value.target === "string" &&
-    isCount(value.unread) &&
-    isCount(value.mentions) &&
-    (value.latestAt === null || typeof value.latestAt === "string") &&
-    (value.latestSenderName === null || typeof value.latestSenderName === "string") &&
-    isCount(value.lastReadSeq)
-  );
-}
+const inboxItemSchema = z.looseObject({
+  kind: z.enum(AGENT_INBOX_ITEM_KINDS),
+  target: z.string(),
+  unread: countSchema,
+  mentions: countSchema,
+  latestAt: z.string().nullable(),
+  latestSenderName: z.string().nullable(),
+  lastReadSeq: countSchema,
+});
+
+const inboxListResponseSchema = z.object({
+  ok: z.literal(true),
+  view: z.enum(AGENT_INBOX_VIEWS),
+  items: z.array(inboxItemSchema),
+  totals: z.object({
+    conversations: countSchema,
+    dms: countSchema,
+    mentions: countSchema,
+  }),
+  hasMore: z.boolean(),
+  nextBefore: countSchema.nullable(),
+  muteHint: z.string().optional(),
+});
 
 export function decodeAgentInboxListResponse(value: unknown): AgentInboxListResponse {
-  if (
-    !isRecord(value) ||
-    value.ok !== true ||
-    !isAgentInboxView(value.view) ||
-    !Array.isArray(value.items) ||
-    !value.items.every(isInboxItem) ||
-    !isRecord(value.totals) ||
-    !isCount(value.totals.conversations) ||
-    !isCount(value.totals.dms) ||
-    !isCount(value.totals.mentions) ||
-    typeof value.hasMore !== "boolean" ||
-    !(value.nextBefore === null || isCount(value.nextBefore)) ||
-    !(value.muteHint === undefined || typeof value.muteHint === "string")
-  )
-    throw new Error("invalid Agent inbox list response");
-  return {
-    ok: true,
-    view: value.view,
-    items: value.items,
-    totals: {
-      conversations: value.totals.conversations,
-      dms: value.totals.dms,
-      mentions: value.totals.mentions,
-    },
-    hasMore: value.hasMore,
-    nextBefore: value.nextBefore as number | null,
-    ...(typeof value.muteHint === "string" ? { muteHint: value.muteHint } : {}),
-  };
+  const parsed = inboxListResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid Agent inbox list response");
+  const { muteHint, ...rest } = parsed.data;
+  return muteHint === undefined ? rest : { ...rest, muteHint };
 }

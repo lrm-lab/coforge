@@ -4,6 +4,8 @@
  * Uses the same `{ ok: false, errorCode, error }` error envelope as the Agent Manual routes.
  */
 
+import { z } from "zod";
+
 export type AgentUserKind = "human" | "agent";
 
 export type AgentUserInfoRequest = { name: string };
@@ -59,62 +61,57 @@ export type AgentUserInfoErrorResponse = {
   error: string;
 };
 
-function isUserInfoErrorCode(value: unknown): value is AgentUserInfoErrorCode {
-  return (
-    typeof value === "string" && (AGENT_USER_INFO_ERROR_CODES as readonly string[]).includes(value)
-  );
-}
+const userInfoErrorResponseSchema = z.object({
+  ok: z.literal(false),
+  errorCode: z.enum(AGENT_USER_INFO_ERROR_CODES),
+  error: z.string(),
+});
+
+const userInfoMembershipSchema = z.looseObject({
+  channel: z.string(),
+  role: z.string().optional(),
+});
+
+const userInfoMembershipsSchema = z.array(userInfoMembershipSchema);
+
+const userInfoSchema = z.looseObject({
+  kind: z.enum(["human", "agent"]),
+  id: z.string(),
+  name: z.string(),
+  displayName: z.string(),
+  description: z.string(),
+  role: z.string().nullable(),
+  isSelf: z.boolean(),
+  timeZone: z.string().optional(),
+});
+
+const userInfoEnvelopeSchema = z.looseObject({
+  ok: z.literal(true),
+  user: z.unknown().optional(),
+  memberships: z.unknown().optional(),
+});
 
 export function decodeAgentUserInfoErrorResponse(
   value: unknown,
 ): AgentUserInfoErrorResponse | undefined {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    !("ok" in value) ||
-    value.ok !== false ||
-    !("errorCode" in value) ||
-    !isUserInfoErrorCode(value.errorCode) ||
-    !("error" in value) ||
-    typeof value.error !== "string"
-  )
-    return undefined;
-  return { ok: false, errorCode: value.errorCode, error: value.error };
-}
-
-function isUserInfoMembership(value: unknown): value is AgentUserInfoMembership {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as { channel?: unknown; role?: unknown };
-  return (
-    typeof candidate.channel === "string" &&
-    (candidate.role === undefined || typeof candidate.role === "string")
-  );
+  const parsed = userInfoErrorResponseSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
 
 export function decodeAgentUserInfoResponse(value: unknown): AgentUserInfoResponse {
-  if (!value || typeof value !== "object" || !("ok" in value) || value.ok !== true)
-    throw new Error("invalid Agent user info response");
-  const candidate = value as { user?: unknown; memberships?: unknown };
-  const user = candidate.user;
-  if (!user || typeof user !== "object")
+  const envelope = userInfoEnvelopeSchema.safeParse(value);
+  if (!envelope.success) throw new Error("invalid Agent user info response");
+  const { user, memberships } = envelope.data;
+  if (!user || typeof user !== "object" || Array.isArray(user))
     throw new Error("invalid Agent user info response: missing user");
-  const u = user as Record<string, unknown>;
-  if (
-    (u.kind !== "human" && u.kind !== "agent") ||
-    typeof u.id !== "string" ||
-    typeof u.name !== "string" ||
-    typeof u.displayName !== "string" ||
-    typeof u.description !== "string" ||
-    (u.role !== null && typeof u.role !== "string") ||
-    typeof u.isSelf !== "boolean" ||
-    (u.timeZone !== undefined && typeof u.timeZone !== "string")
-  )
-    throw new Error("invalid Agent user info response: malformed user");
-  if (!Array.isArray(candidate.memberships) || !candidate.memberships.every(isUserInfoMembership))
+  const parsedUser = userInfoSchema.safeParse(user);
+  if (!parsedUser.success) throw new Error("invalid Agent user info response: malformed user");
+  const parsedMemberships = userInfoMembershipsSchema.safeParse(memberships);
+  if (!parsedMemberships.success)
     throw new Error("invalid Agent user info response: malformed memberships");
   return {
     ok: true,
-    user: u as unknown as AgentUserInfo,
-    memberships: candidate.memberships,
+    user: parsedUser.data as AgentUserInfo,
+    memberships: parsedMemberships.data,
   };
 }

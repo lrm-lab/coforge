@@ -5,6 +5,8 @@
  * codes keep a `knowledge_` prefix.
  */
 
+import { z } from "zod";
+
 export type AgentManualGetRequest = {
   topic: string;
   intent: string;
@@ -62,89 +64,50 @@ export type AgentManualErrorResponse = {
   error: string;
 };
 
-function isManualErrorCode(value: unknown): value is AgentManualErrorCode {
-  return (
-    typeof value === "string" && (AGENT_MANUAL_ERROR_CODES as readonly string[]).includes(value)
-  );
-}
+const manualErrorResponseSchema = z.object({
+  ok: z.literal(false),
+  errorCode: z.enum(AGENT_MANUAL_ERROR_CODES),
+  error: z.string(),
+});
+
+const manualGetResponseSchema = z.object({
+  ok: z.literal(true),
+  docId: z.string(),
+  topicOrPath: z.string(),
+  docVersion: z.string(),
+  docState: z.literal("published"),
+  contentType: z.literal("text/markdown"),
+  content: z.string(),
+});
+
+const manualSearchResultSchema = z.looseObject({
+  slug: z.string(),
+  title: z.string(),
+  firstScreen: z.string(),
+});
+
+const manualSearchResponseSchema = z.object({
+  ok: z.literal(true),
+  query: z.string(),
+  scope: z.null(),
+  results: z.array(manualSearchResultSchema),
+});
 
 export function decodeAgentManualErrorResponse(
   value: unknown,
 ): AgentManualErrorResponse | undefined {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    !("ok" in value) ||
-    value.ok !== false ||
-    !("errorCode" in value) ||
-    !isManualErrorCode(value.errorCode) ||
-    !("error" in value) ||
-    typeof value.error !== "string"
-  )
-    return undefined;
-  return { ok: false, errorCode: value.errorCode, error: value.error };
+  const parsed = manualErrorResponseSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
 
 export function decodeAgentManualGetResponse(value: unknown): AgentManualGetResponse {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    !("ok" in value) ||
-    value.ok !== true ||
-    !("docId" in value) ||
-    typeof value.docId !== "string" ||
-    !("topicOrPath" in value) ||
-    typeof value.topicOrPath !== "string" ||
-    !("docVersion" in value) ||
-    typeof value.docVersion !== "string" ||
-    !("docState" in value) ||
-    value.docState !== "published" ||
-    !("contentType" in value) ||
-    value.contentType !== "text/markdown" ||
-    !("content" in value) ||
-    typeof value.content !== "string"
-  )
-    throw new Error("invalid Agent Manual get response");
-  return {
-    ok: true,
-    docId: value.docId,
-    topicOrPath: value.topicOrPath,
-    docVersion: value.docVersion,
-    docState: value.docState,
-    contentType: value.contentType,
-    content: value.content,
-  };
-}
-
-function isManualSearchResult(value: unknown): value is AgentManualSearchResult {
-  return (
-    Boolean(value) &&
-    typeof value === "object" &&
-    typeof (value as { slug?: unknown }).slug === "string" &&
-    typeof (value as { title?: unknown }).title === "string" &&
-    typeof (value as { firstScreen?: unknown }).firstScreen === "string"
-  );
+  const parsed = manualGetResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid Agent Manual get response");
+  return parsed.data;
 }
 
 export function decodeAgentManualSearchResponse(value: unknown): AgentManualSearchResponse {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    !("ok" in value) ||
-    value.ok !== true ||
-    !("query" in value) ||
-    typeof value.query !== "string" ||
-    !("scope" in value) ||
-    value.scope !== null ||
-    !("results" in value) ||
-    !Array.isArray(value.results) ||
-    !value.results.every(isManualSearchResult)
-  )
-    throw new Error("invalid Agent Manual search response");
-  return {
-    ok: true,
-    query: value.query,
-    scope: null,
-    results: value.results,
-  };
+  const parsed = manualSearchResponseSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid Agent Manual search response");
+  return parsed.data;
 }

@@ -1,4 +1,4 @@
-import { isRecord } from "#src/internal/json-record";
+import { z } from "zod";
 
 /**
  * The Agent API's explained refusal: the body a route answers when it refuses a request for a
@@ -15,28 +15,16 @@ export type AgentApiRefusal = {
   details?: Record<string, string | number>;
 };
 
-const REFUSAL_FIELDS: ReadonlySet<string> = new Set(["error", "code", "retryable", "details"]);
 const STABLE_CODE = /^[A-Z][A-Z0-9_]{0,63}$/;
 
-/**
- * Decodes a refusal body, or `undefined` when the value is anything else. A body with any other
- * field, a code outside the stable grammar, or a non-boolean `retryable` is not a refusal, so an
- * arbitrary upstream body is never mistaken for one.
- */
-export function decodeAgentApiRefusal(value: unknown): AgentApiRefusal | undefined {
-  if (!isRecord(value)) return undefined;
-  if (Object.keys(value).some((field) => !REFUSAL_FIELDS.has(field))) return undefined;
-  if (typeof value.error !== "string" || !value.error.trim()) return undefined;
-  if (value.code !== undefined && (typeof value.code !== "string" || !STABLE_CODE.test(value.code)))
-    return undefined;
-  if (value.retryable !== undefined && typeof value.retryable !== "boolean") return undefined;
-  if (value.details !== undefined && !isDetails(value.details)) return undefined;
-  return value as AgentApiRefusal;
-}
+const agentApiRefusalSchema = z.strictObject({
+  error: z.string().refine((value) => value.trim().length > 0),
+  code: z.string().regex(STABLE_CODE).optional(),
+  retryable: z.boolean().optional(),
+  details: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+});
 
-function isDetails(value: unknown): value is Record<string, string | number> {
-  return (
-    isRecord(value) &&
-    Object.values(value).every((entry) => typeof entry === "string" || typeof entry === "number")
-  );
+export function decodeAgentApiRefusal(value: unknown): AgentApiRefusal | undefined {
+  const parsed = agentApiRefusalSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
