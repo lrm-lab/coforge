@@ -1,4 +1,5 @@
-import { consumptionEvidenceForWrite } from "./message-write-evidence";
+import { scopedWriteContext } from "./message-write-evidence";
+import type { AgentConsumptionScope } from "@lrm/coforge-sdk/agent";
 import {
   AGENT_MESSAGE_ACK_METHOD,
   type AgentMessageDelivery,
@@ -362,8 +363,8 @@ export class AgentMessageAttentionIndex {
   recordHistoryRead(...args: Parameters<AgentConsumedAttention["recordHistoryRead"]>) {
     return this.#consumption.recordHistoryRead(...args);
   }
-  consumptionEvidence(agentId: string, target: string) {
-    return consumptionEvidenceForWrite(this.#consumption, agentId, target);
+  writeContext(agentId: string, target: string, scope?: AgentConsumptionScope) {
+    return scopedWriteContext(this.#consumption, agentId, target, scope);
   }
   recordSendContext(...args: Parameters<AgentConsumedAttention["recordSendContext"]>) {
     return this.#consumption.recordSendContext(...args);

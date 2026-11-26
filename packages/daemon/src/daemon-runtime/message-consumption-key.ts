@@ -1,9 +1,8 @@
 import type { AgentConsumptionScope } from "@lrm/coforge-sdk/agent";
-import { threadRootTarget } from "@lrm/coforge-sdk/internal";
+import { isTaskConversationTarget, threadRootTarget } from "@lrm/coforge-sdk/internal";
 
 export function displayConsumptionRoot(target: string): string | undefined {
-  const root = threadRootTarget(target)?.toLowerCase();
-  return root && !/^#\d+$/.test(root) ? root : undefined;
+  return isTaskConversationTarget(target) ? undefined : threadRootTarget(target)?.toLowerCase();
 }
 
 export function matchesConsumptionScope(target: string, scope: AgentConsumptionScope): boolean {

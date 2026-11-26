@@ -50,7 +50,7 @@ export async function taskWriteWithFreshness(
   }
   const { messageAttention } = ports;
   const result = await ports.agentTask(
-    { ...command, consumptionEvidence: messageAttention.consumptionEvidence(agentId, holdKey) },
+    { ...command, consumptionEvidence: messageAttention.writeContext(agentId, holdKey).evidence },
     agentApiKey,
   );
   const held = result.state === "held";

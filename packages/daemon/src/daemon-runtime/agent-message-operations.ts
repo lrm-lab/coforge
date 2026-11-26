@@ -1,3 +1,5 @@
+import { agentConsumptionScopeSchema } from "@lrm/coforge-sdk/internal/agent-consumption";
+import type { AgentMessageDraftContent } from "#src/persistence/agent-message-draft-store";
 import { targetConfirmationRequiredMessage } from "./target-confirmation-message";
 import type { AgentInboxStateMachine } from "./agent-inbox-state-machine";
 import type { AgentMessageOperationsPorts } from "./agent-message-ports";
@@ -98,6 +100,7 @@ export class AgentMessageOperations {
     request: LocalAgentMessageRequest,
     target: string,
     agentApiKey: string,
+    continuationDraft?: AgentMessageDraftContent,
   ): Promise<AgentMessageResponse> {
     const startedAt = performance.now();
     const inbox = this.#ports.inbox(agentId);
@@ -110,6 +113,18 @@ export class AgentMessageOperations {
       (request.sendDraft
         ? undefined
         : await this.#prepareDraft(agentId, () => inbox.draft(target)));
+    const originalDraft =
+      continuationDraft ??
+      draft ??
+      (priorDraft?.idempotencyKey === idempotencyKey ? priorDraft : undefined);
+    const originalScope = agentConsumptionScopeSchema.safeParse(
+      originalDraft?.consumptionScope,
+    ).data;
+    const writeContext =
+      originalDraft && !originalScope
+        ? undefined
+        : this.#ports.attention.writeContext(agentId, target, originalScope);
+    const draftScope = writeContext?.scope;
     const draftReholdCount = priorDraft?.reholdCount ?? 0;
     const content = draft?.content ?? agentMessageBody(request.content, request.message);
     if (content === undefined)
@@ -155,6 +170,7 @@ export class AgentMessageOperations {
               attachmentIds,
               mentions,
               seenUpToSeq,
+              consumptionScope: draftScope,
               idempotencyKey,
             }),
           );
@@ -169,7 +185,14 @@ export class AgentMessageOperations {
     }
     if (!request.sendDraft)
       await this.#prepareDraft(agentId, () =>
-        inbox.save(target, { content, attachmentIds, mentions, seenUpToSeq, idempotencyKey }),
+        inbox.save(target, {
+          content,
+          attachmentIds,
+          mentions,
+          seenUpToSeq,
+          consumptionScope: draftScope,
+          idempotencyKey,
+        }),
       );
     const freshness = planAgentInboxFreshness({
       continueAnyway: Boolean(request.continueAnyway),
@@ -218,7 +241,7 @@ export class AgentMessageOperations {
               sendDraft: request.sendDraft,
               seenUpToSeq,
               seenExactSeqs,
-              consumptionEvidence: this.#ports.attention.consumptionEvidence(agentId, target),
+              consumptionEvidence: writeContext?.evidence,
               freshnessContextMode: request.freshnessContextMode,
               attachmentIds: attachmentIds ? [...attachmentIds] : undefined,
               mentions: mentions ? [...mentions] : undefined,
@@ -253,6 +276,7 @@ export class AgentMessageOperations {
         attachmentIds,
         mentions,
         reholdCount: draftReholdCount + 1,
+        consumptionScope: originalDraft ? draftScope : (writeScope ?? draftScope),
         seenUpToSeq:
           !contextWasWithheld && (writeScope || localConversationId)
             ? (result.seenUpToSeq ?? seenUpToSeq)
@@ -328,7 +352,8 @@ export class AgentMessageOperations {
       this.#ports,
       agentId,
       request,
-      (sendRequest, sendTarget) => this.#send(agentId, sendRequest, sendTarget, agentApiKey),
+      (sendRequest, sendTarget, originalDraft) =>
+        this.#send(agentId, sendRequest, sendTarget, agentApiKey, originalDraft),
       (operation) => this.#prepareDraft(agentId, operation),
     );
   }

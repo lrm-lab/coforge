@@ -85,7 +85,8 @@ export class AgentStateDb {
         saved_at INTEGER NOT NULL,
         rehold_count INTEGER NOT NULL DEFAULT 0,
         seen_up_to_seq INTEGER,
-        seen_exact_seqs TEXT
+        seen_exact_seqs TEXT,
+        consumption_scope TEXT
       );
       CREATE TABLE IF NOT EXISTS continuations (
         id TEXT PRIMARY KEY,
@@ -105,6 +106,12 @@ export class AgentStateDb {
         PRIMARY KEY (kind, id)
       );
     `);
+    try {
+      ensureDraftConsumptionScope(db);
+    } catch (error) {
+      db.close();
+      throw error;
+    }
     if (version === undefined) writeMeta(db, "version", String(SCHEMA_VERSION));
     const handle = new AgentStateDb(db);
     handle.#importLegacyJson(agentId);
@@ -158,6 +165,15 @@ export class AgentStateDb {
     if (!existsSync(legacy.consumedSeqs) && !existsSync(legacy.drafts))
       writeMeta(this.#db, "legacyImported", "true");
   }
+}
+
+function ensureDraftConsumptionScope(db: Database): void {
+  const columns = db.query<{ name: string }, []>("PRAGMA table_info(drafts)");
+  const upgradeNeeded = () => !columns.all().some(({ name }) => name === "consumption_scope");
+  if (!upgradeNeeded()) return;
+  db.transaction(() => {
+    if (upgradeNeeded()) db.exec("ALTER TABLE drafts ADD COLUMN consumption_scope TEXT");
+  }).immediate();
 }
 
 /**

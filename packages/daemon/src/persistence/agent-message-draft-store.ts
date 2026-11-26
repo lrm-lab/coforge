@@ -1,3 +1,7 @@
+import {
+  agentConsumptionScopeSchema,
+  type AgentConsumptionScope,
+} from "@lrm/coforge-sdk/internal/agent-consumption";
 import { normalizeSeenExactSeqs, type LocalMentionSelector } from "@lrm/coforge-sdk/internal";
 import { AgentStateDb } from "./agent-state-db";
 
@@ -23,6 +27,7 @@ export type AgentMessageDraftContent = Readonly<{
    * held refresh whose context was withheld keeps them: a presented hold's frontier covers them,
    * and before a send they are already durable in the consumed cursor. */
   seenExactSeqs?: readonly number[];
+  consumptionScope?: AgentConsumptionScope;
 }>;
 
 export type AgentMessageDraft = AgentMessageDraftContent &
@@ -51,6 +56,7 @@ type DraftRow = {
   rehold_count: number;
   seen_up_to_seq: number | null;
   seen_exact_seqs: string | null;
+  consumption_scope: string | null;
 };
 
 const SELECT_DRAFT_SQL = `SELECT * FROM drafts WHERE target = ?`;
@@ -58,8 +64,8 @@ const DELETE_DRAFT_SQL = `DELETE FROM drafts WHERE target = ?`;
 const DELETE_DRAFT_IF_MATCH_SQL = `DELETE FROM drafts WHERE target = ? AND idempotency_key = ? AND saved_at >= ?`;
 const UPSERT_DRAFT_SQL = `INSERT OR REPLACE INTO drafts
   (target, content, attachment_ids, idempotency_key, mentions, saved_at, rehold_count,
-   seen_up_to_seq, seen_exact_seqs)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+   seen_up_to_seq, seen_exact_seqs, consumption_scope)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 export class AgentMessageDraftStore {
   constructor(
@@ -133,6 +139,7 @@ export class AgentMessageDraftStore {
       parseJson<number[]>(row.seen_exact_seqs) ?? [],
       row.seen_up_to_seq ?? 0,
     );
+    const consumptionScope = parseConsumptionScope(row.consumption_scope);
     return {
       target: row.target,
       content: row.content,
@@ -143,6 +150,7 @@ export class AgentMessageDraftStore {
       ...(mentions.length ? { mentions } : {}),
       ...(row.seen_up_to_seq !== null ? { seenUpToSeq: row.seen_up_to_seq } : {}),
       ...(seenExactSeqs.length ? { seenExactSeqs } : {}),
+      ...(consumptionScope ? { consumptionScope } : {}),
     };
   }
 
@@ -160,6 +168,7 @@ export class AgentMessageDraftStore {
         reholdCount,
         draft.seenUpToSeq ?? null,
         draft.seenExactSeqs?.length ? JSON.stringify(draft.seenExactSeqs) : null,
+        draft.consumptionScope ? JSON.stringify(draft.consumptionScope) : null,
       );
   }
 
@@ -173,6 +182,15 @@ function parseJson<T>(value: string | null): T | undefined {
   try {
     const parsed: unknown = JSON.parse(value);
     return Array.isArray(parsed) ? (parsed as T) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function parseConsumptionScope(value: string | null): AgentConsumptionScope | undefined {
+  if (value === null) return undefined;
+  try {
+    return agentConsumptionScopeSchema.safeParse(JSON.parse(value)).data;
   } catch {
     return undefined;
   }

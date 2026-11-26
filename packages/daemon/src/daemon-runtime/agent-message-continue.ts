@@ -20,7 +20,11 @@ export async function continueHeldSend(
   ports: AgentMessageOperationsPorts,
   agentId: string,
   request: LocalAgentMessageRequest,
-  send: (request: LocalAgentMessageRequest, target: string) => Promise<AgentMessageResponse>,
+  send: (
+    request: LocalAgentMessageRequest,
+    target: string,
+    draft: AgentContinuation["draft"],
+  ) => Promise<AgentMessageResponse>,
   prepareDraft: <T>(operation: () => Promise<T>) => Promise<T>,
 ): Promise<AgentMessageResponse> {
   const continuationId = request.continuationId ?? "";
@@ -106,6 +110,7 @@ export async function continueHeldSend(
         targetConfirmed: true,
       },
       target,
+      continuation.draft,
     );
     return { ...sent, continuationTarget: target };
   }
@@ -123,6 +128,7 @@ export async function continueHeldSend(
       continueAnyway: choice === "d" || undefined,
     },
     target,
+    continuation.draft,
   );
   return { ...sent, continuationTarget: target };
 }

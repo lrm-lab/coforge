@@ -58,7 +58,9 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   through the scope that produced the hold. Sends and task writes carry
   contiguous and exact evidence inside the server-confirmed scope. A successful
   send advances that scope only when the receipt includes its identity. A
-  search shows a truncated preview and contributes no consumption evidence.
+  draft and its continuation retain their original scope across restarts. A
+  draft without a scope carries no consumption evidence when resent. A search
+  shows a truncated preview and contributes no consumption evidence.
 - A delivery checks its own conversation and thread scope. A recreated channel
   has a new conversation ID and starts with no consumed evidence. Late replay
   leaves read evidence for other conversations intact. A complete preview uses
