@@ -51,6 +51,25 @@ test("an opened turn that was interrupted, failed or exempt is not judged empty"
   expect(maintenance.finish("completed")).toBeUndefined();
 });
 
+test("an input allowed to end silently loses that allowance when real input joins the turn", () => {
+  const silent = strictLedger();
+  silent.markOpened();
+  silent.noteInputAllowsEmptyCompletion(true);
+  expect(silent.finish("completed")).toBeUndefined();
+
+  const reference = strictLedger();
+  reference.markOpened();
+  reference.noteInputAllowsEmptyCompletion(true);
+  reference.noteInputAllowsEmptyCompletion(true);
+  expect(reference.finish("completed")).toBeUndefined();
+
+  const realWork = strictLedger();
+  realWork.markOpened();
+  realWork.noteInputAllowsEmptyCompletion(true);
+  realWork.noteInputAllowsEmptyCompletion(false);
+  expect(realWork.finish("completed")?.providerErrorReason).toBe("zero_evidence_turn_completed");
+});
+
 test("the opened mark does not carry into the next turn", () => {
   const ledger = strictLedger();
   ledger.markOpened();

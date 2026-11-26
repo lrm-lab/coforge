@@ -50,17 +50,20 @@ export type AgentInput =
       kind: "startup";
       text: string;
       openTasks?: AgentStartOpenTasks;
+      allowsEmptyCompletion?: true;
       completion: AgentInputCompletion;
     }
   | {
       kind: "prompt";
       text: string;
       introduction?: true;
+      allowsEmptyCompletion?: true;
       completion: AgentInputCompletion;
     }
   | {
       kind: "memory";
       text: string;
+      allowsEmptyCompletion?: true;
       completion: AgentInputCompletion;
     };
 export function queueHasInputContent(items: readonly AgentInput[]): boolean {

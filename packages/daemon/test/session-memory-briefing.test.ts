@@ -25,6 +25,7 @@ const completion = () => ({ resolve: () => {}, reject: () => {} });
 const starter = (memoryInContext = false): AgentInput => ({
   kind: "startup",
   text: agentStartupInput(false, memoryInContext),
+  allowsEmptyCompletion: true,
   completion: completion(),
 });
 const delivery = (): AgentInput => ({
@@ -85,8 +86,13 @@ test("a queued delivery keeps its place behind one short reference turn", async 
   const items = queue(starter(), delivery());
   await attachSessionMemory(items, directory);
   expect(items.items).toHaveLength(3);
-  const [memory, ...behind] = items.items as { kind: string; text?: string }[];
+  const [memory, ...behind] = items.items as {
+    kind: string;
+    text?: string;
+    allowsEmptyCompletion?: boolean;
+  }[];
   expect(memory!.kind).toBe("memory");
+  expect(memory!.allowsEmptyCompletion).toBe(true);
   expect(memory!.text).toContain("<memory-index");
   expect(memory!.text).toContain("do not reply to it");
   expect(behind.map((item) => item.kind)).toEqual(["startup", "delivery"]);

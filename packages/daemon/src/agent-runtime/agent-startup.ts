@@ -12,6 +12,10 @@ import {
   VERIFY_TASK_TO_RESUME,
 } from "./start-open-tasks";
 
+export function agentStartupAllowsEmptyCompletion(openTasks?: AgentStartOpenTasks): boolean {
+  return !hasStartOpenTasks(openTasks);
+}
+
 export function agentStartupInput(
   resuming: boolean,
   memoryInContext = false,

@@ -5,9 +5,15 @@ import type {
   UsageSnapshot,
 } from "./contract";
 
+/** What the daemon says about a turn's input beyond its text. */
+export type AgentTurnInputOptions = {
+  /** Whether completing the turn with no assistant text or tool calls is a valid silent no-op. */
+  allowsEmptyCompletion?: boolean;
+};
+
 /** What the daemon says about a notice beyond its text. `deliveryIds` names the tracked
  * deliveries the notice carries; a provider only echoes them on `notice-undelivered`. */
-export type AgentNoticeOptions = {
+export type AgentNoticeOptions = AgentTurnInputOptions & {
   deliveryIds?: readonly string[];
   fallbackText?: () => string | undefined;
   noticeOrigin?: Readonly<{
@@ -66,7 +72,7 @@ export interface AgentSession {
    * threads the main turn never resumes on its own; an adapter whose own task notifications
    * already reach a quiet session omits it, which the daemon reads as no wake needed. */
   readonly wakesAfterSubagents?: boolean;
-  sendMessage(message: string): Promise<void>;
+  sendMessage(message: string, options?: AgentTurnInputOptions): Promise<void>;
   /** Proactively compacts session context while idle on runtimes supporting native compaction. */
   compact?(): Promise<void>;
   cancelPendingNotices?(): void;

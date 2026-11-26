@@ -294,5 +294,6 @@ export type {
   AgentNoticeOptions,
   AgentSession,
   AgentSessionExit,
+  AgentTurnInputOptions,
   AgentTurnProcessWindow,
 } from "./agent-session-contract";

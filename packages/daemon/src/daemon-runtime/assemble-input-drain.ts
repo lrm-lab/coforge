@@ -125,12 +125,13 @@ export function assembleInputDrain(ports: InputDrainCollaborators): AgentInputDr
         session: AgentSession,
         launch: ActivityLaunch,
         text: string,
+        options,
       ) => {
-        ports.launchCustody().noteStartupTurn(agentId);
-        await launch.startup?.run(session.sendMessage(text));
+        ports.launchCustody().noteStartupTurn(agentId, options);
+        await launch.startup?.run(session.sendMessage(text, options));
       },
-      runPrompt: (agentId, text, introduction) =>
-        ports.launchCustody().runPromptTurn(agentId, text, introduction),
+      runPrompt: (agentId, text, options) =>
+        ports.launchCustody().runPromptTurn(agentId, text, options),
       recoverAttention: (agentId, context) => ports.launchCustody().recover(agentId, context),
       abandonLaunch: ports.abandonLaunch,
       publishStartupError: (agentId, launch, message) =>

@@ -12,6 +12,7 @@ export class TurnEvidenceLedger {
   #assistantTextEvents = 0;
   #toolCalls = 0;
   #exempt = false;
+  #inputAllowsEmptyCompletion: boolean | undefined;
 
   constructor(options: { bareCompletionIsEmpty?: boolean } = {}) {
     this.#bareCompletionIsEmpty = options.bareCompletionIsEmpty === true;
@@ -23,10 +24,18 @@ export class TurnEvidenceLedger {
     this.#assistantTextEvents = 0;
     this.#toolCalls = 0;
     this.#exempt = false;
+    this.#inputAllowsEmptyCompletion = undefined;
   }
 
   markExempt(): void {
     this.#exempt = true;
+  }
+
+  noteInputAllowsEmptyCompletion(allows: boolean): void {
+    this.#inputAllowsEmptyCompletion =
+      this.#inputAllowsEmptyCompletion === undefined
+        ? allows
+        : this.#inputAllowsEmptyCompletion && allows;
   }
 
   markOpened(): void {
@@ -112,7 +121,8 @@ export class TurnEvidenceLedger {
       (this.#turnObserved || this.#opened) &&
       this.#assistantTextEvents === 0 &&
       this.#toolCalls === 0 &&
-      !this.#exempt;
+      !this.#exempt &&
+      this.#inputAllowsEmptyCompletion !== true;
     this.reset();
     if (!zeroEvidence) return undefined;
     return {

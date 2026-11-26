@@ -42,7 +42,7 @@ export type MessageCompositionPorts = {
   deliveryGate: AgentDeliveryGate;
   runtimeRelease: RuntimeRelease<ActivityLaunch>;
   processManager: AgentProcessManager;
-  launchCustody(): Pick<AgentLaunchCustody, "noteTurnStarted" | "ensureInput">;
+  launchCustody(): Pick<AgentLaunchCustody, "noteTurnStarted" | "noteTurnInput" | "ensureInput">;
   activityPublisher: AgentActivityPublisher<ActivityLaunch>;
   currentActivityLaunch(agentId: string): ActivityLaunch | undefined;
   activity(
@@ -140,6 +140,7 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
       queued: (agentId) => ports.deliveryGate.pending(agentId),
       enqueue: (agentId, message) => ports.deliveryGate.enqueue(agentId, message),
       busy: (agentId) => {
+        ports.launchCustody().noteTurnInput(agentId);
         if (
           !ports.deliveryGate.isBusy(agentId) ||
           ports.processManager.session(agentId)?.hasLiveTurn === false

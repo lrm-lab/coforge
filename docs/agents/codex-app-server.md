@@ -22,7 +22,8 @@ Part of [the documentation index](../../README.md). The Codex adapter talks to t
   named `Codex resume recovery`; the missing-rollout match stays exact. An unnamed thread is named
   `CoForge · <agent name>`, best effort.
 - `turn-signals.ts`: a completed turn with no evidence and a `systemError` status are errors
-  (`codex_zero_evidence_turn_completed`); Codex diagnostic warnings become warning Activity system
+  (`codex_zero_evidence_turn_completed`), unless the daemon marked that input as a valid silent
+  no-op; Codex diagnostic warnings become warning Activity system
   entries with provider-specific titles, waiting statuses become warning system entries, and blank
   answers are logged only. Repeats collapse per session — a self-defined rule; the reference
   Computer emits every diagnostic and does not dedup. An identical diagnostic warns once per

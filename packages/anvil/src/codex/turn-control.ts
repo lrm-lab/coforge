@@ -3,6 +3,7 @@ import {
   type AgentNoticeOptions,
   type AgentRuntimeEvent,
   type AgentSessionIdentity,
+  type AgentTurnInputOptions,
 } from "@coforge/agent";
 import { JsonlRequestError, asRecord } from "@lrm/coforge-anvil";
 import type { JsonlProcess } from "@lrm/coforge-anvil/execution";
@@ -30,6 +31,7 @@ export class CodexTurnControl {
   #interruptWhileStarting = false;
   #starting: Promise<void> | undefined;
   #serviceTierReported = false;
+  #allowsEmptyCompletion = false;
 
   constructor(options: {
     process: JsonlProcess;
@@ -67,9 +69,10 @@ export class CodexTurnControl {
     return this.#starting;
   }
 
-  async sendMessage(text: string): Promise<void> {
+  async sendMessage(text: string, options?: AgentTurnInputOptions): Promise<void> {
     if (this.#state.type === "compacting" && this.#starting) await this.#starting;
     if (this.#state.type !== "idle") throw new Error("code agent is already running");
+    this.#allowsEmptyCompletion = options?.allowsEmptyCompletion === true;
     const starting = this.#startTurn(text);
     this.#starting = starting;
     try {
@@ -106,12 +109,14 @@ export class CodexTurnControl {
         },
       });
     } catch (error) {
+      this.#allowsEmptyCompletion = false;
       if (!this.isDisposed()) this.beginIdle();
       throw error;
     }
     const turn = asRecord(asRecord(response.result)?.turn);
     const turnId = turn?.id;
     if (typeof turnId !== "string") {
+      this.#allowsEmptyCompletion = false;
       if (!this.isDisposed()) this.beginIdle();
       throw new Error("Codex did not create a turn");
     }
@@ -154,6 +159,12 @@ export class CodexTurnControl {
     );
   }
 
+  consumeAllowsEmptyCompletion(): boolean {
+    const allowed = this.#allowsEmptyCompletion;
+    this.#allowsEmptyCompletion = false;
+    return allowed;
+  }
+
   /** Back to idle from anywhere but disposal, forgetting an interrupt that had no turn to act on. */
   beginIdle(): void {
     this.#interruptWhileStarting = false;
@@ -173,9 +184,11 @@ export class CodexTurnControl {
       if (this.#starting) await this.#starting;
       const state = this.#state;
       if (state.type === "idle")
-        return this.sendMessage(prepareAgentNotice(notice, options, "prompt"));
+        return this.sendMessage(prepareAgentNotice(notice, options, "prompt"), options);
       if (state.type !== "running") throw new Error("code agent cannot accept a notification");
       const text = prepareAgentNotice(notice, options, "steer");
+      this.#allowsEmptyCompletion =
+        this.#allowsEmptyCompletion && options?.allowsEmptyCompletion === true;
       try {
         const response = await this.#process.request({
           method: "turn/steer",

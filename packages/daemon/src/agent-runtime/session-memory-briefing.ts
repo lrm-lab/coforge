@@ -48,6 +48,7 @@ export function prependSessionMemory(
   queue.items.unshift({
     kind: "memory",
     text: memoryBlockInput(block),
+    allowsEmptyCompletion: true,
     completion: { resolve: completion.resolve, reject: completion.reject },
   });
 }

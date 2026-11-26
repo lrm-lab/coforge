@@ -4,6 +4,7 @@ import type {
   AgentSession,
   AgentSessionExit,
   AgentSessionIdentity,
+  AgentTurnInputOptions,
   AgentTurnProcessWindow,
 } from "@coforge/agent";
 import { AGENT_RUNTIME_EVENT_TYPE, asRecord, eventTime, nonEmptyString } from "@lrm/coforge-anvil";
@@ -103,8 +104,8 @@ export class CodexAgentSession implements AgentSession {
     process.onFailure((error) => this.#emit({ type: "error", message: error.message }));
   }
 
-  async sendMessage(text: string): Promise<void> {
-    return this.#turns.sendMessage(text);
+  async sendMessage(text: string, options?: AgentTurnInputOptions): Promise<void> {
+    return this.#turns.sendMessage(text, options);
   }
 
   get hasLiveTurn(): boolean {
@@ -408,7 +409,9 @@ export class CodexAgentSession implements AgentSession {
           ...(failure.sessionRecovery ? { sessionRecovery: failure.sessionRecovery } : {}),
         });
       }
-      const signalErrors = this.#signals.finish(record, status);
+      const signalErrors = this.#signals.finish(record, status, {
+        allowsEmptyCompletion: this.#turns.consumeAllowsEmptyCompletion(),
+      });
       this.#emitAll(signalErrors);
       this.#emit({
         type: "completed",

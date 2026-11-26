@@ -16,7 +16,10 @@ afterEach(async () => {
 });
 
 /** The non-session events of one turn started with `input`, up to its `completed` event. */
-async function turnEvents(input: string): Promise<AgentRuntimeEvent[]> {
+async function turnEvents(
+  input: string,
+  options?: { allowsEmptyCompletion?: boolean },
+): Promise<AgentRuntimeEvent[]> {
   const session = await scenarioProvider().createAgentSession({
     agentWorkspaceDirectory: directory,
     instructions: "Test.",
@@ -24,7 +27,7 @@ async function turnEvents(input: string): Promise<AgentRuntimeEvent[]> {
   const events: AgentRuntimeEvent[] = [];
   session.subscribe((event) => events.push(event));
   try {
-    await session.sendMessage(input);
+    await session.sendMessage(input, options);
     await waitForEvent(events, "completed");
     return events.filter((event) => event.type !== "session");
   } finally {
@@ -49,6 +52,82 @@ test("Codex reports a completed turn with no assistant text or tool calls as ret
   expect(await turnEvents("empty")).toEqual([started, zeroEvidenceError, failed]);
   expect(await turnEvents("token-usage-only")).toEqual([started, zeroEvidenceError, failed]);
   expect(await turnEvents("plan-only")).toEqual([started, zeroEvidenceError, failed]);
+});
+
+test("Codex accepts an empty completion only when the input allows a silent no-op", async () => {
+  expect(await turnEvents("empty", { allowsEmptyCompletion: true })).toEqual([started, completed]);
+  expect(await turnEvents("token-usage-only", { allowsEmptyCompletion: true })).toEqual([
+    started,
+    completed,
+  ]);
+});
+
+test("Codex keeps the silent no-op allowance scoped to its own turn", async () => {
+  const session = await scenarioProvider().createAgentSession({
+    agentWorkspaceDirectory: directory,
+    instructions: "Test.",
+  });
+  const events: AgentRuntimeEvent[] = [];
+  session.subscribe((event) => events.push(event));
+  try {
+    await session.sendMessage("empty", { allowsEmptyCompletion: true });
+    await waitForEvent(events, "completed");
+    expect(events.filter((event) => event.type !== "session")).toEqual([started, completed]);
+    await session.sendMessage("empty");
+    for (
+      let attempt = 0;
+      attempt < 200 && events.filter((event) => event.type === "completed").length < 2;
+      attempt += 1
+    )
+      await Bun.sleep(5);
+    expect(events.filter((event) => event.type !== "session")).toEqual([
+      started,
+      completed,
+      started,
+      zeroEvidenceError,
+      failed,
+    ]);
+  } finally {
+    await session.dispose();
+  }
+});
+
+test("Codex keeps the silent no-op allowance when only reference input steers into the turn", async () => {
+  const session = await scenarioProvider().createAgentSession({
+    agentWorkspaceDirectory: directory,
+    instructions: "Test.",
+  });
+  const events: AgentRuntimeEvent[] = [];
+  session.subscribe((event) => events.push(event));
+  try {
+    await session.sendMessage("hold-empty", { allowsEmptyCompletion: true });
+    await session.notify!("finish-empty", { allowsEmptyCompletion: true });
+    await waitForEvent(events, "completed");
+    expect(events.filter((event) => event.type !== "session")).toEqual([started, completed]);
+  } finally {
+    await session.dispose();
+  }
+});
+
+test("Codex drops the silent no-op allowance once real input steers into the turn", async () => {
+  const session = await scenarioProvider().createAgentSession({
+    agentWorkspaceDirectory: directory,
+    instructions: "Test.",
+  });
+  const events: AgentRuntimeEvent[] = [];
+  session.subscribe((event) => events.push(event));
+  try {
+    await session.sendMessage("hold-empty", { allowsEmptyCompletion: true });
+    await session.notify!("finish-empty");
+    await waitForEvent(events, "completed");
+    expect(events.filter((event) => event.type !== "session")).toEqual([
+      started,
+      zeroEvidenceError,
+      failed,
+    ]);
+  } finally {
+    await session.dispose();
+  }
 });
 
 test("Codex completes cleanly when a turn streams assistant text or executes a tool call", async () => {

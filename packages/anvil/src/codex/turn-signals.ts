@@ -75,12 +75,17 @@ export class CodexTurnSignals {
   }
 
   /** The error to report before the `completed` event of a turn that ended with `status`. */
-  finish(record: JsonRecord, status: string): AgentRuntimeEvent[] {
+  finish(
+    record: JsonRecord,
+    status: string,
+    options?: { allowsEmptyCompletion?: boolean },
+  ): AgentRuntimeEvent[] {
     const { agent_id, runtime_id } = { agent_id: this.#agentId, runtime_id: this.#runtimeId };
     const evidence = this.#evidence;
     const blank = this.#assistantText && !this.#visibleText;
     this.reset();
     if (status !== "completed") return [];
+    if (!evidence && options?.allowsEmptyCompletion === true) return [];
     if (evidence) {
       if (blank)
         logger.warn("Codex turn completed with a blank final answer", {

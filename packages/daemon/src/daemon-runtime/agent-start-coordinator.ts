@@ -14,7 +14,10 @@ import type { LaunchRequest } from "./runtime-launch-types";
 import type { RunnerHold } from "./shutdown-reason";
 import { recoveryHasContent } from "./runtime-launch-intent";
 import { withOwed } from "./provider-replay-recovery";
-import { agentStartupInput } from "#src/agent-runtime/agent-startup";
+import {
+  agentStartupAllowsEmptyCompletion,
+  agentStartupInput,
+} from "#src/agent-runtime/agent-startup";
 import { AgentPreflightError } from "./agent-preflight-error";
 import { MENTION_DELIVERY_TERMINAL_CODES } from "@lrm/coforge-sdk/internal";
 
@@ -193,6 +196,9 @@ export function startAgent(
             recovery?.openTasks,
           ),
           ...(recovery?.openTasks ? { openTasks: recovery.openTasks } : {}),
+          ...(agentStartupAllowsEmptyCompletion(recovery?.openTasks)
+            ? { allowsEmptyCompletion: true as const }
+            : {}),
           completion,
         }))
       : undefined;

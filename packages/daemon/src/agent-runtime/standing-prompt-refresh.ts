@@ -93,6 +93,7 @@ export function prependStandingPromptUpdate(
   queue.items.unshift({
     kind: "memory",
     text: standingPromptUpdateStandalone(instructions),
+    allowsEmptyCompletion: true,
     completion: { resolve: completion.resolve, reject: completion.reject },
   });
   return true;

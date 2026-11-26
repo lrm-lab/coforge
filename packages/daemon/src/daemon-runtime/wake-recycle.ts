@@ -221,6 +221,9 @@ function startFreshSession(
   queue.items.unshift({
     kind: "prompt",
     text: composeWakeSections(briefing, starter && alone ? starter.text : BRIEFING_NOTE),
+    ...((starter && alone ? starter.allowsEmptyCompletion : true)
+      ? { allowsEmptyCompletion: true as const }
+      : {}),
     completion: { resolve: turn.resolve, reject: turn.reject },
   });
 }

@@ -72,6 +72,7 @@ export type {
   AgentGitHookPlan,
   AgentSessionOptions,
   AgentSubagentTaskKind,
+  AgentTurnInputOptions,
   AgentTurnProcessWindow,
   AgentTurnTokenUsage,
   UsageOfficialBucket,

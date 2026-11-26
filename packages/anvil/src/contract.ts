@@ -17,6 +17,7 @@ export type {
   AgentSessionExit,
   AgentSessionOptions,
   AgentSubagentTaskKind,
+  AgentTurnInputOptions,
   AgentTurnProcessWindow,
   AgentTurnTokenUsage,
 } from "@coforge/agent";

@@ -37,6 +37,7 @@ export function launchInputPorts(memory: () => SessionMemoryHooks): {
         .prepend(agentId, (completion) => ({
           kind: "memory",
           text: standingPromptUpdateStandalone(instructions),
+          allowsEmptyCompletion: true,
           completion,
         }))
         .catch(() => {});

@@ -1,5 +1,5 @@
 import { getLogger } from "@logtape/logtape";
-import type { AgentSession } from "@coforge/agent";
+import type { AgentSession, AgentTurnInputOptions } from "@coforge/agent";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { scrubRuntimeErrorText } from "@lrm/coforge-anvil";
@@ -39,8 +39,13 @@ export type AgentInputDrainPorts = Readonly<{
     session: AgentSession,
     launch: ActivityLaunch,
     text: string,
+    options?: AgentTurnInputOptions,
   ): Promise<void>;
-  runPrompt(agentId: string, text: string, introduction?: true): Promise<void>;
+  runPrompt(
+    agentId: string,
+    text: string,
+    options?: AgentTurnInputOptions & { introduction?: true },
+  ): Promise<void>;
   recoverAttention(agentId: string, context: AgentRecoveryContext): Promise<void>;
   abandonLaunch(agentId: string, error: unknown): Promise<unknown>;
   publishStartupError(agentId: string, launch: ActivityLaunch, message: string): void;
@@ -319,13 +324,25 @@ export class AgentInputDrain {
           const session = this.ports.sessionFor(agentId);
           const launch = this.ports.launchFor(agentId);
           // Release the queue at real readiness if this provider awaits the whole turn.
-          if (session && launch) await this.ports.runStartup(agentId, session, launch, item.text);
+          if (session && launch)
+            await this.ports.runStartup(agentId, session, launch, item.text, {
+              allowsEmptyCompletion: item.allowsEmptyCompletion,
+            });
         } else if (item.kind === "prompt") {
-          await settleLaunchInput(this.ports.runPrompt(agentId, item.text, item.introduction));
+          await settleLaunchInput(
+            this.ports.runPrompt(agentId, item.text, {
+              ...(item.introduction ? { introduction: item.introduction } : {}),
+              allowsEmptyCompletion: item.allowsEmptyCompletion,
+            }),
+          );
         } else if (item.kind === "memory") {
           // Context, not a request: it opens a turn of its own ahead of the real input.
           if (this.ports.sessionFor(agentId))
-            await settleLaunchInput(this.ports.runPrompt(agentId, item.text));
+            await settleLaunchInput(
+              this.ports.runPrompt(agentId, item.text, {
+                allowsEmptyCompletion: item.allowsEmptyCompletion,
+              }),
+            );
         } else {
           const recovering = this.ports.recoverAttention(agentId, item.context).then(
             () => item.recovered?.(true),

@@ -1,4 +1,5 @@
 import { getLogger } from "@logtape/logtape";
+import type { AgentTurnInputOptions } from "@coforge/agent";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { diagnosticErrorName } from "@lrm/coforge-sdk/internal";
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
@@ -162,7 +163,11 @@ export class AgentLaunchCustody {
 
   /** Opens a turn with `text`: the resume prompt a user's Start sent, or the introduction the
    * server asks for. */
-  async runPromptTurn(agentId: string, text: string, introduction?: true): Promise<void> {
+  async runPromptTurn(
+    agentId: string,
+    text: string,
+    options?: AgentTurnInputOptions & { introduction?: true },
+  ): Promise<void> {
     const session = this.ports.agentProcessManager.session(agentId);
     if (!session?.notify) {
       logger.debug("Agent prompt turn skipped: the session accepts no input", {
@@ -171,22 +176,35 @@ export class AgentLaunchCustody {
       });
       return;
     }
-    if (introduction) this.ports.introducedAgents.add(agentId);
-    this.noteTurnStarted(agentId, "prompt");
-    await session.notify(text);
+    if (options?.introduction) this.ports.introducedAgents.add(agentId);
+    this.noteTurnStarted(agentId, "prompt", options);
+    await session.notify(text, {
+      allowsEmptyCompletion: options?.allowsEmptyCompletion,
+    });
   }
 
   /** Opens the startup input's turn: the same boundary as a delivery's, labeled as the startup's. */
-  noteStartupTurn(agentId: string): void {
-    this.noteTurnStarted(agentId, "startup");
+  noteStartupTurn(agentId: string, options?: AgentTurnInputOptions): void {
+    this.noteTurnStarted(agentId, "startup", options);
   }
 
-  noteTurnStarted(agentId: string, via: "delivery" | "prompt" | "startup"): void {
+  noteTurnInput(agentId: string, options?: AgentTurnInputOptions): void {
+    this.ports.currentActivityLaunches
+      .get(agentId)
+      ?.turnEvidence?.noteInputAllowsEmptyCompletion(options?.allowsEmptyCompletion === true);
+  }
+
+  noteTurnStarted(
+    agentId: string,
+    via: "delivery" | "prompt" | "startup",
+    options?: AgentTurnInputOptions,
+  ): void {
     const launch = this.ports.currentActivityLaunches.get(agentId);
     launch?.flushTokenUsage?.();
     noteTurnStarted(agentId, via);
     if (!launch?.progress) return;
     launch.turnEvidence?.markOpened();
+    this.noteTurnInput(agentId, options);
     launch.progress.noteTurnStarted();
     launch.stalled?.start(agentId, stalledTurnObservation(launch));
   }

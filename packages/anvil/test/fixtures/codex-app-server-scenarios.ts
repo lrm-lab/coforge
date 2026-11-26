@@ -244,6 +244,11 @@ async function handle(message: Message): Promise<void> {
     turnScenario(textInput(message.params), turnId);
     return;
   }
+  if (method === "turn/steer" && id !== undefined) {
+    write({ id, result: { turnId: `turn-${turn}` } });
+    if (textInput(message.params) === "finish-empty") completeTurn(`turn-${turn}`);
+    return;
+  }
   if (method === "turn/interrupt" && id !== undefined) {
     if (turnInput === "interrupt-after-completion") {
       // The turn completed on its own while the interrupt was in flight, so there is nothing to
@@ -337,6 +342,7 @@ function turnScenario(input: string | undefined, turnId: string): void {
     notify("item/completed", { turnId, item });
   }
   if (input === "text") say("Done");
+  if (input === "hold-empty") return;
   if (input === "interrupt-after-completion" || input === "interrupt-while-starting") {
     // A turn still running when the interrupt arrives: these scenarios end it themselves.
     say("Working");
