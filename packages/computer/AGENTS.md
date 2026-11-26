@@ -46,7 +46,7 @@ relative to `src/`.
 | `release/upgrade-receipt.ts`, `release/installer-contract.ts`, `release/supervisor-status.ts`, `release/lifecycle-command.ts` | Fallback failed receipt and `UpgradeFailedError`; shapes shared only with `coforge-installer`; what the supervisor runs; the hidden `__lifecycle` command                               |
 | `release/coordinator-service-registrar.ts`, `release/installer-launch.ts`, `release/installation-source.ts`                   | `coforge-installer start`; fetching, verifying and caching the installer binary; the embedded release installer scripts                                                                 |
 
-`host/run-host.ts`, `host/host-cloud.ts`, `host/docker-containers.ts` and `host/container-binding*.ts` hold the host loop and its HTTPS client, Swarm service and volume naming, and the Daemon binding written on a container's volume.
+`host/run-host.ts`, `host/host-cloud.ts`, `host/docker-engine-api.ts`, `host/docker-containers.ts` and `host/container-binding*.ts` hold the host loop and its HTTPS client, Unix-socket Docker Engine API reads, Swarm service and volume naming, and the Daemon binding written on a container's volume.
 
 `coforge-computer __lifecycle protocol|status|service-definition` is how the installer reads a
 Computer (`service-definition`: the service file it registers, rendered by the daemon host). It prints exactly one JSON object on stdout (the `Lifecycle*` shapes), exits

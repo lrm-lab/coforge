@@ -1,3 +1,14 @@
+import {
+  createDefaultDockerApiClient,
+  DockerApiUnavailableError,
+  queryContainerInspect,
+  queryImageInspect,
+  queryLabeledContainers,
+  querySwarmAccepting,
+  type DockerApiClient,
+  type DockerContainerSummary,
+} from "./docker-engine-api";
+
 export const COMPUTER_ID_LABEL = "coforge.computer_id";
 export const CONTAINER_STATE_MOUNT = "/root/.coforge";
 export const CONTAINER_OPT_MOUNT = "/opt";
@@ -51,12 +62,10 @@ export function dockerVolumeRemoveArgs(computerId: string): string[] {
   return ["volume", "rm", serviceName(computerId)];
 }
 
-/** Docker says `no such service` or `service <name> not found` for a resource already gone. */
 function resourceGone(stderr: string, resource: "service" | "volume"): boolean {
   return new RegExp(`no such ${resource}|${resource} .+ not found`, "i").test(stderr);
 }
 
-/** Container ids from `volume is in use - [id, id]`. */
 function volumeHolders(stderr: string): string[] {
   const match = /volume is in use - \[([^\]]+)\]/i.exec(stderr);
   if (!match?.[1]) return [];
@@ -126,7 +135,6 @@ export function dockerActivateRuntimeArgs(containerId: string, version: string):
   return args;
 }
 
-/** Asks the in-container supervisor to replace the running program. */
 export function dockerRestartRuntimeArgs(containerId: string): string[] {
   return ["exec", containerId, "/usr/local/bin/restart-computer-runtime.sh"];
 }
@@ -153,7 +161,6 @@ export function dockerImageInspectArgs(image: string): string[] {
   ];
 }
 
-/** Repo digest when the image was pushed or built with one, otherwise the local image id. */
 export function dockerImageDigestArgs(image: string): string[] {
   return [
     "image",
@@ -166,10 +173,6 @@ export function dockerImageDigestArgs(image: string): string[] {
 
 const IMAGE_DIGEST = /^sha256:[0-9a-f]{64}$/;
 
-/**
- * Swarm still asks Docker Hub for a `name:tag`, even with `--no-resolve-image`.
- * Pinning the local digest makes the node start the image it already has.
- */
 export function pinnedImageReference(image: string, inspectLine: string): string {
   if (image.includes("@")) return image;
   const token = inspectLine.trim().split(/\s+/)[0] ?? "";
@@ -180,11 +183,6 @@ export function pinnedImageReference(image: string, inspectLine: string): string
   return `${image}@${digest}`;
 }
 
-/**
- * A second name in the same repository. Moving `staging` onto a newer build
- * takes the old name away; Swarm then refuses `staging@old-digest` even though
- * the image is still on disk. This name stays, so a later restart can find it.
- */
 export function stableImageTag(image: string, digest: string): string {
   const named = image.split("@")[0] ?? image;
   const slash = named.lastIndexOf("/");
@@ -195,8 +193,6 @@ export function stableImageTag(image: string, digest: string): string {
 }
 
 export function dockerCloudContainerListArgs(): string[] {
-  // Computer id is a Swarm *service* label, not a container label. Tasks still
-  // carry com.docker.swarm.service.name=coforge-<computer id>.
   return ["ps", "-q", "--filter", "label=com.docker.swarm.service.name"];
 }
 
@@ -211,7 +207,6 @@ export function dockerCloudPlacementInspectArgs(containerIds: string[]): string[
 
 const IMAGE_LAYER = /(?:^|@)(sha256:[0-9a-f]{64})$/i;
 
-/** The content-addressed layer, whether the value is a raw id or a tagged digest. */
 export function imageLayerId(reference: string): string | undefined {
   const match = IMAGE_LAYER.exec(reference.trim());
   return match?.[1]?.toLowerCase();
@@ -226,17 +221,22 @@ export function dockerDesktopInspectArgs(containerId: string): string[] {
   ];
 }
 
+function tokenFromEnv(lines: string[]): string | undefined {
+  let token: string | undefined;
+  for (const line of lines) {
+    if (!line.startsWith("VNC_WS_TOKEN=")) continue;
+    const value = line.slice("VNC_WS_TOKEN=".length).trim();
+    if (value) token = value;
+  }
+  return token;
+}
+
 export function parseDesktopInspect(stdout: string): { ip?: string; token?: string } {
   const marker = "\n---\n";
   const at = stdout.indexOf(marker);
   const envText = at === -1 ? stdout : stdout.slice(0, at);
   const ipText = at === -1 ? "" : stdout.slice(at + marker.length);
-  let token: string | undefined;
-  for (const line of envText.split("\n")) {
-    if (!line.startsWith("VNC_WS_TOKEN=")) continue;
-    const value = line.slice("VNC_WS_TOKEN=".length).trim();
-    if (value) token = value;
-  }
+  const token = tokenFromEnv(envText.split("\n"));
   const ip = ipText
     .split("\n")
     .map((line) => line.trim())
@@ -258,12 +258,9 @@ export interface ContainerRuntime {
   }): Promise<string>;
   removeService(computerId: string): Promise<void>;
   attachWorkspace(input: { computerId: string; env: Record<string, string> }): Promise<void>;
-  /** Replaces the running image. The named volume stays mounted. */
   updateServiceImage(computerId: string, image: string): Promise<void>;
-  /** Installs a published runtime onto the volume, then restarts that program. */
   activateRuntime(computerId: string, version: string): Promise<void>;
   inspectPlacement(image: string): Promise<HostImagePlacement>;
-  /** Address of the browser desktop inside a running cloud computer. */
   desktopEndpoint(
     computerId: string,
   ): Promise<{ host: string; port: number; token: string } | undefined>;
@@ -273,19 +270,37 @@ export type DockerSpawn = (
   args: string[],
 ) => Promise<{ exitCode: number; stdout: string; stderr: string }>;
 
-export function createDockerContainers(spawn: DockerSpawn = spawnDocker): ContainerRuntime {
+export type DockerContainerOptions = {
+  api?: DockerApiClient | null;
+};
+
+function resolveRuntimeApi(
+  spawn: DockerSpawn | undefined,
+  options: DockerContainerOptions | undefined,
+): DockerApiClient | undefined {
+  if (options && "api" in options) return options.api ?? undefined;
+  if (spawn !== undefined) return undefined;
+  return createDefaultDockerApiClient();
+}
+
+export function createDockerContainers(
+  spawn?: DockerSpawn,
+  options?: DockerContainerOptions,
+): ContainerRuntime {
+  const cliSpawn = spawn ?? spawnDocker;
+  const api = resolveRuntimeApi(spawn, options);
   return {
     async findService(computerId) {
       return firstId(
-        await run(spawn, dockerServiceFindArgs(computerId), "docker service ls failed"),
+        await run(cliSpawn, dockerServiceFindArgs(computerId), "docker service ls failed"),
       );
     },
     async createService(input) {
       const result = await run(
-        spawn,
+        cliSpawn,
         dockerServiceCreateArgs({
           ...input,
-          image: await localImageReference(spawn, input.image),
+          image: await localImageReference(cliSpawn, input.image),
         }),
         "docker service create failed",
       );
@@ -294,22 +309,22 @@ export function createDockerContainers(spawn: DockerSpawn = spawnDocker): Contai
       return id;
     },
     async removeService(computerId) {
-      const removed = await spawn(dockerServiceRemoveArgs(computerId));
+      const removed = await cliSpawn(dockerServiceRemoveArgs(computerId));
       if (removed.exitCode !== 0 && !resourceGone(removed.stderr, "service"))
         throw new Error(removed.stderr || "docker service rm failed");
-      await removeDisk(spawn, computerId);
+      await removeDisk(cliSpawn, computerId);
     },
     async attachWorkspace(input) {
       const containerId = firstId(
-        await run(spawn, dockerTaskFindArgs(input.computerId), "docker ps failed"),
+        await run(cliSpawn, dockerTaskFindArgs(input.computerId), "docker ps failed"),
       );
       if (!containerId) throw new Error("cloud computer task is not running");
-      await run(spawn, dockerAttachExecArgs(containerId, input.env), "docker exec failed");
+      await run(cliSpawn, dockerAttachExecArgs(containerId, input.env), "docker exec failed");
     },
     async updateServiceImage(computerId, image) {
       await run(
-        spawn,
-        dockerServiceUpdateArgs(computerId, await localImageReference(spawn, image)),
+        cliSpawn,
+        dockerServiceUpdateArgs(computerId, await localImageReference(cliSpawn, image)),
         "docker service update failed",
       );
     },
@@ -323,50 +338,57 @@ export function createDockerContainers(spawn: DockerSpawn = spawnDocker): Contai
         throw new Error("invalid runtime version");
       }
       const recorded = await run(
-        spawn,
+        cliSpawn,
         dockerServiceImageArgs(computerId),
         "docker service inspect failed",
       );
-      await keepPinnedImageTagged(spawn, recorded.stdout);
+      await keepPinnedImageTagged(cliSpawn, recorded.stdout);
       const containerId = firstId(
-        await run(spawn, dockerTaskFindArgs(computerId), "docker ps failed"),
+        await run(cliSpawn, dockerTaskFindArgs(computerId), "docker ps failed"),
       );
       if (!containerId) throw new Error("cloud computer task is not running");
-      await run(spawn, dockerActivateRuntimeArgs(containerId, version), "docker exec failed");
-      const restarted = await spawn(dockerRestartRuntimeArgs(containerId));
+      await run(cliSpawn, dockerActivateRuntimeArgs(containerId, version), "docker exec failed");
+      const restarted = await cliSpawn(dockerRestartRuntimeArgs(containerId));
       if (restarted.exitCode === 0) return;
       if (runtimeSupervisorMissing(restarted.stderr, restarted.stdout)) {
-        await run(spawn, dockerServiceRestartArgs(computerId), "docker service update failed");
+        await run(cliSpawn, dockerServiceRestartArgs(computerId), "docker service update failed");
         return;
       }
       throw new Error(restarted.stderr || restarted.stdout || "runtime restart failed");
     },
     async desktopEndpoint(computerId) {
-      const listed = await spawn(dockerTaskFindArgs(computerId));
-      if (listed.exitCode !== 0) throw new Error(listed.stderr || "docker ps failed");
-      const containerId = firstId(listed);
-      if (!containerId) return undefined;
-      const inspected = await spawn(dockerDesktopInspectArgs(containerId));
-      if (inspected.exitCode !== 0) throw new Error(inspected.stderr || "docker inspect failed");
-      const parsed = parseDesktopInspect(inspected.stdout);
-      if (!parsed.ip) return undefined;
-      let token = parsed.token;
+      const target = await inspectDesktopTarget(api, cliSpawn, computerId);
+      if (!target?.ip) return undefined;
+      let token = target.token;
       if (!token) {
-        const file = await spawn(["exec", containerId, "cat", "/root/.vnc/ws-token.txt"]);
+        const file = await cliSpawn(["exec", target.containerId, "cat", "/root/.vnc/ws-token.txt"]);
         if (file.exitCode === 0) token = file.stdout.trim();
       }
-      if (!token) return undefined;
-      return { host: parsed.ip, port: 6080, token };
+      return token ? { host: target.ip, port: 6080, token } : undefined;
     },
     async inspectPlacement(image) {
+      if (api) {
+        try {
+          const [inspected, containers] = await Promise.all([
+            queryImageInspect(api, image, COMPUTER_VERSION_LABEL),
+            queryLabeledContainers(api, "com.docker.swarm.service.name"),
+          ]);
+          return {
+            image: { id: imageLayerId(inspected.id) ?? inspected.id, version: inspected.version },
+            computers: placementFromContainers(containers),
+          };
+        } catch (error) {
+          if (!(error instanceof DockerApiUnavailableError)) throw error;
+        }
+      }
       const inspected = await run(
-        spawn,
+        cliSpawn,
         dockerImageInspectArgs(image),
         "docker image inspect failed",
       );
       const parsed = parseImageInspect(inspected.stdout);
       if (!parsed) throw new Error("docker image inspect returned an empty image id");
-      const list = await spawn(dockerCloudContainerListArgs());
+      const list = await cliSpawn(dockerCloudContainerListArgs());
       if (list.exitCode !== 0) throw new Error(list.stderr || "docker ps failed");
       const containerIds = ids(list.stdout);
       if (containerIds.length === 0)
@@ -375,7 +397,7 @@ export function createDockerContainers(spawn: DockerSpawn = spawnDocker): Contai
           computers: [],
         };
       const details = await run(
-        spawn,
+        cliSpawn,
         dockerCloudPlacementInspectArgs(containerIds),
         "docker inspect failed",
       );
@@ -385,6 +407,50 @@ export function createDockerContainers(spawn: DockerSpawn = spawnDocker): Contai
       };
     },
   };
+}
+
+async function inspectDesktopTarget(
+  api: DockerApiClient | undefined,
+  cliSpawn: DockerSpawn,
+  computerId: string,
+): Promise<{ containerId: string; ip?: string; token?: string } | undefined> {
+  if (api) {
+    try {
+      const listed = await queryLabeledContainers(
+        api,
+        `com.docker.swarm.service.name=${serviceName(computerId)}`,
+      );
+      const containerId = listed[0]?.id;
+      if (!containerId) return undefined;
+      const inspected = await queryContainerInspect(api, containerId);
+      return { containerId, ip: inspected.ipAddresses[0], token: tokenFromEnv(inspected.env) };
+    } catch (error) {
+      if (!(error instanceof DockerApiUnavailableError)) throw error;
+    }
+  }
+  const listed = await cliSpawn(dockerTaskFindArgs(computerId));
+  if (listed.exitCode !== 0) throw new Error(listed.stderr || "docker ps failed");
+  const containerId = firstId(listed);
+  if (!containerId) return undefined;
+  const inspected = await cliSpawn(dockerDesktopInspectArgs(containerId));
+  if (inspected.exitCode !== 0) throw new Error(inspected.stderr || "docker inspect failed");
+  return { containerId, ...parseDesktopInspect(inspected.stdout) };
+}
+
+function placementFromContainers(
+  containers: DockerContainerSummary[],
+): Array<{ computerId: string; imageId: string }> {
+  const computers: Array<{ computerId: string; imageId: string }> = [];
+  for (const container of containers) {
+    const service = container.labels["com.docker.swarm.service.name"];
+    if (!service) continue;
+    const computerId = computerIdFromServiceName(service);
+    const rawImage = container.imageId || container.image;
+    const imageId = imageLayerId(rawImage) ?? rawImage;
+    if (!computerId || !imageId) continue;
+    computers.push({ computerId, imageId });
+  }
+  return computers;
 }
 
 async function localImageReference(spawn: DockerSpawn, image: string): Promise<string> {
@@ -447,8 +513,20 @@ function ids(stdout: string): string[] {
     .filter(Boolean);
 }
 
-export async function swarmAccepting(spawn: DockerSpawn = spawnDocker): Promise<boolean> {
-  const result = await spawn(dockerNodeStatusArgs());
+export async function swarmAccepting(
+  spawn?: DockerSpawn,
+  options?: DockerContainerOptions,
+): Promise<boolean> {
+  const api = resolveRuntimeApi(spawn, options);
+  if (api) {
+    try {
+      return await querySwarmAccepting(api);
+    } catch (error) {
+      if (!(error instanceof DockerApiUnavailableError)) return false;
+    }
+  }
+  const cliSpawn = spawn ?? spawnDocker;
+  const result = await cliSpawn(dockerNodeStatusArgs());
   if (result.exitCode !== 0) return false;
   return result.stdout.split("\n").some((line) => line.trim() === "Ready");
 }

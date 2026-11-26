@@ -1,6 +1,7 @@
 import type { ContainerBindingEnv } from "./container-binding-env";
-import { createDockerContainers, swarmAccepting, type ContainerRuntime } from "./docker-containers";
 import { newDesktopToken, startDesktopProxy } from "./desktop-proxy";
+import { createDockerContainers, swarmAccepting, type ContainerRuntime } from "./docker-containers";
+import { createDefaultDockerApiClient } from "./docker-engine-api";
 import { HttpHostCloud, type ClaimedContainerJob, type HostHeartbeatReport } from "./host-cloud";
 import { createPiChatHandler } from "./pi-chat-http";
 import { PiChatWorkers } from "./pi-chat-workers";
@@ -92,8 +93,10 @@ export async function runHost(
     name: config.name,
   });
   while (!signal.aborted) {
-    const accepting = await ports.canPlace();
-    const placement = await ports.containers.inspectPlacement(config.image).catch(() => undefined);
+    const [accepting, placement] = await Promise.all([
+      ports.canPlace(),
+      ports.containers.inspectPlacement(config.image).catch(() => undefined),
+    ]);
     await ports.cloud.heartbeat(
       config.token,
       placement ? { accepting, ...placement } : { accepting },
@@ -122,7 +125,8 @@ export async function runHostProcess(config: HostProcessConfig): Promise<void> {
   const stop = () => controller.abort();
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
-  const containers = createDockerContainers();
+  const dockerApi = createDefaultDockerApiClient();
+  const containers = createDockerContainers(undefined, { api: dockerApi ?? null });
   const chatWorkers = new PiChatWorkers();
   const proxyPort = Number(process.env.COFORGE_DESKTOP_PROXY_PORT ?? "6090");
   const proxy =
@@ -145,7 +149,7 @@ export async function runHostProcess(config: HostProcessConfig): Promise<void> {
       {
         cloud: new HttpHostCloud(fetch, config.serverUrl),
         containers,
-        canPlace: () => swarmAccepting(),
+        canPlace: () => swarmAccepting(undefined, { api: dockerApi ?? null }),
         wait: (signal) => delay(config.pollIntervalMs, signal),
       },
       controller.signal,
