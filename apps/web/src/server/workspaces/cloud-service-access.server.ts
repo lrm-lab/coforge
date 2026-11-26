@@ -1,10 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { clearCookie, readCookie, serializeCookie } from "#src/server/auth/browser-login.server";
+import { readCookie, serializeCookie } from "#src/server/auth/browser-login.server";
 
-/** How long one correct password keeps the cloud computer service page operable. */
 export const CLOUD_SERVICE_UNLOCK_SECONDS = 15 * 60;
-
-const COOKIE = "coforge_cloud_service";
+export const CLOUD_SERVICE_COOKIE = "coforge_cloud_service";
 const ATTEMPT_LIMIT = 8;
 const ATTEMPT_WINDOW_MS = 60_000;
 const PURPOSE = "cloud-service-unlock";
@@ -49,16 +47,12 @@ export function cloudServiceUnlockValid(
 }
 
 export function serializeCloudServiceCookie(token: string, secure: boolean): string {
-  return serializeCookie(COOKIE, token, CLOUD_SERVICE_UNLOCK_SECONDS, secure);
-}
-
-export function clearCloudServiceCookie(secure: boolean): string {
-  return clearCookie(COOKIE, secure);
+  return serializeCookie(CLOUD_SERVICE_COOKIE, token, CLOUD_SERVICE_UNLOCK_SECONDS, secure);
 }
 
 export function cloudServiceCookieValue(header: string | null): string | undefined {
   if (!header) return undefined;
-  const value = readCookie(header, COOKIE)?.trim();
+  const value = readCookie(header, CLOUD_SERVICE_COOKIE)?.trim();
   return value || undefined;
 }
 

@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { getRequest, setResponseHeader } from "@tanstack/react-start/server";
+import { deleteCookie, getRequest, setCookie } from "@tanstack/react-start/server";
 import { declareNoStore } from "#src/features/no-store-response.server";
 
 import { AppError } from "#src/lib/app-error";
@@ -10,10 +10,17 @@ import {
 } from "#src/features/auth/function-auth";
 import { configuredGitHub } from "#src/server/integrations/github-config.server";
 import {
-  githubInstallationStateCookie,
-  githubReturnCookie,
-  githubStateCookie,
+  GITHUB_INSTALL_STATE_COOKIE,
+  GITHUB_RETURN_COOKIE,
+  GITHUB_STATE_COOKIE,
 } from "#src/server/integrations/github-http.server";
+
+const GITHUB_COOKIE_OPTIONS = {
+  path: "/",
+  httpOnly: true,
+  secure: true,
+  sameSite: "lax" as const,
+};
 
 async function requiredGitHub() {
   const github = await configuredGitHub();
@@ -23,17 +30,12 @@ async function requiredGitHub() {
 
 type GitHubGate = NonNullable<Awaited<ReturnType<typeof configuredGitHub>>>;
 
-/**
- * Starts one GitHub flow for the page's Workspace: checks the request's origin (a sibling subdomain
- * must not start a connection with a production session), begins the flow, and sets its state
- * cookie and the cookie that brings the callback back to this Workspace.
- */
 async function startFlow(
   context: WorkspaceUserContext,
   begin: (
     github: GitHubGate,
   ) => Promise<{ state: string; url: string }> | { state: string; url: string },
-  stateCookie: (state: string) => string,
+  stateCookieName: string,
 ) {
   const github = await requiredGitHub();
   if (getRequest().headers.get("origin") !== new URL(github.config.callbackUrl).origin)
@@ -43,7 +45,8 @@ async function startFlow(
     where: { id: context.workspaceId },
     select: { slug: true },
   });
-  setResponseHeader("set-cookie", [stateCookie(attempt.state), githubReturnCookie(slug)]);
+  setCookie(stateCookieName, attempt.state, { ...GITHUB_COOKIE_OPTIONS, maxAge: 600 });
+  setCookie(GITHUB_RETURN_COOKIE, slug, { ...GITHUB_COOKIE_OPTIONS, maxAge: 600 });
   return { url: attempt.url };
 }
 
@@ -60,7 +63,7 @@ export const getGitHubConnection = createServerFn({ method: "GET" })
 export const startGitHubConnection = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .handler(({ context }) =>
-    startFlow(context, (github) => github.connection.begin(context.user.id), githubStateCookie),
+    startFlow(context, (github) => github.connection.begin(context.user.id), GITHUB_STATE_COOKIE),
   );
 
 export const startGitHubReauthorization = createServerFn({ method: "POST" })
@@ -69,7 +72,7 @@ export const startGitHubReauthorization = createServerFn({ method: "POST" })
     startFlow(
       context,
       (github) => github.connection.begin(context.user.id, "reauthorize"),
-      githubStateCookie,
+      GITHUB_STATE_COOKIE,
     ),
   );
 
@@ -79,7 +82,7 @@ export const startGitHubInstallation = createServerFn({ method: "POST" })
     startFlow(
       context,
       (github) => github.connection.beginInstallation(),
-      githubInstallationStateCookie,
+      GITHUB_INSTALL_STATE_COOKIE,
     ),
   );
 
@@ -101,7 +104,7 @@ export const disconnectGitHub = createServerFn({ method: "POST" })
     if (getRequest().headers.get("origin") !== new URL(github.config.callbackUrl).origin)
       throw new AppError("ACCESS_DENIED");
     await github.connection.disconnect(userId);
-    setResponseHeader("set-cookie", githubStateCookie(""));
+    deleteCookie(GITHUB_STATE_COOKIE, GITHUB_COOKIE_OPTIONS);
     return { ok: true as const };
   });
 

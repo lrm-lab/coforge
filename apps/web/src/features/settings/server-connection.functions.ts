@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { getRequest, setResponseHeader } from "@tanstack/react-start/server";
+import { deleteCookie, getCookie, getRequest, setCookie } from "@tanstack/react-start/server";
 import { z } from "zod";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
@@ -12,14 +12,13 @@ import { clusterToken, productionHostDirectory } from "#src/server/hosts/host-pr
 import { publicOrigin } from "#src/server/http/public-origin.server";
 import { PrismaServerConnection } from "#src/server/db/repositories/server-connection.repositories.server";
 import {
+  CLOUD_SERVICE_COOKIE,
+  CLOUD_SERVICE_UNLOCK_SECONDS,
   CloudServiceAttempts,
-  clearCloudServiceCookie,
-  cloudServiceCookieValue,
   cloudServicePasswordAccepted,
   cloudServicePasswordConfigured,
   cloudServiceUnlockValid,
   sealCloudServiceUnlock,
-  serializeCloudServiceCookie,
 } from "#src/server/workspaces/cloud-service-access.server";
 import { hostBootstrapScript } from "#src/server/workspaces/host-bootstrap.server";
 import {
@@ -41,7 +40,7 @@ function secureCookie(): boolean {
 
 async function requireUnlock(): Promise<void> {
   const secret = await readSessionSecret(Bun.env);
-  const token = cloudServiceCookieValue(getRequest().headers.get("cookie"));
+  const token = getCookie(CLOUD_SERVICE_COOKIE)?.trim() || undefined;
   if (!cloudServiceUnlockValid(token, new Date(), secret)) throw new AppError("ACCESS_DENIED");
 }
 
@@ -68,10 +67,13 @@ export const unlockCloudComputerService = createServerFn({ method: "POST" })
       return { ok: false as const, reason: "unavailable" as const };
     }
     const request = getRequest();
-    setResponseHeader(
-      "Set-Cookie",
-      serializeCloudServiceCookie(sealCloudServiceUnlock(now, secret), secureCookie()),
-    );
+    setCookie(CLOUD_SERVICE_COOKIE, sealCloudServiceUnlock(now, secret), {
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax",
+      maxAge: CLOUD_SERVICE_UNLOCK_SECONDS,
+      secure: secureCookie(),
+    });
     const [page, clusterName] = await Promise.all([
       cloudServicePage(context.db, publicOrigin(request), now),
       boundClusterName(context.db),
@@ -83,7 +85,12 @@ export const lockCloudComputerService = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .handler(async () => {
     declareNoStore();
-    setResponseHeader("Set-Cookie", clearCloudServiceCookie(secureCookie()));
+    deleteCookie(CLOUD_SERVICE_COOKIE, {
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax",
+      secure: secureCookie(),
+    });
     return { ok: true as const };
   });
 

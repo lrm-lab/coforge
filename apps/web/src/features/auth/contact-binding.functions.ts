@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { getRequest, setResponseHeader } from "@tanstack/react-start/server";
+import { deleteCookie, getCookie, getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import {
   isSignInCode,
@@ -7,12 +7,10 @@ import {
   typedDestination,
 } from "#src/features/auth/code-destination";
 import { declareNoStore } from "#src/features/no-store-response.server";
-import { readCookie } from "#src/server/auth/browser-login.server";
 import { readSignInConfigOrNull } from "#src/server/auth/config.server";
 import {
   bindAccountContact,
   CONTACT_BIND_COOKIE,
-  contactBindEndingCookie,
   contactBindStore,
   sendContactBindCode,
 } from "#src/server/auth/contact-binding.server";
@@ -22,8 +20,7 @@ import { clientAddress, publicOrigin } from "#src/server/http/public-origin.serv
 import { authMiddleware } from "./function-auth";
 
 function readBindTokenFromRequest(): string | null {
-  const cookieHeader = getRequest().headers.get("cookie") ?? "";
-  const token = readCookie(cookieHeader, CONTACT_BIND_COOKIE)?.trim();
+  const token = getCookie(CONTACT_BIND_COOKIE)?.trim();
   return token ? token : null;
 }
 
@@ -84,10 +81,12 @@ export const bindAccountContactFn = createServerFn({ method: "POST" })
       passCode: data.code,
       config: signInConfig.config,
     });
-    setResponseHeader(
-      "set-cookie",
-      contactBindEndingCookie(publicOrigin(request).startsWith("https:")),
-    );
+    deleteCookie(CONTACT_BIND_COOKIE, {
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax",
+      secure: publicOrigin(request).startsWith("https:"),
+    });
     return result.status === "bound"
       ? ({ ok: true, email: result.email, phone: result.phone } as const)
       : ({ ok: false, problem: result.status } as const);
