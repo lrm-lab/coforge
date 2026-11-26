@@ -1,5 +1,5 @@
-import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
-import { RedisClient } from "bun";
+import { describe, expect, spyOn, test } from "bun:test";
+import type { RedisClient } from "bun";
 import type { AgentActivity, AgentStatus } from "@lrm/coforge-sdk/internal";
 import { decodeAgentActivityProbe } from "@lrm/coforge-sdk/internal";
 import { RedisAgentDisplay } from "#src/server/agents/agent-display.server";
@@ -14,11 +14,8 @@ import {
   agentStatusChannel,
   agentStatusChannelForAgent,
 } from "#src/features/agents/agent-status-channel";
+import { redisServer, useRedisFixture } from "./helpers/redis-fixture";
 
-const redisServer = Bun.which("redis-server");
-const port = 20_000 + Math.floor(Math.random() * 20_000);
-const url = `redis://127.0.0.1:${port}`;
-let process: ReturnType<typeof Bun.spawn> | undefined;
 let redis: RedisClient;
 let now = 1_000_000;
 
@@ -79,30 +76,8 @@ function fakeApi() {
 }
 
 describe.skipIf(!redisServer)("AgentActivitySweep", () => {
-  beforeAll(async () => {
-    process = Bun.spawn(
-      [redisServer!, "--port", String(port), "--save", "", "--appendonly", "no"],
-      {
-        stdout: "ignore",
-        stderr: "ignore",
-      },
-    );
-    redis = new RedisClient(url);
-    for (let attempt = 0; attempt < 100; attempt++) {
-      try {
-        await redis.send("PING", []);
-        return;
-      } catch {
-        await Bun.sleep(10);
-      }
-    }
-    throw new Error("isolated redis-server did not become ready");
-  });
-
-  afterAll(async () => {
-    redis?.close();
-    process?.kill();
-    await process?.exited;
+  useRedisFixture((client) => {
+    redis = client();
   });
 
   const display = () => new RedisAgentDisplay(redis, () => now);

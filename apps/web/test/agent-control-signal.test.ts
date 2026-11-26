@@ -1,9 +1,10 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { RedisClient } from "bun";
 import {
   LocalAgentControlSignal,
   RedisAgentControlSignal,
 } from "#src/server/agents/agent-control-signal.server";
+import { redisServer, useRedisFixture } from "./helpers/redis-fixture";
 
 describe("LocalAgentControlSignal", () => {
   test("notify wakes every waiter for that Agent only", async () => {
@@ -44,40 +45,8 @@ describe("LocalAgentControlSignal", () => {
   });
 });
 
-const redisServer = Bun.which("redis-server");
-const port = 20_000 + Math.floor(Math.random() * 20_000);
-const url = `redis://127.0.0.1:${port}`;
-let process: ReturnType<typeof Bun.spawn> | undefined;
-const clients: RedisClient[] = [];
-const client = () => {
-  const redis = new RedisClient(url);
-  clients.push(redis);
-  return redis;
-};
-
 describe.skipIf(!redisServer)("RedisAgentControlSignal", () => {
-  beforeAll(async () => {
-    process = Bun.spawn(
-      [redisServer!, "--port", String(port), "--save", "", "--appendonly", "no"],
-      { stdout: "ignore", stderr: "ignore" },
-    );
-    const probe = client();
-    for (let attempt = 0; attempt < 100; attempt++) {
-      try {
-        await probe.send("PING", []);
-        return;
-      } catch {
-        await Bun.sleep(10);
-      }
-    }
-    throw new Error("isolated redis-server did not become ready");
-  });
-
-  afterAll(async () => {
-    for (const redis of clients) redis.close();
-    process?.kill();
-    await process?.exited;
-  });
+  const client = useRedisFixture();
 
   test("a notify on one instance wakes a waiter on another", async () => {
     const waiterSide = new RedisAgentControlSignal(client(), client);
@@ -102,13 +71,16 @@ describe.skipIf(!redisServer)("RedisAgentControlSignal", () => {
 
   test("notify survives a publisher outage and the waiter falls back to its timeout", async () => {
     const broken = new RedisClient("redis://127.0.0.1:1");
-    clients.push(broken);
-    const signal = new RedisAgentControlSignal(broken, () => broken);
-    const started = Date.now();
-    await signal.notify("agent-a");
-    await signal.wait("agent-a", 30);
-    const elapsed = Date.now() - started;
-    expect(elapsed).toBeGreaterThanOrEqual(25);
-    expect(elapsed).toBeLessThan(1_000);
+    try {
+      const signal = new RedisAgentControlSignal(broken, () => broken);
+      const started = Date.now();
+      await signal.notify("agent-a");
+      await signal.wait("agent-a", 30);
+      const elapsed = Date.now() - started;
+      expect(elapsed).toBeGreaterThanOrEqual(25);
+      expect(elapsed).toBeLessThan(1_000);
+    } finally {
+      broken.close();
+    }
   });
 });

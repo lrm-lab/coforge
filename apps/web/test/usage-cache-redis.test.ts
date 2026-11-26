@@ -1,15 +1,13 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { RedisClient } from "bun";
+import { describe, expect, test } from "bun:test";
+import type { RedisClient } from "bun";
 import { RedisUsageCache } from "#src/server/centrifugo/usage-cache.server";
 import { RedisAgentUsageCache } from "#src/server/centrifugo/agent-usage-cache.server";
 import { RedisComputerCapabilityLease } from "#src/server/computers/computer-capability-lease.server";
 import { DAEMON_AGENT_USAGE_SCAN_CAPABILITY } from "@lrm/coforge-sdk/internal";
+import { redisServer, useRedisFixture } from "./helpers/redis-fixture";
 
 // The cache's Lua scripts, run by a real Redis: a fake cannot say whether a claim is atomic or
 // which results end which scan. Skipped when no `redis-server` is installed.
-const redisServer = Bun.which("redis-server");
-const port = 20_000 + Math.floor(Math.random() * 20_000);
-let server: ReturnType<typeof Bun.spawn> | undefined;
 let redis: RedisClient;
 let cache: RedisUsageCache;
 
@@ -31,28 +29,9 @@ const finished = (computerId: string, scanId: string, status: "available" | "err
 const pendingId = async (computerId: string) => (await cache.read(key(computerId))).pendingScanId;
 
 describe.skipIf(!redisServer)("RedisUsageCache scans against a real Redis", () => {
-  beforeAll(async () => {
-    server = Bun.spawn([redisServer!, "--port", String(port), "--save", "", "--appendonly", "no"], {
-      stdout: "ignore",
-      stderr: "ignore",
-    });
-    redis = new RedisClient(`redis://127.0.0.1:${port}`);
+  useRedisFixture((client) => {
+    redis = client();
     cache = new RedisUsageCache(redis);
-    for (let attempt = 0; attempt < 100; attempt++) {
-      try {
-        await redis.send("PING", []);
-        return;
-      } catch {
-        await Bun.sleep(10);
-      }
-    }
-    throw new Error("isolated redis-server did not become ready");
-  });
-
-  afterAll(async () => {
-    redis?.close();
-    server?.kill();
-    await server?.exited;
   });
 
   test("concurrent claims agree on one scan, and the claim expires by itself", async () => {

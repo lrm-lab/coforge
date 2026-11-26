@@ -1,12 +1,10 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { RedisClient } from "bun";
+import { describe, expect, test } from "bun:test";
+import type { RedisClient } from "bun";
 import { RedisAgentDisplay } from "#src/server/agents/agent-display.server";
 import { EXTERNAL_ONLINE_WINDOW_MS } from "#src/server/agents/external-agent-presence.server";
+import { redisServer, useRedisFixture } from "./helpers/redis-fixture";
 
-const redisServer = Bun.which("redis-server");
 if (!redisServer) throw new Error("redis-server is required for the external display suite");
-const port = 20_000 + Math.floor(Math.random() * 20_000);
-let server: ReturnType<typeof Bun.spawn> | undefined;
 let redis: RedisClient;
 let now = 1_000_000_000;
 
@@ -25,27 +23,8 @@ const status = (
 ) =>
   subject.observeExternalStatus(scope, { kind, detail, occurredAtMs, reported, windowMs: WINDOW });
 
-beforeAll(async () => {
-  server = Bun.spawn([redisServer, "--port", String(port), "--save", "", "--appendonly", "no"], {
-    stdout: "ignore",
-    stderr: "ignore",
-  });
-  redis = new RedisClient(`redis://127.0.0.1:${port}`);
-  for (let attempt = 0; attempt < 100; attempt++) {
-    try {
-      await redis.send("PING", []);
-      return;
-    } catch {
-      await Bun.sleep(10);
-    }
-  }
-  throw new Error("isolated redis-server did not become ready");
-});
-
-afterAll(async () => {
-  redis?.close();
-  server?.kill();
-  await server?.exited;
+useRedisFixture((client) => {
+  redis = client();
 });
 
 describe("external Agent display", () => {

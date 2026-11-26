@@ -1,13 +1,10 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { RedisClient } from "bun";
+import { describe, expect, test } from "bun:test";
+import type { RedisClient } from "bun";
 import type { AgentStatus } from "@lrm/coforge-sdk/internal";
 import { RedisAgentDisplay } from "#src/server/agents/agent-display.server";
 import { workspaceRedisKey } from "#src/server/redis-keys.server";
+import { redisServer, startRedisFixture, useRedisFixture } from "./helpers/redis-fixture";
 
-const redisServer = Bun.which("redis-server");
-const port = 20_000 + Math.floor(Math.random() * 20_000);
-const url = `redis://127.0.0.1:${port}`;
-let process: ReturnType<typeof Bun.spawn> | undefined;
 let redis: RedisClient;
 let now = 1_000_000;
 
@@ -23,31 +20,34 @@ const status = (sequence: number): AgentStatus => ({
 });
 
 describe.skipIf(!redisServer)("RedisAgentDisplay batch reads", () => {
-  beforeAll(async () => {
-    process = Bun.spawn(
-      [redisServer!, "--port", String(port), "--save", "", "--appendonly", "no"],
-      {
-        stdout: "ignore",
-        stderr: "ignore",
-      },
-    );
-    redis = new RedisClient(url);
-    for (let attempt = 0; attempt < 100; attempt++) {
-      try {
-        await redis.send("PING", []);
-        return;
-      } catch {
-        await Bun.sleep(10);
-      }
-    }
-    throw new Error("isolated redis-server did not become ready");
+  useRedisFixture((client) => {
+    redis = client();
   });
 
-  afterAll(async () => {
-    redis?.close();
-    process?.kill();
-    await process?.exited;
-  });
+  test("concurrent Redis fixtures isolate their clients and keys", async () => {
+    const fixtures = await Promise.allSettled([startRedisFixture(), startRedisFixture()]);
+    try {
+      const [firstResult, secondResult] = fixtures;
+      if (firstResult.status === "rejected") throw firstResult.reason;
+      if (secondResult.status === "rejected") throw secondResult.reason;
+      const first = firstResult.value;
+      const second = secondResult.value;
+      const writer = first.client();
+      const reader = first.client();
+      const separate = second.client();
+      await writer.set("shared-name", "first fixture");
+      expect(await reader.get("shared-name")).toBe("first fixture");
+      expect(await separate.get("shared-name")).toBeNull();
+
+      await first.stop();
+      await first.stop();
+      expect(await separate.send("PING", [])).toBe("PONG");
+    } finally {
+      await Promise.all(
+        fixtures.map((result) => result.status === "fulfilled" && result.value.stop()),
+      );
+    }
+  }, 25_000);
 
   const display = () => new RedisAgentDisplay(redis, () => now);
 
