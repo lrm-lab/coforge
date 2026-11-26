@@ -11,10 +11,7 @@ import {
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import {
-  createContext,
   useCallback,
-  useContext,
-  useEffect,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -37,6 +34,11 @@ import { TaskDescription } from "./task-description";
 import { TaskHistoryPage, TaskSubtasks } from "./task-detail-sections";
 import { ownsDiscussion, taskFollowMenuItem, useTaskFollow } from "./task-follow";
 import { useTaskLeadScroll } from "./task-lead-scroll";
+import {
+  TaskNavigationRegistrationContext,
+  useRegisterTaskNavigation,
+  type TaskDetailNavigation,
+} from "./task-navigation-context";
 import { isTaskStep } from "./task-popup-steps";
 import type { VisibleTaskName } from "./task-relation-edits";
 import { taskRelationMenuItems } from "./task-relation-lines";
@@ -44,27 +46,9 @@ import { TaskSection, type RelationPicker } from "./task-section";
 import { TaskTrail } from "./task-trail";
 import { useTaskRelationAccess, type DetailCommand } from "./use-task-relations";
 
+export { TaskNavigationRegistrationContext, useRegisterTaskNavigation, type TaskDetailNavigation };
+
 export type TaskDetailMode = "split" | "expanded" | "sheet" | "drawer";
-
-export type TaskDetailNavigation = {
-  hasPrev: boolean;
-  hasNext: boolean;
-  onPrev: () => void;
-  onNext: () => void;
-};
-
-type TaskNavigationSetter = (navigation: TaskDetailNavigation | undefined) => void;
-
-export const TaskNavigationRegistrationContext = createContext<TaskNavigationSetter | null>(null);
-
-export function useRegisterTaskNavigation(navigation: TaskDetailNavigation | undefined) {
-  const register = useContext(TaskNavigationRegistrationContext);
-  useEffect(() => {
-    if (!register) return;
-    register(navigation);
-    return () => register(undefined);
-  }, [register, navigation]);
-}
 
 export type TaskDetailPanelProps = {
   task: TaskView;

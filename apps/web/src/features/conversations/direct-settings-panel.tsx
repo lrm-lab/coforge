@@ -1,15 +1,12 @@
 import { useRef, useState, type ReactNode } from "react";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useServerFn } from "@tanstack/react-start";
-import { Settings01 as Settings, User01 } from "@untitledui/icons";
+import { User01 } from "@untitledui/icons";
 
 import { Badge } from "#src/components/base/badges/badges";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { OPEN_OVERLAY_SELECTOR } from "#src/lib/open-overlay";
-import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { HEADER_ICON_CLASS } from "./conversation-header-tabs";
 import { setDirectConversationCollapseLongMessages } from "./conversations.functions";
 import {
   DetailsPaneHeader,
@@ -20,25 +17,7 @@ import {
 import { useSidebarActions, useSidebarLists } from "./sidebar-lists";
 import { SidebarSectionSelect } from "./sidebar-section-select";
 
-export function DirectSettingsToggleButton({
-  open,
-  onToggle,
-}: {
-  open: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <ButtonUtility
-      icon={Settings}
-      size="sm"
-      color="tertiary"
-      aria-expanded={open}
-      className={cn(HEADER_ICON_CLASS, open && "bg-primary_hover")}
-      tooltip={m.direct_settings_open()}
-      onClick={onToggle}
-    />
-  );
-}
+export { DirectSettingsToggleButton } from "./direct-settings-toggle-button";
 
 export function DirectSettingsPanel({
   conversationId,
