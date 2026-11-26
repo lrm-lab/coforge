@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { lazy, Suspense, useMemo, useState, type ReactNode } from "react";
 import { Button as AriaButton } from "react-aria-components";
 import { useOpenSearch } from "#src/features/search/search-dialog-context";
 import { useQuery } from "@tanstack/react-query";
@@ -8,7 +8,6 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { cn } from "#src/lib/utils";
 import { ChannelFace, ChannelGlyph, ChannelTitle } from "./channel-name";
-import { ChannelSettingsPanel } from "./channel-settings-panel";
 import { channelLabel, isPrivateChannel, type ChannelVisibility } from "./channel-visibility";
 import { ChannelHeaderMemberCluster } from "./channel-header-people";
 import type { ChannelMembersView } from "./channel-members-page";
@@ -40,6 +39,10 @@ import type { ConversationProps } from "./conversation-types";
 import type { ChannelNotificationLevel } from "./notification-levels";
 import type { OpenAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
 import { useConversationDetailsState } from "./use-conversation-details-state";
+
+const LazyChannelSettingsPanel = lazy(() =>
+  import("./channel-settings-panel").then((mod) => ({ default: mod.ChannelSettingsPanel })),
+);
 
 export type ChannelConversationView = Omit<DirectConversationView, "agent" | "messages"> & {
   name: string;
@@ -297,14 +300,16 @@ export function ChannelConversation({
       tasksPane={tasksPane}
       detailsOpen={details.open}
       detailsPane={
-        <ChannelSettingsPanel
-          conversation={conversationWithFreshDirectory}
-          open={details.open}
-          membersView={details.membersView}
-          onMembersViewChange={details.setMembersView}
-          onClose={details.closeDetails}
-          onChanged={onChanged}
-        />
+        <Suspense fallback={null}>
+          <LazyChannelSettingsPanel
+            conversation={conversationWithFreshDirectory}
+            open={details.open}
+            membersView={details.membersView}
+            onMembersViewChange={details.setMembersView}
+            onClose={details.closeDetails}
+            onChanged={onChanged}
+          />
+        </Suspense>
       }
       channels={channels}
       mentionMemberLimit={Number.POSITIVE_INFINITY}

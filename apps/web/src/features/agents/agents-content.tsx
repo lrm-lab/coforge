@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useLayoutEffect, useRef, useState } from "react";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { Group, Panel, Separator, useDefaultLayout } from "react-resizable-panels";
 import { useHydrated } from "@tanstack/react-router";
@@ -27,7 +27,7 @@ import {
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 
-import { pickBusyAgents } from "./busy-agents";
+import { useBusyAgentCount } from "./agent-status-floor";
 import { MemberDialogs, type MemberDialog } from "./member-dialogs";
 import { MembersSearchInput } from "./members-search-input";
 import { memberAgentsQuery, memberPeopleQuery } from "./member-directory-queries";
@@ -39,13 +39,19 @@ import {
   HumansDirectoryView,
 } from "./member-directory-views";
 import type { AgentCreateKind } from "./new-agent-dialog";
-import { PersonProfilePanel } from "./person-profile-panel";
-import { AgentProfilePanel } from "./profile-panel/agent-profile-panel";
+import { LazyAgentProfilePanel, LazyPersonProfilePanel } from "./profile-panel/lazy-profile-panels";
 import { useOpenAgentProfile } from "./profile-panel/open-agent-profile";
 import type { AgentProfileTab } from "./profile-panel/profile-panel-search";
 import { SwipeableProfileOverlay } from "./swipeable-profile-overlay";
-import { WorkspaceAgentUsageView } from "./workspace-agent-usage-view";
-import { useLiveWorkspaceAgents } from "./workspace-agents-realtime";
+
+const LazyWorkspaceAgentUsageView = lazy(() =>
+  import("./workspace-agent-usage-view").then((mod) => ({ default: mod.WorkspaceAgentUsageView })),
+);
+
+function WorkingAgentsSummary() {
+  const busyCount = useBusyAgentCount();
+  return <span>{m.member_working_summary({ working: busyCount })}</span>;
+}
 
 export type MemberTab = "all" | "agent" | "human";
 export type OwnerFilter = "all" | "mine";
@@ -87,7 +93,6 @@ export function AgentsContent({
     [],
   );
 
-  const busyCount = useLiveWorkspaceAgents(pickBusyAgents).length;
   const isWorkspaceAdmin = isWorkspaceAdminRole(summary.actorRole);
   const canInviteMember = isWorkspaceAdmin;
   const canCreateAgent = canInviteMember;
@@ -143,7 +148,7 @@ export function AgentsContent({
   const desktop = useBreakpoint("md");
   const splitOpen = hydrated && desktop && profileOpen;
   const profile = profileAgentId ? (
-    <AgentProfilePanel
+    <LazyAgentProfilePanel
       agentId={profileAgentId}
       requestedTab={agentTab}
       onTabChange={setAgentProfileTab}
@@ -151,7 +156,7 @@ export function AgentsContent({
       pageHeading={!splitOpen}
     />
   ) : profilePersonId ? (
-    <PersonProfilePanel
+    <LazyPersonProfilePanel
       key={profilePersonId}
       userId={profilePersonId}
       onClose={closeAgentProfile}
@@ -202,7 +207,7 @@ export function AgentsContent({
           {m.member_directory_title()}
         </h1>
         <p className="hidden min-w-0 items-center gap-3 truncate text-xs text-tertiary tabular-nums sm:flex">
-          <span>{m.member_working_summary({ working: busyCount })}</span>
+          <WorkingAgentsSummary />
           <span>{m.member_total_summary({ count: totalCount })}</span>
         </p>
       </header>
@@ -357,17 +362,26 @@ export function AgentsContent({
             onInvite={() => onDialogChange("invite")}
           />
         ) : onAgentTab && agentView === "usage" ? (
-          <WorkspaceAgentUsageView
-            workspaceId={summary.workspaceId}
-            viewerId={summary.viewerId}
-            owner={isWorkspaceAdmin ? owner : "all"}
-            query={query}
-            profileAgentId={profileAgentId}
-            onClearFilters={() => {
-              clearSearch();
-              if (isWorkspaceAdmin && filtersActive) onFiltersChange({ owner: "all" });
-            }}
-          />
+          <Suspense
+            fallback={
+              <div className={COMPACT_CARD_GRID_CLASS}>
+                <Skeleton className="h-24 rounded-xl" />
+                <Skeleton className="h-24 rounded-xl" />
+              </div>
+            }
+          >
+            <LazyWorkspaceAgentUsageView
+              workspaceId={summary.workspaceId}
+              viewerId={summary.viewerId}
+              owner={isWorkspaceAdmin ? owner : "all"}
+              query={query}
+              profileAgentId={profileAgentId}
+              onClearFilters={() => {
+                clearSearch();
+                if (isWorkspaceAdmin && filtersActive) onFiltersChange({ owner: "all" });
+              }}
+            />
+          </Suspense>
         ) : (
           <AgentsTableView
             agents={listedAgents}

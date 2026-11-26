@@ -13,15 +13,16 @@ import { MessageSquare01 as MessageSquare } from "@untitledui/icons";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { AgentProfilePanel } from "#src/features/agents/profile-panel/agent-profile-panel";
-import { PersonProfilePanel } from "#src/features/agents/person-profile-panel";
-import { resolveVisibleConversationSlot } from "#src/features/agents/profile-panel/profile-panel-slot";
-import { TaskDetailDialog } from "#src/features/tasks/task-detail-dialog";
 import {
-  TaskDetailPanel,
+  LazyAgentProfilePanel,
+  LazyPersonProfilePanel,
+} from "#src/features/agents/profile-panel/lazy-profile-panels";
+import { resolveVisibleConversationSlot } from "#src/features/agents/profile-panel/profile-panel-slot";
+import { LazyTaskDetailDialog, LazyTaskDetailPanel } from "#src/features/tasks/lazy-task-detail";
+import {
   TaskNavigationRegistrationContext,
   type TaskDetailNavigation,
-} from "#src/features/tasks/task-detail-panel";
+} from "#src/features/tasks/task-navigation-context";
 import { useOpenRelatedTask } from "#src/features/tasks/use-open-related-task";
 import { ConversationTaskDemand } from "#src/features/tasks/conversation-task-demand";
 import { useNumberedTask } from "#src/features/tasks/use-conversation-tasks";
@@ -242,7 +243,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
       : undefined;
 
   const taskDialog = openTask ? (
-    <TaskDetailDialog
+    <LazyTaskDetailDialog
       key={openTask.id}
       task={openTask}
       open
@@ -261,7 +262,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
 
   const inlineTaskPanel =
     openTask && taskPopup?.inline ? (
-      <TaskDetailPanel
+      <LazyTaskDetailPanel
         key={openTask.id}
         task={openTask}
         mode={taskPopup.inline.mode}
@@ -359,7 +360,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     <>
       {visibleSlot === "details" && detailsPane}
       {visibleSlot === "task" && openTask && (
-        <TaskDetailPanel
+        <LazyTaskDetailPanel
           key={openTask.id}
           task={openTask}
           mode={isTaskExpanded ? "expanded" : "split"}
@@ -379,7 +380,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
         />
       )}
       {visibleSlot === "profile" && profileAgentId && (
-        <AgentProfilePanel
+        <LazyAgentProfilePanel
           agentId={profileAgentId}
           visible={focus?.focused !== "chat"}
           requestedTab={agentProfile?.tab}
@@ -388,7 +389,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
         />
       )}
       {visibleSlot === "profile" && !profileAgentId && profilePersonId && (
-        <PersonProfilePanel
+        <LazyPersonProfilePanel
           key={profilePersonId}
           userId={profilePersonId}
           onClose={() => onCloseAgentProfile?.()}

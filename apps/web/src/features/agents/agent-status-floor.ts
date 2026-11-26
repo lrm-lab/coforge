@@ -2,7 +2,9 @@ import { createContext, useContext } from "react";
 import { createStore, useSelector, type Store } from "@tanstack/react-store";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 
+import { isBusyTone } from "./agent-activity-presentation";
 import type { AgentMascot } from "./agent-mascot";
+import { agentDisplay } from "./agent-status-display";
 import type { LiveAgent } from "./workspace-agents-realtime";
 import { useWatchAgentDisplay } from "./watched-agent-displays";
 
@@ -94,6 +96,93 @@ export function useVisibleAgentDisplay(agentId: string): AgentDisplaySnapshot | 
 
 export function useLiveAgentDisplay(agentId: string): AgentDisplaySnapshot | undefined {
   return useVisibleAgentDisplay(agentId);
+}
+
+export type AgentAvatarView = {
+  tone: ReturnType<typeof agentDisplay>["tone"];
+  pulse: boolean;
+  label: string;
+};
+
+export function selectAgentAvatarView(
+  display: AgentDisplaySnapshot | undefined,
+  stopped?: boolean,
+): AgentAvatarView {
+  const view = agentDisplay(display, { stopped });
+  return { tone: view.tone, pulse: view.pulse, label: view.label };
+}
+
+export function sameOptionalAgentAvatarView(
+  a: AgentAvatarView | undefined,
+  b: AgentAvatarView | undefined,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.tone === b.tone && a.pulse === b.pulse && a.label === b.label;
+}
+
+export function useLiveAgentAvatarView(agentId: string, stopped?: boolean): AgentAvatarView {
+  const liveStore = useContext(LiveAgentStoreContext);
+  const floorStore = useContext(StatusOnlyDisplaysContext);
+  const watchExtraId = useSelector(liveStore, (agents) => selectExtraWatchId(agents, agentId));
+  useWatchAgentDisplay(watchExtraId);
+  const liveView = useSelector(
+    liveStore,
+    (agents) => {
+      const display = selectLiveAgentDisplay(agents, agentId);
+      return display ? selectAgentAvatarView(display, stopped) : undefined;
+    },
+    { compare: sameOptionalAgentAvatarView },
+  );
+  const floorView = useSelector(
+    floorStore,
+    (displays) => {
+      const display = agentId ? displays.get(agentId) : undefined;
+      return display ? selectAgentAvatarView(display, stopped) : undefined;
+    },
+    { compare: sameOptionalAgentAvatarView },
+  );
+  return liveView ?? floorView ?? selectAgentAvatarView(undefined, stopped);
+}
+
+export function selectBusyAgentCount(
+  agents: readonly { display?: AgentDisplaySnapshot }[],
+): number {
+  let count = 0;
+  for (const agent of agents) {
+    if (agent.display !== undefined && isBusyTone(agent.display.activityKind)) count += 1;
+  }
+  return count;
+}
+
+export function useBusyAgentCount(): number {
+  return useSelector(useContext(LiveAgentStoreContext), selectBusyAgentCount);
+}
+
+export function selectWorkingAgentIds(
+  agents: readonly { id: string; display?: AgentDisplaySnapshot }[],
+  memberIds: ReadonlySet<string>,
+): string {
+  const ids: string[] = [];
+  for (const agent of agents) {
+    if (
+      memberIds.has(agent.id) &&
+      agent.display !== undefined &&
+      isBusyTone(agent.display.activityKind)
+    ) {
+      ids.push(agent.id);
+    }
+  }
+  return ids.join(",");
+}
+
+export function useWorkingAgentIds(
+  enabled: boolean,
+  memberIds: ReadonlySet<string> | undefined,
+): string {
+  return useSelector(useContext(LiveAgentStoreContext), (agents) =>
+    enabled && memberIds && memberIds.size > 0 ? selectWorkingAgentIds(agents, memberIds) : "",
+  );
 }
 
 export function selectHasLiveRosterAgent(

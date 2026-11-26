@@ -16,7 +16,7 @@ import { Fold } from "#src/components/ui/fold";
 import { Modal, ModalOverlay, SheetGrabber } from "#src/components/ui/modal";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { UnreadBadge } from "#src/components/ui/unread-marker";
-import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
+import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-label";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { formatMonthDayTime } from "#src/lib/dates";
 import { useTimeFormat } from "#src/lib/time-format-context";

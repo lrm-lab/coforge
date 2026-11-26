@@ -1,5 +1,5 @@
 import { Button as AriaButton } from "react-aria-components";
-import { useMemo } from "react";
+import { lazy, Suspense, useMemo } from "react";
 
 import { Button } from "#src/components/base/buttons/button";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
@@ -14,7 +14,7 @@ import {
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { TabbedHeader } from "#src/components/layout/tabbed-header";
-import { DirectSettingsPanel, DirectSettingsToggleButton } from "./direct-settings-panel";
+import { DirectSettingsToggleButton } from "./direct-settings-toggle-button";
 import { useConversationDetailsState } from "./use-conversation-details-state";
 import { ConversationFocusButton } from "./conversation-focus-button";
 import { conversationHeaderTabs, type HeaderTabs } from "./conversation-header-tabs";
@@ -26,6 +26,10 @@ import type {
   DirectConversationView,
   ThreadedConversationProps,
 } from "./conversation-types";
+
+const LazyDirectSettingsPanel = lazy(() =>
+  import("./direct-settings-panel").then((mod) => ({ default: mod.DirectSettingsPanel })),
+);
 
 export function DirectConversationHeader({
   conversation,
@@ -192,22 +196,24 @@ export function DirectConversation({
       plainMentions={plainMentions}
       detailsOpen={details.open}
       detailsPane={
-        <DirectSettingsPanel
-          conversationId={conversation.conversationId}
-          name={conversation.agent.displayName}
-          avatar={
-            <AgentDisplayAvatar
-              agentId={conversation.agent.id}
-              name={conversation.agent.displayName}
-              src={conversation.agent.avatarUrl}
-              cornerDot={false}
-            />
-          }
-          open={details.open}
-          onClose={details.closeDetails}
-          collapseLongMessages={conversation.collapseLongMessages}
-          onChanged={onChanged}
-        />
+        <Suspense fallback={null}>
+          <LazyDirectSettingsPanel
+            conversationId={conversation.conversationId}
+            name={conversation.agent.displayName}
+            avatar={
+              <AgentDisplayAvatar
+                agentId={conversation.agent.id}
+                name={conversation.agent.displayName}
+                src={conversation.agent.avatarUrl}
+                cornerDot={false}
+              />
+            }
+            open={details.open}
+            onClose={details.closeDetails}
+            collapseLongMessages={conversation.collapseLongMessages}
+            onChanged={onChanged}
+          />
+        </Suspense>
       }
       header={
         <DirectConversationHeader

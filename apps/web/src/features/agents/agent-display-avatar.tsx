@@ -4,6 +4,7 @@ import { StatusDot } from "#src/components/ui/status-dot";
 import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { m } from "#src/paraglide/messages";
 import { agentDisplay } from "./agent-status-display";
+import type { AgentAvatarView } from "./agent-status-floor";
 import { agentAvatarUrl } from "./agent-mascot";
 import { AVATAR_STACK_RING } from "#src/features/avatars/avatar-stack-ring";
 
@@ -15,6 +16,7 @@ export function AgentDisplayAvatar({
   src,
   noIdDefault,
   display,
+  view: explicitView,
   stopped,
   deleted,
   size = "sm",
@@ -26,13 +28,14 @@ export function AgentDisplayAvatar({
   src?: string | null;
   noIdDefault?: boolean;
   display?: AgentDisplaySnapshot;
+  view?: AgentAvatarView;
   stopped?: boolean;
   deleted?: boolean;
   size?: AvatarSize;
   cornerDot?: boolean;
   className?: string;
 }) {
-  const view = agentDisplay(display, { stopped });
+  const view = explicitView ?? agentDisplay(display, { stopped });
   const picture = src ?? (noIdDefault ? null : agentAvatarUrl(agentId));
   const badge =
     cornerDot && !deleted ? (

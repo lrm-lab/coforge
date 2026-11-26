@@ -6,8 +6,10 @@ import {
   Modal as SlideoutModal,
   ModalOverlay as SlideoutOverlay,
 } from "#src/components/application/slideout-menus/slideout-menu";
-import { AgentProfilePanel } from "#src/features/agents/profile-panel/agent-profile-panel";
-import { PersonProfilePanel } from "#src/features/agents/person-profile-panel";
+import {
+  LazyAgentProfilePanel,
+  LazyPersonProfilePanel,
+} from "#src/features/agents/profile-panel/lazy-profile-panels";
 import type {
   OpenAgentProfile,
   OpenPersonProfile,
@@ -17,15 +19,7 @@ import { m } from "#src/paraglide/messages";
 
 type Profile = { kind: "agent" | "person"; id: string; tab?: AgentProfileTab };
 
-/**
- * A profile opened from inside a Task popup (a sender's avatar or name in its discussion) opens
- * over the popup, as the next overlay, not in the conversation's side slot under it (Frank, 11-04,
- * task #519). It is the popup's own: Escape or a press outside closes it first and the popup
- * second, the order every React Aria overlay already keeps, and it goes with the Task it was
- * opened from. Like the channel settings panel's, it lives outside the address.
- */
 export function useTaskPopupProfile(taskId: string | undefined): {
-  /** The panes' profile openers, in place of the conversation's. */
   openers: { onOpenAgentProfile: OpenAgentProfile; onOpenPersonProfile: OpenPersonProfile };
   layer: ReactNode;
 } {
@@ -34,10 +28,6 @@ export function useTaskPopupProfile(taskId: string | undefined): {
   const close = () => setOpened(undefined);
   const open = (next: Profile) => {
     if (!taskId) return;
-    // Closing the profile gives focus back to what had it when it opened: the popup's own dialog,
-    // not the avatar. With the avatar keeping it, a press outside the profile left it open (seen
-    // in e2e-task-popup-profile, task #520; not traced further). Escape on the avatar is not the
-    // reason any more: a closed peek's trigger lets it through (`HoverPopover`).
     if (document.activeElement instanceof HTMLElement)
       document.activeElement.closest<HTMLElement>('[role="dialog"]')?.focus();
     setOpened({ ...next, taskId });
@@ -59,7 +49,7 @@ export function useTaskPopupProfile(taskId: string | undefined): {
             {profile && (
               <div className="flex min-h-0 w-full flex-1 flex-col">
                 {profile.kind === "agent" ? (
-                  <AgentProfilePanel
+                  <LazyAgentProfilePanel
                     key={profile.id}
                     agentId={profile.id}
                     requestedTab={profile.tab}
@@ -67,7 +57,7 @@ export function useTaskPopupProfile(taskId: string | undefined): {
                     onClose={close}
                   />
                 ) : (
-                  <PersonProfilePanel
+                  <LazyPersonProfilePanel
                     key={profile.id}
                     userId={profile.id}
                     onClose={close}

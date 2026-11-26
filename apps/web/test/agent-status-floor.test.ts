@@ -171,3 +171,67 @@ test("live store selectors isolate roster presence, static identity, online stat
   });
   expect(selectDisplayProfileMetrics(undefined)).toEqual({ contextUsage: null, fastMode: null });
 });
+
+test("primitive busy-count, working-ids, and avatar-view selectors stay stable across unchanged heartbeats", async () => {
+  const {
+    sameOptionalAgentAvatarView,
+    selectAgentAvatarView,
+    selectBusyAgentCount,
+    selectWorkingAgentIds,
+  } = await import("#src/features/agents/agent-status-floor");
+
+  const snap1 = display({
+    agentId: "a1",
+    revision: 1,
+    activityKind: "working",
+    detailKind: "",
+    detail: "",
+    entries: [],
+    expiresAt: 10_000,
+  });
+  const snap2 = display({
+    agentId: "a1",
+    revision: 2,
+    activityKind: "working",
+    detailKind: "",
+    detail: "",
+    entries: [],
+    expiresAt: 20_000,
+    contextUsage: { usedTokens: 500, windowTokens: 1000, observedAtMs: 20_000 },
+  });
+  const idle = display({ agentId: "a2", revision: 1, activityKind: "online" });
+  const thinking = display({ agentId: "a3", revision: 1, activityKind: "thinking" });
+
+  const list1 = [
+    { id: "a1", display: snap1 },
+    { id: "a2", display: idle },
+    { id: "a3", display: thinking },
+  ];
+  const list2 = [
+    { id: "a1", display: snap2 },
+    { id: "a2", display: idle },
+    { id: "a3", display: thinking },
+  ];
+
+  expect(selectBusyAgentCount(list1)).toBe(2);
+  expect(selectBusyAgentCount(list2)).toBe(2);
+  const channelMembers = new Set(["a1", "a2"]);
+  expect(selectWorkingAgentIds(list1, channelMembers)).toBe("a1");
+  expect(selectWorkingAgentIds(list2, channelMembers)).toBe("a1");
+
+  const view1 = selectAgentAvatarView(snap1);
+  const view2 = selectAgentAvatarView(snap2);
+  const viewIdle = selectAgentAvatarView(idle);
+  expect(sameOptionalAgentAvatarView(view1, view2)).toBe(true);
+  expect(sameOptionalAgentAvatarView(view1, viewIdle)).toBe(false);
+  expect(sameOptionalAgentAvatarView(undefined, undefined)).toBe(true);
+  expect(sameOptionalAgentAvatarView(view1, undefined)).toBe(false);
+});
+
+test("runtime-provider-label exposes provider labels without pulling SVG assets", async () => {
+  const { runtimeProviderDisplayName, runtimeProviderLabel } =
+    await import("#src/features/agents/runtime-provider-label");
+  expect(runtimeProviderLabel("codex")).toBe("Codex");
+  expect(runtimeProviderDisplayName("claude-code")).toBe("Claude Code");
+  expect(runtimeProviderDisplayName("custom")).toBe("custom");
+});

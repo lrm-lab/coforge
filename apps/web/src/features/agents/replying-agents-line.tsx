@@ -25,7 +25,7 @@ import { activitySentenceLabel } from "./agent-activity-presentation";
 import { AgentListRow } from "./agent-list-popover";
 import { AgentMascotView } from "./agent-mascot-view";
 import { agentDisplay } from "./agent-status-display";
-import { pickBusyAgents } from "./busy-agents";
+import { useWorkingAgentIds as useStoreWorkingAgentIds } from "./agent-status-floor";
 import { useChannelAgents } from "./channel-agents-context";
 import type { OpenAgentProfile } from "./profile-panel/open-agent-profile";
 import { replyingAgentIds } from "./reply-intents";
@@ -40,7 +40,6 @@ import { useConversationReplyIntents } from "./reply-intents-realtime";
 import {
   useCurrentWorkspaceId,
   useLiveAgent,
-  useLiveWorkspaceAgents,
   useVisibleAgentDirectory,
 } from "./workspace-agents-realtime";
 import "./replying-agents-line.css";
@@ -115,12 +114,11 @@ function useReplyingAgentIds(conversationId: string, threadRootId: string | null
 
 function useWorkingAgentIds(channelAgentIds?: readonly string[]) {
   const [live] = useLiveAgentActivity();
-  const members = useMemo(() => new Set(channelAgentIds), [channelAgentIds]);
-  return useLiveWorkspaceAgents((agents) =>
-    live && channelAgentIds ? pickBusyAgents(agents.filter((agent) => members.has(agent.id))) : [],
-  )
-    .map((agent) => agent.id)
-    .join(ID_SEPARATOR);
+  const members = useMemo(
+    () => (channelAgentIds ? new Set(channelAgentIds) : undefined),
+    [channelAgentIds],
+  );
+  return useStoreWorkingAgentIds(live, members);
 }
 
 const SENTENCES = {

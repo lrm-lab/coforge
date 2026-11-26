@@ -6,8 +6,10 @@ import { User01 } from "@untitledui/icons";
 import { Select } from "#src/components/base/select/select";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { UnsavedChangesDialog } from "#src/components/ui/unsaved-changes-dialog";
-import { AgentProfilePanel } from "#src/features/agents/profile-panel/agent-profile-panel";
-import { PersonProfilePanel } from "#src/features/agents/person-profile-panel";
+import {
+  LazyAgentProfilePanel,
+  LazyPersonProfilePanel,
+} from "#src/features/agents/profile-panel/lazy-profile-panels";
 import type { AgentProfileTab as AgentProfileTabId } from "#src/features/agents/profile-panel/profile-panel-search";
 import { OPEN_OVERLAY_SELECTOR } from "#src/lib/open-overlay";
 import { m } from "#src/paraglide/messages";
@@ -184,7 +186,7 @@ export function ChannelSettingsPanel({
           {profile ? (
             <div className="flex min-h-0 w-full flex-1 flex-col">
               {profile.kind === "agent" ? (
-                <AgentProfilePanel
+                <LazyAgentProfilePanel
                   key={profile.id}
                   agentId={profile.id}
                   visible={open}
@@ -194,7 +196,7 @@ export function ChannelSettingsPanel({
                   back={profileBack}
                 />
               ) : (
-                <PersonProfilePanel
+                <LazyPersonProfilePanel
                   key={profile.id}
                   userId={profile.id}
                   onClose={onClose}

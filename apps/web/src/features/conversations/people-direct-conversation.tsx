@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { lazy, Suspense, useMemo } from "react";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { getRouteApi } from "@tanstack/react-router";
 
@@ -8,14 +8,17 @@ import { m } from "#src/paraglide/messages";
 import { ConversationFocusButton } from "./conversation-focus-button";
 import { conversationHeaderTabs, type HeaderTabs } from "./conversation-header-tabs";
 import { ConversationListButton } from "./conversation-list-button";
-import { DirectSettingsPanel, DirectSettingsToggleButton } from "./direct-settings-panel";
+import { DirectSettingsToggleButton } from "./direct-settings-toggle-button";
 import { useConversationDetailsState } from "./use-conversation-details-state";
 import type { ThreadedConversationProps } from "./conversation-types";
 import { DirectThreadedConversation } from "./direct-threaded-conversation";
 import { plainMentionsByHandle } from "./message-markdown";
 import type { useDirectConversation } from "./use-conversation-data";
 
-/** A direct conversation between Workspace members, as its page loads it. */
+const LazyDirectSettingsPanel = lazy(() =>
+  import("./direct-settings-panel").then((mod) => ({ default: mod.DirectSettingsPanel })),
+);
+
 export type PeopleDirectConversationView = Extract<
   ReturnType<typeof useDirectConversation>["conversation"],
   { kind: "people" }
@@ -23,15 +26,10 @@ export type PeopleDirectConversationView = Extract<
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
-/** Whether this is the viewer's conversation with themself. */
 function useIsSelfConversation(conversation: PeopleDirectConversationView) {
   return appRoute.useLoaderData({ select: ({ user }) => user.id }) === conversation.peer.id;
 }
 
-/**
- * The header of a direct message between members: the member (with their presence, and "(you)" in
- * the viewer's conversation with themself) and the conversation tabs.
- */
 export function PeopleDirectConversationHeader({
   conversation,
   settingsOpen = false,
@@ -81,11 +79,6 @@ export function PeopleDirectConversationHeader({
   );
 }
 
-/**
- * A direct message between members: always writable, with no Agent in it. The composer offers no
- * @-completion here (a mention in a member DM is kept as plain text); the two members' handles
- * still read as their names in the stream.
- */
 export function PeopleDirectConversation({
   conversation,
   onChanged,
@@ -102,7 +95,6 @@ export function PeopleDirectConversation({
   const { mentionables } = conversation;
   const plainMentions = useMemo(() => plainMentionsByHandle(mentionables), [mentionables]);
   const details = useConversationDetailsState({ enabled: !props.taskPopup });
-  // Nobody else is in a conversation with yourself, so its messages carry no read ticks.
   const shown = useMemo(
     () => (self ? { ...conversation, readTicks: undefined } : conversation),
     [self, conversation],
@@ -116,23 +108,25 @@ export function PeopleDirectConversation({
       plainMentions={plainMentions}
       detailsOpen={details.open}
       detailsPane={
-        <DirectSettingsPanel
-          conversationId={conversation.conversationId}
-          name={peer.displayName}
-          avatar={
-            <ActorAvatar
-              presence
-              size="sm"
-              userId={peer.id}
-              name={peer.displayName}
-              src={peer.avatarUrl}
-            />
-          }
-          open={details.open}
-          onClose={details.closeDetails}
-          collapseLongMessages={conversation.collapseLongMessages}
-          onChanged={onChanged}
-        />
+        <Suspense fallback={null}>
+          <LazyDirectSettingsPanel
+            conversationId={conversation.conversationId}
+            name={peer.displayName}
+            avatar={
+              <ActorAvatar
+                presence
+                size="sm"
+                userId={peer.id}
+                name={peer.displayName}
+                src={peer.avatarUrl}
+              />
+            }
+            open={details.open}
+            onClose={details.closeDetails}
+            collapseLongMessages={conversation.collapseLongMessages}
+            onChanged={onChanged}
+          />
+        </Suspense>
       }
       header={
         <PeopleDirectConversationHeader

@@ -1,10 +1,9 @@
-import { useEffect, useEffectEvent, useMemo, useRef, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
 import { useConversationAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
 import { ACTIVITY_INBOX_LISTS_KEY } from "#src/features/inbox/activity-inbox-queries";
-import { ConversationTaskBoard } from "#src/features/tasks/conversation-task-board";
 import { ArtifactsBesideChat } from "#src/features/artifacts/artifact-beside-chat";
 import { ConversationArtifactSplit } from "#src/features/artifacts/artifact-side-pane";
 import { ConversationFilesPanel } from "./conversation-files";
@@ -37,6 +36,12 @@ import { useConversationView, useShownConversationTab } from "./use-conversation
 import { useConversationOpened } from "./use-conversation-open";
 import { usePageAttended } from "./use-page-attended";
 import { useConversationDetailsState } from "./use-conversation-details-state";
+
+const LazyConversationTaskBoard = lazy(() =>
+  import("#src/features/tasks/conversation-task-board").then((mod) => ({
+    default: mod.ConversationTaskBoard,
+  })),
+);
 
 type ConversationPageProps = {
   search: ConversationPageSearch;
@@ -392,35 +397,37 @@ function ConversationPageMain({
         />
       </div>
     ) : view === "tasks" ? (
-      <ConversationTaskBoard
-        conversationId={conversation.conversationId}
-        header={header(
-          { active: "tasks", onShowChat: showChat, onShowFiles: showFiles },
-          onOpenAgentProfile,
-          detailsControls,
-        )}
-        search={search}
-        taskView={taskView}
-        name={name}
-        members={conversation.mentionables}
-        currentMemberId={conversation.senderMemberId}
-        canMutate={isMember}
-        onOpenTask={openTask}
-        onOpenMessage={openTaskThread}
-        onCreateTask={
-          isMember
-            ? async (draft, idempotencyKey) => {
-                const tasks = await taskView.command({
-                  operation: "create",
-                  ...draft,
-                  idempotencyKey,
-                });
-                await page.invalidate();
-                return tasks;
-              }
-            : undefined
-        }
-      />
+      <Suspense fallback={null}>
+        <LazyConversationTaskBoard
+          conversationId={conversation.conversationId}
+          header={header(
+            { active: "tasks", onShowChat: showChat, onShowFiles: showFiles },
+            onOpenAgentProfile,
+            detailsControls,
+          )}
+          search={search}
+          taskView={taskView}
+          name={name}
+          members={conversation.mentionables}
+          currentMemberId={conversation.senderMemberId}
+          canMutate={isMember}
+          onOpenTask={openTask}
+          onOpenMessage={openTaskThread}
+          onCreateTask={
+            isMember
+              ? async (draft, idempotencyKey) => {
+                  const tasks = await taskView.command({
+                    operation: "create",
+                    ...draft,
+                    idempotencyKey,
+                  });
+                  await page.invalidate();
+                  return tasks;
+                }
+              : undefined
+          }
+        />
+      </Suspense>
     ) : undefined;
   return renderConversation({
     jumpMessage,
