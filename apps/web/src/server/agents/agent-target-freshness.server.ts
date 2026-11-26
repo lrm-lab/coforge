@@ -1,3 +1,7 @@
+import type {
+  AgentConsumptionEvidence,
+  AgentConsumptionScope,
+} from "@lrm/coforge-sdk/internal/agent-consumption";
 import type { AgentMessageRecord } from "./agent-messages.server";
 
 /**
@@ -7,6 +11,7 @@ import type { AgentMessageRecord } from "./agent-messages.server";
  * out as well: this port is the one place that rule is applied.
  */
 export type AgentTargetFreshness = {
+  consumptionScope?: AgentConsumptionScope;
   /** The newest (at most three) pending messages above `afterSequence`, oldest first. */
   readPending?(
     afterSequence?: number,
@@ -29,3 +34,25 @@ export type AgentTargetFreshness = {
   readThrough?(): Promise<number>;
   advanceReadThrough?(sequence: number): Promise<number>;
 };
+
+type FreshnessEvidence = {
+  seenUpToSeq?: number;
+  seenExactSeqs?: readonly number[];
+  consumptionEvidence?: AgentConsumptionEvidence;
+};
+
+export function evidenceForFreshness(
+  input: FreshnessEvidence,
+  scope: AgentConsumptionScope | undefined,
+) {
+  if (input.consumptionEvidence === undefined)
+    return { seenUpToSeq: input.seenUpToSeq, seenExactSeqs: input.seenExactSeqs };
+  const entry =
+    scope &&
+    input.consumptionEvidence.find(
+      ({ target }) =>
+        target.conversationId === scope.conversationId &&
+        target.threadRootId === scope.threadRootId,
+    )?.entry;
+  return { seenUpToSeq: entry?.seq, seenExactSeqs: entry?.exactSeqs };
+}

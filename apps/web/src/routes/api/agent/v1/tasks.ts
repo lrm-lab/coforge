@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { AgentTaskRequest } from "@lrm/coforge-sdk/agent";
 import type { TaskPrincipal, TaskResult } from "@lrm/coforge-sdk/internal";
-import { legacyAgentTaskRequestSchema } from "@lrm/coforge-sdk/internal/agent-task-request";
+import { agentTaskRequestSchema } from "@lrm/coforge-sdk/internal/agent-task-request";
 import {
   agentTaskBoardFreshness,
   executeAgentTaskWithFreshness,
@@ -46,7 +46,7 @@ const TASK_REFUSAL_TEXT: Record<string, string> = {
 const agentFacingHint = (error: AppError) =>
   error.errorId && AGENT_FACING_ERROR_IDS.has(error.errorId) ? error.hint : undefined;
 
-export const taskRequestSchema = legacyAgentTaskRequestSchema;
+export const taskRequestSchema = agentTaskRequestSchema;
 
 /** The raw HTTP adapter validates JSON shape; the board owns command invariants and authorization. */
 export async function handleAgentTaskPost(
@@ -122,8 +122,12 @@ export async function handleAgentTaskPost(
       );
     }
     if (error instanceof z.ZodError) {
+      const invalidEvidence = error.issues.some((issue) => issue.path[0] === "consumptionEvidence");
       return Response.json(
-        { error: "invalid task request", code: "INVALID_INPUT" },
+        {
+          error: invalidEvidence ? "invalid consumptionEvidence" : "invalid task request",
+          code: "INVALID_INPUT",
+        },
         { status: 400 },
       );
     }

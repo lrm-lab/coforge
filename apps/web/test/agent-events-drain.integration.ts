@@ -109,6 +109,14 @@ test("events drain returns unread rows in canonical order, advances read boundar
       ]),
     );
 
+    expect(first.messages.map(({ id, consumptionScope }) => [id, consumptionScope])).toEqual(
+      expect.arrayContaining([
+        [root.id, { conversationId: opened.conversationId }],
+        [reply.id, { conversationId: opened.conversationId, threadRootId: root.id }],
+        [channelMessage.id, { conversationId: general.id }],
+      ]),
+    );
+
     // Boundaries advanced for every drained target.
     const dmMember = await db.conversationMember.findUniqueOrThrow({
       where: {

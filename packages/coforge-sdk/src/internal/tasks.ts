@@ -1,3 +1,4 @@
+import type { AgentConsumptionEvidence, AgentConsumptionScope } from "./agent-consumption";
 /** Message-backed Task contract shared by browser, Agent RPC and backend. */
 import type { AgentMessageRecord } from "./local-daemon";
 import { CHANNEL_NAME_PATTERN } from "./channel-references";
@@ -335,6 +336,7 @@ type TaskCommandFields = {
   expectedRevision?: number;
   /** The model-visible boundary for the task board, carried to the server's freshness gate. */
   seenUpToSeq?: number;
+  consumptionEvidence?: AgentConsumptionEvidence;
   /** Exact messages shown above `seenUpToSeq`, for sparse context reads. */
   seenExactSeqs?: number[];
   /** `create`/`claim`/`assign`: the caller confirmed the held review — the write executes even
@@ -410,6 +412,7 @@ export type TaskResult = {
   /** `held`: unread target context stopped the write; `duplicate`: an existing Task answered a
    * repeated create without a new one. */
   state?: "held" | "duplicate";
+  consumptionScope?: AgentConsumptionScope;
   freshnessContextMode?: "inline" | "withheld";
   withheldMessageCount?: number;
   heldMessages?: AgentMessageRecord[];

@@ -1,5 +1,5 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
-import type { AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
+import type { AgentHistoryResponse } from "@lrm/coforge-sdk/agent";
 import type { AgentMessagesPage } from "#src/server/agents/agent-messages.server";
 import { agentHistoryModelSeenBoundary } from "#src/server/agents/agent-history-boundary.server";
 import { AgentMessageValidationError } from "#src/server/conversations/agent-message-validation-error.server";
@@ -45,7 +45,7 @@ export async function readAgentMessagePage(
     isChannel: boolean;
     isUserAgentDirectConversation: boolean;
     page: AgentMessagesPage;
-    consumptionScope?: AgentHistoryConsumptionScope;
+    consumptionScope?: AgentHistoryResponse["consumptionScope"];
     additionalScope?: Prisma.MessageWhereInput;
     conversationReadChanged?(input: ConversationReadChangedInput): Promise<void>;
     resolveAnchor(

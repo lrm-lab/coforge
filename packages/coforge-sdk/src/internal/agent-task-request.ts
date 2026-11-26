@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { agentConsumptionEvidenceSchema } from "./agent-consumption";
 import { CHANNEL_NAME_PATTERN } from "./channel-references";
 import { MAX_MESSAGE_SEQUENCE, SEEN_EXACT_SEQS_LIMIT } from "./freshness-decision";
 import { PROJECT_SLUG_MAX_LENGTH } from "./project-slug";
@@ -82,7 +83,7 @@ const taskRequestFields = z
   })
   .strict();
 
-export const legacyAgentTaskRequestSchema = z.discriminatedUnion("operation", [
+const legacyAgentTaskRequestOptions = [
   taskRequestFields.extend({ operation: z.literal("list") }),
   taskRequestFields.extend({
     operation: z.literal("create"),
@@ -100,4 +101,18 @@ export const legacyAgentTaskRequestSchema = z.discriminatedUnion("operation", [
     ),
     status: z.enum(TASK_WRITE_STATUSES).optional(),
   }),
+] as const;
+
+export const legacyAgentTaskRequestSchema = z.discriminatedUnion(
+  "operation",
+  legacyAgentTaskRequestOptions,
+);
+
+const scopedFields = { consumptionEvidence: agentConsumptionEvidenceSchema.optional() };
+const [list, create, update, write] = legacyAgentTaskRequestOptions;
+export const agentTaskRequestSchema = z.discriminatedUnion("operation", [
+  list.extend(scopedFields),
+  create.extend(scopedFields),
+  update.extend(scopedFields),
+  write.extend(scopedFields),
 ]);

@@ -459,6 +459,7 @@ test("an Agent history page reports the boundary it joins and the conversation i
       agentId: agent.id,
       conversationId: opened.conversationId,
       channelType: "thread",
+      threadRootId: first.id,
       target: `${dm}:${first.id}`,
     });
   } finally {

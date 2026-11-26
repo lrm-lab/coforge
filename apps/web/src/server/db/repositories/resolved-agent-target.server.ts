@@ -1,4 +1,4 @@
-import type { AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
+import type { AgentConsumptionScope, AgentHistoryResponse } from "@lrm/coforge-sdk/agent";
 
 /** An Agent-facing target (`#channel` or `@user`, optionally `:root`) resolved by `resolveAgentTarget`. */
 export type ResolvedAgentTarget = {
@@ -12,15 +12,20 @@ export type ResolvedAgentTarget = {
   isUserAgentDirectConversation?: boolean;
 };
 
-/** The `consumption_scope` of an Agent history read: which conversation it consumed, for
- * a direct conversation or a thread, whose target has more than one spelling. None for a channel's
- * top level. */
+export function resolvedConsumptionScope(
+  conversationId: string,
+  threadRootId: string | null,
+): AgentConsumptionScope {
+  return threadRootId ? { conversationId, threadRootId } : { conversationId };
+}
+
 export function agentHistoryConsumptionScope(
   agentId: string,
   { conversationId, threadRootId, canonicalTarget, isChannel }: ResolvedAgentTarget,
-): AgentHistoryConsumptionScope | undefined {
-  if (threadRootId)
-    return { agentId, conversationId, channelType: "thread", target: canonicalTarget };
-  if (!isChannel) return { agentId, conversationId, channelType: "dm", target: canonicalTarget };
-  return undefined;
+  includeChannelScope?: boolean,
+): AgentHistoryResponse["consumptionScope"] {
+  const scope = resolvedConsumptionScope(conversationId, threadRootId);
+  if (threadRootId) return { ...scope, agentId, channelType: "thread", target: canonicalTarget };
+  if (!isChannel) return { ...scope, agentId, channelType: "dm", target: canonicalTarget };
+  return includeChannelScope ? scope : undefined;
 }

@@ -29,6 +29,7 @@ export function mapSendResult(idempotencyKey: string, result: AgentSendMessageRe
     // Held: the boundary the notice presented. Sent: the boundary the send advanced over messages
     // the Agent had already seen, when it advanced one.
     seenUpToSeq: result.seenUpToSeq,
+    consumptionScope: result.consumptionScope,
     freshnessContextMode: result.freshnessContextMode,
     withheldMessageCount: result.withheldMessageCount,
     recentUnread: (result.recentUnread ?? []).map(toAgentMessage),

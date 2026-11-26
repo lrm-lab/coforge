@@ -40,6 +40,7 @@ export type DirectConversationPageOptions = {
   fromSequence?: number;
   throughSequence?: number;
   unread?: boolean;
+  consumptionScope?: boolean;
 };
 export type LatestSenderFields = {
   latestSenderKind: MessageSenderKind;

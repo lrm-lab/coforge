@@ -17,6 +17,7 @@ import {
   credentialSolicitationMessage,
   solicitsCredentialsInChat,
 } from "@lrm/coforge-sdk/internal";
+import { agentConsumptionEvidenceSchema } from "@lrm/coforge-sdk/internal/agent-consumption";
 import { isPrincipalOnCloudComputer } from "#src/server/agents/agent-cloud-computer.server";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
@@ -108,6 +109,7 @@ export async function handleAgentMessagesGet(
       fromSequence,
       throughSequence,
       ...(unread ? { unread } : {}),
+      ...(query.get("consumptionScope") === "true" ? { consumptionScope: true } : {}),
     };
     const result =
       isAttachmentMessageTarget(target) && attachmentMessages
@@ -236,6 +238,11 @@ export async function handleAgentMessagesPost(
     return Response.json({ error: "invalid mentions" }, { status: 400 });
   if (body.seenExactSeqs !== undefined && !isSeenExactSeqs(body.seenExactSeqs))
     return Response.json({ error: "invalid seenExactSeqs" }, { status: 400 });
+  const consumptionEvidence = agentConsumptionEvidenceSchema
+    .optional()
+    .safeParse(body.consumptionEvidence);
+  if (!consumptionEvidence.success)
+    return Response.json({ error: "invalid consumptionEvidence" }, { status: 400 });
   const idempotencyKey =
     typeof body.idempotencyKey === "string" && body.idempotencyKey
       ? body.idempotencyKey
@@ -262,6 +269,7 @@ export async function handleAgentMessagesPost(
       seenUpToSeq:
         !attachment && typeof body.seenUpToSeq === "number" ? body.seenUpToSeq : undefined,
       seenExactSeqs: attachment ? undefined : body.seenExactSeqs,
+      consumptionEvidence: attachment ? undefined : consumptionEvidence.data,
       freshnessContextMode,
       attachmentIds: Array.isArray(body.attachmentIds)
         ? (body.attachmentIds as string[])

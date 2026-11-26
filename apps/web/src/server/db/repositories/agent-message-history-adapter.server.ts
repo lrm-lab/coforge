@@ -33,7 +33,11 @@ export function readDirectConversationMessagesPage(input: {
       isChannel,
       isUserAgentDirectConversation: resolved.isUserAgentDirectConversation === true,
       page: input.page,
-      consumptionScope: agentHistoryConsumptionScope(input.agentId, resolved),
+      consumptionScope: agentHistoryConsumptionScope(
+        input.agentId,
+        resolved,
+        input.page.consumptionScope,
+      ),
       conversationReadChanged: input.conversationReadChanged,
       resolveAnchor: (anchor) => input.resolveAnchor(conversationId, threadRootId, anchor),
     });

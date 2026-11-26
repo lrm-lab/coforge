@@ -7,7 +7,7 @@ import { resolveTaskScope } from "#src/server/tasks/task-scope.server";
 import type { TaskBoard } from "#src/server/tasks/task-board.server";
 import { workspaceAssistantUser } from "./workspace-assistant-authority.server";
 import { agentResolvedTargetFreshness } from "#src/server/db/repositories/agent-target-freshness.repositories.server";
-import type { AgentTargetFreshness } from "./agent-target-freshness.server";
+import { evidenceForFreshness, type AgentTargetFreshness } from "./agent-target-freshness.server";
 
 const FRESHNESS_HELD_OPERATIONS = ["create", "claim", "assign"];
 const FRESHNESS_ATTACH_OPERATIONS = ["unclaim", "update", "amend"];
@@ -82,15 +82,19 @@ export async function executeAgentTaskWithFreshness(
   const resolved = await deps.freshness(command);
   if (!resolved) return deps.board.execute(principal, command);
   const { freshness, scope } = resolved;
-  const execute = () => deps.board.execute(principal, command, scope);
+  const consumptionScope = freshness.consumptionScope;
+  const receipt = consumptionScope ? { consumptionScope } : {};
+  const execute = async () => ({
+    ...(await deps.board.execute(principal, command, scope)),
+    ...receipt,
+  });
 
   const withheld = command.freshnessContextMode === "withheld";
-  const excluded = command.seenExactSeqs?.length ? command.seenExactSeqs : undefined;
+  const { seenUpToSeq, seenExactSeqs } = evidenceForFreshness(command, consumptionScope);
+  const excluded = seenExactSeqs?.length ? seenExactSeqs : undefined;
   // The Agent's reported boundary advances the server's read-through (monotone) and becomes the
   // freshness boundary; what lies above it, minus the messages shown one by one, is pending.
-  const seen = command.seenUpToSeq
-    ? ((await freshness.advanceReadThrough?.(command.seenUpToSeq)) ?? 0)
-    : 0;
+  const seen = seenUpToSeq ? ((await freshness.advanceReadThrough?.(seenUpToSeq)) ?? 0) : 0;
   const pending = async () => (await freshness.readPending?.(seen || undefined, excluded)) ?? [];
   const pendingCount = async () =>
     (await freshness.countPending?.(seen || undefined, excluded)) ?? 0;
@@ -98,12 +102,14 @@ export async function executeAgentTaskWithFreshness(
     withheld
       ? {
           tasks: [],
+          ...receipt,
           state: "held",
           freshnessContextMode: "withheld",
           withheldMessageCount: messageCount,
         }
       : {
           tasks: [],
+          ...receipt,
           state: "held",
           freshnessContextMode: "inline",
           heldMessages: messages.map(toWireMessage),

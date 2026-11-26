@@ -1,11 +1,17 @@
 import type { AgentPendingMentionAction, MessageTaskMetadata } from "#src/internal/local-daemon";
 export type { AgentPendingMentionAction };
 import type { ForwardedMessage } from "#src/internal/forwarded-message";
+import type {
+  AgentConsumptionEvidence,
+  AgentConsumptionScope,
+} from "#src/internal/agent-consumption";
+export type { AgentConsumptionEvidence, AgentConsumptionScope };
 import type { MessageSenderKind } from "#src/internal/message-sender";
 export type AgentMessageOperation = "read" | "search" | "send";
 export type AgentMessagesReadRequest = {
   target: string;
   unread?: boolean;
+  consumptionScope?: boolean;
   before?: string;
   after?: string;
   around?: string;
@@ -33,6 +39,7 @@ export type AgentMessagesSendRequest = {
   sendDraft?: boolean;
   continueAnyway?: boolean;
   freshnessContextMode?: "inline" | "withheld";
+  consumptionEvidence?: AgentConsumptionEvidence;
   attachmentIds?: string[];
   mentions?: AgentMentionSelector[];
 };
@@ -66,9 +73,8 @@ export type AgentMessage = {
   forwarded?: ForwardedMessage;
   attachmentCommentAnchor?: import("./attachment-comments").AgentAttachmentCommentAnchor;
 };
-export type AgentHistoryConsumptionScope = {
+export type AgentHistoryConsumptionScope = AgentConsumptionScope & {
   agentId: string;
-  conversationId: string;
   channelType: "dm" | "thread";
   target: string;
 };
@@ -83,7 +89,7 @@ export type AgentHistoryResponse = {
   unreadCursorBefore?: number;
   readPositionAfter?: number;
   moreUnread?: boolean;
-  consumptionScope?: AgentHistoryConsumptionScope;
+  consumptionScope?: AgentConsumptionScope & Partial<AgentHistoryConsumptionScope>;
 };
 export type AgentSearchResponse = {
   idempotencyKey: string;
@@ -127,6 +133,7 @@ export type AgentSendDecisionResponse = {
   shownMessageCount?: number;
   omittedMessageCount?: number;
   seenUpToSeq?: number;
+  consumptionScope?: AgentConsumptionScope;
   freshnessContextMode?: "inline" | "withheld";
   withheldMessageCount?: number;
   recentUnread?: AgentMessage[];
@@ -146,7 +153,7 @@ export type AgentReactionResponse = {
 };
 export type AgentEventsResponse = {
   idempotencyKey: string;
-  events: AgentMessage[];
+  events: (AgentMessage & { consumptionScope?: AgentConsumptionScope })[];
   hasMore: boolean;
 };
 export type AgentChannelAttentionResponse = {

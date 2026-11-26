@@ -4,6 +4,7 @@ import {
   advanceResolvedAgentReadThrough,
   agentMessagesByIds,
 } from "./agent-message-reads.repositories.server";
+import { resolvedConsumptionScope } from "./resolved-agent-target.server";
 import { resolveAgentSendTarget } from "./agent-targets.repositories.server";
 import { HELD_CONTEXT_LIMIT } from "@lrm/coforge-sdk/internal";
 import type { AgentTargetFreshness } from "#src/server/agents/agent-target-freshness.server";
@@ -87,6 +88,7 @@ export function agentResolvedTargetFreshness(
     return scope;
   };
   const freshness = {
+    consumptionScope: resolvedConsumptionScope(conversationId, threadRootId),
     advanceReadThrough: (seenUpToSequence: number) =>
       advanceResolvedAgentReadThrough(ports, workspaceId, agentId, resolved, seenUpToSequence),
     readThrough: async () => {

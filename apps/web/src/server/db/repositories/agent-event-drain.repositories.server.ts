@@ -1,5 +1,7 @@
+import type { AgentConsumptionScope } from "@lrm/coforge-sdk/agent";
 import type { DirectConversationPorts } from "./agent-targets.repositories.server";
 
+import { resolvedConsumptionScope } from "./resolved-agent-target.server";
 import { drainScope } from "./agent-targets.repositories.server";
 import {
   AGENT_MESSAGE_WITH_TARGET_INCLUDE,
@@ -26,7 +28,10 @@ export async function drainAgentEvents(
   limit = 20,
   target?: string,
 ): Promise<{
-  messages: (ReturnType<typeof toAgentMessage> & { nonMemberMention?: boolean })[];
+  messages: (ReturnType<typeof toAgentMessage> & {
+    consumptionScope: AgentConsumptionScope;
+    nonMemberMention?: boolean;
+  })[];
   hasMore: boolean;
 }> {
   const bounded = clampPageLimit(limit, 100);
@@ -163,6 +168,7 @@ export async function drainAgentEvents(
           agentId,
           coordination.get(row.conversationId),
         ),
+        consumptionScope: resolvedConsumptionScope(row.conversationId, row.threadRootId),
         ...(row.nonMemberMention ? { nonMemberMention: true } : {}),
       },
     ];

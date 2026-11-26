@@ -6,8 +6,9 @@ import {
   isValidReactionEmoji,
   type MessageSenderKind,
 } from "@lrm/coforge-sdk/internal";
-import type { AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
-import type { AgentTargetFreshness } from "./agent-target-freshness.server";
+import type { AgentHistoryResponse, AgentConsumptionScope } from "@lrm/coforge-sdk/agent";
+import { evidenceForFreshness, type AgentTargetFreshness } from "./agent-target-freshness.server";
+import type { AgentConsumptionEvidence } from "@lrm/coforge-sdk/internal/agent-consumption";
 import { planAgentSend } from "./agent-send-plan.server";
 import { AgentMessageValidationError } from "#src/server/conversations/agent-message-validation-error.server";
 import type { PendingMentionActionView } from "#src/server/conversations/pending-mention-views.server";
@@ -70,7 +71,7 @@ export type AgentMessageRepository = {
     hasNewer: boolean;
     /** The `model_seen_up_to_seq`: see `agentHistoryModelSeenBoundary`. */
     modelSeenUpToSeq: number | null;
-    consumptionScope?: AgentHistoryConsumptionScope;
+    consumptionScope?: AgentHistoryResponse["consumptionScope"];
     unreadCursorBefore?: number;
     readPositionAfter?: number;
     moreUnread?: boolean;
@@ -92,11 +93,15 @@ export type AgentMessageRepository = {
     agentId: string,
     limit?: number,
     target?: string,
-  ): Promise<{ messages: readonly AgentMessageRecord[]; hasMore: boolean }>;
+  ): Promise<{
+    messages: readonly (AgentMessageRecord & { consumptionScope?: AgentConsumptionScope })[];
+    hasMore: boolean;
+  }>;
 };
 
 export type AgentMessagesPage = {
   unread?: boolean;
+  consumptionScope?: boolean;
   before?: string;
   after?: string;
   around?: string;
@@ -121,6 +126,7 @@ export type AgentSendMessageInput = {
   seenUpToSeq?: number;
   /** `seenExactSeqs`: messages above `seenUpToSeq` the Agent was shown one by one. */
   seenExactSeqs?: readonly number[];
+  consumptionEvidence?: AgentConsumptionEvidence;
   freshnessContextMode?: "inline" | "withheld";
   attachmentIds?: string[];
   mentions?: AgentMentionSelector[];
@@ -145,6 +151,7 @@ export type AgentSendMessageResult = {
   /** Held: the boundary the Agent should treat as reviewed after this hold. Sent: the boundary this
    * send advanced over messages the Agent had already seen (the consume effect), if any. */
   seenUpToSeq?: number;
+  consumptionScope?: AgentConsumptionScope;
   freshnessContextMode?: "inline" | "withheld";
   withheldMessageCount?: number;
   /** Only when a sent message bypassed a hold and `freshnessContextMode !== "withheld"`. */
@@ -286,8 +293,13 @@ export async function executeAgentSendMessageWithPolicy(
       freshnessContextMode: mode,
       ...fact,
     });
-  const plan = await planAgentSend(freshness, input, factId);
-  if ("state" in plan) return plan;
+  const consumptionScope = freshness?.consumptionScope;
+  const plan = await planAgentSend(
+    freshness,
+    { ...input, ...evidenceForFreshness(input, consumptionScope) },
+    factId,
+  );
+  if ("state" in plan) return { ...plan, consumptionScope };
   const advanced =
     plan.advanceTo !== undefined ? await advance(freshness, plan.advanceTo) : undefined;
   const sent = await executeAgentSendMessage(dependencies.sender, input);
@@ -297,6 +309,7 @@ export async function executeAgentSendMessageWithPolicy(
     reason: plan.reason,
     messageId: sent.messageId,
     joinedChannel: sent.joinedChannel,
+    consumptionScope,
     pendingMentionActions: sent.pendingMentionActions,
     unresolvedMentionHandles: sent.unresolvedMentionHandles,
     producerFactId: await factId({ decision: plan.decision, reason: plan.reason, ...plan.fact }),
