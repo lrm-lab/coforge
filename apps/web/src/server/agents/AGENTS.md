@@ -91,9 +91,17 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
 ## Send freshness
 
 - `executeAgentSendMessageWithPolicy` decides on the server what a send does to
-  the Agent's inbox. A message is seen when the Agent sent it, when it is at or
-  below the reported `seenUpToSeq`, or when it is in `seenExactSeqs`, in either
-  freshness mode; the mode only decides what a hold presents.
+  the Agent's inbox. Sends and Task writes apply `consumptionEvidence` only when
+  its conversation and thread root match the resolved target. Each matching entry
+  carries a continuous boundary (`seq`), exact sequences (`exactSeqs`), or both.
+  The legacy flat fields `seenUpToSeq` and `seenExactSeqs` apply when the request
+  omits `consumptionEvidence`. The Agent's own messages count as seen. The
+  freshness mode controls what a hold presents.
+- Send and Task write freshness decisions and each message drained by a managed
+  Agent's `check` carry the server-resolved `consumptionScope`. A top-level channel
+  history read can request it with `consumptionScope=true`. DM, thread, and Task
+  read scopes retain `agentId`, `channelType`, and `target`. A Task discussion uses
+  its own conversation ID and omits the thread root.
 - A key that already committed is answered from its request record before the
   target or its freshness is read (`reason: "already_committed"`): no later
   change may report a committed send as refused or held.
