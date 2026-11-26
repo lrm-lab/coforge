@@ -11,6 +11,7 @@ import {
 import { dirname, join } from "node:path";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
+import { z } from "zod";
 import { escapePathIdentity, isSafePathScope } from "./path-scope";
 
 const logger = getLogger(["coforge", "daemon", "runtime-backoff"]);
@@ -30,23 +31,29 @@ export type RuntimeBackoffWait = Readonly<{
 export type PersistedRuntimeBackoff = RuntimeBackoffWait &
   Readonly<{ agentId: string; companion?: RuntimeBackoffWait }>;
 
+const runtimeBackoffWaitSchema = z.object({
+  untilMs: z.number(),
+  reason: z.enum(["rate_limit_backoff", "runtime_error_backoff"]),
+  provider: z.string().min(1).optional().catch(undefined),
+  claudeScope: z.enum(["account_window", "transient_rate_limit"]).optional().catch(undefined),
+});
+
+const backoffFileEnvelopeSchema = z.object({
+  owner: z.unknown().optional(),
+  companion: z.unknown().optional(),
+});
+
 function readWait(value: unknown): RuntimeBackoffWait | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const { untilMs, reason, provider, claudeScope } = value as Record<string, unknown>;
-  if (
-    typeof untilMs !== "number" ||
-    !Number.isFinite(untilMs) ||
-    untilMs <= Date.now() ||
-    (reason !== "rate_limit_backoff" && reason !== "runtime_error_backoff")
-  )
-    return undefined;
+  const parsed = runtimeBackoffWaitSchema.safeParse(value);
+  if (!parsed.success || parsed.data.untilMs <= Date.now()) return undefined;
+  const { untilMs, reason, provider, claudeScope } = parsed.data;
   return {
     untilMs,
     reason,
-    ...(typeof provider === "string" && provider ? { provider } : {}),
+    ...(provider !== undefined ? { provider } : {}),
     ...(provider === RUNTIME_PROVIDER.CLAUDE_CODE &&
     reason === "rate_limit_backoff" &&
-    (claudeScope === "account_window" || claudeScope === "transient_rate_limit")
+    claudeScope !== undefined
       ? { claudeScope }
       : {}),
   };
@@ -98,13 +105,11 @@ export class AgentRuntimeBackoffStore {
       if (!isSafePathScope(agentId)) continue;
       const path = backoffPath(stateDirectory, agentId);
       try {
-        const value = JSON.parse(readFileSync(path, "utf8")) as {
-          owner?: unknown;
-          companion?: unknown;
-        } | null;
-        if (value?.owner === this.owner) continue;
+        const value: unknown = JSON.parse(readFileSync(path, "utf8"));
+        const envelope = backoffFileEnvelopeSchema.safeParse(value);
+        if (envelope.success && envelope.data.owner === this.owner) continue;
         const primary = readWait(value);
-        const companion = readWait(value?.companion);
+        const companion = envelope.success ? readWait(envelope.data.companion) : undefined;
         if (primary) {
           const distinct =
             companion &&

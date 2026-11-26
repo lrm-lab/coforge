@@ -1,5 +1,6 @@
 import { statSync, readFileSync } from "node:fs";
 import { dirname, join, posix } from "node:path";
+import { z } from "zod";
 import { type LoginShellPathFailureReason, type LoginShellPathResult } from "./login-shell-path";
 import { writePrivateFileAtomic } from "./private-file";
 
@@ -86,26 +87,38 @@ export function loginShellPathDirectories(stateDirectory: string | undefined): s
   return record?.ok ? record.path : [];
 }
 
+const loginShellPathRecordSchema = z.discriminatedUnion("ok", [
+  z.object({
+    version: z.literal(1),
+    ok: z.literal(true),
+    path: z.array(z.string().refine((entry) => posix.isAbsolute(entry))),
+    shell: z.string().min(1),
+    durationMs: z.number().catch(0),
+    at: z.string(),
+  }),
+  z.object({
+    version: z.literal(1),
+    ok: z.literal(false),
+    reason: z.string(),
+    shell: z.string().min(1).optional().catch(undefined),
+    durationMs: z.number().catch(0),
+    at: z.string(),
+  }),
+]);
+
 function parseRecord(text: string): LoginShellPathRecord | undefined {
-  const value: unknown = JSON.parse(text);
-  if (typeof value !== "object" || value === null) return undefined;
-  const record = value as Record<string, unknown>;
-  if (record.version !== 1 || typeof record.at !== "string") return undefined;
-  const durationMs = typeof record.durationMs === "number" ? record.durationMs : 0;
-  const shell = typeof record.shell === "string" ? record.shell : undefined;
-  if (record.ok === true) {
-    const path = record.path;
-    if (!shell || !Array.isArray(path)) return undefined;
-    if (!path.every((entry) => typeof entry === "string" && posix.isAbsolute(entry)))
-      return undefined;
-    return { ok: true, path: path as string[], shell, durationMs, at: record.at };
+  const parsed = loginShellPathRecordSchema.safeParse(JSON.parse(text));
+  if (!parsed.success) return undefined;
+  if (parsed.data.ok) {
+    const { path, shell, durationMs, at } = parsed.data;
+    return { ok: true, path, shell, durationMs, at };
   }
-  if (record.ok !== false || typeof record.reason !== "string") return undefined;
+  const { reason, shell, durationMs, at } = parsed.data;
   return {
     ok: false,
-    reason: record.reason as LoginShellPathFailureReason,
-    ...(shell ? { shell } : {}),
+    reason: reason as LoginShellPathFailureReason,
+    ...(shell !== undefined ? { shell } : {}),
     durationMs,
-    at: record.at,
+    at,
   };
 }

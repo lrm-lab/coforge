@@ -1,4 +1,4 @@
-import { isRecord } from "@lrm/coforge-sdk/internal";
+import { z } from "zod";
 import {
   AgentMigrationRemoteError,
   type AgentMigrationServer,
@@ -12,7 +12,10 @@ const REQUEST_TIMEOUT_MS = 30_000;
 /** The route's limit on a failure's detail. */
 const MAX_ERROR_DETAIL = 2000;
 
-const STATES = new Set<string>([
+const nonEmptyString = z.string().min(1);
+const nonNegativeInt = z.int().min(0);
+
+const migrationStateSchema = z.enum([
   "requested",
   "source_stopped",
   "uploaded",
@@ -23,61 +26,51 @@ const STATES = new Set<string>([
   "failed",
 ]);
 
-const isCount = (value: unknown) => Number.isSafeInteger(value) && (value as number) >= 0;
-const isText = (value: unknown) => typeof value === "string" && value.length > 0;
+const migrationSchema = z.looseObject({
+  id: nonEmptyString,
+  state: migrationStateSchema,
+  generation: nonNegativeInt,
+  revision: nonNegativeInt,
+});
 
-function isMigration(value: unknown): value is Record<string, unknown> {
-  return (
-    isRecord(value) &&
-    isText(value.id) &&
-    STATES.has(value.state as string) &&
-    isCount(value.generation) &&
-    isCount(value.revision)
-  );
-}
+const manifestChunkSchema = z.looseObject({
+  index: nonNegativeInt,
+  offsetBytes: nonNegativeInt,
+  sizeBytes: nonNegativeInt,
+  sha256: nonEmptyString,
+});
 
-function isManifest(value: unknown) {
-  return (
-    isRecord(value) &&
-    isText(value.sha256) &&
-    isCount(value.sizeBytes) &&
-    Array.isArray(value.chunks) &&
-    value.chunks.every(
-      (chunk) =>
-        isRecord(chunk) &&
-        isCount(chunk.index) &&
-        isCount(chunk.offsetBytes) &&
-        isCount(chunk.sizeBytes) &&
-        isText(chunk.sha256),
-    )
-  );
-}
+const manifestSchema = z.looseObject({
+  sha256: nonEmptyString,
+  sizeBytes: nonNegativeInt,
+  chunks: z.array(manifestChunkSchema),
+});
 
 /**
  * The shape each operation answers with. The manifest is checked only as far as fetching chunks
  * needs; the bundle commit verifies every byte and total against it.
  */
 const ANSWERS = {
-  view: (value: unknown) =>
-    isRecord(value) &&
-    isMigration(value.migration) &&
-    (value.migration.role === "source" || value.migration.role === "target") &&
-    isText(value.migration.agentId) &&
-    isText(value.migration.sourceComputerId) &&
-    isText(value.migration.targetComputerId) &&
-    (value.manifest === null || isManifest(value.manifest)),
-  step: (value: unknown) =>
-    isRecord(value) &&
-    (value.status === "advanced" ||
-      value.status === "already_applied" ||
-      value.status === "failed") &&
-    isMigration(value.migration),
-  upload_url: (value: unknown) =>
-    isRecord(value) &&
-    isText(value.url) &&
-    isRecord(value.headers) &&
-    Object.values(value.headers).every((header) => typeof header === "string"),
-  download_url: (value: unknown) => isRecord(value) && isText(value.url),
+  view: z.looseObject({
+    migration: migrationSchema.extend({
+      role: z.enum(["source", "target"]),
+      agentId: nonEmptyString,
+      sourceComputerId: nonEmptyString,
+      targetComputerId: nonEmptyString,
+    }),
+    manifest: z.union([z.null(), manifestSchema]),
+  }),
+  step: z.looseObject({
+    status: z.enum(["advanced", "already_applied", "failed"]),
+    migration: migrationSchema,
+  }),
+  upload_url: z.looseObject({
+    url: nonEmptyString,
+    headers: z.record(z.string(), z.string()),
+  }),
+  download_url: z.looseObject({
+    url: nonEmptyString,
+  }),
 };
 
 /**
@@ -151,7 +144,7 @@ export class AgentMigrationHttpClient implements AgentMigrationServer {
   }
 
   async #call<T>(
-    valid: (value: unknown) => boolean,
+    schema: z.ZodType,
     body: Record<string, unknown>,
     signal?: AbortSignal,
   ): Promise<T> {
@@ -182,7 +175,8 @@ export class AgentMigrationHttpClient implements AgentMigrationServer {
         String(response.status),
       );
     }
-    if (!valid(answer)) throw new AgentMigrationRemoteError("invalid_response", false);
+    if (!schema.safeParse(answer).success)
+      throw new AgentMigrationRemoteError("invalid_response", false);
     return answer as T;
   }
 }

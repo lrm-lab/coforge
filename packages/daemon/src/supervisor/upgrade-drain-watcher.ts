@@ -6,6 +6,7 @@ import {
   thrownMessage,
   type RunnerHoldReason,
 } from "@lrm/coforge-sdk/internal";
+import { z } from "zod";
 
 export const UPGRADE_DRAIN_SCHEMA_VERSION = 1;
 export const UPGRADE_DRAIN_REQUEST_FILE = "upgrade-drain-request.json";
@@ -52,32 +53,25 @@ type UpgradeDrainState = {
   updatedAtMs: number;
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+const upgradeDrainRequestSchema = z.object({
+  schemaVersion: z.literal(UPGRADE_DRAIN_SCHEMA_VERSION),
+  drainId: z.string().min(1).max(UPGRADE_DRAIN_MAX_ID_LENGTH),
+  reason: z.custom<RunnerHoldReason>(isRunnerHoldReason),
+  requestedAtMs: z.number(),
+  deadlineAtMs: z.number(),
+});
 
 function parseUpgradeDrainRequest(raw: unknown, nowMs: number): UpgradeDrainRequest | null {
-  if (!isRecord(raw)) return null;
-  if (raw.schemaVersion !== UPGRADE_DRAIN_SCHEMA_VERSION) return null;
-  if (
-    typeof raw.drainId !== "string" ||
-    raw.drainId.length === 0 ||
-    raw.drainId.length > UPGRADE_DRAIN_MAX_ID_LENGTH
-  )
-    return null;
-  if (!isRunnerHoldReason(raw.reason)) return null;
-  if (typeof raw.requestedAtMs !== "number" || !Number.isFinite(raw.requestedAtMs)) return null;
-  if (typeof raw.deadlineAtMs !== "number" || !Number.isFinite(raw.deadlineAtMs)) return null;
-  const effectiveDeadline = Math.min(
-    raw.deadlineAtMs,
-    raw.requestedAtMs + UPGRADE_DRAIN_MAX_TTL_MS,
-  );
+  const parsed = upgradeDrainRequestSchema.safeParse(raw);
+  if (!parsed.success) return null;
+  const { schemaVersion, drainId, reason, requestedAtMs, deadlineAtMs } = parsed.data;
+  const effectiveDeadline = Math.min(deadlineAtMs, requestedAtMs + UPGRADE_DRAIN_MAX_TTL_MS);
   if (nowMs >= effectiveDeadline) return null;
   return {
-    schemaVersion: UPGRADE_DRAIN_SCHEMA_VERSION,
-    drainId: raw.drainId,
-    reason: raw.reason,
-    requestedAtMs: raw.requestedAtMs,
+    schemaVersion,
+    drainId,
+    reason,
+    requestedAtMs,
     deadlineAtMs: effectiveDeadline,
   };
 }

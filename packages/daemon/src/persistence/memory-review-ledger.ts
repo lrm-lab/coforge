@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import { z } from "zod";
 import { readMeta, writeMeta } from "./agent-state-db";
 
 export type MemoryReviewEntry = { key: string; revision: string };
@@ -16,28 +17,33 @@ export type MemoryReviewState = {
 const STATE_KEY = "memoryReview.v1";
 const PENDING_PREFIX = "memoryReview.pending:";
 
+const memoryReviewEntrySchema = z.object({
+  key: z.string(),
+  revision: z.string(),
+});
+
+const memoryReviewBatchSchema = z.object({
+  id: z.string(),
+  humanAt: z.int(),
+  entries: z.array(memoryReviewEntrySchema).max(5),
+});
+
+const memoryReviewStateSchema = z.object({
+  humanAt: z.int().min(0),
+  usedHumanAt: z.int().min(0),
+  lastStartedAt: z.int().min(0),
+  active: memoryReviewBatchSchema.optional(),
+});
+
 export class MemoryReviewLedger {
   constructor(private readonly db: Database) {}
 
   state(): MemoryReviewState {
     const raw = readMeta(this.db, STATE_KEY);
     if (!raw) return { humanAt: 0, usedHumanAt: 0, lastStartedAt: 0 };
-    const value = JSON.parse(raw) as MemoryReviewState;
-    if (
-      ![value.humanAt, value.usedHumanAt, value.lastStartedAt].every(
-        (number) => Number.isSafeInteger(number) && number >= 0,
-      ) ||
-      (value.active &&
-        (typeof value.active.id !== "string" ||
-          !Number.isSafeInteger(value.active.humanAt) ||
-          !Array.isArray(value.active.entries) ||
-          value.active.entries.length > 5 ||
-          !value.active.entries.every(
-            (entry) => typeof entry.key === "string" && typeof entry.revision === "string",
-          )))
-    )
-      throw new Error("memory_review_invalid_state");
-    return value;
+    const parsed = memoryReviewStateSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) throw new Error("memory_review_invalid_state");
+    return parsed.data;
   }
 
   save(state: MemoryReviewState): void {

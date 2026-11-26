@@ -1,9 +1,18 @@
+import { z } from "zod";
 import { spawnOwnedChild } from "./process-transport";
 import { PosixProcessOwner } from "./posix-process-tree";
 import { cleanupOwnedTree } from "@lrm/coforge-anvil/execution";
 import { ProcessChannel } from "./process-channel";
 import type { OwnedChildProcess, OwnedProcessTree } from "@lrm/coforge-anvil";
 import { isAgentRelaySocket } from "./launchd-process";
+
+const launchdStartMessageSchema = z.object({
+  command: z.array(z.string()).min(1),
+  cwd: z.string(),
+  environment: z.record(z.string(), z.string()),
+  terminal: z.boolean().optional(),
+  terminalSize: z.object({ cols: z.int().positive(), rows: z.int().positive() }).optional(),
+});
 
 /** Internal executable mode. No arguments or credentials are persisted in the plist. */
 export async function runLaunchdAgent(socketPath: string): Promise<void> {
@@ -24,50 +33,16 @@ export async function runLaunchdAgent(socketPath: string): Promise<void> {
   let input = Promise.resolve();
   const channel = new ProcessChannel((record) => {
     if (record.type === "start") {
-      if (
-        child ||
-        !Array.isArray(record.command) ||
-        !record.command.length ||
-        !record.command.every((arg) => typeof arg === "string") ||
-        typeof record.cwd !== "string" ||
-        !record.environment ||
-        typeof record.environment !== "object" ||
-        Array.isArray(record.environment) ||
-        !Object.values(record.environment).every((value) => typeof value === "string") ||
-        (record.terminal !== undefined && typeof record.terminal !== "boolean") ||
-        (record.terminalSize !== undefined &&
-          (typeof record.terminalSize !== "object" ||
-            record.terminalSize === null ||
-            !Number.isSafeInteger((record.terminalSize as { cols?: unknown }).cols) ||
-            !Number.isSafeInteger((record.terminalSize as { rows?: unknown }).rows) ||
-            (record.terminalSize as { cols: number }).cols <= 0 ||
-            (record.terminalSize as { rows: number }).rows <= 0))
-      )
-        throw new Error("invalid Agent start");
-      if (record.terminal === true) {
-        terminalTree = new PosixProcessOwner().spawn(
-          record.command,
-          record.cwd,
-          record.environment as Record<string, string>,
-          {
-            terminal: true,
-            ...(record.terminalSize
-              ? {
-                  terminalSize: record.terminalSize as {
-                    cols: number;
-                    rows: number;
-                  },
-                }
-              : {}),
-          },
-        );
+      const parsed = launchdStartMessageSchema.safeParse(record);
+      if (child || !parsed.success) throw new Error("invalid Agent start");
+      const { command, cwd, environment, terminal, terminalSize } = parsed.data;
+      if (terminal === true) {
+        terminalTree = new PosixProcessOwner().spawn(command, cwd, environment, {
+          terminal: true,
+          ...(terminalSize ? { terminalSize } : {}),
+        });
         child = terminalTree.child;
-      } else
-        child = spawnOwnedChild(
-          record.command,
-          record.cwd,
-          record.environment as Record<string, string>,
-        );
+      } else child = spawnOwnedChild(command, cwd, environment);
       channel.send({ type: "started", pid: child.pid });
       const relay = async (stream: AsyncIterable<Uint8Array>, type: string) => {
         for await (const data of stream) {

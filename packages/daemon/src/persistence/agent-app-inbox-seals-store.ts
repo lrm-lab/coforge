@@ -1,6 +1,12 @@
 import { join } from "node:path";
+import { z } from "zod";
 import { isSafePathScope } from "./path-scope";
 import { writePrivateJsonRecord } from "./private-json-record";
+
+const sealsEnvelopeSchema = z.object({
+  version: z.literal(1),
+  seals: z.array(z.unknown()),
+});
 
 /**
  * The sealed App Inbox source identities of one Agent, beside its App Inbox items. A seal is a
@@ -27,12 +33,9 @@ export class AgentAppInboxSealsPersistence {
     } catch {
       throw new Error(`App Inbox seals are corrupt: ${this.#path}`);
     }
-    if (!envelope || typeof envelope !== "object" || Array.isArray(envelope))
-      throw new Error(`App Inbox seals are corrupt: ${this.#path}`);
-    const value = envelope as Record<string, unknown>;
-    if (value.version !== 1 || !Array.isArray(value.seals))
-      throw new Error(`App Inbox seals are corrupt: ${this.#path}`);
-    return value.seals;
+    const parsed = sealsEnvelopeSchema.safeParse(envelope);
+    if (!parsed.success) throw new Error(`App Inbox seals are corrupt: ${this.#path}`);
+    return parsed.data.seals;
   }
 
   async write(seals: readonly unknown[]): Promise<void> {

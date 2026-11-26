@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import { z } from "zod";
 import { readMeta, writeMeta } from "./agent-state-db";
 
 const STANDING_PROMPT_KEY = "standingPrompt";
@@ -38,31 +39,26 @@ export function standingPromptHash(instructions: string): string {
   return new Bun.CryptoHasher("sha256").update(instructions, "utf8").digest("base64url");
 }
 
+const standingPromptRecordSchema = z.object({
+  hash: z.string().min(1),
+  bytes: z.int().min(0),
+  provider: z.string().min(1),
+  recordedAtMs: z.int().min(0),
+  sessionId: z.string().min(1).optional().catch(undefined),
+});
+
 function parseStandingPromptRecord(raw: string | undefined): StandingPromptRecord | undefined {
   if (!raw) return undefined;
   try {
-    const parsed = JSON.parse(raw) as Partial<StandingPromptRecord> | null;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
-    if (typeof parsed.hash !== "string" || parsed.hash.length === 0) return undefined;
-    if (typeof parsed.bytes !== "number" || !Number.isSafeInteger(parsed.bytes) || parsed.bytes < 0)
-      return undefined;
-    if (typeof parsed.provider !== "string" || parsed.provider.length === 0) return undefined;
-    if (
-      typeof parsed.recordedAtMs !== "number" ||
-      !Number.isSafeInteger(parsed.recordedAtMs) ||
-      parsed.recordedAtMs < 0
-    )
-      return undefined;
-    const sessionId =
-      typeof parsed.sessionId === "string" && parsed.sessionId.length > 0
-        ? parsed.sessionId
-        : undefined;
+    const parsed = standingPromptRecordSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) return undefined;
+    const { hash, bytes, provider, sessionId, recordedAtMs } = parsed.data;
     return {
-      hash: parsed.hash,
-      bytes: parsed.bytes,
-      provider: parsed.provider,
-      ...(sessionId ? { sessionId } : {}),
-      recordedAtMs: parsed.recordedAtMs,
+      hash,
+      bytes,
+      provider,
+      ...(sessionId !== undefined ? { sessionId } : {}),
+      recordedAtMs,
     };
   } catch {
     return undefined;

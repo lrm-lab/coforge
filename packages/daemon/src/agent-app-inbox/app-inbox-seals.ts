@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { AgentAppInboxSealsPersistence } from "#src/persistence/agent-app-inbox-seals-store";
 
 /** One sealed App Inbox source identity. Without `sourceRevision` the seal names the source alone
@@ -54,28 +55,24 @@ function sealKey(
   ].join("\u0000");
 }
 
+const persistedSealSchema = z.strictObject({
+  appId: z.unknown().optional(),
+  notificationClass: z.unknown().optional(),
+  sourceKind: z.unknown().optional(),
+  sourceId: z.unknown().optional(),
+  sourceRevision: z
+    .string()
+    .regex(/^[1-9][0-9]*$/)
+    .optional(),
+  owner: z.unknown().optional(),
+  until: z.unknown().optional(),
+  sealedAt: z.string().refine((value) => Number.isFinite(Date.parse(value))),
+});
+
 function normalizeSeal(value: unknown): AppInboxSeal {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("App Inbox seal is corrupt");
-  const input = value as Record<string, unknown>;
-  const allowed = new Set([
-    "appId",
-    "notificationClass",
-    "sourceKind",
-    "sourceId",
-    "sourceRevision",
-    "owner",
-    "until",
-    "sealedAt",
-  ]);
-  if (Object.keys(input).some((key) => !allowed.has(key)))
-    throw new Error("App Inbox seal is corrupt");
-  if (input.sourceRevision !== undefined && typeof input.sourceRevision !== "string")
-    throw new Error("App Inbox seal is corrupt");
-  if (input.sourceRevision !== undefined && !/^[1-9][0-9]*$/.test(input.sourceRevision))
-    throw new Error("App Inbox seal is corrupt");
-  if (typeof input.sealedAt !== "string" || !Number.isFinite(Date.parse(input.sealedAt)))
-    throw new Error("App Inbox seal is corrupt");
+  const parsed = persistedSealSchema.safeParse(value);
+  if (!parsed.success) throw new Error("App Inbox seal is corrupt");
+  const input = parsed.data;
   return Object.freeze({
     appId: bounded(input.appId, "app id"),
     notificationClass: bounded(input.notificationClass, "notification class"),

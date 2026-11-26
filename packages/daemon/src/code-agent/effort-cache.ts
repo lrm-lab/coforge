@@ -1,10 +1,22 @@
 import { join } from "node:path";
+import { z } from "zod";
 import { CATALOG_CACHE_TTL_MS } from "#src/code-agent/runtime-inventory-cache";
 
 const EFFORT_CACHE_ENTRY_LIMIT = 200;
 
 export type EffortCacheEntry = { modelId: string; efforts: string[]; probedAt: number };
 export type EffortCacheFile = { version: string; entries: EffortCacheEntry[] };
+
+const effortCacheEntrySchema = z.object({
+  modelId: z.string().min(1),
+  probedAt: z.number(),
+  efforts: z.array(z.unknown()),
+});
+
+const effortCacheFileSchema = z.object({
+  version: z.string().min(1),
+  entries: z.array(z.unknown()),
+});
 
 const inflight = new Map<string, Promise<unknown>>();
 const writes = new Map<string, Promise<void>>();
@@ -14,28 +26,23 @@ export function effortCachePath(stateDirectory: string, fileName: string): strin
 }
 
 function parseEntry(value: unknown): EffortCacheEntry | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const entry = value as { modelId?: unknown; efforts?: unknown; probedAt?: unknown };
-  if (typeof entry.modelId !== "string" || !entry.modelId) return undefined;
-  if (typeof entry.probedAt !== "number" || !Number.isFinite(entry.probedAt)) return undefined;
-  if (!Array.isArray(entry.efforts)) return undefined;
-  const efforts = entry.efforts.filter(
+  const parsed = effortCacheEntrySchema.safeParse(value);
+  if (!parsed.success) return undefined;
+  const efforts = parsed.data.efforts.filter(
     (effort): effort is string =>
       typeof effort === "string" && effort.length > 0 && effort !== "default",
   );
-  return { modelId: entry.modelId, efforts, probedAt: entry.probedAt };
+  return { modelId: parsed.data.modelId, efforts, probedAt: parsed.data.probedAt };
 }
 
 async function readCacheFile(path: string): Promise<EffortCacheFile | undefined> {
   try {
     const raw: unknown = await Bun.file(path).json();
-    if (!raw || typeof raw !== "object") return undefined;
-    const file = raw as { version?: unknown; entries?: unknown };
-    if (typeof file.version !== "string" || !file.version || !Array.isArray(file.entries))
-      return undefined;
+    const parsed = effortCacheFileSchema.safeParse(raw);
+    if (!parsed.success) return undefined;
     return {
-      version: file.version,
-      entries: file.entries.flatMap((entry) => parseEntry(entry) ?? []),
+      version: parsed.data.version,
+      entries: parsed.data.entries.flatMap((entry) => parseEntry(entry) ?? []),
     };
   } catch {
     return undefined;

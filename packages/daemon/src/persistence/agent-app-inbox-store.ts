@@ -1,6 +1,16 @@
 import { join } from "node:path";
+import { z } from "zod";
 import { isSafePathScope } from "./path-scope";
 import { writePrivateJsonRecord } from "./private-json-record";
+
+const inboxEnvelopeSchema = z.object({
+  version: z.literal(1),
+  items: z.array(z.unknown()),
+});
+
+const oneShotsEnvelopeSchema = inboxEnvelopeSchema.extend({
+  published: z.array(z.string()),
+});
 
 export class AgentAppInboxPersistence {
   readonly #path: string;
@@ -16,28 +26,19 @@ export class AgentAppInboxPersistence {
   }
 
   async read(): Promise<unknown[] | null> {
-    return (await this.#read(this.#path))?.items ?? null;
+    return (await this.#read(this.#path, inboxEnvelopeSchema))?.items ?? null;
   }
 
   async readOneShots(): Promise<{ items: unknown[]; published: string[] } | null> {
-    const state = await this.#read(this.#oneShotsPath);
-    if (!state) return null;
-    const published = state.published;
-    if (!Array.isArray(published) || published.some((id) => typeof id !== "string"))
-      throw new Error(`App Inbox persisted data is corrupt: ${this.#oneShotsPath}`);
-    return { items: state.items, published };
+    const state = await this.#read(this.#oneShotsPath, oneShotsEnvelopeSchema);
+    return state ? { items: state.items, published: state.published } : null;
   }
 
-  async #read(path: string): Promise<{ items: unknown[]; published?: unknown } | null> {
+  async #read<T>(path: string, schema: z.ZodType<T>): Promise<T | null> {
     if (!(await Bun.file(path).exists())) return null;
     try {
-      const value = JSON.parse(await Bun.file(path).text()) as {
-        version?: unknown;
-        items?: unknown;
-        published?: unknown;
-      } | null;
-      if (value?.version === 1 && Array.isArray(value.items))
-        return { items: value.items, published: value.published };
+      const parsed = schema.safeParse(JSON.parse(await Bun.file(path).text()));
+      if (parsed.success) return parsed.data;
     } catch {}
     throw new Error(`App Inbox persisted data is corrupt: ${path}`);
   }

@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { getLogger } from "@logtape/logtape";
 import { thrownMessage } from "@lrm/coforge-sdk/internal";
+import { z } from "zod";
 import { acquireProcessLock, isLockContention, type ProcessLock } from "#src/platform/process-lock";
 
 export const COMPUTER_KEY_CLAIM_SCHEMA_VERSION = 1;
@@ -129,30 +130,22 @@ function isAbsentOrRegularFile(path: string): boolean {
   }
 }
 
+const claimMetadataSchema = z.object({
+  schemaVersion: z.literal(COMPUTER_KEY_CLAIM_SCHEMA_VERSION),
+  pid: z.int().positive(),
+  version: z.string(),
+  stateDirectory: z.string(),
+  workspaceId: z.string(),
+  computerId: z.string(),
+  claimedAtMs: z.number(),
+});
+
 function readClaimMetadata(metaPath: string): ComputerKeyClaimMetadata | null {
   try {
     const stat = lstatSync(metaPath);
     if (!stat.isFile() || stat.size > CLAIM_META_MAX_BYTES) return null;
-    const raw = JSON.parse(readFileSync(metaPath, "utf8")) as unknown;
-    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
-    const record = raw as Record<string, unknown>;
-    if (record.schemaVersion !== COMPUTER_KEY_CLAIM_SCHEMA_VERSION) return null;
-    if (typeof record.pid !== "number" || !Number.isInteger(record.pid) || record.pid <= 0)
-      return null;
-    if (typeof record.version !== "string" || typeof record.stateDirectory !== "string")
-      return null;
-    if (typeof record.workspaceId !== "string" || typeof record.computerId !== "string")
-      return null;
-    if (typeof record.claimedAtMs !== "number" || !Number.isFinite(record.claimedAtMs)) return null;
-    return {
-      schemaVersion: COMPUTER_KEY_CLAIM_SCHEMA_VERSION,
-      pid: record.pid,
-      version: record.version,
-      stateDirectory: record.stateDirectory,
-      workspaceId: record.workspaceId,
-      computerId: record.computerId,
-      claimedAtMs: record.claimedAtMs,
-    };
+    const parsed = claimMetadataSchema.safeParse(JSON.parse(readFileSync(metaPath, "utf8")));
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }

@@ -11,6 +11,7 @@ import {
 import { chmod, mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { getLogger } from "@logtape/logtape";
+import { z } from "zod";
 import type {
   ImportantUnreadNotice,
   UnreadNoticeConversation,
@@ -66,8 +67,9 @@ export class ImportantUnreadNoticeStore {
       if (!isSafePathScope(agentId)) continue;
       const path = noticePath(stateDirectory, agentId);
       try {
-        const value = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-        if (value?.owner === this.owner) continue;
+        const value: unknown = JSON.parse(readFileSync(path, "utf8"));
+        const owner = noticeOwnerSchema.safeParse(value);
+        if (owner.success && owner.data.owner === this.owner) continue;
         const notice = readNotice(value, agentId);
         if (notice) notices.push(notice);
         else this.#clearSync(agentId);
@@ -247,56 +249,60 @@ export class ImportantUnreadNoticeStore {
   }
 }
 
-function readNotice(
-  value: Record<string, unknown>,
-  agentId: string,
-): ImportantUnreadNotice | undefined {
-  const highestSequence = value.highestSequence;
-  if (typeof highestSequence !== "number" || !Number.isSafeInteger(highestSequence)) return;
-  if (highestSequence <= 0) return undefined;
-  const key = value.key;
-  if (typeof key !== "string" || !key) return undefined;
-  const conversations = readConversations(value.conversations);
+const noticeOwnerSchema = z.object({ owner: z.unknown().optional() });
+
+const unreadNoticeConversationSchema = z.object({
+  conversationId: z.string().min(1),
+  firstSequence: z.int(),
+  target: z.string().min(1).optional().catch(undefined),
+  independentEvent: z.literal(true).optional().catch(undefined),
+  lastSequence: z.int().optional().catch(undefined),
+  count: z.number().positive().catch(1),
+});
+
+const unreadNoticeSchema = z.object({
+  highestSequence: z.int().positive(),
+  key: z.string().min(1),
+  conversations: z.array(z.unknown()),
+  attempts: z.number().min(0).catch(0),
+  lastAttempt: z.enum(["accepted", "rejected"]).optional().catch(undefined),
+  writtenAtMs: z.number().optional().catch(undefined),
+  nextAttemptAtMs: z.number().optional().catch(undefined),
+});
+
+function readNotice(value: unknown, agentId: string): ImportantUnreadNotice | undefined {
+  const parsed = unreadNoticeSchema.safeParse(value);
+  if (!parsed.success) return undefined;
+  const { highestSequence, key, attempts, lastAttempt, writtenAtMs, nextAttemptAtMs } = parsed.data;
+  const conversations = readConversations(parsed.data.conversations);
   if (conversations.length === 0) return undefined;
-  const attempts = typeof value.attempts === "number" && value.attempts >= 0 ? value.attempts : 0;
   return {
     agentId,
     key,
     highestSequence,
     conversations,
     attempts,
-    ...(value.lastAttempt === "accepted" || value.lastAttempt === "rejected"
-      ? { lastAttempt: value.lastAttempt }
-      : {}),
-    ...(millis(value.writtenAtMs) ? { writtenAtMs: value.writtenAtMs as number } : {}),
-    ...(millis(value.nextAttemptAtMs) ? { nextAttemptAtMs: value.nextAttemptAtMs as number } : {}),
+    ...(lastAttempt !== undefined ? { lastAttempt } : {}),
+    ...(writtenAtMs !== undefined ? { writtenAtMs } : {}),
+    ...(nextAttemptAtMs !== undefined ? { nextAttemptAtMs } : {}),
   };
 }
 
-function readConversations(value: unknown): UnreadNoticeConversation[] {
-  if (!Array.isArray(value)) return [];
+function readConversations(value: readonly unknown[]): UnreadNoticeConversation[] {
   const conversations: UnreadNoticeConversation[] = [];
   for (const entry of value) {
-    if (typeof entry !== "object" || entry === null) continue;
-    const record = entry as Record<string, unknown>;
-    if (typeof record.conversationId !== "string" || !record.conversationId) continue;
-    if (!Number.isSafeInteger(record.firstSequence)) continue;
+    const parsed = unreadNoticeConversationSchema.safeParse(entry);
+    if (!parsed.success) continue;
+    const { conversationId, target, firstSequence, independentEvent, lastSequence, count } =
+      parsed.data;
     conversations.push({
-      conversationId: record.conversationId,
-      ...(typeof record.target === "string" && record.target ? { target: record.target } : {}),
-      firstSequence: record.firstSequence as number,
-      ...(record.independentEvent === true ? { independentEvent: true as const } : {}),
-      ...(typeof record.lastSequence === "number" &&
-      Number.isSafeInteger(record.lastSequence) &&
-      record.lastSequence >= (record.firstSequence as number)
-        ? { lastSequence: record.lastSequence }
-        : {}),
-      count: typeof record.count === "number" && record.count > 0 ? record.count : 1,
+      conversationId,
+      ...(target !== undefined ? { target } : {}),
+      firstSequence,
+      ...(independentEvent === true ? { independentEvent: true as const } : {}),
+      ...(lastSequence !== undefined && lastSequence >= firstSequence ? { lastSequence } : {}),
+      count,
     });
   }
   return conversations;
-}
-
-function millis(value: unknown): boolean {
-  return typeof value === "number" && Number.isFinite(value);
 }

@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import type { SessionResumeFacts } from "@lrm/coforge-anvil";
+import { z } from "zod";
 import { readMeta, writeMeta } from "./agent-state-db";
 
 const SESSION_SUMMARY_KEY = "sessionSummary";
@@ -50,22 +51,36 @@ function nonNegativeSafeInt(value: unknown): number | undefined {
   return Number.isSafeInteger(rounded) && rounded >= 0 ? rounded : undefined;
 }
 
+const positiveSafeIntSchema = z.number().positive().transform(Math.trunc).pipe(z.int().positive());
+const nonNegativeSafeIntSchema = z.number().nonnegative().transform(Math.trunc).pipe(z.int());
+
+const sessionSummaryRecordSchema = z.object({
+  sessionId: z.string().min(1),
+  provider: z.string().min(1),
+  lastActivityAtMs: nonNegativeSafeIntSchema,
+  updatedAtMs: nonNegativeSafeIntSchema,
+  lastContextTokens: positiveSafeIntSchema.optional().catch(undefined),
+  lastContextObservedAtMs: nonNegativeSafeIntSchema.optional().catch(undefined),
+  windowTokens: positiveSafeIntSchema.optional().catch(undefined),
+});
+
 function parseSessionSummaryRecord(raw: string | undefined): SessionSummaryRecord | undefined {
   if (!raw) return undefined;
   try {
-    const parsed = JSON.parse(raw) as Partial<SessionSummaryRecord> | null;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return undefined;
-    if (typeof parsed.sessionId !== "string" || parsed.sessionId.length === 0) return undefined;
-    if (typeof parsed.provider !== "string" || parsed.provider.length === 0) return undefined;
-    const lastActivityAtMs = nonNegativeSafeInt(parsed.lastActivityAtMs);
-    const updatedAtMs = nonNegativeSafeInt(parsed.updatedAtMs);
-    if (lastActivityAtMs === undefined || updatedAtMs === undefined) return undefined;
-    const lastContextTokens = positiveSafeInt(parsed.lastContextTokens);
-    const lastContextObservedAtMs = nonNegativeSafeInt(parsed.lastContextObservedAtMs);
-    const windowTokens = positiveSafeInt(parsed.windowTokens);
+    const parsed = sessionSummaryRecordSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) return undefined;
+    const {
+      sessionId,
+      provider,
+      lastActivityAtMs,
+      lastContextTokens,
+      lastContextObservedAtMs,
+      windowTokens,
+      updatedAtMs,
+    } = parsed.data;
     return {
-      sessionId: parsed.sessionId,
-      provider: parsed.provider,
+      sessionId,
+      provider,
       lastActivityAtMs,
       ...(lastContextTokens !== undefined ? { lastContextTokens } : {}),
       ...(lastContextObservedAtMs !== undefined ? { lastContextObservedAtMs } : {}),

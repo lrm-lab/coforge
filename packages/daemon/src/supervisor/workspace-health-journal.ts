@@ -4,6 +4,7 @@ import {
   isDaemonConnectRejectionReason,
   type DaemonConnectRejectionReason,
 } from "@lrm/coforge-sdk/internal";
+import { z } from "zod";
 
 /** How far back a crash still counts toward the degraded threshold. */
 export const WORKSPACE_HEALTH_CRASH_WINDOW_MS = 60_000;
@@ -282,8 +283,8 @@ export class WorkspaceHealthJournal {
 
   async #read(): Promise<PersistedWorkspaceHealth> {
     try {
-      const value: unknown = await Bun.file(this.path).json();
-      return valid(value) ? value : EMPTY_RECORD;
+      const parsed = persistedWorkspaceHealthSchema.safeParse(await Bun.file(this.path).json());
+      return parsed.success ? parsed.data : EMPTY_RECORD;
     } catch {
       return EMPTY_RECORD;
     }
@@ -305,27 +306,16 @@ function pruneWindow(crashes: number[], now: number): number[] {
   return crashes.filter((at) => now - at < WORKSPACE_HEALTH_CRASH_WINDOW_MS);
 }
 
-function valid(value: unknown): value is PersistedWorkspaceHealth {
-  if (typeof value !== "object" || value === null) return false;
-  const record = value as Record<string, unknown>;
-  if (record.schemaVersion !== 1 || typeof record.live !== "boolean") return false;
-  if (!Array.isArray(record.crashes) || !record.crashes.every((at) => Number.isFinite(at)))
-    return false;
-  if (record.terminal !== undefined) {
-    const terminal = record.terminal as Record<string, unknown>;
-    if (typeof terminal !== "object" || terminal === null) return false;
-    if (typeof terminal.reason !== "string" || !Number.isFinite(terminal.at)) return false;
-  }
-  if (record.parked !== undefined) {
-    const parked = record.parked as Record<string, unknown>;
-    if (typeof parked !== "object" || parked === null) return false;
-    if (!isDaemonConnectRejectionReason(parked.reason)) return false;
-    if (!Number.isFinite(parked.at)) return false;
-  }
-  if (record.degraded !== undefined) {
-    const degraded = record.degraded as Record<string, unknown>;
-    if (typeof degraded !== "object" || degraded === null) return false;
-    if (!Number.isFinite(degraded.crashCount) || !Number.isFinite(degraded.at)) return false;
-  }
-  return true;
-}
+const persistedWorkspaceHealthSchema = z.object({
+  schemaVersion: z.literal(1),
+  live: z.boolean(),
+  crashes: z.array(z.number()),
+  terminal: z.object({ reason: z.string(), at: z.number() }).optional(),
+  degraded: z.object({ crashCount: z.number(), at: z.number() }).optional(),
+  parked: z
+    .object({
+      reason: z.custom<DaemonConnectRejectionReason>(isDaemonConnectRejectionReason),
+      at: z.number(),
+    })
+    .optional(),
+});

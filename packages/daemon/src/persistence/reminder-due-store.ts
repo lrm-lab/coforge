@@ -2,6 +2,7 @@ import { readdir, rename } from "node:fs/promises";
 import { getLogger } from "@logtape/logtape";
 import { join } from "node:path";
 import { REMINDER_DUE_MESSAGE_TYPE, type ReminderDue } from "@lrm/coforge-sdk/internal";
+import { z } from "zod";
 import type {
   ReminderDueRecord,
   ReminderDueRecordState,
@@ -11,15 +12,39 @@ import { isSafePathScope } from "./path-scope";
 import { writePrivateJsonRecord } from "./private-json-record";
 
 const logger = getLogger(["coforge", "daemon", "reminder"]);
-const STATES: ReadonlySet<string> = new Set<ReminderDueRecordState>([
-  "received",
-  "acknowledged",
-  "delivered",
-  "refused",
-]);
-const JOB_TEXT = ["reminderId", "title", "target", "messageId", "fireAt"] as const;
+const nonEmptyString = z.string().min(1);
 
-const text = (value: unknown): value is string => typeof value === "string" && value.length > 0;
+const reminderDueEnvelopeSchema = z.object({
+  version: z.literal(1),
+  occurrences: z.array(z.unknown()),
+});
+
+const reminderDueRecordSchema = z.object({
+  state: z.enum(["received", "acknowledged", "delivered", "refused"] satisfies [
+    ReminderDueRecordState,
+    ...ReminderDueRecordState[],
+  ]),
+  due: z.looseObject({
+    protocolMajor: z.literal(1),
+    messageType: z.literal(REMINDER_DUE_MESSAGE_TYPE),
+    occurrenceId: nonEmptyString,
+    expiresAt: nonEmptyString,
+    workspaceId: z.unknown().optional(),
+    computerId: z.unknown().optional(),
+    agentId: z.unknown().optional(),
+    job: z.looseObject({
+      reminderId: nonEmptyString,
+      title: nonEmptyString,
+      target: nonEmptyString,
+      messageId: nonEmptyString,
+      fireAt: nonEmptyString,
+      version: z.int(),
+      ownerAgentId: z.unknown().optional(),
+    }),
+  }),
+  itemId: nonEmptyString.optional().catch(undefined),
+  wokenAtMs: z.int().optional().catch(undefined),
+});
 
 export class FileReminderDueStore implements ReminderDueStore {
   constructor(
@@ -75,10 +100,9 @@ export class FileReminderDueStore implements ReminderDueStore {
   }
 
   #parse(agentId: string, text: string): ReminderDueRecord[] {
-    const value = JSON.parse(text) as { version?: unknown; occurrences?: unknown } | null;
-    if (value?.version !== 1 || !Array.isArray(value.occurrences))
-      throw new Error("reminder due records are corrupt");
-    return value.occurrences.map((entry) => this.#record(agentId, entry));
+    const parsed = reminderDueEnvelopeSchema.safeParse(JSON.parse(text));
+    if (!parsed.success) throw new Error("reminder due records are corrupt");
+    return parsed.data.occurrences.map((entry) => this.#record(agentId, entry));
   }
 
   async #quarantine(agentId: string, path: string, error: unknown): Promise<void> {
@@ -98,39 +122,21 @@ export class FileReminderDueStore implements ReminderDueStore {
   }
 
   #record(agentId: string, value: unknown): ReminderDueRecord {
-    const entry = value as {
-      state?: unknown;
-      due?: Partial<ReminderDue>;
-      itemId?: unknown;
-      wokenAtMs?: unknown;
-    } | null;
-    const due = entry?.due;
-    const job = due?.job as Record<string, unknown> | undefined;
-    if (
-      !entry ||
-      !STATES.has(entry.state as string) ||
-      !due ||
-      !job ||
-      due.protocolMajor !== 1 ||
-      due.messageType !== REMINDER_DUE_MESSAGE_TYPE ||
-      !text(due.occurrenceId) ||
-      !text(due.expiresAt) ||
-      !JOB_TEXT.every((key) => text(job[key])) ||
-      !Number.isSafeInteger(job.version)
-    )
-      throw new Error("reminder due records are corrupt");
+    const parsed = reminderDueRecordSchema.safeParse(value);
+    if (!parsed.success) throw new Error("reminder due records are corrupt");
+    const { state, due, itemId, wokenAtMs } = parsed.data;
     if (
       due.workspaceId !== this.workspaceId ||
       due.computerId !== this.computerId ||
       due.agentId !== agentId ||
-      job.ownerAgentId !== agentId
+      due.job.ownerAgentId !== agentId
     )
       throw new Error("reminder due record belongs to another scope");
     return {
-      state: entry.state as ReminderDueRecordState,
+      state,
       due: structuredClone(due as ReminderDue),
-      ...(text(entry.itemId) ? { itemId: entry.itemId } : {}),
-      ...(Number.isSafeInteger(entry.wokenAtMs) ? { wokenAtMs: entry.wokenAtMs as number } : {}),
+      ...(itemId !== undefined ? { itemId } : {}),
+      ...(wokenAtMs !== undefined ? { wokenAtMs } : {}),
     };
   }
 }

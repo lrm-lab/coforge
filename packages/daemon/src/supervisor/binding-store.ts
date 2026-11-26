@@ -1,6 +1,7 @@
 import { mkdir, open, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { isRecord } from "@lrm/coforge-sdk/internal";
+import { z } from "zod";
 import {
   LIFECYCLE_FAILURE_OPERATIONS,
   UPGRADE_OPERATION_HISTORY,
@@ -8,9 +9,86 @@ import {
   type ManagedBinding,
 } from "./machine-supervisor";
 
-function integer(value: unknown): value is number {
-  return Number.isSafeInteger(value) && (value as number) >= 0;
-}
+const nonEmptyString = z.string().min(1);
+const nonNegativeInt = z.int().min(0);
+
+const lastFailureSchema = z.object({
+  operation: z.enum(LIFECYCLE_FAILURE_OPERATIONS),
+  message: nonEmptyString,
+  at: nonNegativeInt,
+});
+
+const bindingBaseSchema = z.looseObject({
+  workspaceId: nonEmptyString,
+  computerId: nonEmptyString,
+  workspaceRoot: nonEmptyString,
+  enabled: z.boolean(),
+});
+
+const restartSchema = z.object({
+  requestId: nonEmptyString,
+  phase: z.enum(["stopping", "starting"]),
+  previousInstanceId: z.union([z.null(), nonEmptyString]),
+});
+
+const restartResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    requestId: nonEmptyString,
+    status: z.literal("cancelled"),
+    by: z.enum(["stop", "configure"]).optional(),
+  }),
+  z.object({
+    requestId: nonEmptyString,
+    status: z.literal("completed"),
+    instanceId: nonEmptyString,
+  }),
+]);
+
+const upgradeRequestIdsSchema = z
+  .array(nonEmptyString)
+  .max(128)
+  .refine((ids) => new Set(ids).size === ids.length);
+
+const upgradeRequestSchema = z.object({
+  requestId: nonEmptyString,
+  expectedVersion: nonEmptyString,
+});
+
+const upgradeOperationTerminalSchema = z.object({
+  at: nonNegativeInt,
+  version: nonEmptyString.optional(),
+  error: nonEmptyString.optional(),
+  deadProcessCount: nonNegativeInt.optional(),
+});
+
+const upgradeOperationBase = {
+  requestId: nonEmptyString,
+  expectedVersion: nonEmptyString,
+  requestedAt: nonNegativeInt,
+};
+
+const upgradeOperationSchema = z.discriminatedUnion("state", [
+  z.object({
+    ...upgradeOperationBase,
+    state: z.literal("pending"),
+    terminal: z.undefined().optional(),
+  }),
+  z.object({
+    ...upgradeOperationBase,
+    state: z.literal("succeeded"),
+    terminal: upgradeOperationTerminalSchema,
+  }),
+  z.object({
+    ...upgradeOperationBase,
+    state: z.literal("failed"),
+    terminal: upgradeOperationTerminalSchema,
+  }),
+  z.object({
+    ...upgradeOperationBase,
+    state: z.literal("acknowledged"),
+    terminal: upgradeOperationTerminalSchema.optional(),
+  }),
+]);
 
 /** Coordinator-owned registry. File and directory sync bracket atomic replacement. */
 export class FileBindingStore implements BindingStore {
@@ -76,16 +154,8 @@ export class FileBindingStore implements BindingStore {
   }
 }
 
-function text(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
-}
 function validLastFailure(failure: unknown): boolean {
-  return (
-    isRecord(failure) &&
-    (LIFECYCLE_FAILURE_OPERATIONS as readonly unknown[]).includes(failure.operation) &&
-    text(failure.message) &&
-    integer(failure.at)
-  );
+  return lastFailureSchema.safeParse(failure).success;
 }
 
 /** `lastFailure` is only a diagnostic for `status`: a malformed one is dropped on load rather
@@ -100,80 +170,52 @@ function dropMalformedLastFailures(value: unknown): void {
 function validateBindings(value: unknown): asserts value is ManagedBinding[] {
   if (!Array.isArray(value)) throw new Error("invalid binding registry");
   const ids = new Set<string>();
-  for (const binding of value) {
-    if (
-      !isRecord(binding) ||
-      !text(binding.workspaceId) ||
-      !text(binding.computerId) ||
-      !text(binding.workspaceRoot) ||
-      typeof binding.enabled !== "boolean" ||
-      ids.has(binding.workspaceId)
-    )
+  for (const raw of value) {
+    const base = bindingBaseSchema.safeParse(raw);
+    if (!base.success || ids.has(base.data.workspaceId))
       throw new Error("invalid binding registry");
+    const binding = base.data;
     ids.add(binding.workspaceId);
+    let restartRequestId: string | undefined;
     if (binding.restart !== undefined) {
-      const pending = binding.restart;
-      if (
-        !binding.enabled ||
-        !isRecord(pending) ||
-        !text(pending.requestId) ||
-        !["stopping", "starting"].includes(String(pending.phase)) ||
-        !(pending.previousInstanceId === null || text(pending.previousInstanceId))
-      )
-        throw new Error("invalid binding registry restart");
+      const pending = restartSchema.safeParse(binding.restart);
+      if (!binding.enabled || !pending.success) throw new Error("invalid binding registry restart");
+      restartRequestId = pending.data.requestId;
     }
     if (binding.restartResults !== undefined) {
       if (!Array.isArray(binding.restartResults) || binding.restartResults.length > 128)
         throw new Error("invalid binding registry results");
       const requests = new Set<string>();
-      for (const result of binding.restartResults) {
-        if (
-          !isRecord(result) ||
-          !text(result.requestId) ||
-          requests.has(result.requestId) ||
-          !(
-            (result.status === "cancelled" &&
-              (result.by === undefined || result.by === "stop" || result.by === "configure")) ||
-            (result.status === "completed" && text(result.instanceId))
-          )
-        )
+      for (const rawResult of binding.restartResults) {
+        const result = restartResultSchema.safeParse(rawResult);
+        if (!result.success || requests.has(result.data.requestId))
           throw new Error("invalid binding registry result");
-        requests.add(result.requestId);
+        requests.add(result.data.requestId);
       }
-      if (isRecord(binding.restart) && requests.has(String(binding.restart.requestId)))
+      if (restartRequestId !== undefined && requests.has(restartRequestId))
         throw new Error("invalid binding registry conflicting restart");
     }
     if (binding.lastFailure !== undefined && !validLastFailure(binding.lastFailure))
       throw new Error("invalid binding registry last failure");
-    if (binding.upgradeRequestIds !== undefined) {
-      if (
-        !Array.isArray(binding.upgradeRequestIds) ||
-        binding.upgradeRequestIds.length > 128 ||
-        binding.upgradeRequestIds.some((requestId) => !text(requestId)) ||
-        new Set(binding.upgradeRequestIds).size !== binding.upgradeRequestIds.length
-      )
-        throw new Error("invalid binding registry upgrade request IDs");
-    }
+    if (
+      binding.upgradeRequestIds !== undefined &&
+      !upgradeRequestIdsSchema.safeParse(binding.upgradeRequestIds).success
+    )
+      throw new Error("invalid binding registry upgrade request IDs");
     if (binding.upgradeRequests !== undefined) {
       if (!Array.isArray(binding.upgradeRequests) || binding.upgradeRequests.length > 128)
         throw new Error("invalid binding registry upgrades");
       const requests = new Set<string>();
-      for (const request of binding.upgradeRequests) {
-        if (
-          !isRecord(request) ||
-          !text(request.requestId) ||
-          !text(request.expectedVersion) ||
-          requests.has(request.requestId)
-        )
+      for (const rawRequest of binding.upgradeRequests) {
+        const request = upgradeRequestSchema.safeParse(rawRequest);
+        if (!request.success || requests.has(request.data.requestId))
           throw new Error("invalid binding registry upgrade request");
-        requests.add(request.requestId);
+        requests.add(request.data.requestId);
       }
     }
     validateUpgradeOperations(binding.upgradeOperations);
   }
 }
-
-const UPGRADE_OPERATION_STATES = ["pending", "succeeded", "failed", "acknowledged"];
 
 /** One operation at a time may be pending, and every terminal state carries its receipt. */
 function validateUpgradeOperations(value: unknown): void {
@@ -182,31 +224,12 @@ function validateUpgradeOperations(value: unknown): void {
     throw new Error("invalid binding registry upgrade operations");
   const seen = new Set<string>();
   let pending = 0;
-  for (const operation of value) {
-    if (
-      !isRecord(operation) ||
-      !text(operation.requestId) ||
-      !text(operation.expectedVersion) ||
-      !integer(operation.requestedAt) ||
-      !UPGRADE_OPERATION_STATES.includes(String(operation.state)) ||
-      seen.has(operation.requestId)
-    )
+  for (const rawOperation of value) {
+    const operation = upgradeOperationSchema.safeParse(rawOperation);
+    if (!operation.success || seen.has(operation.data.requestId))
       throw new Error("invalid binding registry upgrade operation");
-    seen.add(operation.requestId);
-    if (operation.state === "pending") pending += 1;
-    const terminal = operation.terminal;
-    if (operation.state === "pending") {
-      if (terminal !== undefined) throw new Error("invalid binding registry upgrade operation");
-    } else if (operation.state !== "acknowledged" || terminal !== undefined) {
-      if (
-        !isRecord(terminal) ||
-        !integer(terminal.at) ||
-        (terminal.version !== undefined && !text(terminal.version)) ||
-        (terminal.error !== undefined && !text(terminal.error)) ||
-        (terminal.deadProcessCount !== undefined && !integer(terminal.deadProcessCount))
-      )
-        throw new Error("invalid binding registry upgrade operation");
-    }
+    seen.add(operation.data.requestId);
+    if (operation.data.state === "pending") pending += 1;
   }
   if (pending > 1) throw new Error("invalid binding registry upgrade operation overlap");
 }

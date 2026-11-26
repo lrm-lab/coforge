@@ -1,4 +1,5 @@
-import { RFC_UUID_PATTERN, isRecord } from "@lrm/coforge-sdk/internal";
+import { RFC_UUID_PATTERN } from "@lrm/coforge-sdk/internal";
+import { z } from "zod";
 import { isSafePathScope } from "#src/persistence/path-scope";
 import type { MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
 import { PROC_MEMORY_APP_ID, PROC_MEMORY_NOTICE_CLASS } from "#src/agent-app-inbox/registry";
@@ -12,16 +13,14 @@ export type PublishProcJobMemoryNotice = (
   commit: () => Promise<void>,
 ) => Promise<void>;
 
+const procJobMemoryNoticeSchema = z.object({
+  jobId: z.string().regex(RFC_UUID_PATTERN),
+  agentId: z.string().refine(isSafePathScope),
+});
+
 export function decodeProcJobMemoryNotice(value: unknown): ProcJobMemoryNotice | undefined {
-  if (
-    !isRecord(value) ||
-    typeof value.jobId !== "string" ||
-    !RFC_UUID_PATTERN.test(value.jobId) ||
-    typeof value.agentId !== "string" ||
-    !isSafePathScope(value.agentId)
-  )
-    return undefined;
-  return { jobId: value.jobId, agentId: value.agentId };
+  const parsed = procJobMemoryNoticeSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
 
 export class ProcJobMemoryNotices {

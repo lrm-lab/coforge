@@ -1,4 +1,5 @@
 import { agentEnvironmentShapeViolation } from "@lrm/coforge-sdk/internal";
+import { z } from "zod";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import type { AgentRuntimeProviderConfig } from "@lrm/coforge-anvil";
 import type { AgentLaunchConfig } from "./daemon-connection-client";
@@ -30,26 +31,27 @@ export function parseAgentEnvironment(value: unknown): Record<string, string> {
   return envVars;
 }
 
+const runtimeProviderConfigSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("default") }),
+  z.strictObject({
+    kind: z.literal("coforge"),
+    providerId: z.string(),
+    apiKey: z.string().optional(),
+  }),
+]);
+
 export function parseAgentRuntimeProviderConfig(
   value: unknown,
 ): AgentRuntimeProviderConfig | undefined {
   if (value === undefined) return undefined;
-  if (!value || typeof value !== "object")
-    throw new Error("invalid Agent runtime provider config response");
-  const config = value as Record<string, unknown>;
-  if (config.kind === "default" && Object.keys(config).length === 1) return { kind: "default" };
-  if (
-    config.kind === "coforge" &&
-    typeof config.providerId === "string" &&
-    (config.apiKey === undefined || typeof config.apiKey === "string") &&
-    Object.keys(config).every((key) => key === "kind" || key === "providerId" || key === "apiKey")
-  )
-    return {
-      kind: "coforge",
-      providerId: config.providerId,
-      ...(typeof config.apiKey === "string" ? { apiKey: config.apiKey } : {}),
-    };
-  throw new Error("invalid Agent runtime provider config response");
+  const parsed = runtimeProviderConfigSchema.safeParse(value);
+  if (!parsed.success) throw new Error("invalid Agent runtime provider config response");
+  if (parsed.data.kind === "default") return { kind: "default" };
+  return {
+    kind: "coforge",
+    providerId: parsed.data.providerId,
+    ...(parsed.data.apiKey !== undefined ? { apiKey: parsed.data.apiKey } : {}),
+  };
 }
 
 /** The whole Agent launch response: the Agent's key, and its provider, environment, assigned

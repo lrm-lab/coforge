@@ -1,8 +1,14 @@
+import { z } from "zod";
 import { readMemoryFile } from "./memory-files";
 import type { MemoryReviewBatch } from "#src/persistence/memory-review-ledger";
 
 export const MEMORY_REVIEW_RECEIPT_PATH = "notes/.memory-review-receipt.json";
 export type MemoryReviewReceipt = { batchId: string; reviewed: string[] };
+
+const memoryReviewReceiptSchema = z.object({
+  batchId: z.string(),
+  reviewed: z.array(z.string()).max(5),
+});
 
 export async function readMemoryReviewReceipt(
   root: string,
@@ -10,13 +16,8 @@ export async function readMemoryReviewReceipt(
   const text = await readMemoryFile(root, MEMORY_REVIEW_RECEIPT_PATH, 4096);
   if (!text) return undefined;
   try {
-    const value = JSON.parse(text) as MemoryReviewReceipt;
-    return typeof value.batchId === "string" &&
-      Array.isArray(value.reviewed) &&
-      value.reviewed.length <= 5 &&
-      value.reviewed.every((key) => typeof key === "string")
-      ? value
-      : undefined;
+    const parsed = memoryReviewReceiptSchema.safeParse(JSON.parse(text));
+    return parsed.success ? parsed.data : undefined;
   } catch {
     return undefined;
   }

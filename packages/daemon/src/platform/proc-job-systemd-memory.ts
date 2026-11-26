@@ -1,5 +1,6 @@
 import { stat } from "node:fs/promises";
 import { basename, join, posix } from "node:path";
+import { z } from "zod";
 import { isExitedProcState, parseProcStat } from "./linux-process-table";
 
 type ProcScopeMemoryVerificationInput = {
@@ -70,27 +71,21 @@ function validInvocationId(value: string): boolean {
   return /^[0-9a-f]{32}$/.test(value) && !/^0+$/.test(value);
 }
 
+const procJobMemoryScopeIdentitySchema = z.object({
+  bootId: z.string().regex(/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/),
+  invocationId: z.string().refine(validInvocationId),
+  group: z.string(),
+  directory: z.string().regex(/^\d+:\d+$/),
+  rootDirectory: z.string().regex(/^\d+:\d+$/),
+});
+
 export function decodeProcJobMemoryScopeIdentity(
   value: unknown,
   unit: string,
 ): ProcJobMemoryScopeIdentity | undefined {
-  if (typeof value !== "object" || value === null) return undefined;
-  const { bootId, invocationId, group, directory, rootDirectory } =
-    value as Partial<ProcJobMemoryScopeIdentity>;
-  if (
-    typeof bootId !== "string" ||
-    !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(bootId) ||
-    typeof invocationId !== "string" ||
-    !validInvocationId(invocationId) ||
-    typeof group !== "string" ||
-    !matchesScopePath(group, unit) ||
-    typeof directory !== "string" ||
-    !/^\d+:\d+$/.test(directory) ||
-    typeof rootDirectory !== "string" ||
-    !/^\d+:\d+$/.test(rootDirectory)
-  )
-    return undefined;
-  return { bootId, invocationId, group, directory, rootDirectory };
+  const parsed = procJobMemoryScopeIdentitySchema.safeParse(value);
+  if (!parsed.success || !matchesScopePath(parsed.data.group, unit)) return undefined;
+  return parsed.data;
 }
 
 export async function procJobCgroupDirectoryIdentity(folder: string): Promise<string> {

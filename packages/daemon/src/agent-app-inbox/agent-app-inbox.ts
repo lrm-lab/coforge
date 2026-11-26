@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   APP_INBOX_PREVIEW_MAX_CHARS,
   appInboxDefinition,
@@ -210,39 +211,42 @@ function boundedSingleLine(
   return value;
 }
 
+const persistedActionSchema = z.strictObject({
+  kind: z.string(),
+  commandId: z.string(),
+});
+
+const persistedItemSchema = z.strictObject({
+  itemId: z.unknown().optional(),
+  appId: z.string(),
+  notificationClass: z.string(),
+  sourceRef: z.unknown().optional(),
+  title: z.unknown().optional(),
+  summary: z.unknown().optional(),
+  retention: z.unknown().optional(),
+  action: z.unknown().optional(),
+  command: z.unknown().optional(),
+  createdAt: z.unknown().optional(),
+});
+
+const isoDateStringSchema = z.string().refine((value) => Number.isFinite(Date.parse(value)));
+
 function restoreItem(raw: unknown): AgentAppItem {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw))
-    throw new Error("App Inbox persisted item is corrupt");
-  const value = raw as Record<string, unknown>;
-  const allowed = new Set([
-    "itemId",
-    "appId",
-    "notificationClass",
-    "sourceRef",
-    "title",
-    "summary",
-    "retention",
-    "action",
-    "command",
-    "createdAt",
-  ]);
-  if (Object.keys(value).some((key) => !allowed.has(key)))
-    throw new Error("App Inbox persisted item is corrupt");
-  if (typeof value.appId !== "string" || typeof value.notificationClass !== "string")
-    throw new Error("App Inbox persisted item is corrupt");
+  const envelope = persistedItemSchema.safeParse(raw);
+  if (!envelope.success) throw new Error("App Inbox persisted item is corrupt");
+  const value = envelope.data;
   const definition = appInboxDefinition(value.appId, value.notificationClass);
   const sourceRef = definition.normalizeSourceRef(value.sourceRef);
+  const action = persistedActionSchema.safeParse(value.action);
+  const createdAt = isoDateStringSchema.safeParse(value.createdAt);
   if (
     definition.retention === "transient" ||
     value.itemId !== definition.itemId(sourceRef) ||
     value.retention !== definition.retention ||
-    !value.action ||
-    typeof value.action !== "object" ||
-    Array.isArray(value.action) ||
-    Object.keys(value.action).some((key) => !["kind", "commandId"].includes(key)) ||
-    JSON.stringify(value.action) !== JSON.stringify(definition.action) ||
-    typeof value.createdAt !== "string" ||
-    !Number.isFinite(Date.parse(value.createdAt))
+    !action.success ||
+    action.data.kind !== definition.action.kind ||
+    action.data.commandId !== definition.action.commandId ||
+    !createdAt.success
   )
     throw new Error("App Inbox persisted item is corrupt");
   const title = boundedSingleLine(value.title, "title");
@@ -256,8 +260,7 @@ function restoreItem(raw: unknown): AgentAppItem {
     ...(summary === undefined ? {} : { summary }),
     retention: definition.retention,
     action: definition.action,
-    // Recomputed from the class, never trusted from the file.
     ...(definition.command ? { command: definition.command(sourceRef) } : {}),
-    createdAt: value.createdAt,
+    createdAt: createdAt.data,
   });
 }

@@ -1,8 +1,8 @@
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { RuntimeModelWindow } from "@coforge/agent";
-import { isRecord } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
+import { z } from "zod";
 
 type ClaudeQuotaModel = RuntimeModelWindow["model"];
 
@@ -21,23 +21,24 @@ export function isClaudeQuotaAccountDigest(value: unknown): value is string {
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
+const claudeModelQuotaObservationSchema = z.object({
+  accountDigest: z.string().regex(ACCOUNT_DIGEST),
+  model: z.enum(["fable", "opus", "sonnet"]),
+  untilMs: z.int(),
+  observedAtMs: z.int().positive(),
+});
+
+const claudeModelQuotaSnapshotSchema = z.object({
+  version: z.literal(1),
+  records: z.array(z.unknown()),
+});
+
 function readObservation(value: unknown, now: number): ClaudeModelQuotaObservation | undefined {
-  if (!isRecord(value)) return;
-  const { accountDigest, model, untilMs, observedAtMs } = value;
-  if (
-    !isClaudeQuotaAccountDigest(accountDigest) ||
-    (model !== "fable" && model !== "opus" && model !== "sonnet") ||
-    typeof untilMs !== "number" ||
-    !Number.isSafeInteger(untilMs) ||
-    untilMs <= now ||
-    typeof observedAtMs !== "number" ||
-    !Number.isSafeInteger(observedAtMs) ||
-    observedAtMs <= 0 ||
-    observedAtMs > now ||
-    untilMs - observedAtMs > MAX_WINDOW_MS
-  )
-    return;
-  return { accountDigest, model, untilMs, observedAtMs };
+  const parsed = claudeModelQuotaObservationSchema.safeParse(value);
+  if (!parsed.success) return;
+  const { untilMs, observedAtMs } = parsed.data;
+  if (untilMs <= now || observedAtMs > now || untilMs - observedAtMs > MAX_WINDOW_MS) return;
+  return parsed.data;
 }
 
 export class ClaudeModelQuotaLedger {
@@ -55,8 +56,9 @@ export class ClaudeModelQuotaLedger {
     } catch {
       return;
     }
-    if (!isRecord(snapshot) || snapshot.version !== 1 || !Array.isArray(snapshot.records)) return;
-    for (const value of snapshot.records as unknown[]) {
+    const parsed = claudeModelQuotaSnapshotSchema.safeParse(snapshot);
+    if (!parsed.success) return;
+    for (const value of parsed.data.records) {
       const record = readObservation(value, now);
       if (record) this.#remember(record);
     }

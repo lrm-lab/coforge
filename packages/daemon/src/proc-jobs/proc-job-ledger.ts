@@ -6,7 +6,7 @@ import {
   type AgentProcJob,
   type AgentProcStopReason,
 } from "@lrm/coforge-sdk/agent";
-import { isRecord } from "@lrm/coforge-sdk/internal";
+import { z } from "zod";
 import { procJobOwnership, stopVerifiedProcJob } from "#src/platform/proc-job-process";
 import {
   decodeProcJobMemoryScopeIdentity,
@@ -57,29 +57,45 @@ export function procJobLedgerPath(workspaceStateDir: string): string {
   return join(workspaceStateDir, PROC_JOB_LEDGER_FILE);
 }
 
+const nonBlankString = z.string().refine((value) => value.trim().length > 0);
+
+const storedProcJobFieldsSchema = z.object({
+  agentId: nonBlankString,
+  workspaceId: nonBlankString,
+  startIdentity: z.string().optional(),
+  groupAnchor: z.literal(true).optional().catch(undefined),
+  memoryStopRequested: z.literal(true).optional().catch(undefined),
+  groupAnchorBootId: z.string().optional().catch(undefined),
+  memoryScope: z.unknown().optional(),
+});
+
+const procJobLedgerEnvelopeSchema = z.object({
+  version: z.literal(1),
+  jobs: z.array(z.unknown()),
+  memoryNotices: z.array(z.unknown()).catch([]),
+});
+
 function decodeStoredProcJob(value: unknown): StoredProcJob | undefined {
-  if (!isRecord(value)) return undefined;
-  if (typeof value.agentId !== "string" || !value.agentId.trim()) return undefined;
-  if (typeof value.workspaceId !== "string" || !value.workspaceId.trim()) return undefined;
-  if (value.startIdentity !== undefined && typeof value.startIdentity !== "string")
-    return undefined;
+  const fields = storedProcJobFieldsSchema.safeParse(value);
+  if (!fields.success) return undefined;
   try {
     const job = decodeAgentProcJob(value);
+    const data = fields.data;
     const memoryScope =
       job.systemdUnit && job.memory?.mode === "systemd_cgroup"
-        ? decodeProcJobMemoryScopeIdentity(value.memoryScope, job.systemdUnit)
+        ? decodeProcJobMemoryScopeIdentity(data.memoryScope, job.systemdUnit)
         : undefined;
     return {
       ...job,
       ...(memoryScope ? { memoryScope } : {}),
-      agentId: value.agentId,
-      workspaceId: value.workspaceId,
-      ...(value.groupAnchor === true ? { groupAnchor: true } : {}),
-      ...(value.memoryStopRequested === true ? { memoryStopRequested: true } : {}),
-      ...(typeof value.groupAnchorBootId === "string"
-        ? { groupAnchorBootId: value.groupAnchorBootId }
+      agentId: data.agentId,
+      workspaceId: data.workspaceId,
+      ...(data.groupAnchor === true ? { groupAnchor: true } : {}),
+      ...(data.memoryStopRequested === true ? { memoryStopRequested: true } : {}),
+      ...(data.groupAnchorBootId !== undefined
+        ? { groupAnchorBootId: data.groupAnchorBootId }
         : {}),
-      ...(typeof value.startIdentity === "string" ? { startIdentity: value.startIdentity } : {}),
+      ...(data.startIdentity !== undefined ? { startIdentity: data.startIdentity } : {}),
     };
   } catch {
     return undefined;
@@ -94,12 +110,14 @@ export async function readProcJobLedgerState(
   ledgerPath: string,
 ): Promise<{ jobs: StoredProcJob[]; memoryNotices: ProcJobMemoryNotice[] }> {
   try {
-    const raw = JSON.parse(await readFile(ledgerPath, "utf8")) as unknown;
-    if (isRecord(raw) && raw.version === 1 && Array.isArray(raw.jobs)) {
-      const jobs = raw.jobs.map(decodeStoredProcJob).filter((job) => job !== undefined);
-      const memoryNotices = Array.isArray(raw.memoryNotices)
-        ? raw.memoryNotices.map(decodeProcJobMemoryNotice).filter((notice) => notice !== undefined)
-        : [];
+    const parsed = procJobLedgerEnvelopeSchema.safeParse(
+      JSON.parse(await readFile(ledgerPath, "utf8")),
+    );
+    if (parsed.success) {
+      const jobs = parsed.data.jobs.map(decodeStoredProcJob).filter((job) => job !== undefined);
+      const memoryNotices = parsed.data.memoryNotices
+        .map(decodeProcJobMemoryNotice)
+        .filter((notice) => notice !== undefined);
       return { jobs, memoryNotices };
     }
   } catch {}

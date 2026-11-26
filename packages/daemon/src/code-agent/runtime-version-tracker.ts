@@ -1,5 +1,6 @@
 import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { z } from "zod";
 
 export type RuntimeCliVersionObservation = {
   provider: string;
@@ -191,8 +192,8 @@ export async function recordRuntimeCliObservations(
 async function readPersisted(filePath: string): Promise<PersistedRuntimeCliVersions> {
   try {
     const raw: unknown = await Bun.file(filePath).json();
-    if (!isPersistedRecord(raw)) return { schemaVersion: 1, providers: {} };
-    return raw;
+    const parsed = persistedRuntimeCliVersionsSchema.safeParse(raw);
+    return parsed.success ? parsed.data : { schemaVersion: 1, providers: {} };
   } catch {
     return { schemaVersion: 1, providers: {} };
   }
@@ -212,51 +213,24 @@ async function writePersisted(
   }
 }
 
-function isPersistedRecord(value: unknown): value is PersistedRuntimeCliVersions {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const record = value as Record<string, unknown>;
-  if (
-    record.schemaVersion !== 1 ||
-    typeof record.providers !== "object" ||
-    record.providers === null ||
-    Array.isArray(record.providers)
-  ) {
-    return false;
-  }
-  for (const entry of Object.values(record.providers as Record<string, unknown>)) {
-    if (!isTrackedEntry(entry)) return false;
-  }
-  return true;
-}
+const comparableSemverSchema = z
+  .string()
+  .refine((value) => parseComparableSemver(value) !== undefined);
 
-function isTrackedEntry(value: unknown): value is TrackedRuntimeEntry {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const entry = value as Record<string, unknown>;
-  if (
-    typeof entry.highestVersion !== "string" ||
-    !parseComparableSemver(entry.highestVersion) ||
-    typeof entry.highestPath !== "string" ||
-    typeof entry.highestObservedAt !== "string"
-  ) {
-    return false;
-  }
-  if (entry.downgrade !== undefined) {
-    if (
-      typeof entry.downgrade !== "object" ||
-      entry.downgrade === null ||
-      Array.isArray(entry.downgrade)
-    ) {
-      return false;
-    }
-    const downgrade = entry.downgrade as Record<string, unknown>;
-    if (
-      typeof downgrade.currentVersion !== "string" ||
-      !parseComparableSemver(downgrade.currentVersion) ||
-      typeof downgrade.currentPath !== "string" ||
-      typeof downgrade.detectedAt !== "string"
-    ) {
-      return false;
-    }
-  }
-  return true;
-}
+const trackedDowngradeSchema = z.object({
+  currentVersion: comparableSemverSchema,
+  currentPath: z.string(),
+  detectedAt: z.string(),
+});
+
+const trackedRuntimeEntrySchema = z.object({
+  highestVersion: comparableSemverSchema,
+  highestPath: z.string(),
+  highestObservedAt: z.string(),
+  downgrade: trackedDowngradeSchema.optional(),
+});
+
+const persistedRuntimeCliVersionsSchema = z.object({
+  schemaVersion: z.literal(1),
+  providers: z.record(z.string(), trackedRuntimeEntrySchema),
+});
