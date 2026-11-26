@@ -14,10 +14,6 @@ import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { ACTIVE_MEMBER_WHERE, VISIBLE_CONVERSATION_WHERE } from "./active-member.server";
 import { announceMessage } from "./conversation-activity.server";
 
-/**
- * One sentence, like the Task notices: who changed the coordinator, to whom. What a coordinator
- * may and may not do lives in every Agent's standing instructions, not here.
- */
 export function coordinatorChangeNotice(
   channelName: string,
   actorName: string,
@@ -28,7 +24,67 @@ export function coordinatorChangeNotice(
   return `${actorName} made @${nextName} the coordinator of #${channelName}${previousName ? ` (replacing @${previousName})` : ""}`;
 }
 
-/** Current settings once per read window, including revocations made before role notices existed. */
+export type ChannelCoordinationSource = {
+  id: string;
+  channelName: string | null;
+  coordinatorAgentId?: string | null;
+  hiddenFromWorkspaceAt?: Date | null;
+};
+
+function formatChannelCoordination(
+  readerAgentId: string,
+  coordinator: { id: string; name: string } | null,
+): string {
+  const role = coordinator?.id === readerAgentId ? "coordinator" : "member";
+  return `[CoForge current channel role: ${role}; coordinator=${coordinator ? `@${coordinator.name}` : "none"}]`;
+}
+
+export async function readChannelCoordinationFromConversations(
+  db: Pick<Prisma.TransactionClient, "conversationMember">,
+  workspaceId: string,
+  readerAgentId: string,
+  conversations: readonly ChannelCoordinationSource[],
+): Promise<Map<string, string>> {
+  const channelsById = new Map<string, ChannelCoordinationSource>();
+  for (const conversation of conversations) {
+    if (conversation.channelName === null || conversation.hiddenFromWorkspaceAt != null) continue;
+    if (!channelsById.has(conversation.id)) channelsById.set(conversation.id, conversation);
+  }
+  if (!channelsById.size) return new Map();
+  const coordinated = [...channelsById.values()].filter(
+    (channel): channel is ChannelCoordinationSource & { coordinatorAgentId: string } =>
+      typeof channel.coordinatorAgentId === "string" && channel.coordinatorAgentId.length > 0,
+  );
+  const activeCoordinatorByChannel = new Map<string, { id: string; name: string }>();
+  if (coordinated.length > 0) {
+    const members = await db.conversationMember.findMany({
+      where: {
+        workspaceId,
+        conversationId: { in: coordinated.map((channel) => channel.id) },
+        agentId: { in: [...new Set(coordinated.map((channel) => channel.coordinatorAgentId))] },
+        ...ACTIVE_MEMBER_WHERE,
+        agent: { deletedAt: null },
+      },
+      select: {
+        conversationId: true,
+        agent: { select: { id: true, name: true } },
+      },
+    });
+    for (const member of members) {
+      const channel = channelsById.get(member.conversationId);
+      if (channel && member.agent && member.agent.id === channel.coordinatorAgentId) {
+        activeCoordinatorByChannel.set(member.conversationId, member.agent);
+      }
+    }
+  }
+  return new Map(
+    [...channelsById.keys()].map((channelId) => [
+      channelId,
+      formatChannelCoordination(readerAgentId, activeCoordinatorByChannel.get(channelId) ?? null),
+    ]),
+  );
+}
+
 export async function readChannelCoordination(
   db: Pick<Prisma.TransactionClient, "conversation">,
   workspaceId: string,
@@ -68,16 +124,11 @@ export async function readChannelCoordination(
         candidate.conversations.some((member) => member.conversationId === channel.id)
           ? candidate
           : null;
-      const role = coordinator?.id === readerAgentId ? "coordinator" : "member";
-      return [
-        channel.id,
-        `[CoForge current channel role: ${role}; coordinator=${coordinator ? `@${coordinator.name}` : "none"}]`,
-      ];
+      return [channel.id, formatChannelCoordination(readerAgentId, coordinator)];
     }),
   );
 }
 
-/** A channel settings update: only a user who may update the channel changes its coordinator. */
 export async function changeChannelCoordinator(
   db: PrismaClient,
   publisher: CentrifugoServerApi,

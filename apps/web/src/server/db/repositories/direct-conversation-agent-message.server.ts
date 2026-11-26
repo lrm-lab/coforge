@@ -88,25 +88,25 @@ export function conversationTarget(
   }
   return `@${undefined}`;
 }
-export const CONVERSATION_TARGET_MEMBERS = {
-  where: { OR: [{ userId: { not: null } }, { agentId: { not: null } }] },
-  select: {
-    user: { select: { username: true } },
-    agent: { select: { id: true, name: true } },
-  },
-  take: 2,
-} satisfies Prisma.Conversation$membersArgs;
 export const TARGET_CONVERSATION_SELECT = {
+  id: true,
   kind: true,
   channelName: true,
   directKey: true,
+  coordinatorAgentId: true,
+  hiddenFromWorkspaceAt: true,
   attachmentCommentThread: { select: { attachmentId: true } },
-  members: CONVERSATION_TARGET_MEMBERS,
   taskDiscussionOf: {
     select: {
       number: true,
       conversation: {
-        select: { channelName: true, directKey: true, members: CONVERSATION_TARGET_MEMBERS },
+        select: {
+          id: true,
+          kind: true,
+          channelName: true,
+          directKey: true,
+          attachmentCommentThread: { select: { attachmentId: true } },
+        },
       },
     },
   },

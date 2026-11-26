@@ -9,7 +9,7 @@ import {
   messageDeliveryTarget,
   toAgentMessage,
 } from "./direct-conversation-agent-message.server";
-import { readChannelCoordination } from "#src/server/conversations/channel-coordination.server";
+import { readChannelCoordinationFromConversations } from "#src/server/conversations/channel-coordination.server";
 import { directTargets } from "./agent-peer-direct.repositories.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
 import { escapeLikeTerm, searchTerms } from "#src/lib/search-terms";
@@ -144,18 +144,11 @@ export async function searchAgentMessagePage(
   });
   const hasMore = rows.length > limit;
   const page = rows.slice(0, limit);
-  const coordination = await readChannelCoordination(
-    db,
-    workspaceId,
-    agentId,
-    page.filter((row) => row.conversation.channelName !== null).map((row) => row.conversationId),
-  );
-  const targetOf = await directTargets(
-    db,
-    workspaceId,
-    agentId,
-    page.map((message) => message.conversation),
-  );
+  const pageConversations = page.map((message) => message.conversation);
+  const [coordination, targetOf] = await Promise.all([
+    readChannelCoordinationFromConversations(db, workspaceId, agentId, pageConversations),
+    directTargets(db, workspaceId, agentId, pageConversations),
+  ]);
   const last = page.at(-1);
   return {
     messages: page.map((message) =>
@@ -171,7 +164,6 @@ export async function searchAgentMessagePage(
       hasMore && last && options.query && options.sort === "recent"
         ? encodeAgentMessageSearchCursor({ createdAt: last.createdAt, id: last.id })
         : undefined,
-    // The query is a single indexed statement with no scan cap or timeout of its own.
     incomplete: false,
   };
 }

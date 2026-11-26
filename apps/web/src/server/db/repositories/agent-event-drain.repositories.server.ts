@@ -8,7 +8,7 @@ import {
 } from "./direct-conversation-agent-message.server";
 import { directTargets } from "./agent-peer-direct.repositories.server";
 import { isUserAgentDirectConversation } from "#src/features/conversations/direct-key";
-import { readChannelCoordination } from "#src/server/conversations/channel-coordination.server";
+import { readChannelCoordinationFromConversations } from "#src/server/conversations/channel-coordination.server";
 import { unreadAgentMessagesFragment } from "#src/server/db/repositories/agent-attention.repositories.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
 import {
@@ -147,17 +147,10 @@ export async function drainAgentEvents(
   });
   if (messageRows.length === 0) return { messages: [], hasMore: committed.hasMore };
   const rowById = new Map(messageRows.map((row) => [row.id, row]));
-  const channelConversationIds = messageRows
-    .filter((row) => row.conversation.channelName !== null)
-    .map((row) => row.conversationId);
+  const messageConversations = messageRows.map((row) => row.conversation);
   const [targetOf, coordination] = await Promise.all([
-    directTargets(
-      ports.db,
-      workspaceId,
-      agentId,
-      messageRows.map((row) => row.conversation),
-    ),
-    readChannelCoordination(ports.db, workspaceId, agentId, channelConversationIds),
+    directTargets(ports.db, workspaceId, agentId, messageConversations),
+    readChannelCoordinationFromConversations(ports.db, workspaceId, agentId, messageConversations),
   ]);
   const messages = committed.page.flatMap((row) => {
     const message = rowById.get(row.id);

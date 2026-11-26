@@ -189,36 +189,45 @@ export async function directRefs(
     `@${name}${kind === "human" ? (agents.has(name) ? "~human" : "") : memberNames.has(name) ? "~agent" : ""}`;
 }
 
+type TargetConversationMember = {
+  user?: { username: string } | null;
+  agent?: { id: string; name: string } | null;
+};
+
 export type TargetConversation = {
+  id?: string;
   kind?: string | null;
   channelName: string | null;
   directKey?: string | null;
   attachmentCommentThread?: { attachmentId: string } | null;
-  members: { user?: { username: string } | null; agent?: { id: string; name: string } | null }[];
+  members?: TargetConversationMember[];
   taskDiscussionOf?: { number: number; conversation: TargetConversation } | null;
 };
 
 export type DirectTargetOf = (conversation: TargetConversation) => string | undefined;
 
 export async function directTargets(
-  db: Db & Partial<Pick<PrismaClient, "app">>,
+  db: Db & Partial<Pick<PrismaClient, "app" | "conversationMember">>,
   workspaceId: string,
   readerAgentId: string,
   conversations: readonly TargetConversation[],
 ): Promise<DirectTargetOf> {
-  const seatOf = (conversation: TargetConversation): DirectSeat | undefined => {
-    if (
-      conversation.channelName ||
-      conversation.taskDiscussionOf ||
-      conversation.kind === APP_EVENTS_KIND
-    )
-      return undefined;
-    const username = conversation.members.find((member) => member.user)?.user?.username;
-    if (username) return { name: username, kind: "human" };
-    const peerId = agentPeerOf(conversation.directKey ?? null, readerAgentId);
-    const name = conversation.members.find((member) => member.agent?.id === peerId)?.agent?.name;
-    return name === undefined ? undefined : { name, kind: "agent" };
-  };
+  const dmIdsNeedingMembers = [
+    ...new Set(
+      conversations.flatMap((conversation) => {
+        const inner = conversation.taskDiscussionOf?.conversation ?? conversation;
+        if (
+          inner.channelName ||
+          inner.attachmentCommentThread ||
+          inner.kind === APP_EVENTS_KIND ||
+          inner.members !== undefined ||
+          !inner.id
+        )
+          return [];
+        return [inner.id];
+      }),
+    ),
+  ];
   const appIds = [
     ...new Set(
       conversations.flatMap((conversation) => {
@@ -228,15 +237,21 @@ export async function directTargets(
       }),
     ),
   ];
-  const [refOf, apps] = await Promise.all([
-    directRefs(
-      db,
-      workspaceId,
-      readerAgentId,
-      conversations.flatMap(
-        (conversation) => seatOf(conversation.taskDiscussionOf?.conversation ?? conversation) ?? [],
-      ),
-    ),
+  const [loadedMembers, apps] = await Promise.all([
+    dmIdsNeedingMembers.length && db.conversationMember
+      ? db.conversationMember.findMany({
+          where: {
+            workspaceId,
+            conversationId: { in: dmIdsNeedingMembers },
+            OR: [{ userId: { not: null } }, { agentId: { not: null } }],
+          },
+          select: {
+            conversationId: true,
+            user: { select: { username: true } },
+            agent: { select: { id: true, name: true } },
+          },
+        })
+      : Promise.resolve([] as Array<TargetConversationMember & { conversationId: string }>),
     appIds.length && db.app
       ? db.app.findMany({
           where: { id: { in: appIds } },
@@ -244,6 +259,38 @@ export async function directTargets(
         })
       : Promise.resolve([] as { id: string; key: string }[]),
   ]);
+  const membersByConversationId = new Map<string, TargetConversationMember[]>();
+  for (const member of loadedMembers) {
+    const existing = membersByConversationId.get(member.conversationId);
+    if (existing) existing.push(member);
+    else membersByConversationId.set(member.conversationId, [member]);
+  }
+  const seatOf = (conversation: TargetConversation): DirectSeat | undefined => {
+    if (
+      conversation.channelName ||
+      conversation.taskDiscussionOf ||
+      conversation.attachmentCommentThread ||
+      conversation.kind === APP_EVENTS_KIND
+    )
+      return undefined;
+    const members =
+      conversation.members ??
+      (conversation.id ? membersByConversationId.get(conversation.id) : undefined) ??
+      [];
+    const username = members.find((member) => member.user)?.user?.username;
+    if (username) return { name: username, kind: "human" };
+    const peerId = agentPeerOf(conversation.directKey ?? null, readerAgentId);
+    const name = members.find((member) => member.agent?.id === peerId)?.agent?.name;
+    return name === undefined ? undefined : { name, kind: "agent" };
+  };
+  const refOf = await directRefs(
+    db,
+    workspaceId,
+    readerAgentId,
+    conversations.flatMap(
+      (conversation) => seatOf(conversation.taskDiscussionOf?.conversation ?? conversation) ?? [],
+    ),
+  );
   const appKeyById = new Map(apps.map((app) => [app.id, app.key]));
   return (conversation) => {
     if (conversation.kind === APP_EVENTS_KIND) {

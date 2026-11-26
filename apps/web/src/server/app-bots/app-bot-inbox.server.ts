@@ -1,7 +1,7 @@
 import { UUID_LIKE_PATTERN } from "@lrm/coforge-sdk/internal";
 
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { readChannelCoordination } from "#src/server/conversations/channel-coordination.server";
+import { readChannelCoordinationFromConversations } from "#src/server/conversations/channel-coordination.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
 import { directTargets } from "#src/server/db/repositories/agent-peer-direct.repositories.server";
 import { unreadAgentMessagesFragment } from "#src/server/db/repositories/agent-attention.repositories.server";
@@ -96,18 +96,11 @@ export class AppBotInbox {
       include: AGENT_MESSAGE_WITH_TARGET_INCLUDE,
     });
     const byId = new Map(found.map((message) => [message.id, message]));
-    const targetOf = await directTargets(
-      this.db,
-      workspaceId,
-      agentId,
-      found.map((message) => message.conversation),
-    );
-    const coordination = await readChannelCoordination(
-      this.db,
-      workspaceId,
-      agentId,
-      found.filter((m) => m.conversation.channelName !== null).map((m) => m.conversationId),
-    );
+    const foundConversations = found.map((message) => message.conversation);
+    const [targetOf, coordination] = await Promise.all([
+      directTargets(this.db, workspaceId, agentId, foundConversations),
+      readChannelCoordinationFromConversations(this.db, workspaceId, agentId, foundConversations),
+    ]);
     const highest = new Map<string, Cursor["groups"][number]>();
     const events = page.map((row) => {
       const message = byId.get(row.id);

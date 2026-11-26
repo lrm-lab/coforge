@@ -27,7 +27,7 @@ import { messageAnchorWhere } from "#src/server/db/message-anchor.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import { visibleChannelWhere } from "#src/server/conversations/channel-read-access.server";
-import { readChannelCoordination } from "#src/server/conversations/channel-coordination.server";
+import { readChannelCoordinationFromConversations } from "#src/server/conversations/channel-coordination.server";
 import { writeReaction, type ReactionPort } from "#src/server/conversations/reaction-write.server";
 import { NOTIFIED_AGENT_WHERE } from "#src/server/db/repositories/agent-attention.repositories.server";
 import type { ResolvedAgentTarget } from "./resolved-agent-target.server";
@@ -398,13 +398,10 @@ export async function resolveAgentMessage(
   anchor: string,
 ) {
   const row = await findAgentScopedMessage(ports.db, workspaceId, agentId, anchor);
-  const coordination = await readChannelCoordination(
-    ports.db,
-    workspaceId,
-    agentId,
-    row.conversation.channelName !== null ? [row.conversationId] : [],
-  );
-  const targetOf = await directTargets(ports.db, workspaceId, agentId, [row.conversation]);
+  const [coordination, targetOf] = await Promise.all([
+    readChannelCoordinationFromConversations(ports.db, workspaceId, agentId, [row.conversation]),
+    directTargets(ports.db, workspaceId, agentId, [row.conversation]),
+  ]);
   return toAgentMessage(
     row,
     messageDeliveryTarget(row, targetOf),
