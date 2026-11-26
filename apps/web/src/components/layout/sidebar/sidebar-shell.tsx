@@ -39,13 +39,11 @@ function measuredWidthRem(shell: HTMLElement | null): number {
   return px ? px / rootFontSizePx() : getListWidth(SIDEBAR_COLUMN);
 }
 
-function SidebarResizeHandle({
-  shellRef,
-  onLiveDragChange,
-}: {
-  shellRef: RefObject<HTMLDivElement | null>;
-  onLiveDragChange: (live: boolean) => void;
-}) {
+function setShellDragging(shell: HTMLElement | null, dragging: boolean) {
+  shell?.toggleAttribute("data-dragging", dragging);
+}
+
+function SidebarResizeHandle({ shellRef }: { shellRef: RefObject<HTMLDivElement | null> }) {
   const width = useListWidth(SIDEBAR_COLUMN);
   const [dragging, setDragging] = useState(false);
   const [snapPrimed, setSnapPrimed] = useState(false);
@@ -64,16 +62,17 @@ function SidebarResizeHandle({
     }
   };
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    const shell = shellRef.current;
+    return () => {
       if (stopDrag.current) {
         stopDrag.current.abort();
         stopDrag.current = undefined;
       }
+      setShellDragging(shell, false);
       flushPendingRestore();
-    },
-    [],
-  );
+    };
+  }, [shellRef]);
 
   useEffect(() => {
     if (!dragging) return;
@@ -109,14 +108,14 @@ function SidebarResizeHandle({
     const abort = new AbortController();
     stopDrag.current = abort;
     setDragging(true);
-    onLiveDragChange(!collapsed);
+    setShellDragging(shellRef.current, !collapsed);
 
     const move = (moved: globalThis.PointerEvent) => {
       if (moved.pointerId !== pointerId) return;
       const step = stepSidebarDrag(dragState, moved.clientX / remPx);
       dragState = step.state;
       setSnapPrimed(step.snapPrimed);
-      onLiveDragChange(step.liveResize);
+      setShellDragging(shellRef.current, step.liveResize);
       if (step.collapsedChanged) {
         if (!step.collapsed) {
           applyListWidth(SIDEBAR_COLUMN, step.width);
@@ -136,7 +135,7 @@ function SidebarResizeHandle({
       } catch {}
       setDragging(false);
       setSnapPrimed(false);
-      onLiveDragChange(false);
+      setShellDragging(shellRef.current, false);
       const done = finishSidebarDrag(dragState);
       if (done.commitWidth !== undefined) {
         setListWidth(SIDEBAR_COLUMN, done.commitWidth);
@@ -215,7 +214,6 @@ export function SidebarShell({
 }) {
   const shellRef = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
-  const [liveDrag, setLiveDrag] = useState(false);
 
   useEffect(() => {
     let second = 0;
@@ -234,7 +232,6 @@ export function SidebarShell({
       data-sidebar-shell=""
       data-default-rail={defaultRail ? "" : undefined}
       data-ready={ready ? "" : undefined}
-      data-dragging={liveDrag ? "" : undefined}
       className="relative hidden h-full shrink-0 overflow-hidden lg:block"
     >
       <div
@@ -246,7 +243,7 @@ export function SidebarShell({
       <div data-sidebar-panel="rail" className="absolute inset-y-0 start-0 h-full w-14">
         {rail}
       </div>
-      <SidebarResizeHandle shellRef={shellRef} onLiveDragChange={setLiveDrag} />
+      <SidebarResizeHandle shellRef={shellRef} />
     </div>
   );
 }
