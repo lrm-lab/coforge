@@ -45,6 +45,8 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   seen, the scope binds to its conversation immediately so the cursor is
   durable, and it never records `review` — a task ref is not a thread context
   the send guard should learn.
+  An empty, unanchored task page carries the scope's persisted Agent read
+  position as its boundary when no explicit sequence range was requested.
 - A delivery counts as consumed when its sequence is at or below its target's
   frontier, or is one of the target's exact seen sequences (`exactSeqs`:
   durable beside the frontier, at most 2500 per target, pruned as the

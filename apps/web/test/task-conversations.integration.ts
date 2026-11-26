@@ -3,7 +3,10 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { decodeAgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
-import { handleTaskViewGet } from "#src/server/tasks/task-conversation-routes.server";
+import {
+  handleTaskReadGet,
+  handleTaskViewGet,
+} from "#src/server/tasks/task-conversation-routes.server";
 
 import {
   agentTaskConversations,
@@ -255,11 +258,44 @@ test("a follower reads the conversation, and reading moves what is unread", asyn
 
   const after = (await conversations.following(as("peer")))[0]!;
   expect(after.unread).toBe(0);
-  const empty = await conversations.read(as("peer"), ref, { unread: true });
-  expect(empty.messages).toEqual([]);
+  const task = await db.task.findUniqueOrThrow({ where: { id: taskId } });
+  const conversationId = task.discussionConversationId!;
+  const lastRead = await db.message.findFirstOrThrow({
+    where: { conversationId },
+    orderBy: { sequence: "desc" },
+  });
+  expect(page.modelSeenUpToSeq).toBe(lastRead.sequence);
 
-  await conversations.reply(as("worker"), ref, { body: "one more" });
+  const query = new URLSearchParams({ channel: ref.target, task_number: "1", unread: "true" });
+  const empty = await handleTaskReadGet(
+    new Request(`https://example.test/api/agent/v1/tasks/read?${query}`),
+    as("peer"),
+    conversations,
+  );
+  expect(empty.status).toBe(200);
+  expect(await empty.json()).toMatchObject({
+    messages: [],
+    modelSeenUpToSeq: lastRead.sequence,
+    readPositionAfter: lastRead.sequence,
+    moreUnread: false,
+    consumptionScope: {
+      agentId: agents.peer.id,
+      conversationId,
+      channelType: "thread",
+      target: `#${channelName}:#1`,
+    },
+  });
+
+  const next = await conversations.reply(as("worker"), ref, { body: "one more" });
+  expect(await conversations.read(as("peer"), ref, { after: next.messageId })).toMatchObject({
+    messages: [],
+    modelSeenUpToSeq: null,
+  });
   expect((await conversations.following(as("peer")))[0]!.unread).toBe(1);
+  const nextPage = await conversations.read(as("peer"), ref, { unread: true, limit: 1 });
+  expect(nextPage.messages.map((message) => message.id)).toEqual([next.messageId]);
+  expect(nextPage.modelSeenUpToSeq).toBeGreaterThan(lastRead.sequence);
+  expect(nextPage.modelSeenUpToSeq).toBe(nextPage.messages[0]!.sequence);
 });
 
 test("a task nobody has replied to reads as empty, and an outsider cannot read", async () => {
@@ -272,9 +308,19 @@ test("a task nobody has replied to reads as empty, and an outsider cannot read",
       creatorMemberId: agents.worker.memberId,
     },
   });
-  expect(await conversations.read(as("worker"), { ...ref, number: 2 }, {})).toMatchObject({
+  const quietRef = { ...ref, number: 2 };
+  const withoutDiscussion = await conversations.read(as("worker"), quietRef, {});
+  expect(withoutDiscussion).toMatchObject({
     messages: [],
     hasOlder: false,
+    modelSeenUpToSeq: null,
+  });
+  expect(withoutDiscussion).not.toHaveProperty("consumptionScope");
+  const { conversationId } = await conversations.open(as("worker"), quietRef);
+  expect(await conversations.read(as("worker"), quietRef, {})).toMatchObject({
+    messages: [],
+    modelSeenUpToSeq: 0,
+    consumptionScope: { conversationId },
   });
   await expect(conversations.read(as("outsider"), ref, {})).rejects.toMatchObject({
     code: "NOT_FOUND",

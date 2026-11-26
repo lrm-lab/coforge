@@ -240,8 +240,18 @@ export class TaskConversations {
         return rows[0];
       },
     });
+    const emptyUnanchoredPage =
+      result.messages.length === 0 &&
+      !page.before &&
+      !page.after &&
+      !page.around &&
+      page.fromSequence === undefined &&
+      page.throughSequence === undefined;
     return {
       ...result,
+      modelSeenUpToSeq:
+        result.modelSeenUpToSeq ??
+        (emptyUnanchoredPage ? (result.unreadCursorBefore ?? null) : null),
       events: await taskEventsForReadPage(db, {
         taskId: task.id,
         conversationId,
