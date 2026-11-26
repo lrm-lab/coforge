@@ -74,11 +74,10 @@ export const deleteComputer = createServerFn({ method: "POST" })
       return { deleted: false as const };
     }
     await db.$transaction(async (tx) => {
-      for (const binding of computer.workspaces)
-        await DaemonCredentialRevocations.recordForComputer(tx, {
-          workspaceId: binding.workspaceId,
-          computerId: computer.id,
-        });
+      await DaemonCredentialRevocations.recordForComputerWorkspaces(tx, {
+        workspaceIds: computer.workspaces.map((binding) => binding.workspaceId),
+        computerId: computer.id,
+      });
       await tx.computer.delete({ where: { id: computer.id } });
     });
     const api = createCentrifugoServerApi();

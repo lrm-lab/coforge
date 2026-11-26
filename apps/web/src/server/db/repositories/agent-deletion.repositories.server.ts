@@ -3,7 +3,7 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { ACTIVE_CHANNEL_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import { clearOnboardingAgent } from "#src/server/workspaces/workspace-onboarding.server";
-import { recordMembershipNotice } from "#src/server/conversations/channel-membership-notice.server";
+import { recordMembershipNotices } from "#src/server/conversations/channel-membership-notice.server";
 import { settlePendingNotLaunched } from "#src/server/db/repositories/mention-delivery.repositories.server";
 import { auditExternalCredential } from "#src/server/agents/external-agent-credentials.server";
 import { revokeExternalCredentialsOf } from "#src/server/db/repositories/external-agent-credential.repositories.server";
@@ -12,18 +12,6 @@ import type {
   AgentDeletionStore,
 } from "#src/server/agents/agent-deletion.server";
 
-/**
- * One transaction makes a deleted Agent inert cloud-side: the Agent is marked
- * `deletedAt`, its Agent API keys are revoked, its public-channel memberships are soft-left
- * (which is what stops delivery and wake, since both read `ACTIVE_MEMBER_WHERE`), and its
- * scheduled Reminders are canceled, and its pending tracked @mentions are settled not launched. Messages, Tasks and Action cards are deliberately left
- * untouched — the `Restrict` foreign keys make them undeletable, and history must stay readable.
- *
- * Every statement is conditional on the Agent still being live, so a repeated delete is an
- * idempotent no-op rather than a second round of side effects. The per-User weekly-report
- * assistant is refused outright: Records provisions it on demand by `(workspaceId, userId)`, so
- * deleting it would only have it recreated and would break the feature meanwhile.
- */
 export class PrismaAgentDeletionStore implements AgentDeletionStore {
   constructor(private readonly db: PrismaClient) {}
 
@@ -48,12 +36,11 @@ export class PrismaAgentDeletionStore implements AgentDeletionStore {
         where: { id: input.agentId, workspaceId: input.workspaceId, ...ACTIVE_AGENT_WHERE },
         data: { deletedAt: input.deletedAt, deletedByUserId: input.deletedByUserId ?? null },
       });
-      // Already deleted: leave the original `deletedAt` and the first delete's effects alone.
       if (deleted.count === 0) return { outcome: "already-deleted" as const };
-      // No longer the one that welcomes new members: the Workspace falls back to the assistant.
       await clearOnboardingAgent(tx, input.workspaceId, input.agentId);
 
       const activeChannels = await tx.conversationMember.findMany({
+        orderBy: { conversationId: "asc" },
         where: {
           workspaceId: input.workspaceId,
           agentId: input.agentId,
@@ -65,23 +52,17 @@ export class PrismaAgentDeletionStore implements AgentDeletionStore {
         where: { workspaceId: input.workspaceId, agentId: input.agentId, leftAt: null },
         data: { leftAt: input.deletedAt },
       });
-      await recordChannelMembersRemoved(
-        tx,
-        input.workspaceId,
-        activeChannels.map((row) => row.conversationId),
-        { agentId: input.agentId },
-      );
-      const membershipNotices = [];
-      for (const row of activeChannels) {
-        const notice = await recordMembershipNotice(tx, {
-          workspaceId: input.workspaceId,
-          conversationId: row.conversationId,
-          kind: "channel.member_removed",
-          actors: [{ agentId: input.agentId }],
-          ...(input.deletedByUserId ? { operator: { userId: input.deletedByUserId } } : {}),
-        });
-        if (notice) membershipNotices.push({ ...notice, conversationId: row.conversationId });
-      }
+      const leftChannelIds = activeChannels.map((row) => row.conversationId);
+      await recordChannelMembersRemoved(tx, input.workspaceId, leftChannelIds, {
+        agentId: input.agentId,
+      });
+      const membershipNotices = await recordMembershipNotices(tx, {
+        workspaceId: input.workspaceId,
+        conversationIds: leftChannelIds,
+        kind: "channel.member_removed",
+        actors: [{ agentId: input.agentId }],
+        ...(input.deletedByUserId ? { operator: { userId: input.deletedByUserId } } : {}),
+      });
       const remindersCanceled = await tx.reminder.updateMany({
         where: {
           workspaceId: input.workspaceId,
@@ -90,7 +71,6 @@ export class PrismaAgentDeletionStore implements AgentDeletionStore {
         },
         data: { status: "canceled" },
       });
-      // A deleted Agent is never woken or re-issued to, so its pending tracked mentions end here.
       await settlePendingNotLaunched(tx, {
         workspaceId: input.workspaceId,
         agentId: input.agentId,
@@ -118,7 +98,7 @@ export class PrismaAgentDeletionStore implements AgentDeletionStore {
         outcome: "deleted" as const,
         membershipsLeft: membershipsLeft.count,
         membershipNotices,
-        leftChannelIds: activeChannels.map((row) => row.conversationId),
+        leftChannelIds,
         remindersCanceled: remindersCanceled.count,
         apiKeysRevoked: apiKeysRevoked.count,
       };

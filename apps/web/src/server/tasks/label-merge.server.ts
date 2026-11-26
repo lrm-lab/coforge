@@ -6,16 +6,8 @@ import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership
 
 import { LABEL_GROUP_SELECT } from "./label-groups.server";
 
-/** What a merge reads of the two labels: which group, and whether it allows one label only. Its
- * own select, so this module does not import labels.server.ts, which imports it. */
 const MERGE_SELECT = { id: true, groupId: true, group: { select: LABEL_GROUP_SELECT } } as const;
 
-/**
- * An owner or admin merges `from` into `into`: the Tasks carrying `from` carry `into` instead,
- * `from` disappears, and a Task that would then hold two labels of one single group keeps
- * `into` and loses the other (recorded as a system `labels_changed`). Returns what moved and
- * what was dropped, so the caller can report it.
- */
 export async function mergeLabels(
   db: PrismaClient,
   workspaceId: string,
@@ -56,56 +48,76 @@ export async function mergeLabels(
             select: { taskId: true, label: { select: { id: true, name: true, color: true } } },
           })
         : [];
-    const clashByTask = new Map<string, { id: string; name: string; color: string }>();
+    const clashByTask = new Map<string, TaskLabel>();
     for (const clash of clashes)
       if (!clashByTask.has(clash.taskId)) clashByTask.set(clash.taskId, clash.label);
-    let moved = 0;
-    let dropped = 0;
+
+    const dropExistingIds: string[] = [];
+    const moveTaskIds: string[] = [];
+    const clashEntries: Array<{ taskId: string; label: TaskLabel }> = [];
     for (const { taskId } of carried) {
       if (existingIntoTaskIds.has(taskId)) {
-        await tx.taskLabel.delete({ where: { taskId_labelId: { taskId, labelId: fromId } } });
-        dropped += 1;
+        dropExistingIds.push(taskId);
         continue;
       }
-      // A single group allows one label: the one already there goes, `into` takes its place.
       const clash = clashByTask.get(taskId);
-      if (clash) {
+      if (clash) clashEntries.push({ taskId, label: clash });
+      moveTaskIds.push(taskId);
+    }
+
+    if (dropExistingIds.length > 0) {
+      await tx.taskLabel.deleteMany({
+        where: { labelId: fromId, taskId: { in: dropExistingIds } },
+      });
+    }
+    if (clashEntries.length > 0) {
+      clashEntries.sort(
+        (a, b) => a.taskId.localeCompare(b.taskId) || a.label.id.localeCompare(b.label.id),
+      );
+      if (clashEntries.length === 1) {
+        const only = clashEntries[0]!;
         await tx.taskLabel.delete({
-          where: { taskId_labelId: { taskId, labelId: clash.id } },
+          where: { taskId_labelId: { taskId: only.taskId, labelId: only.label.id } },
         });
-        await recordMergeRemoval(tx, taskId, clash);
-        dropped += 1;
+      } else {
+        await tx.$executeRaw`DELETE FROM "task_labels" AS tl
+          USING unnest(
+            ${clashEntries.map((entry) => entry.taskId)}::uuid[],
+            ${clashEntries.map((entry) => entry.label.id)}::uuid[]
+          ) AS v("taskId", "labelId")
+          WHERE tl."taskId" = v."taskId" AND tl."labelId" = v."labelId"`;
       }
-      await tx.taskLabel.update({
-        where: { taskId_labelId: { taskId, labelId: fromId } },
+      await recordMergeRemovals(tx, clashEntries);
+    }
+    if (moveTaskIds.length > 0) {
+      await tx.taskLabel.updateMany({
+        where: { labelId: fromId, taskId: { in: moveTaskIds } },
         data: { labelId: intoId },
       });
-      moved += 1;
     }
     await tx.label.delete({ where: { id: fromId } });
-    return { moved, dropped };
+    return { moved: moveTaskIds.length, dropped: dropExistingIds.length + clashEntries.length };
   });
 }
 
-/** A merge's dropped label, as a system history event on the Task it was taken off. */
-async function recordMergeRemoval(
+async function recordMergeRemovals(
   tx: Prisma.TransactionClient,
-  taskId: string,
-  label: TaskLabel,
+  entries: readonly { taskId: string; label: TaskLabel }[],
 ): Promise<void> {
-  const latest = await tx.taskHistoryEvent.findFirst({
-    where: { taskId },
-    orderBy: { seq: "desc" },
-    select: { seq: true },
+  const latestByTask = await tx.taskHistoryEvent.groupBy({
+    by: ["taskId"],
+    where: { taskId: { in: entries.map((entry) => entry.taskId) } },
+    _max: { seq: true },
   });
-  await tx.taskHistoryEvent.create({
-    data: {
+  const maxSeq = new Map(latestByTask.map((row) => [row.taskId, row._max.seq ?? 0]));
+  await tx.taskHistoryEvent.createMany({
+    data: entries.map(({ taskId, label }) => ({
       taskId,
-      seq: (latest?.seq ?? 0) + 1,
+      seq: (maxSeq.get(taskId) ?? 0) + 1,
       eventType: "labels_changed",
       actorType: "system",
       actorName: null,
       payload: { added: [], removed: [label] },
-    },
+    })),
   });
 }

@@ -11,7 +11,6 @@ type ApiInstallation = {
   configureUrl: string;
 };
 
-/** The User's App installations: read from GitHub with a user token and cached per User. */
 export class GitHubInstallationCache {
   constructor(
     private readonly db: PrismaClient,
@@ -51,12 +50,17 @@ export class GitHubInstallationCache {
 
   async replace(userId: string, installations: ApiInstallation[]) {
     const syncedAt = new Date(this.now());
-    const keepIds = installations.map((item) => item.id);
+    const byId = new Map<number, ApiInstallation>();
+    for (const item of installations) byId.set(item.id, item);
+    const unique = [...byId.values()].sort((a, b) => a.id - b.id);
+    const keepIds = unique.map((item) => item.id);
     await this.db.$transaction(async (tx) => {
       await tx.gitHubUserInstallation.deleteMany({
         where: { userId, installationId: { notIn: keepIds } },
       });
-      for (const item of installations) {
+      if (unique.length === 0) return;
+      if (unique.length === 1) {
+        const item = unique[0]!;
         const data = {
           accountLogin: item.login,
           repositorySelection: item.repositorySelection,
@@ -69,7 +73,24 @@ export class GitHubInstallationCache {
           create: { userId, installationId: item.id, ...data },
           update: data,
         });
+        return;
       }
+      await tx.$executeRaw`INSERT INTO "github_user_installations"
+        ("userId", "installationId", "accountLogin", "repositorySelection", "suspended", "configureUrl", "syncedAt")
+        SELECT ${userId}::uuid, v."installationId", v."accountLogin", v."repositorySelection", v."suspended", v."configureUrl", ${syncedAt}::timestamp(3)
+        FROM unnest(
+          ${unique.map((item) => item.id)}::int[],
+          ${unique.map((item) => item.login)}::text[],
+          ${unique.map((item) => item.repositorySelection)}::text[],
+          ${unique.map((item) => item.suspended)}::boolean[],
+          ${unique.map((item) => item.configureUrl)}::text[]
+        ) AS v("installationId", "accountLogin", "repositorySelection", "suspended", "configureUrl")
+        ON CONFLICT ("userId", "installationId") DO UPDATE SET
+          "accountLogin" = EXCLUDED."accountLogin",
+          "repositorySelection" = EXCLUDED."repositorySelection",
+          "suspended" = EXCLUDED."suspended",
+          "configureUrl" = EXCLUDED."configureUrl",
+          "syncedAt" = EXCLUDED."syncedAt"`;
     });
   }
 }

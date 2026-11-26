@@ -1,5 +1,5 @@
 import { recordChannelMembersRemoved } from "#src/server/app-notifications/channel-events.server";
-import { recordMembershipNotice } from "#src/server/conversations/channel-membership-notice.server";
+import { recordMembershipNotices } from "#src/server/conversations/channel-membership-notice.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { WORKSPACE_ASSISTANT_KIND } from "#src/features/agents/agent-system-kind";
@@ -16,20 +16,6 @@ import type {
   ChangeAgentVisibilityStore,
 } from "#src/server/agents/change-agent-visibility.server";
 
-/**
- * The atomic visibility transition, scoped to a
- * still-live Agent (`ACTIVE_AGENT_WHERE`): a repeated call with the same visibility is a no-op
- * (`changed: false`) so a double submit never soft-leaves or re-joins twice.
- *
- * public → private soft-leaves every active channel membership, `#general` included, in one
- * `updateMany` — the same `leftAt` representation `softLeaveMember`/`AgentDeletion` use, just
- * applied to every channel row at once rather than one conversation at a time. Direct
- * conversations are never touched here: they become read-only through the DM send/open guards in
- * `direct-conversation.repositories.server.ts`, not by leaving anything.
- *
- * private → public re-joins `#general` only, the Workspace-wide channel every public Agent is in;
- * any other channel it left stays left until someone adds it again (`joinGeneralChannel`).
- */
 export class PrismaChangeAgentVisibilityStore implements ChangeAgentVisibilityStore {
   constructor(private readonly db: PrismaClient) {}
 
@@ -37,8 +23,6 @@ export class PrismaChangeAgentVisibilityStore implements ChangeAgentVisibilitySt
     agentId: string;
     workspaceId: string;
     visibility: string;
-    /** The person changing the visibility; a private change records them removing the Agent
-     * from its channels. */
     operatorUserId?: string;
   }): Promise<{
     changed: boolean;
@@ -70,7 +54,6 @@ export class PrismaChangeAgentVisibilityStore implements ChangeAgentVisibilitySt
         const generalId = await joinGeneralChannel(tx, input.workspaceId, input.agentId);
         return { changed: true, leftChannelIds: [], joinedChannelIds: [generalId] };
       }
-      // Members can no longer message it, so it stops being the one that welcomes them.
       await clearOnboardingAgent(tx, input.workspaceId, input.agentId);
       const left = await tx.conversationMember.updateManyAndReturn({
         where: {
@@ -81,26 +64,20 @@ export class PrismaChangeAgentVisibilityStore implements ChangeAgentVisibilitySt
         data: { leftAt: new Date() },
         select: { conversationId: true },
       });
-      await recordChannelMembersRemoved(
-        tx,
-        input.workspaceId,
-        left.map((row) => row.conversationId),
-        { agentId: input.agentId },
-      );
-      const membershipNotices = [];
-      for (const row of left) {
-        const notice = await recordMembershipNotice(tx, {
-          workspaceId: input.workspaceId,
-          conversationId: row.conversationId,
-          kind: "channel.member_removed",
-          actors: [{ agentId: input.agentId }],
-          ...(input.operatorUserId ? { operator: { userId: input.operatorUserId } } : {}),
-        });
-        if (notice) membershipNotices.push({ ...notice, conversationId: row.conversationId });
-      }
+      const leftChannelIds = left.map((row) => row.conversationId);
+      await recordChannelMembersRemoved(tx, input.workspaceId, leftChannelIds, {
+        agentId: input.agentId,
+      });
+      const membershipNotices = await recordMembershipNotices(tx, {
+        workspaceId: input.workspaceId,
+        conversationIds: leftChannelIds,
+        kind: "channel.member_removed",
+        actors: [{ agentId: input.agentId }],
+        ...(input.operatorUserId ? { operator: { userId: input.operatorUserId } } : {}),
+      });
       return {
         changed: true,
-        leftChannelIds: left.map((row) => row.conversationId),
+        leftChannelIds,
         joinedChannelIds: [],
         membershipNotices,
       };
@@ -112,12 +89,6 @@ export class PrismaChangeAgentVisibilityStore implements ChangeAgentVisibilitySt
   }
 }
 
-/**
- * The confirmation dialog's preview for a public→private change: which channels the Agent will
- * leave and how many existing direct conversations will stop accepting new messages. Read-only;
- * never mutates. Answers `{ channelNames: [], readOnlyDirectMessageCount: 0 }` for an Agent with
- * no channel or DM footprint, rather than failing.
- */
 export async function previewAgentVisibilityChange(
   db: Pick<PrismaClient, "agent" | "conversationMember" | "conversation">,
   input: { workspaceId: string; agentId: string },
@@ -133,7 +104,6 @@ export async function previewAgentVisibilityChange(
         workspaceId: input.workspaceId,
         agentId: input.agentId,
         ...ACTIVE_CHANNEL_MEMBER_WHERE,
-        // A channel hidden from the Workspace is not named, though it is left too.
         conversation: { channelName: { not: null }, ...VISIBLE_CONVERSATION_WHERE },
       },
       select: { conversation: { select: { channelName: true } } },

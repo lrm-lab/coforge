@@ -305,7 +305,7 @@ async function applyBatch(
     const now = new Date();
     await tx.$executeRaw`INSERT INTO "artifact_page_documents"
       ("id", "artifactId", "collection", "docId", "data", "version", "sizeBytes", "userId", "agentId", "createdAt", "updatedAt")
-      SELECT v."id", ${input.artifactId}::uuid, v."collection", v."docId", v."data", v."version", v."sizeBytes", ${input.userId}::uuid, NULL::uuid, ${now}, ${now}
+      SELECT v."id", ${input.artifactId}::uuid, v."collection", v."docId", v."data", v."version", v."sizeBytes", ${input.userId}::uuid, NULL::uuid, ${now}::timestamp(3), ${now}::timestamp(3)
       FROM unnest(
         ${toUpsert.map(() => Bun.randomUUIDv7())}::uuid[],
         ${toUpsert.map((entry) => entry.collection)}::text[],

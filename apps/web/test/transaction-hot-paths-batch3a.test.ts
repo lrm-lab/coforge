@@ -281,7 +281,11 @@ test("ArtifactPageData.write batches multi-doc writes into 1 pre-fetch and 1 del
       const sql = sqlText(arg);
       if (sql.includes("DELETE FROM") && sql.includes("artifact_page_documents"))
         batchDeleteCalls += 1;
-      if (sql.includes("INSERT INTO") && sql.includes("artifact_page_documents"))
+      if (
+        sql.includes("INSERT INTO") &&
+        sql.includes("artifact_page_documents") &&
+        sql.includes("::timestamp(3)")
+      )
         batchUpsertCalls += 1;
       return 1;
     },

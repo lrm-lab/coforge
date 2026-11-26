@@ -15,14 +15,12 @@ import {
 } from "#src/features/conversations/chat-section.schemas";
 import { isBuiltInSection } from "#src/features/conversations/directory-section-order";
 
-/** The column is plain text; a value this build does not know reads as the drag order. */
 function sortModeOf(value: string): ChatSectionSortMode {
   return (chatSectionSortModes as readonly string[]).includes(value)
     ? (value as ChatSectionSortMode)
     : "manual";
 }
 
-/** One member's personal Chat groups. Every read/write keeps the trusted user + Workspace scope. */
 export class ChatSections {
   constructor(
     private readonly db: PrismaClient,
@@ -35,8 +33,6 @@ export class ChatSections {
     return { workspaceId: this.workspaceId, userId: this.userId };
   }
 
-  /** Tells the member's pages, this one's included, that their sections changed
-   * (`pref.changed.v1`, `sections`), once the change is saved: each reads them again. */
   private announceChanged() {
     return announceViewerEvent(this.realtime, {
       userIds: [this.userId],
@@ -120,7 +116,6 @@ export class ChatSections {
   async remove(id: string) {
     await this.authorize();
     await this.db.$transaction(async (tx) => {
-      // Same member lock as move/pin: deletion cannot race a move into this section.
       await lockMemberPins(tx, this.workspaceId, this.userId);
       const removed = await tx.chatSection.deleteMany({ where: { ...this.scope, id } });
       if (removed.count === 0) throw new AppError("NOT_FOUND");
@@ -128,7 +123,6 @@ export class ChatSections {
     await this.announceChanged();
   }
 
-  /** The sidebar's saved section order (built-in keys and custom ids); empty when never dragged. */
   async order(): Promise<string[]> {
     await this.authorize();
     const saved = await this.db.workspaceMemberPreference.findUnique({
@@ -138,11 +132,6 @@ export class ChatSections {
     return saved?.chatSectionOrder ?? [];
   }
 
-  /**
-   * Saves the sidebar's section order. `order` names custom sections by id and may also name the
-   * built-in ones ("pinned", "channels", "agents"); with a built-in key, the whole order is kept as
-   * the member's preference, and the custom sections take their `sortOrder` from it either way.
-   */
   async reorder(order: readonly string[]) {
     await this.authorize();
     if (new Set(order).size !== order.length) throw new AppError("INVALID_INPUT");
@@ -157,13 +146,24 @@ export class ChatSections {
       });
       if (ids.some((id) => !sections.some((section) => section.id === id)))
         throw new AppError("NOT_FOUND");
-      // A group unseen by this tab retains its place after the requested groups.
       const sorted = [
         ...ids,
         ...sections.map((section) => section.id).filter((id) => !ids.includes(id)),
       ];
-      for (const [sortOrder, id] of sorted.entries())
-        await tx.chatSection.update({ where: { id }, data: { sortOrder } });
+      if (sorted.length === 1) {
+        await tx.chatSection.update({ where: { id: sorted[0]! }, data: { sortOrder: 0 } });
+      } else if (sorted.length > 1) {
+        const updates = sorted
+          .map((id, sortOrder) => ({ id, sortOrder }))
+          .sort((a, b) => a.id.localeCompare(b.id));
+        await tx.$executeRaw`UPDATE "chat_sections" AS s
+          SET "sortOrder" = v."sortOrder"
+          FROM unnest(
+            ${updates.map((row) => row.id)}::uuid[],
+            ${updates.map((row) => row.sortOrder)}::int[]
+          ) AS v("id", "sortOrder")
+          WHERE s."id" = v."id"`;
+      }
       if (keepsBuiltIns)
         await tx.workspaceMemberPreference.upsert({
           where: { workspaceId_userId: this.scope },
@@ -189,7 +189,6 @@ export class ChatSections {
         });
         if (!section) throw new AppError("NOT_FOUND");
       }
-      // Follow the pin writer's lock order, and authorize after holding the conversation lock.
       await lockConversation(tx, conversationId);
       const member = await tx.conversationMember.findFirst({
         where: {
@@ -227,11 +226,23 @@ export class ChatSections {
           : members.length;
         if (index < 0) throw new AppError("INVALID_INPUT");
         members.splice(index, 0, { id: member.id, conversationId });
-        for (const [chatSectionSortOrder, entry] of members.entries())
+        if (members.length === 1) {
           await tx.conversationMember.update({
-            where: { id: entry.id },
-            data: { chatSectionSortOrder },
+            where: { id: members[0]!.id },
+            data: { chatSectionSortOrder: 0 },
           });
+        } else if (members.length > 1) {
+          const updates = members
+            .map((entry, sortOrder) => ({ id: entry.id, sortOrder }))
+            .sort((a, b) => a.id.localeCompare(b.id));
+          await tx.$executeRaw`UPDATE "conversation_members" AS m
+            SET "chatSectionSortOrder" = v."sortOrder"
+            FROM unnest(
+              ${updates.map((row) => row.id)}::uuid[],
+              ${updates.map((row) => row.sortOrder)}::int[]
+            ) AS v("id", "sortOrder")
+            WHERE m."id" = v."id"`;
+        }
         await tx.chatSection.update({ where: { id: sectionId }, data: { collapsed: false } });
       }
       const unpinned = await setConversationPin(
@@ -239,7 +250,6 @@ export class ChatSections {
         { ...this.scope, conversationId, memberId: member.id },
         false,
       );
-      // A closed chat moved into a section is open again in the member's list.
       const opened =
         member.conversation.channelName === null
           ? REALTIME_EVENTS.dmOpened

@@ -2,7 +2,7 @@ import { withTaskDiscussions } from "#src/server/conversations/task-discussion-r
 import { announceMessageBestEffort } from "#src/server/conversations/conversation-activity.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
-import { recordMembershipNotice } from "#src/server/conversations/channel-membership-notice.server";
+import { recordMembershipNotices } from "#src/server/conversations/channel-membership-notice.server";
 import { channelPeopleChanged } from "#src/server/conversations/channel-people-invalidation.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
@@ -114,31 +114,23 @@ export class PrismaWorkspaceMemberDirectoryStore implements WorkspaceMemberDirec
         where: { workspaceId_userId: { workspaceId, userId } },
       });
       const activeChannels = await tx.conversationMember.findMany({
-        // The notices below lock each channel in this order, so two concurrent removals locking
-        // the same channels take the same locks in the same order.
         orderBy: { conversationId: "asc" },
         where: { workspaceId, userId, ...ACTIVE_CHANNEL_MEMBER_WHERE },
         select: { conversationId: true },
       });
-      // Soft-left, never deleted: their Messages and Tasks keep this row as sender, owner and
-      // creator (`Restrict`), so their history stays readable under their name.
       await tx.conversationMember.updateMany({
         where: { workspaceId, userId, ...ACTIVE_MEMBER_WHERE },
         data: { leftAt: new Date() },
       });
       const { computerIds } = await unlinkDepartingMemberComputers(tx, { workspaceId, userId });
       const leftChannelIds = activeChannels.map((row) => row.conversationId);
-      const membershipNotices = [];
-      for (const row of activeChannels) {
-        const notice = await recordMembershipNotice(tx, {
-          workspaceId,
-          conversationId: row.conversationId,
-          kind: options.operator ? "channel.member_removed" : "channel.member_left",
-          actors: [{ userId }],
-          ...(options.operator ? { operator: options.operator } : {}),
-        });
-        if (notice) membershipNotices.push({ ...notice, conversationId: row.conversationId });
-      }
+      const membershipNotices = await recordMembershipNotices(tx, {
+        workspaceId,
+        conversationIds: leftChannelIds,
+        kind: options.operator ? "channel.member_removed" : "channel.member_left",
+        actors: [{ userId }],
+        ...(options.operator ? { operator: options.operator } : {}),
+      });
       await recordMemberRemoved(tx, workspaceId, { userId, leftChannelIds });
       return {
         leftChannelIds,
@@ -170,8 +162,6 @@ export function workspaceMemberDirectory(db: PrismaClient) {
 }
 
 let realtime: CentrifugoConversationRealtime | undefined;
-/** The open-page publication a membership record announces through; none when Centrifugo is not
- * configured — a page reconciles a missed record on its next subscribe. */
 function productionRealtime() {
   if (!realtime) {
     try {
