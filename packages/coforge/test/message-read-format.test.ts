@@ -85,8 +85,8 @@ test("an unread page that is all folded says there is nothing new and still ends
     unread,
   );
   expect(output.split("\n")).toEqual([
-    "No new unread messages in #general. 2 messages you were already shown (seq 4-5) are not repeated.",
-    'More unread remain. Next: coforge message read --target "#general" --unread',
+    "MORE UNREAD REMAIN. No new unread messages in #general. 2 messages you were already shown (seq 4-5) are not repeated.",
+    'Unread window is incomplete. Continue with: coforge message read --target "#general" --unread',
   ]);
 });
 
@@ -108,15 +108,19 @@ test("a fold with an unmoved read position says how to see the messages again", 
   );
 });
 
-test("an unread read that shows messages without moving the position omits the position line", () => {
-  const output = formatReadWindow(
-    "#general",
+test("an incomplete task unread window warns before the messages and gives the continuation command", () => {
+  const lines = formatReadWindow(
+    "#general:#7",
     { messages: [message(4)], unreadCursorBefore: 4, readPositionAfter: 4, moreUnread: true },
-    unread,
+    { task: true, unread: true },
+  ).split("\n");
+  expect(lines[0]).toBe(
+    "Unread window: 1 returned, seq 4, oldest to newest, starting after your read position (seq 4). MORE UNREAD REMAIN.",
   );
-  expect(output).not.toContain("Read position");
-  expect(output).toContain("More unread remain.");
-  expect(output).not.toContain("No more unread");
+  expect(lines.some((line) => line.startsWith("Read position"))).toBe(false);
+  expect(lines.at(-1)).toBe(
+    'Unread window is incomplete. Continue with: coforge task read "#general:#7" --unread',
+  );
 });
 
 test("an unread read with nothing at all starts with the coverage, a blank line, and where the Agent stands", () => {
@@ -138,10 +142,11 @@ test("an unread page with nothing from others but more beyond it says to keep re
     { messages: [], unreadCursorBefore: 10, readPositionAfter: 60, moreUnread: true },
     unread,
   ).split("\n");
-  expect(lines.slice(1)).toEqual([
+  expect(lines[0]).toBe("MORE UNREAD REMAIN.");
+  expect(lines.slice(2)).toEqual([
     "",
     "No unread messages from others in #general up to seq 60.",
-    'More unread remain. Next: coforge message read --target "#general" --unread',
+    'Unread window is incomplete. Continue with: coforge message read --target "#general" --unread',
   ]);
 });
 

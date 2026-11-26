@@ -37,15 +37,14 @@ const COVERAGE_TOP_LEVEL =
   "Coverage: top-level messages in this target only; thread replies are excluded and must be read from their thread targets.";
 
 const COVERAGE_TASK = "Coverage: this task conversation only.";
+const MORE_UNREAD = "MORE UNREAD REMAIN.";
 
-/** The command that reads `target` again: a task's ref is read with `task read`. */
 const readCommand = (target: string, task: boolean) =>
   task ? `coforge task read "${target}"` : `coforge message read --target "${target}"`;
 
 const sequenceRange = (from?: number, through?: number) =>
   from === through ? `seq ${from}` : `seq ${from}-${through}`;
 
-/** The header of an unread read: what it returned, from where the Agent's read position stood. */
 function unreadHeader(messages: readonly AgentMessageRecord[], cursorBefore: number): string {
   const range = sequenceRange(messages[0]!.sequence, messages.at(-1)!.sequence);
   return `Unread window: ${messages.length} returned, ${range}, oldest to newest, starting after your read position (seq ${cursorBefore}).`;
@@ -54,8 +53,6 @@ function unreadHeader(messages: readonly AgentMessageRecord[], cursorBefore: num
 const readPositionMoved = (response: ReadWindowResponse) =>
   (response.readPositionAfter ?? 0) > (response.unreadCursorBefore ?? 0);
 
-/** One line for the messages an unread read left out because the Agent was already shown them;
- * when the read position did not move, it also says how to see them again. */
 function foldedLine(
   target: string,
   response: ReadWindowResponse,
@@ -74,22 +71,17 @@ function foldedLine(
 
 const eventLines = (events: readonly TaskHistoryEvent[]) => events.map(timelineEventLine);
 
-/** The history events since the read position, when no message came with them. */
 const historyAfterRead = (events: readonly TaskHistoryEvent[]) =>
   events.length ? ["", "History since your read position:", ...eventLines(events)] : [];
 
-/** The unread read's footer: whether more remain past the last shown message. */
 function unreadFooter(target: string, response: ReadWindowResponse, task: boolean): string[] {
-  const lines: string[] = [];
-  lines.push(
+  return [
     response.moreUnread
-      ? `More unread remain. Next: ${readCommand(target, task)} --unread`
+      ? `Unread window is incomplete. Continue with: ${readCommand(target, task)} --unread`
       : "No more unread in this target.",
-  );
-  return lines;
+  ];
 }
 
-/** The header of a history read: how many messages, and where older and newer ones are. */
 function readWindowHeader(
   target: string,
   response: ReadWindowResponse,
@@ -128,6 +120,7 @@ export function formatReadWindow(
     if (!folded) {
       const through = response.readPositionAfter ?? response.unreadCursorBefore ?? 0;
       return [
+        ...(response.moreUnread ? [MORE_UNREAD] : []),
         coverage,
         "",
         response.moreUnread
@@ -138,7 +131,7 @@ export function formatReadWindow(
       ].join("\n");
     }
     return [
-      `No new unread messages in ${target}. ${folded}`,
+      `${response.moreUnread ? `${MORE_UNREAD} ` : ""}No new unread messages in ${target}. ${folded}`,
       ...unreadFooter(target, response, task),
       ...historyAfterRead(events),
     ].join("\n");
@@ -146,7 +139,8 @@ export function formatReadWindow(
 
   const lines = [
     options.unread
-      ? unreadHeader(messages, response.unreadCursorBefore ?? 0)
+      ? unreadHeader(messages, response.unreadCursorBefore ?? 0) +
+        (response.moreUnread ? ` ${MORE_UNREAD}` : "")
       : readWindowHeader(target, response, messages, task),
     coverage,
   ];
@@ -159,8 +153,6 @@ export function formatReadWindow(
   if (taskHint) lines.push(taskHint);
   lines.push("");
 
-  // An attachment takes top-level comments only, so naming a reply target there would point an
-  // Agent at a send that is refused.
   const includeReplyTarget = !task && !isThreadTarget(target) && !target.startsWith("attachment:");
   for (const entry of mergeTimeline(messages, events)) {
     if (entry.kind === "event") {
