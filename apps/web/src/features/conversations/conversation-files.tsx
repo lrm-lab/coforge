@@ -3,7 +3,7 @@ import { getRouteApi } from "@tanstack/react-router";
 import { AlertCircle, Download01, Folder, MarkerPin01 } from "@untitledui/icons";
 
 import { m } from "#src/paraglide/messages";
-import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
+import { getReadableFileSize } from "#src/features/files/file-meta";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { EmptyState, RetryButton } from "#src/components/ui/empty";

@@ -12,7 +12,7 @@ import {
   getComputerRuntimeCatalog,
   listComputers,
 } from "#src/features/computers/computers.functions";
-import { useVisibleLiveAgents } from "#src/features/agents/workspace-agents-realtime";
+import { useVisibleAgentDirectory } from "#src/features/agents/workspace-agents-realtime";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -79,10 +79,8 @@ export function AddMembersView({
   // Joined some other way meanwhile (a refetch, another member): nothing left to retry.
   const unjoined =
     failure && !data.agents.some((agent) => agent.id === failure.agent.id) ? failure : null;
-  // A search no candidate answers names the Agent to create, unless an Agent the viewer can see
-  // already answers it (in the channel, or private): that one exists, and its name is taken.
   const query = term.toLowerCase();
-  const taken = useVisibleLiveAgents().some((agent) =>
+  const taken = useVisibleAgentDirectory().some((agent) =>
     memberMatchesSearch(query, { kind: "agent", displayName: agent.displayName, name: agent.name }),
   );
   const createName = term && shown.length === 0 && !taken ? term : "";

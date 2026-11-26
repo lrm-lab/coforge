@@ -3,7 +3,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
 import { useConversationAgentProfile } from "#src/features/agents/profile-panel/open-agent-profile";
-import { useLiveAgent } from "#src/features/agents/workspace-agents-realtime";
 import { ACTIVITY_INBOX_LISTS_KEY } from "#src/features/inbox/activity-inbox-queries";
 import { ConversationTaskBoard } from "#src/features/tasks/conversation-task-board";
 import { ArtifactsBesideChat } from "#src/features/artifacts/artifact-beside-chat";
@@ -137,7 +136,6 @@ function AgentDirectConversationPage({
   conversation: DirectConversationView;
 }) {
   const agentId = conversation.agent.id;
-  const agentStatus = useLiveAgent(agentId)?.status.value;
   return (
     <DirectConversationPageBody
       {...props}
@@ -159,7 +157,6 @@ function AgentDirectConversationPage({
           {...data.conversationProps}
           conversation={conversation}
           {...chat}
-          agentStatus={agentStatus}
         />
       )}
     />

@@ -100,11 +100,7 @@ export type DirectConversationView = {
 
 export type ConversationProps = {
   conversation: DirectConversationView;
-  agentStatus?: "active" | "inactive";
-  /** Whether the composer offers @-completion; off where a mention stays plain text (a DM between
-   * members). The members still resolve names and fill a Task's assignee list. */
   mentionCompletion?: boolean;
-  /** Maximum in-conversation members returned by `@` completion; defaults to 8 when omitted. */
   mentionMemberLimit?: number;
   onSend: (
     body: string,
@@ -113,50 +109,31 @@ export type ConversationProps = {
     options?: SendOptions,
   ) => Promise<SentMessage | void>;
   onLoadOlder?: () => Promise<void>;
-  /** Fetch the next page towards the live end once the bounded window's oldest page has pushed the
-   * tail out of the loaded pages. */
   onLoadNewer?: () => Promise<void>;
   onLoadMessageAround?: (messageId: string) => Promise<string>;
   onShowLatest?: () => Promise<void>;
-  /** Whether the main stream's viewport is following its newest row. A full refetch may replace
-   * retained pages only while this is true; deliberate reading above the tail must stand. */
   onFollowingLatestChange?: (following: boolean) => void;
   onReadThread?: (rootMessageId: string, throughSequence: number) => Promise<void>;
-  /** The main pane reached the latest message by the user's own scrolling. Thread panes are
-   * separate `ConversationPane` instances and never advance the conversation cursor. */
   onReadLatest?: (throughSequence: number) => void;
-  /** Whether a top-level send may go "As task": the message is a Task, with every upload. */
   canSendAsTask?: boolean;
-  /** Toggles the viewer's own emoji reaction on a message; the route refreshes it. */
   onToggleReaction?: (messageId: string, emoji: string, active: boolean) => Promise<void>;
   onShowTasks?: () => void;
   onShowFiles?: () => void;
-  /** Opens the Agent profile panel from an Agent sender's avatar/name; absent where the
-   * conversation route does not own that slot. See `features/agents/profile-panel/`. A named tab
-   * opens the panel on it (the Agent card's "Recent activity" opens Activity). */
   onOpenAgentProfile?: OpenAgentProfile;
-  /** The Agent profile panel's URL state, owned by the route (`profile`/`agentTab` search
-   * params via `features/agents/profile-panel/`), not by this feature. `agentId` undefined means
-   * the panel is closed. */
   agentProfile?: {
     agentId: string | undefined;
     tab: AgentProfileTab | undefined;
-    /** A person's profile shown in the same slot instead (`profile=user:<id>`). */
     personId?: string;
   };
-  /** Opens a person's profile panel from a person sender's avatar/name. */
   onOpenPersonProfile?: OpenPersonProfile;
   onAgentProfileTabChange?: (tab: AgentProfileTab) => void;
   onCloseAgentProfile?: () => void;
-  /** The conversation's Tasks tab. When given it replaces the message stream in the main pane;
-   * the Task popup and the thread/profile slot stay the conversation's, so a Task opened from
-   * the board shows over it without leaving the tab. */
   tasksPane?: ReactNode;
   detailsOpen?: boolean;
   detailsPane?: ReactNode;
 };
 
-export type ThreadedConversationProps = Omit<ConversationProps, "conversation" | "agentStatus"> & {
+export type ThreadedConversationProps = Omit<ConversationProps, "conversation"> & {
   conversation: Omit<DirectConversationView, "agent">;
   /** Plain-`@handle` display resolution for the stream (see `MessageBody`). Each wrapper builds
    * it with `plainMentionsByHandle`: an Agent DM from its Agent, a member DM or a channel from its

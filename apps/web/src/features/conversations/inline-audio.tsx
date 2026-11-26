@@ -1,7 +1,7 @@
 import type { RefObject } from "react";
 import { Download01 } from "@untitledui/icons";
 
-import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
+import { getReadableFileSize } from "#src/features/files/file-meta";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Spinner } from "#src/components/ui/spinner";

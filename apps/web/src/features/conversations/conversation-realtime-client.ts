@@ -26,48 +26,21 @@ import {
 } from "./conversation-realtime";
 import { deviceComposerOutbox } from "./use-message-outbox";
 
-/** Which member lists a missed membership change may have stale-dated (see `onMemberChanged`). */
 export type MemberDirectoryStale = "page-payload" | "all";
 
 export function subscribeToConversationRealtime(
   client: SharedRealtimeClient,
   input: {
     conversationId: string;
-    /** Where the page's newest window was read in this conversation's stream, once a read of it
-     * under way has settled; undefined when it has none. A first subscribe past nothing new since
-     * reads nothing again (`streamMovedSince`). */
     readPosition?: () => Promise<StreamPosition | undefined>;
-    /** Where the window stood in the stream when the page opened it: its member lists were read
-     * from that copy or after it, so a first subscribe past nothing new since leaves them. */
     openedAt?: StreamPosition;
-    /** A first subscribe found nothing new since the window was read: caught up without a read. */
     onCaughtUp?: () => void;
-    /** `restart`: the page came back (visible, online, or a resubscribe that could not replay
-     * what it missed), so a read in flight may be stuck on a connection that died meanwhile
-     * (`createConversationReconciler`). */
     reconcile: (options?: { restart?: boolean }) => void;
-    /** A membership change in this conversation (join/leave/add/remove) may have gone unseen:
-     * the member directory (composer candidates, plain-@handle resolution) must be refetched.
-     * `"page-payload"`: the first subscribe, which covers what changed while the page loaded, so
-     * only the lists read before it (the page payload's) are stale; a list the browser first
-     * read after hydration was read about as late as the subscribe. `"all"`: a
-     * `member.changed.v1` publication, or a resubscribe that lost publications. */
     onMemberChanged?: (stale: MemberDirectoryStale) => void;
-    /** This channel was renamed, described, archived or unarchived: the page's own copy of those
-     * facts is stale and must be refetched. */
     onChannelUpdated?: () => void;
-    /** A message the viewer sent from the browser now exists: its signal names the send's request
-     * id, so the page can swap its greyed pending copy for the real message (see
-     * `composer-outbox.ts`). */
     onSentMessage?: (idempotencyKey: string, messageId: string) => void;
-    /** A message's reactions after a write, heard whether or not the tab is visible: applying
-     * it reads nothing. */
     onReaction?: (event: MessageReactionEvent) => void;
-    /** A resubscribe could not replay every missed publication: the loaded messages' reactions
-     * may be stale. A first subscribe does not count: a reaction between the page's read and it
-     * waits for the next. */
     onPublicationsLost?: () => void;
-    /** A member's top-level read position moved forward. */
     onRead?: (event: ConversationReadEvent) => void;
   },
 ) {
@@ -75,10 +48,18 @@ export function subscribeToConversationRealtime(
   const requestReconciliation = (options?: { restart?: boolean }) => {
     if (document.visibilityState === "visible") input.reconcile(options);
   };
-  // Left: a first subscribe's comparison that settles later does nothing.
   let closed = false;
-  /** A first subscribe reads again only what the stream moved past: the messages past the window's
-   * last read, the member lists past where the page opened it. */
+  let subscribed = false;
+  let safetyTimer: number | undefined;
+  const startSafetyTimer = () => {
+    if (closed || safetyTimer !== undefined) return;
+    safetyTimer = window.setInterval(() => requestReconciliation(), 30_000);
+  };
+  const stopSafetyTimer = () => {
+    if (safetyTimer === undefined) return;
+    window.clearInterval(safetyTimer);
+    safetyTimer = undefined;
+  };
   const catchUpFirstSubscribe = async (
     recovery: SubscribedRecovery,
     readPosition: () => Promise<StreamPosition | undefined>,
@@ -97,8 +78,8 @@ export function subscribeToConversationRealtime(
     recoverable: true,
     positioned: true,
     onSubscribed: (context) => {
-      // Anything the subscription could not replay — before the first subscribe, or across a
-      // resubscribe that lost publications — may include a member change as well as messages.
+      subscribed = true;
+      stopSafetyTimer();
       const gap = subscriptionGap(context);
       if (gap === "none") return;
       if (gap === "unrecovered" && input.readPosition) {
@@ -110,6 +91,14 @@ export function subscribeToConversationRealtime(
       requestReconciliation({ restart: true });
       if (gap === "lost") input.onPublicationsLost?.();
       input.onMemberChanged?.(gap === "unrecovered" ? "page-payload" : "all");
+    },
+    onSubscribing: () => {
+      subscribed = false;
+      startSafetyTimer();
+    },
+    onError: () => {
+      subscribed = false;
+      startSafetyTimer();
     },
     onPublication: ({ data }) => {
       try {
@@ -129,9 +118,6 @@ export function subscribeToConversationRealtime(
         if (read.conversationId === input.conversationId) input.onRead?.(read);
         return;
       }
-      // Not a message event: the other payloads this channel carries are a membership change,
-      // which stale-dates the member directory, and a change to the channel's own facts. Neither
-      // touches the message window.
       try {
         const event = decodeMemberChangedEvent(data);
         if (event.conversationId === input.conversationId) input.onMemberChanged?.("all");
@@ -143,19 +129,17 @@ export function subscribeToConversationRealtime(
       } catch {}
     },
   });
+  if (!subscribed) startSafetyTimer();
   const onBack = () => requestReconciliation({ restart: true });
-  // Restored from the back-forward cache (iOS Safari's usual way back), which need not fire
-  // `visibilitychange`.
   const onPageShow = (event: PageTransitionEvent) => {
     if (event.persisted) onBack();
   };
-  const safetyTimer = window.setInterval(() => requestReconciliation(), 30_000);
   document.addEventListener("visibilitychange", onBack);
   window.addEventListener("online", onBack);
   window.addEventListener("pageshow", onPageShow);
   return () => {
     closed = true;
-    window.clearInterval(safetyTimer);
+    stopSafetyTimer();
     document.removeEventListener("visibilitychange", onBack);
     window.removeEventListener("online", onBack);
     window.removeEventListener("pageshow", onPageShow);
@@ -171,17 +155,12 @@ export function useConversationRealtime(
   onReaction?: (event: MessageReactionEvent) => void,
   onPublicationsLost?: () => void,
   onRead?: (event: ConversationReadEvent) => void,
-  /** The Query holding the conversation's window (`key`), whose newest page carries its stream
-   * position, and what to call when a first subscribe found nothing new since it was read
-   * (`caughtUp`); without it, every first subscribe catches up. */
   windowQuery?: { key: QueryKey; caughtUp: () => void },
 ) {
   const client = useBrowserRealtime();
   const queryClient = useQueryClient();
   const windowRef = useRef(windowQuery);
   windowRef.current = windowQuery;
-  // Where the window stood when this conversation opened here, which its member lists were seeded
-  // from: kept across a resubscribe of the same conversation, which may follow a refetch.
   const opened = useRef<{ conversationId: string; at: StreamPosition | undefined }>(undefined);
   const reconcileRef = useRef(reconcile);
   reconcileRef.current = reconcile;
@@ -217,9 +196,6 @@ export function useConversationRealtime(
 type PositionedWindow = { pages: { streamPositions?: StreamPositions }[] };
 const newestPositions = (data: PositionedWindow | undefined) => data?.pages.at(-1)?.streamPositions;
 
-/** Where the conversation's window stands in its stream for `subscribeToConversationRealtime`: as
- * it opened (`openedAt`, kept in `opened` per conversation), and once a read of it under way
- * settles (`readPosition`). */
 function windowPositions(
   queryClient: QueryClient,
   windowKey: QueryKey | undefined,

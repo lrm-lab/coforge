@@ -1,14 +1,5 @@
-/**
- * file-meta — pure helpers for how a file is described: its extension, size, kind and type label.
- *
- * Dependency-free (no React, no i18n) so components and unit tests can import the extension /
- * size / type-category logic directly. The type-category token picks a file's glyph in
- * `file-icon-type.ts`.
- */
-
 import { extensionToLanguage, getPreviewKind } from "./preview";
 
-// File-type category token. `file-icon-type.ts` maps each one to a glyph.
 export type FileTypeCategory =
   | "image"
   | "video"
@@ -27,7 +18,6 @@ const WORD_EXTS = new Set<string>(["doc", "docx", "rtf", "odt"]);
 const EXCEL_EXTS = new Set<string>(["xls", "xlsx", "ods", "csv", "tsv"]);
 const PPT_EXTS = new Set<string>(["ppt", "pptx", "odp", "key"]);
 
-/** Lowercased extension without the dot (`"report.PDF"` → `"pdf"`). Empty when none. */
 export function getFileExtension(filename: string): string {
   const base = (filename ?? "").toLowerCase().split(/[\\/]/).pop() ?? "";
   const dot = base.lastIndexOf(".");
@@ -35,18 +25,8 @@ export function getFileExtension(filename: string): string {
   return base.slice(dot + 1);
 }
 
-/**
- * The short kind shown before a file's size: its extension, or the media type when the name has no
- * usable one (`LICENSE`, `Dockerfile`, a dotfile) so such a file still says what it is rather than
- * showing a bare size. `application/octet-stream` is the upload default for "unknown", so it names
- * nothing, and a dotted phrase ("notes.final version") is not an extension.
- *
- * Not unit-tested: this is display text, and `docs/agents/testing.md` reserves UI verification for
- * a browser.
- */
 export function fileTypeLabel(fileName: string, contentType: string): string | undefined {
   const suffix = getFileExtension(fileName);
-  // A long tail is part of the name rather than an extension ("notes.final version").
   if (suffix && suffix.length <= 8 && !suffix.includes(" ")) return suffix.toUpperCase();
   const subtype = contentType.split(";")[0]?.split("/")[1]?.trim() ?? "";
   const named = subtype.replace(/^(x-|vnd\.)/, "");
@@ -54,11 +34,6 @@ export function fileTypeLabel(fileName: string, contentType: string): string | u
   return named.slice(0, 12).toUpperCase();
 }
 
-/**
- * Human-readable byte size (`1536` → `"1.5 KB"`). One decimal below 100,
- * whole numbers at/above 100 and for raw bytes. Empty string for
- * non-finite / negative input so callers can drop it from the meta line.
- */
 export function formatFileSize(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "";
   if (bytes < 1024) return `${bytes} B`;
@@ -73,11 +48,13 @@ export function formatFileSize(bytes: number): string {
   return `${rounded} ${units[unit]}`;
 }
 
-/**
- * Coarse file-type bucket for a file's icon. Leans on the existing
- * preview-kind / language detection, then adds document/archive buckets that
- * preview doesn't distinguish. Falls back to `"file"` for unknown types.
- */
+export function getReadableFileSize(bytes: number): string {
+  if (bytes === 0) return "0 KB";
+  const suffixes = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
+  const index = Math.floor(Math.log(bytes) / Math.log(1024));
+  return `${Math.floor(bytes / 1024 ** index)} ${suffixes[index]}`;
+}
+
 export function getFileTypeCategory(contentType: string, filename: string): FileTypeCategory {
   const kind = getPreviewKind(contentType, filename);
   if (kind === "image") return "image";
@@ -91,13 +68,10 @@ export function getFileTypeCategory(contentType: string, filename: string): File
   if (EXCEL_EXTS.has(ext)) return "excel";
   if (PPT_EXTS.has(ext)) return "ppt";
 
-  // A recognized programming/markup language (but not plain prose / markdown)
-  // reads as code; everything else text-like is plain text.
   const language = extensionToLanguage(filename);
   if (language && language !== "plaintext" && language !== "markdown") {
     return "code";
   }
   if (kind === "markdown" || kind === "text") return "text";
-
   return "file";
 }

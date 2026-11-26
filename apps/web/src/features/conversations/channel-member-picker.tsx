@@ -1,5 +1,5 @@
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
-import { useVisibleLiveAgents } from "#src/features/agents/workspace-agents-realtime";
+import { useVisibleAgentDirectory } from "#src/features/agents/workspace-agents-realtime";
 import { Face } from "#src/features/pickers/entity-picker";
 import { PickerListRow } from "#src/features/pickers/picker-list";
 import { BadgeWithButton } from "#src/components/base/badges/badges";
@@ -191,9 +191,6 @@ export function ChannelCandidateGroups({
   );
 }
 
-/** Why a search found no one to add: nobody matched, or only a private Agent of the viewer's did,
- * which no channel holds; that one links to its profile, where it can be made public. Reads the
- * Agents only once a search has come up empty. */
 function NoMatches({
   term,
   disabled,
@@ -204,7 +201,7 @@ function NoMatches({
   onOpenAgent: (agentId: string) => void;
 }) {
   const query = term.toLowerCase();
-  const privateMatch = useVisibleLiveAgents().find(
+  const privateMatch = useVisibleAgentDirectory().find(
     (agent) =>
       agent.visibility === AGENT_VISIBILITY.PRIVATE &&
       memberMatchesSearch(query, {

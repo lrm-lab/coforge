@@ -10,17 +10,27 @@ type SubscribedContext = {
 };
 type SubscribedListener = (context: SubscribedContext) => void;
 
+type SubscribingListener = () => void;
+type ErrorListener = (event: { error: { code: number; message: string } }) => void;
+
 function fakeClient() {
   let created = 0;
   let stopped = 0;
   let removed = 0;
   const publications: PublicationListener[] = [];
   const subscribedListeners: SubscribedListener[] = [];
+  const subscribingListeners: SubscribingListener[] = [];
+  const errorListeners: ErrorListener[] = [];
   const subscription = {
     state: "subscribing",
-    on(event: string, listener: PublicationListener | SubscribedListener) {
+    on(
+      event: string,
+      listener: PublicationListener | SubscribedListener | SubscribingListener | ErrorListener,
+    ) {
       if (event === "publication") publications.push(listener as PublicationListener);
       if (event === "subscribed") subscribedListeners.push(listener as SubscribedListener);
+      if (event === "subscribing") subscribingListeners.push(listener as SubscribingListener);
+      if (event === "error") errorListeners.push(listener as ErrorListener);
       return subscription;
     },
     subscribe() {},
@@ -45,6 +55,14 @@ function fakeClient() {
     subscribed(context: SubscribedContext) {
       subscription.state = "subscribed";
       for (const listener of subscribedListeners) listener(context);
+    },
+    subscribing() {
+      subscription.state = "subscribing";
+      for (const listener of subscribingListeners) listener();
+    },
+    error(code = 100, message = "failed") {
+      subscription.state = "unsubscribed";
+      for (const listener of errorListeners) listener({ error: { code, message } });
     },
   };
 }
@@ -319,4 +337,52 @@ test("conversation views share one physical subscription until the last release"
     releaseFirst();
     releaseSecond();
   }
+});
+
+test("safetyTimer polls only while unsubscribed or reconnecting and stays inactive when subscribed", () => {
+  const timers = new Map<number, () => void>();
+  let nextId = 1;
+  Object.assign(globalThis.window, {
+    setInterval(fn: () => void) {
+      const id = nextId++;
+      timers.set(id, fn);
+      return id;
+    },
+    clearInterval(id: number) {
+      timers.delete(id);
+    },
+  });
+
+  const { client, subscribed, subscribing, error } = fakeClient();
+  let reconciled = 0;
+  const release = subscribeToConversationRealtime(client, {
+    conversationId: "conversation-timer",
+    reconcile: () => {
+      reconciled += 1;
+    },
+  });
+
+  try {
+    expect(timers.size).toBe(1);
+    for (const fn of timers.values()) fn();
+    expect(reconciled).toBe(1);
+
+    subscribed({ wasRecovering: false, recovered: false });
+    expect(timers.size).toBe(0);
+    expect(reconciled).toBe(2);
+
+    subscribing();
+    expect(timers.size).toBe(1);
+    for (const fn of timers.values()) fn();
+    expect(reconciled).toBe(3);
+
+    subscribed({ wasRecovering: true, recovered: true });
+    expect(timers.size).toBe(0);
+
+    error();
+    expect(timers.size).toBe(1);
+  } finally {
+    release();
+  }
+  expect(timers.size).toBe(0);
 });

@@ -7,7 +7,10 @@ import { AgentMascotAvatar } from "#src/features/agents/agent-mascot-avatar";
 import { agentDisplay } from "#src/features/agents/agent-status-display";
 import { AgentStatusMarker, AgentStatusText } from "#src/features/agents/agent-status-marker";
 import { DELETED_AGENT_NAME_CLASS, DeletedAgentLabel } from "#src/features/agents/deleted-agent";
-import { useLiveAgent, useLiveAgentDisplay } from "#src/features/agents/workspace-agents-realtime";
+import {
+  useLiveAgentDisplay,
+  useLiveAgentIdentity,
+} from "#src/features/agents/workspace-agents-realtime";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { TabbedHeader } from "#src/components/layout/tabbed-header";
@@ -36,21 +39,16 @@ export function DirectConversationHeader({
   settingsOpen?: boolean;
   onToggleSettings?: () => void;
 }) {
-  const live = useLiveAgent(conversation.agent.id);
+  const identity = useLiveAgentIdentity(conversation.agent.id);
   const display = useLiveAgentDisplay(conversation.agent.id);
   const status = agentDisplay(display);
-  // A deleted Agent's DM stays readable, with its read-only profile, but takes no new messages.
   const deleted = Boolean(conversation.agent.deletedAt);
   const openProfile = onOpenAgentProfile
     ? () => onOpenAgentProfile(conversation.agent.id)
     : undefined;
-  // The moving mascot wherever the live store knows the Agent's key: the viewer's own Agents and
-  // another member's (`isExtra`, once watched above). The still picture stays for a deleted Agent
-  // (greyed), an Agent whose mascot is not known yet (no live entry, no profile mascot) and an app
-  // bot, which has no mascot.
-  const avatar = live?.mascot ? (
+  const avatar = identity?.mascot ? (
     <AgentMascotAvatar
-      mascot={live.mascot}
+      mascot={identity.mascot}
       name={conversation.agent.displayName}
       display={display}
       deleted={deleted}

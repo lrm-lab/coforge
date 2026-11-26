@@ -6,9 +6,7 @@ import type { ChannelSuggestion } from "./reference-completion";
 import type { StreamRead } from "./stream-state";
 import type { ThreadFollow } from "./thread-pane-header";
 
-/** What one message stream (`ConversationPane`) is given: a channel's or a DM's main stream, a
- * thread beside it, or a Task popup's discussion. */
-export type ConversationPaneProps = Omit<ConversationProps, "conversation" | "agentStatus"> & {
+export type ConversationPaneProps = Omit<ConversationProps, "conversation"> & {
   conversation: Omit<DirectConversationView, "agent">;
   header?: ReactNode;
   readOnlyNotice?: ReactNode;

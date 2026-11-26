@@ -7,7 +7,7 @@ import {
   type CSSProperties,
 } from "react";
 import { Download01 } from "@untitledui/icons";
-import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
+import { getReadableFileSize } from "#src/features/files/file-meta";
 import { Button } from "#src/components/base/buttons/button";
 import { isDisplayableImageAttachment } from "#src/lib/inline-image";
 import {
@@ -80,7 +80,7 @@ function ImageThumbnail({
         className,
       )}
       style={style}
-      onClick={onOpen}
+      onPress={onOpen}
     >
       <span ref={registerNode} className="block size-full">
         <LoadingImage

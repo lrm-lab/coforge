@@ -14,11 +14,8 @@ import { type StreamPosition, type SubscribedRecovery } from "./subscription-gap
 import { createConnectionJournal } from "./connection-journal";
 import { watchRealtimeWake } from "./realtime-wake";
 
-/** The one realtime subscription type for the shared Workspace connection. */
 export type BrowserRealtimeSubscription = Subscription;
 
-// `undefined` means no provider above the caller; `null` means the provider's
-// connection is not open yet.
 const BrowserRealtimeContext = createContext<Centrifuge | null | undefined>(undefined);
 
 export function BrowserRealtimeProvider({
@@ -35,7 +32,6 @@ export function BrowserRealtimeProvider({
   useEffect(() => {
     if (!workspaceId) return;
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    // The token last fetched, so a wake can tell whether it expired meanwhile.
     let token: string | undefined;
     const journal = createConnectionJournal({ now: Date.now, log: console });
     const next = new Centrifuge(`${protocol}//${location.host}/connection/websocket`, {
@@ -62,22 +58,13 @@ export function BrowserRealtimeProvider({
 
 export function useBrowserRealtime() {
   const client = useContext(BrowserRealtimeContext);
-  // A subscription hook called in the component that renders the provider sees
-  // no client and would silently never subscribe; fail loudly instead.
   if (client === undefined)
     throw new Error("useBrowserRealtime must be called inside BrowserRealtimeProvider");
   return client;
 }
 
-/**
- * The shared connection's status as the page shows it (`connection-status.ts`), and the person's
- * Retry: it starts a connect at once, where the client would wait out its backoff. Nothing is
- * re-read here: each channel catches up in its own `onSubscribed`, as for any reconnect.
- */
 export function useRealtimeConnection() {
   const client = useBrowserRealtime();
-  // Kept with the client it describes: on a Workspace switch the old client's disconnect is not
-  // the new one's state, and nothing shows until the new one's is known.
   const [watched, setWatched] = useState<{ client: Centrifuge; connection: Connection } | null>(
     null,
   );
@@ -118,7 +105,6 @@ export function useRealtimeConnection() {
     };
   }, [client]);
 
-  // Shows the next threshold when it is crossed with nothing else happening.
   const nextChange = connection ? nextStatusChangeAt(connection, now) : undefined;
   useEffect(() => {
     if (nextChange === undefined) return;
@@ -145,35 +131,16 @@ export function useRealtimeConnection() {
   };
 }
 
-/** One publication; `position` is where it stands in a positioned channel's stream. */
 export type RealtimePublication = { channel: string; data: unknown; position?: StreamPosition };
 
-/** Who joined or left a channel with presence on: the connection's client id and its user. */
 export type RealtimeClient = Pick<ClientInfo, "client" | "user">;
 
-/**
- * Subscribes one authorized channel on the shared Workspace connection.
- *
- * The Workspace layout owns the only browser connection; features subscribe
- * through this hook and never construct their own Centrifuge client. No channel
- * carries a token of its own: the subscribe proxy decides who may hold it
- * (`subscribe-proxy.server.ts`).
- */
 export type RealtimeSubscriptionError = {
   channel: string;
   code: number;
   message: string;
 };
 
-/**
- * One real Centrifuge `Subscription` per channel, shared by every `useRealtimeSubscription` call
- * for that channel on this client — `newSubscription` throws "already exists" on a second call for
- * the same channel, and more than one feature legitimately subscribes to the same `chat:user:`
- * channel (the sidebar's unread badges and in-page notifications). The first
- * caller creates and subscribes it; the last caller's cleanup unsubscribes and removes it. Each
- * caller's own `onPublication`/`onSubscribed`/`onJoin`/`onLeave`/`onError` still only ever sees
- * its own latest closure, exactly as before sharing.
- */
 export type SharedRealtimeClient = Pick<Centrifuge, "newSubscription" | "removeSubscription">;
 
 type SharedSubscriptionEntry = {
@@ -182,6 +149,7 @@ type SharedSubscriptionEntry = {
   position?: StreamPosition;
   publicationHandlers: Set<(publication: RealtimePublication) => void>;
   subscribedHandlers: Set<(recovery: SubscribedRecovery) => void>;
+  subscribingHandlers: Set<() => void>;
   joinHandlers: Set<(client: RealtimeClient) => void>;
   leaveHandlers: Set<(client: RealtimeClient) => void>;
   errorHandlers: Set<(error: RealtimeSubscriptionError) => void>;
@@ -200,7 +168,6 @@ function runHandler<T>(channel: string, handler: (value: T) => void, value: T) {
   }
 }
 
-/** `runHandler` for each handler: one that fails leaves the others to run. */
 function dispatch<T>(channel: string, handlers: Iterable<(value: T) => void>, value: T) {
   for (const handler of handlers) runHandler(channel, handler, value);
 }
@@ -227,6 +194,7 @@ function acquireSharedSubscription(
     );
     const publicationHandlers = new Set<(publication: RealtimePublication) => void>();
     const subscribedHandlers = new Set<(recovery: SubscribedRecovery) => void>();
+    const subscribingHandlers = new Set<() => void>();
     const joinHandlers = new Set<(client: RealtimeClient) => void>();
     const leaveHandlers = new Set<(client: RealtimeClient) => void>();
     const errorHandlers = new Set<(error: RealtimeSubscriptionError) => void>();
@@ -235,6 +203,7 @@ function acquireSharedSubscription(
       refCount: 0,
       publicationHandlers,
       subscribedHandlers,
+      subscribingHandlers,
       joinHandlers,
       leaveHandlers,
       errorHandlers,
@@ -251,6 +220,9 @@ function acquireSharedSubscription(
       };
       dispatch(channel, subscribedHandlers, recovery);
     });
+    subscription.on("subscribing", () => {
+      dispatch(channel, subscribingHandlers, undefined);
+    });
     subscription.on("publication", (publication) => {
       const stream = created.position;
       const position =
@@ -260,15 +232,12 @@ function acquireSharedSubscription(
       if (stream && position && position.offset > stream.offset) created.position = position;
       dispatch(channel, publicationHandlers, { ...publication, position });
     });
-    // Delivered only on a channel whose namespace pushes join/leave (`force_push_join_leave`).
     subscription.on("join", ({ info }) => {
       dispatch(channel, joinHandlers, info);
     });
     subscription.on("leave", ({ info }) => {
       dispatch(channel, leaveHandlers, info);
     });
-    // A failed subscribe otherwise fails silently, leaving the feature looking connected but never
-    // updating. A refusal by the subscribe proxy (403) arrives as `unsubscribed` below instead.
     subscription.on("error", (event) => {
       console.warn(`realtime subscription error on ${channel}`, event.error);
       dispatch(channel, errorHandlers, {
@@ -278,8 +247,6 @@ function acquireSharedSubscription(
       });
     });
     subscription.on("unsubscribed", (event) => {
-      // Codes 0 and 2 are this client's own cleanup (unsubscribe called, client
-      // closed); anything else is the server or a token failure dropping us.
       if (event.code === 0 || event.code === 2) return;
       console.warn(`realtime subscription unsubscribed from ${channel}`, event.code, event.reason);
       dispatch(channel, errorHandlers, { channel, code: event.code, message: event.reason });
@@ -307,16 +274,14 @@ export type SharedRealtimeOptions = {
   channel: string;
   recoverable?: boolean;
   positioned?: boolean;
-  /** The channel became `subscribed`: its first subscribe and every resubscribe. The recovery
-   * flags say whether publications may have been missed (see `subscriptionGap`). */
   onSubscribed?: (recovery: SubscribedRecovery) => void;
+  onSubscribing?: () => void;
   onPublication?: (publication: RealtimePublication) => void;
   onJoin?: (client: RealtimeClient) => void;
   onLeave?: (client: RealtimeClient) => void;
   onError?: (error: RealtimeSubscriptionError) => void;
 };
 
-/** One ref-counted subscription lease, shared by React hooks and imperative message readers. */
 export function subscribeToSharedRealtime(
   client: SharedRealtimeClient,
   {
@@ -324,6 +289,7 @@ export function subscribeToSharedRealtime(
     recoverable,
     positioned,
     onSubscribed,
+    onSubscribing,
     onPublication,
     onJoin,
     onLeave,
@@ -333,16 +299,16 @@ export function subscribeToSharedRealtime(
   const entry = acquireSharedSubscription(client, channel, { recoverable, positioned });
   const onPublicationHandler = (publication: RealtimePublication) => onPublication?.(publication);
   const onSubscribedHandler = (recovery: SubscribedRecovery) => onSubscribed?.(recovery);
+  const onSubscribingHandler = () => onSubscribing?.();
   const onJoinHandler = (joined: RealtimeClient) => onJoin?.(joined);
   const onLeaveHandler = (left: RealtimeClient) => onLeave?.(left);
   const onErrorHandler = (error: RealtimeSubscriptionError) => onError?.(error);
   entry.publicationHandlers.add(onPublicationHandler);
   entry.subscribedHandlers.add(onSubscribedHandler);
+  entry.subscribingHandlers.add(onSubscribingHandler);
   entry.joinHandlers.add(onJoinHandler);
   entry.leaveHandlers.add(onLeaveHandler);
   entry.errorHandlers.add(onErrorHandler);
-  // A caller joining an already-subscribed shared channel missed its "subscribed" event, and
-  // everything published before it joined.
   if (entry.subscription.state === "subscribed")
     onSubscribedHandler({
       wasRecovering: false,
@@ -355,6 +321,7 @@ export function subscribeToSharedRealtime(
     released = true;
     entry.publicationHandlers.delete(onPublicationHandler);
     entry.subscribedHandlers.delete(onSubscribedHandler);
+    entry.subscribingHandlers.delete(onSubscribingHandler);
     entry.joinHandlers.delete(onJoinHandler);
     entry.leaveHandlers.delete(onLeaveHandler);
     entry.errorHandlers.delete(onErrorHandler);
@@ -367,6 +334,7 @@ export function useRealtimeSubscription({
   recoverable,
   positioned,
   onSubscribed,
+  onSubscribing,
   onPublication,
   onJoin,
   onLeave,
@@ -376,19 +344,18 @@ export function useRealtimeSubscription({
   const handlers = useRef({
     channel,
     onSubscribed,
+    onSubscribing,
     onPublication,
     onJoin,
     onLeave,
     onError,
   });
 
-  // Install the latest callbacks only after commit, so a superseded channel is
-  // unsubscribed before its handlers are replaced and can never dispatch into
-  // the new channel's scope.
   useEffect(() => {
     handlers.current = {
       channel,
       onSubscribed,
+      onSubscribing,
       onPublication,
       onJoin,
       onLeave,
@@ -405,6 +372,7 @@ export function useRealtimeSubscription({
       positioned,
       onPublication: (publication) => current()?.onPublication?.(publication),
       onSubscribed: (recovery) => current()?.onSubscribed?.(recovery),
+      onSubscribing: () => current()?.onSubscribing?.(),
       onJoin: (joined) => current()?.onJoin?.(joined),
       onLeave: (left) => current()?.onLeave?.(left),
       onError: (error) => current()?.onError?.(error),
@@ -412,14 +380,6 @@ export function useRealtimeSubscription({
   }, [client, channel, recoverable, positioned]);
 }
 
-/**
- * Subscribes a dynamic *set* of authorized channels on the shared Workspace connection — the
- * per-Agent channels added for the viewer's own visible private Agents, one activity and
- * one status channel per Agent, whose membership changes as Agents are created, deleted or
- * change visibility. `useRealtimeSubscription` only ever manages one fixed channel; this hook is
- * its sibling for a channel list, on the same shared subscriptions, diffed by channel name so an
- * Agent leaving the set unsubscribes without disturbing the others.
- */
 export function useRealtimeSubscriptions({
   channels,
   onPublication,
@@ -427,7 +387,6 @@ export function useRealtimeSubscriptions({
 }: {
   channels: readonly string[];
   onPublication: (channel: string, publication: RealtimePublication) => void;
-  /** `SharedRealtimeOptions.onSubscribed`, for each channel. */
   onSubscribed?: (channel: string, recovery: SubscribedRecovery) => void;
 }) {
   const client = useBrowserRealtime();
@@ -438,8 +397,6 @@ export function useRealtimeSubscriptions({
   });
   const channelKey = [...new Set(channels)].sort().join("\u0000");
 
-  // Each channel's lease, kept across set changes so a channel staying in the set is not
-  // resubscribed (and does not read again what a first subscribe may have missed).
   const leases = useRef(new Map<string, () => void>());
   useEffect(() => {
     if (!client) return;

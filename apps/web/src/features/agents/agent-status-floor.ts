@@ -6,16 +6,8 @@ import type { AgentMascot } from "./agent-mascot";
 import type { LiveAgent } from "./workspace-agents-realtime";
 import { useWatchAgentDisplay } from "./watched-agent-displays";
 
-/**
- * The status floors (`statusOnly` snapshots) by Agent id. A floor is never a display: it answers
- * only "is this Agent online, working or offline" for an Agent the viewer cannot otherwise see,
- * so it lives beside the tracked Agents rather than in their `display` — a full snapshot, which
- * may share the floor's revision, always wins and a floor can never downgrade one.
- */
 export type StatusOnlyDisplays = ReadonlyMap<string, AgentDisplaySnapshot>;
 
-/** Applies a status floor, keeping the newest revision per Agent; the same map when nothing
- * changes, so readers do not repaint on a repeated or stale publication. */
 export function mergeStatusOnlyDisplaySnapshot(
   current: StatusOnlyDisplays,
   snapshot: AgentDisplaySnapshot,
@@ -27,8 +19,6 @@ export function mergeStatusOnlyDisplaySnapshot(
   return next;
 }
 
-/** Drops an Agent's floor once its full display arrives (or it leaves the Workspace's status
- * set); the same map when there was none. */
 export function dropStatusOnlyDisplay(
   current: StatusOnlyDisplays,
   agentId: string,
@@ -42,8 +32,6 @@ export function dropStatusOnlyDisplay(
 export const LiveAgentStoreContext = createContext<Store<LiveAgent[]>>(
   createStore<LiveAgent[]>([]),
 );
-// The status floors private Agents publish on the shared status channel, by Agent id: a status
-// answer for an Agent the viewer cannot otherwise see, never a display and never directory data.
 export const StatusOnlyDisplaysContext = createContext<Store<StatusOnlyDisplays>>(
   createStore<StatusOnlyDisplays>(new Map<string, AgentDisplaySnapshot>()),
 );
@@ -112,7 +100,9 @@ export function selectHasLiveRosterAgent(
   agents: readonly { id: string; isExtra?: true }[],
   agentId: string | null | undefined,
 ): boolean {
-  return Boolean(agentId && agents.some((agent) => agent.id === agentId && !agent.isExtra));
+  if (!agentId) return false;
+  const agent = agentById(agents, agentId);
+  return Boolean(agent && !agent.isExtra);
 }
 
 export function useHasLiveAgent(agentId: string | null | undefined): boolean {
@@ -131,8 +121,7 @@ export function selectLiveAgentIdentity(
   agents: readonly Pick<LiveAgent, "id" | "displayName" | "avatarUrl" | "mascot">[],
   agentId: string,
 ): LiveAgentIdentity | undefined {
-  if (!agentId) return undefined;
-  const agent = agents.find((entry) => entry.id === agentId);
+  const agent = agentById(agents, agentId);
   if (!agent) return undefined;
   return {
     displayName: agent.displayName,
