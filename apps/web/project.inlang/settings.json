@@ -72,7 +72,8 @@
       "./messages/{locale}/task-assignment.json",
       "./messages/{locale}/tasks.json",
       "./messages/{locale}/pickers.json",
-      "./messages/{locale}/empty-states.json"
+      "./messages/{locale}/empty-states.json",
+      "./messages/{locale}/feedback.json"
     ]
   }
 }

@@ -3,6 +3,7 @@ import {
   Edit05,
   Grid01,
   Hash01 as Hash,
+  MessageTextSquare01,
   Monitor01 as Monitor,
   Plus,
   ShieldTick,
@@ -61,6 +62,8 @@ export function ActionCardGlyph({
       return <AgentPlus {...props} />;
     case "desktop:takeover":
       return <Monitor {...props} />;
+    case "feedback:submit":
+      return <MessageTextSquare01 {...props} />;
     case "page:fill":
       return <Edit05 {...props} />;
     case "app:grant_agent":
@@ -82,6 +85,8 @@ export function actionCardIcon(kind: ActionCardView["kind"]): Glyph {
       return AgentPlus;
     case "desktop:takeover":
       return Monitor;
+    case "feedback:submit":
+      return MessageTextSquare01;
     case "page:fill":
       return Edit05;
     case "app:grant_agent":

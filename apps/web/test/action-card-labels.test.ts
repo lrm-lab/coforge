@@ -15,6 +15,7 @@ test("every tool card kind has a title of its own, none falls back to another's"
     "app:recover_owner",
     "page:fill",
     "desktop:takeover",
+    "feedback:submit",
   ];
   const titles = kinds.map((kind) => actionCardTitle({ kind } as ToolActionCardView));
   expect(new Set(titles).size).toBe(kinds.length);

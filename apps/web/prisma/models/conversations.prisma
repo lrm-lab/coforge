@@ -58,6 +58,8 @@ model Conversation {
   savedMessages  SavedMessage[]
   messageReads   MessageRead[]
   pins           ConversationPin[]
+  routedFeedbacks UserFeedback[]
+  feedbackRoutingConfigs FeedbackRoutingConfig[]
   coordinatorAgent Agent?               @relation("ConversationCoordinator", fields: [coordinatorAgentId, workspaceId], references: [id, workspaceId], onDelete: NoAction)
 
   @@unique([workspaceId, directKey])

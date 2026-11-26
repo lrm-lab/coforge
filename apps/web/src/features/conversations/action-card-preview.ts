@@ -70,6 +70,10 @@ function summaryOf({ kind, params }: PreviewCard, locale?: Locale): string | und
         ? m.action_card_preview_desktop_takeover_prompt({ prompt }, options)
         : m.action_card_preview_desktop_takeover({}, options);
     }
+    case "feedback:submit": {
+      const body = cardText(params.body);
+      return body ? m.action_card_preview_feedback_submit({ body }, options) : undefined;
+    }
     default:
       return undefined;
   }

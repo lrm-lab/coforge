@@ -24,6 +24,7 @@ import {
   cardDeclinedNotice,
   choiceResultBody,
   desktopTakeoverResultBody,
+  feedbackSubmitResultBody,
   pageFillResultBody,
   questionsResultBody,
   type AgentReadableBody,
@@ -73,6 +74,7 @@ function answerBody(
   if (card?.state === "cancelled") return cardDeclinedNotice(card, target, chooser);
   if (card?.kind === "page:fill") return pageFillResultBody(card, target, chooser);
   if (card?.kind === "desktop:takeover") return desktopTakeoverResultBody(card, target, chooser);
+  if (card?.kind === "feedback:submit") return feedbackSubmitResultBody(card, target, chooser);
   if (card?.kind !== "questions") return choiceResultBody(card, target, chooser);
   const answers =
     (

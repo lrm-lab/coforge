@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   groupSystemMessages,
+  isSystemNoticeMessage,
   itemAnchor,
   summarizeSystemGroup,
   systemMessageKind,
@@ -11,6 +12,7 @@ type Row = {
   id: string;
   senderKind: "user" | "agent" | "system";
   body: string;
+  attachments?: readonly unknown[];
   system?: { kind: string; params: unknown };
 };
 
@@ -98,6 +100,28 @@ describe("grouping system messages", () => {
     expect(items.map((item) => (item.type === "systemGroup" ? item.id : item.message.id))).toEqual([
       "system-group:a:b",
       "c",
+    ]);
+  });
+
+  test("rich system messages with multiline bodies or attachments stay standalone messages", () => {
+    const richMultiline: Row = {
+      id: "fb-1",
+      senderKind: "system",
+      body: "**[CoForge Feedback · Bug]**\n\n> Clips on mobile",
+    };
+    const richAttachment: Row = {
+      id: "fb-2",
+      senderKind: "system",
+      body: "Single line with screenshot",
+      attachments: [{ id: "att-1" }],
+    };
+
+    expect(isSystemNoticeMessage(richMultiline)).toBe(false);
+    expect(isSystemNoticeMessage(richAttachment)).toBe(false);
+    expect(isSystemNoticeMessage(notice("n1", "task.claimed"))).toBe(true);
+    expect(groupSystemMessages([richMultiline, richAttachment]).map((i) => i.type)).toEqual([
+      "message",
+      "message",
     ]);
   });
 });

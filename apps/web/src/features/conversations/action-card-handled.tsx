@@ -18,6 +18,7 @@ import {
 } from "./action-card-labels";
 import { NamesWithFaces } from "./action-card-object";
 import { ActionCardFrame } from "./action-card-pending";
+import { feedbackCategoryLabel } from "./action-card-feedback";
 import { cardActor } from "./action-card-actor";
 import { ChannelPlace } from "./channel-name";
 
@@ -102,6 +103,11 @@ function outcomeOf(view: ToolActionCardView): Outcome | undefined {
     case "page:fill":
     case "desktop:takeover":
       return view.prompt ? { text: view.prompt, quiet: true } : undefined;
+    case "feedback:submit":
+      return {
+        text: feedbackCategoryLabel(view.result?.category ?? view.category),
+        quiet: true,
+      };
     case "app:grant_agent":
       return { text: <AppName name={view.app.name} /> };
     case "app:register":

@@ -29,6 +29,15 @@ export function AppReviewPage({ requests }: { requests: ReviewRequestSummary[] }
     <main className="flex h-full min-w-0 flex-1 flex-col bg-primary">
       <PageHeader
         heading={m.apps_review_title()}
+        actions={
+          <Link
+            to="/w/$workspaceSlug/feedback"
+            params={{ workspaceSlug: slug }}
+            className="rounded-sm text-sm font-semibold text-brand-secondary outline-focus-ring hover:underline focus-visible:outline-2"
+          >
+            {m.feedback_inbox_link()}
+          </Link>
+        }
         breadcrumbs={[
           {
             label: m.settings_title(),

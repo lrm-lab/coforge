@@ -5,7 +5,11 @@ import {
   type ForwardedMessage,
   type TaskReference,
 } from "@lrm/coforge-sdk/internal";
-import { CHOICE_OTHER_DEFAULT_LABEL, CHOICE_OTHER_OPTION_ID } from "@lrm/coforge-sdk/agent";
+import {
+  CHOICE_OTHER_DEFAULT_LABEL,
+  CHOICE_OTHER_OPTION_ID,
+  FEEDBACK_SUBMIT_CATEGORIES,
+} from "@lrm/coforge-sdk/agent";
 import {
   agentReadableBody,
   deliveryMentionsAgent,
@@ -138,6 +142,18 @@ export function actionCardBodySuffix(card: {
       if (parts.length) return `[action card: executed; ${parts.join("; ")}${by}]${words}`;
     }
   }
+  if (card.state === "executed" && card.kind === "feedback:submit") {
+    const category =
+      card.result && typeof card.result === "object" && "category" in card.result
+        ? (card.result as { category?: unknown }).category
+        : undefined;
+    if (
+      typeof category === "string" &&
+      (FEEDBACK_SUBMIT_CATEGORIES as readonly string[]).includes(category)
+    ) {
+      return `[action card: executed; category=${category}${by}]`;
+    }
+  }
   return `[action card: ${card.state}${by}]`;
 }
 
@@ -195,6 +211,29 @@ export function desktopTakeoverResultBody(
     target,
   });
   return `${head}.` as AgentReadableBody;
+}
+
+export function feedbackSubmitResultBody(
+  card: { result: unknown } | null,
+  target: string,
+  actor?: { handle: string } | null,
+): AgentReadableBody {
+  const result = card?.result as { feedbackId?: string; category?: string } | null | undefined;
+  const category =
+    typeof result?.category === "string" &&
+    (FEEDBACK_SUBMIT_CATEGORIES as readonly string[]).includes(result.category)
+      ? result.category
+      : "feedback";
+  const feedbackId =
+    typeof result?.feedbackId === "string" && result.feedbackId ? result.feedbackId : undefined;
+  const head = cardCompletedHead(cardPerson(actor?.handle), {
+    kind: "feedback:submit",
+    target,
+  });
+  const detail = feedbackId
+    ? `submitted ${category} feedback (${feedbackId})`
+    : `submitted ${category} feedback`;
+  return `${head}: ${detail}.` as AgentReadableBody;
 }
 
 /** The questions card's answers as the asking Agent reads them, woken or replaying it later: who

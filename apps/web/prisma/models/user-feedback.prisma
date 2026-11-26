@@ -1,0 +1,58 @@
+/// Product feedback submitted by a signed-in user from the workspace UI (`server/feedback/`).
+/// Closed sets (`category`: `bug`, `idea`, `other`; `status`: `open`, `triaged`, `resolved`,
+/// `archived`) are guarded by CHECK constraints in the migration. Deleting a user, Workspace, or
+/// routed channel keeps the feedback row (`SetNull`) so submitted product signals are not lost.
+model UserFeedback {
+  id                   String                   @id @default(uuid(7)) @db.Uuid
+  userId               String?                  @db.Uuid
+  workspaceId          String?                  @db.Uuid
+  category             String
+  body                 String
+  status               String                   @default("open")
+  pagePath             String?
+  clientInfo           String?
+  routedConversationId String?                  @db.Uuid
+  routedMessageId      String?                  @db.Uuid
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  user                 User?                    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  workspace            Workspace?               @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  routedConversation   Conversation?            @relation(fields: [routedConversationId], references: [id], onDelete: SetNull)
+  attachments          UserFeedbackAttachment[]
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@index([userId])
+  @@index([workspaceId])
+  @@index([routedConversationId])
+  @@map("user_feedback")
+}
+
+/// Singleton platform configuration selecting which CoForge channel receives routed user feedback
+/// (`server/feedback/`). Row id is fixed to 1 by a CHECK constraint in the migration.
+model FeedbackRoutingConfig {
+  id              Int           @id @default(1)
+  conversationId  String?       @db.Uuid
+  updatedByUserId String?       @db.Uuid
+  updatedAt       DateTime      @updatedAt
+  conversation    Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  @@index([conversationId])
+  @@map("feedback_routing_config")
+}
+
+/// One screenshot or image attached to a `UserFeedback` submission (`server/feedback/`).
+/// Bytes live in private `FileStorage` under `feedback/<feedbackId>/<id>/original`.
+model UserFeedbackAttachment {
+  id          String       @id @default(uuid(7)) @db.Uuid
+  feedbackId  String       @db.Uuid
+  fileName    String
+  contentType String
+  sizeBytes   Int
+  objectKey   String       @unique
+  createdAt   DateTime     @default(now())
+  feedback    UserFeedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+
+  @@index([feedbackId])
+  @@map("user_feedback_attachments")
+}

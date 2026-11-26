@@ -37,6 +37,7 @@ The module map of `src/server/`, split out of [`apps/web/AGENTS.md`](../../AGENT
 - `server/experiments/` — the experiments a Workspace's owner or admin switches in Settings: the catalog, the Workspace's stored choices, and the realtime signal that its features changed.
 - `server/feature-flags/` — whether a feature is on for a Workspace (`isFeatureEnabled`): the flag registry, and the flagd definition file the boot reads and installs as the OpenFeature provider (`COFORGE_FEATURE_FLAGS_FILE`).
 - `server/egress/` — outbound HTTP to an address a third party chose (Web Push endpoints, app webhooks): resolve, require every address public, then send pinned to the checked address, no redirect (`OutboundEgress`).
+- `server/feedback/` — user feedback persistence (`user_feedback`, `user_feedback_attachments`, `feedback_routing_config`), private screenshot storage under `feedback/<uuid>/original`, platform-operator inbox listing, status updates, attachment download authorization, and best-effort CoForge channel routing (system message, copied channel attachments, realtime announcement, and Agent delivery push).
 - `server/files/` — file storage (per object, and bulk removal by keys or prefix), delivery, uploaded-image validation, and replacing a row's stored image (`stored-image-replacement`).
 - `server/http/`, `server/install/`, `server/observability/` — public origin,
   response types and request timeouts, install scripts, tracing, and Server-Timing.

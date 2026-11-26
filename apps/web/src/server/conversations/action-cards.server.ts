@@ -22,6 +22,7 @@ import { ConversationHistory } from "./conversation-history.server";
 import { loadPendingActionCard } from "./pending-action-card.server";
 import { resolvePageFillPayload } from "./action-card-page-fill.server";
 import { resolveDesktopTakeoverPayload } from "./action-card-desktop-takeover.server";
+import { resolveFeedbackSubmitPayload } from "./action-card-feedback.server";
 import { resolveChoicePayload } from "./action-card-choice.server";
 import { resolveQuestionsPayload } from "./action-card-questions.server";
 import { assertChannelMembersAddable } from "./channel-member-checks.server";
@@ -327,6 +328,7 @@ export class ActionCards {
     const asked = rawAsked === CHOICE_ANYONE_TARGET ? principal.actorUserId : rawAsked;
     const role = await safeWorkspaceRole(this.db, principal.workspaceId, principal.actorUserId);
     const canCancel =
+      card.kind === "feedback:submit" ||
       card.preparedByAgent.ownerId === principal.actorUserId ||
       (role ? isAdminLike(role) : false) ||
       (asked !== undefined && asked === principal.actorUserId);
@@ -363,6 +365,7 @@ export class ActionCards {
       return resolvePageFillPayload(this.db, workspaceId, agentId, action);
     if (action.type === "desktop:takeover")
       return resolveDesktopTakeoverPayload(this.db, workspaceId, agentId, action);
+    if (action.type === "feedback:submit") return resolveFeedbackSubmitPayload(action);
     if (action.type === "choice" || action.type === "questions") {
       // A request without `to` comes from a Computer whose CLI predates it (see
       // LEGACY_CHOICE_WARNING): ask the Agent's owner, as before.

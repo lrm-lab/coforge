@@ -56,6 +56,7 @@ import { SearchField, SearchRailButton } from "#src/features/search/search-field
 import { SidebarToggle } from "#src/components/layout/sidebar/sidebar-toggle";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
 import { cx } from "#src/utils/cx";
+import { FeedbackHost } from "#src/features/feedback/feedback-host";
 import { KeyboardShortcutsHost } from "#src/features/shortcuts/keyboard-shortcuts-host";
 
 export type AppUser = {
@@ -198,15 +199,20 @@ export function AppShell(props: AppShellProps) {
       enabled={props.canSeeUsageLimits ?? false}
     >
       <WhatsNewAnnouncer base={workspacePath(props.currentWorkspace.slug)} />
-      <KeyboardShortcutsHost workspaceSlug={props.currentWorkspace.slug}>
-        {chromeMounted ? (
-          <WorkspaceChrome {...props} standalone={standalone} />
-        ) : (
-          <div className="flex h-[var(--app-height,100dvh)] flex-col bg-primary pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left font-body antialiased">
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">{props.children}</div>
-          </div>
-        )}
-      </KeyboardShortcutsHost>
+      <FeedbackHost
+        workspaceId={props.currentWorkspace.id}
+        workspaceName={props.currentWorkspace.name}
+      >
+        <KeyboardShortcutsHost workspaceSlug={props.currentWorkspace.slug}>
+          {chromeMounted ? (
+            <WorkspaceChrome {...props} standalone={standalone} />
+          ) : (
+            <div className="flex h-[var(--app-height,100dvh)] flex-col bg-primary pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left font-body antialiased">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col">{props.children}</div>
+            </div>
+          )}
+        </KeyboardShortcutsHost>
+      </FeedbackHost>
     </SystemNotificationsProvider>
   );
 }

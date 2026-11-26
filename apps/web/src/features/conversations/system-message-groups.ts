@@ -20,7 +20,21 @@ export function systemMessageKind(message: SystemNoticeSource): SystemMessageKin
   return message.system?.kind.startsWith("task.") ? "taskUpdate" : "system";
 }
 
-type StreamMessage = { id: string; senderKind: string };
+type StreamMessage = {
+  id: string;
+  senderKind: string;
+  body?: string;
+  attachments?: readonly unknown[];
+  system?: unknown;
+};
+
+export function isSystemNoticeMessage(message: Omit<StreamMessage, "id">): boolean {
+  if (message.senderKind !== "system") return false;
+  if (message.system) return true;
+  if (message.attachments && message.attachments.length > 0) return false;
+  if (message.body?.includes("\n")) return false;
+  return true;
+}
 
 export type StreamItem<M extends StreamMessage> =
   | { type: "message"; message: M }
@@ -54,7 +68,7 @@ export function groupSystemMessages<M extends StreamMessage>(
     run = [];
   };
   for (const message of messages) {
-    if (message.senderKind !== "system") {
+    if (!isSystemNoticeMessage(message)) {
       flush();
       items.push({ type: "message", message });
       continue;

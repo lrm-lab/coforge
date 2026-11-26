@@ -61,5 +61,17 @@
   "action_card_refused": "This can't be done as the card has it.",
   "action_card_questions_recommended": "Recommended",
   "action_card_ignore_row": "Don't answer: {prompt}",
-  "action_card_unknown": "This card needs a newer version of CoForge to show."
+  "action_card_unknown": "This card needs a newer version of CoForge to show.",
+  "action_card_title_feedback_submit": "Send feedback",
+  "action_card_commit_feedback_submit": "Send feedback",
+  "action_card_feedback_sending": "Sending",
+  "action_card_handled_feedback_submit": "Sent feedback",
+  "action_card_preview_feedback_submit": "Send feedback: {body}",
+  "action_card_feedback_note": "Sent under your account so the team can follow up.",
+  "action_card_feedback_category_label": "Feedback category",
+  "action_card_feedback_category_bug": "Bug",
+  "action_card_feedback_category_idea": "Idea",
+  "action_card_feedback_category_other": "Other",
+  "action_card_feedback_body_label": "Feedback details",
+  "action_card_feedback_body_placeholder": "Review or edit the feedback before sending…"
 }

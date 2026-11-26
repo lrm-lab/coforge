@@ -2,7 +2,12 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { CHANNEL_NAME_PATTERN } from "@lrm/coforge-sdk/internal";
-import { CHOICE_OTHER_OPTION_ID, CHOICE_OTHER_TEXT_MAX_LENGTH } from "@lrm/coforge-sdk/agent";
+import {
+  CHOICE_OTHER_OPTION_ID,
+  CHOICE_OTHER_TEXT_MAX_LENGTH,
+  FEEDBACK_SUBMIT_BODY_MAX_LENGTH,
+  FEEDBACK_SUBMIT_CATEGORIES,
+} from "@lrm/coforge-sdk/agent";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { AppRecoverOwnerActionCards } from "#src/server/conversations/app-recover-owner-action-cards.server";
@@ -12,6 +17,7 @@ import { AppGrantActionCards } from "#src/server/conversations/app-grant-action-
 import { ActionCards } from "#src/server/conversations/action-cards.server";
 import { commitPageFillCard } from "#src/server/conversations/action-card-page-fill.server";
 import { commitDesktopTakeoverCard } from "#src/server/conversations/action-card-desktop-takeover.server";
+import { commitFeedbackSubmitCard } from "#src/server/conversations/action-card-feedback.server";
 import { commitChoiceCard } from "#src/server/conversations/action-card-choice.server";
 import { commitQuestionsCard } from "#src/server/conversations/action-card-questions.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
@@ -159,6 +165,32 @@ export const commitDesktopTakeoverActionCard = createServerFn({ method: "POST" }
       new CentrifugoConversationRealtime(centrifugo),
       { workspaceId, actorUserId: user.id },
       data.messageId,
+    );
+  });
+
+export const commitFeedbackSubmitActionCard = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(
+    messageIdInput.extend({
+      category: z.enum(FEEDBACK_SUBMIT_CATEGORIES).optional(),
+      body: z.string().trim().min(1).max(FEEDBACK_SUBMIT_BODY_MAX_LENGTH).optional(),
+      pagePath: z.string().max(512).nullable().optional(),
+      clientInfo: z.string().max(256).nullable().optional(),
+    }),
+  )
+  .handler(async ({ data, context: { db, workspaceId, user } }) => {
+    const centrifugo = createCentrifugoServerApi();
+    return commitFeedbackSubmitCard(
+      db,
+      new CentrifugoConversationRealtime(centrifugo),
+      { workspaceId, actorUserId: user.id },
+      {
+        messageId: data.messageId,
+        category: data.category,
+        body: data.body,
+        pagePath: data.pagePath,
+        clientInfo: data.clientInfo,
+      },
     );
   });
 

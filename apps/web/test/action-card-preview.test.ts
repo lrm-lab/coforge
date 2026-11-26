@@ -88,6 +88,12 @@ const CASES: [string, Record<string, unknown>, string, string][] = [
     "Open the cloud desktop to finish this step",
     "打开云电脑，完成这一步",
   ],
+  [
+    "feedback:submit",
+    { category: "bug", body: "Sidebar focus ring clips on hover" },
+    "Send feedback: Sidebar focus ring clips on hover",
+    "发送反馈：Sidebar focus ring clips on hover",
+  ],
 ];
 
 describe("an action card's preview line", () => {

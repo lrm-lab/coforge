@@ -15,6 +15,7 @@ import { ACTIVE_MEMBER_WHERE, VISIBLE_CONVERSATION_WHERE } from "./active-member
 import { canReadChannel, readableConversationWhere } from "./channel-read-access.server";
 import { pageFillActionCardView } from "./action-card-page-fill.server";
 import { desktopTakeoverActionCardView } from "./action-card-desktop-takeover.server";
+import { feedbackSubmitActionCardView } from "./action-card-feedback.server";
 import { choiceActionCardView } from "./action-card-choice.server";
 import { questionsActionCardView } from "./action-card-questions.server";
 import {
@@ -294,6 +295,8 @@ export async function actionCardViews(
           pending,
         ),
       );
+    } else if (payload.type === "feedback:submit") {
+      views.set(card.messageId, feedbackSubmitActionCardView(base, card, payload, pending));
     } else if (payload.type === "choice") {
       views.set(
         card.messageId,

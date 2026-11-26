@@ -21,6 +21,9 @@ export function actionCardSummary(action: ActionCardAction): string {
       ? `Open the cloud desktop: ${action.prompt}`
       : "Open the cloud desktop to finish this step";
   }
+  if (action.type === "feedback:submit") {
+    return `Send feedback: ${action.body}`;
+  }
   if (action.type === "choice") {
     // Numbered as the card numbers them, so a reply of "2" reads as the second option. No English
     // lead-in: the body is the card's preview, and the question is in the asker's own language.

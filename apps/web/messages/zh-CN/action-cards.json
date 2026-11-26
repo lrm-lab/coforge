@@ -61,5 +61,17 @@
   "action_card_refused": "按卡片上的内容做不了。",
   "action_card_questions_recommended": "推荐",
   "action_card_ignore_row": "不回答：{prompt}",
-  "action_card_unknown": "这张卡片需要更新 CoForge 后才能显示。"
+  "action_card_unknown": "这张卡片需要更新 CoForge 后才能显示。",
+  "action_card_title_feedback_submit": "发送反馈",
+  "action_card_commit_feedback_submit": "发送反馈",
+  "action_card_feedback_sending": "正在发送",
+  "action_card_handled_feedback_submit": "已发送反馈",
+  "action_card_preview_feedback_submit": "发送反馈：{body}",
+  "action_card_feedback_note": "将以你的账号发送，方便团队跟进。",
+  "action_card_feedback_category_label": "反馈类型",
+  "action_card_feedback_category_bug": "问题反馈",
+  "action_card_feedback_category_idea": "功能建议",
+  "action_card_feedback_category_other": "其他",
+  "action_card_feedback_body_label": "反馈内容",
+  "action_card_feedback_body_placeholder": "发送前可查看或修改反馈内容…"
 }

@@ -14,6 +14,7 @@ The module map of `src/features/`, split out of [`apps/web/AGENTS.md`](../../AGE
 - `features/conversations/` — channels, direct messages, threads, composer, message rendering, action cards, forwarding a message (`message-forward.ts`, `message-forward.functions.ts`), saved messages, and the sidebar lists.
 - `features/device-auth/` — device-code verification page.
 - `features/errors/` — page-level load-error view and the router's 404 page.
+- `features/feedback/` — user feedback submission (`FeedbackHost` in `AppShell`, opened from the account menu and the phone Me page; single-surface composer modal with category pills, clipboard/drop image attachments, and collapsible page context) and the platform-operator feedback inbox at `/w/<slug>/feedback`.
 - `features/files/` — what a file is, from its name and media type: extension, size text, kind, preview kind and language, type label, and the icon it is drawn with (`FileTypeIcon`).
 - `features/inbox/` — the Activity page: conversations and threads not yet marked Done, the viewer's pinned conversations above them, and the conversation a row opens beside the list (a thread's alone; full-screen below `lg`); with it beside the list, the list's keys run both (`use-activity-flow.ts`).
 - `features/install/` — Computer install command text.

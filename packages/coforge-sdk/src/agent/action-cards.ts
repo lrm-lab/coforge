@@ -139,6 +139,18 @@ export const desktopTakeoverActionSchema = z.object({
 });
 export type DesktopTakeoverAction = z.infer<typeof desktopTakeoverActionSchema>;
 
+export const FEEDBACK_SUBMIT_CATEGORIES = ["bug", "idea", "other"] as const;
+export type FeedbackSubmitCategory = (typeof FEEDBACK_SUBMIT_CATEGORIES)[number];
+export const FEEDBACK_SUBMIT_BODY_MAX_LENGTH = 2000;
+
+export const feedbackSubmitActionSchema = z.object({
+  type: z.literal("feedback:submit"),
+  category: z.enum(FEEDBACK_SUBMIT_CATEGORIES).default("bug"),
+  body: z.string().trim().min(1).max(FEEDBACK_SUBMIT_BODY_MAX_LENGTH),
+  draftHint: draftHintSchema,
+});
+export type FeedbackSubmitAction = z.infer<typeof feedbackSubmitActionSchema>;
+
 const choiceOptionIdSchema = z
   .string()
   .trim()
@@ -273,6 +285,7 @@ export const actionCardActionSchema = z.discriminatedUnion("type", [
   appRecoverOwnerActionSchema,
   pageFillActionSchema,
   desktopTakeoverActionSchema,
+  feedbackSubmitActionSchema,
   choiceActionSchema,
   questionsActionSchema,
 ]);
@@ -396,6 +409,11 @@ export type ResolvedDesktopTakeoverPayload = {
   computerId: string;
   agentName: string;
 };
+export type ResolvedFeedbackSubmitPayload = {
+  type: "feedback:submit";
+  category: FeedbackSubmitCategory;
+  body: string;
+};
 export type ResolvedChoicePayload = {
   type: "choice";
   prompt: string;
@@ -438,6 +456,7 @@ export type ResolvedActionCardPayload =
   | ResolvedAppRecoverOwnerPayload
   | ResolvedPageFillPayload
   | ResolvedDesktopTakeoverPayload
+  | ResolvedFeedbackSubmitPayload
   | ResolvedChoicePayload
   | ResolvedQuestionsPayload;
 

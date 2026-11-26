@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
+import { useRouterState } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { m } from "#src/paraglide/messages";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { APP_GRANT_REQUEST_CHANGED } from "#src/features/apps/agent-app-access";
+import { detectClientInfo } from "#src/features/feedback/feedback-client";
 import {
   cancelActionCard,
   commitChannelAddMemberActionCard,
@@ -13,10 +15,12 @@ import {
   commitAppRegisterActionCard,
   commitChannelCreateActionCard,
   commitDesktopTakeoverActionCard,
+  commitFeedbackSubmitActionCard,
   commitPageFillActionCard,
   denyAppGrantActionCard,
   loadActionCardStates,
 } from "./action-cards.functions";
+import type { FeedbackCardDraft } from "./action-card-feedback";
 import { CreateChannelDialog } from "./create-channel-dialog";
 import { ChannelAddMembersDialog } from "./channel-add-members-dialog";
 import { HandledActionCard, SettledActionCard } from "./action-card-handled";
@@ -51,6 +55,7 @@ const KNOWN_KINDS: Record<ActionCardView["kind"], true> = {
   "app:recover_owner": true,
   "page:fill": true,
   "desktop:takeover": true,
+  "feedback:submit": true,
   choice: true,
   questions: true,
 };
@@ -89,6 +94,21 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
   const recoverOwner = useServerFn(commitAppRecoverOwnerActionCard);
   const commitFill = useServerFn(commitPageFillActionCard);
   const commitDesktop = useServerFn(commitDesktopTakeoverActionCard);
+  const commitFeedback = useServerFn(commitFeedbackSubmitActionCard);
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const [clientInfo] = useState(() => detectClientInfo());
+  const [feedbackDraft, setFeedbackDraft] = useState<FeedbackCardDraft>(() =>
+    card.kind === "feedback:submit"
+      ? { category: card.category, body: card.body }
+      : { category: "bug", body: "" },
+  );
+  const [draftMessageId, setDraftMessageId] = useState(card.messageId);
+  if (draftMessageId !== card.messageId) {
+    setDraftMessageId(card.messageId);
+    if (card.kind === "feedback:submit") {
+      setFeedbackDraft({ category: card.category, body: card.body });
+    }
+  }
   const queryClient = useQueryClient();
   const conversationId = useConversationId();
   const [fillValues, setFillValues] = useState<Record<string, string>>({});
@@ -263,6 +283,18 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
         );
       case "desktop:takeover":
         return commit(() => commitDesktop({ data: { messageId: view.messageId } }));
+      case "feedback:submit":
+        return commit(() =>
+          commitFeedback({
+            data: {
+              messageId: view.messageId,
+              category: feedbackDraft.category,
+              body: feedbackDraft.body,
+              pagePath: pathname,
+              clientInfo,
+            },
+          }),
+        );
       case "page:fill":
         return commit(
           async () => {
@@ -294,11 +326,14 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
           view={view}
           fillValues={fillValues}
           setFillValues={setFillValues}
+          feedbackDraft={feedbackDraft}
+          setFeedbackDraft={setFeedbackDraft}
           failure={failure}
           committing={committing}
           cancelling={cancelling}
           commitDisabled={
             openingDialog ||
+            (view.kind === "feedback:submit" && !feedbackDraft.body.trim()) ||
             (view.kind === "page:fill" &&
               view.fields.some(
                 (field) => field.input === "password" && !(fillValues[field.id] ?? "").length,

@@ -55,6 +55,11 @@ function previewParams(kind: string, payload: Prisma.JsonValue): PreviewCard["pa
     }
     case "desktop:takeover":
       return prompt ? { prompt } : {};
+    case "feedback:submit": {
+      const body = cardText(payload.body);
+      if (!body) return undefined;
+      return { body: Array.from(body).slice(0, FORWARDED_PREVIEW_SOURCE_LENGTH).join("") };
+    }
     default:
       return undefined;
   }

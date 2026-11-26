@@ -80,6 +80,7 @@ model User {
   appAgentInboundGrantsRevoked AppAgentInboundGrant[] @relation("AppAgentInboundGrantRevokedBy")
   appAgentInboundDecisions    AppAgentInboundRequest[] @relation("AppAgentInboundRequestDecidedBy")
   usageLimitEventViews        UsageLimitEventView[]
+  userFeedback                UserFeedback[]
 
   @@map("users")
 }

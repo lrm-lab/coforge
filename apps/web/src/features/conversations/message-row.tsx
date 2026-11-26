@@ -29,6 +29,7 @@ import { useTimeZone } from "#src/lib/time-zone-context";
 import { clockLabel } from "#src/lib/dates";
 import { gutterClockLabel } from "./gutter-clock-label";
 import { DayDivider, UnreadDivider, dayLabel } from "./message-dividers";
+import { isSystemNoticeMessage } from "./system-message-groups";
 import { SystemMessageRow } from "./system-message-row";
 import { MessageRowFooter } from "./message-row-footer";
 import { OwnMessageTicks } from "./message-status-markers";
@@ -204,7 +205,7 @@ export const MessageRow = memo(function MessageRow({
   const writtenBody = attachmentMessageDisplayBody(message);
   const artifactLayout = useMessageArtifactLayout(writtenBody, message.artifactCards);
   const displayBody = artifactLayout.displayBody;
-  if (message.senderKind === "system")
+  if (isSystemNoticeMessage(message))
     return (
       <SystemMessageRow
         message={message}

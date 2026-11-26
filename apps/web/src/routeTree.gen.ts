@@ -20,6 +20,7 @@ import { Route as ApiAppAgentEventsRouteImport } from './routes/api.app-agent-ev
 import { Route as ApiAppAgentRequestsRouteImport } from './routes/api.app-agent-requests'
 import { Route as ApiAttachmentsRouteImport } from './routes/api/attachments'
 import { Route as ApiBuildIdRouteImport } from './routes/api/build-id'
+import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
 import { Route as ApiJwksRouteImport } from './routes/api/jwks'
 import { Route as ApiMeRouteImport } from './routes/api/me'
 import { Route as AuthGithubRouteImport } from './routes/auth/github'
@@ -74,6 +75,7 @@ import { Route as WWorkspaceSlugChatRouteImport } from './routes/w.$workspaceSlu
 import { Route as WWorkspaceSlugComputersRouteImport } from './routes/w.$workspaceSlug/_computers'
 import { Route as WWorkspaceSlugActivityRouteImport } from './routes/w.$workspaceSlug/activity'
 import { Route as WWorkspaceSlugAppReviewRouteImport } from './routes/w.$workspaceSlug/app-review'
+import { Route as WWorkspaceSlugFeedbackRouteImport } from './routes/w.$workspaceSlug/feedback'
 import { Route as WWorkspaceSlugMeRouteImport } from './routes/w.$workspaceSlug/me'
 import { Route as WWorkspaceSlugMembersRouteImport } from './routes/w.$workspaceSlug/members'
 import { Route as WWorkspaceSlugMemoryRouteImport } from './routes/w.$workspaceSlug/memory'
@@ -116,6 +118,7 @@ import { Route as ApiComputerAttachPollRouteImport } from './routes/api/computer
 import { Route as ApiComputerAttachStartRouteImport } from './routes/api/computer/attach/start'
 import { Route as ApiComputersComputerIdCreatorAvatarRouteImport } from './routes/api/computers/$computerId/creator-avatar'
 import { Route as ApiE2eWorkspacesSlugRouteImport } from './routes/api/e2e/workspaces.$slug'
+import { Route as ApiFeedbackAttachmentsAttachmentIdRouteImport } from './routes/api/feedback.attachments.$attachmentId'
 import { Route as ApiHostsJobsClaimRouteImport } from './routes/api/hosts/jobs/claim'
 import { Route as ApiIntegrationsGithubCallbackRouteImport } from './routes/api/integrations/github/callback'
 import { Route as ApiIntegrationsGithubWebhookRouteImport } from './routes/api/integrations/github/webhook'
@@ -269,6 +272,11 @@ const ApiAttachmentsRoute = ApiAttachmentsRouteImport.update({
 const ApiBuildIdRoute = ApiBuildIdRouteImport.update({
   id: '/api/build-id',
   path: '/api/build-id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiFeedbackRoute = ApiFeedbackRouteImport.update({
+  id: '/api/feedback',
+  path: '/api/feedback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiJwksRoute = ApiJwksRouteImport.update({
@@ -554,6 +562,11 @@ const WWorkspaceSlugAppReviewRoute = WWorkspaceSlugAppReviewRouteImport.update({
   path: '/app-review',
   getParentRoute: () => WWorkspaceSlugRoute,
 } as any)
+const WWorkspaceSlugFeedbackRoute = WWorkspaceSlugFeedbackRouteImport.update({
+  id: '/feedback',
+  path: '/feedback',
+  getParentRoute: () => WWorkspaceSlugRoute,
+} as any)
 const WWorkspaceSlugMeRoute = WWorkspaceSlugMeRouteImport.update({
   id: '/me',
   path: '/me',
@@ -777,6 +790,12 @@ const ApiE2eWorkspacesSlugRoute = ApiE2eWorkspacesSlugRouteImport.update({
   path: '/api/e2e/workspaces/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiFeedbackAttachmentsAttachmentIdRoute =
+  ApiFeedbackAttachmentsAttachmentIdRouteImport.update({
+    id: '/attachments/$attachmentId',
+    path: '/attachments/$attachmentId',
+    getParentRoute: () => ApiFeedbackRoute,
+  } as any)
 const ApiHostsJobsClaimRoute = ApiHostsJobsClaimRouteImport.update({
   id: '/api/hosts/jobs/claim',
   path: '/api/hosts/jobs/claim',
@@ -1370,6 +1389,7 @@ export interface FileRoutesByFullPath {
   '/api/app-agent-requests': typeof ApiAppAgentRequestsRouteWithChildren
   '/api/attachments': typeof ApiAttachmentsRouteWithChildren
   '/api/build-id': typeof ApiBuildIdRoute
+  '/api/feedback': typeof ApiFeedbackRouteWithChildren
   '/api/jwks': typeof ApiJwksRoute
   '/api/me': typeof ApiMeRouteWithChildren
   '/auth/github': typeof AuthGithubRouteWithChildren
@@ -1422,6 +1442,7 @@ export interface FileRoutesByFullPath {
   '/oidc/.well-known/openid-configuration': typeof OidcDotwellKnownOpenidConfigurationRoute
   '/w/$workspaceSlug/activity': typeof WWorkspaceSlugActivityRoute
   '/w/$workspaceSlug/app-review': typeof WWorkspaceSlugAppReviewRoute
+  '/w/$workspaceSlug/feedback': typeof WWorkspaceSlugFeedbackRoute
   '/w/$workspaceSlug/me': typeof WWorkspaceSlugMeRoute
   '/w/$workspaceSlug/members': typeof WWorkspaceSlugMembersRoute
   '/w/$workspaceSlug/memory': typeof WWorkspaceSlugMemoryRoute
@@ -1464,6 +1485,7 @@ export interface FileRoutesByFullPath {
   '/api/computer/attach/start': typeof ApiComputerAttachStartRoute
   '/api/computers/$computerId/creator-avatar': typeof ApiComputersComputerIdCreatorAvatarRoute
   '/api/e2e/workspaces/$slug': typeof ApiE2eWorkspacesSlugRoute
+  '/api/feedback/attachments/$attachmentId': typeof ApiFeedbackAttachmentsAttachmentIdRoute
   '/api/hosts/jobs/claim': typeof ApiHostsJobsClaimRoute
   '/api/integrations/github/callback': typeof ApiIntegrationsGithubCallbackRoute
   '/api/integrations/github/webhook': typeof ApiIntegrationsGithubWebhookRoute
@@ -1575,6 +1597,7 @@ export interface FileRoutesByTo {
   '/api/app-agent-requests': typeof ApiAppAgentRequestsRouteWithChildren
   '/api/attachments': typeof ApiAttachmentsRouteWithChildren
   '/api/build-id': typeof ApiBuildIdRoute
+  '/api/feedback': typeof ApiFeedbackRouteWithChildren
   '/api/jwks': typeof ApiJwksRoute
   '/api/me': typeof ApiMeRouteWithChildren
   '/auth/github': typeof AuthGithubRouteWithChildren
@@ -1627,6 +1650,7 @@ export interface FileRoutesByTo {
   '/oidc/.well-known/openid-configuration': typeof OidcDotwellKnownOpenidConfigurationRoute
   '/w/$workspaceSlug/activity': typeof WWorkspaceSlugActivityRoute
   '/w/$workspaceSlug/app-review': typeof WWorkspaceSlugAppReviewRoute
+  '/w/$workspaceSlug/feedback': typeof WWorkspaceSlugFeedbackRoute
   '/w/$workspaceSlug/me': typeof WWorkspaceSlugMeRoute
   '/w/$workspaceSlug/members': typeof WWorkspaceSlugMembersRoute
   '/w/$workspaceSlug/memory': typeof WWorkspaceSlugMemoryRoute
@@ -1668,6 +1692,7 @@ export interface FileRoutesByTo {
   '/api/computer/attach/start': typeof ApiComputerAttachStartRoute
   '/api/computers/$computerId/creator-avatar': typeof ApiComputersComputerIdCreatorAvatarRoute
   '/api/e2e/workspaces/$slug': typeof ApiE2eWorkspacesSlugRoute
+  '/api/feedback/attachments/$attachmentId': typeof ApiFeedbackAttachmentsAttachmentIdRoute
   '/api/hosts/jobs/claim': typeof ApiHostsJobsClaimRoute
   '/api/integrations/github/callback': typeof ApiIntegrationsGithubCallbackRoute
   '/api/integrations/github/webhook': typeof ApiIntegrationsGithubWebhookRoute
@@ -1779,6 +1804,7 @@ export interface FileRoutesById {
   '/api/app-agent-requests': typeof ApiAppAgentRequestsRouteWithChildren
   '/api/attachments': typeof ApiAttachmentsRouteWithChildren
   '/api/build-id': typeof ApiBuildIdRoute
+  '/api/feedback': typeof ApiFeedbackRouteWithChildren
   '/api/jwks': typeof ApiJwksRoute
   '/api/me': typeof ApiMeRouteWithChildren
   '/auth/github': typeof AuthGithubRouteWithChildren
@@ -1833,6 +1859,7 @@ export interface FileRoutesById {
   '/w/$workspaceSlug/_computers': typeof WWorkspaceSlugComputersRouteWithChildren
   '/w/$workspaceSlug/activity': typeof WWorkspaceSlugActivityRoute
   '/w/$workspaceSlug/app-review': typeof WWorkspaceSlugAppReviewRoute
+  '/w/$workspaceSlug/feedback': typeof WWorkspaceSlugFeedbackRoute
   '/w/$workspaceSlug/me': typeof WWorkspaceSlugMeRoute
   '/w/$workspaceSlug/members': typeof WWorkspaceSlugMembersRoute
   '/w/$workspaceSlug/memory': typeof WWorkspaceSlugMemoryRoute
@@ -1875,6 +1902,7 @@ export interface FileRoutesById {
   '/api/computer/attach/start': typeof ApiComputerAttachStartRoute
   '/api/computers/$computerId/creator-avatar': typeof ApiComputersComputerIdCreatorAvatarRoute
   '/api/e2e/workspaces/$slug': typeof ApiE2eWorkspacesSlugRoute
+  '/api/feedback/attachments/$attachmentId': typeof ApiFeedbackAttachmentsAttachmentIdRoute
   '/api/hosts/jobs/claim': typeof ApiHostsJobsClaimRoute
   '/api/integrations/github/callback': typeof ApiIntegrationsGithubCallbackRoute
   '/api/integrations/github/webhook': typeof ApiIntegrationsGithubWebhookRoute
@@ -1988,6 +2016,7 @@ export interface FileRouteTypes {
     | '/api/app-agent-requests'
     | '/api/attachments'
     | '/api/build-id'
+    | '/api/feedback'
     | '/api/jwks'
     | '/api/me'
     | '/auth/github'
@@ -2040,6 +2069,7 @@ export interface FileRouteTypes {
     | '/oidc/.well-known/openid-configuration'
     | '/w/$workspaceSlug/activity'
     | '/w/$workspaceSlug/app-review'
+    | '/w/$workspaceSlug/feedback'
     | '/w/$workspaceSlug/me'
     | '/w/$workspaceSlug/members'
     | '/w/$workspaceSlug/memory'
@@ -2082,6 +2112,7 @@ export interface FileRouteTypes {
     | '/api/computer/attach/start'
     | '/api/computers/$computerId/creator-avatar'
     | '/api/e2e/workspaces/$slug'
+    | '/api/feedback/attachments/$attachmentId'
     | '/api/hosts/jobs/claim'
     | '/api/integrations/github/callback'
     | '/api/integrations/github/webhook'
@@ -2193,6 +2224,7 @@ export interface FileRouteTypes {
     | '/api/app-agent-requests'
     | '/api/attachments'
     | '/api/build-id'
+    | '/api/feedback'
     | '/api/jwks'
     | '/api/me'
     | '/auth/github'
@@ -2245,6 +2277,7 @@ export interface FileRouteTypes {
     | '/oidc/.well-known/openid-configuration'
     | '/w/$workspaceSlug/activity'
     | '/w/$workspaceSlug/app-review'
+    | '/w/$workspaceSlug/feedback'
     | '/w/$workspaceSlug/me'
     | '/w/$workspaceSlug/members'
     | '/w/$workspaceSlug/memory'
@@ -2286,6 +2319,7 @@ export interface FileRouteTypes {
     | '/api/computer/attach/start'
     | '/api/computers/$computerId/creator-avatar'
     | '/api/e2e/workspaces/$slug'
+    | '/api/feedback/attachments/$attachmentId'
     | '/api/hosts/jobs/claim'
     | '/api/integrations/github/callback'
     | '/api/integrations/github/webhook'
@@ -2396,6 +2430,7 @@ export interface FileRouteTypes {
     | '/api/app-agent-requests'
     | '/api/attachments'
     | '/api/build-id'
+    | '/api/feedback'
     | '/api/jwks'
     | '/api/me'
     | '/auth/github'
@@ -2450,6 +2485,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/_computers'
     | '/w/$workspaceSlug/activity'
     | '/w/$workspaceSlug/app-review'
+    | '/w/$workspaceSlug/feedback'
     | '/w/$workspaceSlug/me'
     | '/w/$workspaceSlug/members'
     | '/w/$workspaceSlug/memory'
@@ -2492,6 +2528,7 @@ export interface FileRouteTypes {
     | '/api/computer/attach/start'
     | '/api/computers/$computerId/creator-avatar'
     | '/api/e2e/workspaces/$slug'
+    | '/api/feedback/attachments/$attachmentId'
     | '/api/hosts/jobs/claim'
     | '/api/integrations/github/callback'
     | '/api/integrations/github/webhook'
@@ -2604,6 +2641,7 @@ export interface RootRouteChildren {
   ApiAppAgentRequestsRoute: typeof ApiAppAgentRequestsRouteWithChildren
   ApiAttachmentsRoute: typeof ApiAttachmentsRouteWithChildren
   ApiBuildIdRoute: typeof ApiBuildIdRoute
+  ApiFeedbackRoute: typeof ApiFeedbackRouteWithChildren
   ApiJwksRoute: typeof ApiJwksRoute
   ApiMeRoute: typeof ApiMeRouteWithChildren
   AuthGithubRoute: typeof AuthGithubRouteWithChildren
@@ -2823,6 +2861,13 @@ declare module '@tanstack/react-router' {
       path: '/api/build-id'
       fullPath: '/api/build-id'
       preLoaderRoute: typeof ApiBuildIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/feedback': {
+      id: '/api/feedback'
+      path: '/api/feedback'
+      fullPath: '/api/feedback'
+      preLoaderRoute: typeof ApiFeedbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/jwks': {
@@ -3203,6 +3248,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WWorkspaceSlugAppReviewRouteImport
       parentRoute: typeof WWorkspaceSlugRoute
     }
+    '/w/$workspaceSlug/feedback': {
+      id: '/w/$workspaceSlug/feedback'
+      path: '/feedback'
+      fullPath: '/w/$workspaceSlug/feedback'
+      preLoaderRoute: typeof WWorkspaceSlugFeedbackRouteImport
+      parentRoute: typeof WWorkspaceSlugRoute
+    }
     '/w/$workspaceSlug/me': {
       id: '/w/$workspaceSlug/me'
       path: '/me'
@@ -3496,6 +3548,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/e2e/workspaces/$slug'
       preLoaderRoute: typeof ApiE2eWorkspacesSlugRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/api/feedback/attachments/$attachmentId': {
+      id: '/api/feedback/attachments/$attachmentId'
+      path: '/attachments/$attachmentId'
+      fullPath: '/api/feedback/attachments/$attachmentId'
+      preLoaderRoute: typeof ApiFeedbackAttachmentsAttachmentIdRouteImport
+      parentRoute: typeof ApiFeedbackRoute
     }
     '/api/hosts/jobs/claim': {
       id: '/api/hosts/jobs/claim'
@@ -4209,6 +4268,19 @@ const ApiAttachmentsRouteWithChildren = ApiAttachmentsRoute._addFileChildren(
   ApiAttachmentsRouteChildren,
 )
 
+interface ApiFeedbackRouteChildren {
+  ApiFeedbackAttachmentsAttachmentIdRoute: typeof ApiFeedbackAttachmentsAttachmentIdRoute
+}
+
+const ApiFeedbackRouteChildren: ApiFeedbackRouteChildren = {
+  ApiFeedbackAttachmentsAttachmentIdRoute:
+    ApiFeedbackAttachmentsAttachmentIdRoute,
+}
+
+const ApiFeedbackRouteWithChildren = ApiFeedbackRoute._addFileChildren(
+  ApiFeedbackRouteChildren,
+)
+
 interface ApiMeRouteChildren {
   ApiMeAvatarRoute: typeof ApiMeAvatarRoute
 }
@@ -4315,6 +4387,7 @@ interface WWorkspaceSlugRouteChildren {
   WWorkspaceSlugComputersRoute: typeof WWorkspaceSlugComputersRouteWithChildren
   WWorkspaceSlugActivityRoute: typeof WWorkspaceSlugActivityRoute
   WWorkspaceSlugAppReviewRoute: typeof WWorkspaceSlugAppReviewRoute
+  WWorkspaceSlugFeedbackRoute: typeof WWorkspaceSlugFeedbackRoute
   WWorkspaceSlugMeRoute: typeof WWorkspaceSlugMeRoute
   WWorkspaceSlugMembersRoute: typeof WWorkspaceSlugMembersRoute
   WWorkspaceSlugMemoryRoute: typeof WWorkspaceSlugMemoryRoute
@@ -4341,6 +4414,7 @@ const WWorkspaceSlugRouteChildren: WWorkspaceSlugRouteChildren = {
   WWorkspaceSlugComputersRoute: WWorkspaceSlugComputersRouteWithChildren,
   WWorkspaceSlugActivityRoute: WWorkspaceSlugActivityRoute,
   WWorkspaceSlugAppReviewRoute: WWorkspaceSlugAppReviewRoute,
+  WWorkspaceSlugFeedbackRoute: WWorkspaceSlugFeedbackRoute,
   WWorkspaceSlugMeRoute: WWorkspaceSlugMeRoute,
   WWorkspaceSlugMembersRoute: WWorkspaceSlugMembersRoute,
   WWorkspaceSlugMemoryRoute: WWorkspaceSlugMemoryRoute,
@@ -4470,6 +4544,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAppAgentRequestsRoute: ApiAppAgentRequestsRouteWithChildren,
   ApiAttachmentsRoute: ApiAttachmentsRouteWithChildren,
   ApiBuildIdRoute: ApiBuildIdRoute,
+  ApiFeedbackRoute: ApiFeedbackRouteWithChildren,
   ApiJwksRoute: ApiJwksRoute,
   ApiMeRoute: ApiMeRouteWithChildren,
   AuthGithubRoute: AuthGithubRouteWithChildren,

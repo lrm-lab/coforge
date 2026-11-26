@@ -43,6 +43,12 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines; the rules are 
   computer ids so the browser can open that Agent's cloud desktop. Commit marks that the person
   finished the step and wakes the preparing Agent; opening the desktop does not go through the
   server.
+- A `feedback:submit` card lets any Agent prepare a pre-filled feedback draft (`category`: `bug` |
+  `idea` | `other`, default `bug`; `body`: 1–2000 chars) in a conversation. Any workspace member who
+  can read the conversation may edit the category/body and submit it under their own identity
+  (`submitUserFeedback`, persisting to `user_feedback` and routing to the configured feedback
+  channel) or dismiss it. Commit marks the card `executed` with `{ feedbackId, category, body }` and
+  wakes the preparing Agent with reason `choice`.
 - A `choice` or `questions` card stores the prompt, options (1–8 on `choice`, 1–6 per option
   question on `questions`, or `kind: "text"` with no options and optional `placeholder` for a
   standalone free-text question), the user id of the person it asks (`to`, or `"anyone"` in a

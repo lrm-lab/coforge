@@ -1,4 +1,4 @@
-import { Announcement02, LogOut01, Settings01 } from "@untitledui/icons";
+import { Announcement02, LogOut01, MessageTextSquare01, Settings01 } from "@untitledui/icons";
 
 import { usePhoneShell } from "#src/components/layout/phone-shell";
 import { ShellLinks } from "#src/components/layout/shell-links";
@@ -6,6 +6,7 @@ import { TabPageHeader } from "#src/components/layout/tab-home-header";
 import { TabPageRow } from "#src/components/layout/tab-page-row";
 import { UnreadDot } from "#src/components/ui/unread-marker";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { useOpenFeedback } from "#src/features/feedback/feedback-host";
 import { useWhatsNewEntry } from "#src/features/whats-new/whats-new-entry";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
@@ -15,6 +16,7 @@ import { localizeHref } from "#src/paraglide/runtime";
 export function MePage() {
   const { user, onSignOut } = usePhoneShell();
   const workspaceSlug = useWorkspaceSlug();
+  const openFeedback = useOpenFeedback();
   const whatsNew = useWhatsNewEntry(workspacePath(workspaceSlug));
   return (
     <ShellLinks>
@@ -44,6 +46,11 @@ export function MePage() {
               icon={Settings01}
               label={m.navigation_personal_settings()}
               href={localizeHref(workspacePath(workspaceSlug, "/settings"))}
+            />
+            <TabPageRow
+              icon={MessageTextSquare01}
+              label={m.feedback_entry()}
+              onPress={openFeedback}
             />
             {whatsNew.visible && (
               <TabPageRow

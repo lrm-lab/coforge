@@ -1,5 +1,8 @@
 import { expect, test } from "bun:test";
-import { actionCardBodySuffix } from "#src/server/conversations/agent-message-view.server";
+import {
+  actionCardBodySuffix,
+  feedbackSubmitResultBody,
+} from "#src/server/conversations/agent-message-view.server";
 
 test("choice executed includes the option id", () => {
   expect(
@@ -147,4 +150,29 @@ test("questions executed names each question's picks, a skipped one as skipped (
       },
     }),
   ).toBe("[action card: executed; webhook=keep; agent=(skipped); notify=ops,owner]");
+});
+
+test("feedback:submit executed includes category and actor, and formats agent wake body", () => {
+  expect(
+    actionCardBodySuffix({
+      state: "executed",
+      kind: "feedback:submit",
+      result: { feedbackId: "fb-1", category: "idea" },
+      committedByUser: { username: "frank" },
+    }),
+  ).toBe("[action card: executed; category=idea by @frank]");
+  expect(
+    actionCardBodySuffix({
+      state: "executed",
+      kind: "feedback:submit",
+      result: { feedbackId: "fb-1", category: "invalid" },
+    }),
+  ).toBe("[action card: executed]");
+  expect(
+    String(
+      feedbackSubmitResultBody({ result: { feedbackId: "fb-1", category: "bug" } }, "#general", {
+        handle: "frank",
+      }),
+    ),
+  ).toBe("@frank completed your action card in #general: submitted bug feedback (fb-1).");
 });

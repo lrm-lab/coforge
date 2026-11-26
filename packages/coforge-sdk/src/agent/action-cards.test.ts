@@ -7,6 +7,8 @@ import {
   channelCreateActionSchema,
   CHOICE_DEADLINE_MAX_MINUTES,
   deadlineMisuse,
+  FEEDBACK_SUBMIT_BODY_MAX_LENGTH,
+  feedbackSubmitActionSchema,
   pageFillActionSchema,
   validateActionCardAction,
 } from "./action-cards";
@@ -269,6 +271,56 @@ describe("desktopTakeoverActionSchema", () => {
     ).toBe("desktop:takeover");
     expect(actionCardActionSchema.parse({ type: "desktop:takeover" }).type).toBe(
       "desktop:takeover",
+    );
+  });
+});
+
+describe("feedbackSubmitActionSchema", () => {
+  test("defaults category to bug, trims body, and accepts optional draftHint", () => {
+    const parsed = actionCardActionSchema.parse({
+      type: "feedback:submit",
+      body: "  Search jumps back to top after editing  ",
+      draftHint: "Drafted from our chat",
+    });
+    expect(parsed).toEqual({
+      type: "feedback:submit",
+      category: "bug",
+      body: "Search jumps back to top after editing",
+      draftHint: "Drafted from our chat",
+    });
+    expect(validateActionCardAction(parsed)).toBeNull();
+  });
+
+  test("accepts idea and other categories", () => {
+    for (const category of ["bug", "idea", "other"] as const) {
+      const parsed = feedbackSubmitActionSchema.parse({
+        type: "feedback:submit",
+        category,
+        body: "Helpful detail",
+      });
+      expect(parsed.category).toBe(category);
+    }
+  });
+
+  test("rejects blank body, over-long body, invalid category, and expiresInMinutes", () => {
+    expect(actionCardActionSchema.safeParse({ type: "feedback:submit", body: "   " }).success).toBe(
+      false,
+    );
+    expect(
+      actionCardActionSchema.safeParse({
+        type: "feedback:submit",
+        body: "x".repeat(FEEDBACK_SUBMIT_BODY_MAX_LENGTH + 1),
+      }).success,
+    ).toBe(false);
+    expect(
+      actionCardActionSchema.safeParse({
+        type: "feedback:submit",
+        category: "feature",
+        body: "hi",
+      }).success,
+    ).toBe(false);
+    expect(deadlineMisuse({ type: "feedback:submit", body: "hi", expiresInMinutes: 10 })).toContain(
+      "expiresInMinutes",
     );
   });
 });

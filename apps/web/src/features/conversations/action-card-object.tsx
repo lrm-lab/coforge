@@ -16,6 +16,7 @@ import { ChannelPlace } from "./channel-name";
 import { GroupAvatar, type GroupAvatarMember } from "./group-avatar";
 import { addMemberChannelName, type ToolActionCardView } from "./action-card-labels";
 import { ActionCardDesktopTakeoverBody, ActionCardPageFillBody } from "./action-card-handoff";
+import { ActionCardFeedbackBody, type FeedbackCardDraft } from "./action-card-feedback";
 
 const listFormats = new Map<string, Intl.ListFormat>();
 
@@ -81,10 +82,16 @@ export function ActionCardObject({
   view,
   fillValues,
   setFillValues,
+  feedbackDraft,
+  setFeedbackDraft,
+  disabled,
 }: {
   view: ToolActionCardView;
   fillValues: Record<string, string>;
   setFillValues: Dispatch<SetStateAction<Record<string, string>>>;
+  feedbackDraft?: FeedbackCardDraft;
+  setFeedbackDraft?: Dispatch<SetStateAction<FeedbackCardDraft>>;
+  disabled?: boolean;
 }) {
   const note = view.draftHint ? <p className="text-tertiary">{view.draftHint}</p> : null;
   let body: ReactNode = null;
@@ -153,6 +160,18 @@ export function ActionCardObject({
     body = (
       <>
         <ActionCardDesktopTakeoverBody view={view} />
+        {note}
+      </>
+    );
+  } else if (view.kind === "feedback:submit") {
+    body = (
+      <>
+        <ActionCardFeedbackBody
+          view={view}
+          draft={feedbackDraft}
+          setDraft={setFeedbackDraft}
+          disabled={disabled}
+        />
         {note}
       </>
     );

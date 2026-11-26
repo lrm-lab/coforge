@@ -7,7 +7,7 @@ These rules apply to `src/routes/`.
 - Every app page lives under `/w/$workspaceSlug` (`w.$workspaceSlug.tsx` owns
   `AppShell` and renders `Outlet`), with these page names: `channel/$channelId`,
   `saved`, `activity`, `tasks`, `search`, `members`, `agent/$agentId`,
-  `computers`, `computer/$computerId`, `settings`, `app-review` (platform operators), `pi-chat`, plus `projects` and
+  `computers`, `computer/$computerId`, `settings`, `app-review` (platform operators), `feedback` (platform operators), `pi-chat`, plus `projects` and
   `records`; a direct message is `dm/$dmId`, by its conversation id. Pathless layouts (`_chat`, `_computers`) share chrome between
   pages without adding a URL segment. Team and personal memory use `settings/memory` and
   `settings/memory/personal`. Legacy page redirects are limited to their earlier `memory` and

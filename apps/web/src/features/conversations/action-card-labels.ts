@@ -13,6 +13,8 @@ export function actionCardTitle(view: ToolActionCardView): string {
       return m.action_card_title_page_fill();
     case "desktop:takeover":
       return m.action_card_title_desktop_takeover();
+    case "feedback:submit":
+      return m.action_card_title_feedback_submit();
     case "channel:create":
       return m.action_card_title_channel_create();
     case "agent:create":
@@ -36,6 +38,8 @@ export function actionCardCommitLabel(view: ToolActionCardView, working: boolean
       return working ? m.action_card_page_fill_filling() : m.action_card_commit_page_fill();
     case "desktop:takeover":
       return working ? m.action_card_finishing() : m.action_card_commit_desktop_takeover();
+    case "feedback:submit":
+      return working ? m.action_card_feedback_sending() : m.action_card_commit_feedback_submit();
     case "channel:create":
       return working ? m.action_card_creating() : m.action_card_commit_channel_create();
     case "agent:create":
@@ -69,6 +73,8 @@ export function actionCardHandledVerb(view: ToolActionCardView): string {
       return m.action_card_page_fill_done();
     case "desktop:takeover":
       return m.action_card_desktop_takeover_done();
+    case "feedback:submit":
+      return m.action_card_handled_feedback_submit();
     case "channel:create":
       return m.action_card_handled_channel_create();
     case "agent:create":
@@ -108,6 +114,7 @@ export function actionCardDeniedReason(view: ToolActionCardView): string | undef
       return m.action_card_denied_page_fill();
     case "desktop:takeover":
       return m.action_card_denied_desktop_takeover();
+    case "feedback:submit":
     case "channel:create":
       return undefined;
     default:

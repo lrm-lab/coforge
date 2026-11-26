@@ -6,6 +6,7 @@ import {
   isAskingCardKind,
   type ActionCardKind,
   type AgentActionPrepareResponse,
+  type FeedbackSubmitCategory,
   type ResolvedActionCardPayload,
 } from "@lrm/coforge-sdk/agent";
 
@@ -155,6 +156,12 @@ export type ActionCardView =
       agentId: string;
       agentName: string;
       result?: { done: true };
+    })
+  | (ActionCardViewBase & {
+      kind: "feedback:submit";
+      category: FeedbackSubmitCategory;
+      body: string;
+      result?: { feedbackId: string; category: FeedbackSubmitCategory; body?: string };
     })
   /** An Agent's question with clickable options, for the person it names. */
   | (ActionCardViewBase & {

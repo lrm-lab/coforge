@@ -13,6 +13,7 @@ import {
 } from "./action-card-labels";
 import { ActionCardGlyph } from "./action-card-icons";
 import { ActionCardObject } from "./action-card-object";
+import type { FeedbackCardDraft } from "./action-card-feedback";
 
 export type ActionCardFailure = {
   message: string;
@@ -28,6 +29,8 @@ export function PendingActionCard({
   view,
   fillValues,
   setFillValues,
+  feedbackDraft,
+  setFeedbackDraft,
   failure,
   committing,
   cancelling,
@@ -41,6 +44,8 @@ export function PendingActionCard({
   view: ToolActionCardView;
   fillValues: Record<string, string>;
   setFillValues: Dispatch<SetStateAction<Record<string, string>>>;
+  feedbackDraft?: FeedbackCardDraft;
+  setFeedbackDraft?: Dispatch<SetStateAction<FeedbackCardDraft>>;
   failure: ActionCardFailure | null;
   committing: boolean;
   cancelling: boolean;
@@ -65,6 +70,9 @@ export function PendingActionCard({
       view={view}
       fillValues={fillValues}
       setFillValues={setFillValues}
+      feedbackDraft={feedbackDraft}
+      setFeedbackDraft={setFeedbackDraft}
+      disabled={busy}
     >
       {failure && (
         <p role="alert" className="flex items-start gap-1.5 text-sm text-error-primary">
@@ -142,6 +150,9 @@ export function ActionCardFrame({
   view,
   fillValues = NO_FILL_VALUES,
   setFillValues = () => {},
+  feedbackDraft,
+  setFeedbackDraft,
+  disabled,
   minHeight,
   children,
 }: {
@@ -149,6 +160,9 @@ export function ActionCardFrame({
   view: ToolActionCardView;
   fillValues?: Record<string, string>;
   setFillValues?: Dispatch<SetStateAction<Record<string, string>>>;
+  feedbackDraft?: FeedbackCardDraft;
+  setFeedbackDraft?: Dispatch<SetStateAction<FeedbackCardDraft>>;
+  disabled?: boolean;
   minHeight?: number;
   children: ReactNode;
 }) {
@@ -171,7 +185,14 @@ export function ActionCardFrame({
         </span>
       </div>
 
-      <ActionCardObject view={view} fillValues={fillValues} setFillValues={setFillValues} />
+      <ActionCardObject
+        view={view}
+        fillValues={fillValues}
+        setFillValues={setFillValues}
+        feedbackDraft={feedbackDraft}
+        setFeedbackDraft={setFeedbackDraft}
+        disabled={disabled}
+      />
 
       {children}
     </div>
