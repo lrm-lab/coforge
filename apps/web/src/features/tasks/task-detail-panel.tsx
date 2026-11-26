@@ -3,6 +3,7 @@ import {
   ArrowUp,
   ChevronDown,
   ChevronUp,
+  ClockRewind,
   DotsHorizontal as MoreHorizontal,
   Maximize02,
   Minimize02,
@@ -321,32 +322,23 @@ export function useTaskDetailModel({
         />
         <Dropdown.Popover placement="bottom end">
           <Dropdown.Menu
+            aria-label={m.tasks_more_actions({ number: String(task.number) })}
             onAction={(key) => {
               if (key === "delete") void deleteTask();
               else if (key === "history") setHistory(true);
               else if (key === "parent" || key === "blocker" || key === "subtask") setPicker(key);
             }}
           >
-            <Dropdown.Section>
-              {taskRelationMenuItems({
-                canEdit: relations.canEdit,
-                canAddBlocker: relations.canAddBlocker,
-                hasParent: task.parent != null,
-              })}
-            </Dropdown.Section>
-            <Dropdown.Section className="border-t border-secondary pt-1">
-              <Dropdown.Item id="history" label={m.tasks_full_history()} />
-            </Dropdown.Section>
-            {follow && (
-              <Dropdown.Section className="mt-1 border-t border-secondary pt-1">
-                {taskFollowMenuItem(follow)}
-              </Dropdown.Section>
-            )}
-            {canDelete && (
-              <Dropdown.Section className="mt-1 border-t border-secondary pt-1">
-                {taskDeleteMenuItem()}
-              </Dropdown.Section>
-            )}
+            <Dropdown.Item id="history" icon={ClockRewind} label={m.tasks_full_history()} />
+            {follow && taskFollowMenuItem(follow)}
+            <Dropdown.Separator />
+            {taskRelationMenuItems({
+              canEdit: relations.canEdit,
+              canAddBlocker: relations.canAddBlocker,
+              hasParent: task.parent != null,
+            })}
+            {canDelete && <Dropdown.Separator />}
+            {canDelete && taskDeleteMenuItem()}
           </Dropdown.Menu>
         </Dropdown.Popover>
       </Dropdown.Root>
