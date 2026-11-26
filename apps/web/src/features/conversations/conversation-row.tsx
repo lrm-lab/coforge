@@ -8,7 +8,11 @@ import { rememberSharedRect } from "#src/lib/shared-element-rect";
 import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
 import { MentionBadge } from "./mention-badge";
-import { useCloseConversationList, useConversationListVisible } from "./conversation-navigation";
+import {
+  useCloseConversationList,
+  useConversationListVisible,
+  useShouldRevealCurrentConversationRow,
+} from "./conversation-navigation";
 import { conversationRoute, type ConversationTarget } from "./last-conversation";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { createRowHover, RowHoverContext } from "./row-hover";
@@ -127,13 +131,14 @@ export function ConversationRow({
   const workspaceSlug = useWorkspaceSlug();
   const [hover] = useState(createRowHover);
   const listVisible = useConversationListVisible();
+  const shouldRevealCurrentRow = useShouldRevealCurrentConversationRow();
   const link = useRef<HTMLAnchorElement>(null);
   const iconRef = useRef<HTMLSpanElement>(null);
   const titleRef = useRef<HTMLSpanElement>(null);
   useEffect(() => {
-    if (current && listVisible)
+    if (current && listVisible && shouldRevealCurrentRow())
       link.current?.scrollIntoView({ block: "nearest", behavior: "instant" });
-  }, [current, listVisible]);
+  }, [current, listVisible, shouldRevealCurrentRow]);
   const route = conversationRoute(target, workspaceSlug);
   const dimmed = Boolean(muted || unjoined);
   const subdued = subduedCapsule ?? dimmed;

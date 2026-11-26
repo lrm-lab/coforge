@@ -23,6 +23,7 @@ export const ConversationListContext = createContext<{
   closeList: () => void;
   detailVisible: boolean;
   listVisible: boolean;
+  shouldRevealCurrentRow?: () => boolean;
   /** The back button's name, when the list is not Chat's conversations. */
   backLabel?: string;
   listBesideFrom: ListBesideFrom;

@@ -28,6 +28,7 @@ import { ChatHeaderBusyAgents } from "./chat-header-busy-agents";
 import { ChatListCrowdContext, useChatListCrowdState } from "./chat-list-crowd";
 import { ConversationFocusContext, useConversationFocusState } from "./conversation-focus";
 import { ConversationListContext } from "./conversation-list-button";
+import { useConversationListScrollRestoration } from "./conversation-list-scroll";
 import { CONVERSATION_LIST_COLUMN } from "./conversation-list-width";
 import { ResizableColumnSplit } from "./use-resizable-column";
 import { ConversationDirectory } from "./conversation-directory";
@@ -68,9 +69,16 @@ export function useConversationListVisible() {
   return useContext(ConversationListContext)?.listVisible ?? true;
 }
 
+const ALWAYS_REVEAL_CURRENT_ROW = () => true;
+
 export function useCloseConversationList(): () => void {
   const navigation = useContext(ConversationListContext);
   return navigation?.closeList ?? (() => {});
+}
+
+export function useShouldRevealCurrentConversationRow(): () => boolean {
+  const navigation = useContext(ConversationListContext);
+  return navigation?.shouldRevealCurrentRow ?? ALWAYS_REVEAL_CURRENT_ROW;
 }
 
 export function ConversationNavigation({ children }: { children: ReactNode }) {
@@ -288,15 +296,27 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   const detailVisible = desktop || !showList;
   useReportChatListOpen(showList);
   const listVisible = desktop || shellShowsList;
+  const listScrollRef = useRef<HTMLDivElement>(null);
+  const listScroll = useConversationListScrollRestoration({
+    scrollerRef: listScrollRef,
+    workspaceId,
+    phone,
+    showList,
+    listVisible,
+  });
   const listControls = useMemo(
     () => ({
       showList: () => setBrowsing(true),
-      closeList: () => setBrowsing(false),
+      closeList: () => {
+        listScroll.captureBeforeLeave();
+        setBrowsing(false);
+      },
       detailVisible,
       listVisible,
+      shouldRevealCurrentRow: listScroll.shouldRevealCurrentRow,
       listBesideFrom: "lg" as const,
     }),
-    [detailVisible, listVisible],
+    [detailVisible, listVisible, listScroll.captureBeforeLeave, listScroll.shouldRevealCurrentRow],
   );
   const listSection = (
     <section
@@ -348,6 +368,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
         </>
       )}
       <div
+        ref={listScrollRef}
         data-tab-home-scroll=""
         className="scroll-fade-y flex min-h-0 flex-1 flex-col overflow-y-auto pt-3 pb-4 scroll-py-6"
       >
