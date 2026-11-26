@@ -1,8 +1,9 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useHydrated, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { Group, Panel, Separator, useDefaultLayout } from "react-resizable-panels";
 import { AlertCircle, Plus, SearchLg } from "@untitledui/icons";
 import type { WorkbenchRuntime } from "@lrm/coforge-sdk/internal/pi-chat";
 import { Button } from "#src/components/base/buttons/button";
@@ -14,7 +15,9 @@ import { EmptyState, RetryButton } from "#src/components/ui/empty";
 import { EmptyIcon } from "#src/components/ui/empty-icon";
 import { ChatWireframe, ComputersWireframe } from "#src/components/ui/empty-wireframes";
 import { Skeleton } from "#src/components/ui/skeleton";
+import { localLayoutStorage } from "#src/features/conversations/local-layout-storage";
 import { markAiWorkbenchOff, useAiWorkbenchEnabled } from "#src/features/settings/ai-workbench";
+import { useMediaQuery } from "#src/hooks/use-media-query";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -48,6 +51,8 @@ export function PiChatPage(props: Props) {
 
 function PiChatContent(props: Props) {
   const navigate = useNavigate();
+  const hydrated = useHydrated();
+  const desktop = useMediaQuery("(min-width: 1024px)", false);
   const queryClient = useQueryClient();
   const { workspaceSlug, configured, sessionId, select, runtime } = props;
   const getComputers = useServerFn(getPiChatComputers);
@@ -112,6 +117,14 @@ function PiChatContent(props: Props) {
     viewports.current.set(key, { top: 0, follow: true, expanded: new Set() });
   const selection = useRef(key);
   selection.current = key;
+  const filesOpen = Boolean(filePanel?.open && sessionId);
+  const desktopSplit = hydrated && desktop;
+  const filesLayout = useDefaultLayout({
+    id: `coforge-pi-chat-files:${workspaceSlug}:${computerId ?? ""}`,
+    panelIds: desktopSplit && filesOpen ? ["conversation", "files"] : ["conversation"],
+    onlySaveAfterUserInteractions: true,
+    storage: localLayoutStorage,
+  });
   if (!configured || !computerId || !computer)
     return (
       <main className="flex h-full min-h-0 flex-col bg-primary">
@@ -139,6 +152,83 @@ function PiChatContent(props: Props) {
   const initialSession = sessions.data?.sessions?.find((session) => session.id === sessionId);
   const sessionRuntime =
     computer.pi === false ? RUNTIME_PROVIDER.CODEX : (initialSession?.runtime ?? runtime);
+  const conversationPane =
+    sessionId === "new" && !runtime && computer.codex ? (
+      <WorkbenchStart
+        key={computerId}
+        computers={computers}
+        computer={computer}
+        onComputer={(id) => select(id, "new")}
+        onStart={(provider) => select(computerId, "new", provider)}
+        onBack={() => select(computerId)}
+      />
+    ) : sessionId ? (
+      <PiChatConversation
+        key={key}
+        computerId={computerId}
+        controls={controls}
+        userId={props.userId}
+        workspaceId={props.workspaceId}
+        sessionId={sessionId}
+        runtime={sessionRuntime}
+        workspaceSlug={workspaceSlug}
+        viewport={viewports.current.get(key)!}
+        initialSession={initialSession}
+        drafts={drafts}
+        draftKey={key}
+        onSelect={(id) => {
+          if (selection.current === key) select(computerId, id, id ? sessionRuntime : undefined);
+        }}
+        onRecover={(text) => {
+          drafts.set(`${workspaceSlug}:${computerId}:new:codex`, { text });
+          select(computerId, "new", RUNTIME_PROVIDER.CODEX);
+        }}
+      />
+    ) : (
+      <section className="hidden min-w-0 flex-1 lg:flex">
+        <EmptyState
+          picture={<ChatWireframe accent />}
+          title={m.empty_pi_chat_none_selected_title()}
+          description={m.empty_pi_chat_none_selected_description()}
+          primaryAction={
+            <Button
+              size="sm"
+              color="primary"
+              iconLeading={Plus}
+              onPress={() =>
+                select(computerId, "new", computer.codex ? undefined : RUNTIME_PROVIDER.PI)
+              }
+            >
+              {m.pi_chat_new()}
+            </Button>
+          }
+        />
+      </section>
+    );
+  const filesPanelElement = filesOpen ? (
+    <PiChatFilesPanel
+      key={computerId}
+      computerId={computerId}
+      computerName={computer.name}
+      workspaceSlug={workspaceSlug}
+      supported={computer.files ?? false}
+      path={filePanel?.path}
+      onPath={openFiles}
+      onMention={(path) =>
+        drafts.update(key, (draft) => ({
+          ...draft,
+          text: [draft.text, `@${JSON.stringify(path)}`].filter(Boolean).join(" "),
+          request: undefined,
+        }))
+      }
+      onClose={() =>
+        setFilePanels((current) => ({
+          ...current,
+          [computerId]: { ...current[computerId]!, open: false },
+        }))
+      }
+    />
+  ) : null;
   return (
     <PiChatFilesContext value={files}>
       <main className="flex h-full min-h-0 min-w-0 overflow-hidden bg-primary">
@@ -235,82 +325,42 @@ function PiChatContent(props: Props) {
             )}
           </div>
         </section>
-        {sessionId === "new" && !runtime && computer.codex ? (
-          <WorkbenchStart
+        {desktopSplit ? (
+          <Group
             key={computerId}
-            computers={computers}
-            computer={computer}
-            onComputer={(id) => select(id, "new")}
-            onStart={(provider) => select(computerId, "new", provider)}
-            onBack={() => select(computerId)}
-          />
-        ) : sessionId ? (
-          <PiChatConversation
-            key={key}
-            computerId={computerId}
-            controls={controls}
-            userId={props.userId}
-            workspaceId={props.workspaceId}
-            sessionId={sessionId}
-            runtime={sessionRuntime}
-            workspaceSlug={workspaceSlug}
-            viewport={viewports.current.get(key)!}
-            initialSession={initialSession}
-            drafts={drafts}
-            draftKey={key}
-            onSelect={(id) => {
-              if (selection.current === key)
-                select(computerId, id, id ? sessionRuntime : undefined);
-            }}
-            onRecover={(text) => {
-              drafts.set(`${workspaceSlug}:${computerId}:new:codex`, { text });
-              select(computerId, "new", RUNTIME_PROVIDER.CODEX);
-            }}
-          />
-        ) : (
-          <section className="hidden min-w-0 flex-1 lg:flex">
-            <EmptyState
-              picture={<ChatWireframe accent />}
-              title={m.empty_pi_chat_none_selected_title()}
-              description={m.empty_pi_chat_none_selected_description()}
-              primaryAction={
-                <Button
-                  size="sm"
-                  color="primary"
-                  iconLeading={Plus}
-                  onPress={() =>
-                    select(computerId, "new", computer.codex ? undefined : RUNTIME_PROVIDER.PI)
-                  }
+            id={`coforge-pi-chat-files:${workspaceSlug}:${computerId}`}
+            orientation="horizontal"
+            defaultLayout={filesLayout.defaultLayout}
+            onLayoutChanged={filesLayout.onLayoutChanged}
+            resizeTargetMinimumSize={{ coarse: 44, fine: 12 }}
+            className="flex min-h-0 min-w-0 flex-1"
+          >
+            <Panel id="conversation" minSize="55%" className="flex min-h-0 min-w-0 flex-col">
+              {conversationPane}
+            </Panel>
+            {filesPanelElement ? (
+              <>
+                <Separator
+                  aria-label={m.pi_chat_files_resize()}
+                  className="w-px shrink-0 bg-border-secondary outline-focus-ring transition-colors hover:bg-brand-solid focus-visible:bg-brand-solid focus-visible:outline-2 data-[separator=active]:bg-brand-solid"
+                />
+                <Panel
+                  id="files"
+                  defaultSize="24rem"
+                  minSize="18rem"
+                  maxSize="45%"
+                  className="flex min-h-0 min-w-0 flex-col"
                 >
-                  {m.pi_chat_new()}
-                </Button>
-              }
-            />
-          </section>
-        )}
-        {filePanel?.open && sessionId && (
-          <PiChatFilesPanel
-            key={computerId}
-            computerId={computerId}
-            computerName={computer?.name ?? computerId}
-            workspaceSlug={workspaceSlug}
-            supported={computer?.files ?? false}
-            path={filePanel.path}
-            onPath={openFiles}
-            onMention={(path) =>
-              drafts.update(key, (draft) => ({
-                ...draft,
-                text: [draft.text, `@${JSON.stringify(path)}`].filter(Boolean).join(" "),
-                request: undefined,
-              }))
-            }
-            onClose={() =>
-              setFilePanels((current) => ({
-                ...current,
-                [computerId]: { ...current[computerId]!, open: false },
-              }))
-            }
-          />
+                  {filesPanelElement}
+                </Panel>
+              </>
+            ) : null}
+          </Group>
+        ) : (
+          <>
+            {conversationPane}
+            {filesPanelElement}
+          </>
         )}
       </main>
     </PiChatFilesContext>

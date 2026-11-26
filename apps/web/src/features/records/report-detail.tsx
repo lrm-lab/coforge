@@ -35,6 +35,7 @@ import {
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { RecordSidePanel } from "./record-side-panel";
+import { RecordSplitLayout } from "./record-split-layout";
 import { fileToDataUrlUpload } from "./file-data-url-upload";
 import { ReportDetailHeader } from "./report-detail-header";
 import type { ReportSubject } from "./record-subject";
@@ -380,70 +381,92 @@ export function ReportDetail({
   }
 
   return (
-    <div className="@container/record-split relative flex min-h-0 flex-1 overflow-hidden">
-      <div className="relative flex min-w-[min(100%,20rem)] flex-1 flex-col overflow-hidden bg-primary">
-        <ReportDetailHeader
-          report={report}
-          returnTo={returnTo}
-          editable={editable}
-          isAssignment={isAssignment}
-          restoreView={restoreView}
-          restoreBusy={restoreBusy}
-          onSwitchBodyVersion={() => void onSwitchBodyVersion()}
-          sendAck={sendAck}
-          sent={sent}
-          assignmentUnchanged={assignmentUnchanged}
-          onSubmit={() => void submitReport()}
-          favorited={favorited}
-          favoriteBusy={favoriteBusy}
-          onToggleFavorite={() => void toggleFavorite()}
-          sideOpen={sideOpen}
-          onOpenSide={() => setSideOpen(true)}
-          saving={saving}
-          onExport={exportReport}
-          onRequestDelete={deleteDialog.request}
-        />
-
-        {failure && <ReportSaveFailureBar failure={failure} retrying={saving} />}
-
-        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-          <ReportTabsEditor
-            editorRef={tabsEditorRef}
-            content={content}
+    <RecordSplitLayout
+      sideOpen={sideOpen}
+      onSideOpenChange={setSideOpen}
+      main={
+        <>
+          <ReportDetailHeader
+            report={report}
+            returnTo={returnTo}
             editable={editable}
-            contentRevision={editorRevision}
-            placeholder={m.records_report_body_placeholder()}
-            onUploadFile={editable ? fileToDataUrlUpload : undefined}
-            trailingTabs={
-              leaderReading && sent
-                ? [{ id: KEY_POINT_EXTRACTION_TAB, label: m.records_key_points_tab() }]
-                : undefined
-            }
-            renderTrailingTab={(id) =>
-              id === KEY_POINT_EXTRACTION_TAB ? (
-                <KeyPointExtractionPanel
-                  extraction={content.keyPointExtraction}
-                  restartBusy={keyPointRestartBusy}
-                  onRestart={() => void restartPersonalKeyPoints()}
-                  scrollable={!readingScroll}
-                  editPrompt={{
-                    slot: "personal",
-                    returnTo: `/w/${workspaceSlug}/records/${report.id}`,
-                  }}
-                />
-              ) : null
-            }
-            readingTurn={readingTurn}
-            onChange={schedulePersist}
-            onBlur={() => {
-              if (!editable || submitInFlightRef.current) return;
-              clearScheduledPersist();
-              void persist(contentRef.current);
-            }}
+            isAssignment={isAssignment}
+            restoreView={restoreView}
+            restoreBusy={restoreBusy}
+            onSwitchBodyVersion={() => void onSwitchBodyVersion()}
+            sendAck={sendAck}
+            sent={sent}
+            assignmentUnchanged={assignmentUnchanged}
+            onSubmit={() => void submitReport()}
+            favorited={favorited}
+            favoriteBusy={favoriteBusy}
+            onToggleFavorite={() => void toggleFavorite()}
+            sideOpen={sideOpen}
+            onOpenSide={() => setSideOpen(true)}
+            saving={saving}
+            onExport={exportReport}
+            onRequestDelete={deleteDialog.request}
           />
-        </div>
-      </div>
 
+          {failure && <ReportSaveFailureBar failure={failure} retrying={saving} />}
+
+          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+            <ReportTabsEditor
+              editorRef={tabsEditorRef}
+              content={content}
+              editable={editable}
+              contentRevision={editorRevision}
+              placeholder={m.records_report_body_placeholder()}
+              onUploadFile={editable ? fileToDataUrlUpload : undefined}
+              trailingTabs={
+                leaderReading && sent
+                  ? [{ id: KEY_POINT_EXTRACTION_TAB, label: m.records_key_points_tab() }]
+                  : undefined
+              }
+              renderTrailingTab={(id) =>
+                id === KEY_POINT_EXTRACTION_TAB ? (
+                  <KeyPointExtractionPanel
+                    extraction={content.keyPointExtraction}
+                    restartBusy={keyPointRestartBusy}
+                    onRestart={() => void restartPersonalKeyPoints()}
+                    scrollable={!readingScroll}
+                    editPrompt={{
+                      slot: "personal",
+                      returnTo: `/w/${workspaceSlug}/records/${report.id}`,
+                    }}
+                  />
+                ) : null
+              }
+              readingTurn={readingTurn}
+              onChange={schedulePersist}
+              onBlur={() => {
+                if (!editable || submitInFlightRef.current) return;
+                clearScheduledPersist();
+                void persist(contentRef.current);
+              }}
+            />
+          </div>
+        </>
+      }
+      side={
+        <RecordSidePanel
+          key={report.id}
+          subjectType="report"
+          subjectId={report.id}
+          surface={memberSurface}
+          open={sideOpen}
+          onOpenChange={setSideOpen}
+          onBodyApplied={applyAssistantBody}
+          bodyRestoreView={restoreView}
+          onSwitchBodyVersion={() => void onSwitchBodyVersion()}
+          keyPointExtraction={leaderReading ? content.keyPointExtraction : undefined}
+          keyPointRestartBusy={keyPointRestartBusy}
+          onRestartKeyPointExtraction={
+            leaderReading ? () => void restartPersonalKeyPoints() : undefined
+          }
+        />
+      }
+    >
       <ConfirmDialog
         open={deleteDialog.open}
         onOpenChange={deleteDialog.setOpen}
@@ -454,23 +477,6 @@ export function ReportDetail({
         errorMessage={m.records_delete_error()}
         onConfirm={removeCurrentReport}
       />
-
-      <RecordSidePanel
-        key={report.id}
-        subjectType="report"
-        subjectId={report.id}
-        surface={memberSurface}
-        open={sideOpen}
-        onOpenChange={setSideOpen}
-        onBodyApplied={applyAssistantBody}
-        bodyRestoreView={restoreView}
-        onSwitchBodyVersion={() => void onSwitchBodyVersion()}
-        keyPointExtraction={leaderReading ? content.keyPointExtraction : undefined}
-        keyPointRestartBusy={keyPointRestartBusy}
-        onRestartKeyPointExtraction={
-          leaderReading ? () => void restartPersonalKeyPoints() : undefined
-        }
-      />
-    </div>
+    </RecordSplitLayout>
   );
 }

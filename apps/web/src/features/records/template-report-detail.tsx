@@ -37,6 +37,7 @@ import { useFormatEditHint } from "./records-layout";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { RecordsReadingColumn } from "./records-reading-column";
 import { RecordSidePanel } from "./record-side-panel";
+import { RecordSplitLayout } from "./record-split-layout";
 import { TemplateChildrenTable } from "./template-children-table";
 import { normalizeLeaderFormatTabs, resetLeaderFormatPage } from "./template-outline-sections";
 import { WEEKLY_SEND_TOAST_MS, WeeklySendConfirmDialog } from "./weekly-send-confirm-dialog";
@@ -355,106 +356,113 @@ export function TemplateReportDetail({
   }
 
   return (
-    <div className="@container/record-split relative flex min-h-0 flex-1 overflow-hidden">
-      <div className="relative flex min-w-[min(100%,20rem)] flex-1 flex-col overflow-hidden bg-primary">
-        <TemplateReportHeader
-          week={report.cycle.week}
-          title={report.title}
-          returnTo={returnTo}
-          isOverview={isOverview}
-          isOverviewLeader={isOverviewLeader}
-          titleDraft={titleDraft}
-          titleError={titleError}
-          onTitleDraftChange={(value) => {
-            setTitleDraft(value);
-            setTitleError(null);
-          }}
-          saving={saving}
-          sending={sending}
-          hasUnsavedEdits={hasUnsavedEdits}
-          alreadySent={Boolean(sendSchedule?.alreadySent)}
-          canSendAssignments={canSendAssignments}
-          weekDismissed={weekDismissed}
-          onOpenConfirmSend={() => setConfirmOpen(true)}
-          onSaveFormatEdits={() => void saveFormatEdits()}
-          sideOpen={sideOpen}
-          onOpenSide={() => setSideOpen(true)}
-          onRequestDeleteOverview={deleteDialog.request}
-          onResetPage={() => {
-            tabsEditorRef.current?.flush();
-            const page = formatPageRef.current || Object.keys(contentRef.current.tabs ?? {})[0];
-            if (!page) return;
-            markLocalContent(resetLeaderFormatPage(contentRef.current, page), { structural: true });
-            setEditorRevision((revision) => revision + 1);
-          }}
-        />
-        {failure && <ReportSaveFailureBar failure={failure} retrying={saving} />}
-        {isOverview || !(titleError ?? sendError) ? null : (
-          <p
-            id={titleError ? "report-title-error" : undefined}
-            className="border-b border-secondary px-4 py-2 text-sm text-error-primary sm:px-6"
-          >
-            {titleError ?? sendError}
-          </p>
-        )}
-
-        {isOverview ? (
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <RecordsReadingColumn>
-              <TemplateChildrenTable children={report.children ?? []} />
-              {isOverviewLeader ? (
-                <TeamKeyPointSection
-                  overviewReportId={report.id}
-                  extraction={content.keyPointExtraction}
-                  busy={teamKeyPoints.busy}
-                  onStart={teamKeyPoints.start}
-                />
-              ) : null}
-            </RecordsReadingColumn>
-          </div>
-        ) : (
-          <ReportTabsEditor
-            editorRef={tabsEditorRef}
-            content={content}
-            editable={report.editable !== false}
-            editableTabs
-            contentRevision={editorRevision}
-            placeholder={m.records_report_body_placeholder()}
-            onUploadFile={fileToDataUrlUpload}
-            onDirty={() => updateDirty(true)}
-            onChange={markLocalContent}
-            onActiveTabChange={(name) => {
-              formatPageRef.current = name;
+    <RecordSplitLayout
+      sideOpen={sideOpen}
+      onSideOpenChange={setSideOpen}
+      main={
+        <>
+          <TemplateReportHeader
+            week={report.cycle.week}
+            title={report.title}
+            returnTo={returnTo}
+            isOverview={isOverview}
+            isOverviewLeader={isOverviewLeader}
+            titleDraft={titleDraft}
+            titleError={titleError}
+            onTitleDraftChange={(value) => {
+              setTitleDraft(value);
+              setTitleError(null);
+            }}
+            saving={saving}
+            sending={sending}
+            hasUnsavedEdits={hasUnsavedEdits}
+            alreadySent={Boolean(sendSchedule?.alreadySent)}
+            canSendAssignments={canSendAssignments}
+            weekDismissed={weekDismissed}
+            onOpenConfirmSend={() => setConfirmOpen(true)}
+            onSaveFormatEdits={() => void saveFormatEdits()}
+            sideOpen={sideOpen}
+            onOpenSide={() => setSideOpen(true)}
+            onRequestDeleteOverview={deleteDialog.request}
+            onResetPage={() => {
+              tabsEditorRef.current?.flush();
+              const page = formatPageRef.current || Object.keys(contentRef.current.tabs ?? {})[0];
+              if (!page) return;
+              markLocalContent(resetLeaderFormatPage(contentRef.current, page), {
+                structural: true,
+              });
+              setEditorRevision((revision) => revision + 1);
             }}
           />
-        )}
-      </div>
+          {failure && <ReportSaveFailureBar failure={failure} retrying={saving} />}
+          {isOverview || !(titleError ?? sendError) ? null : (
+            <p
+              id={titleError ? "report-title-error" : undefined}
+              className="border-b border-secondary px-4 py-2 text-sm text-error-primary sm:px-6"
+            >
+              {titleError ?? sendError}
+            </p>
+          )}
 
-      <RecordSidePanel
-        key={report.id}
-        subjectType="report"
-        subjectId={report.id}
-        surface={formatSurface}
-        countdownUntil={countdownUntil}
-        refreshToken={sideRefresh}
-        open={sideOpen}
-        onOpenChange={setSideOpen}
-        sendOfferActive={canSendAssignments && !weekDismissed && !hasUnsavedEdits}
-        onRequestSend={() => {
-          if (hasUnsavedEdits) return;
-          setConfirmOpen(true);
-        }}
-        onWeekSendDismissed={() => {
-          tabsEditorRef.current?.flush();
-          const week = currentScheduledIsoWeek(new Date());
-          const next = withWeekSendDismissed(contentRef.current, week.year, week.week);
-          replaceContent(next);
-          writeReportDraft(report.id, next);
-          setCanSendAssignments(false);
-          void refresh.records();
-        }}
-      />
-
+          {isOverview ? (
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <RecordsReadingColumn>
+                <TemplateChildrenTable children={report.children ?? []} />
+                {isOverviewLeader ? (
+                  <TeamKeyPointSection
+                    overviewReportId={report.id}
+                    extraction={content.keyPointExtraction}
+                    busy={teamKeyPoints.busy}
+                    onStart={teamKeyPoints.start}
+                  />
+                ) : null}
+              </RecordsReadingColumn>
+            </div>
+          ) : (
+            <ReportTabsEditor
+              editorRef={tabsEditorRef}
+              content={content}
+              editable={report.editable !== false}
+              editableTabs
+              contentRevision={editorRevision}
+              placeholder={m.records_report_body_placeholder()}
+              onUploadFile={fileToDataUrlUpload}
+              onDirty={() => updateDirty(true)}
+              onChange={markLocalContent}
+              onActiveTabChange={(name) => {
+                formatPageRef.current = name;
+              }}
+            />
+          )}
+        </>
+      }
+      side={
+        <RecordSidePanel
+          key={report.id}
+          subjectType="report"
+          subjectId={report.id}
+          surface={formatSurface}
+          countdownUntil={countdownUntil}
+          refreshToken={sideRefresh}
+          open={sideOpen}
+          onOpenChange={setSideOpen}
+          sendOfferActive={canSendAssignments && !weekDismissed && !hasUnsavedEdits}
+          onRequestSend={() => {
+            if (hasUnsavedEdits) return;
+            setConfirmOpen(true);
+          }}
+          onWeekSendDismissed={() => {
+            tabsEditorRef.current?.flush();
+            const week = currentScheduledIsoWeek(new Date());
+            const next = withWeekSendDismissed(contentRef.current, week.year, week.week);
+            replaceContent(next);
+            writeReportDraft(report.id, next);
+            setCanSendAssignments(false);
+            void refresh.records();
+          }}
+        />
+      }
+    >
       <WeeklySendConfirmDialog
         open={confirmOpen}
         busy={sending}
@@ -472,6 +480,6 @@ export function TemplateReportDetail({
         errorMessage={m.records_week_delete_failed()}
         onConfirm={removeOverviewNode}
       />
-    </div>
+    </RecordSplitLayout>
   );
 }

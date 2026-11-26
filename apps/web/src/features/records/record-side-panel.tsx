@@ -1,3 +1,4 @@
+import { useContext } from "react";
 import { ProgressBar } from "react-aria-components";
 import { RefreshCcw01 as Refresh } from "@untitledui/icons";
 import { Spinner } from "#src/components/ui/spinner";
@@ -13,8 +14,7 @@ import type {
 } from "./records-content";
 import { RecordAssistantSetupCard } from "./record-assistant-setup-card";
 import { RecordSideTimeline } from "./record-side-timeline";
-import { SIDE_PANEL_RESIZE_HANDLE_CLASS } from "./record-side-panel-width";
-import { useSidePanelWidth } from "./use-side-panel-width";
+import { RecordSidePanelDockedContext } from "./record-split-layout";
 import type { RecordSideSurface } from "./record-side-panel-pin";
 import { WeeklyTemplateDetailDialog } from "./weekly-template-detail-dialog";
 import { RecordSideChatHeader } from "./record-side-chat-header";
@@ -62,8 +62,7 @@ export function RecordSidePanel({
   keyPointRestartBusy?: boolean;
   onRestartKeyPointExtraction?: () => void;
 }) {
-  const { asideRef, panelWidth, asideStyle, contentMinWidth, docked, resizeHandle } =
-    useSidePanelWidth(open);
+  const docked = useContext(RecordSidePanelDockedContext);
   const {
     workspaceSlug,
     viewer,
@@ -120,35 +119,19 @@ export function RecordSidePanel({
 
   return (
     <aside
-      ref={asideRef}
-      style={asideStyle}
       aria-hidden={!open}
       inert={!open}
       className={cx(
         "flex flex-col overflow-hidden bg-primary",
         docked
-          ? cx(
-              "relative shrink-0 @max-[37.5rem]/record-split:absolute @max-[37.5rem]/record-split:inset-y-0 @max-[37.5rem]/record-split:end-0 @max-[37.5rem]/record-split:z-20 @max-[37.5rem]/record-split:max-w-full",
-              open && "@max-[37.5rem]/record-split:shadow-lg",
-            )
-          : cx("absolute inset-y-0 end-0 z-20 max-w-full", open && "shadow-lg"),
-        open ? "border-s border-secondary" : "border-s-0",
+          ? "h-full min-h-0 min-w-0 flex-1"
+          : cx(
+              "absolute inset-y-0 end-0 z-20 max-w-full",
+              open ? "w-full border-s border-secondary shadow-lg sm:w-[24rem]" : "w-0 border-s-0",
+            ),
       )}
     >
-      <div className="flex h-full w-full min-h-0 flex-col" style={{ minWidth: contentMinWidth }}>
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-label={m.controls_resize_sidebar()}
-          aria-valuenow={Math.round(panelWidth * 10) / 10}
-          tabIndex={open && docked ? 0 : -1}
-          {...resizeHandle}
-          className={cx(
-            SIDE_PANEL_RESIZE_HANDLE_CLASS,
-            (!docked || undefined) && "hidden",
-            "@max-[37.5rem]/record-split:hidden",
-          )}
-        />
+      <div className="flex h-full min-h-0 w-full flex-col">
         <RecordSideChatHeader
           busy={busy}
           chatSessions={chatSessions}
