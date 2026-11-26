@@ -4,15 +4,15 @@ import { type WeeklyReportCollectInvocation } from "#src/weekly-report-collect";
 import type { WeeklyReportInvocation } from "../index";
 import type { WeeklyReportKeyPointsInvocation } from "../index";
 import type { WeeklyReportMemoryInvocation } from "../index";
-import { parseCliFlags, type CliFlagOptions } from "./cli-flags";
+import { parseCliFlags } from "./cli-flags";
 
-function parseStrictFlags<const Keys extends readonly string[]>(
+const stringFlag = { type: "string" } as const;
+
+function parseStrictFlags<const Options extends Record<string, typeof stringFlag>>(
   args: readonly string[],
-  keys: Keys,
-): Partial<Record<Keys[number], string>> {
-  const options: CliFlagOptions = {};
-  for (const key of keys) options[key] = { type: "string" };
-  const { values } = parseCliFlags({
+  options: Options,
+) {
+  return parseCliFlags({
     args,
     options,
     allowEmptyValues: false,
@@ -21,8 +21,7 @@ function parseStrictFlags<const Keys extends readonly string[]>(
     onError() {
       throw new Error("Usage:");
     },
-  });
-  return values as Partial<Record<Keys[number], string>>;
+  }).values;
 }
 
 export function parseWeeklyReportCollectArgs(
@@ -31,13 +30,14 @@ export function parseWeeklyReportCollectArgs(
   const operation = args[0];
   if (operation !== "submit-pack" && operation !== "submit-empty" && operation !== "submit-failure")
     throw unknownCommandError(["weekly-report-collect", ...args]);
-  const allowed =
+  const options = { "run-id": stringFlag, "idempotency-key": stringFlag };
+  const collectOptions: Record<string, typeof stringFlag> =
     operation === "submit-pack"
-      ? (["run-id", "idempotency-key", "markdown"] as const)
-      : operation === "submit-empty"
-        ? (["run-id", "idempotency-key"] as const)
-        : (["run-id", "idempotency-key", "reason"] as const);
-  const values = parseStrictFlags(args.slice(1), allowed);
+      ? { ...options, markdown: stringFlag }
+      : operation === "submit-failure"
+        ? { ...options, reason: stringFlag }
+        : options;
+  const values = parseStrictFlags(args.slice(1), collectOptions);
   const runId = values["run-id"];
   const idempotencyKey = values["idempotency-key"];
   if (
@@ -78,11 +78,11 @@ export function parseWeeklyReportKeyPointsArgs(
   args: readonly string[],
 ): WeeklyReportKeyPointsInvocation {
   if (args[0] !== "submit") throw unknownCommandError(["weekly-report-key-points", ...args]);
-  const values = parseStrictFlags(args.slice(1), [
-    "report-id",
-    "idempotency-key",
-    "markdown",
-  ] as const);
+  const values = parseStrictFlags(args.slice(1), {
+    "report-id": stringFlag,
+    "idempotency-key": stringFlag,
+    markdown: stringFlag,
+  });
   const reportId = values["report-id"];
   const idempotencyKey = values["idempotency-key"];
   const markdownPath = values.markdown;
@@ -103,7 +103,11 @@ export function parseWeeklyReportKeyPointsArgs(
 
 export function parseWeeklyReportMemoryArgs(args: readonly string[]): WeeklyReportMemoryInvocation {
   if (args[0] !== "submit") throw unknownCommandError(["weekly-report-memory", ...args]);
-  const values = parseStrictFlags(args.slice(1), ["report-id", "idempotency-key", "file"] as const);
+  const values = parseStrictFlags(args.slice(1), {
+    "report-id": stringFlag,
+    "idempotency-key": stringFlag,
+    file: stringFlag,
+  });
   const reportId = values["report-id"];
   const idempotencyKey = values["idempotency-key"];
   const filePath = values.file;
@@ -132,12 +136,15 @@ export function parseWeeklyReportArgs(args: readonly string[]): WeeklyReportInvo
     };
   }
   if (operation === "workflow") {
-    const values = parseStrictFlags(args.slice(1), ["input"] as const);
+    const values = parseStrictFlags(args.slice(1), { input: stringFlag });
     if (!values.input) throw new Error("Usage:");
     return { command: "weekly-report", inputPath: values.input };
   }
   if (operation === "context") {
-    const values = parseStrictFlags(args.slice(1), ["subject-type", "subject-id"] as const);
+    const values = parseStrictFlags(args.slice(1), {
+      "subject-type": stringFlag,
+      "subject-id": stringFlag,
+    });
     const subjectType = values["subject-type"];
     const subjectId = values["subject-id"];
     if (
@@ -158,7 +165,11 @@ export function parseWeeklyReportArgs(args: readonly string[]): WeeklyReportInvo
     };
   }
   if (operation === "list") {
-    const values = parseStrictFlags(args.slice(1), ["cycle-id", "cursor", "limit"] as const);
+    const values = parseStrictFlags(args.slice(1), {
+      "cycle-id": stringFlag,
+      cursor: stringFlag,
+      limit: stringFlag,
+    });
     const cycleId = values["cycle-id"];
     const cursor = values.cursor;
     const limitValue = values.limit;
@@ -180,11 +191,11 @@ export function parseWeeklyReportArgs(args: readonly string[]): WeeklyReportInvo
     };
   }
   if (operation !== "read") throw unknownCommandError(["weekly-report", ...args]);
-  const values = parseStrictFlags(args.slice(1), [
-    "report-id",
-    "section",
-    "max-characters",
-  ] as const);
+  const values = parseStrictFlags(args.slice(1), {
+    "report-id": stringFlag,
+    section: stringFlag,
+    "max-characters": stringFlag,
+  });
   const reportId = values["report-id"];
   const section = values.section;
   const maxCharactersValue = values["max-characters"];
