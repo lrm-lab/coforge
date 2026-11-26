@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { parseRuntimeProvider, RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 
+import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
+import { AppError } from "#src/lib/app-error";
+import { m } from "#src/paraglide/messages";
 import type { BatchUpdateAgentRuntimeConfigClientInput } from "./agent.schemas";
 import { agentUpdateErrorMessage, sizesFromForm } from "./agent-form";
 import {
@@ -9,10 +12,6 @@ import {
 } from "./agent-runtime-config-dialog";
 import type { RuntimeOptions, RuntimeSelection } from "./agent-runtime-fields";
 import {
-  BatchAgentRuntimeConfirmDialog,
-  type BatchRuntimeSaveResult,
-} from "./batch-agent-runtime-confirm-dialog";
-import {
   buildInitialBatchRuntimeSelection,
   hasHeterogeneousBatchRuntime,
   parseBatchEnvPatch,
@@ -20,9 +19,12 @@ import {
   type BatchRuntimePreviewAgent,
   type ParsedBatchEnvPatch,
 } from "./batch-runtime-config-model";
-import { runtimeProviderLabel } from "./runtime-provider-display";
 
-export type { BatchRuntimeSaveResult };
+export type BatchRuntimeSaveResult = {
+  succeeded: Array<{ agentId: string; restart: string }>;
+  skipped: Array<{ agentId: string; reason: "unchanged" | "not-owner" }>;
+  failed: Array<{ agentId: string; errorId?: string; reason?: string }>;
+};
 
 const EMPTY_BATCH_ENVIRONMENT: AgentEnvironmentState = { loaded: true, values: {} };
 
@@ -32,6 +34,12 @@ type PendingBatchDraft = {
   apiKey: string;
   envPatch: ParsedBatchEnvPatch;
 };
+
+class PartialBatchFailureError extends Error {
+  constructor(message: string) {
+    super(message);
+  }
+}
 
 function selectionFromForm(form: FormData): { selection: RuntimeSelection; apiKey: string } {
   const provider = parseRuntimeProvider(form.get("provider")) ?? RUNTIME_PROVIDER.COFORGE;
@@ -56,6 +64,16 @@ function envRowsFromForm(form: FormData): Array<{ key: string; value: string }> 
     key: String(key ?? ""),
     value: String(values[index] ?? ""),
   }));
+}
+
+function failureReasonMessage(item: { errorId?: string; reason?: string }): string {
+  if (!item.errorId) return m.agent_update_error();
+  return agentUpdateErrorMessage(
+    new AppError("INVALID_INPUT", {
+      errorId: item.errorId,
+      ...(item.reason ? { details: { reason: item.reason } } : {}),
+    }),
+  );
 }
 
 export function BatchAgentRuntimeConfigDialog({
@@ -104,15 +122,13 @@ export function BatchAgentRuntimeConfigDialog({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [draft, setDraft] = useState<PendingBatchDraft | undefined>(undefined);
   const [saving, setSaving] = useState(false);
-  const [submitError, setSubmitError] = useState("");
-  const [failedItems, setFailedItems] = useState<BatchRuntimeSaveResult["failed"]>([]);
+  const [retryAgentIds, setRetryAgentIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open) {
       setConfirmOpen(false);
       setDraft(undefined);
-      setSubmitError("");
-      setFailedItems([]);
+      setRetryAgentIds([]);
     }
   }, [open]);
 
@@ -149,11 +165,6 @@ export function BatchAgentRuntimeConfigDialog({
     [agents, computerOnline, draft, envKeysByAgent],
   );
 
-  const targetModelDisplay =
-    !draft || draft.keepRuntime || !draft.selection
-      ? ""
-      : `${runtimeProviderLabel(draft.selection.provider)}${draft.selection.model ? ` · ${draft.selection.model}` : ""}`;
-
   const handleFormSave = (form: FormData, changed: { runtime: boolean; environment: boolean }) => {
     const envPatch = parseBatchEnvPatch(envRowsFromForm(form), []);
     const keepRuntime = !changed.runtime && envPatch.hasAny;
@@ -164,15 +175,16 @@ export function BatchAgentRuntimeConfigDialog({
       apiKey: keepRuntime ? "" : apiKey,
       envPatch,
     });
-    setSubmitError("");
-    setFailedItems([]);
+    setRetryAgentIds([]);
     setConfirmOpen(true);
   };
 
-  const executeBatch = async (targetAgentIds: string[]) => {
-    if (!draft || saving || targetAgentIds.length === 0) return;
+  const handleConfirm = async () => {
+    if (!draft) return;
+    const targetAgentIds =
+      retryAgentIds.length > 0 ? retryAgentIds : editableAgents.map((agent) => agent.id);
+    if (targetAgentIds.length === 0) return;
     setSaving(true);
-    setSubmitError("");
     try {
       const payload: BatchUpdateAgentRuntimeConfigClientInput = {
         computerId,
@@ -201,21 +213,39 @@ export function BatchAgentRuntimeConfigDialog({
       };
       const result = await onSubmitBatch(payload);
       if (result.failed.length > 0) {
-        setFailedItems(result.failed);
+        setRetryAgentIds(result.failed.map((item) => item.agentId));
         if (result.succeeded.length > 0) onSaved(result);
-        return;
+        const detail = result.failed
+          .map(
+            (item) =>
+              `${agentNameById.get(item.agentId) ?? item.agentId}: ${failureReasonMessage(item)}`,
+          )
+          .join("；");
+        throw new PartialBatchFailureError(
+          `${m.agent_batch_runtime_failed_heading({ count: result.failed.length })} ${detail}`,
+        );
       }
       onSaved(result);
+      setRetryAgentIds([]);
       setConfirmOpen(false);
       onOpenChange(false);
-    } catch (error) {
-      setSubmitError(agentUpdateErrorMessage(error));
     } finally {
       setSaving(false);
     }
   };
 
-  const canConfirm = !saving && previewPlan.changedCount > 0 && !previewPlan.missingApiKey;
+  const descriptionText = (() => {
+    if (previewPlan.missingApiKey) return m.agent_form_api_key_required();
+    if (previewPlan.changedCount === 0) return m.agent_batch_runtime_unchanged_notice();
+    if (!computerOnline) return m.agent_batch_runtime_notice_offline();
+    if (previewPlan.willRestartCount > 0) {
+      return m.agent_batch_runtime_warning_restart({ restart: previewPlan.willRestartCount });
+    }
+    if (previewPlan.whenIdleCount > 0) return m.agent_batch_runtime_notice_when_idle();
+    return m.agent_batch_runtime_notice_deferred();
+  })();
+
+  const confirmDisabled = previewPlan.changedCount === 0 || previewPlan.missingApiKey;
 
   return (
     <>
@@ -235,19 +265,27 @@ export function BatchAgentRuntimeConfigDialog({
         error=""
         onSave={handleFormSave}
       />
-      <BatchAgentRuntimeConfirmDialog
+      <ConfirmDialog
         open={open && confirmOpen}
         onOpenChange={setConfirmOpen}
-        computerOnline={computerOnline}
-        previewPlan={previewPlan}
-        targetModelDisplay={targetModelDisplay}
-        agentNameById={agentNameById}
-        failedItems={failedItems}
-        submitError={submitError}
-        saving={saving}
-        canConfirm={canConfirm}
-        onConfirm={() => void executeBatch(editableAgents.map((agent) => agent.id))}
-        onRetryFailed={() => void executeBatch(failedItems.map((item) => item.agentId))}
+        tone="default"
+        title={m.agent_batch_runtime_confirm_title({ count: previewPlan.changedCount })}
+        description={
+          <p className={previewPlan.missingApiKey ? "text-error-primary" : undefined}>
+            {descriptionText}
+          </p>
+        }
+        confirmDisabled={confirmDisabled}
+        confirmLabel={
+          retryAgentIds.length > 0
+            ? m.agent_batch_runtime_retry_failed()
+            : m.agent_batch_runtime_confirm_submit()
+        }
+        pendingLabel={m.agent_profile_saving()}
+        errorMessage={(cause) =>
+          cause instanceof PartialBatchFailureError ? cause.message : agentUpdateErrorMessage(cause)
+        }
+        onConfirm={handleConfirm}
       />
     </>
   );
