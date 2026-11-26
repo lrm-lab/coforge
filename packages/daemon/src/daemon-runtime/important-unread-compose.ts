@@ -1,6 +1,7 @@
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import type { NoticeEligibility } from "./notice-eligibility";
+import type { PreviewedWhole } from "./inbox-preview-rows";
 import { planDeliveryNotice } from "./delivery-notice";
 import type { ImportantUnreadNotice } from "./important-unread-notice";
 import type {
@@ -20,6 +21,7 @@ export type UnreadNoticeComposePorts = Readonly<{
     conversationId: string,
   ): boolean;
   eligibility: NoticeEligibility;
+  scopeFullPreview?(agentId: string, preview: PreviewedWhole): PreviewedWhole;
   captureAcceptance?(agentId: string): (messages: readonly AgentMessageDelivery[]) => boolean;
 }>;
 
@@ -34,12 +36,16 @@ export function unreadNoticeComposer(ports: UnreadNoticeComposePorts) {
         delivery.messageId !== undefined && delivery.target !== undefined,
     );
     if (!original.length) return undefined;
+    const scopeFullPreview = ports.scopeFullPreview;
     const current = planDeliveryNotice({
       agentId,
       announced: original,
       queued: ports.queued(agentId),
       prefix: ports.prefix(agentId),
       eligibility: ports.eligibility,
+      scopeFullPreview: scopeFullPreview
+        ? (preview) => scopeFullPreview(agentId, preview)
+        : undefined,
       previewedInFull: (target, sequence, conversationId) =>
         ports.previewedInFull(agentId, target, sequence, conversationId),
     });

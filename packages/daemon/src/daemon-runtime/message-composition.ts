@@ -198,10 +198,11 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
       queued: (agentId) => ports.deliveryGate.pending(agentId),
       prefix: (agentId) => ports.sync.noticePrefix(agentId),
       previewedInFull: (agentId, target, sequence, conversationId) =>
-        messageAttention.previewSeen.has(agentId, target, sequence, conversationId),
+        messageAttention.hasFullPreview(agentId, target, sequence, conversationId),
+      scopeFullPreview: (...args) => messageAttention.scopeFullPreview(...args),
       captureAcceptance: (agentId) => messageAttention.captureNoticeAcceptance(agentId),
     }),
-    shown: (agentId, shown) => messageAttention.previewSeen.record(agentId, shown),
+    shown: (agentId, shown) => messageAttention.recordFullPreviews(agentId, shown),
     report: (agentId, notice) => {
       const launch = ports.currentActivityLaunch(agentId);
       if (!launch) return;

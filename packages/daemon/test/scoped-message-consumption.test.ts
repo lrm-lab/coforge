@@ -207,7 +207,7 @@ test("a late complete preview belongs to its queued delivery's conversation", as
     previewedInFull: () => false,
   });
   expect(notice.whole).toHaveLength(1);
-  index.previewSeen.record(agentId, notice.whole);
+  index.recordFullPreviews(agentId, notice.whole);
 
   await index.receive({
     ...delivery("replacement-fresh", "human", "ada"),

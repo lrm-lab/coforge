@@ -1,7 +1,8 @@
 import { lookupConsumptionKey, rememberConsumptionSpelling } from "./message-consumption-key";
-import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
+import type { AgentMessageDelivery, MessageSenderKind } from "@lrm/coforge-sdk/internal";
+import type { PreviewedWhole } from "./inbox-preview-rows";
 import type { NoticeGeneration } from "./agent-wakeup-unavailable-error";
-import { HELD_CONTEXT_LIMIT } from "@lrm/coforge-sdk/internal";
+import { HELD_CONTEXT_LIMIT, mergeSeenExactSeqs } from "@lrm/coforge-sdk/internal";
 import type {
   AgentConsumedSeqEntry,
   AgentConsumedSeqState,
@@ -121,6 +122,22 @@ export function markNoticeAccepted(
   }
 }
 
+export type MessageAttention = Readonly<{
+  target: string;
+  pendingCount: number;
+  firstPendingSequence: number;
+  latestSequence: number;
+  latestCreatedAtMs?: number;
+  latestSenderKind?: MessageSenderKind;
+  latestSenderHandle?: string;
+  flags: readonly string[];
+}>;
+
+export type AliasDelta = Readonly<{
+  upsertAliases: readonly Readonly<{ spelling: string; canonical: string }>[];
+  deleteAliases?: readonly string[];
+}>;
+
 export type ConsumedAgent = {
   targets: Map<string, ConsumedTarget>;
   scopes: Map<string, ConsumedTarget>;
@@ -132,7 +149,60 @@ export type ConsumedAgent = {
  * review context, independently of consumption; readOrder compares reviews across targets. */
 export type ConsumedTarget = {
   -readonly [K in keyof AgentConsumedSeqEntry]: AgentConsumedSeqEntry[K];
-} & { threadRootId?: string; serverScope?: boolean };
+} & {
+  threadRootId?: string;
+  serverScope?: boolean;
+  previewSeqs?: readonly number[];
+  previewOnly?: true;
+};
+
+export function scopeFullPreview(state: ConsumedAgent, preview: PreviewedWhole): PreviewedWhole {
+  const { conversationId, target } = preview;
+  return {
+    ...preview,
+    scopeKey: lookupConsumptionKey(state.scopeSpellings, conversationId, target),
+  };
+}
+
+export function recordFullPreviews(state: ConsumedAgent, shown: readonly PreviewedWhole[]): void {
+  const batches = new Map<ConsumedTarget, number[]>();
+  for (const { target, conversationId, sequence, scopeKey } of shown) {
+    if (!conversationId) continue;
+    const key = lookupConsumptionKey(state.scopeSpellings, conversationId, target);
+    if (scopeKey !== undefined && scopeKey !== key) continue;
+    let entry = state.scopes.get(key);
+    if (sequence <= (entry?.seq ?? 0)) continue;
+    if (!entry) {
+      entry = { conversationId, previewOnly: true };
+      state.scopes.set(key, entry);
+    }
+    const batch = batches.get(entry);
+    if (batch) batch.push(sequence);
+    else batches.set(entry, [sequence]);
+  }
+  for (const [entry, sequences] of batches) {
+    entry.previewSeqs = mergeSeenExactSeqs(
+      entry.seq ?? 0,
+      entry.previewSeqs ?? [],
+      sequences.sort(byNumber),
+    );
+  }
+}
+
+export function clearFullPreviews(scopes: ConsumedAgent["scopes"] | undefined): void {
+  if (!scopes) return;
+  for (const [key, entry] of scopes) {
+    if (entry.previewOnly) scopes.delete(key);
+    else delete entry.previewSeqs;
+  }
+}
+
+export function pruneFullPreviews(entry: ConsumedTarget, sequence: number): void {
+  if (!entry.previewSeqs) return;
+  const first = firstAbove(entry.previewSeqs, sequence);
+  if (first === entry.previewSeqs.length) delete entry.previewSeqs;
+  else if (first > 0) entry.previewSeqs = entry.previewSeqs.slice(first);
+}
 
 export function persistableConsumedTarget(
   entry: ConsumedTarget,

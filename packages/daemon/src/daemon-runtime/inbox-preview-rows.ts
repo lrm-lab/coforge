@@ -1,5 +1,4 @@
-import { SEEN_EXACT_SEQS_LIMIT, type AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
-import { messageConsumptionKey } from "./message-consumption-key";
+import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { inboxPreviewLine, previewShowsWholeMessage } from "./inbox-preview";
 
 /** The fields a notice row reads — a live delivery or a recovery message. A recovery message
@@ -29,7 +28,12 @@ export type NoticeRow = {
 };
 
 /** A message whose whole body a notice showed: the model does not need it again. */
-export type PreviewedWhole = { target: string; conversationId: string; sequence: number };
+export type PreviewedWhole = {
+  target: string;
+  conversationId: string;
+  sequence: number;
+  scopeKey?: string;
+};
 
 /**
  * One row per target, in the order the targets first appear, with the previews the notice may
@@ -125,82 +129,4 @@ export function renderNoticeRows(rows: readonly NoticeRow[]): string[] {
       ? [line, ...row.previews.map(({ line }) => `  ${line}`)].join("\n")
       : line;
   });
-}
-
-export class PreviewSeen {
-  readonly #byAgent = new Map<string, Map<string, Set<number>>>();
-
-  has(
-    agentId: string,
-    target: string,
-    sequence: number,
-    conversationId: string | undefined,
-  ): boolean {
-    return this.recorded(agentId, target, conversationId)?.has(sequence) ?? false;
-  }
-
-  recorded(
-    agentId: string,
-    target: string,
-    conversationId: string | undefined,
-  ): ReadonlySet<number> | undefined {
-    if (!conversationId) return undefined;
-    return this.#byAgent.get(agentId)?.get(messageConsumptionKey(conversationId, target));
-  }
-
-  record(agentId: string, shown: readonly PreviewedWhole[]): void {
-    if (!shown.length) return;
-    const byScope = this.#byAgent.get(agentId) ?? new Map<string, Set<number>>();
-    const touched = new Set<string>();
-    for (const { target, conversationId, sequence } of shown) {
-      const key = messageConsumptionKey(conversationId, target);
-      const seen = byScope.get(key) ?? new Set<number>();
-      seen.add(sequence);
-      byScope.set(key, seen);
-      touched.add(key);
-    }
-    for (const key of touched) {
-      const seen = byScope.get(key);
-      if (seen && seen.size > SEEN_EXACT_SEQS_LIMIT) {
-        const kept = [...seen].sort((left, right) => left - right).slice(-SEEN_EXACT_SEQS_LIMIT);
-        byScope.set(key, new Set(kept));
-      }
-    }
-    this.#byAgent.set(agentId, byScope);
-  }
-
-  pruneThrough(
-    agentId: string,
-    target: string,
-    frontier: number,
-    conversationId: string | undefined,
-  ): void {
-    if (!conversationId) return;
-    const byScope = this.#byAgent.get(agentId);
-    const key = messageConsumptionKey(conversationId, target);
-    const seen = byScope?.get(key);
-    if (!byScope || !seen) return;
-    for (const sequence of seen) if (sequence <= frontier) seen.delete(sequence);
-    if (seen.size === 0) {
-      byScope.delete(key);
-      if (byScope.size === 0) this.#byAgent.delete(agentId);
-    }
-  }
-
-  clear(agentId: string): void {
-    this.#byAgent.delete(agentId);
-  }
-
-  mergeExact(
-    agentId: string,
-    target: string,
-    recorded: readonly number[] | undefined,
-    limit: number,
-    conversationId: string | undefined,
-  ): readonly number[] | undefined {
-    const previewed = this.recorded(agentId, target, conversationId);
-    if (!previewed?.size) return recorded;
-    const values = recorded?.length ? [...new Set([...recorded, ...previewed])] : [...previewed];
-    return values.sort((left, right) => left - right).slice(-limit);
-  }
 }

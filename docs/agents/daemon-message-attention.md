@@ -64,8 +64,11 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
 - A delivery checks its own conversation and thread scope. A recreated channel
   has a new conversation ID and starts with no consumed evidence. Late replay
   leaves read evidence for other conversations intact. A complete preview uses
-  the scope of the delivery it showed. Empty pages settle only through a
-  boundary in the read receipt.
+  the delivery's scope at submission. If that scope changes before acceptance,
+  the preview supplies no evidence. The same scoped entry holds durable reads
+  and context-local previews. Pending counts and the pending window consult
+  that preview evidence while retaining delivery custody. A new context clears
+  the previews. Empty pages settle only through a boundary in the read receipt.
 - The attention index is the consumed cursor's source of truth once it has
   read the Agent's state database, and an operation that changed it persists
   only the changed targets and aliases in one atomic write (`apply`, falling

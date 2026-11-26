@@ -1,9 +1,5 @@
 import { getLogger } from "@logtape/logtape";
-import {
-  SEEN_EXACT_SEQS_LIMIT,
-  mergeSeenExactSeqs,
-  threadRootTarget,
-} from "@lrm/coforge-sdk/internal";
+import { mergeSeenExactSeqs, threadRootTarget } from "@lrm/coforge-sdk/internal";
 import type { AgentConsumptionScope, AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
 import type {
   AgentConsumedSeqDelta,
@@ -17,7 +13,7 @@ import {
   rememberConsumptionSpelling,
 } from "./message-consumption-key";
 import { LatestThreadReadIndex } from "./latest-thread-read-index";
-import type { PreviewSeen } from "./inbox-preview-rows";
+import type { PreviewedWhole } from "./inbox-preview-rows";
 import { noteFrontierSource, type FrontierSource } from "./agent-message-attention-frontier-source";
 import {
   consumedReadBasis,
@@ -28,18 +24,18 @@ import {
   isAscending,
   persistableConsumedTarget,
   restoreConsumedTargets,
+  recordFullPreviews,
+  scopeFullPreview,
+  pruneFullPreviews,
+  clearFullPreviews,
   sameThreadRoot,
+  type AliasDelta,
   type ConsumedAgent,
   type ConsumedTarget,
 } from "./agent-message-attention-index-helpers";
 
 const logger = getLogger(["coforge", "daemon", "message-attention"]);
 const NO_SEQUENCES: readonly number[] = [];
-
-type AliasDelta = Readonly<{
-  upsertAliases: readonly Readonly<{ spelling: string; canonical: string }>[];
-  deleteAliases?: readonly string[];
-}>;
 
 export class AgentConsumedAttention {
   readonly #consumedByAgent = new Map<string, ConsumedAgent>();
@@ -50,7 +46,6 @@ export class AgentConsumedAttention {
   constructor(
     private readonly ports: {
       store(): AgentConsumedSeqPort | undefined;
-      previewSeen: PreviewSeen;
       settlePending(
         agentId: string,
         target: string,
@@ -73,7 +68,6 @@ export class AgentConsumedAttention {
     this.#latestThreadReads.clear(agentId);
     this.#conversationTargets.delete(agentId);
     this.#attentionConversations.delete(agentId);
-    this.ports.previewSeen.clear(agentId);
   }
 
   recordExactSeen(agentId: string, shown: ReadonlyMap<string, readonly number[]>): void {
@@ -164,23 +158,26 @@ export class AgentConsumedAttention {
   seenExactSequences(agentId: string, target: string, conversationId?: string): readonly number[] {
     this.#consumedState(agentId);
     const entry = this.peek(agentId, target, conversationId);
-    return (
-      this.ports.previewSeen.mergeExact(
-        agentId,
-        target,
-        entry?.exactSeqs,
-        SEEN_EXACT_SEQS_LIMIT,
-        conversationId ?? entry?.conversationId,
-      ) ?? NO_SEQUENCES
-    );
+    return entry?.previewSeqs
+      ? mergeSeenExactSeqs(entry.seq ?? 0, entry.exactSeqs ?? NO_SEQUENCES, entry.previewSeqs)
+      : (entry?.exactSeqs ?? NO_SEQUENCES);
   }
   hasExactSeen(agentId: string, target: string): boolean {
     this.#consumedState(agentId);
     const entry = this.peek(agentId, target);
-    return (
-      (entry?.exactSeqs?.length ?? 0) > 0 ||
-      (this.ports.previewSeen.recorded(agentId, target, entry?.conversationId)?.size ?? 0) > 0
-    );
+    return Boolean(entry?.exactSeqs?.length || entry?.previewSeqs?.length);
+  }
+  scopeFullPreview(agentId: string, preview: PreviewedWhole) {
+    return scopeFullPreview(this.#consumedState(agentId), preview);
+  }
+  recordFullPreviews(agentId: string, shown: readonly PreviewedWhole[]): void {
+    if (shown.length) recordFullPreviews(this.#consumedState(agentId), shown);
+  }
+  fullPreviewSequences(agentId: string, target: string, conversationId: string) {
+    return this.peek(agentId, target, conversationId)?.previewSeqs;
+  }
+  clearPreviewSeen(agentId: string): void {
+    clearFullPreviews(this.#consumedByAgent.get(agentId)?.scopes);
   }
   resolveTarget(agentId: string, target: string): string {
     return this.#consumedState(agentId).aliases.get(target) ?? target;
@@ -236,7 +233,7 @@ export class AgentConsumedAttention {
       if (!kept.length) delete entry.exactSeqs;
       else if (kept.length !== exact.length) entry.exactSeqs = kept;
     }
-    this.ports.previewSeen.pruneThrough(agentId, target, sequence, entry.conversationId);
+    pruneFullPreviews(entry, sequence);
     this.ports.settlePending(
       agentId,
       target,
@@ -477,13 +474,18 @@ export class AgentConsumedAttention {
         ? lookupConsumptionKey(scopeSpellings, conversationId, target)
         : rememberConsumptionSpelling(scopeSpellings, conversationId, target, threadRootId);
     const existing = scopes.get(key);
-    if (existing) {
+    if (existing && !existing.previewOnly) {
       if (threadRootId !== undefined) existing.threadRootId = threadRootId;
       if (!current) targets.set(target, existing);
       return existing;
     }
 
-    const entry = current && !current.conversationId ? current : {};
+    const entry = current && !current.conversationId ? current : (existing ?? {});
+    if (existing?.previewOnly) {
+      entry.previewSeqs = existing.previewSeqs;
+      delete entry.previewOnly;
+      pruneFullPreviews(entry, entry.seq ?? 0);
+    }
     entry.conversationId = conversationId;
     if (threadRootId !== undefined) entry.threadRootId = threadRootId;
     scopes.set(key, entry);

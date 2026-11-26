@@ -2,7 +2,12 @@ import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { countDistinctMessages } from "./agent-history-read";
 import { inboxNoticeText } from "./inbox-notice-text";
 import { inboxPreviewLimit } from "./inbox-preview";
-import { buildNoticeRows, renderNoticeRows, type NoticeRowItem } from "./inbox-preview-rows";
+import {
+  buildNoticeRows,
+  renderNoticeRows,
+  type NoticeRowItem,
+  type PreviewedWhole,
+} from "./inbox-preview-rows";
 import { isTrackedMention } from "./mention-delivery-tracker";
 import type { NoticeEligibility } from "./notice-eligibility";
 
@@ -13,6 +18,7 @@ export function planDeliveryNotice(input: {
   prefix: string;
   previewedInFull: (target: string, sequence: number, conversationId: string) => boolean;
   eligibility: NoticeEligibility;
+  scopeFullPreview?(preview: PreviewedWhole): PreviewedWhole;
 }) {
   const { agentId, eligibility } = input;
   const queued = [...input.queued];
@@ -55,7 +61,7 @@ export function planDeliveryNotice(input: {
           deliveryId,
         }),
       ),
-      shown: view.whole,
+      shown: input.scopeFullPreview ? view.whole.map(input.scopeFullPreview) : view.whole,
       rows,
       totalCount: countDistinctMessages([...announced, ...waiting]),
       notice: input.prefix + inboxNoticeText(rows),

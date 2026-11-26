@@ -4,7 +4,7 @@ import { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-at
 import { INBOX_PREVIEW_LIMIT } from "#src/daemon-runtime/inbox-preview";
 import { delivery, session } from "./fixtures/attention-delivery";
 
-function subject(options: { rejectNotice?: boolean } = {}) {
+function subject(options: { rejectNotice?: boolean; beforeAccept?: () => void } = {}) {
   const notices: string[] = [];
   const index = new AgentMessageAttentionIndex(
     "workspace-1",
@@ -13,6 +13,7 @@ function subject(options: { rejectNotice?: boolean } = {}) {
         session((notice) => {
           if (options.rejectNotice) throw new Error("notice refused");
           notices.push(notice);
+          options.beforeAccept?.();
         }),
     },
     async () => {},
@@ -132,4 +133,65 @@ test("a new context restores the pending hold a preview had cleared", async () =
   expect(index.pendingMaxSequence("agent-1", "#coforge")).toBe(4);
   expect(index.pendingWindow("agent-1", "#coforge", 10)).toHaveLength(1);
   expect(index.unreadDeliveries("agent-1")).toEqual([{ target: "#coforge", count: 1 }]);
+});
+
+test("a whole preview follows the thread scope confirmed by the read receipt", async () => {
+  const { index } = subject();
+  const shortenedTarget = "#coforge:0f0e0d0c";
+  const threadRootId = "0f0e0d0c-0b0a-4908-8706-050403020100";
+  const fullTarget = `#coforge:${threadRootId}`;
+  const preview = message("one", { sequence: 4, target: shortenedTarget });
+  const scope = {
+    conversationId: preview.conversationId,
+    channelType: "thread" as const,
+    target: shortenedTarget,
+    threadRootId,
+  };
+  index.recordHistoryRead("agent-1", {
+    spelling: shortenedTarget,
+    target: shortenedTarget,
+    shown: [],
+    through: 0,
+    scope,
+  });
+
+  await index.receive(preview);
+
+  expect(index.seenExactSequences("agent-1", fullTarget, preview.conversationId)).toEqual([4]);
+  expect(index.pendingMessageCount("agent-1", shortenedTarget)).toBe(0);
+  index.recordHistoryRead("agent-1", {
+    spelling: fullTarget,
+    target: fullTarget,
+    shown: [],
+    through: 4,
+    scope: { ...scope, target: fullTarget },
+  });
+  expect(index.seenExactSequences("agent-1", shortenedTarget, preview.conversationId)).toEqual([]);
+});
+
+test("an in-flight whole preview cannot claim a thread scope confirmed after submission", async () => {
+  const shortenedTarget = "#coforge:0f0e0d0c";
+  const threadRootId = "0f0e0d0c-0b0a-4908-8706-050403020100";
+  const fullTarget = `#coforge:${threadRootId}`;
+  const preview = message("one", { sequence: 4, target: shortenedTarget });
+  const { index } = subject({
+    beforeAccept() {
+      index.recordHistoryRead("agent-1", {
+        spelling: shortenedTarget,
+        target: shortenedTarget,
+        shown: [],
+        through: 0,
+        scope: {
+          conversationId: preview.conversationId,
+          channelType: "thread",
+          target: shortenedTarget,
+          threadRootId,
+        },
+      });
+    },
+  });
+
+  await index.receive(preview);
+
+  expect(index.seenExactSequences("agent-1", fullTarget, preview.conversationId)).toEqual([]);
 });

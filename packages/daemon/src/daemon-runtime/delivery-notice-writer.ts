@@ -10,7 +10,7 @@ import { diagnosticErrorName, type AgentMessageDelivery } from "@lrm/coforge-sdk
 import { markNoticeAccepted } from "./agent-message-attention-index-helpers";
 import { isTrackedMention } from "./mention-delivery-tracker";
 import { AgentWakeupUnavailableError, noticeGeneration } from "./agent-wakeup-unavailable-error";
-import type { AgentMessageAttentionIndex, MessageAttention } from "./agent-message-attention-index";
+import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 
 const logger = getLogger(["coforge", "daemon", "message-attention"]);
 
@@ -29,7 +29,13 @@ export type AgentDeliveryQueue = {
 
 export type DeliveryNoticeHost = Pick<
   AgentMessageAttentionIndex,
-  "previewSeen" | "noticeActionClocks" | "session" | "isCurrentGeneration" | "noticeEligibility"
+  | "hasFullPreview"
+  | "scopeFullPreview"
+  | "recordFullPreviews"
+  | "noticeActionClocks"
+  | "session"
+  | "isCurrentGeneration"
+  | "noticeEligibility"
 > & {
   hold: AgentDeliveryQueue;
   generation(agentId: string): ReturnType<typeof noticeGeneration>;
@@ -41,7 +47,6 @@ export type DeliveryNoticeHost = Pick<
 export function writeDeliveryNotice(
   this: DeliveryNoticeHost,
   message: AgentMessageDelivery,
-  attention?: MessageAttention,
   announced: readonly AgentMessageDelivery[] = [message],
 ): Promise<void> {
   const generation = this.generation(message.agentId);
@@ -101,15 +106,15 @@ export function writeDeliveryNotice(
     generation.notificationAttempts.set(message.deliveryId, handover);
     return handover;
   }
-  void attention;
   const current = planDeliveryNotice({
     agentId: message.agentId,
     announced,
     queued: this.hold.queued?.(message.agentId) ?? [],
     prefix: this.hold.noticePrefix?.(message.agentId) ?? "",
     eligibility: this.noticeEligibility,
+    scopeFullPreview: (preview) => this.scopeFullPreview(message.agentId, preview),
     previewedInFull: (target, sequence, conversationId) =>
-      this.previewSeen.has(message.agentId, target, sequence, conversationId),
+      this.hasFullPreview(message.agentId, target, sequence, conversationId),
   });
   const identity = {
     request_id: message.requestId,
@@ -165,7 +170,7 @@ export function writeDeliveryNotice(
       if (this.isCurrentGeneration(message.agentId, generation)) {
         markNoticeAccepted(generation, selected.announced);
         if (this.recordAccepted(selected.announced))
-          this.previewSeen.record(message.agentId, selected.shown);
+          this.recordFullPreviews(message.agentId, selected.shown);
         this.noticeActionClocks.noteNoticeAccepted(message.agentId);
         this.messageReceived(message.agentId);
       }

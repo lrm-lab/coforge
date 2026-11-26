@@ -262,7 +262,7 @@ test("recovery reports a refused first notice as registered without acceptance",
   ];
   expect(await decisions(recover)).toEqual(recordedOnly);
 
-  index.previewSeen.record(message.agentId, [
+  index.recordFullPreviews(message.agentId, [
     { target: message.target, conversationId: message.conversationId, sequence: message.sequence },
   ]);
   await index.flush(message.agentId, [message]);

@@ -6,7 +6,6 @@ import {
   type AgentMessageDeliveryAck,
   type AgentRecoveryMessage,
   type AgentStartOpenTasks,
-  type MessageSenderKind,
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
 import type { AgentConversationScope } from "@coforge/agent";
@@ -20,7 +19,6 @@ import {
   noticeGeneration,
   type NoticeGeneration,
 } from "./agent-wakeup-unavailable-error";
-import { PreviewSeen } from "./inbox-preview-rows";
 import {
   logAttentionDecision,
   logCustodyAckFailure,
@@ -38,45 +36,29 @@ import {
 } from "./agent-message-attention-recovery";
 import { AgentConsumedAttention } from "./agent-consumed-attention";
 import { noticeEligibility } from "./notice-eligibility";
-import { PendingAttention, type PendingSequences } from "./agent-message-attention-pending";
+import { PendingAttention } from "./agent-message-attention-pending";
 import { AcceptedMessageNotices } from "./accepted-message-notices";
 import {
   attentionRecorded,
+  containsSorted,
   isCardEvent,
   markFlushed,
   markNoticeAccepted,
+  type MessageAttention,
   type PendingWindowEntry,
 } from "./agent-message-attention-index-helpers";
-export type MessageAttention = Readonly<{
-  target: string;
-  pendingCount: number;
-  firstPendingSequence: number;
-  latestSequence: number;
-  latestCreatedAtMs?: number;
-  latestSenderKind?: MessageSenderKind;
-  latestSenderHandle?: string;
-  flags: readonly string[];
-}>;
+export type { MessageAttention } from "./agent-message-attention-index-helpers";
 export class AgentMessageAttentionIndex {
   readonly #acceptedNotices = new AcceptedMessageNotices();
   readonly #generations = new Map<string, NoticeGeneration>();
   readonly #attention = new Map<string, Map<string, MessageAttention>>();
   readonly noticeActionClocks = new NoticeActionClocks();
-  readonly #pendingSequences: PendingSequences = new Map();
-  readonly previewSeen = new PreviewSeen();
-  readonly #pendingWindow = new Map<string, Map<string, PendingWindowEntry[]>>();
-  readonly #workspaceId: string;
-  readonly #runtimes: Pick<AgentProcessManager, "session"> &
-    Partial<Pick<AgentProcessManager, "runtime">>;
   readonly #pending = new PendingAttention({
     attention: this.#attention,
-    pendingSequences: this.#pendingSequences,
-    pendingWindow: this.#pendingWindow,
-    previewSeen: this.previewSeen,
+    fullPreviewSequences: (...args) => this.#consumption.fullPreviewSequences(...args),
   });
   readonly #consumption = new AgentConsumedAttention({
     store: () => this.hold.consumedSeqs,
-    previewSeen: this.previewSeen,
     settlePending: (agentId, target, conversationId, settled) =>
       this.#pending.settle(agentId, target, conversationId, settled, (id, name) =>
         this.clear(id, name),
@@ -85,8 +67,9 @@ export class AgentMessageAttentionIndex {
   });
   readonly noticeEligibility = noticeEligibility((...args) => this.#consumption.readBasis(...args));
   constructor(
-    workspaceId: string,
-    runtimes: Pick<AgentProcessManager, "session"> & Partial<Pick<AgentProcessManager, "runtime">>,
+    private readonly workspaceId: string,
+    private readonly runtimes: Pick<AgentProcessManager, "session"> &
+      Partial<Pick<AgentProcessManager, "runtime">>,
     private readonly sendAck: (ack: AgentMessageDeliveryAck) => Promise<void>,
     private readonly messageReceived: (
       agentId: string,
@@ -97,12 +80,9 @@ export class AgentMessageAttentionIndex {
       enqueue: () => {},
       busy: () => {},
     },
-  ) {
-    this.#workspaceId = workspaceId;
-    this.#runtimes = runtimes;
-  }
+  ) {}
   async receive(message: AgentMessageDelivery): Promise<void> {
-    if (message.workspaceId !== this.#workspaceId)
+    if (message.workspaceId !== this.workspaceId)
       throw new Error("agent message targets another Workspace");
     if (!hasDeliveryScope(message)) throw new Error("invalid agent message scope");
     if (this.#acceptedNotices.has(message.agentId, message)) {
@@ -136,11 +116,11 @@ export class AgentMessageAttentionIndex {
       await this.acknowledge(message);
       return;
     }
-    const current = this.#recordAttention(message);
+    this.#recordAttention(message);
 
     if (this.hold.shouldHold(message.agentId)) return this.#hold(message);
     this.logDecision(message, "notified");
-    await this.#notify(message, current);
+    await this.#notify(message);
     if (this.#generations.get(message.agentId) !== generation) return;
     await this.acknowledge(message);
   }
@@ -151,14 +131,15 @@ export class AgentMessageAttentionIndex {
     this.acknowledgeCustody(message);
   }
   async announce(message: AgentMessageDelivery): Promise<"told" | "gone"> {
-    if (message.workspaceId !== this.#workspaceId)
+    if (message.workspaceId !== this.workspaceId)
       throw new Error("agent message targets another Workspace");
     if (!hasDeliveryScope(message)) throw new Error("invalid agent message scope");
     const generation = this.#generation(message.agentId);
     if (!generation.seenDeliveryIds.has(message.deliveryId)) {
       rememberDelivery(generation, message.deliveryId);
       this.logDecision(message, "notified");
-      await this.#notify(message, this.#recordAttention(message));
+      this.#recordAttention(message);
+      await this.#notify(message);
     } else if (
       !generation.notified.has(message.deliveryId) &&
       !this.#readBasis(message.agentId, message)
@@ -196,7 +177,7 @@ export class AgentMessageAttentionIndex {
     this.bindConversation(agentId, target, message.conversationId);
     return (
       this.#consumption.readBasis(agentId, target, sequence, message.conversationId) ??
-      (this.previewSeen.has(agentId, target, sequence, message.conversationId)
+      (this.hasFullPreview(agentId, target, sequence, message.conversationId)
         ? "full_preview"
         : undefined)
     );
@@ -204,11 +185,9 @@ export class AgentMessageAttentionIndex {
   wasNotified(message: AgentMessageDelivery): boolean {
     return this.#generations.get(message.agentId)?.notified.has(message.deliveryId) === true;
   }
-  #recordAttention(message: AgentMessageDelivery & { target: string }): MessageAttention {
-    const current = this.#pending.record(message);
+  #recordAttention(message: AgentMessageDelivery & { target: string }): void {
+    this.#pending.record(message);
     this.#consumption.recordConversation(message.agentId, message.target, message.conversationId);
-    this.#pending.recordWindow(message.agentId, message.target, message);
-    return current;
   }
   async flush(agentId: string, held: readonly AgentMessageDelivery[]): Promise<void> {
     if (!held.length) return;
@@ -236,7 +215,7 @@ export class AgentMessageAttentionIndex {
       announced.push(message);
     }
     if (announced.length) {
-      await this.#notify(announced[announced.length - 1]!, undefined, announced);
+      await this.#notify(announced[announced.length - 1]!, announced);
       if (this.#generations.get(agentId) !== generation) return;
     }
     markFlushed(generation, settled, announced);
@@ -251,7 +230,7 @@ export class AgentMessageAttentionIndex {
     options?: RecoveryNoticeOptions,
   ): Promise<ReadonlySet<string>> {
     const generation = this.#generation(agentId);
-    const session = this.#runtimes.session(agentId);
+    const session = this.runtimes.session(agentId);
     if (!session?.notify) throw new Error("Agent session cannot receive a wakeup notice");
     const draft = planRecovery({
       agentId,
@@ -262,12 +241,12 @@ export class AgentMessageAttentionIndex {
       countedDeliveries: options?.countedDeliveries,
       lastUnreadSequences: options?.lastUnreadSequences,
       openTasks,
-      currentAttention: this.#attention.get(agentId) ?? new Map<string, MessageAttention>(),
+      currentAttention: this.#attention.get(agentId) ?? new Map(),
       generation,
       readBasis: (id, message) => this.#readBasis(id, message),
       alreadyNotified: (message) => this.#acceptedNotices.has(agentId, message),
       decide: (message, outcome, basis) =>
-        this.logDecision({ ...message, workspaceId: this.#workspaceId, agentId }, outcome, basis),
+        this.logDecision({ ...message, workspaceId: this.workspaceId, agentId }, outcome, basis),
     });
     const recordAccepted = this.captureNoticeAcceptance(agentId);
     const plan = await submitRecoveryNotice({
@@ -286,7 +265,7 @@ export class AgentMessageAttentionIndex {
     const { byTarget, recoveredMessages, acceptedMessages, announced } = plan;
     if (this.#generations.get(agentId) !== generation) return announced;
     if (!recordAccepted(acceptedMessages)) return announced;
-    logRecoveryNoticeAccepted(this.#workspaceId, agentId, plan);
+    logRecoveryNoticeAccepted(this.workspaceId, agentId, plan);
     options?.accepted(acceptedMessages);
     this.#attention.set(agentId, byTarget);
     for (const message of recoveredMessages) {
@@ -305,7 +284,6 @@ export class AgentMessageAttentionIndex {
   }
   #notify(
     message: AgentMessageDelivery,
-    attention?: MessageAttention,
     announced: readonly AgentMessageDelivery[] = [message],
   ): Promise<void> {
     return writeDeliveryNotice.call(
@@ -315,14 +293,15 @@ export class AgentMessageAttentionIndex {
         isCurrentGeneration: (agentId, generation) => this.isCurrentGeneration(agentId, generation),
         hold: this.hold,
         noticeEligibility: this.noticeEligibility,
-        previewSeen: this.previewSeen,
+        scopeFullPreview: (...args) => this.scopeFullPreview(...args),
+        hasFullPreview: (...args) => this.hasFullPreview(...args),
+        recordFullPreviews: (...args) => this.recordFullPreviews(...args),
         noticeActionClocks: this.noticeActionClocks,
         messageReceived: (agentId, conversation) => this.messageReceived(agentId, conversation),
         acceptNotice,
         recordAccepted: this.captureNoticeAcceptance(message.agentId),
       },
       message,
-      attention,
       announced,
     );
   }
@@ -334,7 +313,7 @@ export class AgentMessageAttentionIndex {
     return generation;
   }
   session(agentId: string) {
-    return this.#runtimes.session(agentId);
+    return this.runtimes.session(agentId);
   }
   isCurrentGeneration(agentId: string, generation: NoticeGeneration): boolean {
     return this.#generations.get(agentId) === generation;
@@ -405,7 +384,19 @@ export class AgentMessageAttentionIndex {
     return this.#consumption.latestThreadReadUnderParent(...args);
   }
   clearPreviewSeen(agentId: string): void {
-    this.previewSeen.clear(agentId);
+    this.#consumption.clearPreviewSeen(agentId);
+  }
+  scopeFullPreview(...args: Parameters<AgentConsumedAttention["scopeFullPreview"]>) {
+    return this.#consumption.scopeFullPreview(...args);
+  }
+  recordFullPreviews(...args: Parameters<AgentConsumedAttention["recordFullPreviews"]>) {
+    this.#consumption.recordFullPreviews(...args);
+  }
+  hasFullPreview(agentId: string, target: string, sequence: number, conversationId: string) {
+    return containsSorted(
+      this.#consumption.fullPreviewSequences(agentId, target, conversationId),
+      sequence,
+    );
   }
   beginNoticeContext(agentId: string): void {
     this.#acceptedNotices.begin(agentId);
@@ -436,14 +427,10 @@ export class AgentMessageAttentionIndex {
     },
   ): boolean {
     if (isCardEvent(message)) return false;
-    if (message.conversationId)
-      this.bindConversation(message.agentId, message.target, message.conversationId);
+    this.bindConversation(message.agentId, message.target, message.conversationId);
     return this.hasSeen(message.agentId, message.target, message.sequence, message.conversationId);
   }
-  unreadDeliveries(agentId: string): {
-    target: string;
-    count: number;
-  }[] {
+  unreadDeliveries(agentId: string) {
     return this.#pending.unreadDeliveries(agentId);
   }
   pendingConversationId(agentId: string, target: string): string | undefined {
@@ -473,8 +460,7 @@ export class AgentMessageAttentionIndex {
       this.#generations.get(agentId)?.cancellation.abort(new Error("Agent notice was cancelled"));
     this.#generations.delete(agentId);
     this.#attention.delete(agentId);
-    this.#pendingSequences.delete(agentId);
-    this.#pendingWindow.delete(agentId);
+    this.#pending.clearAgent(agentId);
   }
   clearTargets(agentId: string, targets: readonly string[]): void {
     const lost = (target: string) =>
@@ -485,15 +471,13 @@ export class AgentMessageAttentionIndex {
     );
     const keys = new Set([
       ...(this.#attention.get(agentId)?.keys() ?? []),
-      ...(this.#pendingSequences.get(agentId)?.keys() ?? []),
-      ...(this.#pendingWindow.get(agentId)?.keys() ?? []),
+      ...this.#pending.targets(agentId),
     ]);
     for (const target of keys) if (lost(target)) this.clear(agentId, target);
   }
   clear(agentId: string, target: string): void {
     this.#consumption.forgetConversation(agentId, target);
-    this.#pendingSequences.get(agentId)?.delete(target);
-    this.#pendingWindow.get(agentId)?.delete(target);
+    this.#pending.clear(agentId, target);
     const byTarget = this.#attention.get(agentId);
     byTarget?.delete(target);
     if (byTarget?.size === 0) this.#attention.delete(agentId);

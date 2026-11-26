@@ -77,10 +77,11 @@ export function unreadLoop(
       eligibility: (...args) => index.noticeEligibility(...args),
       queued: () => queue,
       prefix: () => "",
+      scopeFullPreview: (...args) => index.scopeFullPreview(...args),
       previewedInFull: (agentId, target, sequence, conversationId) =>
-        index.previewSeen.has(agentId, target, sequence, conversationId),
+        index.hasFullPreview(agentId, target, sequence, conversationId),
     }),
-    shown: (agentId, shown) => index.previewSeen.record(agentId, shown),
+    shown: (agentId, shown) => index.recordFullPreviews(agentId, shown),
     now: () => clock.nowMs,
   });
   index = new AgentMessageAttentionIndex(

@@ -486,7 +486,6 @@ test("apply updates and deletes only named targets and aliases while preserving 
 
 test("AgentConsumedAttention applies changed cursor evidence and aliases without a write for a new empty scope", async () => {
   const { AgentConsumedAttention } = await import("#src/daemon-runtime/agent-consumed-attention");
-  const { PreviewSeen } = await import("#src/daemon-runtime/inbox-preview-rows");
   const stateDirectory = temporaryStateDirectory();
   const backing = new AgentConsumedSeqStore(stateDirectory);
   let fullWrites = 0;
@@ -504,7 +503,6 @@ test("AgentConsumedAttention applies changed cursor evidence and aliases without
   };
   const attention = new AgentConsumedAttention({
     store: () => spyPort,
-    previewSeen: new PreviewSeen(),
     settlePending: () => {},
   });
 
