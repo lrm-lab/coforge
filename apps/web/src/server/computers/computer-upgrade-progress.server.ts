@@ -182,60 +182,82 @@ export class ComputerUpgradeProgressStore {
   }
 
   async recordMachine(reporter: UpgradeReporter, evidence: UpgradeMachineEvidence) {
+    return this.update(reporter, (record, now) =>
+      this.applyMachineEvidence(record, reporter, evidence, now),
+    );
+  }
+
+  async recordMachineBatch(reporter: UpgradeReporter, events: readonly UpgradeMachineEvidence[]) {
     return this.update(reporter, (record, now) => {
-      if (!sameBinding(record.origin, reporter) || evidence.version !== record.expectedVersion)
-        return { record, result: "rejected" };
-      const generation =
-        record.snapshot?.generation ??
-        record.healthy?.generation ??
-        record.receipts[0]?.generation ??
-        record.phase?.generation;
-      if (generation && generation !== evidence.generation) return { record, result: "rejected" };
-      switch (evidence.kind) {
-        case "snapshot":
-          if (record.snapshot) return { record, result: "stored" };
-          return {
-            record: {
-              ...record,
-              snapshot: evidence,
-              ready: record.ready.filter((row) => row.generation === evidence.generation),
-            },
-            result: "stored",
-          };
-        case "phase":
-          if (
-            record.phase &&
-            phaseOrder.indexOf(record.phase.phase) >= phaseOrder.indexOf(evidence.phase)
-          )
-            return { record, result: "stored" };
-          return { record: { ...record, phase: evidence }, result: "stored" };
-        case "healthy":
-          if (record.healthy) return { record, result: "stored" };
-          return {
-            record: { ...record, healthy: { ...evidence, receivedAt: now } },
-            result: "stored",
-          };
-        case "receipt":
-          if (evidence.outcome === "rolled_back" && evidence.restoredVersion) {
-            const versions = rolledBackVersions(record);
-            if (versions.size > 1 && !versions.has(evidence.restoredVersion))
-              return { record, result: "stored" };
-          }
-          if (
-            record.receipts.some(
-              (receipt) =>
-                receipt.outcome === evidence.outcome &&
-                receipt.oldProcesses === evidence.oldProcesses &&
-                receipt.restoredVersion === evidence.restoredVersion,
-            )
-          )
-            return { record, result: "stored" };
-          return {
-            record: { ...record, receipts: [...record.receipts, evidence] },
-            result: "stored",
-          };
+      let current = record;
+      let outcome: "stored" | "rejected" = "stored";
+      for (const evidence of events) {
+        const next = this.applyMachineEvidence(current, reporter, evidence, now);
+        current = next.record;
+        if (next.result === "rejected") outcome = "rejected";
       }
+      return { record: current, result: outcome };
     });
+  }
+
+  private applyMachineEvidence(
+    record: Record,
+    reporter: UpgradeReporter,
+    evidence: UpgradeMachineEvidence,
+    now: number,
+  ): Mutation {
+    if (!sameBinding(record.origin, reporter) || evidence.version !== record.expectedVersion)
+      return { record, result: "rejected" };
+    const generation =
+      record.snapshot?.generation ??
+      record.healthy?.generation ??
+      record.receipts[0]?.generation ??
+      record.phase?.generation;
+    if (generation && generation !== evidence.generation) return { record, result: "rejected" };
+    switch (evidence.kind) {
+      case "snapshot":
+        if (record.snapshot) return { record, result: "stored" };
+        return {
+          record: {
+            ...record,
+            snapshot: evidence,
+            ready: record.ready.filter((row) => row.generation === evidence.generation),
+          },
+          result: "stored",
+        };
+      case "phase":
+        if (
+          record.phase &&
+          phaseOrder.indexOf(record.phase.phase) >= phaseOrder.indexOf(evidence.phase)
+        )
+          return { record, result: "stored" };
+        return { record: { ...record, phase: evidence }, result: "stored" };
+      case "healthy":
+        if (record.healthy) return { record, result: "stored" };
+        return {
+          record: { ...record, healthy: { ...evidence, receivedAt: now } },
+          result: "stored",
+        };
+      case "receipt":
+        if (evidence.outcome === "rolled_back" && evidence.restoredVersion) {
+          const versions = rolledBackVersions(record);
+          if (versions.size > 1 && !versions.has(evidence.restoredVersion))
+            return { record, result: "stored" };
+        }
+        if (
+          record.receipts.some(
+            (receipt) =>
+              receipt.outcome === evidence.outcome &&
+              receipt.oldProcesses === evidence.oldProcesses &&
+              receipt.restoredVersion === evidence.restoredVersion,
+          )
+        )
+          return { record, result: "stored" };
+        return {
+          record: { ...record, receipts: [...record.receipts, evidence] },
+          result: "stored",
+        };
+    }
   }
 
   async identifyReady(reporter: UpgradeReporter, generation: string) {

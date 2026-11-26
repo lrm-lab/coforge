@@ -257,39 +257,32 @@ export async function readVisibleComputerUpgradeProgress(
 }
 
 export async function acceptComputerUpgradeProgress(
-  db: Pick<PrismaClient, "$transaction">,
+  db: Pick<PrismaClient, "$queryRaw">,
   principal: { workspaceId: string; computerId: string; apiKeyHash: string },
   input: z.infer<typeof upgradeProgressReportSchema>,
 ) {
   const { workspaceId, computerId, apiKeyHash } = principal;
-  return db.$transaction(async (tx) => {
-    const [binding] = await tx.$queryRaw<{ id: string }[]>`
-      SELECT binding.id FROM workspace_computers binding
-      JOIN daemon_api_keys credential
-        ON credential.workspace_id = binding."workspaceId"
-        AND credential.computer_id = binding."computerId"
-      JOIN workspace_memberships member
-        ON member."workspaceId" = binding."workspaceId"
-        AND member."userId" = credential.owner_id
-      WHERE binding."workspaceId" = ${workspaceId}::uuid
-        AND binding."computerId" = ${computerId}::uuid
-        AND credential.api_key_hash = ${apiKeyHash}
-        AND credential.revoked_at IS NULL
-      FOR SHARE OF binding, credential, member`;
-    if (!binding) return 403;
-    const reporter = { workspaceId, computerId, bindingId: binding.id };
-    const results =
-      input.kind === "ready"
-        ? [await recordComputerUpgradeReadyReceipt(input.receipt, reporter)]
-        : await Promise.all(
-            input.events.map((event) =>
-              getComputerUpgradeProgressStore().recordMachine(
-                { ...reporter, requestId: input.requestId },
-                event,
-              ),
-            ),
-          );
-    if (results.every((result) => result === "stored")) return 204;
-    return results.includes("rejected") ? 403 : 410;
-  });
+  const [binding] = await db.$queryRaw<{ id: string }[]>`
+    SELECT binding.id FROM workspace_computers binding
+    JOIN daemon_api_keys credential
+      ON credential.workspace_id = binding."workspaceId"
+      AND credential.computer_id = binding."computerId"
+    JOIN workspace_memberships member
+      ON member."workspaceId" = binding."workspaceId"
+      AND member."userId" = credential.owner_id
+    WHERE binding."workspaceId" = ${workspaceId}::uuid
+      AND binding."computerId" = ${computerId}::uuid
+      AND credential.api_key_hash = ${apiKeyHash}
+      AND credential.revoked_at IS NULL`;
+  if (!binding) return 403;
+  const reporter = { workspaceId, computerId, bindingId: binding.id };
+  const result =
+    input.kind === "ready"
+      ? await recordComputerUpgradeReadyReceipt(input.receipt, reporter)
+      : await getComputerUpgradeProgressStore().recordMachineBatch(
+          { ...reporter, requestId: input.requestId },
+          input.events,
+        );
+  if (result === "stored") return 204;
+  return result === "rejected" ? 403 : 410;
 }

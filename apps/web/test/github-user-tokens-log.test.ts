@@ -292,3 +292,237 @@ test.each(["write", "commit"] as const)(
     }
   },
 );
+
+test("refresh token exchange runs outside any open database transaction and uses a short lock timeout", async () => {
+  const info = spyOn(console, "info").mockImplementation(() => {});
+  try {
+    let activeTx = 0;
+    let activeTxDuringExchange = -1;
+    const timeouts: number[] = [];
+    const state = { row: row() as ReturnType<typeof row> | null };
+    const db = {
+      $transaction: async (
+        fn: (tx: unknown) => Promise<unknown>,
+        options?: { timeout?: number },
+      ) => {
+        if (options?.timeout !== undefined) timeouts.push(options.timeout);
+        activeTx += 1;
+        try {
+          return await fn({
+            $queryRaw: async () => [],
+            gitHubConnection: {
+              findUnique: async () => state.row,
+              update: async ({ data }: { data: Record<string, unknown> }) => {
+                state.row = state.row ? { ...state.row, ...data, updatedAt: new Date(NOW) } : null;
+                return state.row;
+              },
+            },
+          });
+        } finally {
+          activeTx -= 1;
+        }
+      },
+    };
+    const sealed = {
+      open: async () => JSON.stringify({ access_token: "a", refresh_token: "r" }),
+      seal: async () => "sealed2",
+    };
+    const revoked: string[] = [];
+    const t = new GitHubUserTokens(
+      db as never,
+      { clientId: "client" },
+      {
+        exchange: async () => {
+          activeTxDuringExchange = activeTx;
+          return fresh();
+        },
+        revoke: async (token: string) => {
+          revoked.push(token);
+        },
+      } as never,
+      sealed as never,
+      () => NOW,
+    );
+
+    const res = await t.withToken("u1", async (token) => token);
+    expect(res).toEqual({ ok: true, data: "a2" });
+    expect(activeTxDuringExchange).toBe(0);
+    expect(revoked).toEqual([]);
+    expect(timeouts.every((ms) => ms <= 5_000)).toBe(true);
+    expect(events(info)).toEqual([{ event: "github.refresh_committed" }]);
+  } finally {
+    info.mockRestore();
+  }
+});
+
+test("a disconnect during external refresh exchange revokes the unstored token and does not recreate credentials", async () => {
+  let state: ReturnType<typeof row> | null = row();
+  let updates = 0;
+  const revoked: string[] = [];
+  const db = {
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({
+        $queryRaw: async () => [],
+        gitHubConnection: {
+          findUnique: async () => state,
+          update: async () => {
+            updates += 1;
+            return state;
+          },
+        },
+      }),
+  };
+  const sealed = {
+    open: async () => JSON.stringify({ access_token: "a", refresh_token: "r" }),
+    seal: async () => "sealed2",
+  };
+  const t = new GitHubUserTokens(
+    db as never,
+    { clientId: "client" },
+    {
+      exchange: async () => {
+        state = null;
+        return fresh();
+      },
+      revoke: async (token: string) => {
+        revoked.push(token);
+      },
+    } as never,
+    sealed as never,
+    () => NOW,
+  );
+
+  const res = await t.withToken("u1", async (token) => token);
+  expect(res).toEqual({ ok: false, status: "disconnected", login: null });
+  expect(updates).toBe(0);
+  expect(revoked).toEqual(["a2"]);
+});
+
+test("separate GitHubUserTokens instances sharing a db coalesce concurrent refreshes", async () => {
+  const info = spyOn(console, "info").mockImplementation(() => {});
+  try {
+    let queue: Promise<unknown> = Promise.resolve();
+    const state = { row: row() };
+    const db = {
+      $transaction: (fn: (tx: unknown) => Promise<unknown>) => {
+        const run = queue.then(() =>
+          fn({
+            $queryRaw: async () => [],
+            gitHubConnection: {
+              findUnique: async () => state.row,
+              update: async ({ data }: { data: Record<string, unknown> }) => {
+                state.row = { ...state.row, ...data, updatedAt: new Date(NOW) };
+                return state.row;
+              },
+            },
+          }),
+        );
+        queue = run.catch(() => {});
+        return run;
+      },
+    };
+    const sealed = {
+      open: async (_u: string, _p: string, value: string) =>
+        JSON.stringify(
+          value === "sealed2"
+            ? { access_token: "a2", refresh_token: "r2" }
+            : { access_token: "a", refresh_token: "r" },
+        ),
+      seal: async () => "sealed2",
+    };
+    let exchanges = 0;
+    const github = {
+      exchange: async () => {
+        exchanges += 1;
+        await Promise.resolve();
+        return fresh();
+      },
+    };
+    const first = new GitHubUserTokens(
+      db as never,
+      { clientId: "client" },
+      github as never,
+      sealed as never,
+      () => NOW,
+    );
+    const second = new GitHubUserTokens(
+      db as never,
+      { clientId: "client" },
+      github as never,
+      sealed as never,
+      () => NOW,
+    );
+
+    const results = await Promise.all([
+      first.withToken("u1", async (token) => token),
+      second.withToken("u1", async (token) => token),
+    ]);
+    expect(exchanges).toBe(1);
+    expect(results).toEqual([
+      { ok: true, data: "a2" },
+      { ok: true, data: "a2" },
+    ]);
+    expect(events(info)).toEqual([{ event: "github.refresh_committed" }]);
+  } finally {
+    info.mockRestore();
+  }
+});
+
+test("Phase-1 commit failure releases inflight refresh state and CAS mismatch on external rotation reuses fresh token", async () => {
+  let state = row();
+  let failCommitOnce = true;
+  const revoked: string[] = [];
+  const db = {
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => {
+      const result = await fn({
+        $queryRaw: async () => [],
+        gitHubConnection: {
+          findUnique: async () => state,
+          update: async ({ data }: { data: Record<string, unknown> }) => {
+            state = { ...state, ...data, updatedAt: new Date(NOW + 100) };
+            return state;
+          },
+        },
+      });
+      if (failCommitOnce) {
+        failCommitOnce = false;
+        throw new Error("phase1 commit failed");
+      }
+      return result;
+    },
+  };
+  const sealed = {
+    open: async (_u: string, _p: string, value: string) =>
+      JSON.stringify(
+        value === "rotated-by-peer"
+          ? { access_token: "peer-token", refresh_token: "peer-r" }
+          : { access_token: "a", refresh_token: "r" },
+      ),
+    seal: async () => "sealed2",
+  };
+  const t = new GitHubUserTokens(
+    db as never,
+    { clientId: "client" },
+    {
+      exchange: async () => {
+        state = {
+          ...state,
+          credentials: "rotated-by-peer",
+          expiresAt: new Date(NOW + 3_600_000),
+          updatedAt: new Date(NOW + 50),
+        };
+        throw new GitHubUnauthorized();
+      },
+      revoke: async (token: string) => {
+        revoked.push(token);
+      },
+    } as never,
+    sealed as never,
+    () => NOW,
+  );
+
+  await expect(t.withToken("u1", async (token) => token)).rejects.toThrow("phase1 commit failed");
+  const next = await t.withToken("u1", async (token) => token);
+  expect(next).toEqual({ ok: true, data: "peer-token" });
+  expect(revoked).toEqual([]);
+});

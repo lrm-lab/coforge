@@ -349,3 +349,106 @@ test("only evidence-backed progress can outlive a legacy status record", async (
     workspaces: [{ state: "restored" }],
   });
 });
+
+test("recordMachineBatch applies multiple machine events in one persistence CAS pass", async () => {
+  let reads = 0;
+  let replaces = 0;
+  const rows = new Map<string, string>();
+  const persistence: UpgradeProgressPersistence = {
+    async read(key) {
+      reads += 1;
+      return rows.get(key) ?? null;
+    },
+    async readMany(keys) {
+      return keys.map((key) => rows.get(key) ?? null);
+    },
+    async replace(key, previous, next) {
+      replaces += 1;
+      if ((rows.get(key) ?? null) !== previous) return false;
+      rows.set(key, next);
+      return true;
+    },
+  };
+  const store = new ComputerUpgradeProgressStore(persistence, () => 1_000);
+  await store.begin(origin, "2.0.0", deadline, [
+    { workspaceId: "a", bindingId: "binding-a", previousWorkerId: "old-a" },
+    { workspaceId: "b", bindingId: "binding-b", previousWorkerId: "old-b" },
+  ]);
+  reads = 0;
+  replaces = 0;
+
+  const outcome = await store.recordMachineBatch(origin, [
+    {
+      kind: "snapshot",
+      version: "2.0.0",
+      generation,
+      at: 1_100,
+      bindings: [
+        { workspaceId: "a", state: "running" },
+        { workspaceId: "b", state: "running" },
+      ],
+    },
+    { kind: "phase", phase: "switching", version: "2.0.0", generation, at: 1_200 },
+    { kind: "healthy", version: "2.0.0", generation, at: 1_300 },
+    {
+      kind: "receipt",
+      outcome: "promoted",
+      oldProcesses: "verified",
+      version: "2.0.0",
+      generation,
+      at: 1_400,
+    },
+  ]);
+
+  expect(outcome).toBe("stored");
+  expect(reads).toBe(1);
+  expect(replaces).toBe(1);
+  expect(await store.read(origin, ["binding-a"])).toMatchObject({
+    phase: "switching",
+    reconnectUntil: 121_000,
+    switchState: "pending",
+    workspaces: [{ workspaceId: "a", state: "waiting" }],
+  });
+  expect((await store.read(origin, ["binding-a"], "completed"))?.switchState).toBe("confirmed");
+
+  reads = 0;
+  replaces = 0;
+  const rejected = await store.recordMachineBatch(origin, [
+    { kind: "phase", phase: "waiting", version: "9.9.9", generation, at: 1_500 },
+  ]);
+  expect(rejected).toBe("rejected");
+  expect(reads).toBe(1);
+  expect(replaces).toBe(0);
+});
+
+test("acceptComputerUpgradeProgress verifies binding without opening a database transaction", async () => {
+  const { acceptComputerUpgradeProgress } =
+    await import("#src/server/computers/computer-upgrade-progress-wire.server");
+  let transactions = 0;
+  let queries = 0;
+  let sawForShare = false;
+  const db = {
+    $transaction: async () => {
+      transactions += 1;
+      throw new Error("should not open a transaction around Redis I/O");
+    },
+    $queryRaw: async (strings: TemplateStringsArray) => {
+      queries += 1;
+      if (strings.join("").toUpperCase().includes("FOR SHARE")) sawForShare = true;
+      return [];
+    },
+  };
+  const status = await acceptComputerUpgradeProgress(
+    db as never,
+    {
+      workspaceId: "00000000-0000-4000-8000-000000000001",
+      computerId: "00000000-0000-4000-8000-000000000002",
+      apiKeyHash: "hash",
+    },
+    { kind: "ready", receipt: "invalid-token" },
+  );
+  expect(status).toBe(403);
+  expect(transactions).toBe(0);
+  expect(queries).toBe(1);
+  expect(sawForShare).toBe(false);
+});
