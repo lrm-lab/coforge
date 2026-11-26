@@ -7,7 +7,7 @@ import { ACTIVITY_INBOX_LISTS_KEY } from "#src/features/inbox/activity-inbox-que
 import { ConversationTaskBoard } from "#src/features/tasks/conversation-task-board";
 import { ArtifactsBesideChat } from "#src/features/artifacts/artifact-beside-chat";
 import { ConversationArtifactSplit } from "#src/features/artifacts/artifact-side-pane";
-import { ConversationFilesWithDocuments } from "#src/features/artifacts/artifact-files";
+import { ConversationFilesPanel } from "./conversation-files";
 import { activityItemKey } from "#src/features/inbox/activity-unread-count";
 import { useReportViewingItem } from "#src/features/inbox/viewing-items";
 import { usePageTitleLabel } from "#src/lib/browser-tab";
@@ -386,7 +386,7 @@ function ConversationPageMain({
           onOpenAgentProfile,
           detailsControls,
         )}
-        <ConversationFilesWithDocuments
+        <ConversationFilesPanel
           conversationId={conversation.conversationId}
           onOpenMessage={openMessage}
         />
