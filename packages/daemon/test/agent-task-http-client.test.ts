@@ -15,6 +15,70 @@ const request = {
 
 /** The deadline test's client gives up this soon, so it need not wait out production's. */
 const TASK_DEADLINE_MS = 100;
+const legacySchemaRefusal = { error: "invalid task request", code: "INVALID_INPUT" };
+const scopedRequest = {
+  ...request,
+  consumptionEvidence: [{ target: { conversationId: "conversation-1" }, entry: { seq: 31 } }],
+};
+
+test("an old Task parser gets one same-key retry with only the new evidence stripped", async () => {
+  const received: unknown[] = [];
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(incoming) {
+      received.push(await incoming.json());
+      return received.length === 1
+        ? Response.json(legacySchemaRefusal, { status: 400 })
+        : Response.json({ idempotencyKey: request.idempotencyKey, tasks: [] });
+    },
+  });
+  try {
+    const result = await defaultAgentTaskHttpClient.execute({
+      url: `${server.url}api/agent/v1/tasks`,
+      agentApiKey: "agent-key",
+      daemonApiKey: "daemon-key",
+      request: { ...scopedRequest, seenUpToSeq: 31, seenExactSeqs: [33] },
+    });
+    expect(result.idempotencyKey).toBe(request.idempotencyKey);
+    expect(received).toEqual([scopedRequest, request]);
+  } finally {
+    await server.stop();
+  }
+});
+
+test.each([
+  [
+    "a business refusal",
+    scopedRequest,
+    { error: "the request was not valid for this operation", code: "INVALID_INPUT" },
+  ],
+  ["an invalid legacy payload", { ...scopedRequest, target: "" }, legacySchemaRefusal],
+  ["no evidence to strip", request, legacySchemaRefusal],
+] as const)("the Task client preserves %s without retrying", async (_case, sent, refusal) => {
+  let attempts = 0;
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch() {
+      attempts += 1;
+      return Response.json(refusal, { status: 400 });
+    },
+  });
+  try {
+    await expect(
+      defaultAgentTaskHttpClient.execute({
+        url: `${server.url}api/agent/v1/tasks`,
+        agentApiKey: "agent-key",
+        daemonApiKey: "daemon-key",
+        request: sent,
+      }),
+    ).rejects.toMatchObject({ message: refusal.error, status: 400, code: refusal.code });
+    expect(attempts).toBe(1);
+  } finally {
+    await server.stop();
+  }
+});
 
 test("Agent Task HTTP client rejects a response for a different request", async () => {
   const server = Bun.serve({

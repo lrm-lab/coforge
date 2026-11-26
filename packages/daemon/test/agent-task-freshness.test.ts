@@ -7,7 +7,7 @@ import { type AgentRuntimeConfig } from "@lrm/coforge-anvil";
 import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import { type AgentMessageRequest, type TaskRequest } from "@lrm/coforge-sdk/internal";
 import { createMessageHarness } from "./fixtures/message-harness";
-import { messageRecord } from "./fixtures/message-record";
+import { messageRecord, readScope, scopedCheckMessage } from "./fixtures/message-record";
 
 // macOS tmpdir lives under /var, a symlink; the state store rejects linked ancesto
 const tempRoot = realpathSync(tmpdir());
@@ -117,7 +117,7 @@ describe("Agent Task freshness", () => {
     }
   });
 
-  test("a claim on a target the Agent drained with a check reads no context first", async () => {
+  test("a claim on a target the Agent drained with a scoped check reads no context first", async () => {
     const messageCalls: AgentMessageRequest[] = [];
     const harness = await messageHarness(
       async (request) => {
@@ -127,7 +127,7 @@ describe("Agent Task freshness", () => {
           accepted: true,
           attentionCount: 0,
           hasMore: false,
-          messages: request.operation === "check" ? [messageRecord(4, "@ada", "#tasks")] : [],
+          messages: request.operation === "check" ? [scopedCheckMessage(4, "@ada", "#tasks")] : [],
         };
       },
       async (request) => ({ idempotencyKey: request.idempotencyKey, tasks: [] }),
@@ -174,6 +174,7 @@ describe("Agent Task freshness", () => {
           idempotencyKey: request.idempotencyKey,
           accepted: true,
           attentionCount: 1,
+          consumptionScope: readScope(request.agentId, request.target),
           messages: [messageRecord(9, "@alice", request.target)],
         };
       },
@@ -307,7 +308,11 @@ describe("Agent Task freshness", () => {
           idempotencyKey: request.idempotencyKey,
           tasks: [],
           ...(taskCalls.length === 1
-            ? { recentUnread: [messageRecord(4, "@alice", "#tasks")], newMessageCount: 1 }
+            ? {
+                recentUnread: [messageRecord(4, "@alice", "#tasks")],
+                newMessageCount: 1,
+                consumptionScope: { conversationId: "conversation-a" },
+              }
             : {}),
         };
       },
@@ -332,7 +337,9 @@ describe("Agent Task freshness", () => {
         harness.apiKey,
       );
       expect(second).toMatchObject({ tasks: [] });
-      expect(taskCalls[1]).toMatchObject({ seenUpToSeq: 4 });
+      expect(taskCalls[1]).toMatchObject({
+        consumptionEvidence: [{ target: { conversationId: "conversation-a" }, entry: { seq: 4 } }],
+      });
     } finally {
       await harness.runtime.stop();
     }
@@ -353,7 +360,11 @@ describe("Agent Task freshness", () => {
           idempotencyKey: request.idempotencyKey,
           tasks: [],
           ...(taskCalls.length === 1
-            ? { recentUnread: [messageRecord(9, "@alice", "#tasks")], newMessageCount: 1 }
+            ? {
+                recentUnread: [messageRecord(9, "@alice", "#tasks")],
+                newMessageCount: 1,
+                consumptionScope: { conversationId: "conversation-a" },
+              }
             : {}),
         };
       },
@@ -373,7 +384,10 @@ describe("Agent Task freshness", () => {
       );
       expect(taskCalls).toHaveLength(2);
       expect(taskCalls[0]).toMatchObject({ operation: "unclaim" });
-      expect(taskCalls[1]).toMatchObject({ operation: "update", seenUpToSeq: 9 });
+      expect(taskCalls[1]).toMatchObject({
+        operation: "update",
+        consumptionEvidence: [{ target: { conversationId: "conversation-a" }, entry: { seq: 9 } }],
+      });
     } finally {
       await harness.runtime.stop();
     }

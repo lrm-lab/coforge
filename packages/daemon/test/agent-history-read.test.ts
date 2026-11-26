@@ -10,8 +10,6 @@ function attentionStub() {
     hasSeen: () => false,
     recordHistoryRead: (_agent: string, record: { review?: { sequence: number } }) =>
       calls.push(record.review ? `record review ${record.review.sequence}` : "record"),
-    clearThrough: (_agent: string, _target: string, through: number) =>
-      calls.push(`clear ${through}`),
     noticeActionClocks: new NoticeActionClocks(),
   } as unknown as AgentMessageAttentionIndex;
   return { attention, calls };
@@ -22,13 +20,12 @@ const read = (result: object) =>
     request: { unread: true },
     result: { messages: [], ...result },
     unpaged: true,
-    attentionUpperBound: 80,
   }) as never;
 
-test("an empty unread page clears the attention it covered", () => {
+test("an empty unread page without a boundary reviews the target", () => {
   const { attention, calls } = attentionStub();
   settleHistoryRead(attention, "agent", "#general", read({ moreUnread: false }));
-  expect(calls).toEqual(["record review 0", "clear 80"]);
+  expect(calls).toEqual(["record review 0"]);
 });
 
 test("an empty unread page with more unread behind it keeps the attention it did not show", () => {
@@ -42,7 +39,6 @@ const plainRead = (messages: object[]) =>
     request: {},
     result: { messages, modelSeenUpToSeq: null },
     unpaged: true,
-    attentionUpperBound: undefined,
   }) as never;
 
 test("the newest page of a read without an anchor reviews the target and clears no attention", () => {
@@ -68,7 +64,6 @@ test("a page before an anchor reviews nothing", () => {
     request: { before: "x" },
     result: { messages: [{ sequence: 7, target: "#general" }], modelSeenUpToSeq: null },
     unpaged: false,
-    attentionUpperBound: undefined,
   } as never);
   expect(calls).toEqual(["record"]);
 });

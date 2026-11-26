@@ -46,7 +46,7 @@ import {
 } from "@lrm/coforge-anvil";
 import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
-import { seedCursor } from "./fixtures/consumed-cursor";
+import { seedCursor, seedReviewedDelivery } from "./fixtures/consumed-cursor";
 import type {
   AgentMessageTransportResponse,
   AgentSendReconciliationRequest,
@@ -79,7 +79,7 @@ import { captureDaemonLogs } from "./log-capture";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 import { ackGate, createDeliveryGateHarness, deliveryGateSession } from "./fixtures/delivery-gate";
 import { createMessageHarness } from "./fixtures/message-harness";
-import { messageRecord } from "./fixtures/message-record";
+import { messageRecord, readScope } from "./fixtures/message-record";
 const tempRoot = realpathSync(tmpdir());
 function cliTempStateRoot(
   variable: "COFORGE_CLI_CONSUMED_SEQ_STATE_DIR" | "COFORGE_CLI_DRAFT_STATE_DIR",
@@ -1225,6 +1225,7 @@ describe("DaemonRuntime", () => {
               accepted: true,
               attentionCount: 0,
               messages: [messageRecord(7, "@ada", "@ada")],
+              consumptionScope: readScope(request.agentId, "@ada"),
             }),
           }),
         },
@@ -1484,6 +1485,7 @@ describe("DaemonRuntime", () => {
             ),
             ...(request.operation === "read"
               ? {
+                  consumptionScope: readScope(request.agentId, request.target),
                   modelSeenUpToSeq: rows.length && contiguous(request) ? Math.max(...rows) : null,
                 }
               : {}),
@@ -2286,7 +2288,7 @@ describe("DaemonRuntime", () => {
       await runtime.stop();
     }
   });
-  test("message check drains multiple event pages, stops when hasMore is false, and clears attention only for returned targets", async () => {
+  test("message check drains multiple event pages and preserves attention without scoped evidence", async () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
     const limits: Array<number | undefined> = [];
@@ -2375,7 +2377,7 @@ describe("DaemonRuntime", () => {
       { idempotencyKey: "check-after", context, operation: "check" },
       `sk_agent_${"a".repeat(43)}`,
     );
-    expect(second.summaries.map((s) => s.target)).toEqual(["@carl"]);
+    expect(second.summaries.map((s) => s.target)).toEqual(["@ada", "@carl"]);
     await runtime.stop();
   });
   test("message check forwards --target on every events drain round", async () => {
@@ -2483,6 +2485,7 @@ describe("DaemonRuntime", () => {
                   shownMessageCount: 1,
                   omittedMessageCount: 0,
                   seenUpToSeq: 7,
+                  writeConsumptionScope: { conversationId: "conversation-b" },
                   messages: [
                     {
                       id: "message-7",
@@ -2779,15 +2782,7 @@ describe("DaemonRuntime", () => {
     await runtime.stop();
   });
   test("acknowledges a message the Agent has already seen without waking its exited process", async () => {
-    await seedCursor(
-      "agent-a",
-      {
-        targets: { "@agent": { conversationId: "conversation-1", seq: 3 } },
-        aliases: {},
-        nextReadOrder: 1,
-      },
-      ".coforge-daemon-state",
-    );
+    const stateDirectory = await seedReviewedDelivery(workspaceRoot);
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
     const exits = new Set<() => void>();
@@ -2826,6 +2821,7 @@ describe("DaemonRuntime", () => {
       },
       undefined,
       emptyCodeAgentDiscovery,
+      stateDirectory,
     );
     try {
       await runtime.start(connection);
@@ -3120,15 +3116,7 @@ describe("DaemonRuntime", () => {
     }
   });
   test("acknowledges, rather than rejects, a message an Agent with no process has already seen", async () => {
-    await seedCursor(
-      "agent-a",
-      {
-        targets: { "@agent": { conversationId: "conversation-1", seq: 3 } },
-        aliases: {},
-        nextReadOrder: 1,
-      },
-      ".coforge-daemon-state",
-    );
+    const stateDirectory = await seedReviewedDelivery(workspaceRoot);
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
     const acknowledgements: string[] = [];
@@ -3157,6 +3145,7 @@ describe("DaemonRuntime", () => {
       },
       undefined,
       emptyCodeAgentDiscovery,
+      stateDirectory,
     );
     try {
       await runtime.start(connection);

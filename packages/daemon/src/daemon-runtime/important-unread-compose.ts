@@ -13,7 +13,12 @@ const logger = getLogger(["coforge", "daemon", "message-attention"]);
 export type UnreadNoticeComposePorts = Readonly<{
   queued(agentId: string): readonly AgentMessageDelivery[];
   prefix(agentId: string): string;
-  previewedInFull(agentId: string, target: string, sequence: number): boolean;
+  previewedInFull(
+    agentId: string,
+    target: string,
+    sequence: number,
+    conversationId: string,
+  ): boolean;
   eligibility: NoticeEligibility;
   captureAcceptance?(agentId: string): (messages: readonly AgentMessageDelivery[]) => boolean;
 }>;
@@ -35,7 +40,8 @@ export function unreadNoticeComposer(ports: UnreadNoticeComposePorts) {
       queued: ports.queued(agentId),
       prefix: ports.prefix(agentId),
       eligibility: ports.eligibility,
-      previewedInFull: (target, sequence) => ports.previewedInFull(agentId, target, sequence),
+      previewedInFull: (target, sequence, conversationId) =>
+        ports.previewedInFull(agentId, target, sequence, conversationId),
     });
     const record = ports.captureAcceptance?.(agentId);
     let selected = current();

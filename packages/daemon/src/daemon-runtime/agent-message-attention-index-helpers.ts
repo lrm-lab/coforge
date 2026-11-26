@@ -1,3 +1,4 @@
+import { lookupConsumptionKey, rememberConsumptionSpelling } from "./message-consumption-key";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import type { NoticeGeneration } from "./agent-wakeup-unavailable-error";
 import { HELD_CONTEXT_LIMIT } from "@lrm/coforge-sdk/internal";
@@ -122,6 +123,8 @@ export function markNoticeAccepted(
 
 export type ConsumedAgent = {
   targets: Map<string, ConsumedTarget>;
+  scopes: Map<string, ConsumedTarget>;
+  scopeSpellings: Map<string, string | null>;
   aliases: Map<string, string>;
   lastReadOrder: number;
 };
@@ -129,7 +132,7 @@ export type ConsumedAgent = {
  * review context, independently of consumption; readOrder compares reviews across targets. */
 export type ConsumedTarget = {
   -readonly [K in keyof AgentConsumedSeqEntry]: AgentConsumedSeqEntry[K];
-};
+} & { threadRootId?: string; serverScope?: boolean };
 
 export function persistableConsumedTarget(
   entry: ConsumedTarget,
@@ -158,4 +161,31 @@ export function consumedSnapshot(state: ConsumedAgent): AgentConsumedSeqState {
     aliases: Object.fromEntries(state.aliases),
     nextReadOrder: state.lastReadOrder + 1,
   };
+}
+
+export function restoreConsumedTargets(state: ConsumedAgent, saved: AgentConsumedSeqState): number {
+  let count = 0;
+  for (const { target, threadRootId, entry } of saved.scopedTargets ?? []) {
+    if (!entry.conversationId) continue;
+    const key = rememberConsumptionSpelling(
+      state.scopeSpellings,
+      entry.conversationId,
+      target,
+      threadRootId,
+    );
+    state.scopes.set(key, { ...entry, threadRootId, serverScope: true });
+    if ((entry.seq ?? 0) > 0 || entry.exactSeqs?.length) count++;
+  }
+  for (const [target, entry] of Object.entries(saved.targets)) {
+    const key =
+      entry.conversationId &&
+      lookupConsumptionKey(state.scopeSpellings, entry.conversationId, target);
+    const restored = (key ? state.scopes.get(key) : undefined) ?? { ...entry };
+    state.targets.set(target, restored);
+    if (saved.scopedTargets === undefined) {
+      if (key) state.scopes.set(key, restored);
+      if ((entry.seq ?? 0) > 0 || entry.exactSeqs?.length) count++;
+    }
+  }
+  return count;
 }

@@ -1,3 +1,4 @@
+import type { PreviewedWhole } from "./inbox-preview-rows";
 import type { AgentSession } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
 import {
@@ -33,7 +34,7 @@ export type ImportantUnreadWiringPorts = Readonly<{
   ): ImportantUnreadComposedNotice | undefined;
   /** The messages whose whole text an accepted attempt put in front of the model, so the next one
    * does not repeat them. */
-  shown?(agentId: string, shown: readonly { target: string; sequence: number }[]): void;
+  shown?(agentId: string, shown: readonly PreviewedWhole[]): void;
   /** The clock the retry schedule is measured on. */
   now?(): number;
   eligibility?: NoticeEligibility;

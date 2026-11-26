@@ -2,7 +2,7 @@ import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { countDistinctMessages } from "./agent-history-read";
 import { inboxNoticeText } from "./inbox-notice-text";
 import { inboxPreviewLimit } from "./inbox-preview";
-import { buildNoticeRows, renderNoticeRows } from "./inbox-preview-rows";
+import { buildNoticeRows, renderNoticeRows, type NoticeRowItem } from "./inbox-preview-rows";
 import { isTrackedMention } from "./mention-delivery-tracker";
 import type { NoticeEligibility } from "./notice-eligibility";
 
@@ -11,21 +11,20 @@ export function planDeliveryNotice(input: {
   announced: readonly AgentMessageDelivery[];
   queued: readonly AgentMessageDelivery[];
   prefix: string;
-  previewedInFull: (target: string, sequence: number) => boolean;
+  previewedInFull: (target: string, sequence: number, conversationId: string) => boolean;
   eligibility: NoticeEligibility;
 }) {
   const { agentId, eligibility } = input;
   const queued = [...input.queued];
-  const previewKey = (target: string, sequence: number) => `${target} ${sequence}`;
-  const previewed = new Set<string>();
+  const previewed = new Set<NoticeRowItem>();
   for (const delivery of [...input.announced, ...queued]) {
-    const { target, sequence } = delivery;
+    const { target, sequence, conversationId } = delivery;
     if (
       target &&
       eligibility(agentId, delivery).basis !== "independent_event" &&
-      input.previewedInFull(target, sequence)
+      input.previewedInFull(target, sequence, conversationId)
     ) {
-      previewed.add(previewKey(target, sequence));
+      previewed.add(delivery);
     }
   }
 
@@ -39,7 +38,7 @@ export function planDeliveryNotice(input: {
       queued: waiting,
       agentId,
       previewLimit: inboxPreviewLimit(),
-      previewedInFull: (target, sequence) => previewed.has(previewKey(target, sequence)),
+      previewedInFull: (delivery) => previewed.has(delivery),
     });
     const rows = renderNoticeRows(view.rows.filter((row) => row.newIds.size || row.heldIds.size));
     if (!rows.length) return undefined;

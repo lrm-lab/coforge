@@ -1,4 +1,7 @@
+import type { AgentConsumptionEvidence } from "@lrm/coforge-sdk/internal/agent-consumption";
 import { taskRefusalError } from "./agent-task-refusal";
+import { AgentExplainedRefusalError } from "./agent-explained-refusal-error";
+import { legacyAgentTaskRequestSchema } from "@lrm/coforge-sdk/internal/agent-task-request";
 import type { AgentMessageTransportResponse } from "./agent-message-adapters";
 import type {
   AgentHistoryResponse,
@@ -61,7 +64,9 @@ import {
 export interface AgentMessageHttpClient extends AgentAttentionHttpClient, AgentWorkspaceHttpClient {
   requestRead?(input: AgentHttpInput<AgentMessageRequest>): Promise<AgentHistoryResponse>;
   requestSearch?(input: AgentHttpInput<AgentMessageRequest>): Promise<AgentSearchResponse>;
-  requestSend?(input: AgentHttpInput<AgentMessageRequest>): Promise<AgentSendDecisionResponse>;
+  requestSend?(
+    input: AgentHttpInput<AgentMessageRequest & AgentConsumptionEvidenceRequest>,
+  ): Promise<AgentSendDecisionResponse>;
   requestSendReconciliation?(
     input: AgentHttpInput<AgentSendReconciliationRequest>,
   ): Promise<AgentSendReconciliationResponse>;
@@ -97,6 +102,10 @@ export type AgentSendReconciliationRequest = Pick<
 
 export type { AgentMessageTransportResponse };
 
+export type AgentConsumptionEvidenceRequest = {
+  consumptionEvidence?: AgentConsumptionEvidence;
+};
+
 export interface AgentTaskHttpClient {
   execute(input: AgentHttpInput<TaskRequest>): Promise<TaskResponse>;
 }
@@ -131,6 +140,7 @@ export const createAgentMessageHttpClient = (
         fromSequence: request.fromSequence,
         throughSequence: request.throughSequence,
         unread: request.unread ? "true" : undefined,
+        consumptionScope: "true",
       },
       validate: validateAgentMessageArrayShape("messages"),
     }),
@@ -169,8 +179,7 @@ export const createAgentMessageHttpClient = (
         sendDraft: request.sendDraft,
         draftReholdCount: request.draftReholdCount,
         draftReplacedExisting: request.draftReplacedExisting,
-        seenUpToSeq: request.seenUpToSeq,
-        seenExactSeqs: request.seenExactSeqs,
+        consumptionEvidence: request.consumptionEvidence,
         freshnessContextMode: request.freshnessContextMode,
         attachmentIds: request.attachmentIds,
         mentions: request.mentions,
@@ -295,14 +304,36 @@ export const defaultAgentMessageHttpClient = createAgentMessageHttpClient();
 /** `timeoutMs` bounds each request; production's client uses `AGENT_RPC_TIMEOUT_MS`. */
 export const createAgentTaskHttpClient = (timeoutMs: number): AgentTaskHttpClient => ({
   async execute({ url, request, ...keys }) {
-    // `TaskRequest` already names the key `idempotencyKey` (the one HTTP name), so the body goes up
-    // as-is; the response echoes it for correlation.
-    const response = await agentHttpFetch(url, {
-      method: "POST",
-      signal: AbortSignal.timeout(timeoutMs),
-      headers: agentHeaders(keys, true),
-      body: JSON.stringify(request),
-    });
+    const {
+      seenUpToSeq: _seenUpToSeq,
+      seenExactSeqs: _seenExactSeqs,
+      consumptionEvidence,
+      ...legacyRequest
+    } = request;
+    const signal = AbortSignal.timeout(timeoutMs);
+    const post = (body: string) =>
+      agentHttpFetch(url, {
+        method: "POST",
+        signal,
+        headers: agentHeaders(keys, true),
+        body,
+      });
+    let response = await post(JSON.stringify({ ...legacyRequest, consumptionEvidence }));
+    if (!response.ok) {
+      const refusal = await taskRefusalError(response);
+      if (
+        consumptionEvidence === undefined ||
+        !(refusal instanceof AgentExplainedRefusalError) ||
+        refusal.status !== 400 ||
+        refusal.code !== "INVALID_INPUT" ||
+        refusal.message !== "invalid task request" ||
+        refusal.retryable !== undefined
+      )
+        throw refusal;
+      const legacyBody = JSON.stringify(legacyRequest);
+      if (!legacyAgentTaskRequestSchema.safeParse(JSON.parse(legacyBody)).success) throw refusal;
+      response = await post(legacyBody);
+    }
     if (!response.ok) throw await taskRefusalError(response);
     const result = (await response.json()) as TaskResponse;
     if (result.idempotencyKey !== request.idempotencyKey)

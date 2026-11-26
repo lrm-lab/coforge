@@ -3,8 +3,8 @@
 Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
 
 - `agent-message-attention-index.ts` owns full-target thread attention, consumed
-  cursors and pending settlement. Cursor fields are one private record per Agent/target;
-  business operations coordinate updates and persistence inside this module.
+  cursors and pending settlement. Consumption belongs to the Agent, conversation ID,
+  and thread scope. A target is an alias used to look up that identity.
   Callers use its message operations and queries, never a separate mutable state dependency.
 - A create or resume launch opens one startup turn. An `introductionPrompt` (first), real recovery
   input or an explicit `resumePrompt` takes precedence; a fresh session recovers existing memory/tasks,
@@ -41,30 +41,29 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   or processes.
 - `coforge task read` is forwarded like other task routes, but the forwarder
   records its `consumptionScope` (`#board:#N`/`@peer:#N`, the delivery's own
-  spelling) through `settleForwardedTaskRead`: the read's sequences count as
-  seen, the scope binds to its conversation immediately so the cursor is
-  durable, and it never records `review` — a task ref is not a thread context
-  the send guard should learn.
+  spelling) through `settleForwardedTaskRead`. The read's sequences count as
+  seen under that scope. The send guard uses reviews from message history.
   An empty, unanchored task page carries the scope's persisted Agent read
   position as its boundary when no explicit sequence range was requested.
-- A delivery counts as consumed when its sequence is at or below its target's
-  frontier, or is one of the target's exact seen sequences (`exactSeqs`:
-  durable beside the frontier, at most 2500 per target, pruned as the
-  frontier reaches them). A `check`, an anchored `read`, and a `read` the
+- A delivery counts as consumed when its sequence is at or below its scope's
+  frontier, or is one of the scope's exact seen sequences (`exactSeqs`,
+  durable beside the frontier, at most 2500 per scope, pruned as the
+  frontier reaches them). An anchored `read` and a `read` the
   server does not call contiguous (`modelSeenUpToSeq: null`) record exact
-  sequences only: no frontier, no read order. A `read` with a boundary moves
+  sequences only: no frontier, no read order. A `check` records exact sequences
+  from messages with a matching server-provided scope and displays the rest
+  without creating consumption evidence. A `read` with a boundary moves
   the frontier there and reviews the target; one that found nothing only
-  reviews it. The one inferred boundary is a held task result, which marks its
-  newest inlined message model-seen. A send reports the exact sequences above its
-  `seenUpToSeq` as `seenExactSeqs`; a sent response's `seenUpToSeq` (the server
-  advanced over messages already seen) moves the frontier. A `search` never
-  counts: it shows a truncated preview without whether the message mentions
-  the Agent.
-- A target's consumed cursor belongs to one conversation: a delivery binds the
-  target to its `conversationId`, and a target seen under another conversation
-  (a channel deleted and recreated under the same name, whose sequences restart
-  at 1) starts over. Rows without a `conversationId` are dropped on read,
-  since they cannot say whose sequences they hold.
+  reviews it. A held task result marks its newest inlined message model-seen
+  through the scope that produced the hold. Sends and task writes carry
+  contiguous and exact evidence inside the server-confirmed scope. A successful
+  send advances that scope only when the receipt includes its identity. A
+  search shows a truncated preview and contributes no consumption evidence.
+- A delivery checks its own conversation and thread scope. A recreated channel
+  has a new conversation ID and starts with no consumed evidence. Late replay
+  leaves read evidence for other conversations intact. A complete preview uses
+  the scope of the delivery it showed. Empty pages settle only through a
+  boundary in the read receipt.
 - The attention index is the consumed cursor's source of truth once it has
   read the Agent's state database, and an operation that changed it persists
   only the changed targets and aliases in one atomic write (`apply`, falling

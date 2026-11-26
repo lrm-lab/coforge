@@ -197,8 +197,8 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
       eligibility: messageAttention.noticeEligibility,
       queued: (agentId) => ports.deliveryGate.pending(agentId),
       prefix: (agentId) => ports.sync.noticePrefix(agentId),
-      previewedInFull: (agentId, target, sequence) =>
-        messageAttention.previewSeen.has(agentId, target, sequence),
+      previewedInFull: (agentId, target, sequence, conversationId) =>
+        messageAttention.previewSeen.has(agentId, target, sequence, conversationId),
       captureAcceptance: (agentId) => messageAttention.captureNoticeAcceptance(agentId),
     }),
     shown: (agentId, shown) => messageAttention.previewSeen.record(agentId, shown),

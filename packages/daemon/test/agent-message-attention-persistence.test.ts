@@ -14,15 +14,20 @@ afterEach(clearAttentionStateDirectories);
 test("exact sequences survive a restart and a frontier that reaches them prunes them", () => {
   const store = new AgentConsumedSeqStore(temporaryStateDirectory());
   const first = indexWithConsumedSeqs(store);
-  bindTargets(first, "@agent", "#general");
-  first.recordExactSeen(
-    "agent-1",
-    new Map([
-      ["@agent", [8, 6]],
-      ["#general", [2]],
-    ]),
-  );
-  first.recordModelSeen("agent-1", "@agent", 6);
+  first.recordHistoryRead("agent-1", {
+    spelling: "@agent",
+    target: "@agent",
+    scope: { target: "@agent", conversationId: "conversation-1", channelType: "dm" },
+    shown: [6, 8],
+    through: 6,
+  });
+  first.recordHistoryRead("agent-1", {
+    spelling: "#general",
+    target: "#general",
+    scope: { target: "#general", conversationId: "channel-conversation", channelType: "dm" },
+    shown: [2],
+    through: 0,
+  });
   expect(first.seenExactSequences("agent-1", "@agent")).toEqual([8]);
   const restarted = indexWithConsumedSeqs(store);
   expect(restarted.seenExactSequences("agent-1", "@agent")).toEqual([8]);
@@ -62,8 +67,10 @@ test("clearing through a read boundary preserves concurrently newer attention", 
   );
   await index.receive({ ...delivery("old"), sequence: 7 });
   await index.receive({ ...delivery("new"), deliveryId: "delivery-new", sequence: 8 });
-  index.clearThrough("agent-1", "@alice", 7);
-  expect(index.check("agent-1")).toMatchObject([{ latestSequence: 8 }]);
+  index.recordModelSeen("agent-1", "@agent", 7);
+  expect(index.check("agent-1")).toMatchObject([
+    { pendingCount: 1, firstPendingSequence: 8, latestSequence: 8 },
+  ]);
 });
 
 test("a history read records its alias, frontier, exact sequences and read order in one write", () => {
@@ -105,5 +112,6 @@ test("a history read records its alias, frontier, exact sequences and read order
     },
     aliases: { "@Agent": "@agent" },
     nextReadOrder: 2,
+    scopedTargets: [],
   });
 });

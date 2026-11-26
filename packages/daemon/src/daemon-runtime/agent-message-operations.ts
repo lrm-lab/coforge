@@ -24,6 +24,7 @@ import { continueHeldSend, heldSendContinuation } from "./agent-message-continue
 import { elideForAgent } from "./context-elision";
 import { agentLogScope, checkPendingMessages } from "./agent-message-check";
 import { settleAgentSend } from "./agent-send-settlement";
+import { matchesConsumptionScope } from "./message-consumption-key";
 import { settleHistoryRead } from "./agent-history-read";
 import { searchPage, searchFields } from "./search-page";
 const logger = getLogger(["coforge", "daemon", "agent-message"]);
@@ -176,6 +177,10 @@ export class AgentMessageOperations {
       pendingMessageCount: this.#ports.attention.pendingMessageCount(agentId, target),
       pendingMaxSequence: this.#ports.attention.pendingMaxSequence(agentId, target),
     });
+    const localConversationId =
+      freshness.decision === "local_hold"
+        ? this.#ports.attention.pendingConversationId(agentId, target)
+        : undefined;
     const result =
       freshness.decision === "local_hold"
         ? locallyHeldSend(
@@ -213,6 +218,7 @@ export class AgentMessageOperations {
               sendDraft: request.sendDraft,
               seenUpToSeq,
               seenExactSeqs,
+              consumptionEvidence: this.#ports.attention.consumptionEvidence(agentId, target),
               freshnessContextMode: request.freshnessContextMode,
               attachmentIds: attachmentIds ? [...attachmentIds] : undefined,
               mentions: mentions ? [...mentions] : undefined,
@@ -232,6 +238,10 @@ export class AgentMessageOperations {
               logScope: agentLogScope(this.#ports, agentId, idempotencyKey),
             },
           );
+    const writeScope =
+      result.writeConsumptionScope && matchesConsumptionScope(target, result.writeConsumptionScope)
+        ? result.writeConsumptionScope
+        : undefined;
     const held = result.state === "held";
     if (held || result.accepted) this.#ports.noteCoforgeWriteOrHold?.(agentId);
     const contextWasWithheld =
@@ -243,8 +253,12 @@ export class AgentMessageOperations {
         attachmentIds,
         mentions,
         reholdCount: draftReholdCount + 1,
-        seenUpToSeq: contextWasWithheld ? seenUpToSeq : (result.seenUpToSeq ?? seenUpToSeq),
-        seenExactSeqs: contextWasWithheld ? seenExactSeqs : undefined,
+        seenUpToSeq:
+          !contextWasWithheld && (writeScope || localConversationId)
+            ? (result.seenUpToSeq ?? seenUpToSeq)
+            : seenUpToSeq,
+        seenExactSeqs:
+          contextWasWithheld || (!writeScope && !localConversationId) ? seenExactSeqs : undefined,
         idempotencyKey,
       };
       await inbox.replace(target, heldDraft);
@@ -274,6 +288,8 @@ export class AgentMessageOperations {
       target,
       through,
       presented > 0 ? { sequence: presented } : undefined,
+      writeScope,
+      localConversationId,
     );
     if (held && !contextWasWithheld)
       await reportHeldSendFreshnessDecision({
@@ -325,11 +341,6 @@ export class AgentMessageOperations {
   ): Promise<AgentMessageResponse> {
     const unpaged = operation === "read" && !request.before && !request.after && !request.around;
     const read = request;
-    const attentionUpperBound =
-      unpaged && read.unread && target
-        ? this.#ports.attention.check(agentId).find((item) => item.target === target)
-            ?.latestSequence
-        : undefined;
     const result = await this.#ports.transport.agentMessage!(
       {
         idempotencyKey: request.idempotencyKey,
@@ -355,7 +366,6 @@ export class AgentMessageOperations {
             request: read,
             result,
             unpaged,
-            attentionUpperBound,
           })
         : { messages: result.messages, folded: undefined };
     const messages = elideForAgent(this.#ports.contexts, agentId, unfolded, operation);

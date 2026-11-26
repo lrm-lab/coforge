@@ -56,6 +56,12 @@ const freshDeps = (agentId = "agent-1") => {
           accepted: true,
           attentionCount: 0,
           messageId: "",
+          consumptionScope: {
+            agentId,
+            conversationId: "conversation-1",
+            channelType: "dm",
+            target: "#c",
+          },
           summaries: [],
           messages: readMessages.map((message) => ({
             id: `m${message.sequence}`,
@@ -142,6 +148,7 @@ test("a create with --message-id bypasses channel top-level freshness and record
         idempotencyKey: cmd.idempotencyKey,
         tasks: [],
         state: "held" as const,
+        consumptionScope: { conversationId: "conversation-1", threadRootId: "msg-1234" },
         heldMessages: [
           {
             id: "r1",

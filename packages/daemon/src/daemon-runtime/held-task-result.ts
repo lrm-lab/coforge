@@ -1,6 +1,7 @@
 import type { TaskCommand, TaskResult } from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
+import { historyConsumptionTarget } from "./agent-history-read";
 
 export type HeldTaskResultDeps = Readonly<{
   messageAttention: AgentMessageAttentionIndex;
@@ -52,18 +53,25 @@ export async function heldTaskResult(
     },
     agentApiKey,
   );
-  const heldMessages = (context?.accepted ? context.messages : [])
+  const shown = context?.accepted ? context : undefined;
+  const { target: shownTarget, scope } = historyConsumptionTarget(agentId, target, shown);
+  const heldMessages = (shown?.messages ?? [])
     .filter(
       (message) =>
-        message.target === target && !messageAttention.hasSeen(agentId, target, message.sequence),
+        message.target === shownTarget &&
+        (!scope ||
+          !messageAttention.hasSeen(agentId, shownTarget, message.sequence, scope.conversationId)),
     )
     .slice(-3);
   if (heldMessages.length > 0) {
-    messageAttention.recordModelSeen(
-      agentId,
-      target,
-      Math.max(...heldMessages.map(({ sequence }) => sequence)),
-    );
+    if (scope)
+      messageAttention.recordSendContext(
+        agentId,
+        shownTarget,
+        Math.max(...heldMessages.map(({ sequence }) => sequence)),
+        undefined,
+        scope,
+      );
     return {
       tasks: [],
       state: "held",

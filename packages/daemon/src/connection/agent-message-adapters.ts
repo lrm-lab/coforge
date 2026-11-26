@@ -1,3 +1,7 @@
+import {
+  agentConsumptionScopeSchema,
+  type AgentConsumptionScope,
+} from "@lrm/coforge-sdk/internal/agent-consumption";
 import type { LocalSearchPaging } from "@lrm/coforge-sdk/internal";
 import type {
   AgentHistoryConsumptionScope,
@@ -38,6 +42,7 @@ export type AgentMessageTransportResponse = LocalSearchPaging & {
   moreUnread?: boolean;
   /** `read` only: the conversation the read consumed (`consumption_scope`). */
   consumptionScope?: AgentHistoryConsumptionScope;
+  writeConsumptionScope?: AgentConsumptionScope;
   freshnessContextMode?: "inline" | "withheld";
   withheldMessageCount?: number;
   /** `send` only: `seenUpToSeq` — on a held response, the frontier the notice presented; on a
@@ -86,6 +91,7 @@ export function adaptAgentSendResponse(
     freshnessContextMode: response.freshnessContextMode,
     withheldMessageCount: response.withheldMessageCount,
     seenUpToSeq: response.seenUpToSeq,
+    writeConsumptionScope: agentConsumptionScopeSchema.safeParse(response.consumptionScope).data,
     recentUnread: response.recentUnread,
     pendingMentionActions: response.pendingMentionActions,
     unresolvedMentionHandles: response.unresolvedMentionHandles,

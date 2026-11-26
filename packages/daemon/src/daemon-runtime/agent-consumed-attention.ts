@@ -4,12 +4,18 @@ import {
   mergeSeenExactSeqs,
   threadRootTarget,
 } from "@lrm/coforge-sdk/internal";
-import type { AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
+import type { AgentConsumptionScope, AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
 import type {
   AgentConsumedSeqDelta,
   AgentConsumedSeqEntry,
   AgentConsumedSeqPort,
 } from "#src/persistence/agent-consumed-seq-store";
+import {
+  displayConsumptionRoot,
+  lookupConsumptionKey,
+  matchesConsumptionScope,
+  rememberConsumptionSpelling,
+} from "./message-consumption-key";
 import { LatestThreadReadIndex } from "./latest-thread-read-index";
 import type { PreviewSeen } from "./inbox-preview-rows";
 import { noteFrontierSource, type FrontierSource } from "./agent-message-attention-frontier-source";
@@ -21,6 +27,7 @@ import {
   firstAbove,
   isAscending,
   persistableConsumedTarget,
+  restoreConsumedTargets,
   sameThreadRoot,
   type ConsumedAgent,
   type ConsumedTarget,
@@ -37,27 +44,35 @@ type AliasDelta = Readonly<{
 export class AgentConsumedAttention {
   readonly #consumedByAgent = new Map<string, ConsumedAgent>();
   readonly #conversationTargets = new Map<string, Map<string, Set<string>>>();
-  readonly #attentionConversation = new Map<string, Map<string, string>>();
+  readonly #attentionConversations = new Map<string, Map<string, Set<string>>>();
   readonly #latestThreadReads = new LatestThreadReadIndex();
 
   constructor(
     private readonly ports: {
       store(): AgentConsumedSeqPort | undefined;
       previewSeen: PreviewSeen;
-      settlePending(agentId: string, target: string, settled: (sequence: number) => boolean): void;
+      settlePending(
+        agentId: string,
+        target: string,
+        conversationId: string | undefined,
+        settled: (sequence: number) => boolean,
+      ): void;
       onConsumed?(agentId: string): void;
     },
   ) {}
 
-  peek(agentId: string): ConsumedAgent | undefined {
-    return this.#consumedByAgent.get(agentId);
+  peek(agentId: string, target: string, conversationId?: string): ConsumedTarget | undefined {
+    const state = this.#consumedByAgent.get(agentId);
+    if (!state || !conversationId) return state?.targets.get(target);
+    const key = lookupConsumptionKey(state.scopeSpellings, conversationId, target);
+    return state.scopes.get(key);
   }
 
   clearAgent(agentId: string): void {
     this.#consumedByAgent.delete(agentId);
     this.#latestThreadReads.clear(agentId);
     this.#conversationTargets.delete(agentId);
-    this.#attentionConversation.delete(agentId);
+    this.#attentionConversations.delete(agentId);
     this.ports.previewSeen.clear(agentId);
   }
 
@@ -81,25 +96,42 @@ export class AgentConsumedAttention {
       review?: {
         sequence: number;
       };
-      scope?: Pick<AgentHistoryConsumptionScope, "conversationId" | "channelType" | "target">;
+      scope?: Omit<AgentHistoryConsumptionScope, "agentId">;
     },
   ): void {
     this.#consumedState(agentId);
-    const { target } = read;
+    const { target, scope } = read;
+    const entry = this.#targetState(
+      agentId,
+      target,
+      scope?.conversationId,
+      scope?.threadRootId,
+      false,
+    );
     const aliasDelta = this.#setAlias(agentId, read.spelling, target);
-    let targetChanged = false;
+    const hasScope =
+      scope !== undefined && (scope.threadRootId !== undefined || !displayConsumptionRoot(target));
+    let targetChanged = hasScope && !entry.serverScope;
+    if (hasScope) entry.serverScope = true;
     if (read.through > 0)
       targetChanged =
-        this.#advanceFrontier(agentId, target, read.through, "history_read") || targetChanged;
-    targetChanged = this.#addExact(agentId, target, read.shown) || targetChanged;
-    this.#settleSeen(agentId, target);
+        this.#advanceFrontier(agentId, target, read.through, "history_read", entry) ||
+        targetChanged;
+    targetChanged = this.#addExact(agentId, target, read.shown, entry) || targetChanged;
+    this.#settleSeen(agentId, target, entry);
     if (read.review) {
-      this.#takeReadOrder(agentId, target, read.review.sequence);
+      this.#takeReadOrder(agentId, target, read.review.sequence, entry);
       targetChanged = true;
     }
     if (read.scope) this.#settleScope(agentId, read.scope, read.shown, target);
     if (!aliasDelta && !targetChanged) return;
-    this.#persistTargetAndAliases(agentId, targetChanged ? target : undefined, aliasDelta);
+    this.#persistTargetAndAliases(
+      agentId,
+      targetChanged ? target : undefined,
+      aliasDelta,
+      entry,
+      scope?.conversationId,
+    );
   }
   recordSendContext(
     agentId: string,
@@ -108,26 +140,46 @@ export class AgentConsumedAttention {
     review?: {
       sequence: number;
     },
+    authority?: AgentConsumptionScope,
+    deliveryConversationId?: string,
   ): void {
     if (!Number.isInteger(through) || through < 1) return;
-    const changed = this.#advanceFrontier(agentId, target, through, "send_context");
-    if (review) this.#takeReadOrder(agentId, target, review.sequence);
-    if (changed || review) this.#persistTarget(agentId, target);
+    if (authority && !matchesConsumptionScope(target, authority)) return;
+    const conversationId = authority?.conversationId ?? deliveryConversationId;
+    if (!conversationId) return;
+    const entry = this.#targetState(
+      agentId,
+      target,
+      conversationId,
+      authority?.threadRootId,
+      false,
+    );
+    const newAuthority = authority !== undefined && !entry.serverScope;
+    if (newAuthority) entry.serverScope = true;
+    const changed = this.#advanceFrontier(agentId, target, through, "send_context", entry);
+    if (review) this.#takeReadOrder(agentId, target, review.sequence, entry);
+    if (changed || review || newAuthority)
+      this.#persistTargetAndAliases(agentId, target, undefined, entry, conversationId);
   }
-  seenExactSequences(agentId: string, target: string): readonly number[] {
+  seenExactSequences(agentId: string, target: string, conversationId?: string): readonly number[] {
+    this.#consumedState(agentId);
+    const entry = this.peek(agentId, target, conversationId);
     return (
       this.ports.previewSeen.mergeExact(
         agentId,
         target,
-        this.#consumedState(agentId).targets.get(target)?.exactSeqs,
+        entry?.exactSeqs,
         SEEN_EXACT_SEQS_LIMIT,
+        conversationId ?? entry?.conversationId,
       ) ?? NO_SEQUENCES
     );
   }
   hasExactSeen(agentId: string, target: string): boolean {
+    this.#consumedState(agentId);
+    const entry = this.peek(agentId, target);
     return (
-      (this.#consumedState(agentId).targets.get(target)?.exactSeqs?.length ?? 0) > 0 ||
-      (this.ports.previewSeen.recorded(agentId, target)?.size ?? 0) > 0
+      (entry?.exactSeqs?.length ?? 0) > 0 ||
+      (this.ports.previewSeen.recorded(agentId, target, entry?.conversationId)?.size ?? 0) > 0
     );
   }
   resolveTarget(agentId: string, target: string): string {
@@ -142,46 +194,24 @@ export class AgentConsumedAttention {
     return this.readBasis(agentId, target, sequence, conversationId) !== undefined;
   }
   readBasis(agentId: string, target: string, sequence: number, conversationId?: string) {
-    const entry = this.#consumedState(agentId).targets.get(target);
-    if (conversationId !== undefined && entry?.conversationId !== conversationId) return;
-    return consumedReadBasis(entry, sequence);
+    this.#consumedState(agentId);
+    return consumedReadBasis(this.peek(agentId, target, conversationId), sequence);
   }
   bindConversation(agentId: string, target: string, conversationId: string): void {
-    const entry = this.#targetState(agentId, target);
-    const recorded = entry.conversationId;
-    if (recorded === conversationId) return;
-    entry.conversationId = conversationId;
-    if (recorded !== undefined) {
-      logger.info("Agent consumed cursor reset for a recreated conversation", {
-        event: "agent.message.consumed_cursor_reset",
-        agent_id: agentId,
-        target,
-        previous_conversation_id: recorded,
-        conversation_id: conversationId,
-        model_seen_seq: entry.seq ?? 0,
-      });
-      delete entry.seq;
-      delete entry.exactSeqs;
-      delete entry.reviewedSeq;
-      noteFrontierSource(entry, "reset");
-      this.#latestThreadReads.clear(agentId);
-      this.ports.previewSeen.clearTarget(agentId, target);
-      const record = persistableConsumedTarget(entry);
-      this.#persistDelta(
-        agentId,
-        record?.conversationId
-          ? { upsertTargets: [{ target, entry: record }] }
-          : { deleteTargets: [target] },
-      );
-      return;
+    const previous = this.#consumedState(agentId).targets.get(target);
+    const wasUnbound = previous !== undefined && previous.conversationId === undefined;
+    const entry = this.#targetState(agentId, target, conversationId);
+    if (wasUnbound && entry === previous) {
+      this.#persistTarget(agentId, target);
     }
-    const record = persistableConsumedTarget(entry);
-    if (record?.conversationId)
-      this.#persistDelta(agentId, { upsertTargets: [{ target, entry: record }] });
   }
-  #addExact(agentId: string, target: string, sequences: readonly number[]): boolean {
+  #addExact(
+    agentId: string,
+    target: string,
+    sequences: readonly number[],
+    entry = this.#targetState(agentId, target),
+  ): boolean {
     if (!sequences.length) return false;
-    const entry = this.#targetState(agentId, target);
     const existing = entry.exactSeqs ?? NO_SEQUENCES;
     const incoming = isAscending(sequences) ? sequences : [...sequences].sort(byNumber);
     const merged = mergeSeenExactSeqs(entry.seq ?? 0, existing, incoming);
@@ -195,8 +225,8 @@ export class AgentConsumedAttention {
     target: string,
     sequence: number,
     source: FrontierSource,
+    entry = this.#targetState(agentId, target),
   ): boolean {
-    const entry = this.#targetState(agentId, target);
     if (sequence <= (entry.seq ?? 0)) return false;
     entry.seq = sequence;
     noteFrontierSource(entry, source);
@@ -206,37 +236,44 @@ export class AgentConsumedAttention {
       if (!kept.length) delete entry.exactSeqs;
       else if (kept.length !== exact.length) entry.exactSeqs = kept;
     }
-    this.ports.previewSeen.pruneThrough(agentId, target, sequence);
-    this.ports.settlePending(agentId, target, (pending) => pending <= sequence);
+    this.ports.previewSeen.pruneThrough(agentId, target, sequence, entry.conversationId);
+    this.ports.settlePending(
+      agentId,
+      target,
+      entry.conversationId,
+      (pending) => pending <= sequence,
+    );
     return true;
   }
-  #settleSeen(agentId: string, target: string): void {
-    const entry = this.#consumedState(agentId).targets.get(target);
+  #settleSeen(agentId: string, target: string, entry = this.peek(agentId, target)): void {
     const frontier = entry?.seq ?? 0;
     const exact = entry?.exactSeqs;
     this.ports.settlePending(
       agentId,
       target,
+      entry?.conversationId,
       (sequence) => sequence <= frontier || containsSorted(exact, sequence),
     );
   }
   #settleScope(
     agentId: string,
-    scope: Pick<AgentHistoryConsumptionScope, "conversationId" | "channelType" | "target">,
+    scope: Omit<AgentHistoryConsumptionScope, "agentId">,
     shown: readonly number[],
     settled: string,
   ): void {
     if (shown.length === 0) return;
     const targets = this.#conversationTargets.get(agentId)?.get(scope.conversationId);
     if (!targets) return;
-    const scopeRoot = threadRootTarget(scope.target);
+    const scopeRoot = scope.threadRootId ?? threadRootTarget(scope.target);
     if (scope.channelType === "thread" && scopeRoot === undefined) return;
     for (const target of targets) {
       if (target === settled) continue;
       const root = threadRootTarget(target);
       if (scope.channelType === "dm" ? root !== undefined : !sameThreadRoot(root, scopeRoot!))
         continue;
-      this.ports.settlePending(agentId, target, (sequence) => containsSorted(shown, sequence));
+      this.ports.settlePending(agentId, target, scope.conversationId, (sequence) =>
+        containsSorted(shown, sequence),
+      );
     }
   }
   #setAlias(agentId: string, spelling: string, canonical: string): AliasDelta | undefined {
@@ -268,13 +305,17 @@ export class AgentConsumedAttention {
       ? { upsertAliases, deleteAliases: [deletedCanonical] }
       : { upsertAliases };
   }
-  #takeReadOrder(agentId: string, target: string, sequence: number): void {
+  #takeReadOrder(
+    agentId: string,
+    target: string,
+    sequence: number,
+    entry = this.#targetState(agentId, target),
+  ): void {
     const state = this.#consumedState(agentId);
-    const entry = this.#targetState(agentId, target);
     if (Number.isInteger(sequence) && sequence > 0)
       entry.reviewedSeq = Math.max(entry.reviewedSeq ?? 0, sequence);
     entry.readOrder = ++state.lastReadOrder;
-    this.#latestThreadReads.record(agentId, target, entry);
+    if (state.targets.get(target) === entry) this.#latestThreadReads.record(agentId, target, entry);
   }
   #persistDelta(agentId: string, delta: AgentConsumedSeqDelta): void {
     const store = this.ports.store();
@@ -321,47 +362,44 @@ export class AgentConsumedAttention {
     agentId: string,
     target: string | undefined,
     aliasDelta: AliasDelta | undefined,
+    scopedEntry: ConsumedTarget,
+    conversationId?: string,
   ): void {
-    const store = this.ports.store();
-    if (store) {
-      const state = this.#consumedState(agentId);
-      if (!store.apply) {
-        store.write(agentId, consumedSnapshot(state));
-      } else {
-        let upsertTargets: { target: string; entry: AgentConsumedSeqEntry }[] | undefined;
-        if (target !== undefined) {
-          const entry = state.targets.get(target);
-          if (entry?.conversationId) {
-            const record = persistableConsumedTarget(entry);
-            if (record) upsertTargets = [{ target, entry: record }];
-          }
-        }
-        if (
-          upsertTargets?.length ||
-          aliasDelta?.upsertAliases.length ||
-          aliasDelta?.deleteAliases?.length
-        ) {
-          store.apply(agentId, {
-            ...(upsertTargets ? { upsertTargets } : {}),
-            ...(aliasDelta?.upsertAliases.length
-              ? { upsertAliases: aliasDelta.upsertAliases }
-              : {}),
-            ...(aliasDelta?.deleteAliases?.length
-              ? { deleteAliases: aliasDelta.deleteAliases }
-              : {}),
-          });
-        }
-      }
-    }
-    this.ports.onConsumed?.(agentId);
+    const state = this.#consumedState(agentId);
+    const record = scopedEntry.conversationId && persistableConsumedTarget(scopedEntry);
+    const rows = target !== undefined && record ? [{ target, entry: record }] : undefined;
+    const upsertTargets =
+      target !== undefined && state.targets.get(target) === scopedEntry ? rows : undefined;
+    const { threadRootId } = scopedEntry;
+    const upsertScopedTargets =
+      conversationId &&
+      target !== undefined &&
+      record &&
+      (threadRootId || !displayConsumptionRoot(target))
+        ? [{ target, entry: record, ...(threadRootId ? { threadRootId } : {}) }]
+        : undefined;
+    const delta: AgentConsumedSeqDelta = {
+      ...(upsertTargets ? { upsertTargets } : {}),
+      ...(upsertScopedTargets ? { upsertScopedTargets } : {}),
+      ...(aliasDelta?.upsertAliases.length ? { upsertAliases: aliasDelta.upsertAliases } : {}),
+      ...(aliasDelta?.deleteAliases?.length ? { deleteAliases: aliasDelta.deleteAliases } : {}),
+    };
+    this.#persistDelta(agentId, delta);
   }
-  modelSeenSequence(agentId: string, target: string): number {
-    return this.#consumedState(agentId).targets.get(target)?.seq ?? 0;
+  modelSeenSequence(agentId: string, target: string, conversationId?: string): number {
+    this.#consumedState(agentId);
+    return this.peek(agentId, target, conversationId)?.seq ?? 0;
   }
-  recordModelSeen(agentId: string, target: string, sequence: number): void {
+  recordModelSeen(
+    agentId: string,
+    target: string,
+    sequence: number,
+    conversationId?: string,
+  ): void {
     if (!Number.isInteger(sequence) || sequence < 1) return;
-    if (this.#advanceFrontier(agentId, target, sequence, "model_seen"))
-      this.#persistTarget(agentId, target);
+    const entry = this.#targetState(agentId, target, conversationId);
+    if (this.#advanceFrontier(agentId, target, sequence, "model_seen", entry))
+      this.#persistTargetAndAliases(agentId, target, undefined, entry, conversationId);
   }
   recordReadContext(agentId: string, target: string, sequence = 0): void {
     this.#takeReadOrder(agentId, target, sequence);
@@ -384,16 +422,18 @@ export class AgentConsumedAttention {
   #consumedState(agentId: string): ConsumedAgent {
     const existing = this.#consumedByAgent.get(agentId);
     if (existing) return existing;
-    const state: ConsumedAgent = { targets: new Map(), aliases: new Map(), lastReadOrder: 0 };
+    const state: ConsumedAgent = {
+      targets: new Map(),
+      scopes: new Map(),
+      scopeSpellings: new Map(),
+      aliases: new Map(),
+      lastReadOrder: 0,
+    };
     this.#consumedByAgent.set(agentId, state);
     const store = this.ports.store();
     if (store) {
       const saved = store.read(agentId);
-      let readCursorCount = 0;
-      for (const [target, entry] of Object.entries(saved.targets)) {
-        state.targets.set(target, { ...entry });
-        if ((entry.seq ?? 0) > 0 || entry.exactSeqs?.length) readCursorCount++;
-      }
+      const readCursorCount = restoreConsumedTargets(state, saved);
       state.aliases = new Map(Object.entries(saved.aliases));
       state.lastReadOrder = saved.nextReadOrder - 1;
       if (readCursorCount > 0)
@@ -406,19 +446,54 @@ export class AgentConsumedAttention {
     }
     return state;
   }
-  #targetState(agentId: string, target: string): ConsumedTarget {
-    const { targets } = this.#consumedState(agentId);
-    const existing = targets.get(target);
-    if (existing) return existing;
-    const entry: ConsumedTarget = {};
-    targets.set(target, entry);
+  #targetState(
+    agentId: string,
+    target: string,
+    conversationId?: string,
+    threadRootId?: string,
+    moveProjection = true,
+  ): ConsumedTarget {
+    const { targets, scopes, scopeSpellings } = this.#consumedState(agentId);
+    const current = targets.get(target);
+    if (!conversationId) {
+      if (current) return current;
+      const entry: ConsumedTarget = {};
+      targets.set(target, entry);
+      return entry;
+    }
+
+    const key =
+      threadRootId === undefined
+        ? lookupConsumptionKey(scopeSpellings, conversationId, target)
+        : rememberConsumptionSpelling(scopeSpellings, conversationId, target, threadRootId);
+    const existing = scopes.get(key);
+    if (existing) {
+      if (threadRootId !== undefined) existing.threadRootId = threadRootId;
+      if (!current) targets.set(target, existing);
+      return existing;
+    }
+
+    const entry = current && !current.conversationId ? current : {};
+    entry.conversationId = conversationId;
+    if (threadRootId !== undefined) entry.threadRootId = threadRootId;
+    scopes.set(key, entry);
+    if (
+      moveProjection ||
+      !current?.conversationId ||
+      (current.conversationId === conversationId && !current.threadRootId)
+    ) {
+      targets.set(target, entry);
+      if (current && current !== entry) this.#latestThreadReads.clear(agentId);
+    }
     return entry;
   }
   recordConversation(agentId: string, target: string, conversationId: string): void {
-    const byTarget = this.#attentionConversation.get(agentId) ?? new Map<string, string>();
-    this.#attentionConversation.set(agentId, byTarget);
-    if (byTarget.get(target) === conversationId) return;
-    byTarget.set(target, conversationId);
+    const byTarget = this.#attentionConversations.get(agentId) ?? new Map<string, Set<string>>();
+    const conversations = byTarget.get(target) ?? new Set<string>();
+    if (conversations.has(conversationId)) return;
+    conversations.add(conversationId);
+    byTarget.set(target, conversations);
+    this.#attentionConversations.set(agentId, byTarget);
     const byConversation = this.#conversationTargets.get(agentId) ?? new Map<string, Set<string>>();
     this.#conversationTargets.set(agentId, byConversation);
     const targets = byConversation.get(conversationId) ?? new Set<string>();
@@ -426,13 +501,15 @@ export class AgentConsumedAttention {
     byConversation.set(conversationId, targets);
   }
   forgetConversation(agentId: string, target: string): void {
-    const byTarget = this.#attentionConversation.get(agentId);
-    const conversationId = byTarget?.get(target);
-    if (conversationId === undefined) return;
-    byTarget!.delete(target);
+    const byTarget = this.#attentionConversations.get(agentId);
+    const conversations = byTarget?.get(target);
+    if (!conversations) return;
+    byTarget?.delete(target);
     const byConversation = this.#conversationTargets.get(agentId);
-    const targets = byConversation?.get(conversationId);
-    targets?.delete(target);
-    if (targets?.size === 0) byConversation!.delete(conversationId);
+    for (const conversationId of conversations) {
+      const targets = byConversation?.get(conversationId);
+      targets?.delete(target);
+      if (targets?.size === 0) byConversation?.delete(conversationId);
+    }
   }
 }

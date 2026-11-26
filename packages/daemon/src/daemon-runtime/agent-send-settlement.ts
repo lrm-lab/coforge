@@ -3,6 +3,7 @@ import type { AgentSendReconciliationResponse } from "@lrm/coforge-sdk/agent";
 import type { AgentMessageRequest } from "@lrm/coforge-sdk/internal";
 import { adaptAgentSendCommittedResponse } from "#src/connection/agent-message-adapters";
 import {
+  type AgentConsumptionEvidenceRequest,
   type AgentMessageTransportResponse,
   type AgentSendReconciliationRequest,
 } from "#src/connection/agent-http-clients";
@@ -16,7 +17,9 @@ const logger = getLogger(["coforge", "daemon", "agent-message"]);
 /** What settling one send needs: the send and reconcile calls, and whether the target's draft
  * still holds a given key. */
 export type AgentSendSettlementPorts = {
-  send(request: AgentMessageRequest): Promise<AgentMessageTransportResponse>;
+  send(
+    request: AgentMessageRequest & AgentConsumptionEvidenceRequest,
+  ): Promise<AgentMessageTransportResponse>;
   reconcile(request: AgentSendReconciliationRequest): Promise<AgentSendReconciliationResponse>;
   draftHoldsKey(target: string, idempotencyKey: string): Promise<boolean>;
 };
@@ -33,7 +36,7 @@ export type AgentSendSettlementPorts = {
  * send cannot be retried safely.
  */
 export async function settleAgentSend(
-  send: AgentMessageRequest,
+  send: AgentMessageRequest & AgentConsumptionEvidenceRequest,
   ports: AgentSendSettlementPorts,
   options: { reviewerIsolation: boolean; logScope: Record<string, unknown> },
 ): Promise<AgentMessageTransportResponse> {

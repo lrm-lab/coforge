@@ -430,6 +430,9 @@ test("an already-consumed delivery to an offline Agent is ACKed and dropped, not
       "agent-a",
       {
         targets: { "@gone": { conversationId: "conversation-gone", seq: 5 } },
+        scopedTargets: [
+          { target: "@gone", entry: { conversationId: "conversation-gone", seq: 5 } },
+        ],
         aliases: {},
         nextReadOrder: 1,
       },

@@ -484,7 +484,7 @@ test("apply updates and deletes only named targets and aliases while preserving 
   store.close();
 });
 
-test("AgentConsumedAttention uses incremental apply, skips no-op initial binds, and syncs resets and alias flips", async () => {
+test("AgentConsumedAttention applies changed cursor evidence and aliases without a write for a new empty scope", async () => {
   const { AgentConsumedAttention } = await import("#src/daemon-runtime/agent-consumed-attention");
   const { PreviewSeen } = await import("#src/daemon-runtime/inbox-preview-rows");
   const stateDirectory = temporaryStateDirectory();
@@ -523,14 +523,11 @@ test("AgentConsumedAttention uses incremental apply, skips no-op initial binds, 
 
   attention.recordModelSeen("agent-1", "#general", 10);
   attention.recordReadContext("agent-1", "#general", 10);
+  const beforeNewScope = deltas.length;
   attention.bindConversation("agent-1", "#general", "conv-2");
-  expect(backing.read("agent-1").targets["#general"]).toEqual({
-    conversationId: "conv-2",
-    readOrder: 1,
-  });
-
-  attention.bindConversation("agent-1", "#early", "conv-early-2");
-  expect(backing.read("agent-1").targets["#early"]).toBeUndefined();
+  expect(deltas).toHaveLength(beforeNewScope);
+  expect(attention.hasSeen("agent-1", "#general", 10, "conv-1")).toBe(true);
+  expect(attention.hasSeen("agent-1", "#general", 1, "conv-2")).toBe(false);
 
   attention.recordTargetAlias("agent-1", "b", "a");
   attention.recordTargetAlias("agent-1", "x", "b");

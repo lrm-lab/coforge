@@ -14,14 +14,15 @@ export type FoldedMessages = Readonly<{
  * is recorded, since recording it would make every message on the page look shown.
  */
 export function foldShownMessages<T extends { target: string; sequence: number }>(
-  attention: Pick<AgentMessageAttentionIndex, "hasSeen" | "resolveTarget">,
+  attention: Pick<AgentMessageAttentionIndex, "hasSeen">,
   agentId: string,
   target: string,
+  conversationId: string,
   messages: readonly T[],
 ): { messages: T[]; folded?: FoldedMessages } {
-  const canonical = attention.resolveTarget(agentId, target);
   const isShown = (message: T) =>
-    message.target === canonical && attention.hasSeen(agentId, canonical, message.sequence);
+    message.target === target &&
+    attention.hasSeen(agentId, target, message.sequence, conversationId);
   const shown = messages.filter(isShown);
   const fresh = messages.filter((message) => !isShown(message));
   if (shown.length === 0) return { messages: fresh };

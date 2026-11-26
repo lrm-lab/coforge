@@ -1,15 +1,19 @@
 import { afterAll, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sessionSpy } from "./fixtures/session-spy";
 import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import { DaemonRuntime, InMemoryDaemonCredentialStore } from "@lrm/coforge-daemon";
+import type {
+  AgentWorkspaceDeleteRequest,
+  AgentWorkspaceDeleteResult,
+} from "@lrm/coforge-sdk/internal";
 import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 
-const workspaceRoot = await mkdtemp(join(tmpdir(), "coforge-forget-"));
+const workspaceRoot = await mkdtemp(join(await realpath(tmpdir()), "coforge-forget-"));
 const connection: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
@@ -29,9 +33,8 @@ afterAll(() => rm(workspaceRoot, { recursive: true, force: true }));
 async function setup(stateDirectory: string) {
   const credentials = new InMemoryDaemonCredentialStore();
   await credentials.save(connection.workspaceId, connection.computerId, "token-a");
-  let deleteWorkspace:
-    | ((request: import("@lrm/coforge-sdk/internal").AgentWorkspaceDeleteRequest) => Promise<void>)
-    | undefined;
+  let deleteWorkspace: ((request: AgentWorkspaceDeleteRequest) => Promise<void>) | undefined;
+  let deleteResult: AgentWorkspaceDeleteResult | undefined;
   const runtime = new DaemonRuntime(
     connection,
     () => ({
@@ -48,6 +51,9 @@ async function setup(stateDirectory: string) {
           return `sk_agent_${"a".repeat(43)}`;
         },
         async revokeAgentApiKey() {},
+        async sendWorkspaceDeleteResult(result) {
+          deleteResult = result;
+        },
         onWorkspaceDelete(handler) {
           deleteWorkspace = handler;
           return () => {};
@@ -61,14 +67,16 @@ async function setup(stateDirectory: string) {
   await runtime.start(connection);
   return {
     runtime,
-    deleteAgent: (agentId: string) =>
-      deleteWorkspace?.({
+    deleteAgent: async (agentId: string) => {
+      await deleteWorkspace!({
         protocolMajor: 1,
         requestId: `delete-${agentId}`,
         workspaceId: connection.workspaceId,
         computerId: connection.computerId,
         agentId,
-      }),
+      });
+      return deleteResult?.status;
+    },
   };
 }
 
@@ -127,7 +135,7 @@ test("deleting an Agent forgets its cursor ledger, attention state, and App Inbo
     ]);
     expect(existsSync(join(stateDirectory, "agent-state", "agent-a"))).toBe(true);
 
-    await deleteAgent("agent-a");
+    expect(await deleteAgent("agent-a")).toBe("ok");
 
     // The cursor ledger is gone with the Agent — an Agent that moves back starts a fresh read
     // cursor instead of resurrecting the pre-move frontier.

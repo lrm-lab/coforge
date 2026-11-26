@@ -123,6 +123,7 @@ export async function agentMessage(
     const url = messageEndpoint(ports.serverHttpUrl, agentApiRoutes.cloud.messages.list.path);
     return adaptAgentHistoryResponse(
       await requestRead({ url, ...ports.keys(agentApiKey), request }),
+      request,
     );
   }
   if (request.operation === "search") {

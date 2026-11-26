@@ -155,7 +155,10 @@ test("a read from another conversation cannot consume a waiting notice at the sa
   await attention.receive(recreated);
   harness.hold(notices[0]!);
   harness.read(old, 18);
-  expect(attention.hasSeen(agentId, target, recreated.sequence)).toBe(true);
+  expect(attention.hasSeen(agentId, target, old.sequence, old.conversationId)).toBe(true);
+  expect(attention.hasSeen(agentId, target, recreated.sequence, recreated.conversationId)).toBe(
+    false,
+  );
   harness.release();
   expect(notices).toHaveLength(2);
   expect(notices[1]?.text).toContain(recreated.body);

@@ -108,7 +108,8 @@ export function writeDeliveryNotice(
     queued: this.hold.queued?.(message.agentId) ?? [],
     prefix: this.hold.noticePrefix?.(message.agentId) ?? "",
     eligibility: this.noticeEligibility,
-    previewedInFull: (target, sequence) => this.previewSeen.has(message.agentId, target, sequence),
+    previewedInFull: (target, sequence, conversationId) =>
+      this.previewSeen.has(message.agentId, target, sequence, conversationId),
   });
   const identity = {
     request_id: message.requestId,

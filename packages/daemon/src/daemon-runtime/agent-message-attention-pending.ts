@@ -8,9 +8,11 @@ import {
 } from "./agent-message-attention-index-helpers";
 import type { PreviewSeen } from "./inbox-preview-rows";
 
+export type PendingSequences = Map<string, Map<string, Map<string, Set<number>>>>;
+
 export type PendingAttentionState = {
   attention: Map<string, Map<string, MessageAttention>>;
-  pendingSequences: Map<string, Map<string, Set<number>>>;
+  pendingSequences: PendingSequences;
   pendingWindow: Map<string, Map<string, PendingWindowEntry[]>>;
   previewSeen: PreviewSeen;
 };
@@ -32,12 +34,7 @@ export class PendingAttention {
     const byTarget =
       this.#state.attention.get(message.agentId) ?? new Map<string, MessageAttention>();
     const previous = byTarget.get(target);
-    const pendingByTarget =
-      this.#state.pendingSequences.get(message.agentId) ?? new Map<string, Set<number>>();
-    const pending = pendingByTarget.get(target) ?? new Set<number>();
-    pending.add(message.sequence);
-    pendingByTarget.set(target, pending);
-    this.#state.pendingSequences.set(message.agentId, pendingByTarget);
+    this.rememberSequence(message.agentId, target, message.conversationId, message.sequence);
     const current: MessageAttention = {
       target,
       pendingCount: (previous?.pendingCount ?? 0) + 1,
@@ -53,6 +50,22 @@ export class PendingAttention {
     this.#state.attention.set(message.agentId, byTarget);
     return current;
   }
+  rememberSequence(
+    agentId: string,
+    target: string,
+    conversationId: string,
+    sequence: number,
+  ): void {
+    const byTarget =
+      this.#state.pendingSequences.get(agentId) ?? new Map<string, Map<string, Set<number>>>();
+    const byConversation = byTarget.get(target) ?? new Map<string, Set<number>>();
+    const pending = byConversation.get(conversationId) ?? new Set<number>();
+    pending.add(sequence);
+    byConversation.set(conversationId, pending);
+    byTarget.set(target, byConversation);
+    this.#state.pendingSequences.set(agentId, byTarget);
+  }
+
   recordWindow(agentId: string, target: string, delivery: AgentMessageDelivery): void {
     const byTarget =
       this.#state.pendingWindow.get(agentId) ?? new Map<string, PendingWindowEntry[]>();
@@ -66,67 +79,93 @@ export class PendingAttention {
   settle(
     agentId: string,
     target: string,
+    conversationId: string | undefined,
     settled: (sequence: number) => boolean,
     clear: (agentId: string, target: string) => void,
   ): void {
-    const pending = this.#state.pendingSequences.get(agentId)?.get(target);
-    if (pending) for (const sequence of pending) if (settled(sequence)) pending.delete(sequence);
+    if (conversationId === undefined) return;
+    const byConversation = this.#state.pendingSequences.get(agentId)?.get(target);
+    const pending = byConversation?.get(conversationId);
+    if (!pending) return;
+    for (const sequence of pending) if (settled(sequence)) pending.delete(sequence);
+    if (pending.size === 0) byConversation?.delete(conversationId);
     const byTarget = this.#state.pendingWindow.get(agentId);
     const entries = byTarget?.get(target);
-    if (byTarget && entries) {
-      const kept = entries.filter((entry) => !settled(entry.delivery.sequence));
-      if (kept.length === 0) byTarget.delete(target);
-      else if (kept.length !== entries.length) byTarget.set(target, kept);
+    if (entries) {
+      const kept = entries.filter(
+        ({ delivery }) => delivery.conversationId !== conversationId || !settled(delivery.sequence),
+      );
+      if (kept.length === 0) byTarget?.delete(target);
+      else if (kept.length !== entries.length) byTarget?.set(target, kept);
     }
     const attention = this.#state.attention.get(agentId)?.get(target);
     if (!attention) return;
-    if (!pending || pending.size === 0) {
+    if (byConversation?.size === 0) {
       clear(agentId, target);
       return;
     }
-    if (pending.size === attention.pendingCount) return;
+    let pendingCount = 0;
     let first = Infinity;
-    for (const sequence of pending) if (sequence < first) first = sequence;
+    let latest = 0;
+    for (const sequences of byConversation?.values() ?? []) {
+      pendingCount += sequences.size;
+      for (const sequence of sequences) {
+        first = Math.min(first, sequence);
+        latest = Math.max(latest, sequence);
+      }
+    }
+    if (pendingCount === attention.pendingCount) return;
     this.#state.attention.get(agentId)?.set(target, {
       ...attention,
-      pendingCount: pending.size,
+      pendingCount,
       firstPendingSequence: first,
+      latestSequence: latest,
     });
   }
+
   unreadDeliveries(agentId: string): { target: string; count: number }[] {
     const unread: { target: string; count: number }[] = [];
-    for (const [target, pending] of this.#state.pendingSequences.get(agentId) ?? []) {
-      const previewed = this.#state.previewSeen.recorded(agentId, target);
-      let count = 0;
-      for (const sequence of pending) if (!previewed?.has(sequence)) count++;
+    for (const target of this.#state.pendingSequences.get(agentId)?.keys() ?? []) {
+      const count = this.pendingMessageCount(agentId, target);
       if (count) unread.push({ target, count });
     }
     return unread;
   }
 
+  pendingConversationId(agentId: string, target: string): string | undefined {
+    const conversations = this.#state.pendingSequences.get(agentId)?.get(target);
+    return conversations?.size === 1 ? conversations.keys().next().value : undefined;
+  }
+
   pendingMessageCount(agentId: string, target: string): number {
-    const attention = this.#state.attention.get(agentId)?.get(target);
-    if (!attention) return 0;
-    const previewed = this.#state.previewSeen.recorded(agentId, target);
-    if (!previewed?.size) return attention.pendingCount;
-    const pending = this.#state.pendingSequences.get(agentId)?.get(target);
-    let shown = 0;
-    for (const sequence of previewed) if (pending?.has(sequence)) shown++;
-    return Math.max(0, attention.pendingCount - shown);
+    let count = 0;
+    const byConversation = this.#state.pendingSequences.get(agentId)?.get(target);
+    for (const [conversationId, pending] of byConversation ?? []) {
+      count += pending.size;
+      const previewed = this.#state.previewSeen.recorded(agentId, target, conversationId);
+      for (const sequence of previewed ?? []) if (pending.has(sequence)) count--;
+    }
+    return count;
   }
 
   pendingMaxSequence(agentId: string, target: string): number {
-    const previewed = this.#state.previewSeen.recorded(agentId, target);
     let max = 0;
-    for (const sequence of this.#state.pendingSequences.get(agentId)?.get(target) ?? [])
-      if (sequence > max && !previewed?.has(sequence)) max = sequence;
+    const byConversation = this.#state.pendingSequences.get(agentId)?.get(target);
+    for (const [conversationId, pending] of byConversation ?? []) {
+      const previewed = this.#state.previewSeen.recorded(agentId, target, conversationId);
+      for (const sequence of pending)
+        if (sequence > max && !previewed?.has(sequence)) max = sequence;
+    }
     return max;
   }
 
   pendingWindow(agentId: string, target: string, limit: number): readonly PendingWindowEntry[] {
-    const previewed = this.#state.previewSeen.recorded(agentId, target);
     const entries = this.#state.pendingWindow.get(agentId)?.get(target) ?? [];
-    if (!previewed?.size) return entries.slice(-limit);
-    return entries.filter((entry) => !previewed.has(entry.delivery.sequence)).slice(-limit);
+    return entries
+      .filter(
+        ({ delivery }) =>
+          !this.#state.previewSeen.has(agentId, target, delivery.sequence, delivery.conversationId),
+      )
+      .slice(-limit);
   }
 }

@@ -1,4 +1,6 @@
 import { getLogger } from "@logtape/logtape";
+import { z } from "zod";
+import { threadRootTarget } from "@lrm/coforge-sdk/internal";
 import type {
   AgentMessageRecord,
   AgentMessageResponse,
@@ -6,11 +8,20 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 import type { AgentMessageOperationsPorts } from "./agent-message-ports";
 import { elideForAgent } from "./context-elision";
+import { agentConsumptionScopeSchema } from "@lrm/coforge-sdk/internal/agent-consumption";
+import { historySequenceSchema } from "#src/connection/agent-history-response";
+import { matchesConsumptionScope, messageConsumptionKey } from "./message-consumption-key";
 
 const logger = getLogger(["coforge", "daemon", "agent-message"]);
 
 /** Bounds how many events pages one `check` drains before reporting `hasMore: true` and yielding. */
 const MAX_EVENT_DRAIN_ROUNDS = 50;
+
+const checkedEvidenceSchema = z.object({
+  target: z.string().min(1),
+  sequence: historySequenceSchema,
+  consumptionScope: agentConsumptionScopeSchema,
+});
 
 /** The log's correlation field is `request_id`; on the Agent HTTP path it carries the request's
  * idempotency key. */
@@ -67,16 +78,7 @@ export async function checkPendingMessages(
     hasMore = Boolean(result.hasMore);
     if (!hasMore) break;
   }
-  // A `check` records the exact sequences it showed, per target, and no frontier: a check
-  // drains what notified the Agent, which need not be every message of the target. It reviews
-  // nothing either, so it takes no read order.
-  const shownByTarget = new Map<string, number[]>();
-  for (const message of messages) {
-    const shown = shownByTarget.get(message.target);
-    if (shown) shown.push(message.sequence);
-    else shownByTarget.set(message.target, [message.sequence]);
-  }
-  ports.attention.recordExactSeen(agentId, shownByTarget);
+  recordCheckedEvidence(ports.attention, agentId, messages);
   logger.info("Agent checked pending messages", {
     event: "agent.message.checked",
     ...agentLogScope(ports, agentId, request.idempotencyKey),
@@ -101,4 +103,48 @@ export async function checkPendingMessages(
     hasMore,
     appItemsPending,
   };
+}
+
+function recordCheckedEvidence(
+  attention: AgentMessageOperationsPorts["attention"],
+  agentId: string,
+  messages: readonly AgentMessageRecord[],
+): void {
+  const groups = new Map<
+    string,
+    {
+      target: string;
+      conversationId: string;
+      channelType: "thread" | "dm";
+      threadRootId?: string;
+      shown: number[];
+    }
+  >();
+  for (const message of messages) {
+    const parsed = checkedEvidenceSchema.safeParse(message);
+    if (!parsed.success) continue;
+    const { target, sequence, consumptionScope } = parsed.data;
+    const { conversationId, threadRootId } = consumptionScope;
+    const root = threadRootTarget(target)?.toLowerCase();
+    if (!matchesConsumptionScope(target, consumptionScope)) continue;
+    const key = messageConsumptionKey(conversationId, target, threadRootId);
+    const group = groups.get(key);
+    if (group) group.shown.push(sequence);
+    else
+      groups.set(key, {
+        target,
+        conversationId,
+        channelType: root ? "thread" : "dm",
+        threadRootId,
+        shown: [sequence],
+      });
+  }
+  for (const { target, conversationId, channelType, threadRootId, shown } of groups.values())
+    attention.recordHistoryRead(agentId, {
+      spelling: target,
+      target,
+      shown,
+      through: 0,
+      scope: { conversationId, channelType, threadRootId, target },
+    });
 }

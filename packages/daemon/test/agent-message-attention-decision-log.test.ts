@@ -31,7 +31,7 @@ test("a consumed decision names both conversations and the frontier a notice mov
   ]);
 });
 
-test("a read's frontier says so, and a second conversation's delivery reads as unbound-then-reset", async () => {
+test("a read's frontier is logged only for its own conversation", async () => {
   const index = new AgentMessageAttentionIndex(
     "workspace-1",
     { session: () => session() },
@@ -69,7 +69,7 @@ test("a read's frontier says so, and a second conversation's delivery reads as u
       conversation_id: "conversation-2",
       bound_conversation_id: "conversation-2",
       model_seen_seq: 0,
-      frontier_source: "reset",
+      frontier_source: "unset",
       outcome: "notified",
     }),
   ]);
@@ -263,7 +263,7 @@ test("recovery reports a refused first notice as registered without acceptance",
   expect(await decisions(recover)).toEqual(recordedOnly);
 
   index.previewSeen.record(message.agentId, [
-    { target: message.target, sequence: message.sequence },
+    { target: message.target, conversationId: message.conversationId, sequence: message.sequence },
   ]);
   await index.flush(message.agentId, [message]);
   expect(index.wasNotified(message)).toBe(true);

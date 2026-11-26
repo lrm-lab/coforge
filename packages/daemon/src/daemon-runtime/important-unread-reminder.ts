@@ -1,3 +1,4 @@
+import type { PreviewedWhole } from "./inbox-preview-rows";
 import { AgentNoticeSuppressedError, type AgentNoticeOptions } from "@coforge/agent";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
@@ -31,7 +32,7 @@ export type ImportantUnreadComposedNotice = Readonly<{
   deliveries?: NonNullable<AgentNoticeOptions["noticeOrigin"]>["deliveries"];
   fallbackText?: () => string | undefined;
   prepareSubmission?: AgentNoticeOptions["prepareSubmission"];
-  shown?: readonly { target: string; sequence: number }[];
+  shown?: readonly PreviewedWhole[];
   accepted?(): boolean;
 }>;
 

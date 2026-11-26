@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import {
   AgentConsumedSeqStore,
   type AgentConsumedSeqState,
@@ -10,7 +11,23 @@ import {
  */
 export async function seedCursor(agentId: string, state: AgentConsumedSeqState, root: string) {
   const store = new AgentConsumedSeqStore(root);
+  store.stateDb(agentId).database.query("DELETE FROM scoped_consumed_seqs").run();
   store.write(agentId, state);
+  if (state.scopedTargets) store.apply(agentId, { upsertScopedTargets: state.scopedTargets });
   store.close();
   return new AgentConsumedSeqStore(root);
+}
+
+export async function seedReviewedDelivery(workspaceRoot: string) {
+  const stateDirectory = join(workspaceRoot, `state-${crypto.randomUUID()}`);
+  await seedCursor(
+    "agent-a",
+    {
+      targets: { "@agent": { conversationId: "conversation-1", seq: 3 } },
+      aliases: {},
+      nextReadOrder: 1,
+    },
+    stateDirectory,
+  );
+  return stateDirectory;
 }

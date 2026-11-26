@@ -49,18 +49,13 @@ export type AttentionDecisionMessage = {
   mentionDelivery?: AgentMessageDelivery["mentionDelivery"];
 };
 
-export type AttentionDecisionState = {
-  targets: Map<string, { seq?: number; exactSeqs?: readonly number[]; conversationId?: string }>;
-};
-
 export function logAttentionDecision(
   message: AttentionDecisionMessage,
   outcome: AttentionDecisionOutcome,
-  state: AttentionDecisionState | undefined,
+  entry: { seq?: number; exactSeqs?: readonly number[]; conversationId?: string } | undefined,
   target: string,
   basis?: AttentionDecisionBasis,
 ): void {
-  const entry = state?.targets.get(target);
   if (basis === undefined) {
     if (outcome === "already_notified") basis = "delivery_generation";
     if (outcome === "consumed" && entry?.conversationId === message.conversationId)

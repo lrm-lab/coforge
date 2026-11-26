@@ -263,7 +263,7 @@ test("the connection forwards channel thread reads and sends to the cloud", asyn
     expect(seen).toEqual([
       {
         method: "GET",
-        path: "/api/agent/v1/messages?target=%23general%3A12345678-1234-4234-8234-123456789abc&idempotencyKey=read-1",
+        path: "/api/agent/v1/messages?target=%23general%3A12345678-1234-4234-8234-123456789abc&idempotencyKey=read-1&consumptionScope=true",
       },
       {
         method: "POST",

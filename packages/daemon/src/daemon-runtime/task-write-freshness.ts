@@ -1,5 +1,6 @@
 import type { TaskCommand, TaskResult } from "@lrm/coforge-sdk/internal";
-import { mergeSeenExactSeqs } from "@lrm/coforge-sdk/internal";
+import { agentConsumptionScopeSchema } from "@lrm/coforge-sdk/internal/agent-consumption";
+import { matchesConsumptionScope } from "./message-consumption-key";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import { AgentPreflightError } from "./agent-preflight-error";
 import { recordTaskHoldOffered, taskHoldOffered } from "./agent-task-hold-offers";
@@ -48,46 +49,20 @@ export async function taskWriteWithFreshness(
     }
   }
   const { messageAttention } = ports;
-  const seenUpToSeq = sourceThreadCreate
-    ? (command.seenUpToSeq ?? 0)
-    : Math.max(messageAttention.modelSeenSequence(agentId, target), command.seenUpToSeq ?? 0);
-  const seenExactSeqs = sourceThreadCreate
-    ? (command.seenExactSeqs ?? [])
-    : mergeSeenExactSeqs(
-        0,
-        command.seenExactSeqs ?? [],
-        messageAttention.seenExactSequences(agentId, target),
-      );
   const result = await ports.agentTask(
-    {
-      ...command,
-      ...(seenUpToSeq > 0 ? { seenUpToSeq } : {}),
-      ...(seenExactSeqs.length > 0 ? { seenExactSeqs } : {}),
-    },
+    { ...command, consumptionEvidence: messageAttention.consumptionEvidence(agentId, holdKey) },
     agentApiKey,
   );
-  const shown = result.state === "held" ? (result.heldMessages ?? []) : (result.recentUnread ?? []);
-  if (result.state === "held") recordTaskHoldOffered(agentId, holdKey);
-  if (shown.length > 0) {
-    if (sourceThreadCreate) {
-      const maxByTarget = new Map<string, number>();
-      for (const message of shown) {
-        const messageTarget = message.target;
-        if (!messageTarget) continue;
-        maxByTarget.set(
-          messageTarget,
-          Math.max(maxByTarget.get(messageTarget) ?? 0, message.sequence),
-        );
-      }
-      for (const [messageTarget, seq] of maxByTarget)
-        messageAttention.recordModelSeen(agentId, messageTarget, seq);
-    } else {
-      messageAttention.recordModelSeen(
-        agentId,
-        target,
-        Math.max(...shown.map(({ sequence }) => sequence)),
-      );
-    }
+  const held = result.state === "held";
+  if (held) recordTaskHoldOffered(agentId, holdKey);
+  const scope = agentConsumptionScopeSchema.safeParse(result.consumptionScope).data;
+  const shown = held ? (result.heldMessages ?? []) : (result.recentUnread ?? []);
+  const shownTarget = sourceThreadCreate ? shown[0]?.target : target;
+  if (scope && shownTarget && matchesConsumptionScope(shownTarget, scope)) {
+    let through = 0;
+    for (const message of shown)
+      if (message.target === shownTarget && message.sequence > through) through = message.sequence;
+    messageAttention.recordSendContext(agentId, shownTarget, through, undefined, scope);
   }
   return result;
 }

@@ -12,7 +12,7 @@ import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store
 import { DaemonRuntime } from "#src/daemon-runtime/runtime";
 import { WAKE_LOOP_BACKOFF_MS } from "#src/daemon-runtime/wake-loop-guard";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
-import { messageRecord } from "./fixtures/message-record";
+import { scopedCheckMessage } from "./fixtures/message-record";
 import { captureDaemonLogs } from "./log-capture";
 
 function makeDelivery(
@@ -123,7 +123,7 @@ test("WakeLoopGuard handles tracked @mentions across live backoff/park, exited p
               hasMore: false,
               messages:
                 request.operation === "check"
-                  ? [messageRecord(10, "@ada", "#general", "msg-consumed-1")]
+                  ? [scopedCheckMessage(10, "@ada", "#general", "msg-consumed-1", "conv-general")]
                   : [],
               summaries: [],
             };

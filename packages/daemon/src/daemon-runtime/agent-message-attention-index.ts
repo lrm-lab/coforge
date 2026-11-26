@@ -1,3 +1,4 @@
+import { consumptionEvidenceForWrite } from "./message-write-evidence";
 import {
   AGENT_MESSAGE_ACK_METHOD,
   type AgentMessageDelivery,
@@ -36,7 +37,7 @@ import {
 } from "./agent-message-attention-recovery";
 import { AgentConsumedAttention } from "./agent-consumed-attention";
 import { noticeEligibility } from "./notice-eligibility";
-import { PendingAttention } from "./agent-message-attention-pending";
+import { PendingAttention, type PendingSequences } from "./agent-message-attention-pending";
 import { AcceptedMessageNotices } from "./accepted-message-notices";
 import {
   attentionRecorded,
@@ -60,7 +61,7 @@ export class AgentMessageAttentionIndex {
   readonly #generations = new Map<string, NoticeGeneration>();
   readonly #attention = new Map<string, Map<string, MessageAttention>>();
   readonly noticeActionClocks = new NoticeActionClocks();
-  readonly #pendingSequences = new Map<string, Map<string, Set<number>>>();
+  readonly #pendingSequences: PendingSequences = new Map();
   readonly previewSeen = new PreviewSeen();
   readonly #pendingWindow = new Map<string, Map<string, PendingWindowEntry[]>>();
   readonly #workspaceId: string;
@@ -75,8 +76,10 @@ export class AgentMessageAttentionIndex {
   readonly #consumption = new AgentConsumedAttention({
     store: () => this.hold.consumedSeqs,
     previewSeen: this.previewSeen,
-    settlePending: (agentId, target, settled) =>
-      this.#pending.settle(agentId, target, settled, (id, name) => this.clear(id, name)),
+    settlePending: (agentId, target, conversationId, settled) =>
+      this.#pending.settle(agentId, target, conversationId, settled, (id, name) =>
+        this.clear(id, name),
+      ),
     onConsumed: (agentId) => this.hold.onConsumed?.(agentId),
   });
   readonly noticeEligibility = noticeEligibility((...args) => this.#consumption.readBasis(...args));
@@ -173,7 +176,7 @@ export class AgentMessageAttentionIndex {
     logAttentionDecision(
       message,
       outcome,
-      this.#consumption.peek(message.agentId),
+      this.#consumption.peek(message.agentId, message.target ?? "", message.conversationId),
       message.target ?? "",
       basis,
     );
@@ -191,8 +194,10 @@ export class AgentMessageAttentionIndex {
     const { target, sequence } = message;
     this.bindConversation(agentId, target, message.conversationId);
     return (
-      this.#consumption.readBasis(agentId, target, sequence) ??
-      (this.previewSeen.has(agentId, target, sequence) ? "full_preview" : undefined)
+      this.#consumption.readBasis(agentId, target, sequence, message.conversationId) ??
+      (this.previewSeen.has(agentId, target, sequence, message.conversationId)
+        ? "full_preview"
+        : undefined)
     );
   }
   wasNotified(message: AgentMessageDelivery): boolean {
@@ -286,11 +291,12 @@ export class AgentMessageAttentionIndex {
     for (const message of recoveredMessages) {
       this.#consumption.recordConversation(agentId, message.target, message.conversationId);
       rememberDelivery(generation, message.deliveryId, message.messageId);
-      const pendingByTarget = this.#pendingSequences.get(agentId) ?? new Map<string, Set<number>>();
-      const pending = pendingByTarget.get(message.target) ?? new Set<number>();
-      pending.add(message.sequence);
-      pendingByTarget.set(message.target, pending);
-      this.#pendingSequences.set(agentId, pendingByTarget);
+      this.#pending.rememberSequence(
+        agentId,
+        message.target,
+        message.conversationId,
+        message.sequence,
+      );
     }
     markNoticeAccepted(generation, recoveredMessages);
     if (recoveredMessages.length) this.messageReceived(agentId, conversation);
@@ -355,6 +361,9 @@ export class AgentMessageAttentionIndex {
   }
   recordHistoryRead(...args: Parameters<AgentConsumedAttention["recordHistoryRead"]>) {
     return this.#consumption.recordHistoryRead(...args);
+  }
+  consumptionEvidence(agentId: string, target: string) {
+    return consumptionEvidenceForWrite(this.#consumption, agentId, target);
   }
   recordSendContext(...args: Parameters<AgentConsumedAttention["recordSendContext"]>) {
     return this.#consumption.recordSendContext(...args);
@@ -428,13 +437,16 @@ export class AgentMessageAttentionIndex {
     if (isCardEvent(message)) return false;
     if (message.conversationId)
       this.bindConversation(message.agentId, message.target, message.conversationId);
-    return this.hasSeen(message.agentId, message.target, message.sequence);
+    return this.hasSeen(message.agentId, message.target, message.sequence, message.conversationId);
   }
   unreadDeliveries(agentId: string): {
     target: string;
     count: number;
   }[] {
     return this.#pending.unreadDeliveries(agentId);
+  }
+  pendingConversationId(agentId: string, target: string): string | undefined {
+    return this.#pending.pendingConversationId(agentId, target);
   }
   pendingMessageCount(agentId: string, target: string): number {
     return this.#pending.pendingMessageCount(agentId, target);
@@ -484,9 +496,5 @@ export class AgentMessageAttentionIndex {
     const byTarget = this.#attention.get(agentId);
     byTarget?.delete(target);
     if (byTarget?.size === 0) this.#attention.delete(agentId);
-  }
-  clearThrough(agentId: string, target: string, sequence: number): void {
-    const attention = this.#attention.get(agentId)?.get(target);
-    if (!attention || attention.latestSequence <= sequence) this.clear(agentId, target);
   }
 }

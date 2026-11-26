@@ -16,7 +16,7 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { emptyCodeAgentDiscovery } from "./code-agent-discovery";
-import { messageRecord } from "./message-record";
+import { scopedCheckMessage } from "./message-record";
 
 // macOS tmpdir lives under /var, a symlink; the state store rejects linked ancestors.
 const tempRoot = realpathSync(tmpdir());
@@ -171,7 +171,7 @@ export async function harness(
             messages:
               request.operation === "check"
                 ? (options.checkSequences ?? []).map((sequence) =>
-                    messageRecord(sequence, "@ada", "#general"),
+                    scopedCheckMessage(sequence, "@ada", "#general"),
                   )
                 : [],
           };

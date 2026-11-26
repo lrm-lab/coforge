@@ -1126,7 +1126,7 @@ test("a channel recreated under the same target name starts from a fresh consume
   expect(notices).toHaveLength(2);
   expect(index.check("agent-1").find((row) => row.target === "#general")?.pendingCount).toBe(1);
 });
-test("a persisted cursor of another conversation is reset, and one without a conversation is not trusted", async () => {
+test("a stored cursor applies only to its conversation, and one without an identity is not trusted", async () => {
   const store = await seedCursor(
     "agent-1",
     {

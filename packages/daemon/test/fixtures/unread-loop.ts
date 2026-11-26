@@ -77,8 +77,8 @@ export function unreadLoop(
       eligibility: (...args) => index.noticeEligibility(...args),
       queued: () => queue,
       prefix: () => "",
-      previewedInFull: (agentId, target, sequence) =>
-        index.previewSeen.has(agentId, target, sequence),
+      previewedInFull: (agentId, target, sequence, conversationId) =>
+        index.previewSeen.has(agentId, target, sequence, conversationId),
     }),
     shown: (agentId, shown) => index.previewSeen.record(agentId, shown),
     now: () => clock.nowMs,

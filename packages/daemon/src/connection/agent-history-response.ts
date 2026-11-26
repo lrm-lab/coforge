@@ -1,10 +1,13 @@
 import { z } from "zod";
 import type { AgentMessageTransportResponse } from "./agent-http-clients";
-import type { AgentHistoryConsumptionScope, AgentHistoryResponse } from "@lrm/coforge-sdk/agent";
+import type { AgentHistoryResponse } from "@lrm/coforge-sdk/agent";
+import { threadRootTarget } from "@lrm/coforge-sdk/internal";
+import { agentConsumptionScopeSchema } from "@lrm/coforge-sdk/internal/agent-consumption";
 
-const historyConsumptionScopeSchema = z.object({
+export const historySequenceSchema = z.int().nonnegative();
+
+export const historyConsumptionScopeSchema = agentConsumptionScopeSchema.extend({
   agentId: z.string().min(1),
-  conversationId: z.string().min(1),
   channelType: z.enum(["dm", "thread"]),
   target: z.string().min(1),
 });
@@ -13,7 +16,8 @@ const historyConsumptionScopeSchema = z.object({
  * that is not well formed is not trusted: a malformed or missing boundary reads as "no boundary"
  * (`null`), and a malformed scope is dropped. */
 export function adaptAgentHistoryResponse(
-  response: AgentHistoryResponse,
+  response: Omit<AgentHistoryResponse, "consumptionScope"> & { consumptionScope?: unknown },
+  request?: { agentId: string; target: string },
 ): AgentMessageTransportResponse {
   const boundary = validSequence(response.modelSeenUpToSeq);
   return {
@@ -29,15 +33,23 @@ export function adaptAgentHistoryResponse(
     unreadCursorBefore: validSequence(response.unreadCursorBefore),
     readPositionAfter: validSequence(response.readPositionAfter),
     moreUnread: response.moreUnread === true,
-    consumptionScope: historyConsumptionScope(response.consumptionScope),
+    consumptionScope: historyConsumptionScope(response.consumptionScope, request),
   };
 }
 
 function validSequence(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
+  const parsed = historySequenceSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }
 
-function historyConsumptionScope(value: unknown): AgentHistoryConsumptionScope | undefined {
-  const parsed = historyConsumptionScopeSchema.safeParse(value);
-  return parsed.success ? parsed.data : undefined;
+function historyConsumptionScope(
+  value: unknown,
+  request?: { agentId: string; target: string },
+): AgentMessageTransportResponse["consumptionScope"] {
+  const legacy = historyConsumptionScopeSchema.safeParse(value);
+  if (legacy.success) return legacy.data;
+  if (!request?.target.startsWith("#") || threadRootTarget(request.target)) return undefined;
+  const channel = agentConsumptionScopeSchema.safeParse(value);
+  if (!channel.success || channel.data.threadRootId !== undefined) return undefined;
+  return { ...channel.data, agentId: request.agentId, target: request.target, channelType: "dm" };
 }
