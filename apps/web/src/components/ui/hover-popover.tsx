@@ -8,12 +8,13 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
-  useState,
+  useSyncExternalStore,
   type FocusEvent as ReactFocusEvent,
   type ForwardedRef,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent,
   type ReactNode,
+  type RefObject,
 } from "react";
 import {
   Button,
@@ -25,13 +26,11 @@ import {
 } from "react-aria-components";
 import { chipControl } from "#src/lib/chip-control";
 import {
-  CARD_CLOSE_DELAY_MS,
-  CARD_OPEN_DELAY_MS,
-  CARD_SWAP_SLOW_MS,
-  createCardGroupController,
-  type CardGroupController,
-  type CardGroupSnapshot,
-} from "#src/lib/hover-intent";
+  createHoverCardGroupStore,
+  type HoverCardGroupOverlaySnapshot,
+  type HoverCardGroupStore,
+} from "#src/lib/hover-card-group-store";
+import { CARD_CLOSE_DELAY_MS, CARD_OPEN_DELAY_MS, CARD_SWAP_SLOW_MS } from "#src/lib/hover-intent";
 import { cn } from "#src/lib/utils";
 
 const TOUCH_LONG_PRESS_MS = 500;
@@ -53,8 +52,15 @@ interface RegisteredCardEntry {
   readonly renderContent: () => ReactNode;
 }
 
+const SERVER_OVERLAY_SNAPSHOT: HoverCardGroupOverlaySnapshot<RegisteredCardEntry> = {
+  snapshot: { activeId: null, swapped: false },
+  activeEntry: null,
+  revision: 0,
+};
+
 interface HoverCardGroupContextValue {
-  readonly activeId: string | null;
+  readonly isActive: (id: string) => boolean;
+  readonly subscribeActive: (id: string, listener: () => void) => () => void;
   readonly register: (entry: RegisteredCardEntry) => void;
   readonly unregister: (id: string) => void;
   readonly pointerEnterTrigger: (id: string, x: number, y: number) => void;
@@ -78,46 +84,85 @@ export function HoverCardGroup({
   closeDelayMs?: number;
   swapSlowMs?: number;
 }) {
-  const [snapshot, setSnapshot] = useState<CardGroupSnapshot>({ activeId: null, swapped: false });
-  const [, setRenderTick] = useState(0);
-  const entriesRef = useRef<Map<string, RegisteredCardEntry>>(new Map());
   const activeTriggerRef = useRef<Element | null>(null);
-  const focusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastOpenedIdRef = useRef<string | null>(null);
-  const controllerRef = useRef<CardGroupController | null>(null);
+  const storeRef = useRef<HoverCardGroupStore<RegisteredCardEntry> | null>(null);
 
-  if (controllerRef.current === null) {
-    controllerRef.current = createCardGroupController({
+  if (storeRef.current === null) {
+    storeRef.current = createHoverCardGroupStore<RegisteredCardEntry>({
       openDelayMs,
       closeDelayMs,
       swapSlowMs,
-      onChange: setSnapshot,
     });
   }
-
-  const clearFocusTimer = useCallback(() => {
-    if (focusTimerRef.current !== null) {
-      clearTimeout(focusTimerRef.current);
-      focusTimerRef.current = null;
-    }
-  }, []);
+  const store = storeRef.current;
 
   useEffect(() => {
-    const controller = createCardGroupController({
-      openDelayMs,
-      closeDelayMs,
-      swapSlowMs,
-      onChange: setSnapshot,
-    });
-    controllerRef.current = controller;
+    store.activate({ openDelayMs, closeDelayMs, swapSlowMs });
     return () => {
-      clearFocusTimer();
-      controller.dispose();
-      if (controllerRef.current === controller) {
-        controllerRef.current = null;
-      }
+      store.dispose();
     };
-  }, [clearFocusTimer, closeDelayMs, openDelayMs, swapSlowMs]);
+  }, [closeDelayMs, openDelayMs, store, swapSlowMs]);
+
+  const closeImmediate = useCallback(
+    (restoreFocus = false) => {
+      const triggerEl =
+        store.getOverlaySnapshot().activeEntry?.triggerEl ?? activeTriggerRef.current;
+      store.closeImmediate();
+      if (restoreFocus && triggerEl instanceof HTMLElement) {
+        triggerEl.focus();
+      }
+    },
+    [store],
+  );
+
+  const contextValue = useMemo<HoverCardGroupContextValue>(
+    () => ({
+      isActive: (id) => store.isActive(id),
+      subscribeActive: (id, listener) => store.subscribeActive(id, listener),
+      register: (entry) => store.register(entry),
+      unregister: (id) => store.unregister(id),
+      pointerEnterTrigger: (id, x, y) => store.pointerEnterTrigger(id, x, y),
+      pointerLeaveTrigger: (id) => store.pointerLeaveTrigger(id),
+      focusTrigger: (id) => store.focusTrigger(id),
+      blurTrigger: (id) => store.blurTrigger(id),
+      openImmediate: (id) => store.openImmediate(id),
+      closeImmediate,
+    }),
+    [closeImmediate, store],
+  );
+
+  return (
+    <HoverCardGroupContext.Provider value={contextValue}>
+      {children}
+      <HoverCardGroupOverlay
+        store={store}
+        activeTriggerRef={activeTriggerRef}
+        closeImmediate={closeImmediate}
+      />
+    </HoverCardGroupContext.Provider>
+  );
+}
+
+function HoverCardGroupOverlay({
+  store,
+  activeTriggerRef,
+  closeImmediate,
+}: {
+  store: HoverCardGroupStore<RegisteredCardEntry>;
+  activeTriggerRef: RefObject<Element | null>;
+  closeImmediate: (restoreFocus?: boolean) => void;
+}) {
+  const lastOpenedIdRef = useRef<string | null>(null);
+  const subscribeOverlay = useCallback(
+    (listener: () => void) => store.subscribeOverlay(listener),
+    [store],
+  );
+  const getOverlaySnapshot = useCallback(() => store.getOverlaySnapshot(), [store]);
+  const { snapshot, activeEntry } = useSyncExternalStore(
+    subscribeOverlay,
+    getOverlaySnapshot,
+    () => SERVER_OVERLAY_SNAPSHOT,
+  );
 
   useEffect(() => {
     if (snapshot.activeId === null) {
@@ -126,25 +171,21 @@ export function HoverCardGroup({
     }
     if (lastOpenedIdRef.current !== snapshot.activeId) {
       lastOpenedIdRef.current = snapshot.activeId;
-      entriesRef.current.get(snapshot.activeId)?.onOpen?.();
+      store.getOverlaySnapshot().activeEntry?.onOpen?.();
     }
-  }, [snapshot.activeId]);
+  }, [snapshot.activeId, store]);
 
   useEffect(() => {
     if (snapshot.activeId === null) return;
     const onPointerMove = (event: globalThis.PointerEvent) => {
       if (event.pointerType === "touch") return;
-      controllerRef.current?.pointerMove(event.clientX, event.clientY);
+      store.pointerMove(event.clientX, event.clientY);
     };
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key !== "Escape" || event.isComposing || event.keyCode === 229) return;
       event.preventDefault();
       event.stopPropagation();
-      const triggerEl = activeTriggerRef.current;
-      controllerRef.current?.closeImmediate();
-      if (triggerEl instanceof HTMLElement) {
-        triggerEl.focus();
-      }
+      closeImmediate(true);
     };
     document.addEventListener("pointermove", onPointerMove, true);
     document.addEventListener("keydown", onKeyDown, true);
@@ -152,77 +193,8 @@ export function HoverCardGroup({
       document.removeEventListener("pointermove", onPointerMove, true);
       document.removeEventListener("keydown", onKeyDown, true);
     };
-  }, [snapshot.activeId]);
+  }, [closeImmediate, snapshot.activeId, store]);
 
-  const register = useCallback((entry: RegisteredCardEntry) => {
-    entriesRef.current.set(entry.id, entry);
-    if (controllerRef.current?.getSnapshot().activeId === entry.id) {
-      activeTriggerRef.current = entry.triggerEl;
-      setRenderTick((tick) => tick + 1);
-    }
-  }, []);
-
-  const unregister = useCallback((id: string) => {
-    entriesRef.current.delete(id);
-    if (controllerRef.current?.getSnapshot().activeId === id) {
-      controllerRef.current.closeImmediate();
-    }
-  }, []);
-
-  const pointerEnterTrigger = useCallback(
-    (id: string, x: number, y: number) => {
-      clearFocusTimer();
-      controllerRef.current?.pointerEnterTrigger(id, x, y);
-    },
-    [clearFocusTimer],
-  );
-
-  const pointerLeaveTrigger = useCallback((id: string) => {
-    controllerRef.current?.pointerLeaveTrigger(id);
-  }, []);
-
-  const focusTrigger = useCallback(
-    (id: string) => {
-      clearFocusTimer();
-      focusTimerRef.current = setTimeout(() => {
-        focusTimerRef.current = null;
-        controllerRef.current?.openImmediate(id);
-      }, openDelayMs);
-    },
-    [clearFocusTimer, openDelayMs],
-  );
-
-  const blurTrigger = useCallback(
-    (id: string) => {
-      clearFocusTimer();
-      controllerRef.current?.pointerLeaveTrigger(id);
-    },
-    [clearFocusTimer],
-  );
-
-  const openImmediate = useCallback(
-    (id: string) => {
-      clearFocusTimer();
-      controllerRef.current?.openImmediate(id);
-    },
-    [clearFocusTimer],
-  );
-
-  const closeImmediate = useCallback(
-    (restoreFocus = false) => {
-      clearFocusTimer();
-      const triggerEl = activeTriggerRef.current;
-      controllerRef.current?.closeImmediate();
-      if (restoreFocus && triggerEl instanceof HTMLElement) {
-        triggerEl.focus();
-      }
-    },
-    [clearFocusTimer],
-  );
-
-  const activeEntry = snapshot.activeId
-    ? (entriesRef.current.get(snapshot.activeId) ?? null)
-    : null;
   if (activeEntry?.triggerEl) {
     activeTriggerRef.current = activeEntry.triggerEl;
   }
@@ -246,71 +218,43 @@ export function HoverCardGroup({
     [activeEntry, closeImmediate],
   );
 
-  const contextValue = useMemo<HoverCardGroupContextValue>(
-    () => ({
-      activeId: snapshot.activeId,
-      register,
-      unregister,
-      pointerEnterTrigger,
-      pointerLeaveTrigger,
-      focusTrigger,
-      blurTrigger,
-      openImmediate,
-      closeImmediate,
-    }),
-    [
-      blurTrigger,
-      closeImmediate,
-      focusTrigger,
-      openImmediate,
-      pointerEnterTrigger,
-      pointerLeaveTrigger,
-      register,
-      snapshot.activeId,
-      unregister,
-    ],
-  );
-
   return (
-    <HoverCardGroupContext.Provider value={contextValue}>
-      {children}
-      <Popover
-        isNonModal
-        trigger="PreviewTrigger"
-        isOpen={activeEntry !== null && activeTriggerRef.current !== null}
-        triggerRef={activeTriggerRef}
-        onOpenChange={(open) => {
-          if (!open) closeImmediate(false);
-        }}
-        placement="bottom start"
-        offset={12}
-        containerPadding={12}
-        shouldSkipAnimation={false}
-        onPointerEnter={() => controllerRef.current?.pointerEnterCard()}
-        onPointerLeave={() => controllerRef.current?.pointerLeaveCard()}
-        className={cn(
-          CARD_SURFACE_CLASS,
-          CARD_BRIDGE_CLASS,
-          CARD_MOTION_CLASS,
-          snapshot.swapped && "motion-safe:transition-[left,top] motion-safe:duration-200",
-          activeEntry?.className,
+    <Popover
+      isNonModal
+      trigger="PreviewTrigger"
+      isOpen={activeEntry !== null && activeTriggerRef.current !== null}
+      triggerRef={activeTriggerRef}
+      onOpenChange={(open) => {
+        if (!open) closeImmediate(false);
+      }}
+      placement="bottom start"
+      offset={12}
+      containerPadding={12}
+      shouldSkipAnimation={false}
+      onPointerEnter={() => store.pointerEnterCard()}
+      onPointerLeave={() => store.pointerLeaveCard()}
+      className={cn(
+        CARD_SURFACE_CLASS,
+        CARD_BRIDGE_CLASS,
+        CARD_MOTION_CLASS,
+        snapshot.swapped && "motion-safe:transition-[left,top] motion-safe:duration-200",
+        activeEntry?.className,
+      )}
+    >
+      <OverlayTriggerStateContext.Provider value={overlayState}>
+        {activeEntry && (
+          <div
+            key={activeEntry.id}
+            className={cn(
+              "min-w-0 max-h-[min(28rem,calc(100dvh-2rem))] overflow-x-hidden overflow-y-auto rounded-[inherit]",
+              snapshot.swapped && "animate-[coforge-card-swap-in_200ms_var(--ease-out)]",
+            )}
+          >
+            {activeEntry.renderContent()}
+          </div>
         )}
-      >
-        <OverlayTriggerStateContext.Provider value={overlayState}>
-          {activeEntry && (
-            <div
-              key={activeEntry.id}
-              className={cn(
-                "min-w-0 max-h-[min(28rem,calc(100dvh-2rem))] overflow-x-hidden overflow-y-auto rounded-[inherit]",
-                snapshot.swapped && "animate-[coforge-card-swap-in_200ms_var(--ease-out)]",
-              )}
-            >
-              {activeEntry.renderContent()}
-            </div>
-          )}
-        </OverlayTriggerStateContext.Provider>
-      </Popover>
-    </HoverCardGroupContext.Provider>
+      </OverlayTriggerStateContext.Provider>
+    </Popover>
   );
 }
 
@@ -439,7 +383,7 @@ function GroupedHoverPopoverTrigger({
       onOpen: () => onOpenRef.current?.(),
       renderContent: () => childrenRef.current,
     });
-  }, [className, group, id, children]);
+  }, [className, group, id, children, inline]);
 
   useEffect(() => {
     return () => {
@@ -448,7 +392,12 @@ function GroupedHoverPopoverTrigger({
     };
   }, [clearLongPress, group, id]);
 
-  const isExpanded = group.activeId === id;
+  const subscribeExpanded = useCallback(
+    (listener: () => void) => group.subscribeActive(id, listener),
+    [group, id],
+  );
+  const getExpanded = useCallback(() => group.isActive(id), [group, id]);
+  const isExpanded = useSyncExternalStore(subscribeExpanded, getExpanded, () => false);
 
   const setRef = useCallback((node: HTMLElement | null) => {
     triggerElRef.current = node;
