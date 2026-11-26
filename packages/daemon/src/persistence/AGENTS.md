@@ -18,7 +18,15 @@ Rules for durable local state in `src/persistence/`. They extend
   and deletes the directory: an Agent that moves back starts a fresh cursor, never the old one.
 - The cursor is written row by row, and the database keeps it monotonic: an update (delta or
   snapshot) that arrives late never lowers a frontier, a review boundary or a read order (a target
-  that moved to another conversation resets instead). `meta` holds the schema version — a database a newer build wrote
+  that moved to another conversation resets its legacy slot). Scoped evidence is keyed by
+  conversation ID and, for threads, the authoritative thread root returned by the server.
+  On open, the cursor store merges provable legacy cursors from version 1 databases into
+  the additive scoped table in one transaction. Task discussions with their own conversation
+  IDs have top-level scope. Legacy thread progress is merged when its full root matches a
+  previously stored authoritative scope. Active cursor updates can write the scoped row and
+  the legacy slot in the same transaction for rollback. A thread projection requires the full
+  root in the legacy spelling. Scoped-only updates preserve the legacy slot and its binding.
+  `meta` holds the schema version — a database a newer build wrote
   is refused, not migrated — the marker that says the legacy import already ran, and per-Agent
   runtime ledgers (`compactionFailures`, `contextGeneration`, `standingPrompt` — SHA-256 hash and
   metadata only, never raw prompt text — and `sessionSummary` for summary-backed idle session

@@ -9,20 +9,8 @@ import { escapePathIdentity, isSafePathScope } from "./path-scope";
 
 const logger = getLogger(["coforge", "daemon", "agent-state-db"]);
 
-/** The schema this build writes. A database that reports a higher one is refused, not migrated. */
 const SCHEMA_VERSION = 1;
 
-/**
- * The durable per-Agent ledger (`agent-state/<agentId>/state.db`, modeled on Raft's): one row per
- * conversation for the consumed cursor and for a held send's draft. WAL + `synchronous=NORMAL`
- * trades a checkpoint's worth of durability for single-statement commits fast enough that no
- * batching or stop-time flush exists — every write commits when it happens.
- *
- * The database lives in CoForge's own state directory, not `/tmp`: the cursor decides held sends
- * and the draft re-arms a stopped Agent's pending notice, so both are daemon state, not CLI
- * scratch. The first open imports the legacy JSON files (which did live under `/tmp`) in one
- * transaction and removes them once the commit lands.
- */
 export class AgentStateDb {
   readonly #db: Database;
 
@@ -74,6 +62,16 @@ export class AgentStateDb {
         reviewed_seq INTEGER,
         exact_seqs TEXT NOT NULL DEFAULT '[]'
       );
+      CREATE TABLE IF NOT EXISTS scoped_consumed_seqs (
+        target TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        thread_root_id TEXT NOT NULL,
+        seq INTEGER,
+        read_order INTEGER,
+        reviewed_seq INTEGER,
+        exact_seqs TEXT NOT NULL DEFAULT '[]',
+        PRIMARY KEY (conversation_id, thread_root_id)
+      ) WITHOUT ROWID;
       CREATE TABLE IF NOT EXISTS consumed_seq_aliases (
         spelling TEXT PRIMARY KEY,
         canonical TEXT NOT NULL

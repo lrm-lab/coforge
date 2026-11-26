@@ -2,6 +2,12 @@ import type { Database } from "bun:sqlite";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { normalizeSeenExactSeqs } from "@lrm/coforge-sdk/internal";
+import {
+  legacyConsumedSeqProjection,
+  readScopedConsumedSeqs,
+  reconcileLegacyConsumedSeqs,
+  upsertScopedConsumedSeqs,
+} from "./agent-scoped-consumed-seqs";
 import { AgentStateDb } from "./agent-state-db";
 import { escapePathIdentity, isSafePathScope } from "./path-scope";
 
@@ -20,11 +26,13 @@ export type AgentConsumedSeqEntry = Readonly<{
    * `SEEN_EXACT_SEQS_LIMIT`. A send reports them as `seenExactSeqs` so its freshness check does
    * not count them as unreviewed. */
   exactSeqs?: readonly number[];
-  /** The conversation the cursor's sequences count in. A channel recreated under the same name is
-   * another conversation whose sequences restart, so a delivery from a different conversation
-   * starts the target over. An entry without one is dropped on read: it cannot say whose
-   * sequences it holds. */
   conversationId?: string;
+}>;
+
+export type AgentScopedConsumedSeqTarget = Readonly<{
+  target: string;
+  entry: AgentConsumedSeqEntry;
+  threadRootId?: string;
 }>;
 
 /** The `consumed_seqs`/`consumed_seq_aliases` row set as one state: a `targets` map, the
@@ -37,6 +45,7 @@ export type AgentConsumedSeqState = Readonly<{
    * target. */
   aliases: Readonly<Record<string, string>>;
   nextReadOrder: number;
+  scopedTargets?: readonly AgentScopedConsumedSeqTarget[];
 }>;
 
 export type AgentConsumedSeqDelta = Readonly<{
@@ -44,6 +53,7 @@ export type AgentConsumedSeqDelta = Readonly<{
     target: string;
     entry: AgentConsumedSeqEntry;
   }>[];
+  upsertScopedTargets?: readonly AgentScopedConsumedSeqTarget[];
   deleteTargets?: readonly string[];
   upsertAliases?: readonly Readonly<{
     spelling: string;
@@ -165,6 +175,12 @@ export class AgentConsumedSeqStore implements AgentConsumedSeqPort {
     const existing = this.#dbs.get(agentId);
     if (existing) return existing;
     const db = AgentStateDb.open(this.#root, agentId);
+    try {
+      reconcileLegacyConsumedSeqs(db.database);
+    } catch (error) {
+      db.close();
+      throw error;
+    }
     this.#dbs.set(agentId, db);
     return db;
   }
@@ -176,40 +192,50 @@ export class AgentConsumedSeqStore implements AgentConsumedSeqPort {
 
   read(agentId: string): AgentConsumedSeqState {
     if (!isSafePathScope(agentId)) throw new Error("invalid consumed-sequence Agent scope");
-    let rows: ConsumedSeqRow[];
-    let aliasRows: { spelling: string; canonical: string }[];
     try {
       const db = this.stateDb(agentId).database;
-      rows = db.query(SELECT_TARGETS_SQL).all() as ConsumedSeqRow[];
-      aliasRows = db.query(SELECT_ALIASES_SQL).all() as {
-        spelling: string;
-        canonical: string;
-      }[];
+      const [rows, aliasRows, scopedTargets] = db.transaction(
+        () =>
+          [
+            db.query<ConsumedSeqRow, []>(SELECT_TARGETS_SQL).all(),
+            db.query<{ spelling: string; canonical: string }, []>(SELECT_ALIASES_SQL).all(),
+            readScopedConsumedSeqs(db),
+          ] as const,
+      )();
+      return shapeState(rows, aliasRows, scopedTargets);
     } catch {
       return { targets: {}, aliases: {}, nextReadOrder: 1 };
     }
-    return shapeState(rows, aliasRows);
   }
 
   apply(agentId: string, delta: AgentConsumedSeqDelta): void {
     if (!isSafePathScope(agentId)) throw new Error("invalid consumed-sequence Agent scope");
     const targets: PersistableTargetRow[] = [];
-    if (delta.upsertTargets) {
-      for (const { target, entry } of delta.upsertTargets) {
-        if (entry.conversationId) {
-          targets.push({ target, entry, conversationId: entry.conversationId });
-        }
-      }
+    const scopedTargets = delta.upsertScopedTargets ?? [];
+    const deleteTargets = [...(delta.deleteTargets ?? [])];
+    for (const { target, entry } of delta.upsertTargets ?? []) {
+      const { conversationId } = entry;
+      if (!conversationId) continue;
+      const projection =
+        scopedTargets.length > 0
+          ? legacyConsumedSeqProjection(target, conversationId, scopedTargets)
+          : "upsert";
+      if (projection === "clear") deleteTargets.push(target);
+      if (projection === "upsert") targets.push({ target, entry, conversationId });
     }
-    const deleteTargets = delta.deleteTargets ?? [];
     const upsertAliases = delta.upsertAliases ?? [];
     const deleteAliases = delta.deleteAliases ?? [];
     const opCount =
-      targets.length + deleteTargets.length + upsertAliases.length + deleteAliases.length;
+      targets.length +
+      scopedTargets.length +
+      deleteTargets.length +
+      upsertAliases.length +
+      deleteAliases.length;
     if (opCount === 0) return;
 
     const db = this.stateDb(agentId).database;
     const runOps = () => {
+      upsertScopedConsumedSeqs(db, scopedTargets);
       if (targets.length > 0) {
         const upsert = db.query(UPSERT_TARGET_SQL);
         for (const { target, entry, conversationId } of targets) {
@@ -237,11 +263,9 @@ export class AgentConsumedSeqStore implements AgentConsumedSeqPort {
       }
     };
 
-    if (opCount === 1) {
-      runOps();
-      return;
-    }
-    db.transaction(runOps)();
+    if (scopedTargets.length > 0) db.transaction(runOps).immediate();
+    else if (opCount === 1) runOps();
+    else db.transaction(runOps)();
   }
 
   write(agentId: string, state: AgentConsumedSeqState): void {
@@ -292,9 +316,12 @@ export class AgentConsumedSeqStore implements AgentConsumedSeqPort {
 function shapeState(
   rows: ConsumedSeqRow[],
   aliasRows: { spelling: string; canonical: string }[],
+  scopedTargets: AgentScopedConsumedSeqTarget[],
 ): AgentConsumedSeqState {
   const targets: Record<string, AgentConsumedSeqEntry> = {};
   let maxObservedOrder = 0;
+  for (const { entry } of scopedTargets)
+    maxObservedOrder = Math.max(maxObservedOrder, entry.readOrder ?? 0);
   for (const row of rows) {
     if (!row.target || typeof row.conversation_id !== "string" || !row.conversation_id) continue;
     const seq = positiveFiniteNumber(row.seq ?? undefined);
@@ -335,7 +362,7 @@ function shapeState(
     }
     if (canonical !== spelling) aliases[spelling] = canonical;
   }
-  return { targets, aliases, nextReadOrder: maxObservedOrder + 1 };
+  return { targets, aliases, scopedTargets, nextReadOrder: maxObservedOrder + 1 };
 }
 
 function deleteUnlistedTargets(db: Database, rows: readonly PersistableTargetRow[]): void {

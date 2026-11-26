@@ -70,7 +70,10 @@ test("writes one row per target and reads the state back", async () => {
   // Every write is committed when it happens — no delay, no flush.
   expect(await readdir(join(stateDirectory, "agent-state", "agent-1"))).toContain("state.db");
   expect(cursorRows(stateDirectory)).toHaveLength(2);
-  expect(new AgentConsumedSeqStore(stateDirectory).read("agent-1")).toEqual(state);
+  expect(new AgentConsumedSeqStore(stateDirectory).read("agent-1")).toEqual({
+    ...state,
+    scopedTargets: [{ target: "@ada", entry: state.targets["@ada"] }],
+  });
   store.close();
 });
 
@@ -201,6 +204,18 @@ test("the first open imports the legacy JSON cursor and deletes the file", async
         "@bea": { conversationId: "conversation-1", readOrder: 3, reviewedSeq: 4 },
       },
       aliases: { "@ADA": "@ada" },
+      scopedTargets: [
+        {
+          target: "@bea",
+          entry: {
+            conversationId: "conversation-1",
+            seq: 7,
+            exactSeqs: [9],
+            readOrder: 3,
+            reviewedSeq: 4,
+          },
+        },
+      ],
       nextReadOrder: 4,
     });
     expect(existsSync(legacyPath)).toBe(false);
@@ -402,6 +417,20 @@ test("apply updates and deletes only named targets and aliases while preserving 
       "@cyd": { conversationId: "conversation-3", seq: 2, exactSeqs: [5] },
     },
     aliases: { "@ADA": "@ada", "@CYD": "@cyd" },
+    scopedTargets: [
+      {
+        target: "@ada",
+        entry: {
+          conversationId: "conversation-1",
+          seq: 9,
+          exactSeqs: [11, 13],
+          readOrder: 5,
+          reviewedSeq: 9,
+        },
+      },
+      { target: "@bea", entry: { conversationId: "conversation-2", seq: 4 } },
+      { target: "@cyd", entry: { conversationId: "conversation-3", seq: 2, exactSeqs: [5] } },
+    ],
     nextReadOrder: 6,
   });
 
@@ -431,6 +460,21 @@ test("apply updates and deletes only named targets and aliases while preserving 
       "@cyd": { conversationId: "conversation-3-recreated", seq: 1 },
     },
     aliases: { "@ADA": "@ada", "@CYD": "@cyd" },
+    scopedTargets: [
+      {
+        target: "@ada",
+        entry: {
+          conversationId: "conversation-1",
+          seq: 9,
+          exactSeqs: [11, 13, 15],
+          readOrder: 5,
+          reviewedSeq: 9,
+        },
+      },
+      { target: "@bea", entry: { conversationId: "conversation-2", seq: 4 } },
+      { target: "@cyd", entry: { conversationId: "conversation-3", seq: 2, exactSeqs: [5] } },
+      { target: "@cyd", entry: { conversationId: "conversation-3-recreated", seq: 1 } },
+    ],
     nextReadOrder: 6,
   });
 
