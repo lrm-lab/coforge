@@ -8,9 +8,6 @@ import { requireRuntimeProvider, type RuntimeProvider } from "@lrm/coforge-sdk/i
 import { modelMetadata } from "#src/features/computers/computer-model-metadata";
 import { machineStatusView } from "#src/features/computers/computer-machine-status";
 import { readCloudComputerImages } from "#src/server/hosts/cloud-image-inventory.server";
-import { productionCloudComputers } from "#src/server/hosts/host-production.server";
-import { HostDirectoryError } from "#src/server/hosts/host-directory.server";
-import { HostJobError } from "#src/server/hosts/host-jobs.server";
 
 import {
   computerIdInputSchema,
@@ -19,17 +16,13 @@ import {
   scanAgentWorkspacesInputSchema,
   setRuntimeVisibilityInputSchema,
   updateComputerDisplayNameInputSchema,
-  formatCloudComputerInputSchema,
 } from "./computer.schemas";
 import { declareNoStore } from "#src/features/no-store-response.server";
 import {
   workspaceUserMiddleware,
   type WorkspaceUserContext,
 } from "#src/features/auth/function-auth";
-import {
-  createCentrifugoServerApi,
-  reconnectDaemon,
-} from "#src/server/centrifugo/server-api.server";
+import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 import { getComputerConnectRefusals } from "#src/server/centrifugo/computer-connect-refusals.server";
 import { readListRuntimeUsages } from "#src/server/computers/computer-list-usage.server";
@@ -62,8 +55,6 @@ import {
 import { getAgentDisplay } from "#src/server/agents/agent-display.server";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
-import { DaemonCredentialRevocations } from "#src/server/db/repositories/daemon-credential-revocation.repositories.server";
-import { getWorkspaceComputerInvalidation } from "#src/server/agents/workspace-computer-invalidation.server";
 
 function runtimeVisibility(db: WorkspaceUserContext["db"]) {
   const control = new AgentControl(
@@ -75,6 +66,7 @@ function runtimeVisibility(db: WorkspaceUserContext["db"]) {
 }
 
 export { listComputerNames } from "./computer-list-names.functions";
+export { deleteComputer, formatCloudComputer } from "./computer-lifecycle.functions";
 
 export const listComputers = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
@@ -393,90 +385,6 @@ export const updateComputerDisplayName = createServerFn({ method: "POST" })
     });
     if (result.count !== 1) throw new Error("Computer is not available");
     return { displayName: data.displayName };
-  });
-
-/** Queues a disk format for the owner's cloud computer. The typed name is checked again. */
-export const formatCloudComputer = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(formatCloudComputerInputSchema)
-  .handler(async ({ context: { user, db, workspaceId }, data }) => {
-    try {
-      await productionCloudComputers(db).format({
-        userId: user.id,
-        workspaceId,
-        computerId: data.computerId,
-        confirmName: data.confirmName,
-        now: new Date(),
-      });
-    } catch (error) {
-      if (error instanceof HostJobError || error instanceof HostDirectoryError) {
-        throw new Error(error.message);
-      }
-      throw error;
-    }
-    return { formatted: true as const };
-  });
-
-/** Permanently removes an owner's Computer record after all of its Agents are soft-deleted. */
-export const deleteComputer = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(computerIdInputSchema)
-  .handler(async ({ context: { user, db, workspaceId }, data }) => {
-    const computer = await db.computer.findFirst({
-      where: {
-        id: data.computerId,
-        ownerId: user.id,
-        workspaces: { some: { workspaceId } },
-      },
-      select: {
-        id: true,
-        kind: true,
-        cloudSlot: true,
-        agents: { where: { deletedAt: null }, select: { id: true }, take: 1 },
-        workspaces: { select: { workspaceId: true } },
-      },
-    });
-    if (!computer) throw new Error("Computer is not available");
-    if (computer.kind === "cloud" && computer.cloudSlot === "default") {
-      throw new Error("The default cloud computer cannot be deleted");
-    }
-    if (computer.agents.length > 0)
-      throw new Error("Delete all Agents on this Computer before deleting the Computer");
-    if (computer.kind === "cloud" && computer.cloudSlot === "extra") {
-      try {
-        await productionCloudComputers(db).deleteExtra({
-          userId: user.id,
-          workspaceId,
-          computerId: computer.id,
-          now: new Date(),
-        });
-      } catch (error) {
-        if (error instanceof HostJobError || error instanceof HostDirectoryError) {
-          throw new Error(error.message);
-        }
-        throw error;
-      }
-      // The delete job and the soft delete committed inside `deleteExtra`: every cached
-      // ownership answer for this Computer is stale now.
-      getWorkspaceComputerInvalidation().notify(computer.id);
-      return { deleted: false as const };
-    }
-    await db.$transaction(async (tx) => {
-      for (const binding of computer.workspaces)
-        await DaemonCredentialRevocations.recordForComputer(tx, {
-          workspaceId: binding.workspaceId,
-          computerId: computer.id,
-        });
-      await tx.computer.delete({ where: { id: computer.id } });
-    });
-    const api = createCentrifugoServerApi();
-    getWorkspaceComputerInvalidation().notify(computer.id);
-    await Promise.all(
-      computer.workspaces.map(({ workspaceId: boundWorkspaceId }) =>
-        reconnectDaemon(api, boundWorkspaceId, computer.id),
-      ),
-    );
-    return { deleted: true as const };
   });
 
 function runtimeProvider(value: string): RuntimeProvider {
