@@ -165,7 +165,7 @@ test("a real old→new→old→new switch retains A=31, advances B=5→7 and pre
       await reupgrade.attention.receive(taskDelivery(oldConversation, 32));
       expect(reupgrade.notices).toHaveLength(2);
       await reupgrade.attention.receive(
-        taskDelivery("unrelated-conversation", 6, "New unscoped-history task", rollbackDraftTarget),
+        taskDelivery(crypto.randomUUID(), 6, "New unscoped-history task", rollbackDraftTarget),
       );
       expect(reupgrade.notices).toHaveLength(3);
     } finally {
@@ -213,7 +213,7 @@ async function interruptUpgrade(stateDirectory: string, delayMs: number): Promis
 
 test("a SIGKILL during a database upgrade leaves the old state usable and the upgrade retry complete", async () => {
   const witnesses = Array.from({ length: 2048 }, (_, index) =>
-    taskDelivery(`migration-conversation-${index}`, 31, "Old reply", `#migration:#${index + 1}`),
+    taskDelivery(crypto.randomUUID(), 31, "Old reply", `#migration:#${index + 1}`),
   );
   const rows = witnesses.map((message) => ({
     target: message.target,

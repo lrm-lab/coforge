@@ -10,8 +10,8 @@ import { session } from "./attention-delivery";
 
 export const agentId = `read-position-${crypto.randomUUID()}`;
 export const taskTarget = "#acceptance:#42";
-export const oldConversation = "conversation-a";
-export const newConversation = "conversation-b";
+export const oldConversation = "8ad61c95-95b8-42d4-9589-251fc12b8091";
+export const newConversation = "c5181840-668c-4feb-9b35-b43e4a3df7e4";
 
 export function temporaryReadPositionState() {
   const path = mkdtempSync(join(realpathSync(tmpdir()), "coforge-read-position-"));
