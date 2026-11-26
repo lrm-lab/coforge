@@ -43,7 +43,34 @@ test("a submenu opens inside the viewport on a phone and beside its menu on a de
     `document.querySelector('${selector}')?.closest("[data-trigger]")?.getAnimations().every((animation) => animation.playState !== "running") === true`;
   const filterMenu = `[role="menu"][aria-label="Filter"]`;
   const ownerMenu = `[role="menu"][aria-label="Owner"]`;
-  async function openOwner(width: number, height: number) {
+  const ownerRow = `[...document.querySelectorAll('${filterMenu} [role="menuitem"]')].find((el) => el.textContent.includes("Owner"))`;
+  const movePointerIntoOwnerMenu = async () => {
+    const item = `${ownerMenu} [role="menuitemcheckbox"], ${ownerMenu} [role="menuitem"]`;
+    const target = await evaluate<[number, number]>(
+      `(() => { const b = document.querySelector(${JSON.stringify(item)}).getBoundingClientRect(); return [Math.round(b.x + b.width / 2), Math.round(b.y + b.height / 2)]; })()`,
+    );
+    const owner0 = await evaluate<[number, number]>(
+      `(() => { const b = ${ownerRow}.getBoundingClientRect(); return [Math.round(b.x + b.width / 2), Math.round(b.y + b.height / 2)]; })()`,
+    );
+    for (let step = 1; step <= 6; step += 1)
+      await browser(
+        "mouse",
+        "move",
+        String(Math.round(owner0[0] + ((target[0] - owner0[0]) * step) / 6)),
+        String(Math.round(owner0[1] + ((target[1] - owner0[1]) * step) / 6)),
+      );
+    await Bun.sleep(350);
+    expect(await evaluate<boolean>(`document.querySelector('${ownerMenu}') !== null`)).toBe(true);
+  };
+  const assertHoverDoesNotOpenOwner = async () => {
+    await browser("find", "role", "menuitem", "hover", "--name", "Owner");
+    await Bun.sleep(400);
+    expect(await evaluate<boolean>(`document.querySelector('${ownerMenu}') === null`)).toBe(true);
+    expect(await evaluate<string | null>(`${ownerRow}?.getAttribute("aria-expanded")`)).toBe(
+      "false",
+    );
+  };
+  async function openOwner(width: number, height: number, verifyHoverClosed = false) {
     await browser("set", "viewport", String(width), String(height));
     await browser(
       "open",
@@ -57,6 +84,7 @@ test("a submenu opens inside the viewport on a phone and beside its menu on a de
     await browser("find", "role", "button", "click", "--name", "Filter");
     await browser("wait", "--fn", `document.querySelector('${filterMenu}') !== null`);
     await browser("wait", "--fn", settled(filterMenu));
+    if (verifyHoverClosed) await assertHoverDoesNotOpenOwner();
     await browser("find", "role", "menuitem", "click", "--name", "Owner");
     await browser("wait", "--fn", `document.querySelector('${ownerMenu}') !== null`);
     await browser("wait", "--fn", settled(ownerMenu));
@@ -75,30 +103,18 @@ test("a submenu opens inside the viewport on a phone and beside its menu on a de
     await browser("press", "Escape");
     await browser("find", "role", "button", "click", "--name", "Filter");
     await browser("wait", "--fn", `document.querySelector('${filterMenu}') !== null`);
-    await browser("find", "role", "menuitem", "hover", "--name", "Owner");
+    await browser("wait", "--fn", settled(filterMenu));
+    await assertHoverDoesNotOpenOwner();
+    await browser("find", "role", "menuitem", "click", "--name", "Owner");
     await browser("wait", "--fn", `document.querySelector('${ownerMenu}') !== null`);
     await browser("wait", "--fn", settled(ownerMenu));
-    const item = `${ownerMenu} [role="menuitemcheckbox"], ${ownerMenu} [role="menuitem"]`;
-    const target = await evaluate<[number, number]>(
-      `(() => { const b = document.querySelector(${JSON.stringify(item)}).getBoundingClientRect(); return [Math.round(b.x + b.width / 2), Math.round(b.y + b.height / 2)]; })()`,
-    );
-    const owner0 = await evaluate<[number, number]>(
-      `(() => { const b = [...document.querySelectorAll('${filterMenu} [role="menuitem"]')].find((el) => el.textContent.includes("Owner")).getBoundingClientRect(); return [Math.round(b.x + b.width / 2), Math.round(b.y + b.height / 2)]; })()`,
-    );
-    for (let step = 1; step <= 6; step += 1)
-      await browser(
-        "mouse",
-        "move",
-        String(Math.round(owner0[0] + ((target[0] - owner0[0]) * step) / 6)),
-        String(Math.round(owner0[1] + ((target[1] - owner0[1]) * step) / 6)),
-      );
-    await Bun.sleep(300);
-    expect(await evaluate<boolean>(`document.querySelector('${ownerMenu}') !== null`)).toBe(true);
+    await movePointerIntoOwnerMenu();
 
-    await openOwner(1440, 900);
+    await openOwner(1440, 900, true);
     const [menu, beside] = [await box(filterMenu), await box(ownerMenu)];
     expect(beside.left).toBeGreaterThanOrEqual(menu.right - 8);
     await browser("screenshot", join(artifacts, "desktop.png"));
+    await movePointerIntoOwnerMenu();
   } finally {
     await browser("close").catch(() => undefined);
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => undefined);
