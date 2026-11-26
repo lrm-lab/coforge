@@ -77,6 +77,7 @@ export function CascadeMenuProvider({
   openPathRef.current = openPath;
 
   const pointerTrailRef = useRef<PointerTrail>({ previous: null, current: null });
+  const openedByHoverRef = useRef(false);
   const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openTimerRowRef = useRef<{ depth: number; rowId: string } | null>(null);
   const safeWindowIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -126,6 +127,7 @@ export function CascadeMenuProvider({
   useEffect(() => {
     if (!isRootOpen) {
       clearAllTimers();
+      openedByHoverRef.current = false;
       setOpenPath([]);
       setHoveredByDepth({});
       setSkippedByDepth({});
@@ -161,6 +163,7 @@ export function CascadeMenuProvider({
   const closeAll = useCallback(
     (restoreFocus = false) => {
       clearAllTimers();
+      openedByHoverRef.current = false;
       setOpenPath([]);
       setHoveredByDepth({});
       setSkippedByDepth({});
@@ -178,6 +181,7 @@ export function CascadeMenuProvider({
       clearOpenTimer();
       clearSafeWindow();
       clearCloseTimer();
+      openedByHoverRef.current = false;
       setSkippedByDepth((prev) => ({ ...prev, [depth]: null }));
       commitDepthSelection(depth, submenuId);
       setTimerBadge(null);
@@ -189,6 +193,9 @@ export function CascadeMenuProvider({
     (depth: number) => {
       clearOpenTimer();
       clearSafeWindow();
+      if (depth === 0) {
+        openedByHoverRef.current = false;
+      }
       setOpenPath((prev) => prev.slice(0, depth));
       setHoveredByDepth((prev) => {
         const next: Record<number, string | null> = {};
@@ -238,16 +245,42 @@ export function CascadeMenuProvider({
   );
 
   const onRowPointerEnter = useCallback(
-    (depth: number, rowId: string, submenuId: string | null, pointerType: string, point: Point) => {
+    (
+      depth: number,
+      rowId: string,
+      submenuId: string | null,
+      pointerType: string,
+      point: Point,
+      openOnHover = true,
+    ) => {
       clearCloseTimer();
       pointerTrailRef.current = pushPointerPoint(pointerTrailRef.current, point);
 
       if (pointerType === "touch") {
         clearOpenTimer();
         clearSafeWindow();
+        openedByHoverRef.current = false;
         setSkippedByDepth((prev) => ({ ...prev, [depth]: null }));
         setHoveredByDepth((prev) => ({ ...prev, [depth]: rowId }));
         commitDepthSelection(depth, submenuId);
+        setTimerBadge(null);
+        return;
+      }
+
+      if (submenuId !== null && !openOnHover) {
+        clearOpenTimer();
+        clearSafeWindow();
+        setSkippedByDepth((prev) => ({ ...prev, [depth]: null }));
+        setHoveredByDepth((prev) => ({ ...prev, [depth]: rowId }));
+        setTimerBadge(null);
+        return;
+      }
+
+      if (submenuId === null && openPathRef.current.length > depth && !openedByHoverRef.current) {
+        clearOpenTimer();
+        clearSafeWindow();
+        setSkippedByDepth((prev) => ({ ...prev, [depth]: null }));
+        setHoveredByDepth((prev) => ({ ...prev, [depth]: rowId }));
         setTimerBadge(null);
         return;
       }
@@ -303,6 +336,7 @@ export function CascadeMenuProvider({
           setSkippedByDepth((prev) => ({ ...prev, [pending.depth]: null }));
           setTimerBadge(null);
           if (decision === "commit") {
+            openedByHoverRef.current = pending.submenuId !== null;
             setHoveredByDepth((prev) => ({ ...prev, [pending.depth]: pending.rowId }));
             commitDepthSelection(pending.depth, pending.submenuId);
           }
@@ -333,6 +367,7 @@ export function CascadeMenuProvider({
       openTimerRef.current = setTimeout(() => {
         openTimerRef.current = null;
         openTimerRowRef.current = null;
+        openedByHoverRef.current = submenuId !== null;
         commitDepthSelection(depth, submenuId);
         setTimerBadge(null);
       }, CASCADE_MENU_TIMINGS.OPEN_DELAY_MS);
@@ -392,6 +427,7 @@ export function CascadeMenuProvider({
       openTimerRef.current = setTimeout(() => {
         openTimerRef.current = null;
         openTimerRowRef.current = null;
+        openedByHoverRef.current = true;
         commitDepthSelection(depth, submenuId);
         setTimerBadge(null);
       }, CASCADE_MENU_TIMINGS.DRAG_OPEN_DELAY_MS);
@@ -458,6 +494,14 @@ export function CascadeMenuProvider({
         setDebugZones(nextDebugZones);
       }
 
+      if (openPathRef.current.length === 0 || !openedByHoverRef.current) {
+        if (closeTimerRef.current !== null) {
+          clearCloseTimer();
+          setTimerBadge(null);
+        }
+        return;
+      }
+
       if (isPointInMenuOrBridge(point, rects, activeZones)) {
         if (closeTimerRef.current !== null) {
           clearCloseTimer();
@@ -471,7 +515,7 @@ export function CascadeMenuProvider({
         });
         closeTimerRef.current = setTimeout(() => {
           closeTimerRef.current = null;
-          closeAll(false);
+          closeFromDepth(0);
         }, CASCADE_MENU_TIMINGS.CLOSE_DELAY_MS);
       }
     };
@@ -481,7 +525,7 @@ export function CascadeMenuProvider({
   }, [
     clearCloseTimer,
     clearSafeWindow,
-    closeAll,
+    closeFromDepth,
     debugSafeZone,
     getZoneForDepth,
     isRootOpen,

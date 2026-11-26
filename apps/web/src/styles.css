@@ -5,6 +5,7 @@
 @import "./styles/sidebar-transition.css";
 @import "./styles/floating-foot-bar.css";
 @import "./styles/button-loading.css";
+@import "./styles/hover-motion.css";
 
 @plugin "@tailwindcss/typography";
 @plugin "tailwindcss-react-aria-components";

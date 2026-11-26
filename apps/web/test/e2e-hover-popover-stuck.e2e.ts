@@ -37,9 +37,7 @@ if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
 const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/hover-popover-stuck");
 
-/** HoverPopover's open delay: a brush shorter than this must not open the peek. */
-const OPEN_DELAY_MS = 250;
-/** React Aria's tooltip cool-down is 500ms; rest a good while longer. */
+const OPEN_DELAY_MS = 700;
 const COOL_DOWN_MS = 1500;
 const ROUNDS = 3;
 

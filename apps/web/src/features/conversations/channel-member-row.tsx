@@ -13,8 +13,10 @@ import { AgentStatusLine } from "#src/features/agents/agent-status-marker";
 import { useLiveAgentDisplay } from "#src/features/agents/workspace-agents-realtime";
 import type { AgentProfileTab as AgentProfileTabId } from "#src/features/agents/profile-panel/profile-panel-search";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { formatNumber } from "#src/lib/format-number";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { getLocale } from "#src/paraglide/runtime";
 import type { RosterMember } from "./channel-members-query";
 import { PersonHoverCard } from "./person-hover-card";
 
@@ -67,8 +69,9 @@ export const MemberRow = memo(function MemberRow({
     "shrink-0 rounded-[0.4375rem] outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2";
   const namePress = () => onOpenProfile({ kind: member.kind, id: member.id });
   const nameBlock = (
-    <span className="min-w-0 text-left">
+    <span className="min-w-0 flex-1 text-start">
       <span
+        dir="auto"
         className={cn(
           "block truncate text-sm text-primary",
           member.kind === "user" ? "font-semibold" : "font-medium",
@@ -130,7 +133,7 @@ export const MemberRow = memo(function MemberRow({
             : m.member_person_open_profile({ name: member.displayName })
         }
         autoFocus={autoFocus}
-        className="flex min-w-0 cursor-pointer items-center rounded-md outline-focus-ring focus-visible:outline-2"
+        className="flex min-w-0 flex-1 cursor-pointer items-center rounded-md outline-focus-ring focus-visible:outline-2"
         onPress={namePress}
       >
         {nameBlock}
@@ -175,15 +178,16 @@ export const MemberRow = memo(function MemberRow({
           {badge && (
             <span
               className={cn(
-                "col-start-1 row-start-1 flex",
-                hasActions && "group-focus-within:opacity-0 group-hover:opacity-0",
+                "col-start-1 row-start-1 flex transition-opacity duration-(--duration-label-out) ease-in",
+                hasActions &&
+                  "group-focus-within:opacity-0 group-hover:opacity-0 group-hover:duration-(--duration-label-in) group-hover:ease-out",
               )}
             >
               {badge}
             </span>
           )}
           {hasActions && (
-            <span className="col-start-1 row-start-1 flex items-center gap-1 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
+            <span className="col-start-1 row-start-1 flex items-center gap-1 opacity-0 transition-opacity duration-(--duration-label-out) ease-in group-focus-within:opacity-100 group-hover:opacity-100 group-hover:duration-(--duration-label-in) group-hover:ease-out">
               {canChangeRole && (
                 <Button
                   size="sm"
@@ -241,7 +245,7 @@ export function MemberGroup({
             )}
           />
           <span>
-            {label} · <span className="tabular-nums">{count}</span>
+            {label} · <span className="tabular-nums">{formatNumber(count, getLocale())}</span>
           </span>
         </AriaButton>
       </Heading>

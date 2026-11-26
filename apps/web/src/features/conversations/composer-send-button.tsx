@@ -5,6 +5,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { HotkeyKeycaps, useHotkeyAria } from "#src/components/ui/kbd";
+import { TooltipGroup } from "#src/components/ui/tooltip-group";
 import { useShortcutBindings } from "#src/features/shortcuts/shortcut-bindings";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
@@ -47,7 +48,7 @@ export const ComposerSendButton = memo(function ComposerSendButton({
     ? ({ color: "secondary" } as const)
     : ({ color: "primary", className: NEAR_BLACK_NOT_BRAND_VIOLET_SEND_CLASS } as const);
   return (
-    <div className={cx("flex items-center", className)}>
+    <TooltipGroup className={cx("flex items-center", className)}>
       <Tooltip title={label} isDisabled={isDisabled}>
         <Button
           type="submit"
@@ -108,6 +109,6 @@ export const ComposerSendButton = memo(function ComposerSendButton({
           </Dropdown.Popover>
         </Dropdown.Root>
       )}
-    </div>
+    </TooltipGroup>
   );
 });

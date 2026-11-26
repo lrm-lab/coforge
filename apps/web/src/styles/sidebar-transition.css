@@ -106,7 +106,20 @@ html:not(.sidebar-expanded)
     transform 140ms var(--ease-out);
 }
 
-[data-sidebar-resize-handle]:hover::after,
+@media (hover: hover) {
+  [data-sidebar-resize-handle]:hover::after {
+    inset-block: 4%;
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      color-mix(in srgb, var(--color-bg-brand-solid) 85%, transparent) 18%,
+      var(--color-bg-brand-solid) 50%,
+      color-mix(in srgb, var(--color-bg-brand-solid) 85%, transparent) 82%,
+      transparent 100%
+    );
+  }
+}
+
 [data-sidebar-resize-handle]:focus-visible::after,
 [data-sidebar-resize-handle][data-dragging]::after {
   inset-block: 4%;

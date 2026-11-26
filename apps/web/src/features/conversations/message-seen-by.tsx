@@ -10,6 +10,7 @@ import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { ActorAvatarStack, AVATAR_STACK_LIMIT } from "#src/features/avatars/actor-avatar-stack";
 import { AVATAR_STACK_RING } from "#src/features/avatars/avatar-stack-ring";
 import { formatMomentForDisplay } from "#src/lib/dates";
+import { formatNumber } from "#src/lib/format-number";
 import { cn } from "#src/lib/utils";
 import { useTimeFormat } from "#src/lib/time-format-context";
 import { useTimeZone } from "#src/lib/time-zone-context";
@@ -133,7 +134,6 @@ function undeliveredReason(reason: Undelivered["reason"]) {
   }
 }
 
-/** A row's face and name, and for an Agent that did not get the message, why under the name. */
 function ListedMember({
   reader,
   reason,
@@ -144,12 +144,20 @@ function ListedMember({
   size?: "xs" | "sm";
 }) {
   return (
-    <span className={cn("flex min-w-0 items-center", size === "sm" ? "gap-3" : "gap-2")}>
-      <ReaderAvatar reader={reader} size={size} />
-      <span className="flex min-w-0 flex-col">
-        <span className="truncate">{reader.label}</span>
+    <span
+      className={cn(
+        "flex min-w-0",
+        reason ? "items-start" : "items-center",
+        size === "sm" ? "gap-3" : "gap-2",
+      )}
+    >
+      <ReaderAvatar reader={reader} size={size} className={reason ? "mt-0.5" : undefined} />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span dir="auto" className="truncate">
+          {reader.label}
+        </span>
         {reason && (
-          <span className="text-xs whitespace-normal text-tertiary">
+          <span className="text-xs whitespace-normal wrap-anywhere text-tertiary">
             {undeliveredReason(reason)}
           </span>
         )}
@@ -168,10 +176,10 @@ function SeenSummary({
   undelivered: number;
 }) {
   return (
-    <span className="flex min-w-0 grow flex-col text-left">
+    <span className="flex min-w-0 grow flex-col text-start tabular-nums">
       <span className="truncate">{seenLabel(count, failed)}</span>
       {undelivered > 0 && (
-        <span className="text-xs font-normal text-tertiary">
+        <span className="truncate text-xs font-normal text-tertiary">
           {m.conversation_seen_undelivered({ count: undelivered })}
         </span>
       )}
@@ -186,7 +194,7 @@ const seenLabel = (count: number | undefined, failed?: boolean) =>
       ? m.conversation_seen_loading()
       : count === 0
         ? m.empty_seen_by_none()
-        : m.conversation_seen_count({ count: String(count) });
+        : m.conversation_seen_count({ count: formatNumber(count, getLocale()) });
 
 export function MessageSeenByMenuEntry({
   conversationId,
@@ -208,7 +216,7 @@ export function MessageSeenByMenuEntry({
   ) : readers.length || undelivered.length ? (
     <Dropdown.SubmenuTrigger>
       <Dropdown.Item textValue={seenLabel(data?.count, failed)} icon={SeenIcon}>
-        <span className="flex items-center">
+        <span className="flex w-full min-w-0 items-center">
           <SeenSummary count={data?.count} failed={failed} undelivered={undelivered.length} />
           <ReaderFaces readers={readers} />
         </span>

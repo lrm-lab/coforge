@@ -17,6 +17,7 @@ export interface CascadeMenuContextValue {
     submenuId: string | null,
     pointerType: string,
     point: Point,
+    openOnHover?: boolean,
   ) => void;
   readonly onRowPointerLeave: (depth: number, rowId: string) => void;
   readonly clearHoverAtDepth: (depth: number) => void;
@@ -33,6 +34,7 @@ export interface CascadeSubmenuItemContextValue {
   readonly submenuId: string;
   readonly anchorName: string;
   readonly isSubmenuOpen: boolean;
+  readonly openOnHover: boolean;
   readonly triggerRef: RefObject<HTMLDivElement | null>;
   readonly openSubmenuNow: (focusFirstItem: boolean) => void;
   readonly popover: ReactNode;

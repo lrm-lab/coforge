@@ -379,7 +379,7 @@ export function ReportTabsEditor({
           aria-label={`${m.records_template_delete()}: ${name}`}
           isDisabled={tabNames.length <= 1}
           onClick={() => removeTab(name)}
-          className="pointer-events-none absolute -end-6 top-1 size-5 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 any-pointer-coarse:pointer-events-auto any-pointer-coarse:static any-pointer-coarse:size-9 any-pointer-coarse:opacity-100"
+          className="pointer-events-none absolute -end-6 top-1 size-5 opacity-0 transition-opacity duration-(--duration-label-out) ease-in before:pointer-events-auto before:absolute before:inset-y-0 before:-inset-s-2 before:w-2 before:content-[''] group-hover:pointer-events-auto group-hover:opacity-100 group-hover:duration-(--duration-label-in) group-hover:ease-out group-focus-within:pointer-events-auto group-focus-within:opacity-100 any-pointer-coarse:pointer-events-auto any-pointer-coarse:static any-pointer-coarse:size-9 any-pointer-coarse:opacity-100"
         />
       ) : null}
     </>
@@ -548,11 +548,17 @@ export function ReportTabsEditor({
 
 function TabLabel({ name }: { name: string }) {
   return (
-    <span className="inline-grid">
-      <span aria-hidden="true" className="invisible col-start-1 row-start-1 font-semibold">
+    <span className="inline-grid max-w-48">
+      <span
+        aria-hidden="true"
+        dir="auto"
+        className="invisible col-start-1 row-start-1 max-w-full truncate font-semibold"
+      >
         {name}
       </span>
-      <span className="col-start-1 row-start-1">{name}</span>
+      <span dir="auto" className="col-start-1 row-start-1 max-w-full truncate">
+        {name}
+      </span>
     </span>
   );
 }

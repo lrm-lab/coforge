@@ -1,8 +1,10 @@
+import { useEffect, useRef, useState } from "react";
 import { Pie, PieChart, Sector, Tooltip as RechartsTooltip } from "recharts";
 import type { PieSectorShapeProps, TooltipContentProps } from "recharts";
 import type { NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 import { ChartTooltipContent } from "#src/components/application/charts/charts-base";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
+import { createChartHoverController, type ChartHoverController } from "#src/lib/hover-intent";
 import { m } from "#src/paraglide/messages";
 import { formatExactTokens, formatUsagePercent } from "./agent-token-usage-model";
 
@@ -52,14 +54,28 @@ export default function ModelDistributionDonutChart({
   locale: string;
 }) {
   const prefersReducedMotion = usePrefersReducedMotion();
+  const [tooltipVisible, setTooltipVisible] = useState(false);
+  const hoverControllerRef = useRef<ChartHoverController | null>(null);
   const multiSlice = data.length > 1;
   const chartData = [...data];
+
+  useEffect(() => {
+    const controller = createChartHoverController({ onChange: setTooltipVisible });
+    hoverControllerRef.current = controller;
+    return () => {
+      controller.dispose();
+      if (hoverControllerRef.current === controller) {
+        hoverControllerRef.current = null;
+      }
+    };
+  }, []);
 
   function renderSector(props: PieSectorShapeProps) {
     return <DonutSector {...props} activeSliceIndex={activeIndex} />;
   }
 
   function renderTooltip(props: TooltipContentProps<ValueType, NameType>) {
+    if (!tooltipVisible) return null;
     return (
       <ChartTooltipContent
         {...props}
@@ -79,40 +95,56 @@ export default function ModelDistributionDonutChart({
   }
 
   return (
-    <PieChart
-      responsive
+    <div
       className="size-full"
-      margin={{ top: 4, right: 4, bottom: 4, left: 4 }}
-      role="img"
-      aria-label={m.agent_usage_models_chart_label()}
+      onPointerEnter={(event) => {
+        if (event.pointerType === "touch") {
+          setTooltipVisible(true);
+          return;
+        }
+        hoverControllerRef.current?.pointerEnter();
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "touch") return;
+        hoverControllerRef.current?.pointerLeave();
+      }}
     >
-      <Pie
-        data={chartData}
-        dataKey="effectiveTokens"
-        nameKey="label"
-        cx="50%"
-        cy="50%"
-        innerRadius="66%"
-        outerRadius="92%"
-        startAngle={90}
-        endAngle={-270}
-        paddingAngle={multiSlice ? 2 : 0}
-        cornerRadius={multiSlice ? 3 : 0}
-        minAngle={multiSlice ? 4 : 0}
-        stroke="none"
-        rootTabIndex={-1}
-        isAnimationActive={!prefersReducedMotion}
-        animationBegin={0}
-        animationDuration={450}
-        shape={renderSector}
-        onMouseEnter={(_, index) => onActiveIndexChange(index)}
-      />
-      <RechartsTooltip
-        content={renderTooltip}
-        allowEscapeViewBox={{ x: true, y: true }}
-        isAnimationActive={!prefersReducedMotion}
-        wrapperStyle={{ zIndex: 20, pointerEvents: "none" }}
-      />
-    </PieChart>
+      <PieChart
+        responsive
+        className="size-full"
+        margin={{ top: 4, right: 4, bottom: 4, left: 4 }}
+        role="img"
+        aria-label={m.agent_usage_models_chart_label()}
+      >
+        <Pie
+          data={chartData}
+          dataKey="effectiveTokens"
+          nameKey="label"
+          cx="50%"
+          cy="50%"
+          innerRadius="66%"
+          outerRadius="92%"
+          startAngle={90}
+          endAngle={-270}
+          paddingAngle={multiSlice ? 2 : 0}
+          cornerRadius={multiSlice ? 3 : 0}
+          minAngle={multiSlice ? 4 : 0}
+          stroke="none"
+          rootTabIndex={-1}
+          isAnimationActive={!prefersReducedMotion}
+          animationBegin={0}
+          animationDuration={450}
+          shape={renderSector}
+          onMouseEnter={(_, index) => onActiveIndexChange(index)}
+        />
+        <RechartsTooltip
+          content={renderTooltip}
+          allowEscapeViewBox={{ x: true, y: true }}
+          isAnimationActive={!prefersReducedMotion}
+          animationDuration={140}
+          wrapperStyle={{ zIndex: 20, pointerEvents: "none" }}
+        />
+      </PieChart>
+    </div>
   );
 }

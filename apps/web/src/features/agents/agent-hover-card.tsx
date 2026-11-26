@@ -144,17 +144,21 @@ function AgentCard({
           />
         )}
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <Heading slot="title" className="truncate text-sm font-semibold text-primary">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <Heading
+              slot="title"
+              dir="auto"
+              className="line-clamp-2 min-w-0 flex-1 text-sm font-semibold wrap-anywhere text-primary"
+            >
               {displayName}
             </Heading>
             {data?.appBot && (
-              <Badge size="sm" color="brand">
+              <Badge size="sm" color="brand" className="shrink-0">
                 {m.agent_bot_badge()}
               </Badge>
             )}
             {display && !view.alert && (
-              <span className="flex min-w-0 items-center gap-1 text-xs text-tertiary">
+              <span className="inline-flex max-w-full shrink-0 items-center gap-1 text-xs text-tertiary">
                 <AgentStatusMarker status={view} className="size-1.5 shrink-0" />
                 <span className="truncate">
                   <AgentStatusText status={view} />
@@ -167,14 +171,14 @@ function AgentCard({
               @{shownHandle}
             </p>
           )}
-          {/* A stop's sentence on lines of its own under the name: the card is where it reads
-              whole, while a list or a header cuts it to one line. */}
           {display && view.alert && (
-            <p className="mt-1 flex items-start gap-1 text-xs break-words text-error-primary">
+            <p className="mt-1 flex items-start gap-1 text-xs text-error-primary">
               <span className="flex h-4 shrink-0 items-center">
                 <AgentStatusMarker status={view} />
               </span>
-              <span className="min-w-0">{view.label}</span>
+              <span dir="auto" className="min-w-0 flex-1 wrap-anywhere">
+                {view.label}
+              </span>
             </p>
           )}
           {profile.isError ? (
@@ -183,9 +187,13 @@ function AgentCard({
             </p>
           ) : data?.appBot ? (
             <div className="mt-2 grid gap-1 border-t border-secondary pt-2 text-xs text-tertiary">
-              <p>{m.agent_bot_managed_by_app({ app: data.appBot.appName })}</p>
+              <p dir="auto" className="wrap-anywhere">
+                {m.agent_bot_managed_by_app({ app: data.appBot.appName })}
+              </p>
               {data.appBot.statusText && (
-                <p className="wrap-anywhere text-secondary">{data.appBot.statusText}</p>
+                <p dir="auto" className="wrap-anywhere text-secondary">
+                  {data.appBot.statusText}
+                </p>
               )}
             </div>
           ) : (
@@ -199,7 +207,7 @@ function AgentCard({
                     <span className="inline-flex max-w-full items-center gap-1.5 align-middle">
                       <RuntimeProviderMark
                         provider={data.runtimeConfig.runtime}
-                        className="size-3.5"
+                        className="size-3.5 shrink-0"
                       />
                       <span className="truncate">
                         {runtimeProviderLabel(data.runtimeConfig.runtime)}
@@ -219,7 +227,10 @@ function AgentCard({
         </div>
       </div>
       {data?.description && (
-        <p className="line-clamp-3 border-t border-secondary px-3 py-2 text-left text-xs text-tertiary">
+        <p
+          dir="auto"
+          className="line-clamp-3 border-t border-secondary px-3 py-2 text-start text-xs wrap-anywhere text-tertiary"
+        >
           {data.description}
         </p>
       )}

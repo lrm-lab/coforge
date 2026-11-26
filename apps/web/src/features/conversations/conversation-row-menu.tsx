@@ -171,7 +171,7 @@ export function ConversationRowMenu({
         {children}
         <Dropdown.Popover placement="bottom start">
           <Dropdown.Menu aria-label={m.conversation_menu_label()} onAction={handleAction}>
-            <Dropdown.SubmenuTrigger>
+            <Dropdown.SubmenuTrigger openOnHover={false}>
               <Dropdown.Item
                 id="move-section"
                 icon={Folder}
@@ -244,7 +244,7 @@ function NotifySubmenu({
   onAction: (key: unknown) => void;
 }) {
   return (
-    <Dropdown.SubmenuTrigger>
+    <Dropdown.SubmenuTrigger openOnHover={false}>
       <Dropdown.Item
         id="notify"
         icon={level === "muted" ? BellOff01 : Bell01}

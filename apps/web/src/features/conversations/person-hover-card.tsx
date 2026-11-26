@@ -119,9 +119,9 @@ function MemberOnlineStatus({ userId }: { userId: string }) {
   const online = useMemberOnline(userId);
   if (online === undefined) return null;
   return (
-    <span className="flex min-w-0 items-center gap-1 text-xs text-tertiary">
+    <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-xs text-tertiary">
       <StatusDot tone={online ? "online" : "offline"} className="size-1.5 shrink-0" />
-      <span className="truncate">{online ? m.member_online() : m.member_offline()}</span>
+      <span>{online ? m.member_online() : m.member_offline()}</span>
     </span>
   );
 }
@@ -151,15 +151,19 @@ function MemberProfileCard({
           <ActorAvatar presence={false} size="md" alt="" src={src ?? undefined} name={name} />
         )}
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <Heading slot="title" className="truncate text-sm font-semibold text-primary">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <Heading
+              slot="title"
+              dir="auto"
+              className="line-clamp-2 min-w-0 flex-1 text-sm font-semibold wrap-anywhere text-primary"
+            >
               {name}
             </Heading>
             {userId && <MemberOnlineStatus userId={userId} />}
           </div>
           {roleText && (
             <div className="mt-1">
-              <Badge size="sm" color="gray">
+              <Badge size="sm" color="gray" className="max-w-full shrink-0">
                 {roleText}
               </Badge>
             </div>
@@ -167,7 +171,10 @@ function MemberProfileCard({
         </div>
       </div>
       {description && (
-        <p className="border-t border-secondary px-3 py-2 text-xs text-secondary break-words line-clamp-3">
+        <p
+          dir="auto"
+          className="line-clamp-3 border-t border-secondary px-3 py-2 text-start text-xs wrap-anywhere text-secondary"
+        >
           {description}
         </p>
       )}

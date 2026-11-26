@@ -19,6 +19,12 @@ export const DURATION_MS = {
   mdOut: 200,
   lg: 400,
   lgOut: 280,
+  labelIn: 140,
+  labelOut: 60,
+  cardIn: 200,
+  cardOut: 120,
+  previewIn: 250,
+  previewOut: 140,
   reduced: 150,
 } as const;
 
@@ -29,5 +35,11 @@ export const DURATION_S = {
   mdOut: DURATION_MS.mdOut / 1000,
   lg: DURATION_MS.lg / 1000,
   lgOut: DURATION_MS.lgOut / 1000,
+  labelIn: DURATION_MS.labelIn / 1000,
+  labelOut: DURATION_MS.labelOut / 1000,
+  cardIn: DURATION_MS.cardIn / 1000,
+  cardOut: DURATION_MS.cardOut / 1000,
+  previewIn: DURATION_MS.previewIn / 1000,
+  previewOut: DURATION_MS.previewOut / 1000,
   reduced: DURATION_MS.reduced / 1000,
 } as const;

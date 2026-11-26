@@ -7,6 +7,7 @@ import {
 import { AVATAR_STACK_RING } from "#src/features/avatars/avatar-stack-ring";
 import { AvatarAddButton } from "#src/components/base/avatar/base-components/avatar-add-button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
+import { HoverCardGroup } from "#src/components/ui/hover-popover";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { AgentHoverCard } from "#src/features/agents/agent-hover-card";
 import {
@@ -52,77 +53,81 @@ export function ChannelHeaderFaces({
   return (
     <div className="flex shrink-0 items-center">
       {shown.length > 0 && (
-        <ActorAvatarStack className="hidden md:flex" aria-label={m.channel_settings_members()}>
-          {shown.map((entry) => {
-            const isAgent = Boolean(entry.agentId) || entry.kind === "agent";
-            const agentId = isAgent
-              ? (entry.agentId ?? entry.key.replace(/^agent:/, ""))
-              : undefined;
-            const userId = isAgent
-              ? undefined
-              : (entry.userId ??
-                (entry.key.startsWith("user:") ? entry.key.replace(/^user:/, "") : undefined));
-            const avatarNode = (
-              <>
-                <ActorAvatar
-                  presence
-                  agentId={agentId}
-                  userId={userId}
-                  size="xs"
-                  alt=""
-                  src={entry.avatarUrl ?? undefined}
-                  name={entry.displayName}
-                  className={AVATAR_STACK_RING.outline}
-                />
-                <span className="sr-only">{entry.displayName}</span>
-              </>
-            );
+        <HoverCardGroup>
+          <ActorAvatarStack className="hidden md:flex" aria-label={m.channel_settings_members()}>
+            {shown.map((entry) => {
+              const isAgent = Boolean(entry.agentId) || entry.kind === "agent";
+              const agentId = isAgent
+                ? (entry.agentId ?? entry.key.replace(/^agent:/, ""))
+                : undefined;
+              const userId = isAgent
+                ? undefined
+                : (entry.userId ??
+                  (entry.key.startsWith("user:") ? entry.key.replace(/^user:/, "") : undefined));
+              const avatarNode = (
+                <>
+                  <ActorAvatar
+                    presence
+                    agentId={agentId}
+                    userId={userId}
+                    size="xs"
+                    alt=""
+                    src={entry.avatarUrl ?? undefined}
+                    name={entry.displayName}
+                    className={AVATAR_STACK_RING.outline}
+                  />
+                  <span className="sr-only">{entry.displayName}</span>
+                </>
+              );
 
-            if (agentId) {
+              if (agentId) {
+                return (
+                  <AgentHoverCard
+                    key={entry.key}
+                    agentId={agentId}
+                    name={entry.displayName}
+                    handle={entry.name}
+                    src={entry.avatarUrl}
+                    trigger={avatarNode}
+                    triggerClassName="inline-flex shrink-0 items-center justify-center rounded-full p-0 leading-none"
+                    onOpenProfile={onOpenAgentProfile}
+                  />
+                );
+              }
+
               return (
-                <AgentHoverCard
+                <PersonHoverCard
                   key={entry.key}
-                  agentId={agentId}
-                  name={entry.displayName}
-                  handle={entry.name}
-                  src={entry.avatarUrl}
+                  label={entry.displayName}
                   trigger={avatarNode}
                   triggerClassName="inline-flex shrink-0 items-center justify-center rounded-full p-0 leading-none"
-                  onOpenProfile={onOpenAgentProfile}
+                  onPress={onOpenMembers}
+                  userId={userId}
+                  name={entry.displayName}
+                  loaded={{
+                    src: entry.avatarUrl,
+                    description: entry.description,
+                    serverRole: entry.serverRole,
+                    channelRole: entry.channelRole,
+                  }}
                 />
               );
-            }
-
-            return (
-              <PersonHoverCard
-                key={entry.key}
-                label={entry.displayName}
-                trigger={avatarNode}
-                triggerClassName="inline-flex shrink-0 items-center justify-center rounded-full p-0 leading-none"
-                onPress={onOpenMembers}
-                userId={userId}
-                name={entry.displayName}
-                loaded={{
-                  src: entry.avatarUrl,
-                  description: entry.description,
-                  serverRole: entry.serverRole,
-                  channelRole: entry.channelRole,
-                }}
-              />
-            );
-          })}
-          {more > 0 && (
-            <Tooltip title={m.channel_settings_members_more({ count: more })}>
-              <TooltipTrigger
-                className="inline-flex shrink-0 items-center justify-center rounded-full p-0 leading-none"
-                onPress={onOpenMembers}
-              >
-                <ActorAvatarStackMore more={more} />
-                <span className="sr-only">{m.channel_settings_members_more({ count: more })}</span>
-              </TooltipTrigger>
-            </Tooltip>
-          )}
-        </ActorAvatarStack>
+            })}
+            {more > 0 && (
+              <Tooltip title={m.channel_settings_members_more({ count: more })}>
+                <TooltipTrigger
+                  className="inline-flex shrink-0 items-center justify-center rounded-full p-0 leading-none"
+                  onPress={onOpenMembers}
+                >
+                  <ActorAvatarStackMore more={more} />
+                  <span className="sr-only">
+                    {m.channel_settings_members_more({ count: more })}
+                  </span>
+                </TooltipTrigger>
+              </Tooltip>
+            )}
+          </ActorAvatarStack>
+        </HoverCardGroup>
       )}
       {canAdd && (
         <AvatarAddButton

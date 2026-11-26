@@ -1,32 +1,17 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import type {
     ButtonProps as AriaButtonProps,
     TooltipProps as AriaTooltipProps,
     TooltipTriggerComponentProps as AriaTooltipTriggerComponentProps,
 } from "react-aria-components";
 import { Button as AriaButton, OverlayArrow as AriaOverlayArrow, Tooltip as AriaTooltip, TooltipTrigger as AriaTooltipTrigger } from "react-aria-components";
+import { useTooltipGroup } from "#src/components/ui/tooltip-group";
 import { cx } from "#src/utils/cx";
 
 interface TooltipProps extends AriaTooltipTriggerComponentProps, Omit<AriaTooltipProps, "children"> {
-    /**
-     * The title of the tooltip.
-     */
     title: ReactNode;
-    /**
-     * The description of the tooltip.
-     */
     description?: ReactNode;
-    /**
-     * Whether to show the arrow on the tooltip.
-     *
-     * @default false
-     */
     arrow?: boolean;
-    /**
-     * Delay in milliseconds before the tooltip is shown.
-     *
-     * @default 500
-     */
     delay?: number;
 }
 
@@ -47,13 +32,42 @@ export const Tooltip = ({
     onOpenChange,
     ...tooltipProps
 }: TooltipProps) => {
+    const group = useTooltipGroup();
+    const itemId = useId();
+    const isGrouped = group !== null && isOpen === undefined && defaultOpen === undefined;
     const isTopOrBottomLeft = ["top left", "top end", "bottom left", "bottom end"].includes(placement);
     const isTopOrBottomRight = ["top right", "top start", "bottom right", "bottom start"].includes(placement);
-    // Set negative cross offset for left and right placement to visually balance the tooltip.
     const calculatedCrossOffset = isTopOrBottomLeft ? -12 : isTopOrBottomRight ? 12 : 0;
 
+    const resolvedIsOpen = isGrouped ? group.activeId === itemId : isOpen;
+    const resolvedDelay = isGrouped ? 0 : delay;
+    const resolvedCloseDelay = isGrouped ? 0 : closeDelay;
+    const skipEnterMotion = isGrouped && group.instant;
+    const skipExitMotion = isGrouped && group.activeId !== null && group.activeId !== itemId;
+
+    const handleOpenChange = (nextOpen: boolean) => {
+        if (isGrouped) {
+            if (nextOpen) {
+                group.onTriggerOpenRequest(itemId, group.isKeyboardModality());
+            } else {
+                group.onTriggerCloseRequest(itemId, group.isKeyboardModality());
+            }
+        }
+        onOpenChange?.(nextOpen);
+    };
+
     return (
-        <AriaTooltipTrigger {...{ trigger, delay, closeDelay, isDisabled, isOpen, defaultOpen, onOpenChange }}>
+        <AriaTooltipTrigger
+            {...{
+                trigger,
+                delay: resolvedDelay,
+                closeDelay: resolvedCloseDelay,
+                isDisabled,
+                isOpen: resolvedIsOpen,
+                defaultOpen,
+                onOpenChange: handleOpenChange,
+            }}
+        >
             {children}
 
             <AriaTooltip
@@ -61,23 +75,26 @@ export const Tooltip = ({
                 offset={offset}
                 placement={placement}
                 crossOffset={crossOffset ?? calculatedCrossOffset}
-                className={({ isEntering, isExiting }) => cx("pointer-events-none", isEntering && "motion-enter-sm animate-in", isExiting && "motion-leave-sm animate-out")}
+                className={({ isEntering, isExiting }) =>
+                    cx(
+                        "pointer-events-none",
+                        isEntering && !skipEnterMotion && "motion-label-enter animate-in fade-in",
+                        isExiting && !skipExitMotion && "motion-label-leave animate-out fade-out",
+                    )
+                }
             >
                 {({ isEntering, isExiting }) => (
                     <div
                         className={cx(
-                            "pointer-events-none z-50 flex max-w-xs origin-(--trigger-anchor-point) flex-col items-start gap-1 rounded-lg bg-primary-solid px-3 shadow-lg will-change-transform",
+                            "pointer-events-none z-50 flex max-w-[min(20rem,calc(100vw-1.5rem))] origin-(--trigger-anchor-point) flex-col items-start gap-1 rounded-lg bg-primary-solid px-3 shadow-lg",
                             description ? "py-3" : "py-2",
-
-                            isEntering &&
-                                "motion-enter-sm animate-in fade-in zoom-in-95 in-placement-left:slide-in-from-right-0.5 in-placement-right:slide-in-from-left-0.5 in-placement-top:slide-in-from-bottom-0.5 in-placement-bottom:slide-in-from-top-0.5",
-                            isExiting &&
-                                "motion-leave-sm animate-out fade-out zoom-out-95 in-placement-left:slide-out-to-right-0.5 in-placement-right:slide-out-to-left-0.5 in-placement-top:slide-out-to-bottom-0.5 in-placement-bottom:slide-out-to-top-0.5",
+                            isEntering && !skipEnterMotion && "motion-label-enter animate-in fade-in",
+                            isExiting && !skipExitMotion && "motion-label-leave animate-out fade-out",
                         )}
                     >
-                        <span className="text-xs font-semibold text-white">{title}</span>
+                        <span className="max-w-full min-w-0 text-xs font-semibold wrap-anywhere text-white">{title}</span>
 
-                        {description && <span className="text-xs font-medium text-tooltip-supporting-text">{description}</span>}
+                        {description && <span className="max-w-full min-w-0 text-xs font-medium wrap-anywhere text-tooltip-supporting-text">{description}</span>}
 
                         {arrow && (
                             <AriaOverlayArrow>

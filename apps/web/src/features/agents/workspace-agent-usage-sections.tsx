@@ -297,7 +297,7 @@ export function UsageRow({
       </div>
 
       <div className="hidden min-w-0 justify-end @2xl/members:flex">
-        <Tooltip title={shareLabel} description={hoverDetail} delay={120} placement="top">
+        <Tooltip title={shareLabel} description={hoverDetail} placement="top">
           <TooltipTrigger
             onPress={openUsageProfile}
             className="relative z-10 cursor-pointer rounded-sm px-1.5 py-0.5 text-end text-sm font-semibold text-primary tabular-nums outline-focus-ring transition-colors hover:bg-secondary focus-visible:outline-2"

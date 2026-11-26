@@ -7,6 +7,7 @@ import {
 } from "react-aria-components";
 
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
+import { TooltipGroup } from "#src/components/ui/tooltip-group";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -21,11 +22,6 @@ import {
   type SwatchTooltipTransition,
 } from "./swatch-tooltip-state";
 
-/**
- * The colors a label may take, as a grid of round swatches. A radio group, so the arrow keys move
- * the pick and a screen reader reads each swatch as "<name>, selected". Enter inside the group
- * calls `onSubmit` (a radio has no use for it); a phone gets larger swatches to touch.
- */
 export function LabelColorSwatches({
   value,
   onChange,
@@ -36,18 +32,13 @@ export function LabelColorSwatches({
   value: string;
   onChange: (color: string) => void;
   onSubmit?: () => void;
-  /** A swatch clicked or tapped (not one the arrow keys moved to): for a menu that applies it. */
   onPick?: (color: string) => void;
   isDisabled?: boolean;
 }) {
   const desktop = useBreakpoint("md");
   return (
-    // The group takes no key or click handlers of its own, so a wrapper hears them.
     <div
-      // Captured: a swatch's press handling stops its click from bubbling up.
       onClickCapture={(event) => {
-        // A press lands on a swatch's label or dot (the label then clicks its input again, which
-        // is not heard twice).
         if (!(event.target instanceof Element) || event.target instanceof HTMLInputElement) return;
         const input = event.target.closest("label")?.querySelector("input");
         if (input) onPick?.(input.value);
@@ -58,18 +49,20 @@ export function LabelColorSwatches({
         onSubmit?.();
       }}
     >
-      <AriaRadioGroup
-        aria-label={m.tasks_label_color()}
-        value={value}
-        onChange={onChange}
-        isDisabled={isDisabled}
-        orientation="horizontal"
-        className="grid grid-cols-5 justify-items-center gap-2"
-      >
-        {LABEL_PALETTE.map((color) => (
-          <Swatch key={color} color={color} desktop={desktop} />
-        ))}
-      </AriaRadioGroup>
+      <TooltipGroup>
+        <AriaRadioGroup
+          aria-label={m.tasks_label_color()}
+          value={value}
+          onChange={onChange}
+          isDisabled={isDisabled}
+          orientation="horizontal"
+          className="grid grid-cols-5 justify-items-center gap-2"
+        >
+          {LABEL_PALETTE.map((color) => (
+            <Swatch key={color} color={color} desktop={desktop} />
+          ))}
+        </AriaRadioGroup>
+      </TooltipGroup>
     </div>
   );
 }

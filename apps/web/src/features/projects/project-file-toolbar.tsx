@@ -10,6 +10,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { styles as buttonStyles } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
+import { TooltipGroup } from "#src/components/ui/tooltip-group";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { FIND_MATCH_CAP } from "./find-in-text";
@@ -104,46 +105,48 @@ export function FindBar({
       >
         {formatMatchCount(matchCount, activeMatchIndex)}
       </span>
-      <Tooltip title={m.project_file_find_previous()}>
-        <Button
-          size="sm"
-          color="tertiary"
-          aria-label={m.project_file_find_previous()}
-          iconLeading={ChevronUp}
-          isDisabled={matchCount === 0}
-          onPress={onPrevious}
-        />
-      </Tooltip>
-      <Tooltip title={m.project_file_find_next()}>
-        <Button
-          size="sm"
-          color="tertiary"
-          aria-label={m.project_file_find_next()}
-          iconLeading={ChevronDown}
-          isDisabled={matchCount === 0}
-          onPress={onNext}
-        />
-      </Tooltip>
-      <Tooltip title={m.project_file_find_case()}>
-        <ToolbarToggle
-          aria-label={m.project_file_find_case()}
-          isSelected={caseSensitive}
-          onChange={onCaseSensitiveChange}
-          iconOnly={false}
-          className="px-2 text-xs font-semibold"
-        >
-          Aa
-        </ToolbarToggle>
-      </Tooltip>
-      <Tooltip title={m.project_file_find_close()}>
-        <Button
-          size="sm"
-          color="tertiary"
-          aria-label={m.project_file_find_close()}
-          iconLeading={XClose}
-          onPress={onClose}
-        />
-      </Tooltip>
+      <TooltipGroup className="flex items-center gap-0.5">
+        <Tooltip title={m.project_file_find_previous()}>
+          <Button
+            size="sm"
+            color="tertiary"
+            aria-label={m.project_file_find_previous()}
+            iconLeading={ChevronUp}
+            isDisabled={matchCount === 0}
+            onPress={onPrevious}
+          />
+        </Tooltip>
+        <Tooltip title={m.project_file_find_next()}>
+          <Button
+            size="sm"
+            color="tertiary"
+            aria-label={m.project_file_find_next()}
+            iconLeading={ChevronDown}
+            isDisabled={matchCount === 0}
+            onPress={onNext}
+          />
+        </Tooltip>
+        <Tooltip title={m.project_file_find_case()}>
+          <ToolbarToggle
+            aria-label={m.project_file_find_case()}
+            isSelected={caseSensitive}
+            onChange={onCaseSensitiveChange}
+            iconOnly={false}
+            className="px-2 text-xs font-semibold"
+          >
+            Aa
+          </ToolbarToggle>
+        </Tooltip>
+        <Tooltip title={m.project_file_find_close()}>
+          <Button
+            size="sm"
+            color="tertiary"
+            aria-label={m.project_file_find_close()}
+            iconLeading={XClose}
+            onPress={onClose}
+          />
+        </Tooltip>
+      </TooltipGroup>
     </div>
   );
 }

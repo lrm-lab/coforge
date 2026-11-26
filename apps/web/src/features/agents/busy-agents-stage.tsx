@@ -1,5 +1,6 @@
 import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import { HoverCardGroup } from "#src/components/ui/hover-popover";
 import { AvatarSticker } from "#src/features/avatars/avatar-sticker";
 import { useNearViewport } from "#src/hooks/use-near-viewport";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
@@ -13,7 +14,6 @@ import { AgentMascotView } from "./agent-mascot-view";
 import type { OpenAgentProfile } from "./profile-panel/open-agent-profile";
 import { useWorkspaceBusyAgents } from "./use-workspace-busy-agents";
 
-/** One mascot on the stage. It registers its element with the loop, which moves it. */
 function StageMascot({
   agent,
   resting,
@@ -22,7 +22,6 @@ function StageMascot({
   onOpenAgent,
 }: {
   agent: BusyAgent;
-  /** The Agent has stopped and is walking off: it acts out its rest. */
   resting: boolean;
   still: boolean;
   live: StageLive;
@@ -61,22 +60,12 @@ function StageMascot({
 const sameIds = (a: ReadonlySet<string>, b: ReadonlySet<string>) =>
   a.size === b.size && [...a].every((id) => b.has(id));
 
-/**
- * The busy Agents' stage (the Chat list's header, and a phone tab home's): up to five mascots slide
- * out from its end, work and wander a while, and slide back in to make room for others. Each is
- * the Agent's avatar anywhere else: hovering peeks at its card, pressing opens its profile. While
- * some wait off stage, a button at the end opens all of them. The cast is decided by `busy-agents-cast.ts`, the motion by
- * `busy-agents-motion.ts`, both run by `useStageLoop`, so React renders only when someone comes
- * on or goes off.
- */
 export const BusyAgentsStage = memo(
   function BusyAgentsStage({
     directAgentIds,
     onOpenAgent,
   }: {
-    /** Agents the viewer has a direct conversation with: they come first. */
     directAgentIds: ReadonlySet<string>;
-    /** The same function on every render, or the stage repaints with each one. */
     onOpenAgent: OpenAgentProfile;
   }) {
     const busy = useWorkspaceBusyAgents(directAgentIds);
@@ -95,7 +84,6 @@ export const BusyAgentsStage = memo(
     );
     useStageLoop({ live, stage, visible, busy: ids, reduced, setMembers });
 
-    // A stopped Agent still walks off: it keeps the last picture it had, acting out its rest.
     const known = useRef(new Map<string, BusyAgent>());
     for (const agent of busy) known.current.set(agent.id, agent);
     const busyIds = useMemo(() => new Set(ids), [ids]);
@@ -103,23 +91,25 @@ export const BusyAgentsStage = memo(
     if (busy.length === 0 && members.length === 0) return null;
     return (
       <div className="flex h-full min-w-0 flex-1 items-center">
-        <div ref={stageRef} className="relative h-full min-w-0 flex-1 overflow-hidden">
-          {members.map((member) => {
-            const agent = known.current.get(member.id);
-            return (
-              agent && (
-                <StageMascot
-                  key={member.id}
-                  agent={agent}
-                  resting={!busyIds.has(member.id)}
-                  still={reduced}
-                  live={live}
-                  onOpenAgent={onOpenAgent}
-                />
-              )
-            );
-          })}
-        </div>
+        <HoverCardGroup>
+          <div ref={stageRef} className="relative h-full min-w-0 flex-1 overflow-hidden">
+            {members.map((member) => {
+              const agent = known.current.get(member.id);
+              return (
+                agent && (
+                  <StageMascot
+                    key={member.id}
+                    agent={agent}
+                    resting={!busyIds.has(member.id)}
+                    still={reduced}
+                    live={live}
+                    onOpenAgent={onOpenAgent}
+                  />
+                )
+              );
+            })}
+          </div>
+        </HoverCardGroup>
         {waiting > 0 && <BusyAgentsMore agents={busy} onOpenAgent={onOpenAgent} />}
       </div>
     );

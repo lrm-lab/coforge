@@ -54,7 +54,7 @@ export function ChartTooltipContent({
     return (
       <div
         className={cx(
-          "pointer-events-none flex max-w-60 flex-col gap-1 rounded-lg bg-primary-solid px-3 py-2 shadow-lg ring-1 ring-secondary_alt",
+          "pointer-events-none flex max-w-[min(15rem,calc(100vw-1.5rem))] flex-col gap-1 rounded-lg bg-primary-solid px-3 py-2 shadow-lg ring-1 ring-secondary_alt",
           className,
         )}
       >
@@ -85,7 +85,7 @@ export function ChartTooltipContent({
   return (
     <div
       className={cx(
-        "pointer-events-none flex max-w-64 flex-col gap-1.5 rounded-lg bg-primary-solid px-3 py-2 shadow-lg ring-1 ring-secondary_alt",
+        "pointer-events-none flex max-w-[min(16rem,calc(100vw-1.5rem))] flex-col gap-1.5 rounded-lg bg-primary-solid px-3 py-2 shadow-lg ring-1 ring-secondary_alt",
         className,
       )}
     >

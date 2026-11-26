@@ -17,6 +17,7 @@ import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { EmojiPicker } from "#src/components/ui/emoji-picker";
 import { Dialog, Modal, ModalOverlay, SheetGrabber } from "#src/components/ui/modal";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { TooltipGroup } from "#src/components/ui/tooltip-group";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import {
@@ -48,6 +49,7 @@ export type ToolbarActivation = {
 export function MessageActionToolbar({
   messageId,
   grouped,
+  hoverOpen = false,
   active,
   onActivate,
   onStarted,
@@ -62,6 +64,7 @@ export function MessageActionToolbar({
   seenBy,
 }: MessageActions & {
   grouped: boolean;
+  hoverOpen?: boolean;
   active?: ToolbarActivation;
   onActivate: (activation: ToolbarActivation) => void;
   onStarted: () => void;
@@ -75,79 +78,82 @@ export function MessageActionToolbar({
   return (
     <div
       data-message-toolbar
+      data-toolbar-open={hoverOpen ? "true" : undefined}
       className={cn(
-        "pointer-events-none absolute right-3 z-10 flex h-8 items-center gap-0.5 rounded-lg border border-secondary bg-primary px-0.5 opacity-0 shadow-(--message-toolbar-shadow) transition-opacity",
+        "pointer-events-none absolute right-3 z-10 flex h-8 items-center rounded-lg border border-secondary bg-primary px-0.5 opacity-0 shadow-(--message-toolbar-shadow) transition-opacity duration-(--duration-label-out) ease-in after:pointer-events-auto after:absolute after:inset-x-0 after:-bottom-2 after:h-2 after:content-['']",
         grouped ? "-top-8" : "-top-5",
         "[li:has(>[role=separator])_&]:top-0",
-        "lg:[@media(hover:hover)_and_(pointer:fine)]:group-focus-within/message:pointer-events-auto lg:[@media(hover:hover)_and_(pointer:fine)]:group-focus-within/message:opacity-100",
-        "lg:[@media(hover:hover)_and_(pointer:fine)]:group-hover/message:pointer-events-auto lg:[@media(hover:hover)_and_(pointer:fine)]:group-hover/message:opacity-100",
+        "lg:[@media(hover:hover)_and_(pointer:fine)]:group-focus-within/message:pointer-events-auto lg:[@media(hover:hover)_and_(pointer:fine)]:group-focus-within/message:opacity-100 lg:[@media(hover:hover)_and_(pointer:fine)]:group-focus-within/message:duration-(--duration-label-in) lg:[@media(hover:hover)_and_(pointer:fine)]:group-focus-within/message:ease-out",
+        "lg:[@media(hover:hover)_and_(pointer:fine)]:data-[toolbar-open=true]:pointer-events-auto lg:[@media(hover:hover)_and_(pointer:fine)]:data-[toolbar-open=true]:opacity-100 lg:[@media(hover:hover)_and_(pointer:fine)]:data-[toolbar-open=true]:duration-(--duration-label-in) lg:[@media(hover:hover)_and_(pointer:fine)]:data-[toolbar-open=true]:ease-out",
         "lg:[@media(hover:hover)_and_(pointer:fine)]:has-[[aria-expanded=true]]:pointer-events-auto lg:[@media(hover:hover)_and_(pointer:fine)]:has-[[aria-expanded=true]]:opacity-100",
       )}
     >
-      {active ? (
-        <ActiveMessageActionToolbar
-          messageId={messageId}
-          active={active}
-          onStarted={onStarted}
-          onOpenThread={onOpenThread}
-          onToggleReaction={onToggleReaction}
-          onToggleSave={onToggleSave}
-          saveSaved={saveSaved}
-          onForward={onForward}
-          onSelect={onSelect}
-          onMakeTask={onMakeTask}
-          onCopy={onCopy}
-          seenBy={seenBy}
-          hasMore={hasMore}
-        />
-      ) : (
-        <>
-          {onOpenThread && (
-            <ButtonUtility
-              size="xs"
-              color="tertiary"
-              icon={MessageSquare}
-              aria-label={m.conversation_thread_reply()}
-              onFocus={focusTarget("thread")}
-              onClick={() => onOpenThread(messageId)}
-              className="p-1 *:data-icon:size-3.5"
-            />
-          )}
-          {onToggleReaction && (
-            <ButtonUtility
-              size="xs"
-              color="tertiary"
-              icon={FaceSmile}
-              aria-label={m.conversation_add_reaction()}
-              aria-haspopup="dialog"
-              onFocus={focusTarget("reaction")}
-              onClick={() => onActivate({ target: "reaction", mode: "open" })}
-              className="p-1 *:data-icon:size-3.5"
-            />
-          )}
-          <ButtonUtility
-            size="xs"
-            color="tertiary"
-            icon={Copy01}
-            aria-label={m.conversation_message_copy_text()}
-            onFocus={focusTarget("copy")}
-            onClick={onCopy}
-            className="p-1 *:data-icon:size-3.5"
+      <TooltipGroup className="flex items-center gap-0.5">
+        {active ? (
+          <ActiveMessageActionToolbar
+            messageId={messageId}
+            active={active}
+            onStarted={onStarted}
+            onOpenThread={onOpenThread}
+            onToggleReaction={onToggleReaction}
+            onToggleSave={onToggleSave}
+            saveSaved={saveSaved}
+            onForward={onForward}
+            onSelect={onSelect}
+            onMakeTask={onMakeTask}
+            onCopy={onCopy}
+            seenBy={seenBy}
+            hasMore={hasMore}
           />
-          {hasMore && (
+        ) : (
+          <>
+            {onOpenThread && (
+              <ButtonUtility
+                size="xs"
+                color="tertiary"
+                icon={MessageSquare}
+                aria-label={m.conversation_thread_reply()}
+                onFocus={focusTarget("thread")}
+                onClick={() => onOpenThread(messageId)}
+                className="p-1 *:data-icon:size-3.5"
+              />
+            )}
+            {onToggleReaction && (
+              <ButtonUtility
+                size="xs"
+                color="tertiary"
+                icon={FaceSmile}
+                aria-label={m.conversation_add_reaction()}
+                aria-haspopup="dialog"
+                onFocus={focusTarget("reaction")}
+                onClick={() => onActivate({ target: "reaction", mode: "open" })}
+                className="p-1 *:data-icon:size-3.5"
+              />
+            )}
             <ButtonUtility
               size="xs"
               color="tertiary"
-              icon={DotsHorizontal}
-              aria-label={m.conversation_more_actions()}
-              aria-haspopup="menu"
-              onFocus={focusTarget("more")}
-              onClick={() => onActivate({ target: "more", mode: "open" })}
+              icon={Copy01}
+              aria-label={m.conversation_message_copy_text()}
+              onFocus={focusTarget("copy")}
+              onClick={onCopy}
               className="p-1 *:data-icon:size-3.5"
             />
-          )}
-        </>
-      )}
+            {hasMore && (
+              <ButtonUtility
+                size="xs"
+                color="tertiary"
+                icon={DotsHorizontal}
+                aria-label={m.conversation_more_actions()}
+                aria-haspopup="menu"
+                onFocus={focusTarget("more")}
+                onClick={() => onActivate({ target: "more", mode: "open" })}
+                className="p-1 *:data-icon:size-3.5"
+              />
+            )}
+          </>
+        )}
+      </TooltipGroup>
     </div>
   );
 }

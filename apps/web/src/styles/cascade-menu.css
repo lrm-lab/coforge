@@ -11,6 +11,7 @@
     0 8px 14px -2px rgb(16 19 25 / 0.05), 0 16px 24px -6px rgb(16 19 25 / 0.05);
   --cascade-menu-opacity-duration: 150ms;
   --cascade-menu-transform-duration: 180ms;
+  --cascade-menu-exit-duration: 120ms;
   --cascade-menu-transform-ease: var(--ease-out);
   --cascade-menu-folder-duration: 240ms;
   --cascade-menu-theme-duration: 200ms;
@@ -107,8 +108,8 @@
 
 .cascade-menu-level[data-cascade-level="root"][data-exiting] {
   animation:
-    cascade-level-fade-out 130ms var(--ease-out) both,
-    cascade-root-pop-out 130ms var(--ease-out) both;
+    cascade-level-fade-out var(--cascade-menu-exit-duration) var(--ease-in) both,
+    cascade-root-pop-out var(--cascade-menu-exit-duration) var(--ease-in) both;
 }
 
 .cascade-menu-level[popover] {
@@ -117,14 +118,14 @@
   margin: 0;
   opacity: 0;
   transition:
-    opacity var(--cascade-menu-opacity-duration) var(--ease-out),
-    transform var(--cascade-menu-transform-duration) var(--cascade-menu-transform-ease),
+    opacity var(--cascade-menu-exit-duration) var(--ease-in),
+    transform var(--cascade-menu-exit-duration) var(--ease-in),
     background-color var(--cascade-menu-theme-duration) var(--ease-out),
     border-color var(--cascade-menu-theme-duration) var(--ease-out),
     box-shadow var(--cascade-menu-theme-duration) var(--ease-out),
     color var(--cascade-menu-theme-duration) var(--ease-out),
-    overlay var(--cascade-menu-transform-duration) allow-discrete,
-    display var(--cascade-menu-transform-duration) allow-discrete;
+    overlay var(--cascade-menu-exit-duration) allow-discrete,
+    display var(--cascade-menu-exit-duration) allow-discrete;
 }
 
 .cascade-menu-level[popover]::backdrop {
@@ -153,6 +154,15 @@
 .cascade-menu-level[popover][data-cascade-level="submenu"][data-placement="left"]:popover-open {
   opacity: 1;
   transform: translate(0, 0) scale(1, 1);
+  transition:
+    opacity var(--cascade-menu-opacity-duration) var(--ease-out),
+    transform var(--cascade-menu-transform-duration) var(--cascade-menu-transform-ease),
+    background-color var(--cascade-menu-theme-duration) var(--ease-out),
+    border-color var(--cascade-menu-theme-duration) var(--ease-out),
+    box-shadow var(--cascade-menu-theme-duration) var(--ease-out),
+    color var(--cascade-menu-theme-duration) var(--ease-out),
+    overlay var(--cascade-menu-transform-duration) allow-discrete,
+    display var(--cascade-menu-transform-duration) allow-discrete;
 }
 
 @starting-style {

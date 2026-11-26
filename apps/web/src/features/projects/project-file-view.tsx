@@ -24,6 +24,7 @@ import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/
 import { Button } from "#src/components/base/buttons/button";
 import { styles as buttonStyles } from "#src/components/base/buttons/button";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
+import { TooltipGroup } from "#src/components/ui/tooltip-group";
 import { ContentEditor } from "#src/features/records/report-editor/content-editor";
 import { copyText } from "#src/lib/clipboard";
 import { sharedLowlight } from "#src/features/records/report-editor/lowlight";
@@ -221,81 +222,83 @@ export function ProjectFileView({
               <ButtonGroupItem id="source">{m.project_file_source()}</ButtonGroupItem>
             </ButtonGroup>
           )}
-          {showCode && find.findSupported && (
-            <Tooltip title={m.project_file_find()}>
-              <Button
-                size="sm"
-                color="tertiary"
-                aria-label={m.project_file_find()}
-                iconLeading={SearchLg}
-                onPress={() => (find.findOpen ? find.close() : openFind())}
-              />
-            </Tooltip>
-          )}
-          {showCode && (
-            <Tooltip title={m.project_file_wrap()}>
+          <TooltipGroup className="flex items-center gap-0.5">
+            {showCode && find.findSupported && (
+              <Tooltip title={m.project_file_find()}>
+                <Button
+                  size="sm"
+                  color="tertiary"
+                  aria-label={m.project_file_find()}
+                  iconLeading={SearchLg}
+                  onPress={() => (find.findOpen ? find.close() : openFind())}
+                />
+              </Tooltip>
+            )}
+            {showCode && (
+              <Tooltip title={m.project_file_wrap()}>
+                <ToolbarToggle
+                  aria-label={m.project_file_wrap()}
+                  isSelected={wrap}
+                  onChange={(next) => {
+                    setWrap(next);
+                    writeWrapPreference(next);
+                  }}
+                >
+                  <ParagraphWrap data-icon="leading" className={buttonStyles.common.icon} />
+                </ToolbarToggle>
+              </Tooltip>
+            )}
+            <Tooltip title={zen ? m.project_file_zen_exit() : m.project_file_zen()}>
               <ToolbarToggle
-                aria-label={m.project_file_wrap()}
-                isSelected={wrap}
-                onChange={(next) => {
-                  setWrap(next);
-                  writeWrapPreference(next);
-                }}
+                ref={zenButtonRef}
+                aria-label={zen ? m.project_file_zen_exit() : m.project_file_zen()}
+                isSelected={zen}
+                onChange={setZenMode}
               >
-                <ParagraphWrap data-icon="leading" className={buttonStyles.common.icon} />
+                {zen ? (
+                  <Minimize01 data-icon="leading" className={buttonStyles.common.icon} />
+                ) : (
+                  <Expand01 data-icon="leading" className={buttonStyles.common.icon} />
+                )}
               </ToolbarToggle>
             </Tooltip>
-          )}
-          <Tooltip title={zen ? m.project_file_zen_exit() : m.project_file_zen()}>
-            <ToolbarToggle
-              ref={zenButtonRef}
-              aria-label={zen ? m.project_file_zen_exit() : m.project_file_zen()}
-              isSelected={zen}
-              onChange={setZenMode}
-            >
-              {zen ? (
-                <Minimize01 data-icon="leading" className={buttonStyles.common.icon} />
-              ) : (
-                <Expand01 data-icon="leading" className={buttonStyles.common.icon} />
-              )}
-            </ToolbarToggle>
-          </Tooltip>
-          {text !== null && (
-            <Tooltip title={copied ? m.project_file_copied() : m.project_file_copy()}>
-              <Button
-                size="sm"
-                color="tertiary"
-                aria-label={copied ? m.project_file_copied() : m.project_file_copy()}
-                iconLeading={copied ? Check : Copy01}
-                onPress={handleCopy}
-              />
-            </Tooltip>
-          )}
-          {downloadUrl !== undefined && (
-            <Tooltip title={m.project_file_download()}>
-              <Button
-                size="sm"
-                color="tertiary"
-                aria-label={m.project_file_download()}
-                iconLeading={Download01}
-                href={downloadUrl}
-                download={name}
-              />
-            </Tooltip>
-          )}
-          {githubUrl !== undefined && (
-            <Tooltip title={m.project_open_on_github()}>
-              <Button
-                size="sm"
-                color="tertiary"
-                aria-label={m.project_open_on_github()}
-                iconLeading={ArrowUpRight}
-                href={githubUrl}
-                target="_blank"
-                rel="noreferrer"
-              />
-            </Tooltip>
-          )}
+            {text !== null && (
+              <Tooltip title={copied ? m.project_file_copied() : m.project_file_copy()}>
+                <Button
+                  size="sm"
+                  color="tertiary"
+                  aria-label={copied ? m.project_file_copied() : m.project_file_copy()}
+                  iconLeading={copied ? Check : Copy01}
+                  onPress={handleCopy}
+                />
+              </Tooltip>
+            )}
+            {downloadUrl !== undefined && (
+              <Tooltip title={m.project_file_download()}>
+                <Button
+                  size="sm"
+                  color="tertiary"
+                  aria-label={m.project_file_download()}
+                  iconLeading={Download01}
+                  href={downloadUrl}
+                  download={name}
+                />
+              </Tooltip>
+            )}
+            {githubUrl !== undefined && (
+              <Tooltip title={m.project_open_on_github()}>
+                <Button
+                  size="sm"
+                  color="tertiary"
+                  aria-label={m.project_open_on_github()}
+                  iconLeading={ArrowUpRight}
+                  href={githubUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                />
+              </Tooltip>
+            )}
+          </TooltipGroup>
         </div>
       </div>
       <div className="relative flex min-h-0 flex-1 flex-col">

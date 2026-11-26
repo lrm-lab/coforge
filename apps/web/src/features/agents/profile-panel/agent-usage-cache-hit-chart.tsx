@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Area, AreaChart, CartesianGrid, Tooltip as RechartsTooltip, XAxis, YAxis } from "recharts";
 import type { TooltipContentProps } from "recharts";
 import type { NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
@@ -8,6 +8,7 @@ import {
   formatUsagePercent,
 } from "#src/features/agents/agent-token-usage-model";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
+import { createChartHoverController, type ChartHoverController } from "#src/lib/hover-intent";
 import { m } from "#src/paraglide/messages";
 
 export type CacheHitChartDatum = Readonly<{
@@ -27,7 +28,20 @@ export default function AgentUsageCacheHitChart({
 }) {
   const gradientId = useId().replace(/:/g, "");
   const prefersReducedMotion = usePrefersReducedMotion();
+  const [tooltipVisible, setTooltipVisible] = useState(false);
+  const hoverControllerRef = useRef<ChartHoverController | null>(null);
   const hasAnyPoint = data.some((point) => point.hitPercent !== null);
+
+  useEffect(() => {
+    const controller = createChartHoverController({ onChange: setTooltipVisible });
+    hoverControllerRef.current = controller;
+    return () => {
+      controller.dispose();
+      if (hoverControllerRef.current === controller) {
+        hoverControllerRef.current = null;
+      }
+    };
+  }, []);
 
   if (!hasAnyPoint) {
     return (
@@ -40,6 +54,7 @@ export default function AgentUsageCacheHitChart({
   const chartData = [...data];
 
   function renderTooltip(props: TooltipContentProps<ValueType, NameType>) {
+    if (!tooltipVisible) return null;
     const first = props.payload?.[0];
     if (!first || first.value === null || first.value === undefined) return null;
     const datum = first.payload as CacheHitChartDatum | undefined;
@@ -62,7 +77,20 @@ export default function AgentUsageCacheHitChart({
   }
 
   return (
-    <div className="h-60 w-full">
+    <div
+      className="h-60 w-full"
+      onPointerEnter={(event) => {
+        if (event.pointerType === "touch") {
+          setTooltipVisible(true);
+          return;
+        }
+        hoverControllerRef.current?.pointerEnter();
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "touch") return;
+        hoverControllerRef.current?.pointerLeave();
+      }}
+    >
       <AreaChart
         responsive
         data={chartData}
@@ -110,6 +138,7 @@ export default function AgentUsageCacheHitChart({
         <RechartsTooltip
           content={renderTooltip}
           isAnimationActive={!prefersReducedMotion}
+          animationDuration={140}
           cursor={{ stroke: "var(--color-border-primary)", strokeDasharray: "2 3" }}
           wrapperStyle={{ zIndex: 20, pointerEvents: "none" }}
         />

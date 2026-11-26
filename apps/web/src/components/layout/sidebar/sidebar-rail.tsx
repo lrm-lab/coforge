@@ -2,6 +2,7 @@ import type { FC, ReactNode } from "react";
 import { Button as AriaButton, Pressable } from "react-aria-components";
 import type { NavItemType } from "#src/components/application/app-navigation/config";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
+import { TooltipGroup } from "#src/components/ui/tooltip-group";
 import { UnreadBadge, UnreadDot } from "#src/components/ui/unread-marker";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
@@ -104,18 +105,20 @@ export const SidebarRail = ({ activeUrl, items, header, footer }: SidebarRailPro
   <aside
     data-sidebar
     style={{ width: SIDEBAR_RAIL_WIDTH }}
-    className="flex h-full max-h-full w-full flex-col items-center justify-between overflow-x-hidden overflow-y-auto pb-3"
+    className="flex h-full max-h-full w-full flex-col overflow-x-hidden overflow-y-auto pb-3"
   >
-    <div className="flex w-full flex-col items-center">
-      <div className="mt-2 flex flex-col items-center gap-1">{header}</div>
-      <ul className="mt-2 flex w-full flex-col gap-1">
-        {items.map((item) => (
-          <li key={item.label} className="flex w-full min-w-0 justify-center">
-            <RailItem {...item} current={item.href === activeUrl} />
-          </li>
-        ))}
-      </ul>
-    </div>
-    <div className="flex flex-col items-center gap-2">{footer}</div>
+    <TooltipGroup className="flex min-h-full w-full flex-1 flex-col items-center justify-between">
+      <div className="flex w-full flex-col items-center">
+        <div className="mt-2 flex flex-col items-center gap-1">{header}</div>
+        <ul className="mt-2 flex w-full flex-col gap-1">
+          {items.map((item) => (
+            <li key={item.label} className="flex w-full min-w-0 justify-center">
+              <RailItem {...item} current={item.href === activeUrl} />
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="flex flex-col items-center gap-2">{footer}</div>
+    </TooltipGroup>
   </aside>
 );

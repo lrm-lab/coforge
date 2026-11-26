@@ -1,0 +1,82 @@
+@theme {
+  --duration-label-in: 140ms;
+  --duration-label-out: 60ms;
+  --duration-card-in: 200ms;
+  --duration-card-out: 120ms;
+  --duration-preview-in: 250ms;
+  --duration-preview-out: 140ms;
+}
+
+@utility motion-label-enter {
+  && {
+    animation-duration: var(--duration-label-in);
+    transition-duration: var(--duration-label-in);
+    animation-timing-function: var(--ease-out);
+    transition-timing-function: var(--ease-out);
+  }
+}
+
+@utility motion-label-leave {
+  && {
+    animation-duration: var(--duration-label-out);
+    transition-duration: var(--duration-label-out);
+    animation-timing-function: var(--ease-in);
+    transition-timing-function: var(--ease-in);
+  }
+}
+
+@utility motion-card-enter {
+  && {
+    animation-duration: var(--duration-card-in);
+    transition-duration: var(--duration-card-in);
+    animation-timing-function: var(--ease-out);
+    transition-timing-function: var(--ease-out);
+  }
+}
+
+@utility motion-card-leave {
+  && {
+    animation-duration: var(--duration-card-out);
+    transition-duration: var(--duration-card-out);
+    animation-timing-function: var(--ease-in);
+    transition-timing-function: var(--ease-in);
+  }
+}
+
+@utility motion-preview-enter {
+  && {
+    animation-duration: var(--duration-preview-in);
+    transition-duration: var(--duration-preview-in);
+    animation-timing-function: var(--ease-out);
+    transition-timing-function: var(--ease-out);
+  }
+}
+
+@utility motion-preview-leave {
+  && {
+    animation-duration: var(--duration-preview-out);
+    transition-duration: var(--duration-preview-out);
+    animation-timing-function: var(--ease-in);
+    transition-timing-function: var(--ease-in);
+  }
+}
+
+@keyframes coforge-card-swap-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-label-in: 120ms;
+    --duration-label-out: 60ms;
+    --duration-card-in: 150ms;
+    --duration-card-out: 100ms;
+    --duration-preview-in: 150ms;
+    --duration-preview-out: 100ms;
+  }
+}

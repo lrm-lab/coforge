@@ -38,9 +38,13 @@ export function isVerticalMenuNavKey(key: string): boolean {
 
 interface DropdownSubmenuTriggerProps {
   children: [ReactElement, ReactElement];
+  openOnHover?: boolean;
 }
 
-export const DropdownSubmenuTrigger = ({ children }: DropdownSubmenuTriggerProps) => {
+export const DropdownSubmenuTrigger = ({
+  children,
+  openOnHover = true,
+}: DropdownSubmenuTriggerProps) => {
   const cascade = useCascadeMenu();
   const depth = useCascadeDepth();
   const submenuId = useId();
@@ -96,6 +100,7 @@ export const DropdownSubmenuTrigger = ({ children }: DropdownSubmenuTriggerProps
       submenuId,
       anchorName,
       isSubmenuOpen,
+      openOnHover,
       triggerRef,
       openSubmenuNow,
       popover: mounted && (
@@ -111,6 +116,7 @@ export const DropdownSubmenuTrigger = ({ children }: DropdownSubmenuTriggerProps
       depth,
       isSubmenuOpen,
       mounted,
+      openOnHover,
       openSubmenuNow,
       popoverContextValue,
       popoverElement,
@@ -204,7 +210,7 @@ export const DropdownSubmenuPopover = ({
     if (el.matches(":popover-open")) {
       el.hidePopover();
     }
-    exitTimerRef.current = setTimeout(finishExit, CASCADE_MENU_TIMINGS.LEVEL_TRANSFORM_MS + 40);
+    exitTimerRef.current = setTimeout(finishExit, CASCADE_MENU_TIMINGS.LEVEL_EXIT_MS + 40);
   }, [alignOffset, anchorName, depth, finishExit, focusFirstOnOpenRef, isOpen, triggerRef]);
 
   useEffect(() => {

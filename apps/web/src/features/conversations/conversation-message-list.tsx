@@ -1,5 +1,6 @@
 import type { ComponentProps, RefObject } from "react";
 
+import { HoverCardGroup } from "#src/components/ui/hover-popover";
 import { cn } from "#src/lib/utils";
 
 import { ownMessageReadState } from "./conversation-pane-layout";
@@ -75,101 +76,98 @@ export function ConversationMessageList({
   outboxContinues: boolean;
 }) {
   return (
-    <ol ref={messageListRef} className={cn("flex flex-col", threadMarker ? "pt-2" : "pt-6")}>
-      {streamItems.map((item, index) => {
-        // The item above's anchor.
-        const before = streamItems[index - 1];
-        // A thread's first reply opens under the replies marker, which stands in for the
-        // day divider there; later day changes in the thread still get theirs.
-        const opensThread = threadMarker && index === 0;
-        const previous = before && itemAnchor(before);
-        const first = itemAnchor(item);
-        // The unread divider is anchored to the snapshot taken at open: once the
-        // mark-read effect has advanced the cursor, the divider must not jump.
-        const unreadStartsHere = openBoundary?.sequence === first.sequence;
-        if (item.type === "systemGroup") {
-          const groupOpen = item.messages.some((message) => openedSystemMessages.has(message.id));
-          return (
-            <SystemMessageGroup
-              key={first.id}
-              id={item.id}
-              messages={item.messages}
-              expanded={groupOpen}
-              onToggleExpanded={toggleSystemGroup}
-              dayChanged={
-                !opensThread &&
-                groupsWithPrevious(first, previous, false, false, dateLocale, timeZone).dayChanged
-              }
-              unreadStartsHere={unreadStartsHere}
-              dateLocale={dateLocale}
-            >
-              {groupOpen &&
-                item.messages.map((message) => (
-                  <MessageRow
-                    conversationId={conversation.conversationId}
-                    key={message.id}
-                    message={message}
-                    own={false}
-                    dayChanged={false}
-                    grouped={false}
-                    expanded={false}
-                    collapsible={collapsible}
-                    dateLocale={dateLocale}
-                  />
-                ))}
-            </SystemMessageGroup>
+    <HoverCardGroup>
+      <ol ref={messageListRef} className={cn("flex flex-col", threadMarker ? "pt-2" : "pt-6")}>
+        {streamItems.map((item, index) => {
+          const before = streamItems[index - 1];
+          const opensThread = threadMarker && index === 0;
+          const previous = before && itemAnchor(before);
+          const first = itemAnchor(item);
+          const unreadStartsHere = openBoundary?.sequence === first.sequence;
+          if (item.type === "systemGroup") {
+            const groupOpen = item.messages.some((message) => openedSystemMessages.has(message.id));
+            return (
+              <SystemMessageGroup
+                key={first.id}
+                id={item.id}
+                messages={item.messages}
+                expanded={groupOpen}
+                onToggleExpanded={toggleSystemGroup}
+                dayChanged={
+                  !opensThread &&
+                  groupsWithPrevious(first, previous, false, false, dateLocale, timeZone).dayChanged
+                }
+                unreadStartsHere={unreadStartsHere}
+                dateLocale={dateLocale}
+              >
+                {groupOpen &&
+                  item.messages.map((message) => (
+                    <MessageRow
+                      conversationId={conversation.conversationId}
+                      key={message.id}
+                      message={message}
+                      own={false}
+                      dayChanged={false}
+                      grouped={false}
+                      expanded={false}
+                      collapsible={collapsible}
+                      dateLocale={dateLocale}
+                    />
+                  ))}
+              </SystemMessageGroup>
+            );
+          }
+          const message = item.message;
+          const own = isOwn(message);
+          const { dayChanged, grouped } = groupsWithPrevious(
+            message,
+            previous,
+            own,
+            previous ? isOwn(previous) : false,
+            dateLocale,
+            timeZone,
           );
-        }
-        const message = item.message;
-        const own = isOwn(message);
-        const { dayChanged, grouped } = groupsWithPrevious(
-          message,
-          previous,
-          own,
-          previous ? isOwn(previous) : false,
-          dateLocale,
-          timeZone,
-        );
-        return (
-          <MessageRow
-            conversationId={conversation.conversationId}
-            key={message.id}
-            message={message}
-            own={own}
-            dayChanged={dayChanged && !opensThread}
-            grouped={grouped && !unreadStartsHere}
-            unreadStartsHere={unreadStartsHere}
-            collapsible={collapsible}
-            dateLocale={dateLocale}
-            onOpenThread={openThread}
-            showsTask={!root}
-            onToggleReaction={toggleReaction}
-            onToggleSave={onToggleSave}
-            onOpenAgentProfile={openAgentProfile}
-            onOpenPersonProfile={openPersonProfile}
-            viewerId={conversation.viewerId}
+          return (
+            <MessageRow
+              conversationId={conversation.conversationId}
+              key={message.id}
+              message={message}
+              own={own}
+              dayChanged={dayChanged && !opensThread}
+              grouped={grouped && !unreadStartsHere}
+              unreadStartsHere={unreadStartsHere}
+              collapsible={collapsible}
+              dateLocale={dateLocale}
+              onOpenThread={openThread}
+              showsTask={!root}
+              onToggleReaction={toggleReaction}
+              onToggleSave={onToggleSave}
+              onOpenAgentProfile={openAgentProfile}
+              onOpenPersonProfile={openPersonProfile}
+              viewerId={conversation.viewerId}
+              plainMentions={plainMentions}
+              onOpenTask={openTaskReference}
+              channelNames={channelNames}
+              readState={ownMessageReadState(own, message.sequence, readTicks)}
+              seenBy={own && threadSeenBy}
+            />
+          );
+        })}
+        {shownOutbox.map((entry, index) => (
+          <OutboxMessageRow
+            key={entry.localId}
+            entry={entry}
+            grouped={index > 0 || outboxContinues}
+            composerShown={canCompose}
             plainMentions={plainMentions}
+            viewerId={conversation.viewerId}
             onOpenTask={openTaskReference}
-            channelNames={channelNames}
-            readState={ownMessageReadState(own, message.sequence, readTicks)}
-            seenBy={own && threadSeenBy}
+            onRetry={() => outbox.retry(entry)}
+            onEdit={() => outbox.edit(entry)}
+            onDiscard={() => outbox.remove(entry)}
           />
-        );
-      })}
-      {shownOutbox.map((entry, index) => (
-        <OutboxMessageRow
-          key={entry.localId}
-          entry={entry}
-          grouped={index > 0 || outboxContinues}
-          composerShown={canCompose}
-          plainMentions={plainMentions}
-          viewerId={conversation.viewerId}
-          onOpenTask={openTaskReference}
-          onRetry={() => outbox.retry(entry)}
-          onEdit={() => outbox.edit(entry)}
-          onDiscard={() => outbox.remove(entry)}
-        />
-      ))}
-    </ol>
+        ))}
+      </ol>
+    </HoverCardGroup>
   );
 }

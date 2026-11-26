@@ -103,7 +103,7 @@ export function ArtifactMoreMenu({
               label={m.av_open_full_page()}
             />
           )}
-          <Dropdown.SubmenuTrigger>
+          <Dropdown.SubmenuTrigger openOnHover={false}>
             <Dropdown.Item id="ai" icon={Stars01} label={m.av_menu_ai()} />
             <Dropdown.SubmenuPopover title={false} className="w-52">
               <Dropdown.Menu
@@ -129,7 +129,7 @@ export function ArtifactMoreMenu({
             <Dropdown.Item id="rename" icon={Edit03} label={m.av_menu_rename()} />
           )}
           {phone && hasMultipleVersions && (
-            <Dropdown.SubmenuTrigger>
+            <Dropdown.SubmenuTrigger openOnHover={false}>
               <Dropdown.Item id="versions" icon={ClockRewind} label={m.av_versions()} />
               <Dropdown.SubmenuPopover
                 title={false}

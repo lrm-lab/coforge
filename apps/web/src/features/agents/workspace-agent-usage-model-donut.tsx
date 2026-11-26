@@ -125,22 +125,22 @@ export function WorkspaceAgentUsageModelDonutCard({
               locale={locale}
             />
           </Suspense>
-          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-4 text-center">
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-3 text-center">
             {activeSlice ? (
               <>
-                <span className="font-mono text-base font-bold leading-tight tracking-tight text-primary tabular-nums">
+                <span className="max-w-full truncate font-mono text-base font-bold leading-tight tracking-tight text-primary tabular-nums">
                   {formatUsagePercent(activeSlice.sharePercent, locale)}
                 </span>
-                <span className="mt-0.5 font-mono text-xs leading-tight text-tertiary tabular-nums">
+                <span className="mt-0.5 max-w-full truncate font-mono text-xs leading-tight text-tertiary tabular-nums">
                   {formatCompactTokens(activeSlice.effectiveTokens, locale)}
                 </span>
               </>
             ) : (
               <>
-                <span className="font-mono text-lg font-bold leading-tight tracking-tight text-primary tabular-nums">
+                <span className="max-w-full truncate font-mono text-lg font-bold leading-tight tracking-tight text-primary tabular-nums">
                   {formatNumber(distribution.totalModelCount, locale)}
                 </span>
-                <span className="mt-0.5 text-xs leading-tight text-tertiary">
+                <span className="mt-0.5 max-w-full truncate text-xs leading-tight text-tertiary">
                   {distribution.totalModelCount === 1
                     ? m.agent_usage_models_center_one()
                     : m.agent_usage_models_center_other()}
@@ -184,10 +184,10 @@ export function WorkspaceAgentUsageModelDonutCard({
                   </span>
                 </span>
                 <span className="flex shrink-0 items-baseline gap-2 font-mono tabular-nums">
-                  <span className="text-tertiary">
+                  <span className="whitespace-nowrap text-tertiary">
                     {formatCompactTokens(slice.effectiveTokens, locale)}
                   </span>
-                  <span className="w-11 text-right font-semibold text-primary">
+                  <span className="min-w-12 text-end font-semibold whitespace-nowrap text-primary">
                     {formatUsagePercent(slice.sharePercent, locale)}
                   </span>
                 </span>
@@ -218,9 +218,15 @@ export function WorkspaceAgentUsageModelDonutCard({
             return (
               <li
                 key={slice.key}
-                className={rowClass}
+                tabIndex={0}
+                className={cn(
+                  rowClass,
+                  "outline-none focus-visible:ring-2 focus-visible:ring-brand",
+                )}
                 onMouseEnter={() => setActiveIndex(index)}
                 onMouseLeave={() => setActiveIndex(null)}
+                onFocus={() => setActiveIndex(index)}
+                onBlur={() => setActiveIndex(null)}
               >
                 {rowInner}
               </li>

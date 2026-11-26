@@ -105,19 +105,27 @@ export function TaskChip({
   );
 }
 
+const MAX_PEEK_LABELS = 6;
+
 function TaskPeek({ task, meta }: { task: ChipTask; meta: ReactNode }) {
+  const labels = task.labels ?? [];
+  const visibleLabels = labels.slice(0, MAX_PEEK_LABELS);
+  const overflowLabels = labels.length - visibleLabels.length;
+
   return (
-    <div className="flex flex-col">
-      <p className="text-xs font-medium text-tertiary tabular-nums">{meta}</p>
-      <p className="mt-1 text-sm font-semibold text-primary">{task.title}</p>
-      <div className="mt-3 flex flex-col gap-2 border-t border-secondary pt-3 text-sm text-secondary">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="flex shrink-0 items-center gap-1.5">
+    <div className="flex min-w-0 flex-col">
+      <p className="min-w-0 truncate text-xs font-medium text-tertiary tabular-nums">{meta}</p>
+      <p dir="auto" className="mt-1 line-clamp-3 text-sm font-semibold wrap-anywhere text-primary">
+        {task.title}
+      </p>
+      <div className="mt-3 flex min-w-0 flex-col gap-2 border-t border-secondary pt-3 text-sm text-secondary">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+          <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
             <TaskStatusIcon status={task.status} />
             {statusLabel(task.status)}
           </span>
           {task.priority && task.priority !== "none" && (
-            <span className="flex shrink-0 items-center gap-1.5">
+            <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
               <TaskPriorityIcon priority={task.priority} />
               {priorityLabel(task.priority)}
             </span>
@@ -128,11 +136,16 @@ function TaskPeek({ task, meta }: { task: ChipTask; meta: ReactNode }) {
             <span className="truncate text-tertiary">{m.tasks_unassigned()}</span>
           )}
         </div>
-        {task.labels && task.labels.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {task.labels.map((label) => (
+        {visibleLabels.length > 0 && (
+          <div className="flex min-w-0 flex-wrap items-center gap-1">
+            {visibleLabels.map((label) => (
               <TaskLabelChip key={label.id} label={label} className="min-w-0 shrink" />
             ))}
+            {overflowLabels > 0 && (
+              <span className="shrink-0 rounded-md bg-secondary px-1.5 py-0.5 text-xs font-medium text-tertiary tabular-nums">
+                +{overflowLabels}
+              </span>
+            )}
           </div>
         )}
       </div>

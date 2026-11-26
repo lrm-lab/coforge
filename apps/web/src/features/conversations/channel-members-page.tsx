@@ -5,6 +5,7 @@ import { Plus, SearchLg } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
+import { HoverCardGroup } from "#src/components/ui/hover-popover";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useCoarsePointer } from "#src/hooks/use-coarse-pointer";
 import { m } from "#src/paraglide/messages";
@@ -207,16 +208,18 @@ function MembersRoster({
         </p>
       )}
       <div className="min-h-0 flex-1 overflow-y-auto py-2">
-        {humans.length > 0 && (
-          <MemberGroup label={m.channel_members_humans()} count={humans.length}>
-            {humans.map(rowFor)}
-          </MemberGroup>
-        )}
-        {agents.length > 0 && (
-          <MemberGroup label={m.channel_members_agents()} count={agents.length}>
-            {agents.map(rowFor)}
-          </MemberGroup>
-        )}
+        <HoverCardGroup>
+          {humans.length > 0 && (
+            <MemberGroup label={m.channel_members_humans()} count={humans.length}>
+              {humans.map(rowFor)}
+            </MemberGroup>
+          )}
+          {agents.length > 0 && (
+            <MemberGroup label={m.channel_members_agents()} count={agents.length}>
+              {agents.map(rowFor)}
+            </MemberGroup>
+          )}
+        </HoverCardGroup>
         {total === 0 && (
           <p className="px-4 py-4 text-center text-sm text-tertiary md:px-6">
             {m.channel_members_none()}

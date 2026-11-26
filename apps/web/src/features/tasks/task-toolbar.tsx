@@ -311,7 +311,7 @@ function FilterSubmenu({
   onChange: (picked: string[]) => void;
 }) {
   return (
-    <Dropdown.SubmenuTrigger>
+    <Dropdown.SubmenuTrigger openOnHover={false}>
       <Dropdown.Item label={name} />
       <Dropdown.SubmenuPopover className="w-64 [position-try-fallbacks:flip-block,--cascade-submenu-below-start,flip-inline,flip-inline_flip-block]">
         <PickerMenu

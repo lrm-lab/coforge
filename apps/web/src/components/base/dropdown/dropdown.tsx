@@ -216,12 +216,19 @@ const DropdownItem = ({
   const handlePointerEnter = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
       if (props.isDisabled) return;
-      cascade?.onRowPointerEnter(depth, rowId, submenuId, event.pointerType, {
-        x: event.clientX,
-        y: event.clientY,
-      });
+      cascade?.onRowPointerEnter(
+        depth,
+        rowId,
+        submenuId,
+        event.pointerType,
+        {
+          x: event.clientX,
+          y: event.clientY,
+        },
+        submenuItem?.openOnHover,
+      );
     },
-    [cascade, depth, props.isDisabled, rowId, submenuId],
+    [cascade, depth, props.isDisabled, rowId, submenuId, submenuItem?.openOnHover],
   );
 
   const handlePointerLeave = useCallback(() => {

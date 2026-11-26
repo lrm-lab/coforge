@@ -12,6 +12,7 @@ import {
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
+import { TooltipGroup } from "#src/components/ui/tooltip-group";
 import { HotkeyKeycaps, TooltipShortcutLabel } from "#src/components/ui/kbd";
 import { Popconfirm } from "#src/components/ui/popconfirm";
 import { FLOATING_SURFACE_CLASS } from "#src/features/conversations/review-chrome";
@@ -173,7 +174,7 @@ export function ArtifactReviewQueue({
           </li>
         ))}
       </ul>
-      <div className="flex items-center justify-between gap-2 border-t border-secondary/70 px-3 py-2.5">
+      <TooltipGroup className="flex items-center justify-between gap-2 border-t border-secondary/70 px-3 py-2.5">
         <Tooltip title={<TooltipShortcutLabel label={m.av_dr_collapse()} shortcut="Escape" />}>
           <AriaButton onPress={onCollapse} className={cn(TERTIARY_PILL_CLASS, "gap-1 px-2.5")}>
             <span>{m.av_dr_collapse()}</span>
@@ -206,7 +207,7 @@ export function ArtifactReviewQueue({
             </AriaButton>
           </Tooltip>
         </div>
-      </div>
+      </TooltipGroup>
     </>
   );
 }

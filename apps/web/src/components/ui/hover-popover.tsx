@@ -1,9 +1,18 @@
 import {
+  createContext,
   forwardRef,
   useCallback,
   useContext,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
   useRef,
+  useState,
+  type FocusEvent as ReactFocusEvent,
   type ForwardedRef,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent,
   type ReactNode,
 } from "react";
 import {
@@ -14,25 +23,297 @@ import {
   PreviewTrigger,
   type ButtonProps,
 } from "react-aria-components";
-
 import { chipControl } from "#src/lib/chip-control";
+import {
+  CARD_CLOSE_DELAY_MS,
+  CARD_OPEN_DELAY_MS,
+  CARD_SWAP_SLOW_MS,
+  createCardGroupController,
+  type CardGroupController,
+  type CardGroupSnapshot,
+} from "#src/lib/hover-intent";
 import { cn } from "#src/lib/utils";
 
-// Untitled UI has no hover-triggered popover, but React Aria ships this exact interaction:
-// PreviewTrigger "displays a non-modal popover on hover, focus, or long press. Unlike a
-// tooltip, the popover may contain interactive content."
-// (https://react-aria.adobe.com/PreviewTrigger)
-//
-// It owns what a peek has to get right and this file used to hand-roll: the warm-up and
-// cool-down delays, the safe area that keeps the peek open while the pointer travels
-// diagonally into it, opening on keyboard focus with Tab moving into the content and Escape
-// closing it and restoring focus, long press on touch with focus moved in so a screen reader's
-// virtual cursor follows, and the aria-haspopup/aria-expanded/aria-controls/aria-describedby
-// wiring on the trigger.
-//
-// It never binds a press, so the trigger keeps its own: the Agent avatar opens the profile
-// panel on a press. That press also closes the peek, which would otherwise stay over the page the
-// press just changed until the pointer leaves.
+const TOUCH_LONG_PRESS_MS = 500;
+
+const CARD_BRIDGE_CLASS =
+  "relative overflow-visible before:pointer-events-auto before:absolute before:content-[''] data-[placement=bottom]:before:inset-x-0 data-[placement=bottom]:before:-top-3.5 data-[placement=bottom]:before:h-3.5 data-[placement=top]:before:inset-x-0 data-[placement=top]:before:-bottom-3.5 data-[placement=top]:before:h-3.5 data-[placement=right]:before:inset-y-0 data-[placement=right]:before:-left-3.5 data-[placement=right]:before:w-3.5 data-[placement=left]:before:inset-y-0 data-[placement=left]:before:-right-3.5 data-[placement=left]:before:w-3.5";
+
+const CARD_SURFACE_CLASS =
+  "z-50 w-80 max-w-[calc(100vw-1.5rem)] origin-(--trigger-anchor-point) rounded-2xl border border-secondary bg-primary text-primary shadow-lg outline-none";
+
+const CARD_MOTION_CLASS =
+  "data-[entering]:animate-in data-[entering]:fade-in data-[entering]:motion-card-enter motion-safe:data-[entering]:data-[placement=bottom]:slide-in-from-top-1 motion-safe:data-[entering]:data-[placement=top]:slide-in-from-bottom-1 motion-safe:data-[entering]:data-[placement=left]:slide-in-from-right-1 motion-safe:data-[entering]:data-[placement=right]:slide-in-from-left-1 data-[exiting]:animate-out data-[exiting]:fade-out data-[exiting]:motion-card-leave";
+
+interface RegisteredCardEntry {
+  readonly id: string;
+  readonly className?: string;
+  readonly triggerEl: HTMLElement | null;
+  readonly onOpen?: () => void;
+  readonly renderContent: () => ReactNode;
+}
+
+interface HoverCardGroupContextValue {
+  readonly activeId: string | null;
+  readonly register: (entry: RegisteredCardEntry) => void;
+  readonly unregister: (id: string) => void;
+  readonly pointerEnterTrigger: (id: string, x: number, y: number) => void;
+  readonly pointerLeaveTrigger: (id: string) => void;
+  readonly focusTrigger: (id: string) => void;
+  readonly blurTrigger: (id: string) => void;
+  readonly openImmediate: (id: string) => void;
+  readonly closeImmediate: (restoreFocus?: boolean) => void;
+}
+
+const HoverCardGroupContext = createContext<HoverCardGroupContextValue | null>(null);
+
+export function HoverCardGroup({
+  children,
+  openDelayMs = CARD_OPEN_DELAY_MS,
+  closeDelayMs = CARD_CLOSE_DELAY_MS,
+  swapSlowMs = CARD_SWAP_SLOW_MS,
+}: {
+  children: ReactNode;
+  openDelayMs?: number;
+  closeDelayMs?: number;
+  swapSlowMs?: number;
+}) {
+  const [snapshot, setSnapshot] = useState<CardGroupSnapshot>({ activeId: null, swapped: false });
+  const [, setRenderTick] = useState(0);
+  const entriesRef = useRef<Map<string, RegisteredCardEntry>>(new Map());
+  const activeTriggerRef = useRef<Element | null>(null);
+  const focusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastOpenedIdRef = useRef<string | null>(null);
+  const controllerRef = useRef<CardGroupController | null>(null);
+
+  if (controllerRef.current === null) {
+    controllerRef.current = createCardGroupController({
+      openDelayMs,
+      closeDelayMs,
+      swapSlowMs,
+      onChange: setSnapshot,
+    });
+  }
+
+  const clearFocusTimer = useCallback(() => {
+    if (focusTimerRef.current !== null) {
+      clearTimeout(focusTimerRef.current);
+      focusTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    const controller = createCardGroupController({
+      openDelayMs,
+      closeDelayMs,
+      swapSlowMs,
+      onChange: setSnapshot,
+    });
+    controllerRef.current = controller;
+    return () => {
+      clearFocusTimer();
+      controller.dispose();
+      if (controllerRef.current === controller) {
+        controllerRef.current = null;
+      }
+    };
+  }, [clearFocusTimer, closeDelayMs, openDelayMs, swapSlowMs]);
+
+  useEffect(() => {
+    if (snapshot.activeId === null) {
+      lastOpenedIdRef.current = null;
+      return;
+    }
+    if (lastOpenedIdRef.current !== snapshot.activeId) {
+      lastOpenedIdRef.current = snapshot.activeId;
+      entriesRef.current.get(snapshot.activeId)?.onOpen?.();
+    }
+  }, [snapshot.activeId]);
+
+  useEffect(() => {
+    if (snapshot.activeId === null) return;
+    const onPointerMove = (event: globalThis.PointerEvent) => {
+      if (event.pointerType === "touch") return;
+      controllerRef.current?.pointerMove(event.clientX, event.clientY);
+    };
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || event.isComposing || event.keyCode === 229) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const triggerEl = activeTriggerRef.current;
+      controllerRef.current?.closeImmediate();
+      if (triggerEl instanceof HTMLElement) {
+        triggerEl.focus();
+      }
+    };
+    document.addEventListener("pointermove", onPointerMove, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointermove", onPointerMove, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [snapshot.activeId]);
+
+  const register = useCallback((entry: RegisteredCardEntry) => {
+    entriesRef.current.set(entry.id, entry);
+    if (controllerRef.current?.getSnapshot().activeId === entry.id) {
+      activeTriggerRef.current = entry.triggerEl;
+      setRenderTick((tick) => tick + 1);
+    }
+  }, []);
+
+  const unregister = useCallback((id: string) => {
+    entriesRef.current.delete(id);
+    if (controllerRef.current?.getSnapshot().activeId === id) {
+      controllerRef.current.closeImmediate();
+    }
+  }, []);
+
+  const pointerEnterTrigger = useCallback(
+    (id: string, x: number, y: number) => {
+      clearFocusTimer();
+      controllerRef.current?.pointerEnterTrigger(id, x, y);
+    },
+    [clearFocusTimer],
+  );
+
+  const pointerLeaveTrigger = useCallback((id: string) => {
+    controllerRef.current?.pointerLeaveTrigger(id);
+  }, []);
+
+  const focusTrigger = useCallback(
+    (id: string) => {
+      clearFocusTimer();
+      focusTimerRef.current = setTimeout(() => {
+        focusTimerRef.current = null;
+        controllerRef.current?.openImmediate(id);
+      }, openDelayMs);
+    },
+    [clearFocusTimer, openDelayMs],
+  );
+
+  const blurTrigger = useCallback(
+    (id: string) => {
+      clearFocusTimer();
+      controllerRef.current?.pointerLeaveTrigger(id);
+    },
+    [clearFocusTimer],
+  );
+
+  const openImmediate = useCallback(
+    (id: string) => {
+      clearFocusTimer();
+      controllerRef.current?.openImmediate(id);
+    },
+    [clearFocusTimer],
+  );
+
+  const closeImmediate = useCallback(
+    (restoreFocus = false) => {
+      clearFocusTimer();
+      const triggerEl = activeTriggerRef.current;
+      controllerRef.current?.closeImmediate();
+      if (restoreFocus && triggerEl instanceof HTMLElement) {
+        triggerEl.focus();
+      }
+    },
+    [clearFocusTimer],
+  );
+
+  const activeEntry = snapshot.activeId
+    ? (entriesRef.current.get(snapshot.activeId) ?? null)
+    : null;
+  if (activeEntry?.triggerEl) {
+    activeTriggerRef.current = activeEntry.triggerEl;
+  }
+
+  const overlayState = useMemo(
+    () => ({
+      isOpen: activeEntry !== null,
+      setOpen(next: boolean) {
+        if (!next) closeImmediate(false);
+      },
+      open() {},
+      close() {
+        closeImmediate(false);
+      },
+      toggle() {
+        closeImmediate(false);
+      },
+      point: null,
+      setPoint() {},
+    }),
+    [activeEntry, closeImmediate],
+  );
+
+  const contextValue = useMemo<HoverCardGroupContextValue>(
+    () => ({
+      activeId: snapshot.activeId,
+      register,
+      unregister,
+      pointerEnterTrigger,
+      pointerLeaveTrigger,
+      focusTrigger,
+      blurTrigger,
+      openImmediate,
+      closeImmediate,
+    }),
+    [
+      blurTrigger,
+      closeImmediate,
+      focusTrigger,
+      openImmediate,
+      pointerEnterTrigger,
+      pointerLeaveTrigger,
+      register,
+      snapshot.activeId,
+      unregister,
+    ],
+  );
+
+  return (
+    <HoverCardGroupContext.Provider value={contextValue}>
+      {children}
+      <Popover
+        isNonModal
+        trigger="PreviewTrigger"
+        isOpen={activeEntry !== null && activeTriggerRef.current !== null}
+        triggerRef={activeTriggerRef}
+        onOpenChange={(open) => {
+          if (!open) closeImmediate(false);
+        }}
+        placement="bottom start"
+        offset={12}
+        containerPadding={12}
+        shouldSkipAnimation={false}
+        onPointerEnter={() => controllerRef.current?.pointerEnterCard()}
+        onPointerLeave={() => controllerRef.current?.pointerLeaveCard()}
+        className={cn(
+          CARD_SURFACE_CLASS,
+          CARD_BRIDGE_CLASS,
+          CARD_MOTION_CLASS,
+          snapshot.swapped && "motion-safe:transition-[left,top] motion-safe:duration-200",
+          activeEntry?.className,
+        )}
+      >
+        <OverlayTriggerStateContext.Provider value={overlayState}>
+          {activeEntry && (
+            <div
+              key={activeEntry.id}
+              className={cn(
+                "min-w-0 max-h-[min(28rem,calc(100dvh-2rem))] overflow-x-hidden overflow-y-auto rounded-[inherit]",
+                snapshot.swapped && "animate-[coforge-card-swap-in_200ms_var(--ease-out)]",
+              )}
+            >
+              {activeEntry.renderContent()}
+            </div>
+          )}
+        </OverlayTriggerStateContext.Provider>
+      </Popover>
+    </HoverCardGroupContext.Provider>
+  );
+}
+
 export function HoverPopover({
   label,
   trigger,
@@ -50,20 +331,34 @@ export function HoverPopover({
   className?: string;
   children: ReactNode;
   onOpen?: () => void;
-  /** The trigger's own action for a press (pointer or keyboard); the press also closes the peek. */
   onPress?: () => void;
   working?: boolean;
-  /** The trigger is an inline `<span role="button">` rather than a `<button>`, for a chip inside
-   * running text: a `<button>` cannot break across lines, and Firefox and Safari start no text
-   * selection from one. */
   inline?: boolean;
 }) {
+  const group = useContext(HoverCardGroupContext);
+
+  if (group) {
+    return (
+      <GroupedHoverPopoverTrigger
+        group={group}
+        label={label}
+        trigger={trigger}
+        triggerClassName={triggerClassName}
+        className={className}
+        onOpen={onOpen}
+        onPress={onPress}
+        working={working}
+        inline={inline}
+      >
+        {children}
+      </GroupedHoverPopoverTrigger>
+    );
+  }
+
   return (
     <PreviewTrigger
-      // React Aria defaults to 600ms, tuned for links in running prose. These triggers are
-      // badges and avatars the pointer lands on deliberately, so the peek stays quicker.
-      delay={250}
-      closeDelay={200}
+      delay={CARD_OPEN_DELAY_MS}
+      closeDelay={CARD_CLOSE_DELAY_MS}
       onOpenChange={(isOpen) => {
         if (isOpen) onOpen?.();
       }}
@@ -86,27 +381,202 @@ export function HoverPopover({
         placement="bottom start"
         offset={12}
         containerPadding={12}
-        // PreviewTrigger closes a peek instantly when another tooltip or peek replaces it, and
-        // React Aria's Popover then renders nothing while its exit state still turns to exiting.
-        // With no element to watch, that exit never ends, and the next time the trigger is
-        // brushed the Popover mounts again as exiting and unplaced: stuck at the top left of the
-        // page (task #154). Animating every close keeps the element mounted until its exit ends.
         shouldSkipAnimation={false}
-        className={cn(
-          "z-50 w-80 max-w-[calc(100vw-24px)] origin-(--trigger-anchor-point) overflow-y-auto rounded-2xl border border-secondary bg-primary text-primary shadow-lg outline-none",
-          "motion-safe:data-[entering]:animate-in motion-safe:data-[entering]:fade-in motion-safe:data-[entering]:motion-enter-sm motion-safe:data-[exiting]:animate-out motion-safe:data-[exiting]:fade-out motion-safe:data-[exiting]:motion-leave-sm",
-          className,
-        )}
+        className={cn(CARD_SURFACE_CLASS, CARD_BRIDGE_CLASS, CARD_MOTION_CLASS, className)}
       >
-        {children}
+        <div className="min-w-0 max-h-[min(28rem,calc(100dvh-2rem))] overflow-x-hidden overflow-y-auto rounded-[inherit]">
+          {children}
+        </div>
       </Popover>
     </PreviewTrigger>
   );
 }
 
-/** The trigger, inside `PreviewTrigger` so it can reach the peek's open state: `PreviewTrigger`
- * provides it through `OverlayTriggerStateContext`, the context React Aria's own overlay triggers
- * share with their content. */
+function GroupedHoverPopoverTrigger({
+  group,
+  label,
+  trigger,
+  triggerClassName,
+  className,
+  children,
+  onOpen,
+  onPress,
+  working,
+  inline,
+}: {
+  group: HoverCardGroupContextValue;
+  label: string;
+  trigger: ReactNode;
+  triggerClassName?: string;
+  className?: string;
+  children: ReactNode;
+  onOpen?: () => void;
+  onPress?: () => void;
+  working?: boolean;
+  inline?: boolean;
+}) {
+  const id = useId();
+  const triggerElRef = useRef<HTMLElement | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressedRef = useRef(false);
+  const childrenRef = useRef(children);
+  childrenRef.current = children;
+  const onOpenRef = useRef(onOpen);
+  onOpenRef.current = onOpen;
+
+  const clearLongPress = useCallback(() => {
+    if (longPressTimerRef.current !== null) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    group.register({
+      id,
+      className,
+      triggerEl: triggerElRef.current,
+      onOpen: () => onOpenRef.current?.(),
+      renderContent: () => childrenRef.current,
+    });
+  }, [className, group, id, children]);
+
+  useEffect(() => {
+    return () => {
+      clearLongPress();
+      group.unregister(id);
+    };
+  }, [clearLongPress, group, id]);
+
+  const isExpanded = group.activeId === id;
+
+  const setRef = useCallback((node: HTMLElement | null) => {
+    triggerElRef.current = node;
+  }, []);
+
+  const handlePointerEnter = useCallback(
+    (event: PointerEvent<HTMLElement>) => {
+      if (event.pointerType === "touch") return;
+      group.pointerEnterTrigger(id, event.clientX, event.clientY);
+    },
+    [group, id],
+  );
+
+  const handlePointerLeave = useCallback(
+    (event: PointerEvent<HTMLElement>) => {
+      if (event.pointerType === "touch") return;
+      group.pointerLeaveTrigger(id);
+    },
+    [group, id],
+  );
+
+  const handlePointerDown = useCallback(
+    (event: PointerEvent<HTMLElement>) => {
+      if (event.pointerType !== "touch") return;
+      longPressedRef.current = false;
+      clearLongPress();
+      longPressTimerRef.current = setTimeout(() => {
+        longPressTimerRef.current = null;
+        longPressedRef.current = true;
+        group.openImmediate(id);
+      }, TOUCH_LONG_PRESS_MS);
+    },
+    [clearLongPress, group, id],
+  );
+
+  const handlePointerUpOrCancel = useCallback(() => {
+    clearLongPress();
+  }, [clearLongPress]);
+
+  const handleFocus = useCallback(
+    (event: ReactFocusEvent<Element>) => {
+      if (
+        event.currentTarget instanceof HTMLElement &&
+        event.currentTarget.matches(":focus-visible")
+      ) {
+        group.focusTrigger(id);
+      }
+    },
+    [group, id],
+  );
+
+  const handleBlur = useCallback(() => {
+    group.blurTrigger(id);
+  }, [group, id]);
+
+  const handleKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLElement>) => {
+      if (event.key === "Enter" && !onPress) {
+        event.preventDefault();
+        group.openImmediate(id);
+      }
+    },
+    [group, id, onPress],
+  );
+
+  const handlePress = useCallback(() => {
+    if (longPressedRef.current) {
+      longPressedRef.current = false;
+      return;
+    }
+    if (onPress) {
+      group.closeImmediate(false);
+      onPress();
+    } else {
+      group.openImmediate(id);
+    }
+  }, [group, id, onPress]);
+
+  if (inline) {
+    const control = chipControl(handlePress);
+    return (
+      <span
+        ref={setRef}
+        aria-label={label}
+        aria-haspopup="dialog"
+        aria-expanded={isExpanded}
+        className={triggerClassName}
+        onPointerEnter={handlePointerEnter}
+        onPointerLeave={handlePointerLeave}
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUpOrCancel}
+        onPointerCancel={handlePointerUpOrCancel}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        {...control}
+        onKeyDown={(event) => {
+          handleKeyDown(event);
+          control?.onKeyDown?.(event);
+        }}
+      >
+        {trigger}
+      </span>
+    );
+  }
+
+  return (
+    <Button
+      ref={setRef}
+      aria-label={label}
+      aria-haspopup="dialog"
+      aria-expanded={isExpanded}
+      data-working={working}
+      className={triggerClassName}
+      onPress={handlePress}
+      onPointerEnter={handlePointerEnter}
+      onPointerLeave={handlePointerLeave}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUpOrCancel}
+      onPointerCancel={handlePointerUpOrCancel}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+    >
+      {trigger}
+    </Button>
+  );
+}
+
 const PreviewTriggerButton = forwardRef<HTMLButtonElement, ButtonProps>(
   function PreviewTriggerButton({ onPress, ...props }, ref) {
     const closePreview = useClosePreview();
@@ -127,8 +597,6 @@ const PreviewTriggerButton = forwardRef<HTMLButtonElement, ButtonProps>(
   },
 );
 
-/** The inline trigger: `Focusable` hands the span `PreviewTrigger`'s hover, focus, keyboard and
- * long-press props, and `chipControl` adds the button role with the press (click, Enter, Space). */
 function PreviewTriggerInline({
   label,
   className,
@@ -158,26 +626,12 @@ function PreviewTriggerInline({
   );
 }
 
-/** Closes the peek the calling content sits in; for an action inside the popover that moves the
- * reader somewhere else (the Agent card's "Recent activity" link opens the profile panel). */
 export function useClosePreview(): () => void {
   const preview = useContext(OverlayTriggerStateContext);
   return () => preview?.close();
 }
 
-/**
- * Escape on a trigger whose peek is closed goes on as if the trigger were not there (task #520).
- * `PreviewTrigger` marks every Escape on its trigger handled, open peek or not (`usePreviewTrigger`
- * in react-aria 3.52.1), unlike its own tooltip trigger, which takes Escape only while open. An
- * overlay the trigger sits in, the Task popup among them, leaves a handled Escape alone, so with
- * focus on an avatar there it never closed. With no peek open, the press is stopped on the trigger,
- * before React's root listener hands it to `PreviewTrigger`, and pressed again from the trigger's
- * parent, where the overlay takes it as any other. An open peek keeps its Escape: it closes alone.
- * The props `PreviewTrigger` gives the trigger come through a private context, so this works on the
- * event instead.
- */
 function useEscapePassesClosedPeek<T extends HTMLElement>(forwarded: ForwardedRef<T> | null) {
-  // Held on the node itself, so a trigger node swapped for another (rendered anew) gets it too.
   const detach = useRef<() => void>(undefined);
   return useCallback(
     (node: T | null) => {
@@ -190,9 +644,6 @@ function useEscapePassesClosedPeek<T extends HTMLElement>(forwarded: ForwardedRe
   );
 }
 
-/** Lets an Escape on `trigger` with no peek open go on from its parent; returns the detach. The
- * press sent again is the browser's own only in what it says (`isTrusted` is false): a handler
- * that ever asks for a trusted Escape would not take it. */
 function passClosedPeekEscape(trigger: HTMLElement) {
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key !== "Escape" || event.isComposing || event.keyCode === 229) return;
