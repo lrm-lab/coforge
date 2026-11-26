@@ -76,14 +76,14 @@ export function RecordsToolsFooter({
               }
               if (key === "stats") {
                 onNavigate();
-                const now = new Date();
+                const today = Temporal.Now.plainDateISO();
                 void navigate({
                   to: "/w/$workspaceSlug/records/stats",
                   params: { workspaceSlug },
                   search: (previous) => ({
                     tab: recordsTabSearch(previous.tab),
-                    year: typeof previous.year === "number" ? previous.year : now.getFullYear(),
-                    month: typeof previous.month === "number" ? previous.month : now.getMonth() + 1,
+                    year: typeof previous.year === "number" ? previous.year : today.year,
+                    month: typeof previous.month === "number" ? previous.month : today.month,
                   }),
                 });
               }

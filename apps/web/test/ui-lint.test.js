@@ -222,3 +222,48 @@ test("no-distracting-animations rejects animate-bounce and animate-ping in class
   });
   expect(report).toHaveBeenCalledTimes(1);
 });
+
+test("no-handrolled-date-math rejects legacy Date calendar methods and multi-arg new Date in src", () => {
+  const report = mock(() => {});
+  const visitor = plugin.rules["no-handrolled-date-math"].create({
+    report,
+    filename: "/repo/apps/web/src/features/records/window.ts",
+  });
+  const callMethod = (name) => ({
+    callee: {
+      type: "MemberExpression",
+      computed: false,
+      object: { type: "Identifier", name: "date" },
+      property: { type: "Identifier", name },
+    },
+  });
+  visitor.CallExpression(callMethod("setUTCDate"));
+  visitor.CallExpression(callMethod("getFullYear"));
+  visitor.CallExpression(callMethod("getTimezoneOffset"));
+  visitor.CallExpression(callMethod("getTime"));
+  visitor.CallExpression(callMethod("toISOString"));
+  visitor.NewExpression({
+    callee: { type: "Identifier", name: "Date" },
+    arguments: [
+      { type: "Literal", value: 2026 },
+      { type: "Literal", value: 8 },
+    ],
+  });
+  visitor.NewExpression({
+    callee: { type: "Identifier", name: "Date" },
+    arguments: [{ type: "Literal", value: "2026-09-18T00:00:00Z" }],
+  });
+  expect(report).toHaveBeenCalledTimes(4);
+
+  const testFileVisitor = plugin.rules["no-handrolled-date-math"].create({
+    report: mock(() => {}),
+    filename: "/repo/apps/web/test/window.test.ts",
+  });
+  expect(testFileVisitor.CallExpression).toBeUndefined();
+
+  const upstreamVisitor = plugin.rules["no-handrolled-date-math"].create({
+    report: mock(() => {}),
+    filename: "/repo/apps/web/src/components/base/calendar.tsx",
+  });
+  expect(upstreamVisitor.CallExpression).toBeUndefined();
+});

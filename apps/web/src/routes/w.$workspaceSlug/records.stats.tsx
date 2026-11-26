@@ -6,19 +6,19 @@ import { loadWeeklyReportStats } from "#src/features/records/records.functions";
 
 export const Route = createFileRoute("/w/$workspaceSlug/records/stats")({
   validateSearch: (search: Record<string, unknown>): { year: number; month: number } => {
-    const now = new Date();
+    const today = Temporal.Now.plainDateISO();
     const year =
       typeof search.year === "number" && Number.isFinite(search.year)
         ? search.year
         : typeof search.year === "string" && /^\d{4}$/.test(search.year)
           ? Number(search.year)
-          : now.getFullYear();
+          : today.year;
     const month =
       typeof search.month === "number" && search.month >= 1 && search.month <= 12
         ? search.month
         : typeof search.month === "string" && /^\d{1,2}$/.test(search.month)
           ? Math.min(12, Math.max(1, Number(search.month)))
-          : now.getMonth() + 1;
+          : today.month;
     return { year, month };
   },
   loaderDeps: ({ search }) => ({ year: search.year, month: search.month }),

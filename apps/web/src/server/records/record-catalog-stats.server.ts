@@ -6,7 +6,6 @@ import {
   normalizeReportContent,
   reportContentForRecipient,
 } from "#src/features/records/records-content";
-import { isoWeekOfDate } from "#src/features/records/weekly-report-schedule-due";
 import { buildWeeklyReportHtml } from "./weekly-report-html.server";
 import { buildWeeklyReportPresentation } from "./weekly-report-presentation.server";
 import { REPORT_PERSON_SELECT } from "./record-member-weeks.server";
@@ -14,17 +13,17 @@ import { requireMembership, requireWeeklyReportLeader } from "./record-catalog-a
 
 type Db = PrismaClient;
 
-/** ISO (year, week) pairs that intersect the given calendar month. */
 function isoWeeksTouchingMonth(year: number, month: number): Array<{ year: number; week: number }> {
+  const firstDay = new Temporal.PlainDate(year, month, 1);
   const result: Array<{ year: number; week: number }> = [];
-  const days = new Date(year, month, 0).getDate();
   const seen = new Set<string>();
-  for (let day = 1; day <= days; day += 1) {
-    const iso = isoWeekOfDate(new Date(year, month - 1, day));
-    const key = `${iso.year}-${iso.week}`;
+  for (let day = 1; day <= firstDay.daysInMonth; day += 1) {
+    const date = firstDay.with({ day });
+    if (date.yearOfWeek === undefined || date.weekOfYear === undefined) continue;
+    const key = `${date.yearOfWeek}-${date.weekOfYear}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    result.push(iso);
+    result.push({ year: date.yearOfWeek, week: date.weekOfYear });
   }
   return result;
 }

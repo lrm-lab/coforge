@@ -416,6 +416,78 @@ const noDistractingAnimations = {
   },
 };
 
+const LEGACY_DATE_METHODS = new Set([
+  "setFullYear",
+  "setUTCFullYear",
+  "setMonth",
+  "setUTCMonth",
+  "setDate",
+  "setUTCDate",
+  "setHours",
+  "setUTCHours",
+  "setMinutes",
+  "setUTCMinutes",
+  "setSeconds",
+  "setUTCSeconds",
+  "setMilliseconds",
+  "setUTCMilliseconds",
+  "setTime",
+  "getTimezoneOffset",
+  "getFullYear",
+  "getUTCFullYear",
+  "getMonth",
+  "getUTCMonth",
+  "getDate",
+  "getUTCDate",
+  "getDay",
+  "getUTCDay",
+  "getHours",
+  "getUTCHours",
+  "getMinutes",
+  "getUTCMinutes",
+  "getSeconds",
+  "getUTCSeconds",
+]);
+
+const WEB_SRC_FILE = /\/src\//;
+
+const noHandrolledDateMath = {
+  create(context) {
+    const file = normalizedFilename(context);
+    if (!WEB_SRC_FILE.test(file) || UPSTREAM_OFFICIAL_FILES.test(file)) return {};
+    return {
+      CallExpression(node) {
+        const callee = node.callee;
+        if (
+          callee?.type === "MemberExpression" &&
+          !callee.computed &&
+          callee.property?.type === "Identifier" &&
+          LEGACY_DATE_METHODS.has(callee.property.name)
+        ) {
+          context.report({
+            node,
+            message:
+              "Do not hand-roll calendar or timezone math with legacy Date methods; use Temporal (and #src/lib/dates for Intl formatting). See apps/web/src/lib/AGENTS.md.",
+          });
+        }
+      },
+      NewExpression(node) {
+        if (
+          node.callee?.type === "Identifier" &&
+          node.callee.name === "Date" &&
+          (node.arguments?.length ?? 0) >= 2
+        ) {
+          context.report({
+            node,
+            message:
+              "Do not construct local-timezone calendar dates with multi-argument new Date(year, month, ...); use Temporal.PlainDate or Temporal.ZonedDateTime. See apps/web/src/lib/AGENTS.md.",
+          });
+        }
+      },
+    };
+  },
+};
+
 export default {
   meta: {
     name: "coforge",
@@ -435,5 +507,6 @@ export default {
     "no-raw-toast-library": noRawToastLibrary,
     "no-raw-file-type-icon": noRawFileTypeIcon,
     "no-distracting-animations": noDistractingAnimations,
+    "no-handrolled-date-math": noHandrolledDateMath,
   },
 };
