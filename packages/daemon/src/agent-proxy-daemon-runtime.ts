@@ -7,7 +7,7 @@ import {
   isRecord,
   parseRuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
-import { createCodeAgentProvider } from "#src/code-agent/registry";
+import { codeAgentProviderCapabilities } from "#src/code-agent/registry";
 import type { DaemonRuntime } from "#src/daemon-runtime/runtime";
 import { canonicalThreadTarget } from "#src/daemon-runtime/thread-target";
 import { AgentAppInboxPersistence } from "#src/persistence/agent-app-inbox-store";
@@ -21,7 +21,6 @@ import { workspaceRuntime } from "#src/agent-proxy-workspace-runtime";
 import { agentSessionIsLive } from "#src/agent-proxy-session-admission";
 
 const APP_EVENT_TARGET = /^@app\.(?:system\.)?[a-z][a-z0-9-]{2,63}$/;
-const compactionCache = new Map<string, boolean>();
 
 function classifyReadKind(target: string): AgentInboxReadTargetKind {
   if (APP_EVENT_TARGET.test(target)) return "app_events";
@@ -39,17 +38,8 @@ function createCollabHooks(requireRuntime: () => DaemonRuntime): AgentProxyColla
       const provider =
         rt.runtime(agentId)?.config.provider ?? rt.restartConfig(agentId)?.config.provider;
       if (!provider) return false;
-      let cached = compactionCache.get(provider);
-      if (cached === undefined) {
-        const known = parseRuntimeProvider(provider);
-        try {
-          cached = known ? createCodeAgentProvider(known).reportsCompaction === true : false;
-        } catch {
-          cached = false;
-        }
-        compactionCache.set(provider, cached);
-      }
-      return cached;
+      const known = parseRuntimeProvider(provider);
+      return known ? codeAgentProviderCapabilities(known).reportsCompaction : false;
     },
     canonicalizeTarget: (context, target, agentApiKey) =>
       canonicalThreadTarget(target, async (parent, anchor) => {

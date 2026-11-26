@@ -11,8 +11,13 @@ import {
   resolveWarmRecycleConfig,
 } from "#src/agent-runtime/wake-session-recycle";
 import type { CodeAgentProvider, SessionResumeFacts } from "@lrm/coforge-anvil";
+import { codeAgentProviderCapabilities, createCodeAgentProvider } from "#src/code-agent/registry";
 import { runtimeDisplayName } from "./session-invalidate-activity";
-import { resolveSessionResumeFacts, supportsSessionResume } from "./cold-idle-sweep";
+import {
+  resolveSessionResumeFacts,
+  supportsSessionResume,
+  type ColdIdleProviderCapabilities,
+} from "./cold-idle-sweep";
 import {
   queueHasInputContent,
   type AgentInput,
@@ -37,12 +42,16 @@ export type RecycledWake = Readonly<{
   carriedMemoryBlock: boolean;
   recordFailure(error: unknown): void;
 }>;
-export type WakeRecyclePorts = Readonly<{
-  provider(provider: RuntimeProvider): CodeAgentProvider;
-  inputQueue(agentId: string): AgentInputQueue | undefined;
-  hasQueuedDeliveries(agentId: string): boolean;
-  readSummaryFacts?(agentId: string, sessionId: string): SessionResumeFacts | undefined;
-}>;
+export type WakeRecyclePorts = Readonly<
+  (
+    | { provider(provider: RuntimeProvider): CodeAgentProvider; providerFactory?: undefined }
+    | { providerFactory(): (provider: RuntimeProvider) => CodeAgentProvider; provider?: undefined }
+  ) & {
+    inputQueue(agentId: string): AgentInputQueue | undefined;
+    hasQueuedDeliveries(agentId: string): boolean;
+    readSummaryFacts?(agentId: string, sessionId: string): SessionResumeFacts | undefined;
+  }
+>;
 type RecycleFailure = Readonly<{
   sessionId: string;
   provider: RuntimeProvider;
@@ -56,7 +65,14 @@ export class WakeRecycle {
     this.#ports = ports;
   }
   provider(provider: RuntimeProvider): CodeAgentProvider {
-    return this.#ports.provider(provider);
+    return this.#ports.providerFactory
+      ? this.#ports.providerFactory()(provider)
+      : this.#ports.provider(provider);
+  }
+  providerCapabilities(provider: RuntimeProvider): ColdIdleProviderCapabilities | undefined {
+    return this.#ports.providerFactory?.() === createCodeAgentProvider
+      ? codeAgentProviderCapabilities(provider)
+      : undefined;
   }
   readSummaryFacts(agentId: string, sessionId: string): SessionResumeFacts | undefined {
     return this.#ports.readSummaryFacts?.(agentId, sessionId);
@@ -82,7 +98,7 @@ export class WakeRecycle {
   async #plan(request: WakeRecycleRequest): Promise<RecycledWake | undefined> {
     const { agentId, sessionId } = request;
     if (!sessionId || request.sessionMode === "create") return undefined;
-    const provider = this.#ports.provider(request.provider);
+    const provider = this.provider(request.provider);
     const config = resolveWakeRecycleConfig(
       request.envVars,
       Bun.env,

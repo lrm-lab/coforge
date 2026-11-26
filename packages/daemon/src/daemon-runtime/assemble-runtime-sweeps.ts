@@ -5,6 +5,7 @@ import type { AgentContexts } from "./agent-contexts";
 import type { AgentDeliveryGate } from "./agent-delivery-gate";
 import type { AgentStopRegistry } from "./agent-stop-registry";
 import type { CodeAgentInventorySync } from "./code-agent-inventory-sync";
+import { codeAgentProviderCapabilities, createCodeAgentProvider } from "#src/code-agent/registry";
 import { CatalogFreshnessSweep } from "./catalog-freshness-sweep";
 import { ColdIdleSweep } from "./cold-idle-sweep";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
@@ -76,7 +77,7 @@ export function createSessionSummaryObserver(
 export function assembleRuntimeSweeps(ports: {
   processManager(): AgentProcessManager;
   runtimeRelease(): RuntimeRelease<ActivityLaunch>;
-  createProvider(provider: RuntimeProvider): CodeAgentProvider;
+  providerFactory(): (provider: RuntimeProvider) => CodeAgentProvider;
   contexts(): AgentContexts;
   deliveryGate(): AgentDeliveryGate;
   runnerHold(): boolean;
@@ -88,7 +89,11 @@ export function assembleRuntimeSweeps(ports: {
     new ColdIdleSweep({
       agentIds: () => ports.processManager().runningAgentIds(),
       agent: (agentId) => ports.runtimeRelease().coldIdleAgent(agentId),
-      provider: (provider) => ports.createProvider(provider),
+      provider: (provider) => ports.providerFactory()(provider),
+      providerCapabilities: (provider) =>
+        ports.providerFactory() === createCodeAgentProvider
+          ? codeAgentProviderCapabilities(provider)
+          : undefined,
       readSummaryFacts: (agentId, sessionId) =>
         ports.contexts().sessionResumeFacts(agentId, sessionId),
       stop: (stop) => ports.runtimeRelease().stopColdIdle(stop),

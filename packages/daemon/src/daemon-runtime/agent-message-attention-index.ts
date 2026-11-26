@@ -77,6 +77,7 @@ export class AgentMessageAttentionIndex {
     previewSeen: this.previewSeen,
     settlePending: (agentId, target, settled) =>
       this.#pending.settle(agentId, target, settled, (id, name) => this.clear(id, name)),
+    onConsumed: (agentId) => this.hold.onConsumed?.(agentId),
   });
   readonly noticeEligibility = noticeEligibility((...args) => this.#consumption.readBasis(...args));
   constructor(

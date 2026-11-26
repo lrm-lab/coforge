@@ -62,10 +62,16 @@ export function idleBlocker(facts: AgentIdleFacts): IdleBlocker | undefined {
   return undefined;
 }
 export type ColdIdleAgent = Omit<ColdIdleSweepView, "supported">;
+export type ColdIdleProviderCapabilities = Readonly<{
+  supportsSessionSummaryRecycle: boolean;
+  hasNativeSessionResumeFacts: boolean;
+  idleRecycleMinColdGapMs?: number;
+}>;
 export type ColdIdleSweepPorts = Readonly<{
   agentIds(): string[];
   agent(agentId: string): ColdIdleAgent | undefined;
   provider(provider: RuntimeProvider): CodeAgentProvider;
+  providerCapabilities?(provider: RuntimeProvider): ColdIdleProviderCapabilities | undefined;
   stop(stop: ColdIdleStop): Promise<void>;
   readSummaryFacts?(agentId: string, sessionId: string): SessionResumeFacts | undefined;
   now?(): number;
@@ -147,12 +153,13 @@ export class ColdIdleSweep {
   ): boolean {
     const agent = this.#ports.agent(agentId);
     if (!agent || !agent.sessionId || agent.lastContextTokens === undefined) return false;
-    const provider = this.#ports.provider(agent.provider);
-    if (!supportsSessionResume(provider)) return false;
+    const capabilities = this.#capabilities(agent.provider);
+    if (!capabilities.hasNativeSessionResumeFacts && !capabilities.supportsSessionSummaryRecycle)
+      return false;
     const config = resolveWakeRecycleConfig(
       agent.envVars,
       Bun.env,
-      provider.idleRecycleMinColdGapMs,
+      capabilities.idleRecycleMinColdGapMs,
     );
     if (!config.enabled) return false;
     const warm = resolveWarmRecycleConfig(agent.envVars, Bun.env);
@@ -254,17 +261,30 @@ export class ColdIdleSweep {
         ),
       });
   }
+  #capabilities(provider: RuntimeProvider): ColdIdleProviderCapabilities {
+    const staticCapabilities = this.#ports.providerCapabilities?.(provider);
+    if (staticCapabilities) return staticCapabilities;
+    const instance = this.#ports.provider(provider);
+    return {
+      supportsSessionSummaryRecycle: instance.supportsSessionSummaryRecycle === true,
+      hasNativeSessionResumeFacts: instance.readSessionResumeFacts !== undefined,
+      ...(instance.idleRecycleMinColdGapMs !== undefined
+        ? { idleRecycleMinColdGapMs: instance.idleRecycleMinColdGapMs }
+        : {}),
+    };
+  }
   #views(): ColdIdleSweepView[] {
     return this.#ports.agentIds().flatMap((agentId) => {
       const agent = this.#ports.agent(agentId);
       if (!agent) return [];
-      const provider = this.#ports.provider(agent.provider);
+      const capabilities = this.#capabilities(agent.provider);
       return [
         {
           ...agent,
-          supported: supportsSessionResume(provider),
-          ...(provider.idleRecycleMinColdGapMs !== undefined
-            ? { providerMinColdGapMs: provider.idleRecycleMinColdGapMs }
+          supported:
+            capabilities.hasNativeSessionResumeFacts || capabilities.supportsSessionSummaryRecycle,
+          ...(capabilities.idleRecycleMinColdGapMs !== undefined
+            ? { providerMinColdGapMs: capabilities.idleRecycleMinColdGapMs }
             : {}),
         },
       ];
@@ -274,6 +294,12 @@ export class ColdIdleSweep {
     view: ColdIdleSweepView,
     sessionId: string,
   ): Promise<SessionResumeFacts | undefined> {
+    const capabilities = this.#ports.providerCapabilities?.(view.provider);
+    if (capabilities && !capabilities.hasNativeSessionResumeFacts) {
+      return capabilities.supportsSessionSummaryRecycle
+        ? this.#ports.readSummaryFacts?.(view.agentId, sessionId)
+        : undefined;
+    }
     return resolveSessionResumeFacts(this.#ports.provider(view.provider), {
       agentId: view.agentId,
       sessionId,

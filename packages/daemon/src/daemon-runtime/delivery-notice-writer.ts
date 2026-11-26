@@ -1,10 +1,3 @@
-/**
- * Where a delivery's notice is written into an Agent's process (task #14). Who writes it depends on
- * who owns the message: the unread loop writes every reliable delivery, because it holds the batch
- * and retries on one state machine; a Memory Agent's notice and a tracked @mention's are written
- * here, by the mechanisms that own them. The rule is one writer per message — not one writer in the
- * daemon — so a delivery that is both is written exactly once.
- */
 import type { NoticeMessage } from "./accepted-message-notices";
 import { AgentNoticeSuppressedError, type AgentConversationScope } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
@@ -21,40 +14,19 @@ import type { AgentMessageAttentionIndex, MessageAttention } from "./agent-messa
 
 const logger = getLogger(["coforge", "daemon", "message-attention"]);
 
-/**
- * The daemon's delivery queue, as the notice path uses it: whether a delivery waits, the
- * synchronous busy marker, the queue's own contents for a notice to count, and the Agent's
- * durable cursor. Declared here, structurally, so the index can keep the field private: a class
- * may hand a private field to a function, and no caller can reach the queue through the index.
- */
 export type AgentDeliveryQueue = {
   shouldHold(agentId: string): boolean;
   enqueue(agentId: string, message: AgentMessageDelivery): void;
   busy(agentId: string): void;
-  /** Admission resolved or rejected; this is not a turn outcome. */
   noticeSettled?(agentId: string): void;
   noticeAccepted?(agentId: string, messages: readonly NoticeMessage[]): void;
-  /** The deliveries held for this Agent that it has not been shown yet. The notice counts
-   * these, so its number is always a count of messages the daemon is holding right now rather
-   * than a running total it would have to invalidate later. Concrete deliveries rather than a
-   * number because one message can be held as more than one delivery, and a notice must
-   * count messages, not deliveries. Optional: a composition without a delivery queue holds
-   * nothing. */
   queued?(agentId: string): readonly AgentMessageDelivery[];
-  /** The Agent's durable consumed cursor (its state database). Without it the index is
-   * exactly as volatile as it was: the cursor then only lives as long as this process. */
   consumedSeqs?: AgentConsumedSeqPort;
-  /** A line owed before the next notice, with its newline; empty when none. */
+  onConsumed?(agentId: string): void;
   noticePrefix?(agentId: string): string;
-  /** The unread loop's door (task #14): a reliable delivery enters the loop here instead of being
-   * written by this path, because the loop is that tier's only writer — it keeps the batch and
-   * composes afresh at each attempt. The returned promise is that first attempt: it rejects when the
-   * session refused the notice, which this path must pass on. Absent in a composition without a
-   * loop, and then this path writes the notice itself. */
   unread?(announced: readonly AgentMessageDelivery[]): Promise<void> | void;
 };
 
-/** The facts a delivery notice is written from: the index lends these, and keeps its own. */
 export type DeliveryNoticeHost = Pick<
   AgentMessageAttentionIndex,
   "previewSeen" | "noticeActionClocks" | "session" | "isCurrentGeneration" | "noticeEligibility"
@@ -66,20 +38,10 @@ export type DeliveryNoticeHost = Pick<
   recordAccepted(deliveries: readonly AgentMessageDelivery[]): boolean;
 };
 
-/**
- * One line per target, in the order the targets first appear: what this notice announces (`new`)
- * and what stays queued for this Agent (`held`). The delivery queue is per Agent, so a coalesced
- * flush can mix a channel, a DM and a thread; attributing the whole batch to the last delivery's
- * target would hide the others.
- *
- * `held` is a fact only this daemon has: those messages have not been shown to the model yet.
- * They are presented again when the queue releases them, unless a read covers them first.
- */
 export function writeDeliveryNotice(
   this: DeliveryNoticeHost,
   message: AgentMessageDelivery,
   attention?: MessageAttention,
-  /** The messages this notice announces: one delivery, or a coalesced flush's whole batch. */
   announced: readonly AgentMessageDelivery[] = [message],
 ): Promise<void> {
   const generation = this.generation(message.agentId);
@@ -92,27 +54,12 @@ export function writeDeliveryNotice(
     announced.map((item) => item.messageId),
   );
   this.hold.busy(message.agentId);
-  // A reliable delivery has one writer, the unread loop (task #14): it holds the batch, composes
-  // from it at every attempt, and retries until the Agent reads it. Handing the batch over here —
-  // at the one place this path would have written a notice — keeps the decision (who is told) with
-  // the index and the writing (when, how often, in what words) with the loop, without a second
-  // notice for the same message. The loop wrote this first attempt into the session just now, so
-  // the delivery counts as told; the retries that follow are the loop's.
-  //
-  // A tracked @mention keeps this writer instead: the rule is one writer per message rather than one
-  // writer in the daemon. Its notice names its deliveries to the session (`deliveryIds`) and its
-  // retries are the mention tracker's, not the loop's; routing it there would take the notice away
-  // from the mechanism that guarantees it.
   const tracked = announced.some((item) => isTrackedMention(item));
   if (
     deliveryImportance(message) === DELIVERY_IMPORTANCE.RELIABLE &&
     this.hold.unread &&
     !tracked
   ) {
-    // The loop's first attempt is awaited here, so a session that refuses the notice still fails
-    // the delivery: the caller does not acknowledge what nobody was told. It is raced against the
-    // generation's cancellation like every other notice, so a stop settles this delivery instead of
-    // leaving it waiting on a process that is going away.
     const handover = this.acceptNotice(generation.cancellation.signal, async () => {
       await this.hold.unread!(announced);
     })
@@ -151,8 +98,6 @@ export function writeDeliveryNotice(
         if (this.isCurrentGeneration(message.agentId, generation))
           generation.notificationAttempts.delete(message.deliveryId);
       });
-    // A redelivery that arrives while this attempt is in flight reuses it, so the loop is not asked
-    // to say the same thing twice.
     generation.notificationAttempts.set(message.deliveryId, handover);
     return handover;
   }

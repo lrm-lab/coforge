@@ -112,6 +112,72 @@ export function createRuntimeAuthAdapter(
   }
 }
 
+export type CodeAgentProviderCapabilities = Readonly<{
+  reportsCompaction: boolean;
+  supportsSessionSummaryRecycle: boolean;
+  hasNativeSessionResumeFacts: boolean;
+  idleRecycleMinColdGapMs?: number;
+}>;
+
+const CLAUDE_CODE_IDLE_RECYCLE_MIN_COLD_GAP_MS = 60 * 60_000;
+const CODEX_IDLE_RECYCLE_MIN_COLD_GAP_MS = 60 * 60_000;
+
+export function codeAgentProviderCapabilities(
+  provider: RuntimeProvider,
+): CodeAgentProviderCapabilities {
+  switch (provider) {
+    case RUNTIME_PROVIDER.COFORGE:
+    case RUNTIME_PROVIDER.PI:
+    case RUNTIME_PROVIDER.GROK:
+      return {
+        reportsCompaction: true,
+        supportsSessionSummaryRecycle: true,
+        hasNativeSessionResumeFacts: false,
+      };
+    case RUNTIME_PROVIDER.CODEX:
+      return {
+        reportsCompaction: true,
+        supportsSessionSummaryRecycle: true,
+        hasNativeSessionResumeFacts: true,
+        idleRecycleMinColdGapMs: CODEX_IDLE_RECYCLE_MIN_COLD_GAP_MS,
+      };
+    case RUNTIME_PROVIDER.CLAUDE_CODE:
+      return {
+        reportsCompaction: true,
+        supportsSessionSummaryRecycle: false,
+        hasNativeSessionResumeFacts: true,
+        idleRecycleMinColdGapMs: CLAUDE_CODE_IDLE_RECYCLE_MIN_COLD_GAP_MS,
+      };
+    case RUNTIME_PROVIDER.KIRO:
+      return {
+        reportsCompaction: true,
+        supportsSessionSummaryRecycle: false,
+        hasNativeSessionResumeFacts: false,
+      };
+    case RUNTIME_PROVIDER.OPENCODE:
+    case RUNTIME_PROVIDER.ANTIGRAVITY:
+      return {
+        reportsCompaction: false,
+        supportsSessionSummaryRecycle: true,
+        hasNativeSessionResumeFacts: false,
+      };
+    case RUNTIME_PROVIDER.CURSOR:
+    case RUNTIME_PROVIDER.DSH:
+    case RUNTIME_PROVIDER.COMMAND_CODE:
+    case RUNTIME_PROVIDER.DEVIN:
+    case RUNTIME_PROVIDER.DROID:
+      return {
+        reportsCompaction: false,
+        supportsSessionSummaryRecycle: false,
+        hasNativeSessionResumeFacts: false,
+      };
+    default: {
+      const unreachable: never = provider;
+      throw new Error(`Unhandled runtime provider: ${unreachable}`);
+    }
+  }
+}
+
 export function createCodeAgentProvider(
   provider: RuntimeProvider,
   options: CodeAgentProviderRegistryOptions = {},

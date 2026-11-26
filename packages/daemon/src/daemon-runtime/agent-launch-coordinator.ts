@@ -46,8 +46,6 @@ import { installAgentApiKeyHealer } from "./agent-api-key-heal";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
-/** Raft's `formatSubagentsFinishedRuntimeInput`, verbatim: Codex only queues their results for
- * the next turn, so the notice says where they are and to finish the work. */
 const SUBAGENTS_FINISHED_WAKE =
   "Your sub-agents have finished. Their results are above. " +
   "Continue your work with them. Complete all your work before stopping.";
@@ -85,8 +83,6 @@ export type AgentLaunchCoordinatorPorts = {
   agentControl: AgentControl;
   agentSessions: AgentSessions;
   runtimeErrorHold: RuntimeErrorDeliveryHold;
-  /** Told when a launch fails with a provider credential known unusable, and when a person's Start
-   * ends that record before the launch it is making. */
   credentialHolds: Pick<CredentialInvalidHolds, "record" | "started">;
   lifecycle: Pick<AgentLifecycle, "processStarted" | "processClosed" | "subscribe">;
   replyIntents: ReplyIntentPublisher<ActivityLaunch>;
@@ -168,6 +164,7 @@ export class AgentLaunchCoordinator {
       agent: (agentId) => this.ports.runtimeRelease?.coldIdleAgent?.(agentId),
       provider: (provider) =>
         this.ports.wakeRecycle?.provider?.(provider) ?? ({ provider } as never),
+      providerCapabilities: (provider) => this.ports.wakeRecycle?.providerCapabilities?.(provider),
       readSummaryFacts: (agentId, sessionId) =>
         this.ports.wakeRecycle?.readSummaryFacts?.(agentId, sessionId),
       stop: async (stop) => {
@@ -257,8 +254,6 @@ export class AgentLaunchCoordinator {
         return true;
       },
     });
-    // A key another launch's Stop revoked answers every Agent API call with a bare 401;
-    // the shared wire transport asks this healer for a replacement and retries once.
     installAgentApiKeyHealer({
       agentApiKeys: ports.agentApiKeys,
       workspaceId: () => ports.connection.workspaceId,
@@ -271,10 +266,6 @@ export class AgentLaunchCoordinator {
     });
   }
 
-  /**
-   * Writes the last-subagent wake as idle input (Raft's `sendRuntimeInput mode:idle`), under
-   * the idle nudge's delivery gates: a live turn, queued work or a delivery hold drops it.
-   */
   wakeFinishedSubagents(agentId: string): void {
     const session = this.ports.agentProcessManager.session(agentId);
     if (!session?.notify || session.hasLiveTurn !== false) return;
@@ -400,7 +391,6 @@ export class AgentLaunchCoordinator {
     );
   }
 
-  /** Drops what the Agent was owed: a Stop a person made, or the Agent's delete. */
   dropOwedRecovery(agentId: string): void {
     this.ports.wakeRecycle.forgetFailure(agentId);
     this.memory.review.forget(agentId);
@@ -409,13 +399,10 @@ export class AgentLaunchCoordinator {
     this.#owed.drop(agentId);
   }
 
-  /** A person's Start is the probe for a credential the Agent showed unusable: the record ends
-   * before the launch, and a live Agent is told what the hold kept (task #39). */
   credentialStarted(agentId: string): Promise<void> | void {
     return this.ports.credentialHolds.started(agentId);
   }
 
-  /** Drops every debt, as a whole-runtime stop does: the cloud's next Start is the source then. */
   clearOwedRecovery(): void {
     this.ports.wakeRecycle.clearFailures();
     this.memory.review.clear();
@@ -424,8 +411,6 @@ export class AgentLaunchCoordinator {
     this.#owed.clear();
   }
 
-  /** What the Agent's next launch still owes a cold start that did not finish telling it, and the
-   * call that settles the debt once that launch has told it. */
   owedTo(agentId: string) {
     return this.#owed.owing(agentId, this.ports.deliveryGate.pending(agentId));
   }

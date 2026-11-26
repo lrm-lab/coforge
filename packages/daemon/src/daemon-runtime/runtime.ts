@@ -242,7 +242,7 @@ export class DaemonRuntime {
   readonly #sweeps = assembleRuntimeSweeps({
     processManager: () => this.#agentProcessManager,
     runtimeRelease: () => this.#runtimeRelease,
-    createProvider: (provider) => this.#createProvider(provider),
+    providerFactory: () => this.#createProvider,
     contexts: () => this.#contexts,
     deliveryGate: () => this.#deliveryGate,
     runnerHold: () => this.#runnerHold !== undefined,
@@ -267,7 +267,7 @@ export class DaemonRuntime {
     transport: () => (this.#startup.started && !this.#stopping ? this.#transport : undefined),
   });
   readonly #wakeRecycle = new WakeRecycle({
-    provider: (provider) => this.#createProvider(provider),
+    providerFactory: () => this.#createProvider,
     inputQueue: (agentId) => this.#inputDrain.get(agentId),
     hasQueuedDeliveries: (agentId) => this.#deliveryGate.hasQueued(agentId),
     readSummaryFacts: (agentId, sessionId) => this.#contexts.sessionResumeFacts(agentId, sessionId),

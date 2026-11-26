@@ -1,7 +1,7 @@
 import { getLogger } from "@logtape/logtape";
 import { parseRuntimeProvider, thrownMessage } from "@lrm/coforge-sdk/internal";
 import type { SessionResumeFacts } from "@lrm/coforge-anvil";
-import { createCodeAgentProvider } from "#src/code-agent/registry";
+import { codeAgentProviderCapabilities } from "#src/code-agent/registry";
 import type { NoticeMessage } from "./accepted-message-notices";
 import { humanMemoryActivityTime } from "./memory-idle-review";
 import { MemoryReviewLedger } from "#src/persistence/memory-review-ledger";
@@ -35,12 +35,7 @@ export type CompactionFailureKind =
 
 function reportsCompaction(provider: string): boolean {
   const known = parseRuntimeProvider(provider);
-  if (!known) return false;
-  try {
-    return createCodeAgentProvider(known).reportsCompaction === true;
-  } catch {
-    return false;
-  }
+  return known ? codeAgentProviderCapabilities(known).reportsCompaction : false;
 }
 
 export class AgentContexts {
@@ -214,41 +209,27 @@ export class AgentContexts {
     } catch {}
   }
 
-  /** Current context generation from `AgentContextLedger.generation()`, falling back to in-memory
-   * tracking when the runtime does not persist a compaction ledger. */
   contextGeneration(agentId: string): number | undefined {
     try {
       const persisted = this.ledger(agentId)?.generation();
       if (persisted !== undefined) return persisted;
-    } catch {
-      // Fall back to the in-memory generation counter when stateDb is unavailable.
-    }
+    } catch {}
     return this.#memoryGenerations.get(agentId);
   }
 
-  /** Listeners told when an Agent's context starts over (a launch or a finished compaction), for
-   * state that only the model's current context makes true. */
   readonly #newContextListeners = new Set<(agentId: string, runtime?: string) => void>();
 
-  /** Registers a context-reset listener; returns its removal. */
   onNewContext(listener: (agentId: string, runtime?: string) => void): () => void {
     this.#newContextListeners.add(listener);
     return () => this.#newContextListeners.delete(listener);
   }
 
-  /** The Agent's context starts over: a launch, whose `runtime` is then the one in use (its
-   * session may be new), or a finished compaction. */
   newContext(agentId: string, runtime?: string): void {
-    // A finished compaction starts the context over (the ledger below), and nothing is queued for
-    // it: the two memory files arrive with the next fresh session instead (task #548). A launch
-    // records the runtime whose adapter reports compactions; a compaction keeps it.
     if (runtime) this.#reportsCompaction.set(agentId, reportsCompaction(runtime));
     this.#memoryGenerations.set(agentId, (this.#memoryGenerations.get(agentId) ?? 0) + 1);
     try {
       this.ledger(agentId)?.advance();
     } catch (error) {
-      // The ledger is a convenience: a launch or a compaction finish must not fail over it. The
-      // context stays as it was, so the Agent is shown less repeated text, never less new text.
       logger.warn("could not start a new Agent context", {
         event: "agent_context.advance_failed",
         agent_id: agentId,
@@ -258,9 +239,7 @@ export class AgentContexts {
     for (const listener of this.#newContextListeners) {
       try {
         listener(agentId, runtime);
-      } catch {
-        // A listener must never fail a launch or a compaction bookkeeping step.
-      }
+      } catch {}
     }
   }
 }

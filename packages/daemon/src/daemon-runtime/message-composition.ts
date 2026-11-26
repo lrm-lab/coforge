@@ -153,13 +153,10 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
         const launch = ports.currentActivityLaunch(agentId);
         if (launch) ports.reconcileIdleTurn(agentId, launch);
       },
-      consumedSeqs: {
-        read: (agentId) => ports.consumedSeqs.read(agentId),
-        write: (agentId, state) => {
-          ports.consumedSeqs.write(agentId, state);
-          mentionDeliveries.settleConsumed(agentId);
-          importantUnread.consumed(agentId);
-        },
+      consumedSeqs: ports.consumedSeqs,
+      onConsumed: (agentId) => {
+        mentionDeliveries.settleConsumed(agentId);
+        importantUnread.consumed(agentId);
       },
       noticePrefix: (agentId) => ports.sync.noticePrefix(agentId),
       unread: (announced) => importantUnread.observeDeliveries(announced),

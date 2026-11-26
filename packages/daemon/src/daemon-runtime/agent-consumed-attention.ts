@@ -45,6 +45,7 @@ export class AgentConsumedAttention {
       store(): AgentConsumedSeqPort | undefined;
       previewSeen: PreviewSeen;
       settlePending(agentId: string, target: string, settled: (sequence: number) => boolean): void;
+      onConsumed?(agentId: string): void;
     },
   ) {}
 
@@ -277,43 +278,44 @@ export class AgentConsumedAttention {
   }
   #persistDelta(agentId: string, delta: AgentConsumedSeqDelta): void {
     const store = this.ports.store();
-    if (!store) return;
-    if (store.apply) {
-      store.apply(agentId, delta);
-      return;
+    if (store) {
+      if (store.apply) store.apply(agentId, delta);
+      else store.write(agentId, consumedSnapshot(this.#consumedState(agentId)));
     }
-    store.write(agentId, consumedSnapshot(this.#consumedState(agentId)));
+    this.ports.onConsumed?.(agentId);
   }
   #persistTarget(agentId: string, target: string): void {
     const store = this.ports.store();
-    if (!store) return;
-    const state = this.#consumedState(agentId);
-    if (!store.apply) {
-      store.write(agentId, consumedSnapshot(state));
-      return;
+    if (store) {
+      const state = this.#consumedState(agentId);
+      if (!store.apply) {
+        store.write(agentId, consumedSnapshot(state));
+      } else {
+        const entry = state.targets.get(target);
+        const record = entry?.conversationId ? persistableConsumedTarget(entry) : undefined;
+        if (record) store.apply(agentId, { upsertTargets: [{ target, entry: record }] });
+      }
     }
-    const entry = state.targets.get(target);
-    if (!entry?.conversationId) return;
-    const record = persistableConsumedTarget(entry);
-    if (!record) return;
-    store.apply(agentId, { upsertTargets: [{ target, entry: record }] });
+    this.ports.onConsumed?.(agentId);
   }
   #persistTargets(agentId: string, targets: readonly string[]): void {
     const store = this.ports.store();
-    if (!store) return;
-    const state = this.#consumedState(agentId);
-    if (!store.apply) {
-      store.write(agentId, consumedSnapshot(state));
-      return;
+    if (store) {
+      const state = this.#consumedState(agentId);
+      if (!store.apply) {
+        store.write(agentId, consumedSnapshot(state));
+      } else {
+        const upsertTargets: { target: string; entry: AgentConsumedSeqEntry }[] = [];
+        for (const target of targets) {
+          const entry = state.targets.get(target);
+          if (!entry?.conversationId) continue;
+          const record = persistableConsumedTarget(entry);
+          if (record) upsertTargets.push({ target, entry: record });
+        }
+        if (upsertTargets.length > 0) store.apply(agentId, { upsertTargets });
+      }
     }
-    const upsertTargets: { target: string; entry: AgentConsumedSeqEntry }[] = [];
-    for (const target of targets) {
-      const entry = state.targets.get(target);
-      if (!entry?.conversationId) continue;
-      const record = persistableConsumedTarget(entry);
-      if (record) upsertTargets.push({ target, entry: record });
-    }
-    if (upsertTargets.length > 0) store.apply(agentId, { upsertTargets });
+    this.ports.onConsumed?.(agentId);
   }
   #persistTargetAndAliases(
     agentId: string,
@@ -321,31 +323,37 @@ export class AgentConsumedAttention {
     aliasDelta: AliasDelta | undefined,
   ): void {
     const store = this.ports.store();
-    if (!store) return;
-    const state = this.#consumedState(agentId);
-    if (!store.apply) {
-      store.write(agentId, consumedSnapshot(state));
-      return;
-    }
-    let upsertTargets: { target: string; entry: AgentConsumedSeqEntry }[] | undefined;
-    if (target !== undefined) {
-      const entry = state.targets.get(target);
-      if (entry?.conversationId) {
-        const record = persistableConsumedTarget(entry);
-        if (record) upsertTargets = [{ target, entry: record }];
+    if (store) {
+      const state = this.#consumedState(agentId);
+      if (!store.apply) {
+        store.write(agentId, consumedSnapshot(state));
+      } else {
+        let upsertTargets: { target: string; entry: AgentConsumedSeqEntry }[] | undefined;
+        if (target !== undefined) {
+          const entry = state.targets.get(target);
+          if (entry?.conversationId) {
+            const record = persistableConsumedTarget(entry);
+            if (record) upsertTargets = [{ target, entry: record }];
+          }
+        }
+        if (
+          upsertTargets?.length ||
+          aliasDelta?.upsertAliases.length ||
+          aliasDelta?.deleteAliases?.length
+        ) {
+          store.apply(agentId, {
+            ...(upsertTargets ? { upsertTargets } : {}),
+            ...(aliasDelta?.upsertAliases.length
+              ? { upsertAliases: aliasDelta.upsertAliases }
+              : {}),
+            ...(aliasDelta?.deleteAliases?.length
+              ? { deleteAliases: aliasDelta.deleteAliases }
+              : {}),
+          });
+        }
       }
     }
-    if (
-      !upsertTargets?.length &&
-      !aliasDelta?.upsertAliases.length &&
-      !aliasDelta?.deleteAliases?.length
-    )
-      return;
-    store.apply(agentId, {
-      ...(upsertTargets ? { upsertTargets } : {}),
-      ...(aliasDelta?.upsertAliases.length ? { upsertAliases: aliasDelta.upsertAliases } : {}),
-      ...(aliasDelta?.deleteAliases?.length ? { deleteAliases: aliasDelta.deleteAliases } : {}),
-    });
+    this.ports.onConsumed?.(agentId);
   }
   modelSeenSequence(agentId: string, target: string): number {
     return this.#consumedState(agentId).targets.get(target)?.seq ?? 0;
