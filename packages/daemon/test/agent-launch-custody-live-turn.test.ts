@@ -32,6 +32,7 @@ function midTurn(options: { hasLiveTurn?: boolean } = {}) {
         void told.push(held.map(({ deliveryId }) => deliveryId)),
     },
     agentProcessManager: { session: () => ({ hasLiveTurn: options.hasLiveTurn }) },
+    currentActivityLaunches: new Map(),
   } as never);
   return { gate, custody, told };
 }
@@ -83,6 +84,7 @@ test("a carried item that finds nothing kept leaves the Agent busy", async () =>
     deliveryGate: gate,
     inputDrain: { tellCarried: async () => void state.presented++ },
     agentProcessManager: { session: () => ({ hasLiveTurn: undefined }) },
+    currentActivityLaunches: new Map(),
   } as never);
   const drain = new AgentInputDrain({
     runnerHeld: () => false,

@@ -54,6 +54,7 @@ function custody(held: AgentMessageDelivery[]) {
     agentProcessManager: { session: () => undefined },
     releaseHeldAppItems: () => {},
     releaseFallbackNotices: () => {},
+    currentActivityLaunches: new Map(),
   } as never);
   return { subject, deliveryGate, flushed, recovered };
 }
@@ -150,6 +151,7 @@ test("a delivery newer than a message the Agent already read is still presented"
     agentProcessManager: { session: () => undefined },
     releaseHeldAppItems: () => {},
     releaseFallbackNotices: () => {},
+    currentActivityLaunches: new Map(),
   } as never);
   // The Agent read #general up to 5; the recovery still names sequence 5, so it announces nothing.
   index.recordModelSeen("agent-1", "#general", 5);

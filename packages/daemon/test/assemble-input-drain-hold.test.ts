@@ -7,6 +7,7 @@ function drain(runnerHeld: boolean, hold?: "credential_invalid") {
   const calls = { taken: 0, told: 0, flushed: [] as string[][] };
   const input = assembleInputDrain({
     runnerHeld: () => runnerHeld,
+    launches: () => new Map(),
     mentionDeliveries: () => ({
       carry: {
         hasCarried: () => true,

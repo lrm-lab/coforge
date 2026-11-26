@@ -41,6 +41,7 @@ function fallbackHarness() {
     mentionDeliveries: { markUndelivered: () => {} },
   } as unknown as Parameters<typeof observeRuntimeEvent>[0];
   const coordinator = new AgentInboxCoordinator({
+    currentActivityLaunch: () => undefined,
     deliveryGate,
     messageAttention: attention,
     processManager: { session: () => runtimeSession, restartConfig: () => undefined },
