@@ -9,6 +9,7 @@ import {
 import { isAgentPeerDirectKey } from "#src/features/conversations/direct-key";
 import { AppError } from "#src/lib/app-error";
 import { allocateSequence } from "./sequence-allocation.server";
+import { linkMessageAttachments } from "./attachment-link.repositories.server";
 import { WORKSPACE_ASSISTANT_KIND } from "#src/features/agents/agent-system-kind";
 import { canDirectMessageAgent } from "#src/server/agents/agent-visibility.server";
 import { agentChannelReader } from "#src/server/agents/workspace-assistant-authority.server";
@@ -299,12 +300,11 @@ export async function sendAgentMessage(
           messageId: created.id,
         });
     }
-    for (const [position, attachment] of attachments.entries()) {
-      await tx.attachment.update({
-        where: { id: attachment.id },
-        data: { messageId: created.id, position },
-      });
-    }
+    await linkMessageAttachments(
+      tx,
+      created.id,
+      attachments.map((attachment) => attachment.id),
+    );
     return {
       ...created,
       mentions: stored.mentions.map((mention) => ({

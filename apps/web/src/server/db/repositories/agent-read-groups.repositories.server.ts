@@ -1,8 +1,8 @@
-import {
-  advanceAgentReadPosition,
-  type ConversationReadChangedInput,
-  type AgentReadPositionInput,
+import type {
+  ConversationReadChangedInput,
+  AgentReadPositionInput,
 } from "./agent-read-position.repositories.server";
+import { advanceAgentReadsBatch, type BatchedAgentReadItem } from "./thread-read-position.server";
 import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 
 export type ConversationReadRealtimePort = Pick<ConversationRealtime, "conversationReadChanged">;
@@ -67,25 +67,49 @@ export async function advanceAgentReadGroups(input: {
   workspaceId: string;
   agentId: string;
 }) {
-  const changes: ConversationReadChangedInput[] = [];
+  const directByConversation = new Map(
+    input.messageRows.map((row) => [row.conversationId, row.conversation.directKey !== null]),
+  );
   const publishReadByConversation = conversationReadPublicationMap(
     input.messageRows,
     input.isUserAgentDirectConversation,
   );
-  for (const group of input.groups) {
+  const groupList = [...input.groups];
+  const items: BatchedAgentReadItem[] = [];
+  for (const group of groupList) {
     const memberId = input.memberIdByConversation.get(group.conversationId);
     if (!memberId) throw new Error("Agent is not a conversation member");
-    const publication = await advanceAgentReadPosition({
-      db: input.db,
+    items.push({
       memberId,
       conversationId: group.conversationId,
-      workspaceId: input.workspaceId,
-      agentId: input.agentId,
-      ...(group.threadRootId ? { threadRootId: group.threadRootId } : {}),
+      threadRootId: group.threadRootId,
       sequence: group.maxSequence,
-      publishConversationRead: publishReadByConversation.get(group.conversationId) === true,
+      isDirect: directByConversation.get(group.conversationId) === true,
     });
-    if (publication) changes.push(publication);
+  }
+  if (items.length === 0) return [];
+  const advancedConversations = await advanceAgentReadsBatch(input.db, {
+    workspaceId: input.workspaceId,
+    agentId: input.agentId,
+    items,
+  });
+  const changes: ConversationReadChangedInput[] = [];
+  for (const group of groupList) {
+    if (
+      !group.threadRootId &&
+      advancedConversations.has(group.conversationId) &&
+      publishReadByConversation.get(group.conversationId) === true
+    ) {
+      const memberId = input.memberIdByConversation.get(group.conversationId);
+      if (memberId) {
+        changes.push({
+          workspaceId: input.workspaceId,
+          conversationId: group.conversationId,
+          memberId,
+          readThroughSequence: group.maxSequence,
+        });
+      }
+    }
   }
   return changes;
 }

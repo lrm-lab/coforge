@@ -11,6 +11,7 @@ import {
   createCentrifugoServerApi,
   type CentrifugoServerApi,
 } from "#src/server/centrifugo/server-api.server";
+import { linkMessageAttachments } from "#src/server/db/repositories/attachment-link.repositories.server";
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
 import type { MessageNotifier } from "#src/server/notifications/web-push-composition.server";
 import { AgentDeliveryPublisher } from "./agent-delivery.server";
@@ -242,12 +243,7 @@ export async function sendChannel(
           },
           unboundMentionTargets(input.mentions ?? [], stored.mentions),
         );
-        for (const [position, id] of attachmentRowIds.entries()) {
-          await tx.attachment.update({
-            where: { id },
-            data: { messageId: message.id, position },
-          });
-        }
+        await linkMessageAttachments(tx, message.id, attachmentRowIds);
         await input.withinSend?.(tx, {
           id: message.id,
           conversationId: channelId,

@@ -99,6 +99,22 @@ describe("P1-7 review fixes (#44 & #47)", () => {
           found.version += 1;
           return found;
         },
+        updateMany: async ({
+          where,
+          data,
+        }: {
+          where: { id: { in: string[] } };
+          data: { status?: string; firedAt?: Date };
+        }) => {
+          let count = 0;
+          for (const r of reminders) {
+            if (!where.id.in.includes(r.id)) continue;
+            if (data.status) r.status = data.status;
+            r.version += 1;
+            count += 1;
+          }
+          return { count };
+        },
       },
       reminderOccurrence: {
         findMany: async () => [],
@@ -345,8 +361,9 @@ describe("P1-7 review fixes (#44 & #47)", () => {
     const db = {
       $queryRaw: async (arg: readonly string[] | { strings: readonly string[] }) => {
         const sql = "strings" in arg ? arg.strings.join(" ") : arg.join(" ");
-        if (sql.includes("thread_follows")) return [];
-        // Verify SQL explicitly restricts conversation kind to NULL or 'app_events'!
+        if (sql.includes("thread_follows") || sql.includes("message_reads")) return [];
+        if (sql.includes("UPDATE") && sql.includes("conversation_members"))
+          return [{ conversationId: CONV_CHANNEL }, { conversationId: CONV_APP }];
         expect(sql).toContain("app_events");
         return [
           {
@@ -375,25 +392,12 @@ describe("P1-7 review fixes (#44 & #47)", () => {
       },
       user: { findMany: async () => [{ username: "alice" }] },
       agent: { findMany: async () => [] },
-      conversation: {
-        findMany: async () => [],
-        findUnique: async ({ where }: { where: { id: string } }) => ({
-          workspaceId: WORKSPACE_ID,
-          directKey:
-            where.id === CONV_CHANNEL
-              ? `user:${USER_ALICE}|agent:${AGENT_ID}`
-              : `app:0196ed00-0000-7000-8000-000000000300|agent:${AGENT_ID}`,
-        }),
-      },
+      conversation: { findMany: async () => [] },
       workspaceMembership: { findUnique: async () => ({ role: "member" }) },
-      conversationMember: {
-        updateMany: async () => ({ count: 1 }),
-      },
       messageRead: {
-        findFirst: async () => null,
-        create: async ({ data }: { data: unknown }) => {
-          messageReadRows.push(data);
-          return data;
+        createMany: async ({ data }: { data: unknown[] }) => {
+          messageReadRows.push(...data);
+          return { count: data.length };
         },
       },
       reminder: { findMany: async () => [] },

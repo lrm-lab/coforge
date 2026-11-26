@@ -31,7 +31,7 @@ import {
   type ConversationReadChangedInput,
 } from "#src/server/db/repositories/agent-read-position.repositories.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
-import { advanceAgentRead } from "#src/server/db/repositories/thread-read-position.server";
+import { advanceAgentReadsBatch } from "#src/server/db/repositories/thread-read-position.server";
 import {
   dismissDueAgentReminders,
   readAgentInboxReminders,
@@ -357,28 +357,31 @@ export async function dismissAgentInbox(
   const advancedRows: CutoffMemberRow[] = [];
   const readChanges: ConversationReadChangedInput[] = [];
   if (candidateMembers.length > 0) {
-    await db.$transaction(async (tx) => {
-      for (const row of candidateMembers) {
-        const didAdvance = await advanceAgentRead(tx, {
+    const advancedConversationIds = await db.$transaction((tx) =>
+      advanceAgentReadsBatch(tx, {
+        workspaceId: principal.workspaceId,
+        agentId: principal.agentId,
+        items: candidateMembers.map((row) => ({
           memberId: row.memberId,
           conversationId: row.conversationId,
-          workspaceId: principal.workspaceId,
-          agentId: principal.agentId,
           threadRootId: null,
           sequence: row.maxSeq,
+          isDirect: row.directKey !== null,
+        })),
+      }),
+    );
+    for (const row of candidateMembers) {
+      if (!advancedConversationIds.has(row.conversationId)) continue;
+      advancedRows.push(row);
+      if (row.kind === null) {
+        readChanges.push({
+          workspaceId: principal.workspaceId,
+          conversationId: row.conversationId,
+          memberId: row.memberId,
+          readThroughSequence: row.maxSeq,
         });
-        if (!didAdvance) continue;
-        advancedRows.push(row);
-        if (row.kind === null) {
-          readChanges.push({
-            workspaceId: principal.workspaceId,
-            conversationId: row.conversationId,
-            memberId: row.memberId,
-            readThroughSequence: row.maxSeq,
-          });
-        }
       }
-    });
+    }
     const publishRead = dependencies.realtime?.conversationReadChanged?.bind(dependencies.realtime);
     if (publishRead) {
       await Promise.all(readChanges.map((change) => publishRead(change).catch(() => undefined)));

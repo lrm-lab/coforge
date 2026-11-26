@@ -9,6 +9,7 @@ import {
 import { isInboxPolled } from "#src/features/agents/agent-system-kind";
 import { AppError } from "#src/lib/app-error";
 import { allocateSequence } from "./sequence-allocation.server";
+import { linkMessageAttachments } from "./attachment-link.repositories.server";
 import { canDirectMessageAgent } from "#src/server/agents/agent-visibility.server";
 import {
   storeMessageBody,
@@ -133,12 +134,11 @@ export async function sendMessage(
       stored.references,
     );
 
-    for (const [position, attachment] of attachments.entries()) {
-      await tx.attachment.update({
-        where: { id: attachment.id },
-        data: { messageId: created.id, position },
-      });
-    }
+    await linkMessageAttachments(
+      tx,
+      created.id,
+      attachments.map((attachment) => attachment.id),
+    );
     await withinSend?.(tx, {
       id: created.id,
       conversationId,

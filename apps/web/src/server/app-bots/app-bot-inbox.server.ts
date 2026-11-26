@@ -11,7 +11,6 @@ import {
   toAgentMessage,
 } from "#src/server/db/repositories/direct-conversation-agent-message.server";
 
-/** The cursor was not one `check` gave out. */
 export class AppBotInboxCursorError extends Error {
   constructor() {
     super("invalid inbox cursor");
@@ -19,8 +18,6 @@ export class AppBotInboxCursorError extends Error {
   }
 }
 
-/** What a pull covered, as the next `check` hands it back to acknowledge it: the highest sequence
- * read in each conversation (or thread), and the messages read from outside a channel. */
 type Cursor = {
   groups: [conversationId: string, threadRootId: string | null, sequence: number][];
   outside: string[];
@@ -60,13 +57,6 @@ function decode(value: string): Cursor {
   }
 }
 
-/**
- * The inbox of an app's bot: what waits for it, read without taking it. `check` returns the unread
- * messages with a `cursor`; nothing is acknowledged by reading, so a batch the app lost before
- * handling comes back. Handing the cursor back as `since` on the next `check` acknowledges
- * everything up to it (the read boundary of the Agent moves, as it does when a daemon drains), and
- * answers what has arrived since. Replaying a cursor is harmless: boundaries only move forward.
- */
 export class AppBotInbox {
   constructor(private readonly db: PrismaClient) {}
 
@@ -136,7 +126,6 @@ export class AppBotInbox {
           agentId,
           coordination.get(row.conversationId),
         ),
-        // Reached the bot outside the channel: readable, but it cannot reply there.
         ...(row.nonMemberMention ? { nonMemberMention: true } : {}),
       };
     });
@@ -149,16 +138,26 @@ export class AppBotInbox {
     cursor: Cursor,
   ) {
     await this.db.$transaction(async (tx) => {
-      const channels = cursor.groups.filter(([, threadRootId]) => !threadRootId);
-      for (const [conversationId, , sequence] of channels)
-        await tx.conversationMember.updateMany({
-          where: { conversationId, agentId, agentReadThroughSequence: { lt: sequence } },
-          data: { agentReadThroughSequence: sequence },
-        });
+      const channelMax = new Map<string, number>();
+      for (const [conversationId, threadRootId, sequence] of cursor.groups) {
+        if (threadRootId) continue;
+        const previous = channelMax.get(conversationId);
+        if (previous === undefined || sequence > previous) channelMax.set(conversationId, sequence);
+      }
+      if (channelMax.size > 0) {
+        const channels = [...channelMax.entries()].sort(([a], [b]) => a.localeCompare(b));
+        await tx.$executeRaw`UPDATE "conversation_members" AS m
+          SET "agentReadThroughSequence" = GREATEST(m."agentReadThroughSequence", t."sequence")
+          FROM unnest(
+            ${channels.map(([conversationId]) => conversationId)}::uuid[],
+            ${channels.map(([, sequence]) => sequence)}::int[]
+          ) AS t("conversationId", "sequence")
+          WHERE m."conversationId" = t."conversationId"
+            AND m."agentId" = ${agentId}::uuid
+            AND m."agentReadThroughSequence" < t."sequence"`;
+      }
       const threads = cursor.groups.filter(([, threadRootId]) => threadRootId);
       if (threads.length) {
-        // One lookup of the bot's memberships and one upsert for every thread; the position only
-        // moves forward, atomically, across replicas.
         const members = await tx.conversationMember.findMany({
           where: {
             agentId,
@@ -167,13 +166,24 @@ export class AppBotInbox {
           select: { id: true, conversationId: true },
         });
         const memberOf = new Map(members.map((member) => [member.conversationId, member.id]));
-        const rows = threads.flatMap(([conversationId, threadRootId, sequence]) => {
+        const dedupedThreads = new Map<
+          string,
+          { memberId: string; conversationId: string; threadRootId: string; sequence: number }
+        >();
+        for (const [conversationId, threadRootId, sequence] of threads) {
           const memberId = memberOf.get(conversationId);
-          return memberId
-            ? [{ memberId, conversationId, threadRootId: threadRootId!, sequence }]
-            : [];
-        });
-        if (rows.length)
+          if (!memberId || !threadRootId) continue;
+          const key = `${memberId}:${threadRootId}`;
+          const existing = dedupedThreads.get(key);
+          if (!existing || sequence > existing.sequence) {
+            dedupedThreads.set(key, { memberId, conversationId, threadRootId, sequence });
+          }
+        }
+        if (dedupedThreads.size) {
+          const rows = [...dedupedThreads.values()].sort(
+            (a, b) =>
+              a.memberId.localeCompare(b.memberId) || a.threadRootId.localeCompare(b.threadRootId),
+          );
           await tx.$executeRaw`INSERT INTO "thread_reads"
             ("memberId", "conversationId", "workspaceId", "rootMessageId", "readThroughSequence")
             SELECT t."memberId", t."conversationId", ${workspaceId}::uuid, t."rootMessageId", t."sequence"
@@ -185,6 +195,7 @@ export class AppBotInbox {
             ) AS t("memberId", "conversationId", "rootMessageId", "sequence")
             ON CONFLICT ("memberId", "rootMessageId") DO UPDATE SET "readThroughSequence" =
               GREATEST("thread_reads"."readThroughSequence", EXCLUDED."readThroughSequence")`;
+        }
       }
       if (cursor.outside.length)
         await tx.pendingMentionAction.updateMany({

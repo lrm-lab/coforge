@@ -438,6 +438,9 @@ export async function dismissDueAgentReminders(
     }> = [];
     const scheduledIds: string[] = [];
 
+    const oneShotIds: string[] = [];
+    const repeatingUpdates: Array<{ id: string; next: Date }> = [];
+
     for (const row of dueRows) {
       if (row.status === "scheduled") {
         scheduledIds.push(row.id);
@@ -449,10 +452,7 @@ export async function dismissDueAgentReminders(
             row.fireAt,
             options.dueBefore,
           );
-          await tx.reminder.update({
-            where: { id: row.id },
-            data: { fireAt: next, version: { increment: 1 } },
-          });
+          repeatingUpdates.push({ id: row.id, next });
           eventsToCreate.push({
             reminderId: row.id,
             workspaceId: principal.workspaceId,
@@ -464,10 +464,7 @@ export async function dismissDueAgentReminders(
           });
           syncsToPublish.push(buildUpsertSync(principal, row, newVersion, next));
         } else {
-          await tx.reminder.update({
-            where: { id: row.id },
-            data: { status: "fired", firedAt: now, version: { increment: 1 } },
-          });
+          oneShotIds.push(row.id);
           eventsToCreate.push({
             reminderId: row.id,
             workspaceId: principal.workspaceId,
@@ -488,6 +485,31 @@ export async function dismissDueAgentReminders(
           scheduledFor: row.fireAt,
         });
       }
+    }
+
+    if (oneShotIds.length > 0) {
+      await tx.reminder.updateMany({
+        where: { id: { in: oneShotIds } },
+        data: { status: "fired", firedAt: now, version: { increment: 1 } },
+      });
+    }
+    if (repeatingUpdates.length === 1) {
+      const only = repeatingUpdates[0]!;
+      await tx.reminder.update({
+        where: { id: only.id },
+        data: { fireAt: only.next, version: { increment: 1 } },
+      });
+    } else if (repeatingUpdates.length > 1) {
+      repeatingUpdates.sort((a, b) => a.id.localeCompare(b.id));
+      await tx.$executeRaw`UPDATE "reminders" AS r
+        SET "fireAt" = (v."fireAt" AT TIME ZONE 'UTC'),
+            "version" = r."version" + 1,
+            "updatedAt" = ${now}
+        FROM unnest(
+          ${repeatingUpdates.map((entry) => entry.id)}::uuid[],
+          ${repeatingUpdates.map((entry) => entry.next.toISOString())}::timestamptz[]
+        ) AS v("id", "fireAt")
+        WHERE r."id" = v."id"`;
     }
 
     if (scheduledIds.length > 0) {
