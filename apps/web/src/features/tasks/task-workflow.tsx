@@ -247,7 +247,7 @@ export function TaskWorkflow<T extends TaskView>({
                         aria-busy={pending?.id === task.id}
                         className={cn(
                           layout === "list" &&
-                            "sm:not-any-pointer-coarse:[contain-intrinsic-block-size:2.5rem] sm:not-any-pointer-coarse:[content-visibility:auto]",
+                            "sm:not-any-pointer-coarse:[contain-intrinsic-block-size:auto_2.5rem] sm:not-any-pointer-coarse:[content-visibility:auto]",
                           landing === task.id && "opacity-0",
                         )}
                       >

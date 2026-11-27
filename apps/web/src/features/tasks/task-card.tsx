@@ -150,7 +150,6 @@ export function TaskCard({
   menu,
   list,
   selected = false,
-  reached = true,
   onReach,
 }: {
   task: TaskView;
@@ -162,7 +161,6 @@ export function TaskCard({
   menu?: ReactNode;
   list: boolean;
   selected?: boolean;
-  reached?: boolean;
   onReach?: () => void;
 }) {
   const hydrated = useHydrated();
@@ -185,13 +183,9 @@ export function TaskCard({
   };
   const onPointerEnter =
     onReach && ((event: PointerEvent) => event.pointerType === "mouse" && onReach());
-  const blocked = task.blocked ? (
-    <TaskBlockedMark blockedBy={task.blockedBy} interactive={reached} />
-  ) : null;
-  const parent = task.parent ? <TaskParentMark parent={task.parent} interactive={reached} /> : null;
-  const subtasks = task.subtasks ? (
-    <TaskSubtaskMark subtasks={task.subtasks} interactive={reached} />
-  ) : null;
+  const blocked = task.blocked ? <TaskBlockedMark blockedBy={task.blockedBy} /> : null;
+  const parent = task.parent ? <TaskParentMark parent={task.parent} /> : null;
+  const subtasks = task.subtasks ? <TaskSubtaskMark subtasks={task.subtasks} /> : null;
   const handle =
     controls.handle && list ? (
       <span className="hidden sm:contents">{controls.handle}</span>
@@ -221,7 +215,6 @@ export function TaskCard({
         aria-current={selected ? "true" : undefined}
         onClickCapture={rememberCard}
         onPointerEnter={onPointerEnter}
-        onFocusCapture={onReach}
         className={cn(
           "relative flex min-h-10 items-center gap-3 px-4 py-1.5 transition-colors any-pointer-coarse:min-h-11",
           selected ? "bg-active" : "hover:bg-primary_hover",
@@ -278,7 +271,7 @@ export function TaskCard({
             <TaskDueAt task={task} hydrated={hydrated} timeZone={timeZone} />
           </span>
         )}
-        <TaskOwnerAvatar owner={task.owner} tooltip={reached} />
+        <TaskOwnerAvatar owner={task.owner} tooltip />
         {tools}
       </article>
     );
@@ -293,7 +286,6 @@ export function TaskCard({
       aria-current={selected ? "true" : undefined}
       onClickCapture={rememberCard}
       onPointerEnter={onPointerEnter}
-      onFocusCapture={onReach}
       className={cn(
         "group relative flex flex-col gap-2.5 rounded-lg border bg-primary p-3 transition-colors",
         selected
@@ -355,7 +347,7 @@ export function TaskCard({
           tools && "any-pointer-coarse:pe-16",
         )}
       >
-        <TaskOwnerAvatar owner={task.owner} tooltip={reached} />
+        <TaskOwnerAvatar owner={task.owner} tooltip />
         <span className="flex shrink-0 items-center gap-3">
           <TaskCount
             icon={MessageChatCircle}

@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback } from "react";
 
@@ -84,7 +84,7 @@ export function useCachedLabelsIndex(): WorkspaceLabelsIndex {
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const cached = useQuery<WorkspaceLabels>({
     queryKey: workspaceLabelsKey(workspaceId),
-    enabled: false,
+    queryFn: skipToken,
   });
   return indexWorkspaceLabels(cached.data?.labels);
 }
@@ -97,7 +97,7 @@ export function useCachedLabel(label: { id: string; color: string }): CachedLabe
   );
   const cached = useQuery<WorkspaceLabels, Error, CachedLabelEntry | null>({
     queryKey: workspaceLabelsKey(workspaceId),
-    enabled: false,
+    queryFn: skipToken,
     select,
   });
   return cached.data ?? { color: label.color, archived: false };

@@ -416,20 +416,15 @@ function BoardTaskCardContent<T extends BoardTask>({
   const onOpenDetails = () => onOpenTask(task);
   const onCommand =
     onTaskCommand && ((command: OverviewTaskCommand) => onTaskCommand(task, command));
-  const [reached, setReached] = useState(false);
   const [menu, setMenu] = useState<{ start?: "focus" | "open" }>();
-  const reach = () => {
-    setReached(true);
-    if (onTaskCommand) setMenu((current) => current ?? {});
-  };
+  const reach = () => setMenu((current) => current ?? {});
   const { label: menuLabel, ...menuButton } = taskMenuButton(task);
   return (
     <TaskCard
       task={task}
       list={list}
       selected={selected}
-      reached={reached}
-      onReach={reach}
+      onReach={onCommand && reach}
       renderTitle={(title) =>
         renderTitle ? (
           renderTitle(task, title)

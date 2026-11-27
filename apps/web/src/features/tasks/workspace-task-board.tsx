@@ -1,4 +1,4 @@
-import { useHydrated, useLocation, useRouter } from "@tanstack/react-router";
+import { Link, useHydrated, useRouter } from "@tanstack/react-router";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Group, Panel, Separator, useDefaultLayout, useGroupRef } from "react-resizable-panels";
@@ -10,7 +10,6 @@ import {
 } from "#src/features/conversations/conversation-split";
 import { localLayoutStorage } from "#src/features/conversations/local-layout-storage";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
-import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { isFinishedStatus } from "./finished-tasks";
@@ -20,12 +19,7 @@ import { TASK_TITLE_CLASS } from "./task-card";
 import type { TaskDetailNavigation } from "./task-detail-panel";
 import { statusMatches, taskMatches } from "./task-filters";
 import type { OverviewTaskCommand, OverviewTaskRow } from "./task-overview-collection";
-import {
-  TASK_HREF_PLACEHOLDER,
-  formatTaskHref,
-  overviewTaskParam,
-  parseOverviewTaskParam,
-} from "./task-overview-search";
+import { overviewTaskParam, parseOverviewTaskParam } from "./task-overview-search";
 import { useTaskOverview } from "./use-task-overview";
 import { overviewTaskQuery, useFinishedTasks } from "./use-finished-tasks";
 
@@ -211,47 +205,6 @@ export function WorkspaceTaskBoard({
   });
   const useInlineSplit = board && desktop && splitShown;
   const toggleExpand = useCallback(() => setExpanded((current) => !current), []);
-  const pathname = useLocation({ select: (location) => location.pathname });
-  const boardSearchKey = JSON.stringify(boardSearch);
-  const taskHrefTemplate = useMemo(
-    () =>
-      router.buildLocation({
-        to: pathname,
-        search: {
-          ...(JSON.parse(boardSearchKey) as Record<string, unknown>),
-          task: TASK_HREF_PLACEHOLDER,
-        },
-      }).publicHref,
-    [router, pathname, boardSearchKey],
-  );
-  const openBoardTask = useLatestCallback((task: OverviewTaskRow) => {
-    if (openTask && useInlineSplit) switchPopup(task);
-    else openPopup(task);
-  });
-  const renderTaskTitle = useCallback(
-    (task: OverviewTaskRow, title: ReactNode) => (
-      <a
-        href={formatTaskHref(taskHrefTemplate, task)}
-        onClick={(event) => {
-          if (
-            event.defaultPrevented ||
-            event.button !== 0 ||
-            event.metaKey ||
-            event.ctrlKey ||
-            event.shiftKey ||
-            event.altKey
-          )
-            return;
-          event.preventDefault();
-          openBoardTask(task);
-        }}
-        className={TASK_TITLE_CLASS}
-      >
-        {title}
-      </a>
-    ),
-    [taskHrefTemplate, openBoardTask],
-  );
 
   const boardNode = board ? (
     <TaskBoard
@@ -259,7 +212,7 @@ export function WorkspaceTaskBoard({
       finished={finished}
       view={view}
       selectedTaskId={useInlineSplit ? openTask?.id : undefined}
-      onOpenTask={openBoardTask}
+      onOpenTask={openTask && useInlineSplit ? switchPopup : openPopup}
       renderTitle={renderTaskTitle}
       onCommand={command}
       commandsPending={!hydrated}
@@ -383,5 +336,22 @@ export function WorkspaceTaskBoard({
         )}
       </Group>
     </div>
+  );
+}
+
+function renderTaskTitle(task: OverviewTaskRow, title: ReactNode) {
+  return (
+    <Link
+      to="."
+      search={(previous: Record<string, unknown>) => ({
+        ...previous,
+        task: overviewTaskParam(task),
+      })}
+      resetScroll={false}
+      preload={false}
+      className={TASK_TITLE_CLASS}
+    >
+      {title}
+    </Link>
   );
 }
