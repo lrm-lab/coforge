@@ -20,5 +20,11 @@
   "whats_new_artifacts_demo_comment": "Highlight best ablation",
   "whats_new_agent_usage_title": "Agent token usage in Profiles",
   "whats_new_agent_usage_body": "Open the Usage tab on any Agent profile to track token usage, cache hit rate trends, and model breakdown by runtime.",
-  "whats_new_agent_usage_cta": "View in Members"
+  "whats_new_agent_usage_cta": "View in Members",
+  "whats_new_feedback_title": "Send feedback right in CoForge",
+  "whats_new_feedback_body": "Report bugs or share ideas with screenshots attached. Click Send feedback above your avatar in the desktop sidebar, or tap the card below your avatar on the mobile Me tab.",
+  "whats_new_feedback_cta": "Send feedback",
+  "whats_new_feedback_demo_desktop": "Desktop",
+  "whats_new_feedback_demo_mobile": "Mobile",
+  "whats_new_feedback_demo_user": "Alex Chen"
 }

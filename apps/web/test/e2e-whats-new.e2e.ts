@@ -51,11 +51,13 @@ test("What's new keeps a row in the sidebar with a dot while entries wait, on ev
     "task-labels": "Labels for tasks",
     artifacts: "Meet Artifacts",
     "agent-usage": "Agent token usage in Profiles",
+    feedback: "Send feedback right in CoForge",
   };
 
   const entry = `[...document.querySelectorAll('button')].find((el) => (el.textContent === "What's new" || el.getAttribute("aria-label") === "What's new") && el.getBoundingClientRect().width > 0 && el.checkVisibility({ visibilityProperty: true, opacityProperty: true }))`;
   const dot = `(${entry})?.querySelector("span.size-2.rounded-full") != null`;
   const dialog = `([...document.querySelectorAll('[role="dialog"]')].find((el) => el.getAttribute("aria-label") === "What's new") ?? null)`;
+  const feedbackDialog = `([...document.querySelectorAll('[role="dialog"]')].find((el) => el.querySelector("h2")?.textContent?.trim() === "Send feedback") ?? null)`;
   const heading = `(${dialog}?.querySelector("h2")?.textContent ?? null)`;
   const settled = (b: typeof first) => b.browser("wait", "--fn", animationsSettled());
   const shoot = async (b: typeof first, shot: string) => {
@@ -67,9 +69,12 @@ test("What's new keeps a row in the sidebar with a dot while entries wait, on ev
     await b.evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
   };
   const page = `${origin}/en/w/${workspace.slug}/tasks`;
-  const open = async (b: typeof first) => {
+  const open = async (
+    b: typeof first,
+    ready = `document.querySelector('[data-sidebar]') !== null`,
+  ) => {
     await b.browser("open", page);
-    await b.browser("wait", "--fn", `document.querySelector('[data-sidebar]') !== null`);
+    await b.browser("wait", "--fn", ready);
     await b.browser("wait", "1500");
   };
   const press = async (b: typeof first, target: string) => {
@@ -126,6 +131,19 @@ test("What's new keeps a row in the sidebar with a dot while entries wait, on ev
         .whatsNewDismissed,
     ).toEqual([pending[0]!]);
 
+    if (pending.at(-1) === "feedback") {
+      await setDismissed(pending.slice(0, -1));
+      await open(first);
+      await press(first, entry);
+      await first.browser("wait", "--fn", `${dialog} !== null`);
+      expect(await first.evaluate(heading)).toBe(titles.feedback!);
+      await pressText(first, "Send feedback");
+      await first.browser("wait", "--fn", `${dialog} === null`);
+      await first.browser("wait", "--fn", `${feedbackDialog} !== null`);
+      await first.browser("press", "Escape");
+      await first.browser("wait", "--fn", `${feedbackDialog} === null`);
+    }
+
     await setDismissed([]);
     await open(first);
     const visible = (label: string) =>
@@ -142,7 +160,10 @@ test("What's new keeps a row in the sidebar with a dot while entries wait, on ev
     await press(first, visible("Expand sidebar"));
 
     await first.browser("set", "viewport", "390", "844");
-    await open(first);
+    await open(
+      first,
+      `document.querySelector("main") !== null && document.querySelector('[data-sidebar]') === null`,
+    );
     expect(await first.evaluate(`(${entry}) == null`)).toBe(true);
     await first.browser("open", `${origin}/en/w/${workspace.slug}/me`);
     await first.browser("wait", "--fn", `(${entry}) != null`);

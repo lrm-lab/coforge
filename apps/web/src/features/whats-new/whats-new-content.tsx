@@ -4,14 +4,19 @@ import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import { ArtifactsScene } from "./whats-new-artifacts-scene";
 import { AgentUsageScene } from "./whats-new-agent-usage-scene";
+import { FeedbackScene } from "./whats-new-feedback-scene";
 import type { WhatsNewId } from "./whats-new-entries";
+
+type WhatsNewAction =
+  | { label: () => string; path: string }
+  | { label: () => string; kind: "open-feedback" };
 
 type WhatsNewContent = {
   title: () => string;
   body: () => string;
   illustration: ComponentType;
   heroTone?: "dark";
-  action?: { label: () => string; path: string };
+  action?: WhatsNewAction;
 };
 
 function Chip({ dot, label }: { dot: string; label: string }) {
@@ -73,5 +78,11 @@ export const WHATS_NEW_CONTENT: Record<WhatsNewId, WhatsNewContent> = {
     illustration: AgentUsageScene,
     heroTone: "dark",
     action: { label: m.whats_new_agent_usage_cta, path: "/members" },
+  },
+  feedback: {
+    title: m.whats_new_feedback_title,
+    body: m.whats_new_feedback_body,
+    illustration: FeedbackScene,
+    action: { label: m.whats_new_feedback_cta, kind: "open-feedback" },
   },
 };

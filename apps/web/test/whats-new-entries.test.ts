@@ -81,4 +81,12 @@ test("an announced entry opens by itself once; the others wait for the row", () 
   expect(announcedWhatsNew(data, ["small", "big", "bigger"], ["big"])).toEqual(["bigger"]);
   expect(announcedWhatsNew(data, ["small"], [])).toEqual([]);
   expect(announcedWhatsNew(WHATS_NEW_ENTRIES, ["artifacts"], [])).toEqual(["artifacts"]);
+  expect(announcedWhatsNew(WHATS_NEW_ENTRIES, ["feedback"], [])).toEqual(["feedback"]);
+  expect(
+    pendingWhatsNew(WHATS_NEW_ENTRIES, {
+      ...viewer,
+      now: new Date("2026-11-27T05:05:00Z"),
+      joinedAt: new Date("2026-11-27T05:01:00Z"),
+    }),
+  ).toContain("feedback");
 });

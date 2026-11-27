@@ -4,6 +4,7 @@ import { XClose } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { useOpenFeedback } from "#src/features/feedback/feedback-host";
 import { m } from "#src/paraglide/messages";
 import { localizeHref } from "#src/paraglide/runtime";
 import { cx } from "#src/utils/cx";
@@ -73,13 +74,16 @@ function WhatsNewPages({
   onDone: () => void;
 }) {
   const [index, setIndex] = useState(0);
+  const openFeedback = useOpenFeedback();
   const id = pages[index];
   if (!id) return null;
   const entry = WHATS_NEW_CONTENT[id];
   const Illustration = entry.illustration;
   const last = index >= pages.length - 1;
+  const action = last ? entry.action : undefined;
   const actionHref =
-    last && base && entry.action ? localizeHref(`${base}${entry.action.path}`) : undefined;
+    action && "path" in action && base ? localizeHref(`${base}${action.path}`) : undefined;
+  const hasFeedbackAction = action !== undefined && "kind" in action;
   const go = (to: number) => {
     setIndex(to);
     onReach(to);
@@ -128,14 +132,26 @@ function WhatsNewPages({
             )}
             <Button
               size="sm"
-              color={last && !actionHref ? "primary" : "secondary"}
+              color={last && !actionHref && !hasFeedbackAction ? "primary" : "secondary"}
               onPress={() => (last ? onDone() : go(index + 1))}
             >
               {last ? m.whats_new_got_it() : m.whats_new_next()}
             </Button>
-            {actionHref && entry.action && (
+            {actionHref && action && (
               <Button size="sm" color="primary" href={actionHref} onPress={onDone}>
-                {entry.action.label()}
+                {action.label()}
+              </Button>
+            )}
+            {hasFeedbackAction && action && (
+              <Button
+                size="sm"
+                color="primary"
+                onPress={() => {
+                  onDone();
+                  openFeedback();
+                }}
+              >
+                {action.label()}
               </Button>
             )}
           </div>
