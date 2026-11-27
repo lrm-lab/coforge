@@ -15,6 +15,7 @@ import {
 } from "react-aria-components";
 import { Check, Folder } from "@untitledui/icons";
 
+import { CloseButton } from "#src/components/base/buttons/close-button";
 import { CheckboxBase } from "#src/components/base/checkbox/checkbox";
 import { EmptyState } from "#src/components/ui/empty";
 import { Dialog, DialogTrigger, Modal, ModalOverlay, SheetGrabber } from "#src/components/ui/modal";
@@ -127,7 +128,7 @@ export type PickerSingleProps = MenuBase & SingleChoice;
 export type PickerMultipleProps = MenuBase & MultipleChoice;
 
 export const PICKER_SEARCH_INPUT =
-  "h-10 w-full border-b border-secondary bg-transparent px-3.5 text-sm text-primary outline-hidden placeholder:text-placeholder max-sm:h-12 max-sm:text-md";
+  "h-10 w-full border-b border-secondary bg-transparent px-3.5 text-sm text-primary outline-hidden placeholder:text-placeholder max-sm:h-12 max-sm:text-md any-pointer-coarse:h-12";
 export const PICKER_LIST =
   "scroll-fade-y max-h-72 overflow-y-auto p-1 scroll-py-6 outline-hidden select-none max-sm:max-h-[50dvh]";
 const PICKER_SECTION_HEADING =
@@ -252,9 +253,35 @@ export function PickerMenu({
         onKeyDownCapture={(event) => {
           if (event.key === "Escape" && !search) onClose?.();
         }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && search) event.stopPropagation();
+        }}
       >
-        <AriaSearchField aria-label={label} value={search} onChange={typed} autoFocus={autoFocus}>
-          <AriaInput placeholder={searchPlaceholder} className={PICKER_SEARCH_INPUT} />
+        <AriaSearchField
+          aria-label={label}
+          value={search}
+          onChange={typed}
+          autoFocus={autoFocus}
+          className="relative flex items-center"
+        >
+          <AriaInput
+            placeholder={searchPlaceholder}
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            className={cn(
+              PICKER_SEARCH_INPUT,
+              search && "pr-9 max-sm:pr-12 any-pointer-coarse:pr-12",
+            )}
+          />
+          {search && (
+            <CloseButton
+              slot="clear"
+              size="xs"
+              label={m.empty_clear_search()}
+              className="absolute top-1/2 right-1.5 -translate-y-1/2 max-sm:right-1 max-sm:size-11 any-pointer-coarse:right-1 any-pointer-coarse:size-11"
+            />
+          )}
         </AriaSearchField>
       </div>
       {list}

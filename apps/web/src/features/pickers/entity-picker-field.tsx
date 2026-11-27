@@ -12,21 +12,23 @@ export function EntityPickerField({
   hint,
   placeholder,
   isDisabled,
+  className,
   ...menu
 }: PickerSingleProps & {
   fieldLabel?: string;
   hint?: string;
   placeholder?: string;
   isDisabled?: boolean;
+  className?: string;
 }) {
   const chosen = menu.options?.find((option) => option.id === menu.selectedKey);
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className={cn("flex flex-col gap-1.5", className)}>
       {fieldLabel && <Label>{fieldLabel}</Label>}
       <PickerSurface
         label={menu.label}
         placement="bottom start"
-        className="w-(--trigger-width)"
+        className="w-(--trigger-width) [--cascade-menu-max-width:calc(100vw-1rem)] [--cascade-menu-width:var(--trigger-width)]"
         trigger={
           <AriaButton
             isDisabled={isDisabled}

@@ -1,8 +1,10 @@
+import { useMemo } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Clock as Clock3, Translate01 as Languages } from "@untitledui/icons";
 import { Select } from "#src/components/base/select/select";
 import { SelectItem } from "#src/components/base/select/select-item";
 import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
+import { EntityPickerField } from "#src/features/pickers/entity-picker-field";
 import { isTimeFormat, localeTimeFormat, type TimeFormat } from "#src/lib/time-format";
 import {
   SettingsCard,
@@ -11,7 +13,7 @@ import {
   SettingsPage,
 } from "#src/components/settings-layout";
 import { saveErrorFrom, SaveErrorMessage } from "#src/components/save-error";
-import { getTimeZoneOptions } from "#src/features/settings/time-zone-options";
+import { buildTimeZonePickerOptions } from "#src/features/settings/time-zone-options";
 import { m } from "#src/paraglide/messages";
 import type { SettingsContentProps } from "./settings-content";
 
@@ -25,7 +27,6 @@ export function LanguageRegionSettings({
   SettingsContentProps,
   "locale" | "timeZone" | "timeFormat" | "onLocaleChange" | "onDateTimeSave"
 >) {
-  const timeZoneOptions = getTimeZoneOptions(m.preferences_system());
   const saveOptions = { scope: { id: "language-region" }, networkMode: "always" } as const;
   const language = useMutation({ ...saveOptions, mutationFn: onLocaleChange });
   const zone = useMutation({
@@ -40,6 +41,11 @@ export function LanguageRegionSettings({
   const selectedFormat = format.isPending
     ? format.variables
     : (timeFormat ?? localeTimeFormat(locale));
+  const systemLabel = m.preferences_system();
+  const timeZoneOptions = useMemo(
+    () => buildTimeZonePickerOptions({ locale, systemLabel, selectedZone }),
+    [locale, systemLabel, selectedZone],
+  );
 
   return (
     <SettingsPage>
@@ -74,19 +80,17 @@ export function LanguageRegionSettings({
             label={m.preferences_time_zone()}
             description={m.language_region_time_zone_description()}
           >
-            <Select
-              aria-label={m.preferences_time_zone()}
+            <EntityPickerField
               className="max-w-sm"
-              items={timeZoneOptions}
-              value={selectedZone ?? "system"}
+              label={m.preferences_time_zone()}
+              searchPlaceholder={m.language_region_time_zone_search()}
+              options={timeZoneOptions}
+              selectedKey={selectedZone ?? "system"}
               isDisabled={language.isPending}
-              onChange={(key) => {
-                if (key !== null && key !== (selectedZone ?? "system"))
-                  zone.mutate(key === "system" ? null : String(key));
+              onSelect={(key) => {
+                zone.mutate(key === "system" ? null : key);
               }}
-            >
-              {(option) => <SelectItem id={option.id} label={option.label} />}
-            </Select>
+            />
           </SettingsField>
           {zone.isError && (
             <SaveErrorMessage error={saveErrorFrom(m.settings_save_error(), zone.error)} />

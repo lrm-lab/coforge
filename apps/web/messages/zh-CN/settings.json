@@ -190,6 +190,7 @@
   "language_region_display_language_description": "选择应用界面使用的语言。",
   "language_region_date_time_group": "日期和时间",
   "language_region_time_zone_description": "CoForge 中的时间都按这个时区显示。",
+  "language_region_time_zone_search": "搜索时区",
   "language_region_time_format": "时间格式",
   "language_region_time_format_description": "仅影响显示，不影响 Agent 的行为。",
   "language_region_time_format_12h": "12 小时制",

@@ -190,6 +190,7 @@
   "language_region_display_language_description": "Choose the language for the app interface.",
   "language_region_date_time_group": "Date & time",
   "language_region_time_zone_description": "Times across CoForge are shown in this time zone.",
+  "language_region_time_zone_search": "Search time zones",
   "language_region_time_format": "Time format",
   "language_region_time_format_description": "Display only. Does not affect Agent behavior.",
   "language_region_time_format_12h": "12-hour",
