@@ -70,15 +70,12 @@ type Theme = "system" | "light" | "dark";
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
 export const Route = createFileRoute("/w/$workspaceSlug/settings")({
-  // The section lives in the URL so it survives the full reload a locale
-  // switch triggers and so a settings link can open a specific section.
   validateSearch: z.object({
     section: z.enum(SETTINGS_SECTIONS).optional().catch(undefined),
     github: z
       .enum(["connected", ...GITHUB_CALLBACK_FAILURES])
       .optional()
       .catch(undefined),
-    // The way back from GitHub's confirmation of who is adding a contact (`?bind=1`, or why not).
     bind: z
       .union([z.literal(1), z.literal("1")])
       .optional()
@@ -99,9 +96,6 @@ export const Route = createFileRoute("/w/$workspaceSlug/settings")({
       });
     }
   },
-  // The loader reads nothing from the search. A navigation that stays on Settings (a section, the
-  // Applications tab or category, clicking the one already open) does not re-run it; entering the
-  // page and `router.invalidate()` after a save still do.
   shouldReload: ({ cause }) => cause !== "stay",
   loader: async () => {
     const [preferences, members, generalChannel, archivedChannels, archivedAgents, createdAgents] =
@@ -198,8 +192,6 @@ function SettingsPage() {
 
   async function changeLocale(next: Parameters<typeof setLocale>[0]) {
     await saveLanguage({ data: { language: next } });
-    // The stored preference is the source of truth: re-reading it has the Workspace layout switch
-    // the page to it, as it does on every page.
     await router.invalidate({ sync: true });
   }
 
@@ -257,8 +249,6 @@ function SettingsPage() {
     applyTheme(nextTheme);
   }
 
-  // Hiding #general changes the sidebar's channel list too; its realtime signal also refreshes
-  // other open pages.
   async function changeGeneralChannelHidden(hidden: boolean) {
     await saveGeneralChannelHidden({ data: { hidden } });
     void refreshSidebarChannels();
@@ -300,7 +290,6 @@ function SettingsPage() {
 
   async function testBrowserNotification() {
     try {
-      // The test button is only enabled once permission is granted; "Allow in browser" asks for it.
       const subscription = await registerCurrentBrowser(false);
       if (!subscription) throw new Error("Browser notification permission is not granted");
       const { delivery } = await sendTestNotification({
@@ -308,8 +297,6 @@ function SettingsPage() {
       });
       return delivery;
     } catch (cause) {
-      // A client-side failure with the permission granted is the browser's own push service
-      // refusing to create the subscription; name that, and put the raw reason in the console.
       const browserFailed = !isAppError(cause) && browserNotificationPermission() === "granted";
       if (!isAppError(cause)) console.warn("browser push test failed", cause);
       toast.error(
@@ -321,8 +308,6 @@ function SettingsPage() {
     }
   }
 
-  /** After the viewer's own name, description or picture changed: the page, and the Members
-   * page's cards and person panel, which show them too. */
   async function refreshOwnProfile() {
     await router.invalidate({ sync: true });
     await queryClient.invalidateQueries({ queryKey: MEMBER_DIRECTORY_KEY });
@@ -333,8 +318,6 @@ function SettingsPage() {
     await refreshOwnProfile();
   }
 
-  // The switcher and this page both read the Workspace from the loaders, so a reload shows the
-  // new name or icon everywhere without a page refresh.
   async function changeWorkspaceName(name: string) {
     await saveWorkspaceName({ data: { name } });
     await router.invalidate({ sync: true });

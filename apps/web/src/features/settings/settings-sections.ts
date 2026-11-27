@@ -55,13 +55,11 @@ const ENTRIES = SETTINGS_SECTION_GROUPS.flatMap(
   (group): readonly SettingsSectionEntry[] => group.sections,
 );
 
-/** Every section id, for the route's search validation (`z.enum`). */
 export const SETTINGS_SECTIONS = ENTRIES.map((entry) => entry.id) as [
   SettingsSection,
   ...SettingsSection[],
 ];
 
-/** One section's label and icon. */
 export function settingsSection(id: SettingsSection): SettingsSectionEntry {
   return ENTRIES.find((entry) => entry.id === id)!;
 }

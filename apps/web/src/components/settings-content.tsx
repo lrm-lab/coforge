@@ -49,18 +49,14 @@ const navigationRowClass =
   "h-11 w-full min-w-0 justify-start gap-2.5 rounded-lg px-2 text-sm font-medium *:data-text:min-w-0 *:data-text:truncate";
 
 export interface SettingsContentProps {
-  /** Controlled section; falls back to internal state when omitted (tests, previews). */
   section?: SettingsSection;
   memoryContent?: React.ReactNode;
   personalMemory?: boolean;
   githubCallbackFailure?: GitHubCallbackFailure;
   onSectionChange?: (section: SettingsSection) => void;
-  /** Set while the page is opened by the way back from GitHub's confirmation, for the password dialog. */
   bindArrival?: BindArrival;
-  /** Called once the page has taken `bindArrival` in, to drop it from the URL. */
   onBindArrivalHandled?: () => void;
   profile: AccountProfile;
-  /** The Agents the person created in this Workspace, for the profile. */
   createdAgents: Array<{ id: string; name: string; avatarUrl: string | null }>;
   members: {
     actorUserId: string;
@@ -94,19 +90,13 @@ export interface SettingsContentProps {
   onBrowserNotificationsChange: (enabled: boolean) => Promise<void>;
   onEnableBrowserNotifications: () => Promise<void>;
   onTestBrowserNotification: () => Promise<TestDelivery | null>;
-  /** Whether #general is hidden from the Workspace; `null` unless the viewer is an owner or admin,
-   * who alone see the System channels section of Settings → Members. */
   generalChannelHidden: boolean | null;
   onGeneralChannelHiddenSave: (hidden: boolean) => Promise<void>;
-  /** The Workspace the page URL names. */
   workspace: { id: string; slug: string; name: string; iconUrl: string | null };
   onWorkspaceRename: (name: string) => Promise<void>;
-  /** Changes the Workspace URL; resolves once the page has moved to the new URL. */
   onWorkspaceSlugChange: (slug: string) => Promise<void>;
   onWorkspaceIconUpload: (file: File) => Promise<void>;
-  /** The archived channels and Agents groups Settings → Workspace profile shows under the profile. */
   archivedGroups?: React.ReactNode;
-  /** The Danger zone Settings → Workspace profile ends with. */
   dangerZone?: React.ReactNode;
 }
 
@@ -207,7 +197,6 @@ export function SettingsContent(props: SettingsContentProps) {
               <LanguageRegionSettings {...props} />
             ) : section === "workspace-profile" ? (
               <WorkspaceProfileSettings
-                // A rename lands through the loader; a fresh Workspace starts a fresh form.
                 key={props.workspace.id}
                 workspace={props.workspace}
                 canEdit={canManageWorkspaceSettings(props.members.actorRole)}
@@ -224,7 +213,6 @@ export function SettingsContent(props: SettingsContentProps) {
                 actorRole={props.members.actorRole}
                 members={props.members.members}
                 systemChannels={
-                  // Workspace-wide settings: present only for a Workspace owner or admin.
                   props.generalChannelHidden !== null && (
                     <>
                       <SystemChannelsSettings
@@ -260,8 +248,6 @@ export function SettingsContent(props: SettingsContentProps) {
   );
 }
 
-/** Settings → Members → System channels: hiding #general from the whole Workspace, the only way
- * back once it is hidden. A checkbox and Save, so hiding it for everyone is a deliberate step. */
 function SystemChannelsSettings({
   hidden,
   onSave,
@@ -397,7 +383,6 @@ function NotificationSettings({
           </div>
         </div>
       )}
-      {/* The account's rules for every device, and the devices themselves (task #469). */}
       <div className="mt-8 flex flex-col gap-8">
         <NotificationSettingsPanel
           enabled={browserNotificationsEnabled}
