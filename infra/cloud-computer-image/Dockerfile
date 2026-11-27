@@ -137,7 +137,7 @@ COPY config/pi-agent/ /tmp/pi-agent/
 RUN mkdir -p /root/.pi/agent/certs /root/.pi/agent/skills \
   && cp /usr/local/share/coforge/pi-APPEND_SYSTEM.md /root/.pi/agent/APPEND_SYSTEM.md \
   && chmod 644 /root/.pi/agent/APPEND_SYSTEM.md \
-  && for skill_name in cloud-computer-overview browser-login; do \
+  && for skill_name in cloud-computer-overview browser-login lenovo-intranet; do \
        rm -rf "/root/.pi/agent/skills/${skill_name}"; \
        cp -a "/usr/local/share/coforge/pi-skills/${skill_name}" "/root/.pi/agent/skills/${skill_name}"; \
      done \
@@ -178,7 +178,9 @@ RUN if [ "${INSTALL_PI}" != "1" ]; then \
       grep -q 'CoForge' /root/.pi/agent/APPEND_SYSTEM.md; \
       test -f /root/.pi/agent/skills/cloud-computer-overview/SKILL.md; \
       test -f /root/.pi/agent/skills/browser-login/SKILL.md; \
+      test -f /root/.pi/agent/skills/lenovo-intranet/SKILL.md; \
       grep -q 'name: browser-login' /root/.pi/agent/skills/browser-login/SKILL.md; \
+      grep -q 'name: lenovo-intranet' /root/.pi/agent/skills/lenovo-intranet/SKILL.md; \
       grep -q 'https://modelfactory.lenovo.com/llm/v1' /root/.pi/agent/models.json; \
       grep -q '"id": "DeepSeek"' /root/.pi/agent/models.json; \
       grep -q '"id": "gpt-oss-120b"' /root/.pi/agent/models.json; \

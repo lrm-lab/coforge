@@ -8,9 +8,10 @@ export const COFORGE_CLOUD_COMPUTER_ENV = "COFORGE_CLOUD_COMPUTER";
 export const CLOUD_COMPUTER_ONLY_SKILL_NAMES: ReadonlySet<string> = new Set([
   "browser-login",
   "cloud-computer-overview",
+  "lenovo-intranet",
 ]);
 
-const CLOUD_COMPUTER_APPEND_SYSTEM_HEADING = "# CoForge 云电脑身份与能力";
+const CLOUD_COMPUTER_APPEND_SYSTEM_HEADING = "# CoForge cloud computer identity and capabilities";
 
 export function isCloudComputerOnlySkillName(name: string): boolean {
   return CLOUD_COMPUTER_ONLY_SKILL_NAMES.has(name.trim());

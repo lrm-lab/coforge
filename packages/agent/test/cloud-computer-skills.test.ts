@@ -95,6 +95,10 @@ test("prepareCloudComputerAgentSkills removes migrated cloud-computer skills on 
       "---\nname: cloud-computer-overview\ndescription: Cloud overview\n---\n",
     );
     await Bun.write(
+      join(root, ".pi", "skills", "lenovo-intranet", "SKILL.md"),
+      "---\nname: lenovo-intranet\ndescription: Lenovo intranet\n---\n",
+    );
+    await Bun.write(
       join(root, ".pi", "skills", "custom-local", "SKILL.md"),
       "---\nname: custom-local\ndescription: User skill\n---\n",
     );
@@ -109,6 +113,9 @@ test("prepareCloudComputerAgentSkills removes migrated cloud-computer skills on 
     );
     expect(
       await Bun.file(join(root, ".pi", "skills", "cloud-computer-overview", "SKILL.md")).exists(),
+    ).toBe(false);
+    expect(
+      await Bun.file(join(root, ".pi", "skills", "lenovo-intranet", "SKILL.md")).exists(),
     ).toBe(false);
     expect(await Bun.file(join(root, ".pi", "skills", "custom-local", "SKILL.md")).exists()).toBe(
       true,
@@ -192,6 +199,7 @@ test("resourceLoaderOptionsForSession strips cloud-only skills, their diagnostic
     skills: [
       { name: "browser-login" } as never,
       { name: "cloud-computer-overview" } as never,
+      { name: "lenovo-intranet" } as never,
       { name: "ego-browser" } as never,
     ],
     diagnostics: localDiagnostics,
@@ -200,7 +208,7 @@ test("resourceLoaderOptionsForSession strips cloud-only skills, their diagnostic
   expect(overridden?.diagnostics).toEqual([localDiagnostics[2]!]);
   expect(
     localLoader.appendSystemPromptOverride?.([
-      "# CoForge 云电脑身份与能力\n你运行在云电脑中。",
+      "# CoForge cloud computer identity and capabilities\nYou run on a cloud computer.",
       "User custom append prompt.",
     ]),
   ).toEqual(["User custom append prompt."]);
