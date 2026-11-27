@@ -1,0 +1,23 @@
+{
+  "computer_attach_request_title": "添加请求",
+  "computer_attach_approval_title": "批准添加 Computer",
+  "computer_attach_fingerprint": "电脑指纹",
+  "computer_attach_fingerprint_hint": "请核对终端里显示的电脑指纹。",
+  "computer_attach_code_label": "确认码",
+  "computer_attach_code_placeholder": "输入终端中的确认码",
+  "computer_attach_state_pending": "待审批",
+  "computer_attach_state_connecting": "等待连接",
+  "computer_attach_state_connected": "已连接",
+  "computer_attach_state_denied": "已拒绝",
+  "computer_attach_state_expired": "已过期",
+  "computer_attach_state_timeout": "已超时",
+  "computer_attach_requested_at": "发起于 {time}",
+  "computer_attach_finished_at": "结束于 {time}",
+  "computer_attach_minutes_left": "还剩 {minutes} 分钟",
+  "computer_attach_reason_timeout": "批准后 10 分钟内未连上。",
+  "computer_attach_reason_expired": "请求到期前无人批准。",
+  "computer_attach_reason_denied": "管理员拒绝了添加请求。",
+  "computer_attach_retry_on_computer": "请在那台 Computer 上重新运行",
+  "computer_attach_approved_continue": "已批准。回到终端继续，这台 Computer 连上后会出现在列表。",
+  "computer_attach_connected_confirmation": "这台 Computer 已连接。"
+}

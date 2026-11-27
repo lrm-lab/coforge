@@ -12,16 +12,23 @@ import {
 const sessionInput = z.object({ sessionId: z.uuid() });
 const decisionInput = sessionInput.extend({
   workspaceId: z.uuid(),
-  userCode: z.string().trim().length(8),
+  userCode: z.string().trim().length(8).optional(),
   action: z.enum(["approve", "deny"]),
 });
 
 export const readMachineAttach = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator(sessionInput)
-  .handler(({ data, context }) => {
+  .handler(async ({ data, context }) => {
     declareNoStore();
-    return readMachineAttachApproval(requireDatabaseClient(), data.sessionId, context.user.id);
+    const db = requireDatabaseClient();
+    const userId = context.user.id;
+    const session = await readMachineAttachApproval(db, data.sessionId, userId);
+    if (!session) return null;
+    const relatedRequests = session.targetWorkspaceId
+      ? ((await listMachineAttachRequests(db, session.targetWorkspaceId, userId)) ?? [])
+      : [];
+    return { ...session, relatedRequests };
   });
 
 export const decideMachineAttach = createServerFn({ method: "POST" })
@@ -41,4 +48,18 @@ export const listMachineAttach = createServerFn({ method: "GET" })
   .handler(({ context: { db, workspaceId, user } }) => {
     declareNoStore();
     return listMachineAttachRequests(db, workspaceId, user.id);
+  });
+
+export const denyMachineAttachFromList = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(sessionInput)
+  .handler(async ({ data, context: { db, workspaceId, user } }) => {
+    declareNoStore();
+    const accepted = await decideComputerAttachSession(db, {
+      sessionId: data.sessionId,
+      userId: user.id,
+      workspaceId,
+      action: "deny",
+    });
+    return { accepted };
   });

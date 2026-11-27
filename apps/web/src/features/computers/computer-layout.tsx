@@ -62,6 +62,7 @@ export function ComputerLayout({
   onReadRestartStatus,
   latestComputerVersions,
   upgradingComputerIds,
+  attachRequests,
   children,
 }: {
   computers: ComputerOverviewItem[];
@@ -76,6 +77,7 @@ export function ComputerLayout({
   onReadRestartStatus?: (computerId: string, requestId: string) => Promise<ComputerRestartStatus>;
   latestComputerVersions?: ReadonlyMap<string, string | null>;
   upgradingComputerIds?: ReadonlySet<string>;
+  attachRequests?: ReactNode;
   children: ReactNode;
 }) {
   const workspaceSlug = useWorkspaceSlug();
@@ -218,6 +220,7 @@ export function ComputerLayout({
         <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-primary">
           <PageHeader heading={m.computer_page_title()} />
           <div className="min-h-0 flex-1 overflow-y-auto">
+            {attachRequests ? <div className="px-page pt-4">{attachRequests}</div> : null}
             <NoComputers onAdd={onAdd} />
           </div>
         </section>
@@ -280,6 +283,7 @@ export function ComputerLayout({
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto px-page py-4">
+        {attachRequests}
         {summary.attention > 0 && status !== "attention" ? (
           <div className="mb-3 flex items-center">
             <Button

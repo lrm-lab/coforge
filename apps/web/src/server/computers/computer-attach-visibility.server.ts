@@ -68,7 +68,7 @@ export async function readMachineAttachApproval(
       ...(session.targetWorkspaceId ? { id: session.targetWorkspaceId } : {}),
       members: { some: { userId: viewerId, role: { in: ["owner", "admin"] } } },
     },
-    select: { id: true, slug: true },
+    select: { id: true, slug: true, name: true },
     orderBy: { slug: "asc" },
   });
   if (!workspaces.length) return null;
@@ -77,6 +77,7 @@ export async function readMachineAttachApproval(
     hostname: session.hostname,
     os: session.os,
     ...visibleAttachState(session, now),
+    targetWorkspaceId: session.targetWorkspaceId,
     fingerprint: await attachPublicKeyFingerprint(session.machinePublicKey),
     workspaces,
   };
@@ -90,7 +91,7 @@ export async function listMachineAttachRequests(
 ) {
   return db.$transaction(async (tx) => {
     const role = await lockAttachMembership(tx, workspaceId, viewerId);
-    if (role !== "admin") return [];
+    if (role !== "admin") return null;
     const rows = await tx.computerAttachSession.findMany({
       where: {
         protocolMajor,
