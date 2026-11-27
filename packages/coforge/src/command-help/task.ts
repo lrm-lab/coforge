@@ -44,9 +44,9 @@ export const taskHelp: Readonly<Record<string, HelpEntry>> = {
   },
   "task reply": {
     syntax:
-      "coforge task reply [<ref>] [--target <board> --number <n>] [--attachment-id <uuid>]... [--mention human:<uuid>:<handle>|agent:<uuid>:<handle>]... [--json]",
+      "coforge task reply [<ref>] [--target <board> --number <n>] [--attachment-id <uuid>]... [--mention human:<uuid>:<handle>|agent:<uuid>:<handle>]... [--send-draft [--anyway]] [--json]",
     guidance:
-      "The reply body is read from stdin. The reply posts in the task's own conversation and makes you follow the task.",
+      "The reply body is read from stdin. If unread context holds the reply, read the task and use --send-draft. Add --anyway to send the saved reply without reading.",
     example: "coforge task reply '#general:#7' <<'COFORGE_MESSAGE'\nOn it.\nCOFORGE_MESSAGE",
   },
   "task read": {

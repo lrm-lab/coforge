@@ -2,7 +2,11 @@ import {
   agentConsumptionScopeSchema,
   type AgentConsumptionScope,
 } from "@lrm/coforge-sdk/internal/agent-consumption";
-import { normalizeSeenExactSeqs, type LocalMentionSelector } from "@lrm/coforge-sdk/internal";
+import {
+  isRecord,
+  normalizeSeenExactSeqs,
+  type LocalMentionSelector,
+} from "@lrm/coforge-sdk/internal";
 import { AgentStateDb } from "./agent-state-db";
 
 export const AGENT_MESSAGE_DRAFT_TTL_MS = 10 * 60 * 1_000;
@@ -28,6 +32,7 @@ export type AgentMessageDraftContent = Readonly<{
    * and before a send they are already durable in the consumed cursor. */
   seenExactSeqs?: readonly number[];
   consumptionScope?: AgentConsumptionScope;
+  taskReplyId?: string;
 }>;
 
 export type AgentMessageDraft = AgentMessageDraftContent &
@@ -139,7 +144,7 @@ export class AgentMessageDraftStore {
       parseJson<number[]>(row.seen_exact_seqs) ?? [],
       row.seen_up_to_seq ?? 0,
     );
-    const consumptionScope = parseConsumptionScope(row.consumption_scope);
+    const scope = parseDraftScope(row.consumption_scope);
     return {
       target: row.target,
       content: row.content,
@@ -150,7 +155,7 @@ export class AgentMessageDraftStore {
       ...(mentions.length ? { mentions } : {}),
       ...(row.seen_up_to_seq !== null ? { seenUpToSeq: row.seen_up_to_seq } : {}),
       ...(seenExactSeqs.length ? { seenExactSeqs } : {}),
-      ...(consumptionScope ? { consumptionScope } : {}),
+      ...scope,
     };
   }
 
@@ -168,7 +173,7 @@ export class AgentMessageDraftStore {
         reholdCount,
         draft.seenUpToSeq ?? null,
         draft.seenExactSeqs?.length ? JSON.stringify(draft.seenExactSeqs) : null,
-        draft.consumptionScope ? JSON.stringify(draft.consumptionScope) : null,
+        encodeDraftScope(draft),
       );
   }
 
@@ -187,11 +192,20 @@ function parseJson<T>(value: string | null): T | undefined {
   }
 }
 
-function parseConsumptionScope(value: string | null): AgentConsumptionScope | undefined {
-  if (value === null) return undefined;
+function encodeDraftScope(draft: AgentMessageDraftContent) {
+  if (draft.taskReplyId !== undefined) return JSON.stringify({ taskReplyId: draft.taskReplyId });
+  return draft.consumptionScope ? JSON.stringify(draft.consumptionScope) : null;
+}
+
+function parseDraftScope(value: string | null) {
+  if (value === null) return {};
   try {
-    return agentConsumptionScopeSchema.safeParse(JSON.parse(value)).data;
+    const parsed: unknown = JSON.parse(value);
+    if (isRecord(parsed) && typeof parsed.taskReplyId === "string" && parsed.taskReplyId)
+      return { taskReplyId: parsed.taskReplyId };
+    const consumptionScope = agentConsumptionScopeSchema.safeParse(parsed).data;
+    return consumptionScope ? { consumptionScope } : {};
   } catch {
-    return undefined;
+    return {};
   }
 }

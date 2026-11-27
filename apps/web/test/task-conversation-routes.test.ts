@@ -228,3 +228,37 @@ test("reply with reconcileOnly probes reconcileReply and requires idempotencyKey
   );
   expect(missingKey.status).toBe(400);
 });
+
+test("task reply negotiates a hold and only resumes through a guarded request", async () => {
+  const replyWithHold = record("replyWithHold", { state: "held", taskId: "stable-task" });
+  const supported = { ...service, replyWithHold } as never;
+  const original = { channel: "#c", content: "hello", idempotencyKey: "k" };
+  const held = await handleTaskReplyPost(
+    post({ ...original, task_number: 7, holdIfUnread: true }),
+    principal,
+    supported,
+  );
+  expect(await held.json()).toEqual({ state: "held", taskId: "stable-task", idempotencyKey: "k" });
+  expect(calls.at(-1)).toEqual([
+    "replyWithHold",
+    principal,
+    { target: "#c", number: 7 },
+    { body: "hello", idempotencyKey: "k" },
+    undefined,
+  ]);
+  const resume = { number: 7, taskId: "stable-task", anyway: true };
+  const refused = await handleTaskReplyPost(
+    post({ ...original, task_number: 7, resume }),
+    principal,
+    supported,
+  );
+  expect(refused.status).toBe(400);
+  await handleTaskReplyPost(post({ ...original, task_number: 0, resume }), principal, supported);
+  expect(calls.at(-1)).toEqual([
+    "replyWithHold",
+    principal,
+    { target: "#c", number: 7 },
+    { body: "hello", idempotencyKey: "k" },
+    resume,
+  ]);
+});

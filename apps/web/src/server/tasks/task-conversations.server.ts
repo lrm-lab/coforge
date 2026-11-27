@@ -11,12 +11,13 @@ import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.serv
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
 import type { TaskBoardPorts } from "./task-board-ports.server";
-import { memberId } from "./task-board-ports.server";
+import { TaskReplyHeld } from "./task-reply-freshness.server";
 import {
   reconcileTaskReply,
   writeTaskReply,
   type TaskReplyInput,
 } from "./task-conversation-reply.server";
+import { memberId } from "./task-board-ports.server";
 import { taskDiscussionDeliveryTarget } from "./task-discussion-target.server";
 import { markHumanRead } from "#src/server/conversations/human-unread.server";
 import { postUnfollowNotice } from "./task-unfollow-notice.server";
@@ -114,10 +115,39 @@ export class TaskConversations {
     };
   }
 
-  async reply(principal: TaskPrincipal, ref: TaskConversationRef, input: TaskReplyInput) {
+  reply(principal: TaskPrincipal, ref: TaskConversationRef, input: TaskReplyInput) {
+    return this.writeReply(principal, ref, input);
+  }
+
+  async replyWithHold(
+    principal: TaskPrincipal,
+    ref: TaskConversationRef,
+    input: TaskReplyInput,
+    resume?: { taskId: string; anyway: boolean },
+  ) {
+    if (!principal.agentId) throw new AppError("ACCESS_DENIED");
+    try {
+      return await this.writeReply(principal, ref, input, {
+        agentId: principal.agentId,
+        resume,
+      });
+    } catch (error) {
+      if (error instanceof TaskReplyHeld) return error.result;
+      throw error;
+    }
+  }
+
+  private async writeReply(
+    principal: TaskPrincipal,
+    ref: TaskConversationRef,
+    input: TaskReplyInput,
+    hold?: { agentId: string; resume?: { taskId: string; anyway: boolean } },
+  ) {
     const body = input.body.trim();
     if (!body || body.length > 64_000) throw new AppError("INVALID_INPUT");
     const { task, member, scope } = await this.resolve(principal, ref, { member: true });
+    if (hold?.resume && hold.resume.taskId !== task.id) throw new AppError("NOT_FOUND");
+    const check = hold && !hold.resume?.anyway ? hold.agentId : undefined;
     return writeTaskReply(this.ports, this.idempotency, {
       scope,
       taskId: task.id,
@@ -125,6 +155,7 @@ export class TaskConversations {
       member: { ...member!, id: memberId(member!) },
       body,
       input,
+      check,
     });
   }
 

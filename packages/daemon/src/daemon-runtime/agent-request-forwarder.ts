@@ -46,6 +46,7 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { AgentContexts } from "./agent-contexts";
+import { forwardTaskReply, type TaskReplyInbox } from "./forwarded-task-reply";
 import { forwardedTaskReadResponse } from "./forwarded-task-read-response";
 import { settleAgentReadConfirmation } from "./agent-read-confirmation";
 import { settleForwardedTaskRead } from "./agent-history-read";
@@ -99,6 +100,7 @@ export type AgentRequestForwarderPorts = Readonly<{
     workspaceId: string;
   }>;
   contexts?: Pick<AgentContexts, "ledger">;
+  taskReplyInbox?: (agentId: string) => TaskReplyInbox;
   authorizedAgent(context: string, agentApiKey: string | undefined): string;
   settleConfirmedRead?: (agentId: string, response: Response) => Promise<Response>;
   recordForwardedRead?: (
@@ -112,22 +114,27 @@ export function assembleAgentRequests(input: {
   connection: AgentRequestForwarderPorts["connection"];
   contexts?: AgentRequestForwarderPorts["contexts"];
   authorizedAgent: AgentRequestForwarderPorts["authorizedAgent"];
-  attention: AgentMessageAttentionIndex;
+  messages: {
+    messageAttention: AgentMessageAttentionIndex;
+    inboxCoordinator?: { agentInbox(agentId: string): TaskReplyInbox };
+  };
 }): AgentRequestForwarder {
+  const { messageAttention, inboxCoordinator } = input.messages;
   return new AgentRequestForwarder({
     get transport() {
       return input.transport();
     },
     connection: input.connection,
     contexts: input.contexts,
+    taskReplyInbox: inboxCoordinator && ((agentId) => inboxCoordinator.agentInbox(agentId)),
     authorizedAgent: actionStampingAuthorizedAgent(
       input.authorizedAgent,
-      input.attention.noticeActionClocks,
+      messageAttention.noticeActionClocks,
     ),
     settleConfirmedRead: (agentId, response) =>
-      settleAgentReadConfirmation(input.attention, agentId, response),
+      settleAgentReadConfirmation(messageAttention, agentId, response),
     recordForwardedRead: (agentId, query, result) =>
-      settleForwardedTaskRead(input.attention, agentId, query, result),
+      settleForwardedTaskRead(messageAttention, agentId, query, result),
   });
 }
 export class AgentRequestForwarder {
@@ -277,10 +284,18 @@ export class AgentRequestForwarder {
     agentApiKey: string,
   ): Promise<Response> {
     const agentId = this.#ports.authorizedAgent(context, agentApiKey);
-    const response = await this.#transportCall("agentTaskConversation", NOT_CONNECTED)(
-      request,
-      agentApiKey,
-    );
+    const send = this.#transportCall("agentTaskConversation", NOT_CONNECTED);
+    const body = request.body;
+    if (
+      request.route === "reply" &&
+      (body?.holdIfUnread === true || body?.sendDraft === true) &&
+      this.#ports.taskReplyInbox
+    ) {
+      return forwardTaskReply(body, this.#ports.taskReplyInbox(agentId), (outbound) =>
+        send({ route: "reply", body: outbound }, agentApiKey),
+      );
+    }
+    const response = await send(request, agentApiKey);
     return forwardedTaskReadResponse(
       {
         agentId,

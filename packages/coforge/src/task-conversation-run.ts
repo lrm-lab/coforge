@@ -1,5 +1,6 @@
 import type { AgentTaskConversationRequest } from "@lrm/coforge-sdk/agent";
 import {
+  agentTaskReplyHeldSchema,
   decodeAgentTaskFollowResponse,
   decodeAgentTaskFollowingResponse,
   decodeAgentTaskReplyReconcileResponse,
@@ -7,7 +8,7 @@ import {
   decodeAgentTaskViewResponse,
   isHistoryEventList,
 } from "@lrm/coforge-sdk/agent";
-import { isRecord } from "@lrm/coforge-sdk/internal";
+import { foldUntrustedLine, isRecord } from "@lrm/coforge-sdk/internal";
 import { CliError, withOutputMode } from "./cli-error";
 import {
   convertLongMessageToAttachment,
@@ -24,7 +25,11 @@ import {
 } from "./task-conversation-format";
 import { runReadConfirmationPage, type ReadConfirmationTransport } from "./read-confirmation";
 import { readConfirmationPage } from "./message-read-args";
-import { readPipedSendContent, refuseForeignStdinFile } from "./send-stdin";
+import {
+  readPipedSendContent,
+  refuseForeignStdinFile,
+  sendDraftStdinHasContent,
+} from "./send-stdin";
 
 export type TaskConversationTransport = ReadConfirmationTransport & {
   taskConversation?(request: AgentTaskConversationRequest): Promise<unknown>;
@@ -93,6 +98,34 @@ async function sendReply(
   }
 }
 
+function decodeTaskReply(ref: string, raw: unknown) {
+  const result = agentTaskReplyHeldSchema.safeParse(raw);
+  if (result.success) {
+    const held = result.data;
+    const read = `coforge task read "${ref}" --unread`;
+    const resume = `coforge task reply "${ref}" --send-draft`;
+    const next = `Read with ${read}, then run ${resume}. To send without reading, run ${resume} --anyway.`;
+    throw new CliError({
+      code: "SEND_HELD_AS_DRAFT",
+      message: `Task reply saved as a draft. ${held.newMessageCount} unread in ${ref}.`,
+      retryable: false,
+      effect: "draft_saved",
+      draftSaved: true,
+      suggestedNextAction: next,
+      contextText: [
+        ...(held.omittedMessageCount
+          ? [`${held.omittedMessageCount} earlier unread omitted.`]
+          : []),
+        ...held.heldMessages.map(
+          ({ sequence, body }) => `  │ seq=${sequence} ${foldUntrustedLine(body)}`,
+        ),
+      ].join("\n"),
+      details: held,
+    });
+  }
+  return decoded(decodeAgentTaskReplyResponse, raw);
+}
+
 async function runReply(
   send: (request: AgentTaskConversationRequest) => Promise<unknown>,
   invocation: Extract<TaskConversationInvocation, { op: "reply" }>,
@@ -107,6 +140,27 @@ async function runReply(
     HEREDOC_DELIMITER,
   ];
   try {
+    if (invocation.sendDraft) {
+      if (await sendDraftStdinHasContent())
+        throw new CliError({
+          code: "INVALID_ARG",
+          message: "--send-draft sends the saved reply and does not accept stdin.",
+          retryable: false,
+        });
+      const reply = decodeTaskReply(
+        task.ref,
+        await send({
+          route: "reply",
+          body: {
+            channel: task.board,
+            task_number: task.number,
+            sendDraft: true,
+            ...(invocation.anyway ? { anyway: true } : {}),
+          },
+        }),
+      );
+      return json ? JSON.stringify({ ok: true, data: reply }) : formatTaskReply(task.ref, reply);
+    }
     refuseForeignStdinFile(heredoc, { outputMode });
     const content = (await readBody()).trim();
     if (!content)
@@ -138,12 +192,13 @@ async function runReply(
       channel: task.board,
       task_number: task.number,
       content: converted.body,
+      holdIfUnread: true,
       idempotencyKey: crypto.randomUUID(),
       ...(mentions ? { mentions } : {}),
       ...(converted.attachmentIds ? { attachmentIds: converted.attachmentIds } : {}),
     };
     const outcome = await sendReply(send, body);
-    const reply = decoded(decodeAgentTaskReplyResponse, outcome.raw);
+    const reply = decodeTaskReply(task.ref, outcome.raw);
     if (json) {
       return JSON.stringify({
         ok: true,

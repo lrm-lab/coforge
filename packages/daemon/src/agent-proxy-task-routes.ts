@@ -61,6 +61,28 @@ function bodyRequest(
     body[field] = value;
   }
   if (route === "reply") {
+    if (fields.sendDraft === true) {
+      if (
+        fields.reconcileOnly !== undefined ||
+        fields.holdIfUnread !== undefined ||
+        fields.content !== undefined ||
+        fields.idempotencyKey !== undefined ||
+        fields.attachmentIds !== undefined ||
+        fields.mentions !== undefined ||
+        (fields.anyway !== undefined && typeof fields.anyway !== "boolean")
+      )
+        return badRequest();
+      return {
+        route,
+        body: { ...body, sendDraft: true, ...(fields.anyway ? { anyway: true } : {}) },
+      };
+    }
+    if (fields.sendDraft !== undefined || fields.anyway !== undefined) return badRequest();
+    if (fields.holdIfUnread !== undefined) {
+      if (typeof fields.holdIfUnread !== "boolean" || fields.reconcileOnly === true)
+        return badRequest();
+      body.holdIfUnread = fields.holdIfUnread;
+    }
     if (fields.reconcileOnly !== undefined) {
       if (typeof fields.reconcileOnly !== "boolean") return badRequest();
       body.reconcileOnly = fields.reconcileOnly;

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TASK_REPLY_RESUME_LEGACY_REFUSAL_NUMBER } from "@lrm/coforge-sdk/agent";
 
 import {
   attachmentIdsSchema,
@@ -26,23 +27,39 @@ type Service = Pick<
   TaskConversations,
   "view" | "read" | "reply" | "follow" | "unfollow" | "following"
 > &
+  Pick<TaskConversations, "replyWithHold"> &
   Partial<Pick<TaskConversations, "reconcileReply">>;
 
 const refSchema = z.object({
   channel: z.string().min(1),
   task_number: z.number().int().positive(),
 });
+const replyContent = {
+  content: z.string().min(1).max(50_000),
+  idempotencyKey: z.string().min(1),
+  mentions: mentionSelectorsSchema,
+  attachmentIds: attachmentIdsSchema,
+};
 const replySchema = z.union([
   refSchema.extend({
     reconcileOnly: z.literal(true),
     idempotencyKey: z.string().min(1),
   }),
   refSchema.extend({
+    ...replyContent,
     reconcileOnly: z.literal(false).optional(),
-    content: z.string().min(1).max(50_000),
-    idempotencyKey: z.string().min(1),
-    mentions: mentionSelectorsSchema,
-    attachmentIds: attachmentIdsSchema,
+    holdIfUnread: z.boolean().optional(),
+    resume: z.never().optional(),
+  }),
+  refSchema.extend({
+    ...replyContent,
+    task_number: z.literal(TASK_REPLY_RESUME_LEGACY_REFUSAL_NUMBER),
+    reconcileOnly: z.literal(false).optional(),
+    resume: z.object({
+      number: z.number().int().positive(),
+      taskId: z.string().min(1),
+      anyway: z.boolean(),
+    }),
   }),
 ]);
 const limitSchema = z.coerce.number().int().min(1).max(20).optional();
@@ -144,15 +161,23 @@ export async function handleTaskReplyPost(
         idempotencyKey: body.idempotencyKey,
       });
     }
-    return Response.json({
-      ...(await service.reply(principal, asRef(body), {
-        body: body.content,
-        idempotencyKey: body.idempotencyKey,
-        mentions: body.mentions,
-        attachmentIds: body.attachmentIds,
-      })),
+    const input = {
+      body: body.content,
       idempotencyKey: body.idempotencyKey,
-    });
+      mentions: body.mentions,
+      attachmentIds: body.attachmentIds,
+    };
+    const result = body.resume
+      ? await service.replyWithHold(
+          principal,
+          { ...asRef(body), number: body.resume.number },
+          input,
+          body.resume,
+        )
+      : body.holdIfUnread
+        ? await service.replyWithHold(principal, asRef(body), input, undefined)
+        : await service.reply(principal, asRef(body), input);
+    return Response.json({ ...result, idempotencyKey: body.idempotencyKey });
   } catch (error) {
     return failure(error);
   }

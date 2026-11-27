@@ -94,6 +94,20 @@ export type AgentTaskReplyResponse = {
   idempotencyKey?: string;
 };
 
+export const TASK_REPLY_RESUME_LEGACY_REFUSAL_NUMBER = 0;
+
+export const agentTaskReplyHeldSchema = z.object({
+  state: z.literal("held"),
+  taskId: z.string().min(1),
+  reason: z.literal("exact_target_pending"),
+  newMessageCount: z.number().int().positive(),
+  omittedMessageCount: z.number().int().nonnegative(),
+  heldMessages: z.array(z.object({ sequence: z.number().int().positive(), body: z.string() })),
+  idempotencyKey: z.string().min(1).optional(),
+});
+
+export type AgentTaskReplyHeld = z.infer<typeof agentTaskReplyHeldSchema>;
+
 export type AgentTaskReplyReconcileResponse =
   | { state: "committed"; messageId: string; sequence: number; idempotencyKey?: string }
   | { state: "not_found"; idempotencyKey?: string };

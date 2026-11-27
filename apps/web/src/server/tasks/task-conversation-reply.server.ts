@@ -3,10 +3,12 @@ import {
   MessageRequestInProgressError,
   type MessageRequestIdempotency,
   type MessageRequestRecords,
+  type MessageRequestScope,
 } from "#src/server/conversations/message-request-idempotency.server";
 import type { TaskBoardPorts } from "./task-board-ports.server";
 import { postTaskMessage } from "./task-discussion-send.server";
 import { publishTaskConversationMessage } from "./task-publication.server";
+import { checkTaskReplyFreshness } from "./task-reply-freshness.server";
 
 export type TaskReplyInput = {
   body: string;
@@ -14,6 +16,20 @@ export type TaskReplyInput = {
   attachmentIds?: readonly string[];
   mentions?: readonly MentionSelectorInput[];
 };
+
+function replyKey(
+  workspaceId: string,
+  taskId: string,
+  principal: TaskPrincipal,
+  idempotencyKey: string,
+): MessageRequestScope {
+  return {
+    workspaceId,
+    senderKind: principal.agentId ? "agent" : "user",
+    senderId: (principal.agentId ?? principal.userId)!,
+    idempotencyKey: `task:${taskId}:${idempotencyKey}`,
+  };
+}
 
 export async function writeTaskReply(
   ports: TaskBoardPorts,
@@ -25,9 +41,10 @@ export async function writeTaskReply(
     member: { id: string; userId: string | null; agentId: string | null };
     body: string;
     input: TaskReplyInput;
+    check?: string;
   },
 ) {
-  const { scope, taskId, principal, member, body, input } = data;
+  const { scope, taskId, principal, member, body, input, check } = data;
   const post = async () => {
     const posted = await ports.db.$transaction((tx) =>
       postTaskMessage(tx, {
@@ -37,6 +54,9 @@ export async function writeTaskReply(
         body,
         attachmentIds: input.attachmentIds,
         mentions: input.mentions,
+        checkExistingDiscussion: check
+          ? (conversationId) => checkTaskReplyFreshness(tx, conversationId, check, taskId)
+          : undefined,
       }),
     );
     await publishTaskConversationMessage(ports, posted.messageId, posted.messageId).catch(
@@ -55,12 +75,7 @@ export async function writeTaskReply(
   const persisted =
     idempotency && input.idempotencyKey
       ? await idempotency.execute(
-          {
-            workspaceId: scope.workspaceId,
-            senderKind: principal.agentId ? "agent" : "user",
-            senderId: (principal.agentId ?? principal.userId)!,
-            idempotencyKey: `task:${taskId}:${input.idempotencyKey}`,
-          },
+          replyKey(scope.workspaceId, taskId, principal, input.idempotencyKey),
           post,
         )
       : await post();
@@ -78,12 +93,7 @@ export async function reconcileTaskReply(
     | (MessageRequestIdempotency & Partial<MessageRequestRecords>)
     | undefined;
   if (!records?.find) return { state: "not_found" as const };
-  const found = await records.find({
-    workspaceId,
-    senderKind: principal.agentId ? "agent" : "user",
-    senderId: (principal.agentId ?? principal.userId)!,
-    idempotencyKey: `task:${taskId}:${idempotencyKey}`,
-  });
+  const found = await records.find(replyKey(workspaceId, taskId, principal, idempotencyKey));
   if (found?.state === "processing") throw new MessageRequestInProgressError();
   if (found?.state === "completed")
     return {

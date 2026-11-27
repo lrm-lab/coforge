@@ -259,3 +259,42 @@ test("a reply with a --mention the body does not name is refused before anything
   ).catch((failure: CliError) => failure);
   expect((error as CliError).code).toBe("MENTION_NOT_IN_CONTENT");
 });
+
+test("held task reply offers read, resume and explicit send anyway", async () => {
+  const transport = transportAnswering({
+    state: "held",
+    taskId: "stable-task",
+    reason: "exact_target_pending",
+    newMessageCount: 1,
+    omittedMessageCount: 0,
+    heldMessages: [],
+  });
+  const error = await runTaskConversation(
+    transport,
+    invoke(["reply", REF]),
+    async () => "reply",
+  ).catch((failure: CliError) => failure);
+  expect(error).toMatchObject({ code: "SEND_HELD_AS_DRAFT" });
+  expect((error as CliError).suggestedNextAction).toContain(`coforge task read "${REF}" --unread`);
+  expect((error as CliError).suggestedNextAction).toContain(
+    `coforge task reply "${REF}" --send-draft --anyway`,
+  );
+  expect(transport.requests[0]?.body).toMatchObject({ holdIfUnread: true });
+});
+
+test("resuming a task draft needs no stdin and requests explicit bypass only with --anyway", async () => {
+  const transport = transportAnswering({ messageId: "m1", sequence: 4 });
+  await runTaskConversation(
+    transport,
+    invoke(["reply", REF, "--send-draft", "--anyway"]),
+    async () => {
+      throw new Error("must not read the draft from stdin");
+    },
+  );
+  expect(transport.requests).toEqual([
+    {
+      route: "reply",
+      body: { channel: "#general", task_number: 7, sendDraft: true, anyway: true },
+    },
+  ]);
+});

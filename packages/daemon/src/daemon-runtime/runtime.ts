@@ -510,7 +510,7 @@ export class DaemonRuntime {
       connection,
       contexts: this.#contexts,
       authorizedAgent: (context, agentApiKey) => this.#authorizedAgent(context, agentApiKey),
-      attention: messages.messageAttention,
+      messages,
     });
     this.#mentionDeliveries = messages.mentionDeliveries;
     this.#messageAttention = messages.messageAttention;

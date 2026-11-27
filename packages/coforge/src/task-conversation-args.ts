@@ -13,6 +13,8 @@ export type TaskConversationInvocation = { command: "task-conversation" } & (
       op: "reply";
       task: TaskRef;
       json?: boolean;
+      sendDraft?: boolean;
+      anyway?: boolean;
       mentions?: MentionSelectorInput[];
       attachmentIds?: string[];
     }
@@ -27,7 +29,10 @@ type TaskConversationOp = Exclude<TaskConversationInvocation["op"], "following">
 /** What each command takes besides the task: flags with a value, and flags without one. */
 const FLAGS: Record<TaskConversationOp, { values: string[]; switches: string[] }> = {
   view: { values: ["--limit"], switches: [] },
-  reply: { values: ["--mention", "--attachment-id"], switches: ["--json"] },
+  reply: {
+    values: ["--mention", "--attachment-id"],
+    switches: ["--json", "--send-draft", "--anyway"],
+  },
   read: {
     values: ["--before", "--after", "--around", "--limit", "--confirm"],
     switches: ["--unread", "--confirm-delivery", "--peek"],
@@ -149,14 +154,22 @@ export function parseTaskConversationArgs(
       const limit = viewLimit(values.get("--limit"));
       return { ...invocation, op: "view", ...(limit === undefined ? {} : { limit }) };
     }
-    case "reply":
+    case "reply": {
+      const sendDraft = given.has("--send-draft");
+      const anyway = given.has("--anyway");
+      if (anyway && !sendDraft) throw invalidArg("--anyway requires --send-draft.");
+      if (sendDraft && (mentions.length || attachmentIds.length))
+        throw invalidArg("--send-draft uses the saved mentions and attachments.");
       return {
         ...invocation,
         op: "reply",
+        ...(sendDraft ? { sendDraft: true } : {}),
+        ...(anyway ? { anyway: true } : {}),
         ...(given.has("--json") ? { json: true } : {}),
         ...(mentions.length ? { mentions: mentions.map(mentionSelector) } : {}),
         ...(attachmentIds.length ? { attachmentIds: attachmentIdList(attachmentIds) } : {}),
       };
+    }
     case "read":
       return {
         ...invocation,

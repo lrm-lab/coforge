@@ -89,7 +89,7 @@ test("CLI and proxy carry an explicit prefix and the next page retains the unsee
   let cursor = 0;
   const requests: AgentReadRequest[] = [];
   const forward = assembleAgentRequests({
-    attention,
+    messages: { messageAttention: attention },
     connection: { workspaceId: "workspace-1" },
     authorizedAgent: (context) => context,
     transport: () => ({

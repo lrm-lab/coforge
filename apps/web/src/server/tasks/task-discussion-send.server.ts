@@ -36,6 +36,7 @@ export async function postTaskMessage(
     attachmentIds?: readonly string[];
     /** Members the sender named by id (the composer's picks), beside the `@handle`s in `body`. */
     mentions?: readonly MentionSelectorInput[];
+    checkExistingDiscussion?: (conversationId: string) => Promise<void>;
   },
 ) {
   const { taskId, scope, member } = input;
@@ -54,6 +55,7 @@ export async function postTaskMessage(
   if (!active || !task) throw new AppError("NOT_FOUND");
   const conversationId = await discussionOf(tx, task, workspaceId);
   await lockConversation(tx, conversationId);
+  if (task.discussionConversationId) await input.checkExistingDiscussion?.(conversationId);
   const seat = await joinDiscussion(tx, workspaceId, conversationId, member);
 
   const attachmentIds = [...new Set(input.attachmentIds ?? [])];
