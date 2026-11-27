@@ -2,7 +2,7 @@ import { useState } from "react";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { parseKiroIdentityCenterOptions, type KiroLoginTarget } from "@lrm/coforge-sdk/internal";
 import { Input } from "#src/components/base/input/input";
-import { RadioButton, RadioGroup } from "#src/components/base/radio-buttons/radio-buttons";
+import { OptionCard, OptionCardGroup } from "#src/components/ui/option-card";
 import {
   DialogAction,
   DialogActions,
@@ -13,12 +13,6 @@ import { m } from "#src/paraglide/messages";
 
 type License = KiroLoginTarget["license"];
 
-/**
- * What precedes the shared runtime login progress for Kiro. A Computer that can sign Kiro in free
- * (`offerFree`, task #87) asks which account first, free (Builder ID, Google, GitHub) chosen, and
- * the two IAM Identity Center inputs open under Enterprise only; one that cannot asks for those
- * two inputs alone, as it always has.
- */
 export function KiroEnterpriseSignIn({
   offerFree,
   onStart,
@@ -59,23 +53,22 @@ export function KiroEnterpriseSignIn({
           className="p-0"
         />
         {offerFree && (
-          <RadioGroup
+          <OptionCardGroup
             aria-label={m.runtime_auth_kiro_title()}
             value={license}
             onChange={(value) => setLicense(value as License)}
-            className="gap-3"
           >
-            <RadioButton
+            <OptionCard
               value="free"
               label={m.runtime_auth_kiro_free()}
-              hint={m.runtime_auth_kiro_free_hint()}
+              description={m.runtime_auth_kiro_free_hint()}
             />
-            <RadioButton
+            <OptionCard
               value="pro"
               label={m.runtime_auth_kiro_pro()}
-              hint={m.runtime_auth_kiro_pro_hint()}
+              description={m.runtime_auth_kiro_pro_hint()}
             />
-          </RadioGroup>
+          </OptionCardGroup>
         )}
         {enterprise && (
           <>

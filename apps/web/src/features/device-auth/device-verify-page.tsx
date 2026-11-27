@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Radio, RadioGroup } from "react-aria-components";
 import {
   Check,
   Laptop01 as Laptop,
@@ -16,12 +15,12 @@ import {
   InputOTPSlot,
 } from "#src/components/ui/input-otp";
 import { KeyValueList, KeyValueRow } from "#src/components/ui/key-value-list";
+import { OptionCard, OptionCardGroup } from "#src/components/ui/option-card";
 import type {
   ApprovableExternalAgent,
   ExternalGrantDetails,
 } from "#src/server/auth/device-auth-external-agent.server";
 import { m } from "#src/paraglide/messages";
-import { cx } from "#src/utils/cx";
 import { formatUserCode, USER_CODE_LENGTH } from "./device-code-format";
 import {
   approveDeviceCode,
@@ -260,39 +259,24 @@ function ExternalAgentChoice({
       </p>
     );
   return (
-    <RadioGroup
+    <OptionCardGroup
       aria-label={m.device_verify_external_choose()}
       value={value}
       onChange={onChange}
       isDisabled={isDisabled}
-      className="space-y-2"
     >
       <p className="text-sm font-medium text-secondary">{m.device_verify_external_choose()}</p>
-      <div className="max-h-64 space-y-1 overflow-y-auto">
+      <div className="-m-1 max-h-64 space-y-2 overflow-y-auto p-1">
         {agents.map((agent) => (
-          <Radio
+          <OptionCard
             key={agent.agentId}
             value={agent.agentId}
-            className={({ isSelected, isFocusVisible }) =>
-              cx(
-                "flex cursor-pointer flex-col rounded-lg border px-3 py-2 transition duration-100 ease-out",
-                isSelected
-                  ? "border-brand bg-secondary"
-                  : "border-secondary hover:bg-primary_hover",
-                isFocusVisible && "outline-2 outline-offset-2 outline-focus-ring",
-              )
-            }
-          >
-            <span className="truncate text-sm font-medium text-primary">
-              {agent.displayName || agent.name}
-            </span>
-            <span className="truncate text-xs text-tertiary">
-              @{agent.name} · {agent.workspaceName || agent.workspaceSlug}
-            </span>
-          </Radio>
+            label={agent.displayName || agent.name}
+            description={`@${agent.name} · ${agent.workspaceName || agent.workspaceSlug}`}
+          />
         ))}
       </div>
-    </RadioGroup>
+    </OptionCardGroup>
   );
 }
 

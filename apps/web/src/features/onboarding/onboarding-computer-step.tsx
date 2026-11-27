@@ -1,7 +1,7 @@
 import { Cloud01 as Cloud, Monitor01 as Monitor } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
-import { RadioButton, RadioGroup } from "#src/components/base/radio-buttons/radio-buttons";
+import { OptionCard, OptionCardGroup } from "#src/components/ui/option-card";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { computerLabel } from "#src/features/computers/computer-identity";
 import { ComputerInstallCommand } from "#src/features/computers/computer-install-command";
@@ -14,10 +14,6 @@ import {
   type computerSelection,
 } from "./onboarding-wizard-plan";
 
-/**
- * Step 1: where the assistant runs. Both kinds are always offered as cards; the cloud card shows
- * its live state and is disabled, with the reason, when the deployment has no cluster.
- */
 export function OnboardingComputerStep({
   selection: { cloud, locals, arrived, selected },
   showInstall,
@@ -29,17 +25,12 @@ export function OnboardingComputerStep({
   installOrigin,
   workspaceSlug,
 }: {
-  /** The computers and the selected one, derived once by the wizard (`computerSelection`);
-   * `arrived` is the computer that connected while this step was open. */
   selection: ReturnType<typeof computerSelection>;
-  /** Whether the install command and its checks are shown (the wizard decides, as it also polls
-   * for the approval only while they are). */
   showInstall: boolean;
   onConnectAnother: () => void;
   choice: ComputerChoice;
   onChoice: (choice: ComputerChoice) => void;
   onLocal: (id: string) => void;
-  /** The member approved a computer's device sign-in. */
   approved: boolean;
   installOrigin: string;
   workspaceSlug: string;
@@ -77,29 +68,25 @@ export function OnboardingComputerStep({
       </div>
       {choice === "local" && locals.length > 0 && (
         <div className="flex flex-col gap-3">
-          <RadioGroup
+          <OptionCardGroup
             aria-label={m.computer_your_computer()}
             value={selected?.id ?? ""}
             onChange={onLocal}
-            className="gap-2"
           >
             {locals.map((computer) => (
-              <RadioButton
+              <OptionCard
                 key={computer.id}
                 value={computer.id}
-                className="items-center rounded-xl border border-secondary px-4 py-3"
-                label={
-                  <span className="flex min-w-0 flex-1 items-center justify-between gap-3">
-                    <span className="truncate">{computerLabel(computer)}</span>
-                    <span className="flex shrink-0 items-center gap-2 text-sm text-tertiary">
-                      <StatusDot tone={computer.online ? "online" : "offline"} className="size-2" />
-                      {computer.online ? m.computer_status_online() : m.computer_status_offline()}
-                    </span>
+                label={computerLabel(computer)}
+                trailing={
+                  <span className="flex items-center gap-2 text-sm text-tertiary">
+                    <StatusDot tone={computer.online ? "online" : "offline"} className="size-2" />
+                    {computer.online ? m.computer_status_online() : m.computer_status_offline()}
                   </span>
                 }
               />
             ))}
-          </RadioGroup>
+          </OptionCardGroup>
           {!showInstall && (
             <div>
               <Button color="link-color" size="sm" onPress={onConnectAnother}>

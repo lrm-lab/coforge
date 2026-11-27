@@ -7,7 +7,7 @@ import { Heading } from "react-aria-components";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { HintText } from "#src/components/base/input/hint-text";
 import { Input } from "#src/components/base/input/input";
-import { RadioButton, RadioGroup } from "#src/components/base/radio-buttons/radio-buttons";
+import { OptionCard, OptionCardGroup } from "#src/components/ui/option-card";
 import {
   DialogAction,
   DialogActions,
@@ -237,24 +237,15 @@ function PasswordForm({
   return (
     <form noValidate onSubmit={onSubmit} className="flex flex-col gap-5 px-6 pt-5 pb-6">
       {contacts.email && contacts.phone ? (
-        <RadioGroup
+        <OptionCardGroup
           aria-label={m.login_code_label()}
           value={contact}
           onChange={(value) => setContact(value === "phone" ? "phone" : "email")}
           isDisabled={saving}
-          className="gap-3"
         >
-          <RadioButton
-            value="email"
-            label={m.settings_email()}
-            hint={<span className="wrap-anywhere">{contacts.email}</span>}
-          />
-          <RadioButton
-            value="phone"
-            label={m.settings_phone()}
-            hint={<span className="wrap-anywhere">{contacts.phone}</span>}
-          />
-        </RadioGroup>
+          <OptionCard value="email" label={m.settings_email()} description={contacts.email} />
+          <OptionCard value="phone" label={m.settings_phone()} description={contacts.phone} />
+        </OptionCardGroup>
       ) : (
         <p className="min-w-0 text-md wrap-anywhere text-secondary">
           {m.settings_password_code_goes_to({ destination })}

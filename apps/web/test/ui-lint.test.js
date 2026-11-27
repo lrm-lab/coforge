@@ -509,3 +509,80 @@ test("no-ragged-dl rejects horizontal flex <dt>/<dd> rows without fixed label wi
   );
   expect(report).toHaveBeenCalledTimes(3);
 });
+
+test("no-hinted-radio-button rejects RadioButton with hint prop but allows plain RadioButton and upstream files", () => {
+  const report = mock(() => {});
+  const visitor = plugin.rules["no-hinted-radio-button"].create({
+    report,
+    filename: "/repo/apps/web/src/features/computers/kiro-enterprise-sign-in.tsx",
+  });
+  const radioEl = (name, attrs) => ({
+    name: { type: "JSXIdentifier", name },
+    attributes: attrs,
+  });
+
+  visitor.JSXOpeningElement(
+    radioEl("RadioButton", [
+      {
+        type: "JSXAttribute",
+        name: { type: "JSXIdentifier", name: "label" },
+        value: { type: "Literal", value: "Free" },
+      },
+      {
+        type: "JSXAttribute",
+        name: { type: "JSXIdentifier", name: "hint" },
+        value: { type: "Literal", value: "Builder ID" },
+      },
+    ]),
+  );
+  expect(report).toHaveBeenCalledTimes(1);
+
+  visitor.JSXOpeningElement(
+    radioEl("RadioButton", [
+      {
+        type: "JSXAttribute",
+        name: { type: "JSXIdentifier", name: "label" },
+        value: { type: "Literal", value: "Personal" },
+      },
+    ]),
+  );
+  expect(report).toHaveBeenCalledTimes(1);
+
+  for (const emptyVal of [
+    { type: "JSXExpressionContainer", expression: { type: "Identifier", name: "undefined" } },
+    { type: "JSXExpressionContainer", expression: { type: "Literal", value: null } },
+    { type: "JSXExpressionContainer", expression: { type: "Literal", value: false } },
+    { type: "Literal", value: "" },
+  ]) {
+    visitor.JSXOpeningElement(
+      radioEl("RadioButton", [
+        { type: "JSXAttribute", name: { type: "JSXIdentifier", name: "hint" }, value: emptyVal },
+      ]),
+    );
+  }
+  expect(report).toHaveBeenCalledTimes(1);
+
+  visitor.JSXOpeningElement(
+    radioEl("RadioButton", [
+      { type: "JSXAttribute", name: { type: "JSXIdentifier", name: "hint" }, value: null },
+    ]),
+  );
+  expect(report).toHaveBeenCalledTimes(2);
+
+  visitor.JSXOpeningElement(
+    radioEl("Checkbox", [
+      {
+        type: "JSXAttribute",
+        name: { type: "JSXIdentifier", name: "hint" },
+        value: { type: "Literal", value: "Required" },
+      },
+    ]),
+  );
+  expect(report).toHaveBeenCalledTimes(2);
+
+  const upstreamVisitor = plugin.rules["no-hinted-radio-button"].create({
+    report: mock(() => {}),
+    filename: "/repo/apps/web/src/components/base/radio-buttons/radio-buttons.tsx",
+  });
+  expect(upstreamVisitor.JSXOpeningElement).toBeUndefined();
+});

@@ -3,6 +3,7 @@
 - 优先使用现有 Button、Dialog、Tooltip、Select 等原语。只有真实重复需求才沉淀共享模式，不为单个页面新建一套设计系统。
 - 从人与 Agent 中挑选成员再创建（发起群聊）用双栏弹窗：左栏是可搜索、带复选框的候选列表（头像、名字），只列出公开 Agent，不列私有 Agent 与周报助手；右栏是标题与「已选 N 人」计数、名称与项目输入、已选成员行（头像、名字、移除按钮；移除同时取消左栏勾选）以及取消、完成。人数不足时完成按钮禁用，并用一句话写明最少人数。成员添加失败时弹窗保留，用一行内联提示「#名称 已创建，但成员未能添加。」并给出「打开频道」按钮，不发 toast，也不重新创建。其他创建入口保持单栏。
 - 开或关的设置（是/否、开/关、公开/私有）不用下拉框，也不用写着当前状态的按钮。拨了立即生效的用 `Toggle`（静音、置顶、运行时公开），标签写打开后得到什么；要点提交才生效的表单项用 `Checkbox`（创建 Agent 时「设为私有」）；要先确认的改动显示当前值徽标，旁边放写明动作的按钮（Agent 资料页「设为私有」）。这条看的是「开或关」，不是选项个数：角色、语言这类从一组里选一个的仍用 `Select`，卡片式的单选（Computer 类型等）也保留。依据：[NN/g Toggle-Switch Guidelines](https://www.nngroup.com/articles/toggle-switch-guidelines/)。
+- 带副标题、说明或价格的单选项（如套餐/版本、验证方式、应用授权、目标 Agent/电脑选择）不做裸 `RadioButton`，统一用整块可点选项卡片 `OptionCardGroup` / `OptionCard`（`#src/components/ui/option-card`）：选中态用浅强调底（`bg-brand-primary`）配 1px 细边（`border-brand`）与官方实心点（`RadioButtonBase`），未选态用标准表面（`bg-primary`）配极细边（`border-secondary`），外层不再叠额外边框卡片。`coforge/no-hinted-radio-button` 禁止给裸 `RadioButton` 传 `hint`。
 - 不可撤销的操作按范围选确认方式：单个自己的对象（自己的模板、一条历史、一个 Agent 的停止），就在点击处二次确认，用 `components/ui/popconfirm.tsx` 的 popconfirm，路径最短、不打断别的；影响他人、批量，或要先做决定的，用 `ConfirmDialog` 对话框；可撤销的直接执行并给「撤销」。
 - 使用语义颜色。主按钮与品牌强调按既有规范区分；状态颜色同时有文字或其他非颜色线索。
 - 同级元素使用一致的字号角色、间距和对齐。不要因为一段文字长就单独缩小它，也不要用极小浅灰字掩盖信息过多。
