@@ -285,7 +285,6 @@ test("release callers select separate tracks and Web staging waits for candidate
   expect(deploy.concurrency["cancel-in-progress"]).toBe(false);
   expect(ci.jobs.changes.permissions).toEqual({ contents: "read", actions: "read" });
   expect(deploy.jobs.gates.permissions).toEqual({ contents: "read", actions: "read" });
-  expect(release.jobs.gates.permissions).toEqual({ contents: "read", actions: "read" });
   expect(deploy.jobs.image.needs).toEqual(["ci-status", "gates"]);
   expect(deploy.jobs.image.if).toBe(
     "always() && github.ref == 'refs/heads/main' && !cancelled() && (needs.ci-status.outputs.passed == 'true' || (needs.gates.result == 'success' && needs.gates.outputs.deploy == 'true'))",
@@ -298,8 +297,6 @@ test("release callers select separate tracks and Web staging waits for candidate
   expect(deploy.jobs.deploy.if).toBe(
     "always() && !cancelled() && needs.image.result == 'success' && (!inputs.enable_artifact_checker || needs.checker-image.result == 'success')",
   );
-  expect(release.jobs.gates.with.track).toBe("local");
-  expect(release.jobs.publish.needs).toEqual(["gates", "notes-check"]);
 });
 
 test("the workflow diffs PRs from their merge base and includes both sides of a rename", async () => {

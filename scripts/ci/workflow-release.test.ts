@@ -74,3 +74,9 @@ test("withdrawal inputs cannot accidentally fall through to a publication", asyn
     expect(child.exitCode).toBe(allowed ? 0 : 1);
   }
 });
+
+test("Computer staging validates the local track beside its notes check", async () => {
+  expect(release.jobs.gates.with.track).toBe("local");
+  expect(release.jobs.gates.permissions).toEqual({ contents: "read", actions: "read" });
+  expect(release.jobs.publish.needs).toEqual(["gates", "notes-check"]);
+});
