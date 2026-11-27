@@ -1,13 +1,16 @@
 import { homedir } from "node:os";
 import {
   computerUpgradeJobPaths,
+  FileBindingStore,
   launchComputerUpgrade,
   readUpgradeReceipt,
   resolveComputerInstallDirectory,
 } from "@lrm/coforge-daemon";
+import { UPGRADE_PROCESSES_EXITED_WITHOUT_RECEIPT } from "@lrm/coforge-daemon/src/platform/computer-upgrade-receipts";
+import { UPGRADE_ERROR_CODE } from "@lrm/coforge-sdk/internal";
 import type { UpgradeResult } from "@lrm/coforge-sdk/internal/upgrade-receipt";
 import { UpdateError } from "#src/updater";
-import { COFORGE_RELEASE_FEED_URL } from "#src/release-channel";
+import { COFORGE_RELEASE_FEED_URL, COFORGE_SERVER_URL } from "#src/release-channel";
 
 /** How long a caller waits for the job's receipt before it stops watching. The job itself
  * continues either way: it is outside this process, which is the point. */
@@ -97,17 +100,26 @@ export async function runDetachedUpgrade(
   const deadline = now() + (options.timeoutMs ?? DETACHED_UPGRADE_TIMEOUT_MS);
   const pollMs = options.pollMs ?? DETACHED_UPGRADE_POLL_MS;
   const log = new UpgradeLogFollower(logPath, onLine);
-  for (;;) {
-    const receipt = await readReceipt(installRoot, requestId).catch((error: unknown) => {
-      // A receipt that exists but cannot be read is the operation's own evidence of failure.
+  const coordinatorBindings =
+    admitted && options.stateDirectory
+      ? new FileBindingStore(options.stateDirectory, COFORGE_SERVER_URL)
+      : undefined;
+  const readInstallerReceipt = () =>
+    readReceipt(installRoot, requestId).catch((error: unknown) => {
       throw new UpdateError(
         "UPDATE_FEED_INVALID",
         `upgrade ${requestId} left an unreadable receipt: ${error instanceof Error ? error.message : String(error)}`,
       );
     });
-    if (receipt) {
+  for (;;) {
+    let result = (await readInstallerReceipt())?.result;
+    if (!result && coordinatorBindings) {
+      const failure = await readCoordinatorFailure(coordinatorBindings, requestId, options.version);
+      if (failure) result = (await readInstallerReceipt())?.result ?? failure;
+    }
+    if (result) {
       await log.flush();
-      return { kind: "settled", requestId, result: receipt.result };
+      return { kind: "settled", requestId, result };
     }
     await log.follow();
     if (now() >= deadline) {
@@ -119,6 +131,34 @@ export async function runDetachedUpgrade(
     }
     await sleep(pollMs);
   }
+}
+
+async function readCoordinatorFailure(
+  bindings: FileBindingStore,
+  requestId: string,
+  expectedVersion: string,
+): Promise<UpgradeResult | undefined> {
+  const records = await bindings.load().catch(() => []);
+  for (const binding of records) {
+    const failure = binding.upgradeOperations?.find(
+      (operation) =>
+        operation.requestId === requestId &&
+        operation.expectedVersion === expectedVersion &&
+        (operation.state === "failed" || operation.state === "acknowledged") &&
+        (operation.terminal?.errorCode === UPGRADE_ERROR_CODE.EXPIRED_WITHOUT_RECEIPT ||
+          operation.terminal?.error === UPGRADE_PROCESSES_EXITED_WITHOUT_RECEIPT),
+    )?.terminal;
+    if (failure)
+      return {
+        schema_version: 1,
+        request_id: requestId,
+        operation: "upgrade",
+        status: "failed",
+        error: failure.error,
+        errorCode: failure.errorCode,
+      };
+  }
+  return undefined;
 }
 
 function normalizeReleaseFeedUrl(value: string): string {

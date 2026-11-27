@@ -63,6 +63,7 @@ export function createUpdateCommand(
       feedUrl: options.releaseFeedUrl,
       releaseChannel: options.releaseChannel,
       installRoot,
+      stateDirectory,
       admit: dependencies.admitComputerUpgrade,
       // The job's own progress lines are diagnostics: they belong on stderr, never on the
       // command's stdout, which a `--json` caller reads.

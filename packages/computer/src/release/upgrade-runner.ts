@@ -1,3 +1,4 @@
+import { recordComputerUpgradeProcesses } from "@lrm/coforge-daemon/src/platform/computer-upgrade-process-evidence";
 import { recordInstallerBootstrapProgress } from "@lrm/coforge-daemon/src/platform/computer-upgrade-progress";
 import { readUpgradeReceipt, resolveComputerInstallDirectory } from "@lrm/coforge-daemon";
 import type { UpgradeResult } from "@lrm/coforge-sdk/internal/upgrade-receipt";
@@ -23,6 +24,7 @@ export type InstallerSpawn = {
   stdin: "ignore";
   stdout: "inherit" | "ignore" | "pipe" | "stderr";
   stderr: "inherit" | "pipe";
+  onStarted?: (installerPid: number) => Promise<void>;
 };
 
 export type InstallerRun = { exitCode: number; stdout: string; stderr: string };
@@ -75,6 +77,7 @@ export async function defaultSpawnInstaller(spawn: InstallerSpawn): Promise<Inst
     spawn.stderr === "pipe" ? new Response(child.stderr).text() : Promise.resolve(""),
     child.exited,
     spawn.stdout === "stderr" ? forwardToStderr(child.stdout) : Promise.resolve(),
+    spawn.onStarted?.(child.pid).catch(() => {}),
   ]);
   return { exitCode, stdout, stderr };
 }
@@ -138,6 +141,17 @@ export async function runUpgradeOperation(
       stdin: "ignore",
       stdout: origin === "remote" ? "pipe" : "inherit",
       stderr: "pipe",
+      ...(origin === "remote" && process.platform === "linux"
+        ? {
+            onStarted: (installerPid: number) =>
+              recordComputerUpgradeProcesses(
+                options.installRoot,
+                requestId,
+                process.pid,
+                installerPid,
+              ),
+          }
+        : {}),
     });
   } catch (error) {
     return conclude(

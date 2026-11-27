@@ -106,6 +106,10 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 `src/proc-jobs/proc-job-memory-config.ts` reads the local Computer memory limit for new jobs.
 
 `src/daemon-runtime/upgrade-progress-reporter.ts` submits installed upgrade evidence and durable ready receipt replays for an authenticated binding.
+On Linux the remote upgrade launcher records the wrapper and installer identities in one private
+process-evidence file. The Coordinator accepts early failure only when both exact identities are
+gone and both the result and switch journal are absent. Missing or unrecognized evidence keeps
+the existing pending TTL. Installer receipts remain authoritative.
 
 Host notes for `src/code-agent/<provider>/`: each injects environment, client identity, process, version, auth and usage capabilities into Anvil's native sessions. Kiro's `usage-host.ts` is read-only: only usage JSON crosses into the adapter. Antigravity's `acp-host.ts` strips SSH markers. Droid spawns a wide PTY for `/limits`. Devin runs the `thought_level` effort sweep. `pi/` holds the built-in provider, catalog and metadata and shares the native SDK Session through Anvil.
 

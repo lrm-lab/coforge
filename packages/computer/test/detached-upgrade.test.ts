@@ -2,7 +2,10 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile, appendFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { computerUpgradeJobPaths } from "@lrm/coforge-daemon";
+import { computerUpgradeJobPaths, FileBindingStore } from "@lrm/coforge-daemon";
+import { UPGRADE_PROCESSES_EXITED_WITHOUT_RECEIPT } from "@lrm/coforge-daemon/src/platform/computer-upgrade-receipts";
+import { UPGRADE_ERROR_CODE } from "@lrm/coforge-sdk/internal";
+import { COFORGE_SERVER_URL } from "#src/release-channel";
 import type { UpgradeReceiptFile } from "@lrm/coforge-daemon";
 import { runDetachedUpgrade } from "#src/release/detached-upgrade";
 
@@ -79,6 +82,83 @@ describe("running an upgrade outside this process", () => {
       result: { status: "failed", error: "installer refused the target" },
     });
   });
+
+  test.each([
+    ["failed", "expired without a receipt", UPGRADE_ERROR_CODE.EXPIRED_WITHOUT_RECEIPT],
+    ["acknowledged", "expired without a receipt", UPGRADE_ERROR_CODE.EXPIRED_WITHOUT_RECEIPT],
+    ["failed", UPGRADE_PROCESSES_EXITED_WITHOUT_RECEIPT, undefined],
+    ["acknowledged", UPGRADE_PROCESSES_EXITED_WITHOUT_RECEIPT, undefined],
+  ] as const)(
+    "reads the Coordinator's %s state without a receipt (%s)",
+    async (state, error, errorCode) => {
+      const homeDirectory = await home();
+      const stateDirectory = join(homeDirectory, "daemon");
+      const store = new FileBindingStore(stateDirectory);
+      let now = 0;
+      await store.save([
+        {
+          workspaceId: "ws",
+          computerId: "computer",
+          workspaceRoot: homeDirectory,
+          serverHttpUrl: COFORGE_SERVER_URL,
+          enabled: true,
+          upgradeOperations: [
+            {
+              requestId: "other-request",
+              expectedVersion: "2.0.0",
+              requestedAt: 0,
+              state: "failed",
+              terminal: { at: 1, error: "other operation" },
+            },
+            {
+              requestId: REQUEST_ID,
+              expectedVersion: "2.0.0",
+              requestedAt: 0,
+              state,
+              terminal: {
+                at: 2,
+                error,
+                errorCode,
+              },
+            },
+          ],
+        },
+      ]);
+
+      const outcome = await runDetachedUpgrade({
+        version: "2.0.0",
+        requestId: REQUEST_ID,
+        stateDirectory,
+        homeDirectory,
+        installRoot: join(homeDirectory, "install"),
+        admit: async () => true,
+        launch: async () => {
+          throw new Error("Coordinator already launched the upgrade");
+        },
+        timeoutMs: 10,
+        sleep: async (ms) => {
+          now += ms;
+        },
+        now: () => now,
+        onLine: () => {},
+        onNote: () => {},
+      });
+
+      expect(outcome).toEqual({
+        kind: "settled",
+        requestId: REQUEST_ID,
+        result: {
+          schema_version: 1,
+          request_id: REQUEST_ID,
+          operation: "upgrade",
+          status: "failed",
+          error,
+          errorCode,
+        },
+      });
+      expect(now).toBe(0);
+    },
+  );
 
   test("the job's log lines arrive as they are written, and the tail on settle", async () => {
     const homeDirectory = await home();

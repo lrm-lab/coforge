@@ -2,6 +2,7 @@ import { UPGRADE_ERROR_CODE } from "@lrm/coforge-sdk/internal";
 
 import { resolveComputerInstallDirectory } from "./computer-install-directory";
 import type { UpgradeOperationTerminal } from "#src/supervisor/machine-supervisor-operations";
+import { computerUpgradeProcessesExited } from "./computer-upgrade-process-evidence";
 import { readUpgradeReceipt } from "./upgrade-receipt-file";
 
 /**
@@ -27,10 +28,13 @@ export type ComputerUpgradeReceiptOptions = {
   installRoot?: string;
   /** Injectable receipt reader, for tests only. */
   readReceipt?: (requestId: string) => Promise<ComputerUpgradeReceipt | undefined>;
+  processesExited?: typeof computerUpgradeProcessesExited;
 };
 
 /** What a pending operation is settled with when its job never left a receipt. */
 export const UPGRADE_EXPIRED_WITHOUT_RECEIPT = "expired without a receipt";
+export const UPGRADE_PROCESSES_EXITED_WITHOUT_RECEIPT =
+  "upgrade processes exited without a receipt";
 
 export type SweepComputerUpgradeReceiptsOptions = ComputerUpgradeReceiptOptions & {
   now?: () => number;
@@ -98,9 +102,22 @@ export async function sweepComputerUpgradeReceipts(
   const now = options.now ?? Date.now;
   let resolved = 0;
   for (const operation of pending) {
-    const receipt =
-      (await readComputerUpgradeReceipt(operation.requestId, options)) ??
-      expiredReceipt(operation, now(), options.pendingTtlMs);
+    let receipt = await readComputerUpgradeReceipt(operation.requestId, options);
+    if (
+      !receipt &&
+      (await (options.processesExited ?? computerUpgradeProcessesExited)(
+        options.installRoot ?? resolveComputerInstallDirectory(),
+        operation,
+      ))
+    ) {
+      receipt = (await readComputerUpgradeReceipt(operation.requestId, options)) ?? {
+        requestId: operation.requestId,
+        status: "failed",
+        at: now(),
+        error: UPGRADE_PROCESSES_EXITED_WITHOUT_RECEIPT,
+      };
+    }
+    receipt ??= expiredReceipt(operation, now(), options.pendingTtlMs);
     if (!receipt) continue;
     await complete(operation.workspaceId, operation.requestId, receipt);
     resolved += 1;
