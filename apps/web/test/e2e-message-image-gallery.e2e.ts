@@ -7,13 +7,6 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { browserSession, localBrowserE2e } from "./helpers/browser-e2e";
 import { png } from "./helpers/test-png";
 
-/**
- * A message's images laid out as Raft does (task #212, `attachment-image-box.ts`): a lone image at
- * its own shape within 360×288, a 176×132 box when its size is unknown, and several in a grid at
- * most 360 wide whose wide images take a row of their own. Run with `mise run test:e2e:web
- * e2e-message-image-gallery`. Screenshots and measured boxes live in
- * .artifacts/e2e/message-image-gallery/. The suite removes its own Workspace and writer.
- */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/message-image-gallery");
@@ -25,7 +18,6 @@ let channelId: string;
 let writerMemberId: string;
 let sequence = 0;
 
-/** One message from the writer with these images, each `[name, width, height, size known]`. */
 async function post(body: string, images: [string, number, number, boolean?][]) {
   const message = await db.message.create({
     data: {
@@ -55,7 +47,6 @@ async function post(body: string, images: [string, number, number, boolean?][]) 
   }
 }
 
-/** Each named image's button box, rounded, once every image has loaded. */
 const boxes = (names: string[]) =>
   `(() => Object.fromEntries(${JSON.stringify(names)}.map((name) => { const button = document.querySelector('img[alt="' + name + '"]')?.closest("button"); const r = button?.getBoundingClientRect(); return [name, r && { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width), height: Math.round(r.height) }]; })))()`;
 
@@ -140,22 +131,18 @@ test("lone images keep their shape; several share a grid with wide ones on a row
   await browser("screenshot", "--full", join(artifacts, "1440.png"));
   await Bun.write(join(artifacts, "1440.json"), JSON.stringify(box, null, 2));
 
-  // A lone image: within 360×288 at its ratio; its border is inside that box.
   expect(box["landscape.png"]).toMatchObject({ width: 360, height: 270 });
-  // 43px wide at 300:2000 is 286.7 tall: the width is whole pixels, the height follows.
   expect(box["long.png"]!.height).toBeGreaterThanOrEqual(286);
   expect(box["long.png"]!.height).toBeLessThanOrEqual(288);
   expect(box["long.png"]!.width).toBeLessThanOrEqual(44);
   expect(box["unknown.png"]).toMatchObject({ width: 176, height: 132 });
 
-  // Four: two rows of two, the group no wider than 360.
   const four = [1, 2, 3, 4].map((n) => box[`four-${n}.png`]!);
   expect(four[0]!.y).toBe(four[1]!.y);
   expect(four[2]!.y).toBe(four[3]!.y);
   expect(four[2]!.y).toBeGreaterThan(four[0]!.y);
   expect(four[1]!.x + four[1]!.width - four[0]!.x).toBeLessThanOrEqual(360);
 
-  // Five with a wide one in the middle: two, the wide one alone, then two.
   const mixed = [1, 2, 3, 4, 5].map((n) => box[`mixed-${n}.png`]!);
   expect(mixed[0]!.y).toBe(mixed[1]!.y);
   expect(mixed[2]!.y).toBeGreaterThan(mixed[0]!.y);
@@ -164,7 +151,6 @@ test("lone images keep their shape; several share a grid with wide ones on a row
   expect(mixed[3]!.y).toBeGreaterThan(mixed[2]!.y);
 }, 120_000);
 
-/** What the open lightbox shows: its title, "n / count", which arrows work, and its thumbnails. */
 const lightbox = () =>
   evaluate<{
     title: string | null;
@@ -186,7 +172,6 @@ const lightbox = () =>
     };
   })()`);
 
-/** Waits until the lightbox shows `position` ("n / count"). */
 async function at(position: string) {
   for (let attempt = 0; attempt < 50; attempt++) {
     if ((await lightbox()).position === position) return;
@@ -195,7 +180,6 @@ async function at(position: string) {
   expect((await lightbox()).position).toBe(position);
 }
 
-/** Points at a control, then clicks it, as a mouse does: the arrows show a tooltip on hover. */
 async function press(selector: string) {
   await browser("hover", selector);
   await browser("click", selector);
@@ -217,8 +201,6 @@ test("a message's images page in one lightbox: arrows, keys and thumbnails, stop
     current: "mixed-1.png",
   });
 
-  // The keys stop at the ends rather than wrapping: a step back from the first image is ignored,
-  // so the next step forward lands on the second.
   await browser("press", "ArrowLeft");
   await browser("press", "ArrowRight");
   await at("2 / 5");
@@ -240,7 +222,6 @@ test("a message's images page in one lightbox: arrows, keys and thumbnails, stop
   await press('[role="dialog"] button[aria-label="Previous image"]');
   await at("3 / 5");
 
-  // Clicking Next until it is disabled leaves the lightbox in control: Escape still closes it.
   await press(NEXT);
   await at("4 / 5");
   await press(NEXT);
@@ -248,7 +229,6 @@ test("a message's images page in one lightbox: arrows, keys and thumbnails, stop
   await browser("press", "Escape");
   await browser("wait", "--fn", `!document.querySelector('[role="dialog"]')`);
 
-  // A lone image opens on its own: no count, arrows or thumbnails.
   await browser("click", 'button:has(img[alt="landscape.png"])');
   await browser("wait", '[role="dialog"]');
   expect(await lightbox()).toMatchObject({
