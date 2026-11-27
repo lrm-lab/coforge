@@ -17,3 +17,4 @@ or claim a real model call based only on credential presence.
 - [Native browser scenario coverage](native-browser-scenario.md): Attachment, Task review/Done, Agent-created Task, and reassignment phases of the native browser scenario.
 - [Native CLI fix and HTTPS setup migration](native-https-migration.md): The attachment-metadata CLI defect, the HTTPS setup migration, and the runs that verified or failed it.
 - [Native run guidance](native-run-guidance.md): Build ordering, offline recovery, selectors, the hydration defect, and environment restart rules for native runs.
+- [Codex compatible provider acceptance](codex-compatible.md) runs real Codex without a ChatGPT login against a local synthetic Responses endpoint.

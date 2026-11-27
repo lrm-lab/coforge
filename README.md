@@ -83,7 +83,7 @@ The architecture invariants every change must respect are in
 | [docs/agents/architecture-invariants.md](docs/agents/architecture-invariants.md) | Package, process, transport, protocol and storage rules every change keeps |
 | [docs/agents/ui-manual-checks.md](docs/agents/ui-manual-checks.md) | Manual UI verification scenarios by interface area |
 | [docs/agents/shared-agent-skills.md](docs/agents/shared-agent-skills.md) | Project skills, independent review, release and reference-research rules every agent follows |
-| [docs/agents/e2e-testing/](docs/agents/e2e-testing/README.md) | Live OpenRouter integration test |
+| [docs/agents/e2e-testing/](docs/agents/e2e-testing/README.md) | Native Computer and provider end-to-end tests |
 | [docs/agents/mise-tasks.md](docs/agents/mise-tasks.md) | Mise task policy |
 | [docs/agents/git-hooks/](docs/agents/git-hooks/README.md) | Pre-commit file size limit and its ratchet, the hard rules the hook and CI enforce, the hook check in `mise run check`, and marking generated files |
 | [docs/agents/reference-cli-research/](docs/agents/reference-cli-research/README.md) | Studying the latest Raft Computer reference binary, source tree, and installer |

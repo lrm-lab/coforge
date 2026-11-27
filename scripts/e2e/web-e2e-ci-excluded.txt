@@ -45,6 +45,8 @@ e2e-channel-header-name.e2e.ts 待分拣
 e2e-channel-thread.e2e.ts 待分拣
 e2e-choice-card-long-text.e2e.ts 待分拣
 e2e-cloud-agent-create-state.e2e.ts 待分拣
+e2e-codex-compatible-browser.e2e.ts requires two native Computer installs and offline Chromium
+e2e-codex-compatible-native.e2e.ts requires two native Computer installs and a real Codex app-server
 e2e-composer-send-during-upload.e2e.ts 待 Linux runner 准入
 e2e-computer-refusal.e2e.ts 待分拣
 e2e-departure-impact.e2e.ts 待分拣
