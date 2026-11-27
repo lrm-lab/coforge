@@ -58,6 +58,7 @@ model Conversation {
   savedMessages  SavedMessage[]
   messageReads   MessageRead[]
   pins           ConversationPin[]
+  pinnedArtifact ConversationPinnedArtifact?
   routedFeedbacks UserFeedback[]
   feedbackRoutingConfigs FeedbackRoutingConfig[]
   coordinatorAgent Agent?               @relation("ConversationCoordinator", fields: [coordinatorAgentId, workspaceId], references: [id, workspaceId], onDelete: NoAction)
@@ -208,6 +209,25 @@ model ConversationPin {
   @@id([conversationId, memberId])
   @@index([workspaceId, memberId, sortOrder])
   @@map("conversation_pins")
+}
+
+/// One Artifact pinned to the top of a channel or direct conversation. `artifactId` has no foreign
+/// key: this module adds none to the artifacts tables, and a deleted or moved Artifact reads as
+/// absent.
+model ConversationPinnedArtifact {
+  conversationId  String       @id @db.Uuid
+  workspaceId     String       @db.Uuid
+  artifactId      String       @db.Uuid
+  pinnedByUserId  String?      @db.Uuid
+  pinnedByAgentId String?      @db.Uuid
+  pinnedAt        DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  conversation    Conversation @relation(fields: [conversationId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@unique([conversationId, workspaceId])
+  @@index([workspaceId])
+  @@index([artifactId])
+  @@map("conversation_pinned_artifacts")
 }
 
 /// A one-time suggestion to an Agent that it mute a channel: shown once per Agent and channel,

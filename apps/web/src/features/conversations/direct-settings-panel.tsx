@@ -14,6 +14,7 @@ import {
   SectionEyebrow,
   SettingsCard,
 } from "./settings-panel-parts";
+import { PinnedArtifactSettingsSection } from "./pinned-artifact-settings-section";
 import { useSidebarActions, useSidebarLists } from "./sidebar-lists";
 import { SidebarSectionSelect } from "./sidebar-section-select";
 
@@ -66,6 +67,7 @@ export function DirectSettingsPanel({
             {m.direct_settings_label()}
           </Badge>
         </div>
+        <PinnedArtifactSettingsSection conversationId={conversationId} isDm />
         <DirectPreferences
           conversationId={conversationId}
           collapseLongMessages={collapseLongMessages}

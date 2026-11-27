@@ -8,6 +8,10 @@ import { m } from "#src/paraglide/messages";
 import { ConversationFocusButton } from "./conversation-focus-button";
 import { conversationHeaderTabs, type HeaderTabs } from "./conversation-header-tabs";
 import { ConversationListButton } from "./conversation-list-button";
+import {
+  ConversationPinnedArtifactStrip,
+  PinnedArtifactRestoreButton,
+} from "./conversation-pinned-artifact-strip";
 import { DirectSettingsToggleButton } from "./direct-settings-toggle-button";
 import { useConversationDetailsState } from "./use-conversation-details-state";
 import type { ThreadedConversationProps } from "./conversation-types";
@@ -68,6 +72,7 @@ export function PeopleDirectConversationHeader({
       }
       actions={
         <div className="-mr-1.5 flex shrink-0 items-center gap-3">
+          <PinnedArtifactRestoreButton conversationId={conversation.conversationId} />
           <ConversationFocusButton />
           {onToggleSettings && (
             <DirectSettingsToggleButton open={settingsOpen} onToggle={onToggleSettings} />
@@ -137,6 +142,9 @@ export function PeopleDirectConversation({
           settingsOpen={details.open}
           onToggleSettings={details.toggleDetails}
         />
+      }
+      pinnedStrip={
+        <ConversationPinnedArtifactStrip conversationId={conversation.conversationId} isDm />
       }
       emptyState={{
         title: self

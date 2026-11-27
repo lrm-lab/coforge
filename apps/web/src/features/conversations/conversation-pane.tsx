@@ -44,6 +44,7 @@ import { useIsHostTaskMessage } from "#src/features/tasks/use-conversation-tasks
 export function ConversationPane({
   conversation,
   header,
+  pinnedStrip,
   readOnlyNotice,
   emptyState,
   streamRead = "settled",
@@ -279,7 +280,10 @@ export function ConversationPane({
                 action={threadHeaderAction}
               />
             ) : (
-              header
+              <>
+                {header}
+                {pinnedStrip}
+              </>
             )}
 
             <div className="group/history relative min-h-24 flex-1 overflow-x-clip">

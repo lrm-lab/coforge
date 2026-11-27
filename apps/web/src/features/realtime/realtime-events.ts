@@ -20,6 +20,7 @@ export const REALTIME_EVENTS = {
   threadUnreadChanged: "conversation.thread-unread.changed.v1",
   channelThreadUnreadInvalidated: "conversation.thread-unread.invalidated.v1",
   conversationRead: "conversation.read.v1",
+  conversationPinnedArtifactChanged: "conversation.pinned_artifact.changed.v1",
   messageAvailable: "message.available.v1",
   messageReaction: "message.reaction.v1",
   notificationAvailable: "notification.available.v2",

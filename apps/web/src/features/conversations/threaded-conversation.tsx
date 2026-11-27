@@ -72,6 +72,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     onReadThread,
     onMarkThreadUnread,
     header,
+    pinnedStrip,
     threadHeaderAction,
     threadFollow,
     threadContext,
@@ -379,6 +380,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
         onLoadMessageAround={onLoadMessageAround}
         onReadLatest={onReadLatest}
         header={header}
+        pinnedStrip={pinnedStrip}
         conversation={conversation}
         composerTarget={threadContext}
         onOpenThread={openThread}

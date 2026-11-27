@@ -102,6 +102,22 @@ export function decodeConversationReadEvent(value: unknown): ConversationReadEve
   return decodeJsonPublication(conversationReadEvent, value);
 }
 
+const conversationPinnedArtifactChangedEvent = z.object({
+  type: z.literal(REALTIME_EVENTS.conversationPinnedArtifactChanged),
+  conversationId: z.string().min(1),
+  artifactId: z.string().min(1).nullable(),
+});
+
+export type ConversationPinnedArtifactChangedEvent = z.infer<
+  typeof conversationPinnedArtifactChangedEvent
+>;
+
+export function decodeConversationPinnedArtifactChangedEvent(
+  value: unknown,
+): ConversationPinnedArtifactChangedEvent | undefined {
+  return decodeJsonPublication(conversationPinnedArtifactChangedEvent, value);
+}
+
 export type NotificationAvailableEvent = {
   type: "notification.available.v2";
   messageId: string;

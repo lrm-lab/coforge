@@ -18,6 +18,7 @@ import { POPOVER_MOTION } from "#src/utils/popover-motion";
 import { FLOATING_SURFACE_CLASS } from "#src/features/conversations/review-chrome";
 import { cn } from "#src/lib/utils";
 import { useChannelPresence, usePresentUsers } from "#src/features/realtime/channel-presence";
+import { markPinnedArtifactSeenInCache } from "#src/features/conversations/pinned-artifact-queries";
 import { ARTIFACT_ROSTER_SIZE, artifactPresenceChannel } from "./artifact-presence-channel";
 import { presenceSummary } from "./artifact-presence-summary";
 import { artifactViewersQuery, type ArtifactViewers } from "./artifact-queries";
@@ -73,6 +74,7 @@ export function useRecordOpen(artifactId: string, version: number): boolean {
     void openArtifact({ data: { artifactId, version } })
       .then((roster) => {
         queryClient.setQueryData(artifactViewersQuery(artifactId).queryKey, roster);
+        markPinnedArtifactSeenInCache(queryClient, artifactId, version);
         if (current) setOpened(true);
       })
       .catch(() => undefined);
