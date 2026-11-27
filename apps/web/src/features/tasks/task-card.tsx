@@ -27,9 +27,15 @@ import { TaskOwnerAvatar } from "./task-owner";
 import { TaskStatusIcon } from "./task-status-icon";
 import type { TaskControls } from "./task-workflow";
 
-function TaskCreatedAt({ at }: { at: string | Date }) {
-  const hydrated = useHydrated();
-  const timeZone = useTimeZone();
+function TaskCreatedAt({
+  at,
+  hydrated,
+  timeZone,
+}: {
+  at: string | Date;
+  hydrated: boolean;
+  timeZone: string | null | undefined;
+}) {
   return (
     <time
       dateTime={new Date(at).toISOString()}
@@ -40,9 +46,15 @@ function TaskCreatedAt({ at }: { at: string | Date }) {
   );
 }
 
-function TaskDueAt({ task }: { task: TaskView }) {
-  const hydrated = useHydrated();
-  const timeZone = useTimeZone();
+function TaskDueAt({
+  task,
+  hydrated,
+  timeZone,
+}: {
+  task: TaskView;
+  hydrated: boolean;
+  timeZone: string | null | undefined;
+}) {
   if (!task.dueAt) return null;
   const state = task.dueState;
   return (
@@ -138,6 +150,7 @@ export function TaskCard({
   menu,
   list,
   selected = false,
+  reached = true,
   onReach,
 }: {
   task: TaskView;
@@ -149,8 +162,11 @@ export function TaskCard({
   menu?: ReactNode;
   list: boolean;
   selected?: boolean;
+  reached?: boolean;
   onReach?: () => void;
 }) {
+  const hydrated = useHydrated();
+  const timeZone = useTimeZone();
   const cardRef = useRef<HTMLElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
@@ -169,9 +185,13 @@ export function TaskCard({
   };
   const onPointerEnter =
     onReach && ((event: PointerEvent) => event.pointerType === "mouse" && onReach());
-  const blocked = task.blocked ? <TaskBlockedMark blockedBy={task.blockedBy} /> : null;
-  const parent = task.parent ? <TaskParentMark parent={task.parent} /> : null;
-  const subtasks = task.subtasks ? <TaskSubtaskMark subtasks={task.subtasks} /> : null;
+  const blocked = task.blocked ? (
+    <TaskBlockedMark blockedBy={task.blockedBy} interactive={reached} />
+  ) : null;
+  const parent = task.parent ? <TaskParentMark parent={task.parent} interactive={reached} /> : null;
+  const subtasks = task.subtasks ? (
+    <TaskSubtaskMark subtasks={task.subtasks} interactive={reached} />
+  ) : null;
   const handle =
     controls.handle && list ? (
       <span className="hidden sm:contents">{controls.handle}</span>
@@ -201,6 +221,7 @@ export function TaskCard({
         aria-current={selected ? "true" : undefined}
         onClickCapture={rememberCard}
         onPointerEnter={onPointerEnter}
+        onFocusCapture={onReach}
         className={cn(
           "relative flex min-h-10 items-center gap-3 px-4 py-1.5 transition-colors any-pointer-coarse:min-h-11",
           selected ? "bg-active" : "hover:bg-primary_hover",
@@ -227,7 +248,7 @@ export function TaskCard({
             )}
             {task.dueAt && (
               <span className="ms-auto shrink-0">
-                <TaskDueAt task={task} />
+                <TaskDueAt task={task} hydrated={hydrated} timeZone={timeZone} />
               </span>
             )}
           </p>
@@ -254,10 +275,10 @@ export function TaskCard({
         )}
         {task.dueAt && (
           <span className="hidden shrink-0 sm:inline-flex">
-            <TaskDueAt task={task} />
+            <TaskDueAt task={task} hydrated={hydrated} timeZone={timeZone} />
           </span>
         )}
-        <TaskOwnerAvatar owner={task.owner} tooltip />
+        <TaskOwnerAvatar owner={task.owner} tooltip={reached} />
         {tools}
       </article>
     );
@@ -272,6 +293,7 @@ export function TaskCard({
       aria-current={selected ? "true" : undefined}
       onClickCapture={rememberCard}
       onPointerEnter={onPointerEnter}
+      onFocusCapture={onReach}
       className={cn(
         "group relative flex flex-col gap-2.5 rounded-lg border bg-primary p-3 transition-colors",
         selected
@@ -333,7 +355,7 @@ export function TaskCard({
           tools && "any-pointer-coarse:pe-16",
         )}
       >
-        <TaskOwnerAvatar owner={task.owner} tooltip />
+        <TaskOwnerAvatar owner={task.owner} tooltip={reached} />
         <span className="flex shrink-0 items-center gap-3">
           <TaskCount
             icon={MessageChatCircle}
@@ -345,8 +367,8 @@ export function TaskCard({
             count={task.fileCount}
             label={(count) => m.task_card_files({ count })}
           />
-          <TaskCreatedAt at={task.createdAt} />
-          <TaskDueAt task={task} />
+          <TaskCreatedAt at={task.createdAt} hydrated={hydrated} timeZone={timeZone} />
+          <TaskDueAt task={task} hydrated={hydrated} timeZone={timeZone} />
         </span>
       </div>
       {tools && (

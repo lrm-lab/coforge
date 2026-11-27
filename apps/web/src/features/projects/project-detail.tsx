@@ -141,7 +141,9 @@ export function ProjectDetail({
           </TabPanel>
         )}
       </Tabs>
-      {tab !== "tasks" && <WorkspaceTaskBoard search={search} project={project.id} board={false} />}
+      {tab !== "tasks" && search.task && (
+        <WorkspaceTaskBoard search={search} project={project.id} board={false} />
+      )}
     </main>
   );
 }

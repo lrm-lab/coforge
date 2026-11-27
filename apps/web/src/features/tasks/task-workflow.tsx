@@ -22,8 +22,6 @@ import {
 } from "@dnd-kit/core";
 import { useHydrated } from "@tanstack/react-router";
 import { DotsGrid as GripVertical } from "@untitledui/icons";
-import { LayoutGroup } from "motion/react";
-import * as motion from "motion/react-m";
 import {
   createContext,
   useCallback,
@@ -41,7 +39,6 @@ import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useDocumentDragCursor } from "#src/hooks/use-document-drag-cursor";
 import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
-import { DURATION_S, EASE_IN_OUT } from "#src/utils/motion-tokens";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { DropState } from "./task-drop-target";
@@ -64,10 +61,6 @@ export function useTaskLayout(layout: TaskLayout | undefined): TaskLayout {
 }
 
 const POINTER_SENSOR_OPTIONS = { activationConstraint: { distance: 6 } };
-
-const LAYOUT_TRANSITION = {
-  layout: { duration: DURATION_S.md, ease: EASE_IN_OUT },
-} as const;
 
 const MovePendingContext = createContext(false);
 
@@ -131,14 +124,18 @@ export function TaskWorkflow<T extends TaskView>({
     useSensor(KeyboardSensor),
   );
   const groups = useMemo(() => {
-    const displayedTasks = tasks.map((task) =>
-      pending?.id === task.id && pending.revision === task.revision
-        ? { ...task, status: pending.status }
-        : task,
-    );
+    const byStatus = new Map<TaskStatus, T[]>();
+    for (const status of statuses) byStatus.set(status, []);
+    for (const task of tasks) {
+      const display =
+        pending?.id === task.id && pending.revision === task.revision
+          ? { ...task, status: pending.status }
+          : task;
+      byStatus.get(display.status)?.push(display);
+    }
     return statuses.map((status) => ({
       status,
-      tasks: displayedTasks.filter((task) => task.status === status),
+      tasks: byStatus.get(status) ?? [],
     }));
   }, [tasks, pending, statuses]);
   const ordered = (group: (typeof groups)[number]) =>
@@ -205,91 +202,82 @@ export function TaskWorkflow<T extends TaskView>({
         </p>
       )}
       <MovePendingContext.Provider value={pending !== undefined}>
-        <LayoutGroup id={`tasks-${id}`}>
-          <div
-            className={
-              layout === "list"
-                ? "flex flex-col gap-4"
-                : groups.length > 1
-                  ? "flex flex-col gap-3 md:h-full md:flex-row md:items-stretch md:justify-center-safe md:overflow-x-auto [@media(max-height:32rem)]:md:h-auto [@media(max-height:32rem)]:md:items-start"
-                  : "flex max-w-sm flex-col md:h-full [@media(max-height:32rem)]:md:h-auto"
-            }
-          >
-            {shownGroups.map((group) => (
-              <TaskGroup
-                key={group.status}
-                status={group.status}
-                count={paged?.[group.status]?.count ?? group.tasks.length}
-                loaded={group.tasks.length}
-                paged={paged?.[group.status]}
-                board={layout === "board"}
-                compact={groups.length > TASK_WRITE_STATUSES.length}
-                dropState={dropState(group.status)}
-                hidable={hides}
-                onHide={
-                  hides && onHiddenChange ? () => onHiddenChange(group.status, true) : undefined
-                }
-                onAdd={add(group.status)}
-                onSortByPriority={(on) =>
-                  setByPriority((current) => {
-                    const next = new Set(current);
-                    if (on) next.add(group.status);
-                    else next.delete(group.status);
-                    return next;
-                  })
-                }
-                sortedByPriority={byPriority.has(group.status)}
-              >
-                {(shown) => (
-                  <>
-                    {ordered(group)
-                      .slice(0, shown)
-                      .map((task) => {
-                        const canAnimate =
-                          !reduced && active === undefined && landing === undefined;
-                        return (
-                          <motion.div
-                            key={task.id}
-                            layout={canAnimate ? "position" : false}
-                            layoutId={canAnimate ? `task-item-${id}-${task.id}` : undefined}
-                            transition={LAYOUT_TRANSITION}
-                            data-task-drag-node
-                            aria-busy={pending?.id === task.id}
-                            className={cn(
-                              layout === "list" &&
-                                "sm:not-any-pointer-coarse:[contain-intrinsic-block-size:2.5rem] sm:not-any-pointer-coarse:[content-visibility:auto]",
-                              landing === task.id && "opacity-0",
-                            )}
-                          >
-                            {renderTask(task, controls(task))}
-                          </motion.div>
-                        );
-                      })}
-                  </>
-                )}
-              </TaskGroup>
-            ))}
-            {hiddenGroups.length > 0 && (
-              <aside
-                aria-label={m.tasks_hidden_columns()}
-                className="flex shrink-0 flex-col gap-1 md:w-52"
-              >
-                <h2 className="flex h-10 items-center px-1 text-sm font-medium text-tertiary">
-                  {m.tasks_hidden_columns()}
-                </h2>
-                {hiddenGroups.map((group) => (
-                  <HiddenColumn
-                    key={group.status}
-                    status={group.status}
-                    count={paged?.[group.status]?.count ?? group.tasks.length}
-                    dropState={dropState(group.status)}
-                    onShow={() => onHiddenChange?.(group.status, false)}
-                  />
-                ))}
-              </aside>
-            )}
-          </div>
-        </LayoutGroup>
+        <div
+          className={
+            layout === "list"
+              ? "flex flex-col gap-4"
+              : groups.length > 1
+                ? "flex flex-col gap-3 md:h-full md:flex-row md:items-stretch md:justify-center-safe md:overflow-x-auto [@media(max-height:32rem)]:md:h-auto [@media(max-height:32rem)]:md:items-start"
+                : "flex max-w-sm flex-col md:h-full [@media(max-height:32rem)]:md:h-auto"
+          }
+        >
+          {shownGroups.map((group) => (
+            <TaskGroup
+              key={group.status}
+              status={group.status}
+              count={paged?.[group.status]?.count ?? group.tasks.length}
+              loaded={group.tasks.length}
+              paged={paged?.[group.status]}
+              board={layout === "board"}
+              compact={groups.length > TASK_WRITE_STATUSES.length}
+              dropState={dropState(group.status)}
+              hidable={hides}
+              onHide={
+                hides && onHiddenChange ? () => onHiddenChange(group.status, true) : undefined
+              }
+              onAdd={add(group.status)}
+              onSortByPriority={(on) =>
+                setByPriority((current) => {
+                  const next = new Set(current);
+                  if (on) next.add(group.status);
+                  else next.delete(group.status);
+                  return next;
+                })
+              }
+              sortedByPriority={byPriority.has(group.status)}
+            >
+              {(shown) => (
+                <>
+                  {ordered(group)
+                    .slice(0, shown)
+                    .map((task) => (
+                      <div
+                        key={task.id}
+                        data-task-drag-node
+                        aria-busy={pending?.id === task.id}
+                        className={cn(
+                          layout === "list" &&
+                            "sm:not-any-pointer-coarse:[contain-intrinsic-block-size:2.5rem] sm:not-any-pointer-coarse:[content-visibility:auto]",
+                          landing === task.id && "opacity-0",
+                        )}
+                      >
+                        {renderTask(task, controls(task))}
+                      </div>
+                    ))}
+                </>
+              )}
+            </TaskGroup>
+          ))}
+          {hiddenGroups.length > 0 && (
+            <aside
+              aria-label={m.tasks_hidden_columns()}
+              className="flex shrink-0 flex-col gap-1 md:w-52"
+            >
+              <h2 className="flex h-10 items-center px-1 text-sm font-medium text-tertiary">
+                {m.tasks_hidden_columns()}
+              </h2>
+              {hiddenGroups.map((group) => (
+                <HiddenColumn
+                  key={group.status}
+                  status={group.status}
+                  count={paged?.[group.status]?.count ?? group.tasks.length}
+                  dropState={dropState(group.status)}
+                  onShow={() => onHiddenChange?.(group.status, false)}
+                />
+              ))}
+            </aside>
+          )}
+        </div>
       </MovePendingContext.Provider>
       <DragOverlay dropAnimation={reduced ? null : dropAnimation} className="pointer-events-none">
         {active ? (

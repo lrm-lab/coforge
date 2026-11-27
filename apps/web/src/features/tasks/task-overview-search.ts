@@ -25,6 +25,12 @@ export function overviewTaskParam(task: OverviewTaskRef): string {
   return `${task.conversationId}:${task.number}`;
 }
 
+export const TASK_HREF_PLACEHOLDER = "__COFORGE_TASK_REF__";
+
+export function formatTaskHref(template: string, task: OverviewTaskRef): string {
+  return template.replace(TASK_HREF_PLACEHOLDER, encodeURIComponent(overviewTaskParam(task)));
+}
+
 /** Validates the raw `task` search param: a well-formed Task reference, or `undefined` (no
  * popup) for anything else, matching the routes' `.catch()` convention. */
 export const overviewTaskParamSchema = z

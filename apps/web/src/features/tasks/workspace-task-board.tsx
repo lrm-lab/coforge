@@ -1,4 +1,4 @@
-import { Link, useHydrated, useRouter } from "@tanstack/react-router";
+import { useHydrated, useLocation, useRouter } from "@tanstack/react-router";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Group, Panel, Separator, useDefaultLayout, useGroupRef } from "react-resizable-panels";
@@ -9,12 +9,8 @@ import {
   useResponsiveSplitLayout,
 } from "#src/features/conversations/conversation-split";
 import { localLayoutStorage } from "#src/features/conversations/local-layout-storage";
-import {
-  ProjectTaskTreeSkeleton,
-  ProjectTaskTreeView,
-} from "#src/features/projects/project-task-tree";
-import { useProjectTasks } from "#src/features/projects/project-tasks";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
+import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { isFinishedStatus } from "./finished-tasks";
@@ -24,7 +20,12 @@ import { TASK_TITLE_CLASS } from "./task-card";
 import type { TaskDetailNavigation } from "./task-detail-panel";
 import { statusMatches, taskMatches } from "./task-filters";
 import type { OverviewTaskCommand, OverviewTaskRow } from "./task-overview-collection";
-import { overviewTaskParam, parseOverviewTaskParam } from "./task-overview-search";
+import {
+  TASK_HREF_PLACEHOLDER,
+  formatTaskHref,
+  overviewTaskParam,
+  parseOverviewTaskParam,
+} from "./task-overview-search";
 import { useTaskOverview } from "./use-task-overview";
 import { overviewTaskQuery, useFinishedTasks } from "./use-finished-tasks";
 
@@ -53,16 +54,9 @@ export function WorkspaceTaskBoard({
 }) {
   const { tasks: all, run, refetch } = useTaskOverview();
   const { task: taskParam, ...boardSearch } = search;
-  const searched = useTaskBoardSearch(boardSearch);
+  const view = useTaskBoardSearch(boardSearch);
   const hydrated = useHydrated();
   const desktop = useBreakpoint("lg");
-  const layoutPending = project !== undefined && boardSearch.layout === undefined && !hydrated;
-  const treeShown = project !== undefined && !layoutPending && searched.layout === "list";
-  const projectTasks = useProjectTasks(treeShown ? project : undefined);
-  const view = useMemo(
-    () => (treeShown ? searched : { ...searched, filter: { ...searched.filter, channels: [] } }),
-    [treeShown, searched],
-  );
   const workspaceId = useCurrentWorkspaceId() ?? "";
   const router = useRouter();
   const projectPick = useMemo(
@@ -86,7 +80,7 @@ export function WorkspaceTaskBoard({
     window: view.completedWindow,
     filter: project ? { ...view.filter, projects: [project] } : view.filter,
     onPage: tasks,
-    enabled: !treeShown,
+    enabled: board,
   });
   const { refresh: refreshFinished } = finished;
   const command = useMemo(
@@ -164,11 +158,7 @@ export function WorkspaceTaskBoard({
   }, [missing, closePopup]);
 
   const orderedTasks = useMemo(() => {
-    if (treeShown) {
-      return (projectTasks.data?.tasks ?? []).filter(
-        (task) => statusMatches(task.status, view.statuses) && taskMatches(task, view.filter),
-      );
-    }
+    if (!openTask) return [];
     const unfinished = tasks.filter((task) => !isFinishedStatus(task.status));
     const visible = [
       ...unfinished,
@@ -177,8 +167,7 @@ export function WorkspaceTaskBoard({
     ].filter((task) => statusMatches(task.status, view.statuses) && taskMatches(task, view.filter));
     return orderBoardTasks(visible, view.statuses);
   }, [
-    treeShown,
-    projectTasks.data?.tasks,
+    openTask,
     tasks,
     finished.columns.done.rows,
     finished.columns.closed.rows,
@@ -222,6 +211,47 @@ export function WorkspaceTaskBoard({
   });
   const useInlineSplit = board && desktop && splitShown;
   const toggleExpand = useCallback(() => setExpanded((current) => !current), []);
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const boardSearchKey = JSON.stringify(boardSearch);
+  const taskHrefTemplate = useMemo(
+    () =>
+      router.buildLocation({
+        to: pathname,
+        search: {
+          ...(JSON.parse(boardSearchKey) as Record<string, unknown>),
+          task: TASK_HREF_PLACEHOLDER,
+        },
+      }).publicHref,
+    [router, pathname, boardSearchKey],
+  );
+  const openBoardTask = useLatestCallback((task: OverviewTaskRow) => {
+    if (openTask && useInlineSplit) switchPopup(task);
+    else openPopup(task);
+  });
+  const renderTaskTitle = useCallback(
+    (task: OverviewTaskRow, title: ReactNode) => (
+      <a
+        href={formatTaskHref(taskHrefTemplate, task)}
+        onClick={(event) => {
+          if (
+            event.defaultPrevented ||
+            event.button !== 0 ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.shiftKey ||
+            event.altKey
+          )
+            return;
+          event.preventDefault();
+          openBoardTask(task);
+        }}
+        className={TASK_TITLE_CLASS}
+      >
+        {title}
+      </a>
+    ),
+    [taskHrefTemplate, openBoardTask],
+  );
 
   const boardNode = board ? (
     <TaskBoard
@@ -229,28 +259,12 @@ export function WorkspaceTaskBoard({
       finished={finished}
       view={view}
       selectedTaskId={useInlineSplit ? openTask?.id : undefined}
-      onOpenTask={openTask && useInlineSplit ? switchPopup : openPopup}
+      onOpenTask={openBoardTask}
       renderTitle={renderTaskTitle}
       onCommand={command}
       commandsPending={!hydrated}
       project={project !== undefined}
       newTask={newTask}
-      tree={
-        treeShown
-          ? {
-              node: (
-                <ProjectTaskTreeView
-                  query={projectTasks}
-                  view={view}
-                  onOpenTask={openTask && useInlineSplit ? switchPopup : openPopup}
-                />
-              ),
-              tasks: projectTasks.data?.tasks ?? [],
-            }
-          : layoutPending
-            ? { node: <ProjectTaskTreeSkeleton />, tasks: [] }
-            : undefined
-      }
     />
   ) : null;
 
@@ -369,21 +383,5 @@ export function WorkspaceTaskBoard({
         )}
       </Group>
     </div>
-  );
-}
-
-function renderTaskTitle(task: OverviewTaskRow, title: ReactNode) {
-  return (
-    <Link
-      to="."
-      search={(previous: Record<string, unknown>) => ({
-        ...previous,
-        task: overviewTaskParam(task),
-      })}
-      resetScroll={false}
-      className={TASK_TITLE_CLASS}
-    >
-      {title}
-    </Link>
   );
 }

@@ -176,13 +176,12 @@ test("a Project page lists its Tasks as a tree, and a Task's popup moves it betw
     expect(await evaluate<string>("location.pathname")).toEndWith(`/projects/${home.slug}`);
     await shoot("desktop-tasks-popup");
 
-    // On a phone the Tasks tab opens on its list layout, the task tree (task #462).
     await browser("set", "viewport", "390", "844");
     await browser("open", `${projectPage}?tab=tasks`);
     await browser(
       "wait",
       "--fn",
-      `${pageHydrated} && document.querySelector('[role="treegrid"]')?.textContent.includes(${JSON.stringify(loneTitle)}) === true`,
+      `${pageHydrated} && document.querySelector('[data-task-board]')?.textContent.includes(${JSON.stringify(loneTitle)}) === true`,
     );
     await shoot("phone-tasks-tab");
 

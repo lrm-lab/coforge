@@ -1,6 +1,6 @@
 import { taskNameLabel } from "@lrm/coforge-sdk/internal";
 import type { TaskLink, TaskName, TaskTreeNode } from "@lrm/coforge-sdk/internal";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   Button as AriaButton,
   Dialog as AriaDialog,
@@ -22,17 +22,36 @@ import { TaskOwnerAvatar } from "./task-owner";
 import { openBlockers, type TaskRelations, type VisibleTaskName } from "./task-relation-edits";
 import { TaskStatusIcon } from "./task-status-icon";
 
-export function TaskBlockedMark({ blockedBy }: { blockedBy: readonly (TaskName | TaskLink)[] }) {
+export function TaskBlockedMark({
+  blockedBy,
+  interactive = true,
+}: {
+  blockedBy: readonly (TaskName | TaskLink)[];
+  interactive?: boolean;
+}) {
+  const [activated, setActivated] = useState(false);
   const open = openBlockers(blockedBy);
   const first = open[0];
   if (!first) return null;
   const name = first.hidden ? m.tasks_ref_hidden() : taskMetaLabel(first);
+  const text =
+    open.length > 1
+      ? m.tasks_blocked_by_count({ count: open.length })
+      : m.tasks_blocked_by_mark({ name });
+  if (!interactive && !activated) {
+    return (
+      <AriaButton
+        onPress={() => setActivated(true)}
+        className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-sm text-xs whitespace-nowrap text-tertiary tabular-nums outline-hidden hover:text-secondary focus-visible:ring-2 focus-visible:ring-focus-ring"
+      >
+        {text}
+      </AriaButton>
+    );
+  }
   return (
-    <AriaDialogTrigger>
+    <AriaDialogTrigger defaultOpen={activated}>
       <AriaButton className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-sm text-xs whitespace-nowrap text-tertiary tabular-nums outline-hidden hover:text-secondary focus-visible:ring-2 focus-visible:ring-focus-ring">
-        {open.length > 1
-          ? m.tasks_blocked_by_count({ count: open.length })
-          : m.tasks_blocked_by_mark({ name })}
+        {text}
       </AriaButton>
       <AriaPopover
         placement="bottom start"
@@ -70,7 +89,23 @@ export function TaskBlockedMark({ blockedBy }: { blockedBy: readonly (TaskName |
   );
 }
 
-function CardMark({ children, label }: { children: ReactNode; label: string }) {
+function CardMark({
+  children,
+  label,
+  interactive = true,
+}: {
+  children: ReactNode;
+  label: string;
+  interactive?: boolean;
+}) {
+  if (!interactive) {
+    return (
+      <span className="inline-flex shrink-0 items-center gap-1 rounded-sm text-xs whitespace-nowrap text-tertiary tabular-nums">
+        <span className="sr-only">{label}</span>
+        {children}
+      </span>
+    );
+  }
   return (
     <Tooltip title={label}>
       <TooltipTrigger className="inline-flex shrink-0 items-center gap-1 rounded-sm text-xs whitespace-nowrap text-tertiary tabular-nums focus-visible:ring-2 focus-visible:ring-focus-ring">
@@ -80,12 +115,21 @@ function CardMark({ children, label }: { children: ReactNode; label: string }) {
   );
 }
 
-export function TaskParentMark({ parent }: { parent: TaskLink }) {
+export function TaskParentMark({
+  parent,
+  interactive = true,
+}: {
+  parent: TaskLink;
+  interactive?: boolean;
+}) {
   const text = parent.hidden
     ? m.tasks_parent()
     : m.tasks_parent_mark({ name: taskNameLabel(parent) });
   return (
-    <CardMark label={parent.hidden ? `${text} (${m.tasks_hidden()})` : `${text} ${parent.title}`}>
+    <CardMark
+      interactive={interactive}
+      label={parent.hidden ? `${text} (${m.tasks_hidden()})` : `${text} ${parent.title}`}
+    >
       <CornerLeftUp aria-hidden="true" className="size-3 shrink-0 text-fg-quaternary" />
       {text}
     </CardMark>
@@ -94,11 +138,13 @@ export function TaskParentMark({ parent }: { parent: TaskLink }) {
 
 export function TaskSubtaskMark({
   subtasks,
+  interactive = true,
 }: {
   subtasks: NonNullable<TaskRelations["subtasks"]>;
+  interactive?: boolean;
 }) {
   return (
-    <CardMark label={m.tasks_subtasks_finished(subtasks)}>
+    <CardMark interactive={interactive} label={m.tasks_subtasks_finished(subtasks)}>
       <SubtaskProgressRing {...subtasks} className="size-3" />
       {m.tasks_subtasks_mark(subtasks)}
     </CardMark>
