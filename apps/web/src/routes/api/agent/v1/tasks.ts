@@ -36,7 +36,8 @@ const TASK_REFUSAL_STATUS: Record<string, number> = {
 /** What a board refusal tells the Agent: the daemon relays it as written. */
 const TASK_REFUSAL_TEXT: Record<string, string> = {
   INVALID_INPUT: "the request was not valid for this operation",
-  NOT_FOUND: "the referenced task or message does not exist",
+  NOT_FOUND:
+    "the referenced task or message could not be found or accessed in the target conversation",
   ACCESS_DENIED: "this agent is not allowed to do that",
   CONFLICT: "the task changed since you last read it; read the Task list again",
   TEMPORARILY_UNAVAILABLE: "the server is temporarily unavailable; retry",

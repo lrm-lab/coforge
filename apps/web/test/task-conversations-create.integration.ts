@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
+import { agentTaskBoardFreshness } from "#src/server/agents/agent-task-freshness.server";
+import { getOrCreateAgentPeerConversation } from "#src/server/db/repositories/agent-peer-direct.repositories.server";
+import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { handleAgentTaskPost } from "#src/routes/api/agent/v1/tasks";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { agentTaskPrincipal } from "#src/server/tasks/task-principal.server";
@@ -407,4 +410,77 @@ test("createConversationTasks files a Task under an explicit Project and default
   expect(tasks.find((task) => task.title === "Unfiled")!.projectId).toBeNull();
   void filed;
   void unfiled;
+});
+
+test("over the Agent route: an Agent can create from the same peer DM it just read", async () => {
+  const maker = agents.maker;
+  const worker = agents.worker;
+  const principal = as("maker");
+  const direct = await getOrCreateAgentPeerConversation(db, workspaceId, maker.id, worker.id);
+  const sender = await db.conversationMember.findUniqueOrThrow({
+    where: { conversationId_agentId: { conversationId: direct.id, agentId: worker.id } },
+  });
+  const message = await db.message.create({
+    data: {
+      workspaceId,
+      conversationId: direct.id,
+      senderMemberId: sender.id,
+      sequence: 1,
+      body: "Please create a task from this message",
+    },
+  });
+  await db.conversation.update({
+    where: { id: direct.id },
+    data: { lastSequence: message.sequence },
+  });
+  const repository = new PrismaDirectConversationRepository(db);
+  const page = await repository.readMessagesPage(workspaceId, maker.id, `@${worker.name}~agent`, {
+    around: message.id,
+    limit: 1,
+  });
+  expect(page.messages.map(({ id }) => id)).toEqual([message.id]);
+
+  const createFrom = (messageId: string) =>
+    handleAgentTaskPost(
+      new Request("http://127.0.0.1/api/agent/v1/tasks", {
+        method: "POST",
+        body: JSON.stringify({
+          operation: "create",
+          peerKind: "agent",
+          target: `@${worker.name}`,
+          idempotencyKey: crypto.randomUUID(),
+          messageId,
+          status: "backlog",
+          title: "Create from an Agent DM",
+          alongside: true,
+        }),
+      }),
+      principal,
+      board,
+      (command) => agentTaskBoardFreshness(db, principal, command),
+    );
+  const results = [];
+  for (const messageId of [message.id, message.id.slice(0, 13)]) {
+    const response = await createFrom(messageId);
+    const body = await response.json();
+    results.push({
+      status: response.status,
+      code: body.code,
+      source: body.tasks?.[0]?.sourceMessageId,
+    });
+  }
+  expect(results).toEqual([
+    { status: 200, code: undefined, source: message.id },
+    { status: 200, code: undefined, source: message.id },
+  ]);
+  for (const messageId of [sourceId, sourceId.slice(0, 13), crypto.randomUUID()]) {
+    const response = await createFrom(messageId);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      code: "NOT_FOUND",
+      error:
+        "the referenced task or message could not be found or accessed in the target conversation",
+    });
+  }
+  expect(await db.task.count({ where: { conversationId: direct.id } })).toBe(2);
 });

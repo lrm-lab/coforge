@@ -5,7 +5,7 @@ import { TASK_SCOPE_WHERE } from "./task-view.server";
 import type { TaskCommand, TaskPrincipal } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import { MEMBER_SELECT, type Member, type TaskBoardPorts } from "./task-board-ports.server";
-import { agentDirectKey } from "#src/features/conversations/direct-key";
+import { agentPeerDirectKey } from "#src/features/conversations/direct-key";
 
 export async function resolveTaskScope(
   ports: Pick<TaskBoardPorts, "db">,
@@ -77,7 +77,7 @@ export async function resolveTaskScope(
   }
   const agent = await ports.db.agent.findFirst({
     where: { id: principal.agentId, workspaceId: principal.workspaceId, ...ACTIVE_AGENT_WHERE },
-    select: { id: true, ownerId: true },
+    select: { id: true },
   });
   if (!agent) throw new AppError("ACCESS_DENIED");
   if (command.conversationId || !command.target) throw new AppError("INVALID_INPUT");
@@ -131,7 +131,7 @@ export async function resolveTaskScope(
           AND: [
             { members: { some: { agentId: principal.agentId, ...ACTIVE_MEMBER_WHERE } } },
             ...(targetAgent
-              ? [{ directKey: agentDirectKey(agent.ownerId, targetAgent.id) }]
+              ? [{ directKey: agentPeerDirectKey(agent.id, targetAgent.id) }]
               : [
                   {
                     members: {
