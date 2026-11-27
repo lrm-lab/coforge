@@ -155,6 +155,23 @@ test("a targeted session only accepts the actual user code and the target Worksp
   expect(polled.challenge?.attachTicket).toBeTruthy();
 });
 
+test("only an authorized administrator can deny without a confirmation code", async () => {
+  const now = new Date();
+  const started = await start(now);
+  const rejection = { sessionId: started.sessionId, workspaceId, action: "deny" as const };
+  expect(await decideComputerAttachSession(db, { ...rejection, userId: users.member }, now)).toBe(
+    false,
+  );
+  expect(await decideComputerAttachSession(db, { ...rejection, userId: users.admin }, now)).toBe(
+    true,
+  );
+  await expect(
+    pollComputerAttachSession(db, started.sessionId, started.pollSecret, now),
+  ).rejects.toMatchObject({
+    code: ComputerAttachErrorCode.ATTACH_DENIED,
+  });
+});
+
 test("records explicit approval and completion deadlines without issuing a key", async () => {
   const now = new Date();
   const started = await start(now);
@@ -379,7 +396,7 @@ test("the four HTTP operations use no-store binary frames and reject unproven id
 test("only current Workspace admins can read scoped sessions and terminal history survives the sweep", async () => {
   const now = new Date();
   const started = await start(now);
-  const row = (await listMachineAttachRequests(db, workspaceId, users.admin, now)).find(
+  const row = (await listMachineAttachRequests(db, workspaceId, users.admin, now))?.find(
     ({ id }) => id === started.sessionId,
   );
   expect(row).toMatchObject({
@@ -389,14 +406,14 @@ test("only current Workspace admins can read scoped sessions and terminal histor
   });
   expect(row).not.toHaveProperty("userCode");
   expect(row).not.toHaveProperty("deviceCodeHash");
-  expect(await listMachineAttachRequests(db, workspaceId, users.member, now)).toEqual([]);
-  expect(await listMachineAttachRequests(db, workspaceId, users.foreign, now)).toEqual([]);
+  expect(await listMachineAttachRequests(db, workspaceId, users.member, now)).toBeNull();
+  expect(await listMachineAttachRequests(db, workspaceId, users.foreign, now)).toBeNull();
   expect(await readMachineAttachApproval(db, started.sessionId, users.foreign, now)).toBeNull();
 
   const expired = new Date(now.getTime() + 600_100);
   await sweepMachineAttachSessions(db, expired);
   expect(
-    (await listMachineAttachRequests(db, workspaceId, users.admin, expired)).find(
+    (await listMachineAttachRequests(db, workspaceId, users.admin, expired))?.find(
       ({ id }) => id === started.sessionId,
     ),
   ).toMatchObject({ status: "expired", failureReason: "approval_expired" });

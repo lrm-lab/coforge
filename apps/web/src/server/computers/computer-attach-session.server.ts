@@ -131,7 +131,7 @@ export async function decideComputerAttachSession(
     sessionId: string;
     userId: string;
     workspaceId: string;
-    userCode: string;
+    userCode?: string;
     action: "approve" | "deny";
   },
   now = new Date(),
@@ -145,7 +145,8 @@ export async function decideComputerAttachSession(
       session.status !== "awaiting_approval" ||
       session.expiresAt <= now ||
       (session.targetWorkspaceId && session.targetWorkspaceId !== input.workspaceId) ||
-      !matchesAttachSecret(session.userCode, input.userCode.trim().toUpperCase())
+      (input.action === "approve" &&
+        !matchesAttachSecret(session.userCode, input.userCode?.trim().toUpperCase() ?? ""))
     )
       return false;
     if (!isAttachAdministrator(await lockAttachMembership(tx, input.workspaceId, input.userId)))

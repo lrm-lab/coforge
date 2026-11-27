@@ -1,0 +1,23 @@
+{
+  "computer_attach_request_title": "Add requests",
+  "computer_attach_approval_title": "Approve adding a Computer",
+  "computer_attach_fingerprint": "Computer fingerprint",
+  "computer_attach_fingerprint_hint": "Check that the fingerprint matches the one in the terminal.",
+  "computer_attach_code_label": "Confirmation code",
+  "computer_attach_code_placeholder": "Enter the code from the terminal",
+  "computer_attach_state_pending": "Awaiting approval",
+  "computer_attach_state_connecting": "Waiting to connect",
+  "computer_attach_state_connected": "Connected",
+  "computer_attach_state_denied": "Declined",
+  "computer_attach_state_expired": "Expired",
+  "computer_attach_state_timeout": "Timed out",
+  "computer_attach_requested_at": "Started at {time}",
+  "computer_attach_finished_at": "Ended at {time}",
+  "computer_attach_minutes_left": "{minutes} min left",
+  "computer_attach_reason_timeout": "The Computer didn’t connect within 10 minutes of approval.",
+  "computer_attach_reason_expired": "Nobody approved this request before it expired.",
+  "computer_attach_reason_denied": "An administrator declined this request.",
+  "computer_attach_retry_on_computer": "On that Computer, run",
+  "computer_attach_approved_continue": "Approved. Return to the terminal to continue. The Computer will appear in the list after it connects.",
+  "computer_attach_connected_confirmation": "This Computer has connected."
+}

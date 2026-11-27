@@ -140,6 +140,11 @@ describe("Centrifugo Connect Proxy", () => {
     const body = await response.json();
     expect(body.result.user).toBe("user-1");
     expect(body.result.subs).toHaveProperty("daemon:workspace-1:computer-1");
+    expect(body.result.meta).toMatchObject({
+      workspace_id: "workspace-1",
+      computer_id: "computer-1",
+      daemon_api_key_hash: hashDaemonApiKey(keys.token),
+    });
   });
 
   test("refuses an sk_computer key whose Computer detached, for good", async () => {

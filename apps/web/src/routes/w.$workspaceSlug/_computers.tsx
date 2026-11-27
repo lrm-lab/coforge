@@ -1,3 +1,5 @@
+import { MachineAttachRequests } from "#src/features/computers/machine-attach-requests";
+import { listMachineAttach } from "#src/features/computers/machine-attach.functions";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Outlet,
@@ -83,7 +85,7 @@ export const Route = createFileRoute("/w/$workspaceSlug/_computers")({
 });
 
 function ComputersPage() {
-  const { computers, installOrigin, desktopOrigin } = Route.useLoaderData();
+  const { computers, installOrigin, desktopOrigin, timeZone } = Route.useLoaderData();
   const [mountedAt] = useState(() => Date.now());
   const followedUpgrades = useQuery(followedComputerUpgradesQuery).data ?? [];
   const followedStatuses = useQueries({
@@ -141,6 +143,12 @@ function ComputersPage() {
     [latestVersionKey],
   );
   const { currentWorkspace } = appRoute.useLoaderData();
+  const attachRequests = useQuery({
+    queryKey: ["computers", "attach-requests", currentWorkspace?.id],
+    queryFn: () => listMachineAttach(),
+    enabled: Boolean(currentWorkspace?.id),
+    refetchInterval: (query) => (query.state.data === null ? false : 5_000),
+  });
   const params = useParams({
     from: "/w/$workspaceSlug/_computers/computer/$computerId",
     shouldThrow: false,
@@ -213,6 +221,16 @@ function ComputersPage() {
         }
         latestComputerVersions={latestByChannel}
         upgradingComputerIds={upgradingComputerIds}
+        attachRequests={
+          attachRequests.data?.length ? (
+            <MachineAttachRequests
+              requests={attachRequests.data}
+              updatedAt={attachRequests.dataUpdatedAt}
+              timeZone={timeZone}
+              onChange={attachRequests.refetch}
+            />
+          ) : undefined
+        }
       >
         <Outlet />
       </ComputerLayout>
