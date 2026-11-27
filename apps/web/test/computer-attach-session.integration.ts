@@ -141,6 +141,10 @@ test("a targeted session only accepts the actual user code and the target Worksp
     ),
   ).toBe(false);
   expect(await decideComputerAttachSession(db, decision, now)).toBe(true);
+  expect(await readMachineAttachApproval(db, started.sessionId, users.admin, now)).toMatchObject({
+    status: "approved",
+    failureReason: null,
+  });
   expect(await db.workspaceComputer.count({ where: { workspaceId } })).toBe(0);
   expect(await pollAttachSession(db, { deviceCode: started.pollSecret }, now)).toEqual({
     kind: "expired",
