@@ -68,7 +68,7 @@ function normalizePagePath(value: string | null | undefined): string | null {
   return normalized;
 }
 
-async function isPlatformOperator(db: PrismaClient, userId: string): Promise<boolean> {
+export async function isPlatformOperator(db: PrismaClient, userId: string): Promise<boolean> {
   const row = await db.platformOperator.findUnique({
     where: { userId },
     select: { role: true },

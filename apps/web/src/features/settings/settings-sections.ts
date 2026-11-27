@@ -5,6 +5,7 @@ import {
   Building07,
   Keyboard01,
   Link03,
+  MessageTextSquare01,
   Server01,
   Share01,
   Sliders01,
@@ -13,11 +14,13 @@ import {
   UserCircle,
   Users01,
 } from "@untitledui/icons";
+import type { FC } from "react";
 
 import { m } from "#src/paraglide/messages";
 
 export const SETTINGS_SECTION_GROUPS = [
   {
+    id: "personal",
     label: () => m.settings_personal_group(),
     sections: [
       { id: "account", label: () => m.settings_account(), icon: UserCircle },
@@ -29,6 +32,7 @@ export const SETTINGS_SECTION_GROUPS = [
     ],
   },
   {
+    id: "workspace",
     label: () => m.settings_workspace_group(),
     sections: [
       { id: "workspace-profile", label: () => m.settings_workspace_profile(), icon: Building07 },
@@ -40,12 +44,36 @@ export const SETTINGS_SECTION_GROUPS = [
     ],
   },
   {
+    id: "system",
     label: () => m.settings_system_group(),
     sections: [
       { id: "server-connection", label: () => m.settings_server_connection(), icon: Server01 },
     ],
   },
 ] as const;
+
+export type SettingsSystemLink = {
+  id: "feedback-inbox";
+  to: "/w/$workspaceSlug/feedback";
+  label: () => string;
+  icon: FC<{ className?: string }>;
+};
+
+export function settingsSystemLinks({
+  canViewFeedbackInbox = false,
+}: {
+  canViewFeedbackInbox?: boolean;
+}): readonly SettingsSystemLink[] {
+  if (!canViewFeedbackInbox) return [];
+  return [
+    {
+      id: "feedback-inbox",
+      to: "/w/$workspaceSlug/feedback",
+      label: () => m.feedback_inbox_link(),
+      icon: MessageTextSquare01,
+    },
+  ];
+}
 
 type SettingsSectionEntry = (typeof SETTINGS_SECTION_GROUPS)[number]["sections"][number];
 

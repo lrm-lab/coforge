@@ -12,6 +12,7 @@ import { z } from "zod";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { SettingsContent } from "#src/components/settings-content";
+import { loadFeedbackInboxAccess } from "#src/features/feedback/feedback.functions";
 import { GITHUB_CALLBACK_FAILURES } from "#src/features/integrations/github-callback";
 import { bindArrivalFrom } from "#src/features/profiles/account-password-logic";
 import { useAppToast } from "#src/components/ui/toast";
@@ -98,15 +99,23 @@ export const Route = createFileRoute("/w/$workspaceSlug/settings")({
   },
   shouldReload: ({ cause }) => cause !== "stay",
   loader: async () => {
-    const [preferences, members, generalChannel, archivedChannels, archivedAgents, createdAgents] =
-      await Promise.all([
-        getUserPreferences(),
-        loadWorkspaceMembers(),
-        loadGeneralChannelHidden(),
-        loadArchivedChannels(),
-        loadArchivedAgents(),
-        loadMemberAgentPage({ data: { owner: "mine", query: "", limit: MEMBER_PAGE_SIZE } }),
-      ]);
+    const [
+      preferences,
+      members,
+      generalChannel,
+      archivedChannels,
+      archivedAgents,
+      createdAgents,
+      feedbackAccess,
+    ] = await Promise.all([
+      getUserPreferences(),
+      loadWorkspaceMembers(),
+      loadGeneralChannelHidden(),
+      loadArchivedChannels(),
+      loadArchivedAgents(),
+      loadMemberAgentPage({ data: { owner: "mine", query: "", limit: MEMBER_PAGE_SIZE } }),
+      loadFeedbackInboxAccess(),
+    ]);
     return {
       ...preferences,
       createdAgents: createdAgents.items.map(({ id, name, avatarUrl }) => ({
@@ -117,6 +126,7 @@ export const Route = createFileRoute("/w/$workspaceSlug/settings")({
       generalChannelHidden: generalChannel?.hidden ?? null,
       archivedChannels,
       archivedAgents,
+      canViewFeedbackInbox: feedbackAccess.canViewInbox,
       members: {
         actorUserId: members.actorUserId,
         actorRole: members.actorRole,
@@ -148,6 +158,7 @@ function SettingsPage() {
     generalChannelHidden,
     archivedChannels,
     archivedAgents,
+    canViewFeedbackInbox,
   } = Route.useLoaderData();
   const { user: profile, notifications, currentWorkspace } = appRoute.useLoaderData();
   const [notificationPermission, setNotificationPermission] = useState<
@@ -366,6 +377,7 @@ function SettingsPage() {
       onBindArrivalHandled={dropBindArrival}
       githubCallbackFailure={github === "connected" ? undefined : github}
       section={memorySelected ? "team-memory" : section}
+      canViewFeedbackInbox={canViewFeedbackInbox}
       memoryContent={memorySelected ? <Outlet /> : undefined}
       personalMemory={personalMemory}
       onSectionChange={selectSection}

@@ -1,7 +1,8 @@
 import type { DateTimePreferenceUpdate } from "#src/features/settings/settings.schemas";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { useEffect, useId, useState } from "react";
-import { ChevronLeft, Share01 } from "@untitledui/icons";
+import { Link } from "@tanstack/react-router";
+import { ChevronLeft, ChevronRight, Share01 } from "@untitledui/icons";
 import { PageHeader } from "#src/components/layout/page-header";
 import { ListIconTile } from "#src/components/ui/list-icon-tile";
 import { Button } from "#src/components/base/buttons/button";
@@ -27,6 +28,7 @@ import { SettingsNavigationGroup } from "#src/features/settings/settings-navigat
 import {
   SETTINGS_SECTION_GROUPS,
   settingsSection,
+  settingsSystemLinks,
   type SettingsSection,
 } from "#src/features/settings/settings-sections";
 import { type TimeFormat } from "#src/lib/time-format";
@@ -50,6 +52,7 @@ const navigationRowClass =
 
 export interface SettingsContentProps {
   section?: SettingsSection;
+  canViewFeedbackInbox?: boolean;
   memoryContent?: React.ReactNode;
   personalMemory?: boolean;
   githubCallbackFailure?: GitHubCallbackFailure;
@@ -116,6 +119,7 @@ export function SettingsContent(props: SettingsContentProps) {
   const memorySelected = section === "team-memory";
   const sectionLabel =
     memorySelected && props.personalMemory ? m.memory_personal() : current.label();
+  const systemLinks = settingsSystemLinks({ canViewFeedbackInbox: props.canViewFeedbackInbox });
 
   function selectSection(next: SettingsSection) {
     setInternalSection(next);
@@ -135,7 +139,7 @@ export function SettingsContent(props: SettingsContentProps) {
         <PageHeader heading={m.settings_title()} />
         <div className="space-y-5 overflow-x-hidden overflow-y-auto p-3">
           {SETTINGS_SECTION_GROUPS.map((group) => (
-            <SettingsNavigationGroup key={group.label()} label={group.label()}>
+            <SettingsNavigationGroup key={group.id} label={group.label()}>
               {group.sections.map((item) => (
                 <li key={item.id}>
                   <Button
@@ -158,6 +162,26 @@ export function SettingsContent(props: SettingsContentProps) {
                   </Button>
                 </li>
               ))}
+              {group.id === "system" &&
+                systemLinks.map((link) => (
+                  <li key={link.id}>
+                    <Link
+                      to={link.to}
+                      params={{ workspaceSlug: props.workspace.slug }}
+                      className={cn(
+                        "flex items-center text-tertiary outline-brand transition duration-100 ease-out hover:bg-primary_hover hover:text-tertiary_hover focus-visible:outline-2 focus-visible:outline-offset-2",
+                        navigationRowClass,
+                      )}
+                    >
+                      <ListIconTile icon={link.icon} />
+                      <span className="min-w-0 flex-1 truncate">{link.label()}</span>
+                      <ChevronRight
+                        aria-hidden="true"
+                        className="size-4 shrink-0 text-fg-quaternary rtl:rotate-180"
+                      />
+                    </Link>
+                  </li>
+                ))}
             </SettingsNavigationGroup>
           ))}
         </div>

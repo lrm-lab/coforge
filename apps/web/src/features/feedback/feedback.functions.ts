@@ -4,6 +4,7 @@ import { z } from "zod";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { declareNoStore } from "#src/features/no-store-response.server";
 import {
+  isPlatformOperator,
   loadUserFeedbackInbox,
   saveFeedbackRoutingConfig,
   updateUserFeedbackStatus,
@@ -13,6 +14,13 @@ import {
   type FeedbackInboxPayload,
   type FeedbackRoutingSummary,
 } from "./feedback-types";
+
+export const loadFeedbackInboxAccess = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .handler(async ({ context }): Promise<{ canViewInbox: boolean }> => {
+    declareNoStore();
+    return { canViewInbox: await isPlatformOperator(context.db, context.user.id) };
+  });
 
 export const loadFeedbackInbox = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
