@@ -1,3 +1,4 @@
+import { markComputerAttachReady } from "#src/server/computers/computer-attach-ready.server";
 import { installerRecoveryRpc } from "./installer-recovery-rpc.server";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
@@ -120,6 +121,7 @@ export function daemonRuntimeReadyPorts(input: {
     issueUpgradeReadyReceipt: (request, workerId) =>
       issueComputerUpgradeReadyReceipt(db, request, workerId),
     lifecycle: input.computerLifecycle,
+    attachReady: (scope) => markComputerAttachReady(db, scope),
     releaseState: getComputerReleaseState(),
   };
 }

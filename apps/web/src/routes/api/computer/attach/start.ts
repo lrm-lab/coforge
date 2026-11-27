@@ -1,33 +1,11 @@
 import { z } from "zod";
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  RedisAppRateLimit,
-  RateLimitOutageLog,
-  NO_RATE_LIMIT,
-} from "#src/server/app-rate-limits/app-rate-limit.server";
-import { openRedisClient } from "#src/server/redis-client.server";
-
 import { parseBody } from "#src/server/auth/daemon-request.server";
 import { requireDatabaseClient } from "#src/server/db/client.server";
 import { clientAddress, publicOrigin } from "#src/server/http/public-origin.server";
 import { startAttachSession } from "#src/server/computers/computer-attach.server";
 
-/** At most a few attach sessions per address per minute; fails open where Redis is down. */
-let attachStartLimit:
-  | import("#src/server/app-rate-limits/app-rate-limit.server").AppRateLimit
-  | undefined;
-function attachStartRateLimit() {
-  if (attachStartLimit) return attachStartLimit;
-  const redisUrl = process.env.COFORGE_REDIS_URL ?? process.env.REDIS_URL;
-  if (!redisUrl) return NO_RATE_LIMIT;
-  attachStartLimit = new RedisAppRateLimit(openRedisClient(redisUrl), {
-    keyPrefix: "computer-attach-start",
-    limit: 10,
-    windowMs: 60_000,
-    outageLog: new RateLimitOutageLog(),
-  });
-  return attachStartLimit;
-}
+import { computerAttachCreationRateLimit } from "#src/server/computers/computer-attach-session-http.server";
 
 const startSchema = z.object({
   machineName: z.string().min(1).max(200),
@@ -45,7 +23,7 @@ export const Route = createFileRoute("/api/computer/attach/start")({
         // attach/start is unauthenticated and writes a row per call — the per-IP fixed window
         // keeps one address from opening unbounded sessions (task #417).
         const ip = clientAddress(request) ?? "unknown";
-        const limit = attachStartRateLimit();
+        const limit = computerAttachCreationRateLimit();
         if (limit) {
           const decision = await limit.admit(ip);
           if (!decision.allowed)

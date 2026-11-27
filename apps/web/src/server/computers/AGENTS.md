@@ -17,6 +17,7 @@ These rules apply to `src/server/computers/`.
   `computer:register`, and `computer:list`.
   It is composition only; `ComputerRegistrar` owns registration authorization,
   idempotency, and persistence.
+- Machine-proven attach lives in `computer-attach-session*.server.ts`, with key activation only at preflight. `computer-attach-visibility.server.ts` owns admin history and `computer-attach-ready.server.ts` closes from the exact authenticated key.
 - `roster.server.ts` lists the signed-in User's owned local Computers for
   explicit setup adoption; it never returns another User's rows.
 - `desktop-proxy-auth.server.ts` answers Caddy before it forwards `/desktop/<computer id>/...`:

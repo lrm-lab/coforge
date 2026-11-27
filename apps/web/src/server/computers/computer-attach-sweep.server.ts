@@ -1,3 +1,4 @@
+import { sweepMachineAttachSessions } from "./computer-attach-visibility.server";
 import { requireDatabaseClient } from "#src/server/db/client.server";
 import { onServerShutdown } from "#src/server/runtime/server-lifecycle.server";
 
@@ -17,6 +18,7 @@ export async function sweepComputerAttach(now = new Date()): Promise<{
   const db = requireDatabaseClient();
   const sessions = await db.computerAttachSession.deleteMany({
     where: {
+      protocolMajor: null,
       OR: [
         // An approved session that polled keeps its row until the token's own 10 min runs; one
         // that never polled has no token to protect and goes by its own expiry.
@@ -33,10 +35,11 @@ export async function sweepComputerAttach(now = new Date()): Promise<{
       ],
     },
   });
+  const machineSessions = await sweepMachineAttachSessions(db, now);
   const retiredLogins = await db.computerRetiredLogin.deleteMany({
     where: { retiredAt: { lt: new Date(now.getTime() - RETIRED_LOGIN_LIFE_MS) } },
   });
-  return { sessions: sessions.count, retiredLogins: retiredLogins.count };
+  return { sessions: sessions.count + machineSessions, retiredLogins: retiredLogins.count };
 }
 
 let sweep: ReturnType<typeof setInterval> | undefined;

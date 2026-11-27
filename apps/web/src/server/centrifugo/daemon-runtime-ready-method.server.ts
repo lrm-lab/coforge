@@ -67,6 +67,11 @@ export type DaemonRuntimeReadyPorts = {
   /** The release feed's newest Computer version, attached to the reply so a stale Computer
    * knows without a call of its own; a failed read answers no version. */
   latestComputerVersion?: () => Promise<string | null>;
+  attachReady?: (scope: {
+    workspaceId: string;
+    computerId: string;
+    apiKeyHash: string;
+  }) => Promise<number>;
   releaseState?: {
     record(
       workspaceId: string,
@@ -94,6 +99,7 @@ export const createDaemonRuntimeReadyMethod =
     lifecycle,
     latestComputerVersion,
     releaseState,
+    attachReady,
   }: DaemonRuntimeReadyPorts = {}): CentrifugoRpcMethod =>
   async (payload, metadata) => {
     const request = decodeDaemonRuntimeReadyRequest(payload);
@@ -241,6 +247,14 @@ export const createDaemonRuntimeReadyMethod =
           : undefined,
         installerRecovery?.ready(request, metadata).catch(() => {}),
       ]);
+      if (!metadata.principal.agentId && metadata.principal.apiKeyHash) {
+        stage = "attach_ready";
+        await attachReady?.({
+          workspaceId: request.workspaceId,
+          computerId: request.computerId,
+          apiKeyHash: metadata.principal.apiKeyHash,
+        });
+      }
       // This server takes the `accepted` Agent control phase; only a daemon that advertised
       // `agent-control-accepted:v1` is told so — an older one ignores the field anyway, and a
       // daemon that never claimed the phase is never asked for it.

@@ -115,6 +115,7 @@ import { Route as ApiAppInstallationsInstallationIdComputersRouteImport } from '
 import { Route as ApiAppInstallationsInstallationIdSetupRouteImport } from './routes/api.app-installations.$installationId.setup'
 import { Route as ApiAppInstallationsInstallationIdWorkspaceRouteImport } from './routes/api.app-installations.$installationId.workspace'
 import { Route as ApiComputerAttachPollRouteImport } from './routes/api/computer/attach/poll'
+import { Route as ApiComputerAttachSessionsRouteImport } from './routes/api/computer/attach/sessions'
 import { Route as ApiComputerAttachStartRouteImport } from './routes/api/computer/attach/start'
 import { Route as ApiComputersComputerIdCreatorAvatarRouteImport } from './routes/api/computers/$computerId/creator-avatar'
 import { Route as ApiE2eWorkspacesSlugRouteImport } from './routes/api/e2e/workspaces.$slug'
@@ -197,6 +198,7 @@ import { Route as ApiAgentV1MessagesMessageIdReactionsRouteImport } from './rout
 import { Route as ApiAgentV1MessagesMessageIdResolveRouteImport } from './routes/api/agent/v1/messages_.$messageId.resolve'
 import { Route as ApiAgentV1ThreadsThreadFollowRouteImport } from './routes/api/agent/v1/threads_.$thread.follow'
 import { Route as ApiAgentV1ThreadsThreadUnfollowRouteImport } from './routes/api/agent/v1/threads_.$thread.unfollow'
+import { Route as ApiComputerAttachSessionsSessionIdOperationRouteImport } from './routes/api/computer/attach/sessions/$sessionId/$operation'
 import { Route as ApiWorkspacesWorkspaceIdAppsAppKeyLogoRouteImport } from './routes/api/workspaces/$workspaceId/apps/$appKey/logo'
 import { Route as ApiWorkspacesWorkspaceIdUsersUserIdAvatarRouteImport } from './routes/api/workspaces/$workspaceId/users/$userId/avatar'
 import { Route as ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRouteImport } from './routes/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images'
@@ -774,6 +776,12 @@ const ApiComputerAttachPollRoute = ApiComputerAttachPollRouteImport.update({
   path: '/poll',
   getParentRoute: () => ApiComputerAttachRoute,
 } as any)
+const ApiComputerAttachSessionsRoute =
+  ApiComputerAttachSessionsRouteImport.update({
+    id: '/sessions',
+    path: '/sessions',
+    getParentRoute: () => ApiComputerAttachRoute,
+  } as any)
 const ApiComputerAttachStartRoute = ApiComputerAttachStartRouteImport.update({
   id: '/start',
   path: '/start',
@@ -1249,6 +1257,12 @@ const ApiAgentV1ThreadsThreadUnfollowRoute =
     path: '/api/agent/v1/threads/$thread/unfollow',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiComputerAttachSessionsSessionIdOperationRoute =
+  ApiComputerAttachSessionsSessionIdOperationRouteImport.update({
+    id: '/$sessionId/$operation',
+    path: '/$sessionId/$operation',
+    getParentRoute: () => ApiComputerAttachSessionsRoute,
+  } as any)
 const ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute =
   ApiWorkspacesWorkspaceIdAppsAppKeyLogoRouteImport.update({
     id: '/api/workspaces/$workspaceId/apps/$appKey/logo',
@@ -1482,6 +1496,7 @@ export interface FileRoutesByFullPath {
   '/api/app-installations/$installationId/setup': typeof ApiAppInstallationsInstallationIdSetupRoute
   '/api/app-installations/$installationId/workspace': typeof ApiAppInstallationsInstallationIdWorkspaceRoute
   '/api/computer/attach/poll': typeof ApiComputerAttachPollRoute
+  '/api/computer/attach/sessions': typeof ApiComputerAttachSessionsRouteWithChildren
   '/api/computer/attach/start': typeof ApiComputerAttachStartRoute
   '/api/computers/$computerId/creator-avatar': typeof ApiComputersComputerIdCreatorAvatarRoute
   '/api/e2e/workspaces/$slug': typeof ApiE2eWorkspacesSlugRoute
@@ -1563,6 +1578,7 @@ export interface FileRoutesByFullPath {
   '/api/agent/v1/messages/$messageId/resolve': typeof ApiAgentV1MessagesMessageIdResolveRoute
   '/api/agent/v1/threads/$thread/follow': typeof ApiAgentV1ThreadsThreadFollowRoute
   '/api/agent/v1/threads/$thread/unfollow': typeof ApiAgentV1ThreadsThreadUnfollowRoute
+  '/api/computer/attach/sessions/$sessionId/$operation': typeof ApiComputerAttachSessionsSessionIdOperationRoute
   '/api/workspaces/$workspaceId/apps/$appKey/logo': typeof ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute
   '/api/workspaces/$workspaceId/users/$userId/avatar': typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
   '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRouteWithChildren
@@ -1689,6 +1705,7 @@ export interface FileRoutesByTo {
   '/api/app-installations/$installationId/setup': typeof ApiAppInstallationsInstallationIdSetupRoute
   '/api/app-installations/$installationId/workspace': typeof ApiAppInstallationsInstallationIdWorkspaceRoute
   '/api/computer/attach/poll': typeof ApiComputerAttachPollRoute
+  '/api/computer/attach/sessions': typeof ApiComputerAttachSessionsRouteWithChildren
   '/api/computer/attach/start': typeof ApiComputerAttachStartRoute
   '/api/computers/$computerId/creator-avatar': typeof ApiComputersComputerIdCreatorAvatarRoute
   '/api/e2e/workspaces/$slug': typeof ApiE2eWorkspacesSlugRoute
@@ -1769,6 +1786,7 @@ export interface FileRoutesByTo {
   '/api/agent/v1/messages/$messageId/resolve': typeof ApiAgentV1MessagesMessageIdResolveRoute
   '/api/agent/v1/threads/$thread/follow': typeof ApiAgentV1ThreadsThreadFollowRoute
   '/api/agent/v1/threads/$thread/unfollow': typeof ApiAgentV1ThreadsThreadUnfollowRoute
+  '/api/computer/attach/sessions/$sessionId/$operation': typeof ApiComputerAttachSessionsSessionIdOperationRoute
   '/api/workspaces/$workspaceId/apps/$appKey/logo': typeof ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute
   '/api/workspaces/$workspaceId/users/$userId/avatar': typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
   '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRouteWithChildren
@@ -1899,6 +1917,7 @@ export interface FileRoutesById {
   '/api/app-installations/$installationId/setup': typeof ApiAppInstallationsInstallationIdSetupRoute
   '/api/app-installations/$installationId/workspace': typeof ApiAppInstallationsInstallationIdWorkspaceRoute
   '/api/computer/attach/poll': typeof ApiComputerAttachPollRoute
+  '/api/computer/attach/sessions': typeof ApiComputerAttachSessionsRouteWithChildren
   '/api/computer/attach/start': typeof ApiComputerAttachStartRoute
   '/api/computers/$computerId/creator-avatar': typeof ApiComputersComputerIdCreatorAvatarRoute
   '/api/e2e/workspaces/$slug': typeof ApiE2eWorkspacesSlugRoute
@@ -1980,6 +1999,7 @@ export interface FileRoutesById {
   '/api/agent/v1/messages_/$messageId/resolve': typeof ApiAgentV1MessagesMessageIdResolveRoute
   '/api/agent/v1/threads_/$thread/follow': typeof ApiAgentV1ThreadsThreadFollowRoute
   '/api/agent/v1/threads_/$thread/unfollow': typeof ApiAgentV1ThreadsThreadUnfollowRoute
+  '/api/computer/attach/sessions/$sessionId/$operation': typeof ApiComputerAttachSessionsSessionIdOperationRoute
   '/api/workspaces/$workspaceId/apps/$appKey/logo': typeof ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute
   '/api/workspaces/$workspaceId/users/$userId/avatar': typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
   '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRouteWithChildren
@@ -2109,6 +2129,7 @@ export interface FileRouteTypes {
     | '/api/app-installations/$installationId/setup'
     | '/api/app-installations/$installationId/workspace'
     | '/api/computer/attach/poll'
+    | '/api/computer/attach/sessions'
     | '/api/computer/attach/start'
     | '/api/computers/$computerId/creator-avatar'
     | '/api/e2e/workspaces/$slug'
@@ -2190,6 +2211,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/messages/$messageId/resolve'
     | '/api/agent/v1/threads/$thread/follow'
     | '/api/agent/v1/threads/$thread/unfollow'
+    | '/api/computer/attach/sessions/$sessionId/$operation'
     | '/api/workspaces/$workspaceId/apps/$appKey/logo'
     | '/api/workspaces/$workspaceId/users/$userId/avatar'
     | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images'
@@ -2316,6 +2338,7 @@ export interface FileRouteTypes {
     | '/api/app-installations/$installationId/setup'
     | '/api/app-installations/$installationId/workspace'
     | '/api/computer/attach/poll'
+    | '/api/computer/attach/sessions'
     | '/api/computer/attach/start'
     | '/api/computers/$computerId/creator-avatar'
     | '/api/e2e/workspaces/$slug'
@@ -2396,6 +2419,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/messages/$messageId/resolve'
     | '/api/agent/v1/threads/$thread/follow'
     | '/api/agent/v1/threads/$thread/unfollow'
+    | '/api/computer/attach/sessions/$sessionId/$operation'
     | '/api/workspaces/$workspaceId/apps/$appKey/logo'
     | '/api/workspaces/$workspaceId/users/$userId/avatar'
     | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images'
@@ -2525,6 +2549,7 @@ export interface FileRouteTypes {
     | '/api/app-installations/$installationId/setup'
     | '/api/app-installations/$installationId/workspace'
     | '/api/computer/attach/poll'
+    | '/api/computer/attach/sessions'
     | '/api/computer/attach/start'
     | '/api/computers/$computerId/creator-avatar'
     | '/api/e2e/workspaces/$slug'
@@ -2606,6 +2631,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/messages_/$messageId/resolve'
     | '/api/agent/v1/threads_/$thread/follow'
     | '/api/agent/v1/threads_/$thread/unfollow'
+    | '/api/computer/attach/sessions/$sessionId/$operation'
     | '/api/workspaces/$workspaceId/apps/$appKey/logo'
     | '/api/workspaces/$workspaceId/users/$userId/avatar'
     | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images'
@@ -3528,6 +3554,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiComputerAttachPollRouteImport
       parentRoute: typeof ApiComputerAttachRoute
     }
+    '/api/computer/attach/sessions': {
+      id: '/api/computer/attach/sessions'
+      path: '/sessions'
+      fullPath: '/api/computer/attach/sessions'
+      preLoaderRoute: typeof ApiComputerAttachSessionsRouteImport
+      parentRoute: typeof ApiComputerAttachRoute
+    }
     '/api/computer/attach/start': {
       id: '/api/computer/attach/start'
       path: '/start'
@@ -4102,6 +4135,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentV1ThreadsThreadUnfollowRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/computer/attach/sessions/$sessionId/$operation': {
+      id: '/api/computer/attach/sessions/$sessionId/$operation'
+      path: '/$sessionId/$operation'
+      fullPath: '/api/computer/attach/sessions/$sessionId/$operation'
+      preLoaderRoute: typeof ApiComputerAttachSessionsSessionIdOperationRouteImport
+      parentRoute: typeof ApiComputerAttachSessionsRoute
+    }
     '/api/workspaces/$workspaceId/apps/$appKey/logo': {
       id: '/api/workspaces/$workspaceId/apps/$appKey/logo'
       path: '/api/workspaces/$workspaceId/apps/$appKey/logo'
@@ -4444,13 +4484,30 @@ const WWorkspaceSlugRouteWithChildren = WWorkspaceSlugRoute._addFileChildren(
   WWorkspaceSlugRouteChildren,
 )
 
+interface ApiComputerAttachSessionsRouteChildren {
+  ApiComputerAttachSessionsSessionIdOperationRoute: typeof ApiComputerAttachSessionsSessionIdOperationRoute
+}
+
+const ApiComputerAttachSessionsRouteChildren: ApiComputerAttachSessionsRouteChildren =
+  {
+    ApiComputerAttachSessionsSessionIdOperationRoute:
+      ApiComputerAttachSessionsSessionIdOperationRoute,
+  }
+
+const ApiComputerAttachSessionsRouteWithChildren =
+  ApiComputerAttachSessionsRoute._addFileChildren(
+    ApiComputerAttachSessionsRouteChildren,
+  )
+
 interface ApiComputerAttachRouteChildren {
   ApiComputerAttachPollRoute: typeof ApiComputerAttachPollRoute
+  ApiComputerAttachSessionsRoute: typeof ApiComputerAttachSessionsRouteWithChildren
   ApiComputerAttachStartRoute: typeof ApiComputerAttachStartRoute
 }
 
 const ApiComputerAttachRouteChildren: ApiComputerAttachRouteChildren = {
   ApiComputerAttachPollRoute: ApiComputerAttachPollRoute,
+  ApiComputerAttachSessionsRoute: ApiComputerAttachSessionsRouteWithChildren,
   ApiComputerAttachStartRoute: ApiComputerAttachStartRoute,
 }
 

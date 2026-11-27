@@ -37,7 +37,7 @@ const mintDeviceCode = () => `cd_${mintOpaqueToken()}`;
 const mintAttachToken = () => `at_${mintOpaqueToken()}`;
 const hash = sha256Hex;
 
-function mintUserCode(): string {
+export function mintComputerAttachUserCode(): string {
   const bytes = new Uint8Array(8);
   crypto.getRandomValues(bytes);
   return [...bytes].map((b) => USER_CODE_ALPHABET[b % USER_CODE_ALPHABET.length]!).join("");
@@ -61,7 +61,7 @@ export async function startAttachSession(
   expiresInSeconds: number;
 }> {
   const deviceCode = mintDeviceCode();
-  const userCode = mintUserCode();
+  const userCode = mintComputerAttachUserCode();
   const expiresAt = new Date(now.getTime() + ATTACH_SESSION_TTL_MS);
   const session = await db.computerAttachSession.create({
     data: {
@@ -110,7 +110,7 @@ export async function pollAttachSession(
     >`SELECT "id", "status", "attach_token_hash" AS "attachTokenHash", "expires_at" AS "expiresAt",
              "last_polled_at" AS "lastPolledAt", "approved_workspace_id" AS "workspaceId"
         FROM "computer_attach_sessions"
-        WHERE "device_code_hash" = ${hash(input.deviceCode)}
+        WHERE "device_code_hash" = ${hash(input.deviceCode)} AND "protocol_major" IS NULL
         FOR UPDATE`;
     // A swept or never-known deviceCode answers the same expiry as one that ran out.
     if (!session) return { kind: "expired" };
@@ -166,7 +166,7 @@ export async function resolveAttachToken(
   now: Date = new Date(),
 ): Promise<{ userId: string; workspaceId: string; sessionId: string } | null> {
   const session = await db.computerAttachSession.findUnique({
-    where: { attachTokenHash: hash(token) },
+    where: { attachTokenHash: hash(token), protocolMajor: null },
     select: {
       id: true,
       status: true,
@@ -207,6 +207,7 @@ export async function consumeAttachToken(
   const result = await tx.computerAttachSession.updateMany({
     where: {
       id: sessionId,
+      protocolMajor: null,
       status: "approved",
       tokenConsumedAt: null,
       attachTokenExpiresAt: { gt: now },

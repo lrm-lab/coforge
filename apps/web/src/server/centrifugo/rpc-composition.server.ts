@@ -183,6 +183,7 @@ async function requireAuthenticatedCentrifugoUser(
   const workspaceId = request.meta?.workspace_id;
   const computerId = request.meta?.computer_id;
   const workerInstanceId = request.meta?.worker_instance_id;
+  const apiKeyHash = request.meta?.daemon_api_key_hash;
   const sequence = request.meta?.installer_recovery_connection_sequence;
   if (
     request.user &&
@@ -196,6 +197,7 @@ async function requireAuthenticatedCentrifugoUser(
       workspaceId,
       computerId,
       ...(typeof workerInstanceId === "string" && workerInstanceId && { workerInstanceId }),
+      ...(typeof apiKeyHash === "string" && /^[a-f0-9]{64}$/.test(apiKeyHash) && { apiKeyHash }),
       ...(typeof sequence === "number" && Number.isSafeInteger(sequence) && sequence > 0
         ? { connectionSequence: sequence }
         : {}),
