@@ -12,12 +12,15 @@ const local = { CI: "false" };
 
 const runGate = (env: Record<string, string> = local) => repo.run([process.execPath, gate], env);
 
-/** A bare `origin` holding HEAD as `main`, fetched so that origin/main resolves. */
-function withOrigin(): string {
+function withOrigin(kind: "tracking-ref" | "bare-remote" = "tracking-ref"): string {
   const remote = `${repo.home}/origin.git`;
-  repo.ok("init", "-q", "--bare", remote);
   repo.ok("remote", "add", "origin", remote);
-  repo.ok("push", "-q", "-u", "origin", "HEAD:main");
+  if (kind === "bare-remote") {
+    repo.ok("init", "-q", "--bare", remote);
+    repo.ok("push", "-q", "-u", "origin", "HEAD:main");
+  } else {
+    repo.ok("update-ref", "refs/remotes/origin/main", "HEAD");
+  }
   return remote;
 }
 
@@ -133,7 +136,7 @@ test("a trailing blank line in an unpushed commit fails the gate, as pre-push an
 test("a stale origin/main judges from its old commit until it is fetched", () => {
   installed();
   repo.seed({ "README.md": "# Repo\n" });
-  const remote = withOrigin();
+  const remote = withOrigin("bare-remote");
   const stale = repo.head();
   // Someone else's commit reaches main, and this clone builds on it without fetching origin.
   repo.seed({ "theirs.ts": "x".repeat(20_001) });
@@ -305,7 +308,7 @@ test("a branch with no history shared with origin/main is reported in one line, 
 test("a branch that forked before origin/main advanced is not blamed for main's newer commits", () => {
   installed();
   repo.seed({ "README.md": "# Repo\n" });
-  withOrigin();
+  withOrigin("bare-remote");
   repo.ok("switch", "-q", "-c", "feat");
   repo.seed({ "feat.md": "# Feat\n" });
   repo.ok("switch", "-q", "main");

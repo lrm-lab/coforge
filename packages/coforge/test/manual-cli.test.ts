@@ -4,6 +4,7 @@ import {
   faults,
   input,
   intent,
+  MANUAL_FIXTURE_TEST_TIMEOUT_MS,
   modes,
   noticePath,
   reason,
@@ -42,16 +43,60 @@ function originalError(scenario: Scenario, mode: Mode): string {
   return manualError(`HTTP ${scenario}`);
 }
 
-for (const route of routes) {
-  for (const mode of modes) {
-    const manualRequest = {
+const variants = routes.flatMap((route) =>
+  modes.map((mode) => ({
+    route,
+    mode,
+    manualRequest: {
       path: route.path,
       method: "GET",
       query: { [route.parameter]: input, intent, reason },
       authorized: true,
-    };
-    for (const fault of faults) {
-      test.concurrent(`manual ${route.command} ${mode} ${fault} prints recovery before the original error`, async () => {
+    },
+  })),
+);
+
+for (const { route, mode, manualRequest } of variants) {
+  if (mode === "external")
+    test.serial(
+      `manual ${route.command} external redirect retains the refusal and never follows it`,
+      async () => {
+        const result = await runManualFixture(route, mode, "redirect");
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout).toBe("");
+        expect(result.stderr).toBe(originalError("timeout", mode));
+        expect(result.requests).toEqual([manualRequest]);
+      },
+      MANUAL_FIXTURE_TEST_TIMEOUT_MS,
+    );
+
+  for (const control of controls) {
+    test.serial(
+      `manual ${route.command} ${mode} ${control} preserves the original CLI result`,
+      async () => {
+        const result = await runManualFixture(route, mode, control);
+        const success = control === "success";
+        const hasNotice = mode === "managed" && control !== "missing";
+        expect(result.exitCode).toBe(success ? 0 : 1);
+        expect(result.stdout).toBe(success ? route.stdout : "");
+        expect(result.stderr).toBe(
+          (success ? "" : originalError(control, mode)) + (hasNotice ? "Fixture update\n" : ""),
+        );
+        expect(result.requests).toEqual([
+          ...(control === "missing" ? [] : [manualRequest]),
+          ...(hasNotice ? [{ path: noticePath, method: "GET", query: {}, authorized: true }] : []),
+        ]);
+      },
+      MANUAL_FIXTURE_TEST_TIMEOUT_MS,
+    );
+  }
+}
+
+for (const { route, mode, manualRequest } of variants) {
+  for (const fault of faults) {
+    test.concurrent(
+      `manual ${route.command} ${mode} ${fault} prints recovery before the original error`,
+      async () => {
         const result = await runManualFixture(route, mode, fault);
         expect(result.exitCode).toBe(1);
         expect(result.stdout).toBe("");
@@ -68,33 +113,8 @@ for (const route of routes) {
         expect(recovery).toContain(diagnostic);
         expect(recovery).toContain("retry the manual command once");
         expect(recovery).toContain("Workspace administrator");
-      }, 30_000);
-    }
-
-    if (mode === "external")
-      test.concurrent(`manual ${route.command} external redirect retains the refusal and never follows it`, async () => {
-        const result = await runManualFixture(route, mode, "redirect");
-        expect(result.exitCode).toBe(1);
-        expect(result.stdout).toBe("");
-        expect(result.stderr).toBe(originalError("timeout", mode));
-        expect(result.requests).toEqual([manualRequest]);
-      });
-
-    for (const control of controls) {
-      test.concurrent(`manual ${route.command} ${mode} ${control} preserves the original CLI result`, async () => {
-        const result = await runManualFixture(route, mode, control);
-        const success = control === "success";
-        const hasNotice = mode === "managed" && control !== "missing";
-        expect(result.exitCode).toBe(success ? 0 : 1);
-        expect(result.stdout).toBe(success ? route.stdout : "");
-        expect(result.stderr).toBe(
-          (success ? "" : originalError(control, mode)) + (hasNotice ? "Fixture update\n" : ""),
-        );
-        expect(result.requests).toEqual([
-          ...(control === "missing" ? [] : [manualRequest]),
-          ...(hasNotice ? [{ path: noticePath, method: "GET", query: {}, authorized: true }] : []),
-        ]);
-      });
-    }
+      },
+      MANUAL_FIXTURE_TEST_TIMEOUT_MS,
+    );
   }
 }

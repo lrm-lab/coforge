@@ -46,6 +46,11 @@ type Route = (typeof routes)[number];
 export type Mode = (typeof modes)[number];
 export type Scenario = (typeof faults)[number] | (typeof controls)[number] | "redirect";
 
+const MANUAL_CLI_PROCESS_TIMEOUT_MS = 25_000;
+const FIXTURE_SETUP_AND_CLEANUP_BUDGET_MS = 5_000;
+export const MANUAL_FIXTURE_TEST_TIMEOUT_MS =
+  MANUAL_CLI_PROCESS_TIMEOUT_MS + FIXTURE_SETUP_AND_CLEANUP_BUDGET_MS;
+
 const managedKey = `sfp_${"m".repeat(43)}`;
 const externalKey = `sk_ext_${"e".repeat(43)}`;
 
@@ -133,7 +138,7 @@ export async function runManualFixture(
           : env,
       stdout: "pipe",
       stderr: "pipe",
-      signal: AbortSignal.timeout(25_000),
+      signal: AbortSignal.timeout(MANUAL_CLI_PROCESS_TIMEOUT_MS),
     });
     const [stdout, stderr, exitCode] = await Promise.all([
       new Response(child.stdout).text(),
