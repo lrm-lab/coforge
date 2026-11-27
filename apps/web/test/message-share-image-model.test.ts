@@ -57,7 +57,6 @@ test("a very long message is scaled down until it fits Mobile Safari's canvas ar
   const scale = shareImageScale(720, 30_000);
   expect(scale).toBeLessThan(SHARE_IMAGE_SCALE);
   expect(720 * scale * (30_000 * scale)).toBeLessThanOrEqual(SHARE_CANVAS_MAX_AREA);
-  // Near the limit, not far under it: as sharp as it can be.
   expect(720 * scale * (30_000 * scale)).toBeGreaterThan(SHARE_CANVAS_MAX_AREA * 0.99);
 });
 
@@ -74,7 +73,6 @@ test("a CDN's attachment or avatar is read through this site, and nothing else i
   expect(shareImageAddress(attachment, at)).toBe(`/api/attachments/${id}?download`);
   const avatar = `https://images.coforge.cn/users/${id}/avatars/${id}/original?style=a`;
   expect(shareImageAddress(avatar, at)).toBe(`/api/workspaces/ws/users/${id}/avatar`);
-  // The expired preview's fallback, which redirects to the CDN.
   expect(shareImageAddress(`https://coforge.cn/api/attachments/${id}`, at)).toBe(
     `/api/attachments/${id}?download`,
   );

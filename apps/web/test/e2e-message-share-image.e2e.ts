@@ -8,12 +8,6 @@ import { deleteAttachmentRows } from "#src/server/db/repositories/attachment-del
 import { LocalFileStorage } from "#src/server/files/file-storage.server";
 import { browserSession, localBrowserE2e } from "./helpers/browser-e2e";
 
-/**
- * "Generate image" in select mode: picked messages, an image attachment among them, become one
- * share image; a long selection becomes several pages. The preview is the real PNG (its blob is
- * read back). Needs a local built Web with skip-auth and `COFORGE_FILE_STORAGE_DIR`. The suite
- * removes its own Workspace, writer and stored file. Screenshots live in `.artifacts/e2e/message-share-image/`.
- */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const storageRoot = Bun.env.COFORGE_FILE_STORAGE_DIR;
 if (!storageRoot) throw new Error("COFORGE_FILE_STORAGE_DIR is required");
@@ -24,7 +18,6 @@ const { browser, evaluate } = browserSession(browserPath, `share-image-${process
 const prefix = Bun.env.SHOT_PREFIX ?? "share";
 const suffix = String(process.pid);
 const objectKey = `e2e/share-image/${suffix}/chart.png`;
-// A 2×1 PNG, red then blue.
 const PNG = Uint8Array.from(
   atob(
     "iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAAEElEQVR4nGP4z8AARAwMDAAKBAIBM9eVwwAAAABJRU5ErkJggg==",
@@ -64,7 +57,6 @@ async function select(ids: readonly string[]) {
     `[...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent.trim() === "Select messages").click()`,
   );
   await waitFor(`document.querySelector("[data-selection-bar]") !== null`);
-  // "Select messages" picks the message it was opened on.
   for (const id of ids) {
     await waitFor(`${row(id)}.querySelector("input") !== null`);
     await browser(
@@ -83,7 +75,6 @@ async function generate() {
   await waitFor(`${preview} !== null && ${preview}.complete`);
 }
 
-/** The preview's PNG: its width in pixels, and it is a real PNG of some size. */
 async function pageWidth() {
   await browser(
     "eval",
@@ -172,7 +163,6 @@ beforeAll(async () => {
     );
     longIds.push(message.id);
   }
-  // Taller than Mobile Safari's largest canvas holds at the full scale.
   const huge = await write(
     20,
     viewer!.id,
@@ -203,7 +193,6 @@ test("picked messages become one share image, at three times the card's width", 
   expect(await pageWidth()).toBe(1440);
   expect(await evaluate<boolean>(`${dialogButton("Download")} !== undefined`)).toBe(true);
   await shot("short-1440");
-  // A ratio is drawn again at its own size, however little there is to show.
   await pickRatio("16:9");
   await waitFor(
     `${preview} !== null && ${preview}.naturalWidth === 2400 && ${preview}.naturalHeight === 1350`,
@@ -237,7 +226,6 @@ test("a long selection becomes pages, and the pager moves between them", async (
   await select(longIds);
   await generate();
   await waitFor(`${dialogButton("Download all")} !== undefined`);
-  // More than a narrow page holds, so the image is the wide one.
   expect(await pageWidth()).toBe(2160);
   const first = await evaluate<string>(`${preview}.src`);
   await evaluate(`${dialogButton("Next page")}.click() ?? true`);

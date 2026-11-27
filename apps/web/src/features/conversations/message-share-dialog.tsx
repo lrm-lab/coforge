@@ -33,7 +33,6 @@ import {
 
 type SharePage = { png: Blob; url: string };
 
-/** The stage draws everything to measure it, then the pages to capture them; then it is gone. */
 type ShareStep = { ratio: ShareRatio; width: number } & (
   | { name: "measuring" }
   | { name: "capturing"; split: number[][] }
@@ -47,8 +46,6 @@ const start = (ratio: ShareRatio): ShareStep => ({
   width: shareRatioSize(ratio).width,
 });
 
-/** The tallest run of messages a page of this `ratio` holds: for a fixed one, what the card's own
- * padding and foot leave of its height, from the card as measured with all `rowsHeight` of rows. */
 function pageMaxHeight(ratio: ShareRatio, width: number, stage: HTMLElement, rowsHeight: number) {
   const { height } = shareRatioSize(ratio);
   const card = stage.querySelector<HTMLElement>("[data-share-page]");
@@ -56,11 +53,6 @@ function pageMaxHeight(ratio: ShareRatio, width: number, stage: HTMLElement, row
   return height - (card.offsetHeight - rowsHeight);
 }
 
-/**
- * "Share preview" (as Raft's): the selected messages drawn out of sight, split into pages by their
- * real height, captured once, and shown as the images they became, so what is previewed is what is
- * copied or downloaded.
- */
 const noopSubscribe = () => () => {};
 const readDocumentBody = () => document.body;
 const serverDocumentBody = () => null;
@@ -90,14 +82,12 @@ export function MessageShareDialog({
       if (stale) return;
       if (name === "measuring") {
         const rows = [...root.querySelectorAll<HTMLElement>("[data-share-row]")];
-        // A row's slot, to the next row's top: the gap between rows counts towards a page.
         const slots = rows.map(
           (row, at) =>
             (rows[at + 1]?.offsetTop ?? row.offsetTop + row.offsetHeight) - row.offsetTop,
         );
         const rowsHeight = slots.reduce((sum, slot) => sum + slot, 0);
         const split = sharePages(slots, pageMaxHeight(ratio, stageWidth, root, rowsHeight));
-        // More than one narrow page: wider, so the same words take fewer pages.
         if (split.length > 1 && ratio === "auto" && stageWidth === SHARE_CARD_WIDTH)
           setStep({ name: "measuring", ratio, width: SHARE_CARD_WIDE_WIDTH });
         else setStep({ name: "capturing", ratio, width: stageWidth, split });
